@@ -52,6 +52,9 @@ CREATE TABLE IF NOT EXISTS public.service_areas (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.service_areas ADD COLUMN IF NOT EXISTS city_id UUID REFERENCES public.cities(id) ON DELETE CASCADE;
+ALTER TABLE public.service_areas ADD COLUMN IF NOT EXISTS description TEXT;
+
 -- 5. SERVICE ZONE POLYGONS TABLE (GeoJSON Polygon Boundaries & Dynamic Pricing Rules)
 CREATE TABLE IF NOT EXISTS public.service_zone_polygons (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -139,25 +142,35 @@ ALTER TABLE public.sync_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ai_orchestration_logs ENABLE ROW LEVEL SECURITY;
 
 -- Public Read access for Geography Engine
+DROP POLICY IF EXISTS "Public geography read access" ON public.countries;
 CREATE POLICY "Public geography read access" ON public.countries FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public states read access" ON public.states;
 CREATE POLICY "Public states read access" ON public.states FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public cities read access" ON public.cities;
 CREATE POLICY "Public cities read access" ON public.cities FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public service areas read access" ON public.service_areas;
 CREATE POLICY "Public service areas read access" ON public.service_areas FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public service zone polygons read access" ON public.service_zone_polygons;
 CREATE POLICY "Public service zone polygons read access" ON public.service_zone_polygons FOR SELECT USING (true);
 
 -- User-scoped access for Disputes
+DROP POLICY IF EXISTS "Users view own disputes" ON public.disputes;
 CREATE POLICY "Users view own disputes" ON public.disputes FOR SELECT USING (auth.uid() = claimant_user_id OR EXISTS (
     SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true
 ));
+DROP POLICY IF EXISTS "Users create disputes" ON public.disputes;
 CREATE POLICY "Users create disputes" ON public.disputes FOR INSERT WITH CHECK (auth.uid() = claimant_user_id);
+DROP POLICY IF EXISTS "Admins update disputes" ON public.disputes;
 CREATE POLICY "Admins update disputes" ON public.disputes FOR UPDATE USING (EXISTS (
     SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true
 ));
 
 -- User-scoped access for Sync Events
+DROP POLICY IF EXISTS "Users manage own sync events" ON public.sync_events;
 CREATE POLICY "Users manage own sync events" ON public.sync_events FOR ALL USING (auth.uid() = user_id);
 
 -- Admin read access for AI logs
+DROP POLICY IF EXISTS "Admins view AI logs" ON public.ai_orchestration_logs;
 CREATE POLICY "Admins view AI logs" ON public.ai_orchestration_logs FOR SELECT USING (EXISTS (
     SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true
 ));

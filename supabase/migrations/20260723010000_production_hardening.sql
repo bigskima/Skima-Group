@@ -19,6 +19,35 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS action VARCHAR(64);
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS event_type VARCHAR(100);
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS actor_role VARCHAR(50);
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS target_resource VARCHAR(100);
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS target_table VARCHAR(64);
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS resource_id VARCHAR(100);
+ALTER TABLE public.audit_logs ADD COLUMN IF NOT EXISTS target_id UUID;
+
+UPDATE public.audit_logs
+SET
+    event_type = COALESCE(event_type, action, 'AUDIT_EVENT'),
+    action = COALESCE(action, event_type, 'AUDIT_EVENT'),
+    actor_role = COALESCE(actor_role, 'SYSTEM'),
+    target_resource = COALESCE(target_resource, target_table, 'UNKNOWN'),
+    target_table = COALESCE(target_table, target_resource, 'UNKNOWN'),
+    resource_id = COALESCE(resource_id, target_id::TEXT, 'UNKNOWN');
+
+ALTER TABLE public.audit_logs ALTER COLUMN event_type SET DEFAULT 'AUDIT_EVENT';
+ALTER TABLE public.audit_logs ALTER COLUMN action SET DEFAULT 'AUDIT_EVENT';
+ALTER TABLE public.audit_logs ALTER COLUMN actor_role SET DEFAULT 'SYSTEM';
+ALTER TABLE public.audit_logs ALTER COLUMN target_resource SET DEFAULT 'UNKNOWN';
+ALTER TABLE public.audit_logs ALTER COLUMN target_table SET DEFAULT 'UNKNOWN';
+ALTER TABLE public.audit_logs ALTER COLUMN resource_id SET DEFAULT 'UNKNOWN';
+ALTER TABLE public.audit_logs ALTER COLUMN event_type SET NOT NULL;
+ALTER TABLE public.audit_logs ALTER COLUMN action SET NOT NULL;
+ALTER TABLE public.audit_logs ALTER COLUMN actor_role SET NOT NULL;
+ALTER TABLE public.audit_logs ALTER COLUMN target_resource SET NOT NULL;
+ALTER TABLE public.audit_logs ALTER COLUMN resource_id SET NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON public.audit_logs(actor_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON public.audit_logs(event_type);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON public.audit_logs(created_at DESC);
@@ -145,8 +174,8 @@ CREATE TABLE IF NOT EXISTS public.marketplace_products (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_products_slug ON public.marketplace_products(slug);
-CREATE INDEX IF NOT EXISTS idx_products_merchant ON public.marketplace_products(merchant_user_id);
+CREATE INDEX IF NOT EXISTS idx_marketplace_products_slug ON public.marketplace_products(slug);
+CREATE INDEX IF NOT EXISTS idx_marketplace_products_merchant_user ON public.marketplace_products(merchant_user_id);
 
 CREATE TABLE IF NOT EXISTS public.marketplace_orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -162,6 +191,25 @@ CREATE TABLE IF NOT EXISTS public.marketplace_orders (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.marketplace_orders ADD COLUMN IF NOT EXISTS customer_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE public.marketplace_orders ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES public.marketplace_products(id) ON DELETE RESTRICT;
+ALTER TABLE public.marketplace_orders ADD COLUMN IF NOT EXISTS quantity INT DEFAULT 1;
+ALTER TABLE public.marketplace_orders ADD COLUMN IF NOT EXISTS unit_price_ngn NUMERIC(12, 2);
+ALTER TABLE public.marketplace_orders ADD COLUMN IF NOT EXISTS total_amount_ngn NUMERIC(12, 2);
+ALTER TABLE public.marketplace_orders ADD COLUMN IF NOT EXISTS order_status VARCHAR(50) DEFAULT 'PLACED';
+ALTER TABLE public.marketplace_orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
+
+UPDATE public.marketplace_orders
+SET
+    customer_user_id = COALESCE(customer_user_id, customer_id),
+    total_amount_ngn = COALESCE(total_amount_ngn, total_amount),
+    order_status = COALESCE(order_status, status::TEXT),
+    shipping_address = COALESCE(shipping_address, delivery_address)
+WHERE customer_user_id IS NULL
+   OR total_amount_ngn IS NULL
+   OR order_status IS NULL
+   OR shipping_address IS NULL;
+
 CREATE INDEX IF NOT EXISTS idx_mp_orders_customer ON public.marketplace_orders(customer_user_id);
 CREATE INDEX IF NOT EXISTS idx_mp_orders_product ON public.marketplace_orders(product_id);
 
@@ -176,11 +224,18 @@ CREATE OR REPLACE FUNCTION public.log_audit_event(
 ) RETURNS UUID AS $$
 DECLARE
     v_audit_id UUID;
+    v_target_id UUID;
 BEGIN
+    BEGIN
+        v_target_id := p_resource_id::UUID;
+    EXCEPTION WHEN invalid_text_representation THEN
+        v_target_id := NULL;
+    END;
+
     INSERT INTO public.audit_logs (
-        event_type, actor_id, actor_role, target_resource, resource_id, payload
+        event_type, action, actor_id, actor_role, target_resource, target_table, resource_id, target_id, payload
     ) VALUES (
-        p_event_type, p_actor_id, p_actor_role, p_target_resource, p_resource_id, p_payload
+        p_event_type, p_event_type, p_actor_id, p_actor_role, p_target_resource, p_target_resource, p_resource_id, v_target_id, p_payload
     ) RETURNING id INTO v_audit_id;
     
     RETURN v_audit_id;
@@ -241,9 +296,15 @@ ALTER TABLE public.marketplace_products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.marketplace_orders ENABLE ROW LEVEL SECURITY;
 
 -- Read policies
+DROP POLICY IF EXISTS "Admins can view audit logs" ON public.audit_logs;
 CREATE POLICY "Admins can view audit logs" ON public.audit_logs FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public cylinder registry search" ON public.cylinder_registry;
 CREATE POLICY "Public cylinder registry search" ON public.cylinder_registry FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Users view own verifications" ON public.verifications;
 CREATE POLICY "Users view own verifications" ON public.verifications FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Public currency rates view" ON public.currency_rates;
 CREATE POLICY "Public currency rates view" ON public.currency_rates FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public products view" ON public.marketplace_products;
 CREATE POLICY "Public products view" ON public.marketplace_products FOR SELECT USING (is_active = true);
+DROP POLICY IF EXISTS "Users view own marketplace orders" ON public.marketplace_orders;
 CREATE POLICY "Users view own marketplace orders" ON public.marketplace_orders FOR SELECT USING (auth.uid() = customer_user_id);

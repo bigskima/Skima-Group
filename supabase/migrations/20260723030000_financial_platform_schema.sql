@@ -103,18 +103,23 @@ ALTER TABLE public.withdrawal_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.partner_verifications ENABLE ROW LEVEL SECURITY;
 
 -- Company Wallet RLS (Admin Only)
+DROP POLICY IF EXISTS "Admins manage company wallet" ON public.company_wallet;
 CREATE POLICY "Admins manage company wallet" ON public.company_wallet FOR ALL USING (EXISTS (
     SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true
 ));
 
 -- Withdrawal Requests RLS (Users view own, Admins view all)
+DROP POLICY IF EXISTS "Users view own withdrawals" ON public.withdrawal_requests;
 CREATE POLICY "Users view own withdrawals" ON public.withdrawal_requests FOR SELECT USING (auth.uid() = user_id OR EXISTS (
     SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true
 ));
+DROP POLICY IF EXISTS "Users create withdrawals" ON public.withdrawal_requests;
 CREATE POLICY "Users create withdrawals" ON public.withdrawal_requests FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- Partner Verifications RLS
+DROP POLICY IF EXISTS "Users view own verifications" ON public.partner_verifications;
 CREATE POLICY "Users view own verifications" ON public.partner_verifications FOR SELECT USING (auth.uid() = user_id OR EXISTS (
     SELECT 1 FROM public.profiles WHERE id = auth.uid() AND is_admin = true
 ));
+DROP POLICY IF EXISTS "Users create verifications" ON public.partner_verifications;
 CREATE POLICY "Users create verifications" ON public.partner_verifications FOR INSERT WITH CHECK (auth.uid() = user_id);
