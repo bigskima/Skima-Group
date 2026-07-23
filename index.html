@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skima Platform - Operating System for Commerce & Logistics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-dark: #090D16;
+      --bg-card: #111726;
+      --bg-card-hover: #1A2238;
+      --border-color: #232F4A;
+      --primary-flame: #F97316;
+      --primary-flame-glow: rgba(249, 115, 22, 0.35);
+      --accent-cyan: #06B6D4;
+      --accent-green: #10B981;
+      --accent-purple: #8B5CF6;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* HEADER / NAVIGATION */
+    header {
+      background: rgba(17, 23, 38, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #F97316, #EA580C);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 22px;
+      color: #FFF;
+      box-shadow: 0 0 16px var(--primary-flame-glow);
+    }
+
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(90deg, #FFFFFF, #CBD5E1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-tag {
+      font-size: 11px;
+      background: rgba(249, 115, 22, 0.15);
+      color: var(--primary-flame);
+      border: 1px solid rgba(249, 115, 22, 0.3);
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-weight: 600;
+    }
+
+    /* ROLE SWITCHER PILL */
+    .role-switcher {
+      display: flex;
+      background: rgba(9, 13, 22, 0.8);
+      border: 1px solid var(--border-color);
+      padding: 4px;
+      border-radius: 99px;
+      gap: 4px;
+    }
+
+    .role-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 8px 18px;
+      border-radius: 99px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+
+    .role-btn:hover {
+      color: var(--text-main);
+    }
+
+    .role-btn.active {
+      background: linear-gradient(135deg, #F97316, #D97706);
+      color: #FFF;
+      box-shadow: 0 4px 12px var(--primary-flame-glow);
+    }
+
+    /* LAYOUT CONTAINER */
+    .container {
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      width: 100%;
+      flex: 1;
+    }
+
+    .grid-dashboard {
+      display: grid;
+      grid-template-columns: 360px 1fr 340px;
+      gap: 24px;
+    }
+
+    /* CARDS */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* WALLET SUMMARY */
+    .wallet-card {
+      background: linear-gradient(135deg, #161F33, #0F172A);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+    }
+
+    .balance-amount {
+      font-family: 'Outfit', sans-serif;
+      font-size: 38px;
+      font-weight: 800;
+      color: var(--text-main);
+      margin: 8px 0;
+    }
+
+    .balance-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: 600;
+    }
+
+    .badge-escrow {
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* ORDER LIFECYCLE SIMULATOR */
+    .action-btn {
+      width: 100%;
+      background: linear-gradient(135deg, var(--primary-flame), #EA580C);
+      color: #FFF;
+      border: none;
+      padding: 14px;
+      border-radius: var(--radius-md);
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .action-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px var(--primary-flame-glow);
+    }
+
+    .action-btn:active {
+      transform: translateY(0);
+    }
+
+    /* TIMELINE TRACKER */
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 16px;
+      position: relative;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 15px;
+      top: 10px;
+      bottom: 10px;
+      width: 2px;
+      background: var(--border-color);
+    }
+
+    .timeline-item {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      position: relative;
+      z-index: 1;
+    }
+
+    .timeline-dot {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--bg-dark);
+      border: 2px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      transition: all 0.3s ease;
+    }
+
+    .timeline-item.completed .timeline-dot {
+      background: var(--accent-green);
+      border-color: var(--accent-green);
+      color: #FFF;
+    }
+
+    .timeline-item.active .timeline-dot {
+      background: var(--primary-flame);
+      border-color: var(--primary-flame);
+      color: #FFF;
+      box-shadow: 0 0 12px var(--primary-flame-glow);
+    }
+
+    .timeline-content {
+      flex: 1;
+      background: var(--bg-card-hover);
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-color);
+    }
+
+    .timeline-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .timeline-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* CUSTODY DISPLAY */
+    .custody-box {
+      background: rgba(6, 182, 212, 0.08);
+      border: 1px solid rgba(6, 182, 212, 0.25);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-top: 16px;
+    }
+
+    .custody-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .custody-val {
+      font-weight: 700;
+      color: var(--accent-cyan);
+    }
+
+    /* RADAR SERVICE ZONE MAP SIMULATION */
+    .map-box {
+      height: 240px;
+      background: radial-gradient(circle at center, #1B2640 0%, #0B0F19 100%);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .radar-circle {
+      position: absolute;
+      border: 1px solid rgba(6, 182, 212, 0.2);
+      border-radius: 50%;
+      animation: pulse 4s infinite linear;
+    }
+
+    .radar-circle:nth-child(1) { width: 80px; height: 80px; }
+    .radar-circle:nth-child(2) { width: 160px; height: 160px; }
+    .radar-circle:nth-child(3) { width: 230px; height: 230px; }
+
+    @keyframes pulse {
+      0% { opacity: 0.2; transform: scale(0.95); }
+      50% { opacity: 0.6; transform: scale(1.05); }
+      100% { opacity: 0.2; transform: scale(0.95); }
+    }
+
+    .pin-station {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      background: var(--accent-cyan);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent-cyan);
+    }
+
+    .pin-driver {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      background: var(--primary-flame);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--primary-flame);
+      top: 40%;
+      left: 55%;
+    }
+
+    .map-tag {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      background: rgba(9, 13, 22, 0.85);
+      border: 1px solid var(--border-color);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--border-color);
+      padding: 20px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP BAR -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">S</div>
+      <div>
+        <span class="brand-title">SKIMA</span>
+        <span class="brand-tag">v1.0 Operational OS</span>
+      </div>
+    </div>
+
+    <!-- Active View Selector -->
+    <div class="role-switcher">
+      <button class="role-btn active" onclick="switchRole('CUSTOMER')">Customer</button>
+      <button class="role-btn" onclick="switchRole('DRIVER')">Driver</button>
+      <button class="role-btn" onclick="switchRole('STATION')">LPG Station</button>
+      <button class="role-btn" onclick="switchRole('MERCHANT')">Merchant</button>
+      <button class="role-btn" onclick="switchRole('ADMIN')">Admin Control</button>
+    </div>
+  </header>
+
+  <!-- MAIN DASHBOARD CONTENT -->
+  <div class="container">
+    <div class="grid-dashboard">
+
+      <!-- LEFT COLUMN: WALLET & CYLINDER -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        
+        <!-- Wallet Balance Card -->
+        <div class="card wallet-card">
+          <div class="card-title">
+            <span>Platform Wallet</span>
+            <span class="badge-escrow" id="escrowStatus">0 Locked in Escrow</span>
+          </div>
+          <div class="balance-label">Available Balance</div>
+          <div class="balance-amount" id="walletBalance">₦ 45,800.00</div>
+          <button class="action-btn" style="margin-top: 8px; background: rgba(255,255,255,0.08); border: 1px solid var(--border-color);" onclick="fundWallet()">
+            + Fund Wallet (Paystack / Monnify)
+          </button>
+        </div>
+
+        <!-- Cylinder Ownership & Custody Card -->
+        <div class="card">
+          <div class="card-title">
+            <span>Registered Cylinder</span>
+            <span style="font-size: 12px; color: var(--accent-green);">● Active</span>
+          </div>
+          <div class="custody-box">
+            <div class="custody-row">
+              <span>QR Code Identifier:</span>
+              <span class="custody-val">SKM-CYL-12.5KG-8902</span>
+            </div>
+            <div class="custody-row">
+              <span>Owner:</span>
+              <span>Emeka N. (Customer)</span>
+            </div>
+            <div class="custody-row">
+              <span>Current Custody:</span>
+              <span class="custody-val" id="custodyHolder">Emeka N. (Customer)</span>
+            </div>
+            <div class="custody-row">
+              <span>Cylinder Status:</span>
+              <span id="cylinderStatusLabel" style="font-weight: 700; color: var(--primary-flame);">IDLE</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- MIDDLE COLUMN: GAS REFILL WORKFLOW SIMULATOR -->
+      <div class="card">
+        <div class="card-title">
+          <span>LPG Gas Refill Workflow Simulator</span>
+          <span style="font-size: 12px; color: var(--text-muted);" id="currentRoleTag">Role: Customer</span>
+        </div>
+
+        <!-- Service Area Check -->
+        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 12px 16px; border-radius: var(--radius-sm); font-size: 13px; color: var(--accent-green); margin-bottom: 20px;">
+          ✓ Location Verified: <strong>Awka Zone (Anambra, Nigeria)</strong> - 12.5 kg LPG Refill (₦ 17,500 + ₦ 500 delivery)
+        </div>
+
+        <!-- Step Action Button -->
+        <button class="action-btn" id="workflowBtn" onclick="nextWorkflowStep()">
+          Step 1: Place Refill Order & Lock Escrow
+        </button>
+
+        <!-- Order Custody Timeline -->
+        <div class="timeline" id="orderTimeline">
+          <div class="timeline-item completed" id="step1">
+            <div class="timeline-dot">1</div>
+            <div class="timeline-content">
+              <div class="timeline-title">Order Placed & Escrow Locked</div>
+              <div class="timeline-desc">Customer confirmed 12.5kg refill. ₦ 18,000 locked in Skima Escrow.</div>
+            </div>
+          </div>
+
+          <div class="timeline-item" id="step2">
+            <div class="timeline-dot">2</div>
+            <div class="timeline-content">
+              <div class="timeline-title">Driver Dispatch & Cylinder Pickup</div>
+              <div class="timeline-desc">Driver scans Cylinder QR -> Custody transfers to Driver.</div>
+            </div>
+          </div>
+
+          <div class="timeline-item" id="step3">
+            <div class="timeline-dot">3</div>
+            <div class="timeline-content">
+              <div class="timeline-title">Station Arrival & Refill Verification</div>
+              <div class="timeline-desc">Pump Attendant scans QR -> Custody to Station -> Gas Payment released.</div>
+            </div>
+          </div>
+
+          <div class="timeline-item" id="step4">
+            <div class="timeline-dot">4</div>
+            <div class="timeline-content">
+              <div class="timeline-title">Return Transit & Customer Handover</div>
+              <div class="timeline-desc">Driver delivers refilled cylinder -> Customer confirms delivery.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN: AWKA RADAR MAP & AUDIT LOGS -->
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        
+        <!-- Awka Geo-Fence Radar Map -->
+        <div class="card">
+          <div class="card-title">
+            <span>Awka Service Area Radar</span>
+            <span style="font-size: 11px; color: var(--accent-cyan);">25km Polygon</span>
+          </div>
+          <div class="map-box">
+            <div class="radar-circle"></div>
+            <div class="radar-circle"></div>
+            <div class="radar-circle"></div>
+            <div class="pin-station" style="top: 35%; left: 30%;" title="Awka Central Station"></div>
+            <div class="pin-driver" id="driverPin" title="Assigned Driver"></div>
+            <div class="map-tag">Active Zone: Awka, Anambra (Nigeria)</div>
+          </div>
+        </div>
+
+        <!-- Realtime System Audit Log -->
+        <div class="card" style="flex: 1;">
+          <div class="card-title">
+            <span>Audit Trail & Ledger Events</span>
+          </div>
+          <div id="auditLog" style="font-family: monospace; font-size: 11px; color: var(--text-muted); display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;">
+            <div>[22:23:45] SYSTEM_INIT: Skima Platform OS Engine initialized.</div>
+            <div>[22:23:46] CONFIG_LOAD: Active zone set to Awka (NGN 1,400/kg).</div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <footer>
+    Skima Group Technology Platform © 2026 • Unified Operating System for Commerce & Logistics
+  </footer>
+
+  <script>
+    let currentStep = 0;
+    let balance = 45800;
+    let lockedEscrow = 0;
+
+    const steps = [
+      { name: "Step 1: Place Refill Order & Lock Escrow", role: "CUSTOMER" },
+      { name: "Step 2: Driver Pickup & QR Scan (Custody to Driver)", role: "DRIVER" },
+      { name: "Step 3: Station Handover & Refill Scan (Station Payout)", role: "STATION" },
+      { name: "Step 4: Customer Delivery Confirmation & Driver Commission", role: "CUSTOMER" }
+    ];
+
+    function updateAudit(msg) {
+      const log = document.getElementById("auditLog");
+      const time = new Date().toTimeString().split(' ')[0];
+      const entry = document.createElement("div");
+      entry.innerHTML = `[${time}] ${msg}`;
+      log.prepend(entry);
+    }
+
+    function switchRole(role) {
+      document.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('currentRoleTag').innerText = `Role: ${role}`;
+      updateAudit(`ROLE_SWITCH: Switched context to ${role}`);
+    }
+
+    function fundWallet() {
+      balance += 10000;
+      document.getElementById("walletBalance").innerText = `₦ ${balance.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+      updateAudit(`PAYMENT_GATEWAY: Funded +₦10,000.00 via Paystack Adapter.`);
+    }
+
+    function nextWorkflowStep() {
+      currentStep++;
+      if (currentStep > 4) {
+        currentStep = 0;
+        lockedEscrow = 0;
+        document.getElementById("escrowStatus").innerText = "0 Locked in Escrow";
+        document.getElementById("custodyHolder").innerText = "Emeka N. (Customer)";
+        document.getElementById("cylinderStatusLabel").innerText = "IDLE";
+        document.getElementById("workflowBtn").innerText = steps[0].name;
+        document.querySelectorAll('.timeline-item').forEach(el => {
+          el.classList.remove('completed', 'active');
+        });
+        updateAudit(`ORDER_RESET: Order simulation reset to initial state.`);
+        return;
+      }
+
+      if (currentStep === 1) {
+        balance -= 18000;
+        lockedEscrow = 18000;
+        document.getElementById("walletBalance").innerText = `₦ ${balance.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+        document.getElementById("escrowStatus").innerText = "₦ 18,000 Locked in Escrow";
+        document.getElementById("step1").classList.add("completed");
+        document.getElementById("step2").classList.add("active");
+        document.getElementById("cylinderStatusLabel").innerText = "ESCROW_LOCKED";
+        updateAudit(`ESCROW_LOCK: ₦18,000 locked in System Escrow for Order ORD-LPG-9081.`);
+        document.getElementById("workflowBtn").innerText = steps[1].name;
+      } else if (currentStep === 2) {
+        document.getElementById("custodyHolder").innerText = "Chidi K. (Driver)";
+        document.getElementById("cylinderStatusLabel").innerText = "IN_TRANSIT_TO_STATION";
+        document.getElementById("step2").classList.remove("active");
+        document.getElementById("step2").classList.add("completed");
+        document.getElementById("step3").classList.add("active");
+        updateAudit(`CUSTODY_TRANSFER: Cylinder QR scanned by Driver -> Custody transferred.`);
+        document.getElementById("workflowBtn").innerText = steps[2].name;
+      } else if (currentStep === 3) {
+        document.getElementById("custodyHolder").innerText = "Awka Central LPG Station";
+        document.getElementById("cylinderStatusLabel").innerText = "REFILLED";
+        document.getElementById("step3").classList.remove("active");
+        document.getElementById("step3").classList.add("completed");
+        document.getElementById("step4").classList.add("active");
+        updateAudit(`ESCROW_RELEASE: ₦17,500 station gas payout released to Station Wallet.`);
+        document.getElementById("workflowBtn").innerText = steps[3].name;
+      } else if (currentStep === 4) {
+        document.getElementById("custodyHolder").innerText = "Emeka N. (Customer)";
+        document.getElementById("cylinderStatusLabel").innerText = "IDLE (Refilled)";
+        document.getElementById("step4").classList.remove("active");
+        document.getElementById("step4").classList.add("completed");
+        document.getElementById("escrowStatus").innerText = "Escrow Released (Completed)";
+        updateAudit(`ORDER_COMPLETED: Customer confirmed delivery. Driver commission ₦500 released.`);
+        document.getElementById("workflowBtn").innerText = "Reset Workflow Simulation";
+      }
+    }
+  </script>
+</body>
+</html>

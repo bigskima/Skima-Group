@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "CommonJS",
+    "jsx": "react-jsx",
+    "strict": false,
+    "noImplicitAny": false,
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "react": ["node_modules/react"],
+      "react/*": ["node_modules/react/*"],
+      "react-native": ["node_modules/react-native"],
+      "react-native/*": ["node_modules/react-native/*"]
+    }
+  },
+  "extends": "expo/tsconfig.base"
+}
