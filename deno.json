@@ -1,0 +1,23 @@
+{
+  "lock": false,
+  "nodeModulesDir": "auto",
+  "compilerOptions": {
+    "strict": true,
+    "lib": ["deno.window", "dom", "dom.iterable"]
+  },
+  "fmt": {
+    "lineWidth": 100,
+    "semiColons": true,
+    "singleQuote": false
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  },
+  "tasks": {
+    "check": "deno check packages/core/src/index.ts packages/config/src/index.ts packages/events/src/index.ts packages/adapters/src/index.ts packages/auth/src/index.ts packages/engines/src/index.ts supabase/functions/health/index.ts supabase/functions/api-gateway/index.ts scripts/supabase-runtime.ts scripts/supabase-remote.ts scripts/bootstrap-platform-admin.ts scripts/provision-platform-admin.ts scripts/provision-platform-wallets.ts scripts/list-platform-admin-roles.ts scripts/validate-foundation.ts scripts/verify-remote-gate.ts",
+    "validate": "deno run --allow-read scripts/validate-foundation.ts",
+    "verify": "deno task check && deno lint packages scripts supabase/functions && deno task validate"
+  }
+}

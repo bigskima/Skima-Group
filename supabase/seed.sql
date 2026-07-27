@@ -1,0 +1,3 @@
+-- Seed data belongs here only when it is platform-wide and business-agnostic.
+-- The first platform admin is assigned with:
+-- select public.bootstrap_platform_admin('<auth-user-uuid>');

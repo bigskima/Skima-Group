@@ -1,0 +1,29 @@
+{
+  "name": "skima-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Universal AI-first platform foundation for logistics, commerce, mobility, and fulfillment.",
+  "type": "module",
+  "scripts": {
+    "check": "deno check packages/core/src/index.ts packages/config/src/index.ts packages/events/src/index.ts packages/adapters/src/index.ts packages/auth/src/index.ts packages/engines/src/index.ts supabase/functions/health/index.ts supabase/functions/api-gateway/index.ts scripts/supabase-runtime.ts scripts/supabase-remote.ts scripts/bootstrap-platform-admin.ts scripts/provision-platform-admin.ts scripts/provision-platform-wallets.ts scripts/list-platform-admin-roles.ts scripts/validate-foundation.ts scripts/verify-remote-gate.ts",
+    "lint": "deno lint packages scripts supabase/functions",
+    "validate": "deno run --allow-read scripts/validate-foundation.ts",
+    "verify": "npm run check && npm run lint && npm run validate",
+    "supabase:link": "deno run --allow-env --allow-run scripts/supabase-remote.ts link",
+    "supabase:db:push": "deno run --allow-env --allow-run scripts/supabase-remote.ts db-push",
+    "supabase:db:reset:linked": "deno run --allow-env --allow-run scripts/supabase-remote.ts db-reset-linked",
+    "supabase:functions:deploy": "deno run --allow-env --allow-run --allow-read scripts/supabase-remote.ts functions-deploy",
+    "supabase:remote:status": "deno run --allow-env --allow-run --allow-read --allow-net scripts/supabase-remote.ts status",
+    "supabase:remote:gate": "deno run --allow-env --allow-net --allow-read --allow-run scripts/verify-remote-gate.ts",
+    "supabase:bootstrap-admin": "deno run --allow-env --allow-net --allow-read --allow-run scripts/bootstrap-platform-admin.ts",
+    "supabase:provision-admin": "deno run --allow-env --allow-net --allow-read --allow-run scripts/provision-platform-admin.ts",
+    "supabase:provision-platform-wallets": "deno run --allow-env --allow-net --allow-read --allow-run scripts/provision-platform-wallets.ts",
+    "supabase:admin-roles:list": "deno run --allow-env --allow-net --allow-read --allow-run scripts/list-platform-admin-roles.ts",
+    "supabase:status": "supabase status",
+    "supabase:start": "supabase start",
+    "supabase:reset": "supabase db reset"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

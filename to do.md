@@ -1,94 +1,159 @@
-# Skima Group Platform Implementation Roadmap & Master Execution Checklist
+# Skima Platform Roadmap
 
-This is the official implementation tracker for **Skima Group Platform**. All 15 platform upgrade directives are fully implemented and verified under the **Refactored Single-Platform Architecture**.
+This tracker follows `SKIMA_PLATFORM_CONSTITUTION.md`. LPG is the first module only after the
+reusable platform foundation and business module framework exist.
 
----
+## Current Status
 
-## Phase 1 — Platform Foundation & Reusable Lego Design System (Completed)
-- [x] Create identity, role unlocking (`IdentityEngine.ts`), and permission engine (`usePermissions.ts`).
-- [x] Establish unified TypeScript types (`src/types/index.ts`).
-- [x] Build shared Lego UI components (`Header.tsx`, `Badge.tsx`, `EmptyState.tsx`, `LoadingSpinner.tsx`).
-- [x] Create baseline kernel test suite (`src/__tests__/engines.test.ts`).
+- Milestone 1 production gate: complete on the hosted Supabase dev project.
+- Milestone 2 production gate: complete on the hosted Supabase dev project.
+- Milestone 2 reusable engine storage/API/runtime foundation: live on hosted Supabase dev.
+- Financial posting now uses a balanced idempotent database engine.
+- Wallet accounts now have real provisioning/status engines live on hosted Supabase dev.
+- Workflow and event runtime changes now use idempotent database engines.
+- Dispatch, tracking, verification, notification, maps, and AI runtime commands now have idempotent
+  database engines live on hosted Supabase dev.
+- Runtime strategy: hosted Supabase dev project through `supabase db push` and function deploy.
+  Docker is optional, not a milestone blocker.
 
----
+## Milestone 1: Platform Foundation
 
-## Phase 2 — Driver Tracking & Live GPS Telemetry Engine (Directive 2)
-- [x] Upgrade `useLocation.ts` & `SkimaMap.tsx` to compute real-time ETA (Haversine/Speed math), remaining distance, and active route polylines.
-- [x] Enforce automated tracking start upon driver pickup and auto-stop upon delivery completion (`LiveTrackingPolicy.ts`).
-- [x] Connect `order-tracking.tsx` to live driver location updates with privacy-scoped controls.
+- [x] Authentication Engine
+- [x] Authorization Engine
+- [x] User Engine
+- [x] Role Engine
+- [x] Permission Engine
+- [x] Organization Engine
+- [x] Partner Engine
+- [x] Driver Engine
+- [x] Vehicle Engine
+- [x] Asset Engine
+- [x] Media Engine
+- [x] Storage Engine
+- [x] Configuration Engine
+- [x] Audit Engine
+- [x] Logging Engine
+- [x] Error Engine
+- [x] Queue Engine
+- [x] Background Jobs
+- [x] Webhooks
+- [x] API Gateway
+- [x] Rate Limiting
+- [x] Caching
+- [x] Database foundation
+- [x] Edge Functions foundation
+- [x] Security baseline
+- [x] Health Monitoring
+- [x] Documentation baseline
 
----
+## Milestone 1 Production Gate
 
-## Phase 3 — Driver & Station Verification & Onboarding Workflows (Directives 3 & 4)
-- [x] Build Driver Onboarding Screen (`apps/mobile/app/(driver)/driver-onboarding.tsx`): License upload, vehicle inspection docs, NIN/BVN, bank details.
-- [x] Build Station Onboarding Screen (`apps/mobile/app/(station)/station-onboarding.tsx`): Operating license, EPA permit, station address, owner ID, bank payout account.
-- [x] Enforce permission locks: Driver & Station roles remain **LOCKED** until Admin approves verification in `verifications.tsx`.
-- [x] Build Admin verification action handlers (Approve, Reject with Reason, Suspend, Reactivate) in `verifications.tsx`.
+- [x] Root verification scripts exist.
+- [x] Shared TypeScript contracts compile.
+- [x] Static validation confirms business-agnostic boundaries.
+- [x] Static validation confirms RLS coverage in the Supabase migration.
+- [x] Remote Supabase scripts exist for link, database push, function deploy, status, bootstrap, and
+      RLS checks.
+- [x] Hosted Supabase dev project is linked with `npm run supabase:link`.
+- [x] Supabase migration applies successfully with `npm run supabase:db:push`.
+- [x] Edge Functions deploy with `npm run supabase:functions:deploy`.
+- [x] First platform admin bootstrap is verified with a real Supabase Auth user.
+- [x] Remote runtime checks pass for health, JWT enforcement, anon denial, service-role operations,
+      and append-only audit logs.
+- [x] Authenticated-user RLS checks use real super admin authentication.
+- [x] Client-safe Supabase Auth helper exists for real user sign-up, sign-in, session refresh,
+      current-user lookup, and sign-out.
+- [x] App/client env example exposes only `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
+- [ ] Supabase runtime secrets are configured with `supabase secrets set`.
+- [x] Deployment-only values are stored in shell or CI secrets, never app env files.
+- [ ] Production backup and point-in-time recovery settings are confirmed.
+- [ ] Monitoring alerts are configured.
 
----
+## Milestone 2: Reusable Platform Engines
 
-## Phase 4 — Permanent Physical Cylinder Identity & Printable QR Card System (Directive 7 & Clarification)
-- [x] Create Permanent Cylinder Registry in database & `CylinderIdentityEngine.ts` with permanent UUID, public tag (e.g. `CYL-AWK-12.5-90182`), and secure URL (`https://app.skima.com/cylinder/CYL-AWK-12.5-90182`).
-- [x] Build Printable QR Code Card Lego Component (`src/components/common/PrintableQrCard.tsx`): Auto-generated branded visual label artwork with high-resolution PNG, SVG vector, PDF print-ready export, and artwork regeneration without altering underlying UUIDs.
-- [x] Build Admin Cylinder Asset Portal (`apps/admin/pages/cylinder-management.tsx`): Fleet asset overview, previewing QR Cards, printing labels, downloading high-res assets, and registering new cylinders.
-- [x] Build Permission-Scoped Scanner Resolver (`apps/mobile/app/(common)/cylinder-details.tsx`): Public unauthenticated scan vs authenticated role-based operational view.
+- [x] Workflow Engine storage with database-stored workflows, runtime instances, and transition
+      receipts
+- [x] Event Engine storage with handler configuration and controlled event recording
+- [x] Verification Event Engine storage and runtime recording RPC
+- [x] Pricing Engine policy storage
+- [x] Settlement Engine policy storage
+- [x] Wallet Engine account provisioning, status runtime, receipts, and append-only ledger storage
+      with direct inserts blocked by RLS
+- [x] Financial Engine transaction storage with balanced idempotent posting RPC
+- [x] Currency Engine with NGN active for Phase One
+- [x] Payment Provider Engine through replaceable provider adapters
+- [x] Escrow Engine hold storage
+- [x] Dispatch Engine policy, request, candidate, assignment runtime, and receipt storage
+- [x] Tracking Engine session, point runtime, and receipt storage
+- [x] Maps Adapter request storage and queue RPC
+- [x] Notification Engine template, message runtime, and receipt storage
+- [x] AI Engine task definition, run runtime, and receipt storage
 
----
+## Milestone 3: Business Module Framework
 
-## Phase 5 — LPG Dynamic Pricing & Multi-Currency Engine (Directives 8, 9, 10)
-- [x] Build `LpgPricingEngine.ts`: `Selling Price = Market Price * (1 + Company Margin %) + Operating Buffer`.
-- [x] Zero Hardcoding: Move all commissions (driver %, station %, marketplace %, deposit/withdrawal fees, bill fees, wallet limits) to DB & `ConfigurationEngine.ts`.
-- [x] Build Admin Multi-Currency Exchange & Pricing Matrix Screen (`apps/admin/pages/multi-currency.tsx`): Manage NGN, USD, USDC exchange rates and currency gates.
+- [ ] Module registry
+- [ ] Module capability definitions
+- [ ] Module workflow definitions
+- [ ] Module pricing policy definitions
+- [ ] Module settlement policy definitions
+- [ ] Module event definitions
+- [ ] Module permission definitions
+- [ ] Module vehicle and driver requirements
+- [ ] Module document requirements
+- [ ] Module AI behavior definitions
+- [ ] Module report definitions
+- [ ] Module screen definitions
+- [ ] LPG module configuration
 
----
+## Milestone 4: Reusable Frontend Foundation
 
-## Phase 6 — Complete Marketplace Commerce System (Directives 11 & 12)
-- [x] Build Merchant Selling Console (`apps/mobile/app/(merchant)/sell.tsx`): Product creation, images, variants, stock inventory, shipping rules.
-- [x] Build Slug-based Marketplace Product Routing (`apps/mobile/app/(marketplace)/[slug].tsx`): Friendly URL slugs mapping to immutable product UUIDs.
-- [x] Build Complete Order Lifecycle (`apps/mobile/app/(marketplace)/order-flow.tsx`): Cart -> Escrow Lock -> Fulfillment -> Shipping Telemetry -> Delivery Confirmation -> Dispute Resolution -> Escrow Release.
+- [ ] Design system tokens
+- [ ] Buttons
+- [ ] Cards
+- [ ] Forms
+- [ ] Inputs
+- [ ] Dropdowns
+- [ ] Search
+- [ ] Filters
+- [ ] Lists
+- [ ] Tables
+- [ ] Navigation
+- [ ] Sidebar
+- [ ] Bottom navigation
+- [ ] Headers
+- [ ] Maps
+- [ ] QR components
+- [ ] Wallet components
+- [ ] Notification components
+- [ ] Charts
+- [ ] Dialogs
+- [ ] Loading states
+- [ ] Error states
+- [ ] Themes
 
----
+## Milestone 5: Platform Expansion
 
-## Phase 7 — Station Management & Driver Financial Platform (Directives 5 & 6)
-- [x] Complete Station Console (`apps/mobile/app/(station)/station-console.tsx`): Operating hours, pump attendant management, station wallet, refill earnings history, and bank payouts.
-- [x] Complete Driver Financial Console (`apps/mobile/app/(driver)/driver-finance.tsx`): Pending vs available balances, per-trip commission log, wallet withdrawals, and tax/payout statements.
+- [ ] Restaurant module
+- [ ] Ride hailing module
+- [ ] Pharmacy module
+- [ ] Laundry module
+- [ ] Courier module
+- [ ] Marketplace module
+- [ ] Water delivery module
+- [ ] Construction materials module
+- [ ] Healthcare logistics module
+- [ ] Future business modules through configuration
 
----
+## Agent Gate Before Every Code Change
 
-## Phase 8 — Global Feature Toggles & Maintenance Fallbacks (Directive 13)
-- [x] Implement global module gates in `ConfigurationEngine.ts` for Marketplace, Gas, Bills, Driver Reg, Station Reg, Withdrawals, Maintenance Mode.
-- [x] Render friendly maintenance fallbacks ("Marketplace is under maintenance...") across mobile screens when a feature flag is toggled off (`feature-flags.tsx`).
-
----
-
-## Phase 9 — Backend Security, Audit Logging & Production Hardening (Directives 1 & 14 & 15)
-- [x] Audit and harden all Supabase RLS policies, index optimizations, atomic stored procedures, and double-entry ledger entries in SQL migration (`20260723010000_production_hardening.sql`).
-- [x] Create system-wide Audit Logger (`AuditLogEngine.ts`) recording all administrative policy changes, user role unlocks, and financial withdrawals.
-- [x] Expand master kernel test suite in `src/__tests__/engines.test.ts` covering all engines and verifying 100% test passage.
-
----
-
-## Phase 10 — Next Horizon Enterprise Upgrades (Completed & Verified 100%)
-- [x] Build `AiAgentOrchestrator.ts` & mobile screen (`ai-assistant.tsx`).
-- [x] Build `DisputeEngine.ts` & admin dispute management screen (`dispute-management.tsx`).
-- [x] Build batch QR exporter `QrBatchExportEngine.ts` & ESC/POS thermal sticker generator.
-
----
-
-## Phase 11 — Zero-Hardcoding Platform Capability Architecture (Completed & Verified 100%)
-- [x] **Geography Capability (`GeographyEngine.ts`)**: Normalized database DDL (`20260723020000_platform_capability_schema.sql`), GeoJSON Point-in-Polygon containment math, and Google Maps Platform adapter interfaces. Zero hardcoded locations/cities in code.
-- [x] **Unified Communication Capability (`CommunicationEngine.ts`)**: Multi-channel gateway routing Push (Expo/FCM), SMS, Email, WhatsApp, & In-App messaging with Edge Function (`communication-gateway`).
-- [x] **Unified Synchronization Capability (`SyncEngine.ts`)**: Offline mutation queuing, background retries, conflict resolution policies, and audit trails (`sync_events`).
-- [x] **Location-Agnostic AI Capability (`AiEngine.ts`)**: Structured location context payload (`{ countryId, stateId, cityId, serviceAreaId, coordinates }`) replacing hardcoded location strings in AI prompts.
-- [x] **Dynamic Service Zone Governance (`service-zones.tsx`)**: Admin visual control center for creating countries, cities, service areas, drawing polygons, setting surge multipliers, and pricing rules.
-- [x] **Master Kernel Test Suite**: Expanded `src/__tests__/engines.test.ts` verifying all 13 platform capabilities with 100% test passage.
-
----
-
-## Phase 12 — Enterprise Financial Platform & Production Deployment (Completed & Verified 100%)
-- [x] **Skima Wallet Platform & Permanent Skima ID (`FinancialPlatformEngine.ts`)**: Single source of truth for all money, double-entry ledger tracking, company wallet fee retention, and internal P2P transfers using permanent public `SKM-XXXXXXXX` IDs. **ZERO Virtual Bank Accounts / NO NUBANs.**
-- [x] **Infrastructure Payment Connectors (`PaymentAdapterEngine.ts`)**: Infrastructure adapters for Paystack, Flutterwave, and Monnify checkout initialization & bank payout transfers.
-- [x] **Partner Verification Platform (`PartnerVerificationEngine.ts`)**: Automated KYC/AML risk engine for driver license OCR validation, NIN/BVN checks, CAC/TIN business verification, and EPA permits.
-- [x] **Commerce Platform (`CommerceEngine.ts`)**: Multi-vendor shopping cart checkout, dynamic distance shipping fee math, escrow locks, and merchant wallet settlement.
-- [x] **Production Deployment Pipelines**: Created Mobile EAS config (`apps/mobile/eas.json`), Web Admin Dockerfile containerization (`apps/admin/Dockerfile`), and Vercel specs (`apps/admin/vercel.json`).
-- [x] **Master Kernel Test Suite Expansion**: Expanded `src/__tests__/engines.test.ts` covering all 16 platform capability modules with 100% test passage.
+- [ ] Is this reusable?
+- [ ] Is this business-agnostic?
+- [ ] Can another service use it?
+- [ ] Is this configuration instead of hardcoding?
+- [ ] Can this be an engine instead of a feature?
+- [ ] Can this be an event instead of a conditional?
+- [ ] Can this be a workflow instead of business logic?
+- [ ] Can providers be swapped through adapters?
+- [ ] Can currencies be enabled through configuration?
+- [ ] Can payment policies change without code changes?
+- [ ] Will this still work if 100 new business modules are added?
