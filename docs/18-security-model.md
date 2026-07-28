@@ -12,8 +12,11 @@ Security requirements:
 - Authenticated gateway routes enforce database-configured rate limits.
 - Runtime service request, quote, settlement, and provider log mutations are routed through RPCs,
   not direct client table writes.
+- Outbound webhook payloads are signed with HMAC SHA-256 using Supabase secret references.
+- Webhook attempt records are append-only and inspectable only by webhook-governance admins.
 
 Current remediation focus:
 
 - expand RLS and integration tests by role
-- prove worker and webhook negative-auth checks on hosted Supabase
+- prove worker, provider webhook, and sandbox outbound webhook negative-auth checks on hosted
+  Supabase

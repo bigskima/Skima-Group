@@ -15,5 +15,8 @@ Implemented groups:
 - executable `price_quotes`
 - `settlement_executions`
 - `provider_execution_logs`
+- `webhook_delivery_attempts`
+- webhook delivery retry, locking, and dead-letter metadata on `webhook_deliveries`
 
-Remote migration evidence for the remediation schema is still pending.
+Remote migration evidence for `20260728050000_webhook_delivery_runtime.sql` has been recorded
+against the hosted Supabase dev project.

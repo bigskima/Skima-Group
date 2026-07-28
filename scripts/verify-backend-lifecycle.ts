@@ -28,6 +28,7 @@ await upsertProfile(driverUserId, "Lifecycle Driver");
 await upsertProfile(partnerOwnerUserId, "Lifecycle Partner Owner");
 
 const organizationId = await createOrganization(partnerOwnerUserId);
+const webhookEndpointId = await createWebhookEndpoint(organizationId);
 const partnerId = await createPartner(organizationId, partnerOwnerUserId);
 const driverId = await createDriver(driverUserId);
 const vehicleId = await createVehicle(driverUserId);
@@ -228,6 +229,7 @@ const aiTaskRunId = await requireRpcId(
 await runWorker();
 await requireRuntimeStatus("notification_messages", notificationMessageId, "delivered");
 await requireRuntimeStatus("ai_task_runs", aiTaskRunId, "completed");
+await requireWebhookDelivered(webhookEndpointId, serviceRequestId);
 
 await requireRpcId(
   serviceClient.rpc("execute_service_request_settlement", {
@@ -343,6 +345,29 @@ async function createOrganization(ownerUserId: string): Promise<string> {
       user_id: ownerUserId,
     }),
   );
+
+  return data.id;
+}
+
+async function createWebhookEndpoint(organizationId: string): Promise<string> {
+  const { data, error } = await serviceClient
+    .from("webhook_endpoints")
+    .insert({
+      delivery_config: {
+        requestTimeoutMs: 5000,
+      },
+      event_type_keys: ["event.delivery.completed"],
+      organization_id: organizationId,
+      signing_secret_ref: "SUPABASE_SECRET:SKIMA_OUTBOUND_WEBHOOK_SANDBOX_SECRET",
+      status: "active",
+      url: `${supabaseUrl}/functions/v1/webhook-sandbox-receiver`,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    throw error;
+  }
 
   return data.id;
 }
@@ -677,14 +702,59 @@ async function requireProviderEvidence(): Promise<void> {
   const { data, error } = await serviceClient
     .from("provider_execution_logs")
     .select("id")
-    .in("provider_kind", ["notification", "ai"])
+    .in("provider_kind", ["notification", "ai", "queue", "observability"])
     .eq("status", "succeeded");
 
   if (error) {
     throw error;
   }
 
-  requireCondition((data ?? []).length >= 2, "provider execution evidence is missing.");
+  requireCondition((data ?? []).length >= 4, "provider execution evidence is missing.");
+}
+
+async function requireWebhookDelivered(
+  webhookEndpointId: string,
+  serviceRequestId: string,
+): Promise<void> {
+  const eventRecord = await requireSingle(
+    serviceClient
+      .from("event_log")
+      .select("id")
+      .eq("subject_type", "service_request")
+      .eq("subject_id", serviceRequestId)
+      .eq("event_type_key", "event.delivery.completed")
+      .limit(1)
+      .single(),
+    "read delivery-completed event",
+  );
+
+  const delivery = await requireSingle(
+    serviceClient
+      .from("webhook_deliveries")
+      .select("id,status,attempt_count")
+      .eq("endpoint_id", webhookEndpointId)
+      .eq("event_id", eventRecord.id)
+      .single(),
+    "read webhook delivery",
+  );
+
+  requireCondition(
+    delivery.status === "delivered" && Number(delivery.attempt_count) >= 1,
+    `webhook delivery expected delivered, found ${delivery.status}.`,
+  );
+
+  const { data: attempts, error } = await serviceClient
+    .from("webhook_delivery_attempts")
+    .select("id,status")
+    .eq("delivery_id", delivery.id)
+    .eq("status", "succeeded")
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  requireCondition((attempts ?? []).length === 1, "webhook delivery attempt evidence is missing.");
 }
 
 async function requireLedgerEvidence(serviceRequestId: string): Promise<void> {

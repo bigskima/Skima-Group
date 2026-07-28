@@ -26,7 +26,7 @@ Milestone status is evidence-based:
 
 - Milestone 1: In Progress
 - Milestone 2: In Progress
-- Milestone 3: Implemented but Untested
+- Milestone 3: In Progress
 - Milestone 4: Not Started
 
 LPG remains the first module and is configured as database records and engine bindings, not platform
@@ -67,6 +67,7 @@ Required Edge Function secrets are stored in Supabase, not in app env files:
 
 - `SKIMA_WORKER_SECRET`
 - `SKIMA_PAYMENT_WEBHOOK_SECRET`
+- `SKIMA_OUTBOUND_WEBHOOK_SANDBOX_SECRET`
 - sandbox provider secrets such as `SKIMA_SANDBOX_PAYMENT_SECRET`
 
 ## Authentication Foundation

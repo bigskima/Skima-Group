@@ -18,6 +18,10 @@ await runGate("public health function responds", verifyPublicHealthFunction);
 await runGate("api gateway rejects anonymous requests", verifyGatewayRejectsAnonymous);
 await runGate("runtime worker rejects unsigned requests", verifyRuntimeWorkerRejectsUnsigned);
 await runGate("payment webhook rejects unsigned requests", verifyPaymentWebhookRejectsUnsigned);
+await runGate(
+  "sandbox webhook receiver rejects unsigned requests",
+  verifySandboxWebhookReceiverRejectsUnsigned,
+);
 await runGate("anonymous role cannot read protected tables", verifyAnonymousProtectedTables);
 await runGate("service role can read foundation records", verifyServiceRoleFoundationAccess);
 await runGate("one active platform super admin exists", verifySingleActiveSuperAdmin);
@@ -132,6 +136,19 @@ async function verifyPaymentWebhookRejectsUnsigned(): Promise<void> {
   );
 }
 
+async function verifySandboxWebhookReceiverRejectsUnsigned(): Promise<void> {
+  const response = await fetch(`${supabaseUrl}/functions/v1/webhook-sandbox-receiver`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idempotencyKey: `remote-gate:${crypto.randomUUID()}` }),
+  });
+
+  requireCondition(
+    response.status === 401 || response.status === 403,
+    `webhook-sandbox-receiver unsigned request returned HTTP ${response.status}.`,
+  );
+}
+
 async function verifyAnonymousProtectedTables(): Promise<void> {
   const { data, error } = await anonClient.from("configuration_entries").select("id").limit(1);
 
@@ -167,6 +184,8 @@ async function verifyServiceRoleFoundationAccess(): Promise<void> {
   await requireReadable(serviceClient, "workflow_instances", "status");
   await requireReadable(serviceClient, "workflow_instance_events", "status");
   await requireReadable(serviceClient, "event_handlers", "key,status");
+  await requireReadable(serviceClient, "webhook_endpoints", "url,status");
+  await requireReadable(serviceClient, "webhook_deliveries", "status,attempt_count");
   await requireReadable(serviceClient, "verification_definitions", "key,status");
   await requireReadable(serviceClient, "verification_events", "result");
   await requireReadable(serviceClient, "dispatch_policies", "key,status");
@@ -192,6 +211,7 @@ async function verifyServiceRoleFoundationAccess(): Promise<void> {
     "provider_execution_logs",
     "provider_kind,operation_key,status",
   );
+  await requireReadable(serviceClient, "webhook_delivery_attempts", "delivery_id,status");
 }
 
 async function verifyAuditLogsRejectDirectMutation(): Promise<void> {
@@ -793,6 +813,40 @@ async function verifyBackendRuntimeRejectsIncompleteOperations(): Promise<void> 
     }),
     "target_service_key must be a valid platform key",
   );
+
+  await requireRpcError(
+    "webhook queue runtime",
+    serviceClient.rpc("queue_webhook_deliveries", {
+      target_event_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+    }),
+    "target_event_id is required",
+  );
+
+  await requireRpcError(
+    "webhook claim runtime",
+    serviceClient.rpc("claim_pending_webhook_deliveries", {
+      target_limit: 0,
+      target_worker_id: "remote-gate",
+    }),
+    "target_limit must be between 1 and 100",
+  );
+
+  await requireRpcError(
+    "webhook attempt runtime",
+    serviceClient.rpc("record_webhook_delivery_attempt", {
+      target_delivery_id: null,
+      target_error_message: "remote gate",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_provider_execution_log_id: null,
+      target_request_headers: {},
+      target_request_payload: {},
+      target_response_body: null,
+      target_response_status: null,
+      target_status: "failed",
+    }),
+    "target_delivery_id is required",
+  );
 }
 
 async function verifyFirstBusinessModuleConfiguration(): Promise<void> {
@@ -935,6 +989,8 @@ async function verifyPlatformAdminReadAccess(adminClient: SupabaseClient): Promi
   await requireReadable(adminClient, "workflow_instances", "status");
   await requireReadable(adminClient, "workflow_instance_events", "status");
   await requireReadable(adminClient, "event_handlers", "key,status");
+  await requireReadable(adminClient, "webhook_endpoints", "url,status");
+  await requireReadable(adminClient, "webhook_deliveries", "status,attempt_count");
   await requireReadable(adminClient, "verification_definitions", "key,status");
   await requireReadable(adminClient, "verification_events", "result");
   await requireReadable(adminClient, "dispatch_policies", "key,status");
@@ -960,6 +1016,7 @@ async function verifyPlatformAdminReadAccess(adminClient: SupabaseClient): Promi
     "provider_execution_logs",
     "provider_kind,operation_key,status",
   );
+  await requireReadable(adminClient, "webhook_delivery_attempts", "delivery_id,status");
   await requireAdminCanReadFirstBusinessModule(adminClient);
 }
 

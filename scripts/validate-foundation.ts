@@ -92,6 +92,10 @@ requireCondition(
   tables.includes("provider_execution_logs"),
   "Backend runtime remediation must include provider execution logs.",
 );
+requireCondition(
+  tables.includes("webhook_delivery_attempts"),
+  "Webhook delivery runtime must include immutable delivery attempt records.",
+);
 
 for (const table of tables) {
   requireMatch(
@@ -544,12 +548,43 @@ requireMatch(
 
 requireMatch(
   normalizedSql,
+  /create policy webhook_delivery_attempts_no_direct_insert on public\.webhook_delivery_attempts/,
+  "Webhook delivery attempts must reject direct authenticated inserts.",
+);
+
+requireMatch(
+  normalizedSql,
+  /webhook delivery attempts are append-only/,
+  "Webhook delivery attempts must be append-only.",
+);
+
+requireMatch(
+  normalizedSql,
+  /create or replace function public\.claim_pending_webhook_deliveries/,
+  "Webhook runtime must claim pending deliveries through a controlled RPC.",
+);
+
+requireMatch(
+  normalizedSql,
+  /create or replace function public\.record_webhook_delivery_attempt/,
+  "Webhook runtime must record delivery attempts through a controlled RPC.",
+);
+
+requireMatch(
+  normalizedSql,
+  /enqueue_webhook_deliveries_after_event_insert/,
+  "Platform events must enqueue configured webhook deliveries.",
+);
+
+requireMatch(
+  normalizedSql,
   /runtime event records are append-only/,
   "Runtime service request events must be append-only.",
 );
 
 await requireFile("supabase/functions/runtime-worker/index.ts");
 await requireFile("supabase/functions/payment-webhook/index.ts");
+await requireFile("supabase/functions/webhook-sandbox-receiver/index.ts");
 await requireFile("scripts/verify-backend-lifecycle.ts");
 
 requireCondition(

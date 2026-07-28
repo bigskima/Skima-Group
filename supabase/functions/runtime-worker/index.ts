@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.110.9";
 import { jsonResponse, optionsResponse, requestId } from "../_shared/http.ts";
 
 const DEFAULT_LIMIT = 25;
+const DEFAULT_WEBHOOK_TIMEOUT_MS = 5_000;
 
 Deno.serve(async (request: Request): Promise<Response> => {
   const id = requestId(request);
@@ -43,6 +44,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
     const notifications = await processNotifications(supabase, limit);
     const aiTasks = await processAiTasks(supabase, limit);
+    const webhooks = await processWebhooks(supabase, limit);
     const jobs = await processBackgroundJobs(supabase, limit);
     const expirations = await expireEscrowHolds(supabase, limit);
 
@@ -52,6 +54,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         expirations,
         jobs,
         notifications,
+        webhooks,
         requestId: id,
       },
       target_service_key: "platform.runtime_worker",
@@ -65,6 +68,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         expirations,
         jobs,
         notifications,
+        webhooks,
       },
       requestId: id,
     });
@@ -121,6 +125,22 @@ type QueryResult<TData> = PromiseLike<{ data: TData; error: RuntimeError | null 
 interface RuntimeRow {
   readonly id: string;
   readonly [key: string]: unknown;
+}
+
+interface WebhookDeliveryClaim {
+  readonly deliveryId: string;
+  readonly endpointId: string;
+  readonly eventId: string;
+  readonly attemptNumber: number;
+  readonly url: string;
+  readonly signingSecretRef: string;
+  readonly deliveryConfig: Readonly<Record<string, unknown>>;
+  readonly eventTypeKey: string;
+  readonly eventSource: string;
+  readonly subjectType: string;
+  readonly subjectId: string;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly occurredAt: string;
 }
 
 interface RuntimeError {
@@ -273,6 +293,107 @@ async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): P
   return processed;
 }
 
+async function processWebhooks(supabase: RuntimeSupabaseClient, limit: number): Promise<number> {
+  const { data, error } = await supabase.rpc("claim_pending_webhook_deliveries", {
+    target_limit: limit,
+    target_worker_id: "runtime-worker",
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const deliveries = parseWebhookClaims(data);
+  let processed = 0;
+
+  for (const delivery of deliveries) {
+    const attemptIdempotencyKey = `${delivery.deliveryId}:${delivery.attemptNumber}`;
+    const requestPayload = buildWebhookPayload(delivery);
+    const requestBody = JSON.stringify(requestPayload);
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "User-Agent": "skima-runtime-worker/0.1",
+      "x-skima-delivery-id": delivery.deliveryId,
+      "x-skima-event-id": delivery.eventId,
+      "x-skima-event-type": delivery.eventTypeKey,
+    };
+    const secretHeaderNames = new Set<string>();
+
+    try {
+      const signingSecret = resolveSecretValue(delivery.signingSecretRef);
+
+      if (!signingSecret) {
+        throw new Error("webhook signing secret is not configured");
+      }
+
+      headers["x-skima-signature"] = `sha256=${await hmacSha256(signingSecret, requestBody)}`;
+      headers["x-skima-signature-algorithm"] = "hmac-sha256";
+      applyConfiguredHeaders(headers, delivery.deliveryConfig, secretHeaderNames);
+
+      const response = await fetch(delivery.url, {
+        body: requestBody,
+        headers,
+        method: "POST",
+        signal: AbortSignal.timeout(readWebhookTimeout(delivery.deliveryConfig)),
+      });
+      const responseBody = (await response.text()).slice(0, 4_000);
+      const providerLogId = await recordWebhookProviderExecution(
+        supabase,
+        delivery,
+        requestPayload,
+        sanitizeHeaders(headers, secretHeaderNames),
+        response.ok ? "succeeded" : "failed",
+        {
+          responseBody,
+          responseStatus: response.status,
+        },
+        response.ok ? null : `webhook returned HTTP ${response.status}`,
+      );
+
+      await recordWebhookAttempt(
+        supabase,
+        delivery,
+        response.ok ? "delivered" : "failed",
+        requestPayload,
+        sanitizeHeaders(headers, secretHeaderNames),
+        response.status,
+        responseBody,
+        response.ok ? null : `webhook returned HTTP ${response.status}`,
+        attemptIdempotencyKey,
+        providerLogId,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "webhook delivery failed";
+      const providerLogId = await recordWebhookProviderExecution(
+        supabase,
+        delivery,
+        requestPayload,
+        sanitizeHeaders(headers, secretHeaderNames),
+        "failed",
+        {},
+        message,
+      );
+
+      await recordWebhookAttempt(
+        supabase,
+        delivery,
+        "failed",
+        requestPayload,
+        sanitizeHeaders(headers, secretHeaderNames),
+        null,
+        null,
+        message,
+        attemptIdempotencyKey,
+        providerLogId,
+      );
+    }
+
+    processed += 1;
+  }
+
+  return processed;
+}
+
 async function processBackgroundJobs(
   supabase: RuntimeSupabaseClient,
   limit: number,
@@ -380,6 +501,233 @@ async function requireUpdate(
   if (error) {
     throw new Error(error.message);
   }
+}
+
+async function recordWebhookProviderExecution(
+  supabase: RuntimeSupabaseClient,
+  delivery: WebhookDeliveryClaim,
+  requestPayload: Readonly<Record<string, unknown>>,
+  requestHeaders: Readonly<Record<string, unknown>>,
+  status: "succeeded" | "failed",
+  responsePayload: Readonly<Record<string, unknown>>,
+  errorMessage: string | null,
+): Promise<string | null> {
+  const { data, error } = await supabase.rpc("record_provider_execution", {
+    target_error_message: errorMessage,
+    target_idempotency_key: `${delivery.deliveryId}:${delivery.attemptNumber}:provider:${status}`,
+    target_operation_key: "provider.webhook.deliver",
+    target_provider_adapter_key: "provider.queue.webhook-delivery",
+    target_provider_kind: "queue",
+    target_request_payload: {
+      deliveryId: delivery.deliveryId,
+      endpointId: delivery.endpointId,
+      eventId: delivery.eventId,
+      eventTypeKey: delivery.eventTypeKey,
+      headers: requestHeaders,
+      payload: requestPayload,
+      url: delivery.url,
+    },
+    target_response_payload: responsePayload,
+    target_status: status,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return typeof data === "string" ? data : null;
+}
+
+async function recordWebhookAttempt(
+  supabase: RuntimeSupabaseClient,
+  delivery: WebhookDeliveryClaim,
+  status: "delivered" | "failed",
+  requestPayload: Readonly<Record<string, unknown>>,
+  requestHeaders: Readonly<Record<string, unknown>>,
+  responseStatus: number | null,
+  responseBody: string | null,
+  errorMessage: string | null,
+  idempotencyKey: string,
+  providerExecutionLogId: string | null,
+): Promise<void> {
+  await requireRpc(supabase.rpc("record_webhook_delivery_attempt", {
+    target_delivery_id: delivery.deliveryId,
+    target_error_message: errorMessage,
+    target_idempotency_key: idempotencyKey,
+    target_provider_execution_log_id: providerExecutionLogId,
+    target_request_headers: requestHeaders,
+    target_request_payload: requestPayload,
+    target_response_body: responseBody,
+    target_response_status: responseStatus,
+    target_status: status,
+  }));
+}
+
+function parseWebhookClaims(data: unknown): WebhookDeliveryClaim[] {
+  if (!Array.isArray(data)) {
+    return [];
+  }
+
+  return data.map((item) => {
+    const record = requireRecord(item);
+
+    return {
+      attemptNumber: requireNumber(record.attemptNumber),
+      deliveryConfig: optionalRecord(record.deliveryConfig) ?? {},
+      deliveryId: requireString(record.deliveryId),
+      endpointId: requireString(record.endpointId),
+      eventId: requireString(record.eventId),
+      eventSource: requireString(record.eventSource),
+      eventTypeKey: requireString(record.eventTypeKey),
+      occurredAt: requireString(record.occurredAt),
+      payload: optionalRecord(record.payload) ?? {},
+      signingSecretRef: requireString(record.signingSecretRef),
+      subjectId: requireString(record.subjectId),
+      subjectType: requireString(record.subjectType),
+      url: requireString(record.url),
+    };
+  });
+}
+
+function buildWebhookPayload(
+  delivery: WebhookDeliveryClaim,
+): Readonly<Record<string, unknown>> {
+  return {
+    delivery: {
+      attemptNumber: delivery.attemptNumber,
+      id: delivery.deliveryId,
+    },
+    event: {
+      id: delivery.eventId,
+      occurredAt: delivery.occurredAt,
+      payload: delivery.payload,
+      source: delivery.eventSource,
+      subjectId: delivery.subjectId,
+      subjectType: delivery.subjectType,
+      type: delivery.eventTypeKey,
+    },
+  };
+}
+
+function applyConfiguredHeaders(
+  headers: Record<string, string>,
+  deliveryConfig: Readonly<Record<string, unknown>>,
+  secretHeaderNames: Set<string>,
+): void {
+  const headerConfigs = deliveryConfig.headers;
+
+  if (!Array.isArray(headerConfigs)) {
+    return;
+  }
+
+  for (const headerConfig of headerConfigs) {
+    const record = requireRecord(headerConfig);
+    const name = requireString(record.name);
+    const normalizedName = name.toLowerCase();
+    const value = typeof record.value === "string"
+      ? record.value
+      : resolveSecretValue(optionalString(record.secretRef) ?? optionalString(record.secret_ref));
+
+    if (!value) {
+      throw new Error(`configured webhook header ${name} has no value`);
+    }
+
+    headers[name] = value;
+
+    if (record.secretRef || record.secret_ref) {
+      secretHeaderNames.add(normalizedName);
+    }
+  }
+}
+
+function readWebhookTimeout(deliveryConfig: Readonly<Record<string, unknown>>): number {
+  const timeout = deliveryConfig.requestTimeoutMs ?? deliveryConfig.request_timeout_ms;
+
+  if (typeof timeout !== "number" || !Number.isInteger(timeout)) {
+    return DEFAULT_WEBHOOK_TIMEOUT_MS;
+  }
+
+  return Math.min(Math.max(timeout, 1_000), 30_000);
+}
+
+function sanitizeHeaders(
+  headers: Readonly<Record<string, string>>,
+  secretHeaderNames: ReadonlySet<string>,
+): Readonly<Record<string, unknown>> {
+  const sanitized: Record<string, unknown> = {};
+
+  for (const [name, value] of Object.entries(headers)) {
+    const lowerName = name.toLowerCase();
+    sanitized[name] = lowerName.includes("signature") || secretHeaderNames.has(lowerName)
+      ? "[redacted]"
+      : value;
+  }
+
+  return sanitized;
+}
+
+function resolveSecretValue(secretRef: string | null): string | null {
+  if (!secretRef) {
+    return null;
+  }
+
+  if (secretRef.startsWith("SUPABASE_SECRET:")) {
+    return Deno.env.get(secretRef.slice("SUPABASE_SECRET:".length)) ?? null;
+  }
+
+  return Deno.env.get(secretRef) ?? null;
+}
+
+async function hmacSha256(secret: string, payload: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { hash: "SHA-256", name: "HMAC" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+
+  return bytesToHex(new Uint8Array(signature));
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function requireRecord(value: unknown): Readonly<Record<string, unknown>> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("expected JSON object");
+  }
+
+  return value as Readonly<Record<string, unknown>>;
+}
+
+function optionalRecord(value: unknown): Readonly<Record<string, unknown>> | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  return requireRecord(value);
+}
+
+function optionalString(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  return requireString(value);
+}
+
+function requireNumber(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error("expected finite number");
+  }
+
+  return value;
 }
 
 function requireString(value: unknown): string {

@@ -10,9 +10,10 @@ Implemented:
 - service request event processing through `process_service_request_event`
 - runtime worker surface for queued jobs and provider execution
 - payment webhook event intake
+- automatic outbound webhook delivery creation for configured webhook endpoints
+- signed outbound webhook attempts, retry scheduling, and dead-letter recording
 
 Required remediation:
 
-- E2E proof that configured events trigger workflow advancement and operational side effects
-- webhook delivery generation for configured outbound endpoints
-- deeper retry/dead-letter tests for failure scenarios
+- E2E proof for the webhook delivery runtime inside the service-request lifecycle
+- deeper retry/dead-letter tests for non-2xx receiver failure scenarios

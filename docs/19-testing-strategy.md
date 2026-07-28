@@ -10,6 +10,8 @@ Required test layers:
 - database integration tests for every runtime RPC
 - Edge Function API tests
 - worker and webhook tests
+- signed outbound webhook delivery tests
+- retry and dead-letter tests
 - no-frontend E2E lifecycle test
 - security/RLS tests for anon, users, admins, and service role
 

@@ -33,6 +33,7 @@ Runtime server-side secrets for Edge Functions must be stored in Supabase secret
 ```bash
 supabase secrets set SKIMA_WORKER_SECRET=<worker-secret> --project-ref <hosted-dev-project-ref>
 supabase secrets set SKIMA_PAYMENT_WEBHOOK_SECRET=<webhook-secret> --project-ref <hosted-dev-project-ref>
+supabase secrets set SKIMA_OUTBOUND_WEBHOOK_SANDBOX_SECRET=<outbound-webhook-sandbox-secret> --project-ref <hosted-dev-project-ref>
 ```
 
 Sandbox provider secrets are also server-side only when enabled, for example
@@ -84,6 +85,7 @@ Expected function behavior:
 - `api-gateway` requires a user JWT.
 - `runtime-worker` does not require a user JWT but requires `x-skima-worker-secret`.
 - `payment-webhook` does not require a user JWT but requires `x-skima-webhook-secret`.
+- `webhook-sandbox-receiver` does not require a user JWT but requires a valid `x-skima-signature`.
 - `api-gateway/admin/role-templates` lists or configures admin role templates.
 - `api-gateway/admin/users` lists or configures platform admin assignments.
 - `api-gateway/admin/users/revoke` revokes a role-based platform admin assignment.
@@ -99,8 +101,8 @@ The admin and module gateway routes delegate authorization to Supabase RLS and p
 policies.
 
 This is intentionally not one Edge Function per resource. Functions are split where security or
-execution boundaries differ: public health, authenticated API, worker-secret runtime processing, and
-provider-secret webhook intake.
+execution boundaries differ: public health, authenticated API, worker-secret runtime processing,
+provider-secret webhook intake, and signed sandbox outbound webhook receipt.
 
 ## 6. Bootstrap the First Platform Admin
 

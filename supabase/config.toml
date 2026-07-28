@@ -54,3 +54,12 @@ verify_jwt = false
 
 [functions.api-gateway]
 verify_jwt = true
+
+[functions.runtime-worker]
+verify_jwt = false
+
+[functions.payment-webhook]
+verify_jwt = false
+
+[functions.webhook-sandbox-receiver]
+verify_jwt = false

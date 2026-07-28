@@ -3,8 +3,8 @@
 Tracking stores backend movement data only. Frontend map rendering is out of scope.
 
 Skima is not building a mapping platform, GPS system, road-routing algorithm, or traffic engine.
-Those capabilities come from map providers through adapters. The backend owns tracking
-permissions, location security, geofence policy, workflow integration, dispatch decisions, and
+Those capabilities come from map providers through adapters. The backend owns tracking permissions,
+location security, geofence policy, workflow integration, dispatch decisions, and
 settlement-triggering events.
 
 Implemented:

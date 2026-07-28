@@ -6,6 +6,10 @@ const ROUTES = new Set([
   "/admin/role-templates",
   "/admin/users",
   "/admin/users/revoke",
+  "/admin/webhook-endpoints",
+  "/admin/webhook-deliveries",
+  "/admin/webhook-attempts",
+  "/admin/webhooks/queue",
   "/engines/catalog",
   "/engines/currencies",
   "/engines/pricing-policies",
@@ -854,6 +858,92 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     );
   }
 
+  if (url.pathname === "/admin/webhook-endpoints") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("webhook_endpoints")
+          .select(
+            "id,organization_id,url,event_type_keys,signing_secret_ref,delivery_config,status,created_at,updated_at",
+          )
+          .order("created_at", { ascending: false }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      const { data, error } = await supabase
+        .from("webhook_endpoints")
+        .insert({
+          delivery_config: optionalRecord(payload.deliveryConfig) ?? {},
+          event_type_keys: optionalStringArray(payload.eventTypeKeys) ?? [],
+          organization_id: optionalUuid(payload.organizationId, "organizationId"),
+          signing_secret_ref: requireString(payload.signingSecretRef, "signingSecretRef"),
+          status: optionalString(payload.status) ?? "active",
+          url: requireHttpsUrl(payload.url, "url"),
+        })
+        .select("id")
+        .single();
+
+      if (error) {
+        return databaseError(error, id);
+      }
+
+      return jsonResponse({
+        ok: true,
+        id: data.id,
+        requestId: id,
+      });
+    }
+  }
+
+  if (url.pathname === "/admin/webhook-deliveries" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("webhook_deliveries")
+        .select(
+          "id,endpoint_id,event_id,status,attempt_count,response_status,next_attempt_at,last_error,delivered_at,failed_at,metadata,created_at,updated_at",
+        )
+        .order("created_at", { ascending: false }),
+      id,
+    );
+  }
+
+  if (url.pathname === "/admin/webhook-attempts" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("webhook_delivery_attempts")
+        .select(
+          "id,delivery_id,endpoint_id,event_id,attempt_number,status,response_status,error_message,provider_execution_log_id,created_at",
+        )
+        .order("created_at", { ascending: false }),
+      id,
+    );
+  }
+
+  if (url.pathname === "/admin/webhooks/queue" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    return rpcResponse(
+      supabase.rpc("queue_webhook_deliveries", {
+        target_event_id: requireUuid(body.value.eventId, "eventId"),
+        target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+      }),
+      id,
+    );
+  }
+
   if (url.pathname === "/admin/role-templates") {
     if (request.method === "GET") {
       const { data, error } = await supabase
@@ -1093,6 +1183,24 @@ function requireStringArray(value: unknown, fieldName: string): string[] {
   }
 
   return value;
+}
+
+function optionalStringArray(value: unknown): string[] | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  return requireStringArray(value, "optional string array field");
+}
+
+function requireHttpsUrl(value: unknown, fieldName: string): string {
+  const url = requireString(value, fieldName);
+
+  if (!url.startsWith("https://")) {
+    throw new RequestValidationError(`${fieldName} must be an HTTPS URL.`);
+  }
+
+  return url;
 }
 
 function requireInteger(value: unknown, fieldName: string): number {

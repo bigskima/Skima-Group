@@ -78,6 +78,27 @@ export interface MapProviderResponse {
   readonly providerMetadata: Readonly<Record<string, unknown>>;
 }
 
+export interface WebhookDeliveryRequest {
+  readonly deliveryId: string;
+  readonly endpointId: string;
+  readonly eventId: string;
+  readonly eventTypeKey: string;
+  readonly url: string;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly signingSecretRef: string;
+  readonly idempotencyKey: string;
+  readonly deliveryConfig?: Readonly<Record<string, unknown>>;
+}
+
+export interface WebhookDeliveryResponse {
+  readonly delivered: boolean;
+  readonly responseStatus?: number;
+  readonly responseBody?: string;
+  readonly attemptId?: string;
+  readonly providerExecutionLogId?: string;
+  readonly errorMessage?: string;
+}
+
 export class ProviderRegistry {
   private readonly adapters = new Map<string, ProviderAdapter<unknown, unknown>>();
 

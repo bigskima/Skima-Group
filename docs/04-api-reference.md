@@ -27,6 +27,10 @@ Authenticated current routes:
 - `GET|POST /functions/v1/api-gateway/admin/role-templates`
 - `GET|POST /functions/v1/api-gateway/admin/users`
 - `POST /functions/v1/api-gateway/admin/users/revoke`
+- `GET|POST /functions/v1/api-gateway/admin/webhook-endpoints`
+- `GET /functions/v1/api-gateway/admin/webhook-deliveries`
+- `GET /functions/v1/api-gateway/admin/webhook-attempts`
+- `POST /functions/v1/api-gateway/admin/webhooks/queue`
 
 Authenticated runtime routes:
 
@@ -54,6 +58,7 @@ Worker and webhook surfaces:
 
 - `POST /functions/v1/runtime-worker` requires `x-skima-worker-secret`
 - `POST /functions/v1/payment-webhook` requires `x-skima-webhook-secret`
+- `POST /functions/v1/webhook-sandbox-receiver` requires a valid `x-skima-signature`
 
 All authenticated API routes enforce the configured database rate-limit policy
 `api.gateway.authenticated.default`.

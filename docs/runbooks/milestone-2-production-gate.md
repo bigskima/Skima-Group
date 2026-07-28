@@ -47,10 +47,11 @@ business-specific screens.
 - [x] Remote gate confirms incomplete financial postings are rejected by the posting engine.
 - [x] Remote gate confirms incomplete workflow/event runtime operations are rejected by the runtime
       engines.
-- [x] Remote gate confirms executable pricing, escrow, settlement, provider workers, retry/dead
-      letter processing, and reconciliation reject incomplete operations after backend remediation
-      is pushed.
-- [x] Full no-frontend lifecycle proves successful runtime execution across all engines.
+- [x] Remote gate confirms executable pricing, escrow, settlement, provider workers, outbound
+      webhooks, retry/dead letter processing, and reconciliation reject incomplete operations after
+      webhook delivery runtime is pushed.
+- [ ] Full no-frontend lifecycle proves successful runtime execution across all engines after the
+      webhook-aware lifecycle gate is deployed.
 
 ## Engine Checklist
 
@@ -87,8 +88,9 @@ business-specific screens.
 - [x] Escrow hold/release/refund/dispute/expiry execution
 - [x] Settlement distribution execution
 - [x] Provider worker execution
-- [x] Retry and dead-letter execution
+- [x] Outbound webhook delivery execution
+- [ ] Hosted non-2xx retry and dead-letter execution evidence
 - [x] Financial reconciliation execution
-- [x] Hosted Supabase migration/deploy evidence for executable runtime engines
-- [x] Hosted Supabase successful lifecycle evidence for executable runtime engines
+- [x] Hosted Supabase migration/deploy evidence for webhook delivery runtime
+- [ ] Hosted Supabase successful lifecycle evidence for webhook-aware runtime engines
 - [ ] Reviewer approves runtime engine evidence.

@@ -30,8 +30,10 @@ ride hailing, pharmacy, or any other business module into platform engines.
 - [x] LPG module configuration migration applies to the hosted Supabase dev project.
 - [x] Remote gate confirms active LPG module version 1 has required engine component bindings.
 - [x] Remote gate confirms the platform super admin can read active LPG module records.
-- [x] Full no-frontend LPG backend lifecycle passes through API/RPC calls.
-- [x] `npm run supabase:backend:e2e` passes against the hosted Supabase dev project.
+- [ ] Full no-frontend LPG backend lifecycle passes through API/RPC calls after outbound webhook
+      delivery is included.
+- [ ] `npm run supabase:backend:e2e` passes against the hosted Supabase dev project with signed
+      outbound webhook delivery evidence.
 - [ ] Reviewer approves lifecycle evidence.
 
 ## Framework Checklist
@@ -47,5 +49,6 @@ ride hailing, pharmacy, or any other business module into platform engines.
 - [x] API gateway module routes
 - [x] First business module configuration
 - [x] No-frontend lifecycle gate script
-- [x] No-frontend lifecycle gate passed with service request
+- [x] Earlier no-frontend lifecycle gate passed with service request
       `f126afbf-2cbe-4b46-bd79-5d82531c20e1`
+- [ ] Updated webhook-aware no-frontend lifecycle gate passed with service request evidence
