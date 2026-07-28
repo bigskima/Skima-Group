@@ -2,6 +2,8 @@
 
 Milestone 2 may not start until this checklist is complete.
 
+Current status: In Progress.
+
 ## Local Verification
 
 - [x] Root verification scripts exist.
@@ -44,13 +46,19 @@ Milestone 2 may not start until this checklist is complete.
 
 - [x] Health Edge Function exists.
 - [x] API Gateway Edge Function exists.
+- [x] Runtime worker Edge Function exists.
+- [x] Payment webhook Edge Function exists.
+- [x] Database-backed API rate-limit check exists.
+- [x] Cache runtime helpers exist.
+- [x] Health recording runtime helper exists.
 - [x] Job queue tables exist.
 - [x] Webhook tables exist.
 - [x] Rate limit tables exist.
 - [x] Cache tables exist.
 - [x] Logging and error tables exist.
 - [x] Edge Functions are deployed to the hosted Supabase dev project.
-- [x] Remote production verification is completed against the hosted Supabase dev project.
+- [ ] Remote production verification is completed against the hosted Supabase dev project after the
+      backend-first remediation gate is added.
 - [ ] Monitoring alerts are configured in the production Supabase project.
 
 ## Required Remote Commands
@@ -66,6 +74,9 @@ npm run supabase:functions:deploy
 npm run supabase:provision-admin
 npm run supabase:remote:gate
 ```
+
+Set `SKIMA_WORKER_SECRET` and `SKIMA_PAYMENT_WEBHOOK_SECRET` with `supabase secrets set` before
+deploying `runtime-worker` and `payment-webhook`.
 
 Use a dedicated hosted Supabase development project. Do not run these commands against production
 until Milestone 1 has passed the hosted dev gate.

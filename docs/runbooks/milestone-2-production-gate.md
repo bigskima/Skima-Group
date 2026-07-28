@@ -2,6 +2,8 @@
 
 Milestone 3 may not start until this checklist is complete.
 
+Current status: In Progress.
+
 ## Scope
 
 Milestone 2 builds reusable platform engines only. It must not add business modules, LPG flows, or
@@ -34,7 +36,7 @@ business-specific screens.
 
 ## Remote Supabase Verification
 
-- [x] Engine migration applies to the hosted Supabase dev project.
+- [x] Engine remediation migration applies to the hosted Supabase dev project.
 - [x] Remote gate confirms service-role access to reusable engine tables.
 - [x] Remote gate confirms anonymous users cannot read protected engine routes and tables.
 - [x] Remote gate confirms the platform super admin can read governed engine records.
@@ -45,8 +47,10 @@ business-specific screens.
 - [x] Remote gate confirms incomplete financial postings are rejected by the posting engine.
 - [x] Remote gate confirms incomplete workflow/event runtime operations are rejected by the runtime
       engines.
-- [x] Remote gate confirms incomplete operational runtime operations are rejected by the runtime
-      engines.
+- [x] Remote gate confirms executable pricing, escrow, settlement, provider workers, retry/dead
+      letter processing, and reconciliation reject incomplete operations after backend remediation
+      is pushed.
+- [ ] Full no-frontend lifecycle proves successful runtime execution across all engines.
 
 ## Engine Checklist
 
@@ -79,3 +83,11 @@ business-specific screens.
 - [x] AI task definitions and runs
 - [x] AI task queue and status runtime functions
 - [x] AI runtime receipts
+- [x] Executable pricing calculation
+- [x] Escrow hold/release/refund/dispute/expiry execution
+- [x] Settlement distribution execution
+- [x] Provider worker execution
+- [x] Retry and dead-letter execution
+- [x] Financial reconciliation execution
+- [x] Hosted Supabase migration/deploy evidence for executable runtime engines
+- [ ] Hosted Supabase successful lifecycle evidence for executable runtime engines

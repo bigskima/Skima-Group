@@ -70,31 +70,41 @@ async function resetLinkedDatabase(): Promise<void> {
 async function deployFunctions(): Promise<void> {
   const projectRef = await resolveProjectRef();
 
-  await runSupabase([
-    "functions",
-    "deploy",
-    "health",
-    "--project-ref",
-    projectRef,
-    "--use-api",
-    "--no-verify-jwt",
-  ]);
+  await deployFunction(projectRef, "health", true);
+  await deployFunction(projectRef, "api-gateway", false);
+  await deployFunction(projectRef, "runtime-worker", true);
+  await deployFunction(projectRef, "payment-webhook", true);
+}
 
-  await runSupabase([
+async function deployFunction(
+  projectRef: string,
+  functionName: string,
+  noVerifyJwt: boolean,
+): Promise<void> {
+  const args = [
     "functions",
     "deploy",
-    "api-gateway",
+    functionName,
     "--project-ref",
     projectRef,
     "--use-api",
-  ]);
+  ];
+
+  if (noVerifyJwt) {
+    args.push("--no-verify-jwt");
+  }
+
+  await runSupabase(args);
 }
 
 async function remoteStatus(): Promise<void> {
   const projectRef = await resolveProjectRef();
 
   console.log(`Checking Supabase CLI access for project ${projectRef}...`);
-  await runSupabase(["projects", "list"]);
+  await runSupabase([
+    "projects",
+    "list",
+  ]);
 }
 
 async function runSupabase(args: readonly string[]): Promise<void> {
@@ -138,7 +148,7 @@ Commands:
   link              Link this repo to the hosted Supabase dev project
   db-push           Push migrations to the linked hosted dev project
   db-reset-linked   Reset the linked hosted dev database with the local migrations
-  functions-deploy  Deploy health and api-gateway with server-side bundling
+  functions-deploy  Deploy health, api-gateway, runtime-worker, and payment-webhook
   status            Check CLI project access
 `,
   );

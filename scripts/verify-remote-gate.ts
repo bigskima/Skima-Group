@@ -16,6 +16,8 @@ const serviceClient = createDeploymentClient(serviceRoleKey);
 
 await runGate("public health function responds", verifyPublicHealthFunction);
 await runGate("api gateway rejects anonymous requests", verifyGatewayRejectsAnonymous);
+await runGate("runtime worker rejects unsigned requests", verifyRuntimeWorkerRejectsUnsigned);
+await runGate("payment webhook rejects unsigned requests", verifyPaymentWebhookRejectsUnsigned);
 await runGate("anonymous role cannot read protected tables", verifyAnonymousProtectedTables);
 await runGate("service role can read foundation records", verifyServiceRoleFoundationAccess);
 await runGate("one active platform super admin exists", verifySingleActiveSuperAdmin);
@@ -38,6 +40,18 @@ await runGate(
   verifyOperationalRuntimesRejectIncompleteOperations,
 );
 await runGate("wallet ledger rejects direct mutation", verifyWalletLedgerRejectsDirectMutation);
+await runGate(
+  "business module framework rejects incomplete operations",
+  verifyModuleFrameworkRejectsIncompleteOperations,
+);
+await runGate(
+  "backend runtime remediation rejects incomplete operations",
+  verifyBackendRuntimeRejectsIncompleteOperations,
+);
+await runGate(
+  "first business module configuration is active",
+  verifyFirstBusinessModuleConfiguration,
+);
 
 const adminClient = await resolveAdminClient();
 
@@ -47,8 +61,8 @@ if (adminClient) {
     () => verifyPlatformAdminReadAccess(adminClient),
   );
 } else {
-  console.log(
-    "No real admin session credentials found; real-admin RLS verification remains pending.",
+  throw new Error(
+    "Real admin session credentials are required for the production gate. Set SKIMA_ADMIN_ACCESS_TOKEN or SKIMA_SUPER_ADMIN_EMAIL and SKIMA_SUPER_ADMIN_PASSWORD in the deployment shell.",
   );
 }
 
@@ -83,6 +97,39 @@ async function verifyGatewayRejectsAnonymous(): Promise<void> {
     engineResponse.status === 401 || engineResponse.status === 403,
     `api-gateway anonymous engine request returned HTTP ${engineResponse.status}.`,
   );
+
+  const moduleResponse = await fetch(`${supabaseUrl}/functions/v1/api-gateway/modules/catalog`);
+
+  requireCondition(
+    moduleResponse.status === 401 || moduleResponse.status === 403,
+    `api-gateway anonymous module request returned HTTP ${moduleResponse.status}.`,
+  );
+}
+
+async function verifyRuntimeWorkerRejectsUnsigned(): Promise<void> {
+  const response = await fetch(`${supabaseUrl}/functions/v1/runtime-worker`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ limit: 1 }),
+  });
+
+  requireCondition(
+    response.status === 401 || response.status === 403,
+    `runtime-worker unsigned request returned HTTP ${response.status}.`,
+  );
+}
+
+async function verifyPaymentWebhookRejectsUnsigned(): Promise<void> {
+  const response = await fetch(`${supabaseUrl}/functions/v1/payment-webhook`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idempotencyKey: `remote-gate:${crypto.randomUUID()}` }),
+  });
+
+  requireCondition(
+    response.status === 401 || response.status === 403,
+    `payment-webhook unsigned request returned HTTP ${response.status}.`,
+  );
 }
 
 async function verifyAnonymousProtectedTables(): Promise<void> {
@@ -102,6 +149,10 @@ async function verifyServiceRoleFoundationAccess(): Promise<void> {
   await requireReadable(serviceClient, "configuration_entries", "namespace,key,status");
   await requireReadable(serviceClient, "platform_admins", "user_id,admin_kind,status");
   await requireReadable(serviceClient, "platform_admin_role_templates", "key,status");
+  await requireReadable(serviceClient, "business_modules", "key,status");
+  await requireReadable(serviceClient, "business_module_versions", "version,status");
+  await requireReadable(serviceClient, "business_module_components", "component_type,status");
+  await requireReadable(serviceClient, "business_module_events", "event_type");
   await requireReadable(serviceClient, "roles", "key,status");
   await requireReadable(serviceClient, "provider_adapters", "provider_kind,key,status");
   await requireReadable(serviceClient, "workflow_definitions", "key,status");
@@ -132,6 +183,15 @@ async function verifyServiceRoleFoundationAccess(): Promise<void> {
   await requireReadable(serviceClient, "ai_task_runs", "status");
   await requireReadable(serviceClient, "ai_task_run_events", "status");
   await requireReadable(serviceClient, "map_service_requests", "request_type,status");
+  await requireReadable(serviceClient, "service_requests", "status");
+  await requireReadable(serviceClient, "service_request_events", "status");
+  await requireReadable(serviceClient, "price_quotes", "status,total_amount");
+  await requireReadable(serviceClient, "settlement_executions", "status,gross_amount");
+  await requireReadable(
+    serviceClient,
+    "provider_execution_logs",
+    "provider_kind,operation_key,status",
+  );
 }
 
 async function verifyAuditLogsRejectDirectMutation(): Promise<void> {
@@ -473,6 +533,362 @@ async function verifyOperationalRuntimesRejectIncompleteOperations(): Promise<vo
   );
 }
 
+async function verifyModuleFrameworkRejectsIncompleteOperations(): Promise<void> {
+  await requireRpcError(
+    "business module configuration engine",
+    serviceClient.rpc("configure_business_module", {
+      target_description: null,
+      target_display_name: "Invalid Module",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_module_key: "Invalid Module",
+      target_status: "draft",
+    }),
+    "target_module_key must be a valid platform key",
+  );
+
+  await requireRpcError(
+    "business module version engine",
+    serviceClient.rpc("configure_business_module_version", {
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_manifest: {},
+      target_module_key: "platform.remote_gate.missing_module",
+      target_version: 1,
+    }),
+    "target_module_key must reference a configured business module",
+  );
+
+  await requireRpcError(
+    "business module component engine",
+    serviceClient.rpc("configure_business_module_component", {
+      target_component_key: "platform.remote_gate.component",
+      target_component_type: "workflow",
+      target_config: {},
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_is_required: true,
+      target_module_version_id: null,
+      target_reference_key: "platform.remote_gate.workflow",
+      target_status: "active",
+    }),
+    "target_module_version_id is required",
+  );
+
+  await requireRpcError(
+    "business module activation engine",
+    serviceClient.rpc("activate_business_module_version", {
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_module_key: "platform.remote_gate.missing_module",
+      target_version: 1,
+    }),
+    "target_module_key must reference a configured business module",
+  );
+}
+
+async function verifyBackendRuntimeRejectsIncompleteOperations(): Promise<void> {
+  await requireRpcError(
+    "service request runtime",
+    serviceClient.rpc("create_module_service_request", {
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_module_key: "platform.remote_gate.missing_module",
+      target_organization_id: null,
+      target_request_payload: {},
+      target_source: "platform.remote_gate",
+    }),
+    "target_module_key must reference an active module version",
+  );
+
+  await requireRpcError(
+    "pricing execution runtime",
+    serviceClient.rpc("calculate_price_quote", {
+      target_currency_code: "NGN",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_module_key: "lpg",
+      target_pricing_context: {},
+      target_pricing_policy_key: null,
+      target_service_request_id: null,
+      target_source: "platform.remote_gate",
+    }),
+    "target_service_request_id is required",
+  );
+
+  await requireRpcError(
+    "price quote acceptance runtime",
+    serviceClient.rpc("accept_price_quote", {
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_price_quote_id: null,
+    }),
+    "target_price_quote_id is required",
+  );
+
+  await requireRpcError(
+    "escrow hold runtime",
+    serviceClient.rpc("create_escrow_hold", {
+      target_customer_wallet_id: null,
+      target_escrow_wallet_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_service_request_id: null,
+      target_source: "platform.remote_gate",
+    }),
+    "target_service_request_id is required",
+  );
+
+  await requireRpcError(
+    "escrow status runtime",
+    serviceClient.rpc("update_escrow_hold_status", {
+      target_escrow_hold_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_status: "disputed",
+    }),
+    "target_escrow_hold_id is required",
+  );
+
+  await requireRpcError(
+    "escrow release runtime",
+    serviceClient.rpc("release_escrow_hold", {
+      target_distribution: [],
+      target_escrow_hold_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_source: "platform.remote_gate",
+    }),
+    "target_escrow_hold_id is required",
+  );
+
+  await requireRpcError(
+    "escrow refund runtime",
+    serviceClient.rpc("refund_escrow_hold", {
+      target_escrow_hold_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_refund_wallet_id: null,
+    }),
+    "target_escrow_hold_id and target_refund_wallet_id are required",
+  );
+
+  await requireRpcError(
+    "service request workflow runtime",
+    serviceClient.rpc("start_service_request_workflow", {
+      target_context: {},
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_service_request_id: null,
+    }),
+    "target_service_request_id is required",
+  );
+
+  await requireRpcError(
+    "service request event runtime",
+    serviceClient.rpc("process_service_request_event", {
+      target_event_type_key: "event.request.validated",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_payload: {},
+      target_service_request_id: null,
+    }),
+    "target_service_request_id is required",
+  );
+
+  await requireRpcError(
+    "service request participant runtime",
+    serviceClient.rpc("assign_service_request_participant", {
+      target_entity_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_participant_role: "driver",
+      target_service_request_id: null,
+    }),
+    "target_service_request_id is required",
+  );
+
+  await requireRpcError(
+    "dispatch selection runtime",
+    serviceClient.rpc("dispatch_service_request", {
+      target_candidate_limit: 0,
+      target_dispatch_policy_key: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_service_request_id: null,
+    }),
+    "target_service_request_id is required",
+  );
+
+  await requireRpcError(
+    "settlement execution runtime",
+    serviceClient.rpc("execute_service_request_settlement", {
+      target_distribution: [],
+      target_escrow_hold_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_service_request_id: null,
+      target_source: "platform.remote_gate",
+    }),
+    "target_service_request_id and target_escrow_hold_id are required",
+  );
+
+  await requireRpcError(
+    "reconciliation runtime",
+    serviceClient.rpc("reconcile_service_request_financials", {
+      target_service_request_id: null,
+    }),
+    "target_service_request_id is required",
+  );
+
+  await requireRpcError(
+    "provider execution runtime",
+    serviceClient.rpc("record_provider_execution", {
+      target_error_message: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_operation_key: "platform.remote_gate",
+      target_provider_adapter_key: null,
+      target_provider_kind: "missing",
+      target_request_payload: {},
+      target_response_payload: {},
+      target_status: "succeeded",
+    }),
+    "target_provider_kind is not supported",
+  );
+
+  await requireRpcError(
+    "rate limit runtime",
+    serviceClient.rpc("check_rate_limit", {
+      target_increment: 1,
+      target_policy_key: "platform.remote_gate.missing_policy",
+      target_subject: "remote-gate",
+    }),
+    "target_policy_key must reference an active rate limit policy",
+  );
+
+  await requireRpcError(
+    "cache runtime",
+    serviceClient.rpc("set_cache_entry", {
+      target_cache_key: "remote-gate",
+      target_namespace: null,
+      target_ttl_seconds: 60,
+      target_value: {},
+    }),
+    "target_namespace must be a valid platform key",
+  );
+
+  await requireRpcError(
+    "job queue runtime",
+    serviceClient.rpc("enqueue_background_job", {
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_job_type_key: "platform.remote_gate",
+      target_max_attempts: 3,
+      target_payload: {},
+      target_queue_key: "platform.remote_gate.missing_queue",
+      target_run_at: new Date().toISOString(),
+      target_source: "platform.remote_gate",
+    }),
+    "target_queue_key must reference an active queue",
+  );
+
+  await requireRpcError(
+    "health runtime",
+    serviceClient.rpc("record_health_check", {
+      target_details: {},
+      target_service_key: null,
+      target_status: "healthy",
+    }),
+    "target_service_key must be a valid platform key",
+  );
+}
+
+async function verifyFirstBusinessModuleConfiguration(): Promise<void> {
+  const { data: moduleRecord, error: moduleError } = await serviceClient
+    .from("business_modules")
+    .select("id,key,status")
+    .eq("key", "lpg")
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (moduleError) {
+    throw moduleError;
+  }
+
+  requireCondition(Boolean(moduleRecord?.id), "active LPG module record is missing.");
+
+  const { data: versionRecord, error: versionError } = await serviceClient
+    .from("business_module_versions")
+    .select("id,module_id,version,status")
+    .eq("module_id", moduleRecord!.id)
+    .eq("version", 1)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (versionError) {
+    throw versionError;
+  }
+
+  requireCondition(Boolean(versionRecord?.id), "active LPG module version 1 is missing.");
+
+  const { data: components, error: componentsError } = await serviceClient
+    .from("business_module_components")
+    .select("component_type,component_key,reference_key,status")
+    .eq("module_version_id", versionRecord!.id)
+    .eq("status", "active");
+
+  if (componentsError) {
+    throw componentsError;
+  }
+
+  const configuredTypes = new Set((components ?? []).map((component) => component.component_type));
+
+  for (
+    const componentType of [
+      "capability",
+      "workflow",
+      "pricing_policy",
+      "settlement_policy",
+      "dispatch_policy",
+      "event",
+      "permission",
+      "vehicle_requirement",
+      "driver_requirement",
+      "document_requirement",
+      "ai_behavior",
+      "report",
+      "screen",
+    ]
+  ) {
+    requireCondition(
+      configuredTypes.has(componentType),
+      `LPG module is missing active component type: ${componentType}.`,
+    );
+  }
+
+  const referenceKeys = new Set(
+    (components ?? [])
+      .map((component) => component.reference_key)
+      .filter((referenceKey): referenceKey is string => typeof referenceKey === "string"),
+  );
+
+  for (
+    const referenceKey of [
+      "workflow.lpg.fulfillment",
+      "pricing.lpg.fixed.v1",
+      "settlement.lpg.escrow.station-driver.v1",
+      "dispatch.lpg.nearest-qualified-driver.v1",
+      "event.delivery.completed",
+      "verification.lpg.driver.training_certificate",
+      "ai.lpg.dispatch.recommendation",
+    ]
+  ) {
+    requireCondition(
+      referenceKeys.has(referenceKey),
+      `LPG module is missing required engine reference: ${referenceKey}.`,
+    );
+  }
+
+  await requireActiveKey("workflow_definitions", "workflow.lpg.fulfillment");
+  await requireActiveKey("pricing_policies", "pricing.lpg.fixed.v1");
+  await requireActiveKey("settlement_policies", "settlement.lpg.escrow.station-driver.v1");
+  await requireActiveKey("dispatch_policies", "dispatch.lpg.nearest-qualified-driver.v1");
+  await requireActiveKey("verification_definitions", "verification.lpg.pickup.asset_scan");
+  await requireActiveKey("ai_task_definitions", "ai.lpg.dispatch.recommendation");
+}
+
 async function verifySingleActiveSuperAdmin(): Promise<void> {
   const { data, error } = await serviceClient
     .from("platform_admins")
@@ -503,6 +919,10 @@ async function verifyPlatformAdminReadAccess(adminClient: SupabaseClient): Promi
   await requireReadable(adminClient, "provider_adapters", "provider_kind,key,status");
   await requireReadable(adminClient, "platform_admins", "user_id,admin_kind,status");
   await requireReadable(adminClient, "platform_admin_role_templates", "key,status");
+  await requireReadable(adminClient, "business_modules", "key,status");
+  await requireReadable(adminClient, "business_module_versions", "version,status");
+  await requireReadable(adminClient, "business_module_components", "component_type,status");
+  await requireReadable(adminClient, "business_module_events", "event_type");
   await requireReadable(adminClient, "workflow_definitions", "key,status");
   await requireReadable(adminClient, "currency_definitions", "code,status");
   await requireReadable(adminClient, "pricing_policies", "key,status");
@@ -531,6 +951,16 @@ async function verifyPlatformAdminReadAccess(adminClient: SupabaseClient): Promi
   await requireReadable(adminClient, "ai_task_runs", "status");
   await requireReadable(adminClient, "ai_task_run_events", "status");
   await requireReadable(adminClient, "map_service_requests", "request_type,status");
+  await requireReadable(adminClient, "service_requests", "status");
+  await requireReadable(adminClient, "service_request_events", "status");
+  await requireReadable(adminClient, "price_quotes", "status,total_amount");
+  await requireReadable(adminClient, "settlement_executions", "status,gross_amount");
+  await requireReadable(
+    adminClient,
+    "provider_execution_logs",
+    "provider_kind,operation_key,status",
+  );
+  await requireAdminCanReadFirstBusinessModule(adminClient);
 }
 
 async function requireReadable(
@@ -543,6 +973,72 @@ async function requireReadable(
   if (error) {
     throw error;
   }
+}
+
+async function requireActiveKey(table: string, key: string): Promise<void> {
+  const { data, error } = await serviceClient
+    .from(table)
+    .select("key,status")
+    .eq("key", key)
+    .eq("status", "active")
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  requireCondition((data ?? []).length === 1, `active record is missing: ${table}.${key}.`);
+}
+
+async function requireAdminCanReadFirstBusinessModule(adminClient: SupabaseClient): Promise<void> {
+  const { data: moduleRecord, error: moduleError } = await adminClient
+    .from("business_modules")
+    .select("id,key,status")
+    .eq("key", "lpg")
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (moduleError) {
+    throw moduleError;
+  }
+
+  requireCondition(
+    Boolean(moduleRecord?.id),
+    "platform super admin cannot read the active LPG module.",
+  );
+
+  const { data: versionRecord, error: versionError } = await adminClient
+    .from("business_module_versions")
+    .select("id,module_id,version,status")
+    .eq("module_id", moduleRecord!.id)
+    .eq("version", 1)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (versionError) {
+    throw versionError;
+  }
+
+  requireCondition(
+    Boolean(versionRecord?.id),
+    "platform super admin cannot read active LPG module version 1.",
+  );
+
+  const { data: components, error: componentsError } = await adminClient
+    .from("business_module_components")
+    .select("component_type,component_key,status")
+    .eq("module_version_id", versionRecord!.id)
+    .eq("status", "active")
+    .limit(1);
+
+  if (componentsError) {
+    throw componentsError;
+  }
+
+  requireCondition(
+    (components ?? []).length > 0,
+    "platform super admin cannot read active LPG module components.",
+  );
 }
 
 async function requireRpcError(

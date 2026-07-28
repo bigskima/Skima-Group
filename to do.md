@@ -5,9 +5,16 @@ reusable platform foundation and business module framework exist.
 
 ## Current Status
 
-- Milestone 1 production gate: complete on the hosted Supabase dev project.
-- Milestone 2 production gate: complete on the hosted Supabase dev project.
-- Milestone 2 reusable engine storage/API/runtime foundation: live on hosted Supabase dev.
+- Milestone 1 status: In Progress. Foundation exists, but operational hardening evidence is not
+  approved.
+- Milestone 2 status: In Progress. Executable runtime remediation exists locally; hosted remote
+  proof and E2E approval are pending.
+- Milestone 3 status: Implemented but Untested. Module framework and LPG configuration exist, but
+  the full no-frontend lifecycle is not approved.
+- Milestone 3 first LPG module configuration: live on hosted Supabase dev from the previous gate.
+- Milestone 3 backend lifecycle gate: pending after the runtime remediation migration is pushed.
+- Milestone 4 status: Not Started. Frontend foundation is paused until backend milestones 1-3 are
+  approved.
 - Financial posting now uses a balanced idempotent database engine.
 - Wallet accounts now have real provisioning/status engines live on hosted Supabase dev.
 - Workflow and event runtime changes now use idempotent database engines.
@@ -15,6 +22,7 @@ reusable platform foundation and business module framework exist.
   database engines live on hosted Supabase dev.
 - Runtime strategy: hosted Supabase dev project through `supabase db push` and function deploy.
   Docker is optional, not a milestone blocker.
+- Runtime worker and payment webhook functions are required backend surfaces.
 
 ## Milestone 1: Platform Foundation
 
@@ -88,25 +96,42 @@ reusable platform foundation and business module framework exist.
 - [x] Maps Adapter request storage and queue RPC
 - [x] Notification Engine template, message runtime, and receipt storage
 - [x] AI Engine task definition, run runtime, and receipt storage
+- [x] Executable pricing calculation
+- [x] Escrow hold, release, refund, dispute-state, and expiry RPCs
+- [x] Settlement distribution execution
+- [x] Provider execution logs
+- [x] Runtime worker for notifications, AI tasks, jobs, expirations, and health recording
+- [x] Payment webhook handler with server-side secret validation
+- [x] Reconciliation RPC
+- [ ] Hosted Supabase remote gate after runtime remediation
+- [ ] No-frontend backend lifecycle E2E after runtime remediation
 
 ## Milestone 3: Business Module Framework
 
-- [ ] Module registry
-- [ ] Module capability definitions
-- [ ] Module workflow definitions
-- [ ] Module pricing policy definitions
-- [ ] Module settlement policy definitions
-- [ ] Module event definitions
-- [ ] Module permission definitions
-- [ ] Module vehicle and driver requirements
-- [ ] Module document requirements
-- [ ] Module AI behavior definitions
-- [ ] Module report definitions
-- [ ] Module screen definitions
-- [ ] LPG module configuration
+- [x] Module registry
+- [x] Module versioning
+- [x] Module lifecycle event receipts
+- [x] Module capability definitions
+- [x] Module workflow definitions
+- [x] Module pricing policy definitions
+- [x] Module settlement policy definitions
+- [x] Module dispatch policy component binding
+- [x] Module event definitions
+- [x] Module permission definitions
+- [x] Module vehicle and driver requirements
+- [x] Module document requirements
+- [x] Module AI behavior definitions
+- [x] Module report definitions
+- [x] Module screen definitions
+- [x] Module configuration RPCs
+- [x] Module API gateway routes
+- [x] LPG module configuration
+- [x] No-frontend lifecycle gate script
+- [ ] Hosted lifecycle gate passed and evidence reviewed
 
 ## Milestone 4: Reusable Frontend Foundation
 
+- [ ] Blocked until backend milestones 1-3 are approved
 - [ ] Design system tokens
 - [ ] Buttons
 - [ ] Cards

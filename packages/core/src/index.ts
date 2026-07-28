@@ -49,6 +49,7 @@ export const ENTITY_KINDS = [
   "driver",
   "vehicle",
   "asset",
+  "business-module",
   "platform-admin",
   "platform-admin-role-template",
   "pricing-policy",

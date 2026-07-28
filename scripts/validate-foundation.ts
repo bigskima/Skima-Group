@@ -1,4 +1,41 @@
 const migrationsDirectory = "supabase/migrations";
+const requiredDocumentationPaths = [
+  "docs/00-platform-constitution.md",
+  "docs/01-system-architecture.md",
+  "docs/02-backend-architecture.md",
+  "docs/03-database-schema.md",
+  "docs/04-api-reference.md",
+  "docs/05-authentication-authorization.md",
+  "docs/06-workflow-engine.md",
+  "docs/07-event-engine.md",
+  "docs/08-financial-engine.md",
+  "docs/09-wallet-ledger-escrow.md",
+  "docs/10-pricing-engine.md",
+  "docs/11-dispatch-engine.md",
+  "docs/12-tracking-engine.md",
+  "docs/13-verification-engine.md",
+  "docs/14-notification-engine.md",
+  "docs/15-provider-adapters.md",
+  "docs/16-ai-orchestration.md",
+  "docs/17-module-framework.md",
+  "docs/18-security-model.md",
+  "docs/19-testing-strategy.md",
+  "docs/20-deployment-operations.md",
+  "docs/21-milestone-status.md",
+  "docs/22-architecture-decisions/ADR-0001-backend-first-sequential-production.md",
+  "docs/23-change-requests/CR-0001-backend-first-remediation.md",
+  "docs/24-known-limitations.md",
+  "docs/25-production-readiness.md",
+] as const;
+
+for (const documentationPath of requiredDocumentationPaths) {
+  try {
+    const fileInfo = await Deno.stat(documentationPath);
+    requireCondition(fileInfo.isFile, `${documentationPath} must be a documentation file.`);
+  } catch (_error) {
+    throw new Error(`Required documentation file is missing: ${documentationPath}.`);
+  }
+}
 
 const migrationFiles = [];
 
@@ -25,6 +62,34 @@ requireCondition(
 requireCondition(
   tables.includes("platform_admin_role_templates"),
   "Foundation must include configurable platform admin role templates.",
+);
+requireCondition(
+  tables.includes("business_modules"),
+  "Milestone 3 must include the business module registry.",
+);
+requireCondition(
+  tables.includes("business_module_versions"),
+  "Milestone 3 must include versioned business module definitions.",
+);
+requireCondition(
+  tables.includes("business_module_components"),
+  "Milestone 3 must include module component bindings.",
+);
+requireCondition(
+  tables.includes("service_requests"),
+  "Backend runtime remediation must include executable service request records.",
+);
+requireCondition(
+  tables.includes("price_quotes"),
+  "Backend runtime remediation must include executable price quotes.",
+);
+requireCondition(
+  tables.includes("settlement_executions"),
+  "Backend runtime remediation must include settlement execution receipts.",
+);
+requireCondition(
+  tables.includes("provider_execution_logs"),
+  "Backend runtime remediation must include provider execution logs.",
 );
 
 for (const table of tables) {
@@ -83,6 +148,12 @@ requireMatch(
   "Foundation must seed support admin as a configurable admin role template.",
 );
 
+requireMatch(
+  normalizedSql,
+  /platform\.module_admin/,
+  "Milestone 3 must seed module admin as a configurable admin role template.",
+);
+
 const requiredEngineTables = [
   "currency_definitions",
   "pricing_policies",
@@ -111,10 +182,26 @@ const requiredEngineTables = [
   "ai_task_runs",
   "ai_task_run_events",
   "map_service_requests",
+  "service_requests",
+  "service_request_events",
+  "price_quotes",
+  "settlement_executions",
+  "provider_execution_logs",
 ] as const;
 
 for (const table of requiredEngineTables) {
   requireCondition(tables.includes(table), `Milestone 2 engine table is missing: ${table}.`);
+}
+
+const requiredModuleTables = [
+  "business_modules",
+  "business_module_versions",
+  "business_module_components",
+  "business_module_events",
+] as const;
+
+for (const table of requiredModuleTables) {
+  requireCondition(tables.includes(table), `Milestone 3 module table is missing: ${table}.`);
 }
 
 requireMatch(
@@ -303,6 +390,187 @@ for (const table of noDirectOperationalRuntimeInsertTables) {
   );
 }
 
+const moduleFrameworkFunctions = [
+  "can_manage_business_modules",
+  "validate_business_module_component_reference",
+  "configure_business_module",
+  "configure_business_module_version",
+  "configure_business_module_component",
+  "activate_business_module_version",
+  "retire_business_module",
+] as const;
+
+for (const functionName of moduleFrameworkFunctions) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(`create or replace function public\\.${functionName}`),
+    `${functionName} module framework function must exist.`,
+  );
+}
+
+requireMatch(
+  normalizedSql,
+  /business module events are append-only/,
+  "Business module lifecycle events must be append-only.",
+);
+
+requireMatch(
+  normalizedSql,
+  /business module version must define at least one active component/,
+  "Business module activation must require configured components.",
+);
+
+requireMatch(
+  normalizedSql,
+  /'lpg', 'lpg'/,
+  "Milestone 3 must configure the first LPG business module.",
+);
+
+requireMatch(
+  normalizedSql,
+  /pricing\.lpg\.fixed\.v1/,
+  "LPG module configuration must bind a fixed pricing policy.",
+);
+
+requireMatch(
+  normalizedSql,
+  /settlement\.lpg\.escrow\.station-driver\.v1/,
+  "LPG module configuration must bind an escrow settlement policy.",
+);
+
+requireMatch(
+  normalizedSql,
+  /workflow\.lpg\.fulfillment/,
+  "LPG module configuration must bind a database-stored workflow.",
+);
+
+requireMatch(
+  normalizedSql,
+  /dispatch\.lpg\.nearest-qualified-driver\.v1/,
+  "LPG module configuration must bind a dispatch policy.",
+);
+
+requireMatch(
+  normalizedSql,
+  /verification\.lpg\.pickup\.asset_scan/,
+  "LPG module configuration must bind cylinder pickup verification.",
+);
+
+requireMatch(
+  normalizedSql,
+  /ai\.lpg\.dispatch\.recommendation/,
+  "LPG module configuration must bind an assist-only AI behavior.",
+);
+
+requireMatch(
+  normalizedSql,
+  /module\.lpg\.operate/,
+  "LPG module configuration must define module-scoped permissions.",
+);
+
+const executableRuntimeFunctions = [
+  "create_module_service_request",
+  "calculate_price_quote",
+  "accept_price_quote",
+  "create_escrow_hold",
+  "update_escrow_hold_status",
+  "release_escrow_hold",
+  "refund_escrow_hold",
+  "start_service_request_workflow",
+  "process_service_request_event",
+  "assign_service_request_participant",
+  "dispatch_service_request",
+  "execute_service_request_settlement",
+  "expire_escrow_holds",
+  "reconcile_service_request_financials",
+  "record_provider_execution",
+  "check_rate_limit",
+  "set_cache_entry",
+  "get_cache_entry",
+  "enqueue_background_job",
+  "record_health_check",
+] as const;
+
+for (const functionName of executableRuntimeFunctions) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(`create or replace function public\\.${functionName}`),
+    `${functionName} executable runtime function must exist.`,
+  );
+}
+
+requireMatch(
+  normalizedSql,
+  /'dispatch_policy'/,
+  "Module framework must support dispatch policy component bindings.",
+);
+
+requireMatch(
+  normalizedSql,
+  /provider\.notification\.sandbox/,
+  "Provider adapters must include deterministic sandbox notification execution.",
+);
+
+requireMatch(
+  normalizedSql,
+  /provider\.ai\.sandbox/,
+  "Provider adapters must include deterministic sandbox AI execution.",
+);
+
+requireMatch(
+  normalizedSql,
+  /create policy service_requests_no_direct_insert on public\.service_requests/,
+  "Service requests must reject direct authenticated inserts.",
+);
+
+requireMatch(
+  normalizedSql,
+  /create policy price_quotes_no_direct_insert on public\.price_quotes/,
+  "Price quotes must reject direct authenticated inserts.",
+);
+
+requireMatch(
+  normalizedSql,
+  /create policy settlement_executions_no_direct_insert on public\.settlement_executions/,
+  "Settlement executions must reject direct authenticated inserts.",
+);
+
+requireMatch(
+  normalizedSql,
+  /create policy provider_execution_logs_no_direct_insert on public\.provider_execution_logs/,
+  "Provider execution logs must reject direct authenticated inserts.",
+);
+
+requireMatch(
+  normalizedSql,
+  /runtime event records are append-only/,
+  "Runtime service request events must be append-only.",
+);
+
+await requireFile("supabase/functions/runtime-worker/index.ts");
+await requireFile("supabase/functions/payment-webhook/index.ts");
+await requireFile("scripts/verify-backend-lifecycle.ts");
+
+requireCondition(
+  !/create or replace function public\.[a-z0-9_]*lpg/.exec(normalizedSql),
+  "LPG must not add LPG-specific platform functions.",
+);
+
+const noDirectModuleInsertTables = [
+  "business_modules",
+  "business_module_versions",
+  "business_module_components",
+  "business_module_events",
+] as const;
+
+for (const table of noDirectModuleInsertTables) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(`create policy ${table}_no_direct_insert on public\\.${table}`),
+    `${table} must reject direct authenticated inserts.`,
+  );
+}
+
 requireMatch(
   normalizedSql,
   /grant select, insert, update, delete on .* public\.profiles, .* public\.health_checks to service_role/s,
@@ -310,6 +578,15 @@ requireMatch(
 );
 
 console.log("Foundation migration validation passed.");
+
+async function requireFile(path: string): Promise<void> {
+  try {
+    const fileInfo = await Deno.stat(path);
+    requireCondition(fileInfo.isFile, `${path} must be a file.`);
+  } catch (_error) {
+    throw new Error(`Required runtime file is missing: ${path}.`);
+  }
+}
 
 function requireCondition(condition: boolean, message: string): void {
   if (!condition) {
