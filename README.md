@@ -25,8 +25,8 @@ The active work is backend-first remediation for Milestones 1-3.
 Milestone status is evidence-based:
 
 - Milestone 1: In Progress
-- Milestone 2: In Progress
-- Milestone 3: In Progress
+- Milestone 2: Complete
+- Milestone 3: Complete
 - Milestone 4: Not Started
 
 LPG remains the first module and is configured as database records and engine bindings, not platform
@@ -56,6 +56,7 @@ npm run supabase:db:push
 npm run supabase:functions:deploy
 npm run supabase:remote:gate
 npm run supabase:backend:e2e
+npm run supabase:webhook:dead-letter
 ```
 
 Docker is optional. Runtime validation uses a dedicated hosted Supabase development project through

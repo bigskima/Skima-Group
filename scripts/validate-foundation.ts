@@ -572,6 +572,12 @@ requireMatch(
 
 requireMatch(
   normalizedSql,
+  /endpoint_delivery_config/,
+  "Webhook retry/dead-letter policy must support endpoint-level configuration overrides.",
+);
+
+requireMatch(
+  normalizedSql,
   /enqueue_webhook_deliveries_after_event_insert/,
   "Platform events must enqueue configured webhook deliveries.",
 );
@@ -586,6 +592,7 @@ await requireFile("supabase/functions/runtime-worker/index.ts");
 await requireFile("supabase/functions/payment-webhook/index.ts");
 await requireFile("supabase/functions/webhook-sandbox-receiver/index.ts");
 await requireFile("scripts/verify-backend-lifecycle.ts");
+await requireFile("scripts/verify-webhook-dead-letter.ts");
 
 requireCondition(
   !/create or replace function public\.[a-z0-9_]*lpg/.exec(normalizedSql),

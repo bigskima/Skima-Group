@@ -2,7 +2,7 @@
 
 Milestone 3 may not start until this checklist is complete.
 
-Current status: In Progress.
+Current status: Complete.
 
 ## Scope
 
@@ -50,7 +50,7 @@ business-specific screens.
 - [x] Remote gate confirms executable pricing, escrow, settlement, provider workers, outbound
       webhooks, retry/dead letter processing, and reconciliation reject incomplete operations after
       webhook delivery runtime is pushed.
-- [ ] Full no-frontend lifecycle proves successful runtime execution across all engines after the
+- [x] Full no-frontend lifecycle proves successful runtime execution across all engines after the
       webhook-aware lifecycle gate is deployed.
 
 ## Engine Checklist
@@ -89,8 +89,9 @@ business-specific screens.
 - [x] Settlement distribution execution
 - [x] Provider worker execution
 - [x] Outbound webhook delivery execution
-- [ ] Hosted non-2xx retry and dead-letter execution evidence
+- [x] Hosted non-2xx retry and dead-letter execution evidence with
+      `npm run supabase:webhook:dead-letter`
 - [x] Financial reconciliation execution
 - [x] Hosted Supabase migration/deploy evidence for webhook delivery runtime
-- [ ] Hosted Supabase successful lifecycle evidence for webhook-aware runtime engines
+- [x] Hosted Supabase successful lifecycle evidence for webhook-aware runtime engines
 - [ ] Reviewer approves runtime engine evidence.

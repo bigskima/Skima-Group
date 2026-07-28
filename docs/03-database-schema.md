@@ -17,6 +17,9 @@ Implemented groups:
 - `provider_execution_logs`
 - `webhook_delivery_attempts`
 - webhook delivery retry, locking, and dead-letter metadata on `webhook_deliveries`
+- endpoint-level webhook retry/dead-letter policy overrides
 
 Remote migration evidence for `20260728050000_webhook_delivery_runtime.sql` has been recorded
-against the hosted Supabase dev project.
+against the hosted Supabase dev project. Remote migration evidence for
+`20260728060000_webhook_retry_policy_override.sql` has been recorded against the hosted Supabase dev
+project.

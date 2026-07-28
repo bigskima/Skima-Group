@@ -29,7 +29,7 @@ Current status: In Progress.
 - [x] Future platform admin categories are database-configured through role templates.
 - [x] Provider records store secret references instead of plaintext secrets.
 - [x] App/client env example exposes only `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
-- [ ] Supabase runtime secrets are configured with `supabase secrets set`.
+- [x] Supabase runtime secrets are configured with `supabase secrets set`.
 - [x] Deployment-only values are stored in shell or CI secrets, never app env files.
 - [ ] Production backup and point-in-time recovery settings are confirmed in Supabase.
 
@@ -59,7 +59,7 @@ Current status: In Progress.
 - [x] Logging and error tables exist.
 - [x] Edge Functions are deployed to the hosted Supabase dev project after the webhook delivery
       runtime update.
-- [ ] Remote production verification is completed against the hosted Supabase dev project after the
+- [x] Remote production verification is completed against the hosted Supabase dev project after the
       webhook delivery runtime gate is added.
 - [ ] Monitoring alerts are configured in the production Supabase project.
 

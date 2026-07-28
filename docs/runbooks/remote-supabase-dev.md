@@ -200,7 +200,10 @@ After runtime remediation is pushed and functions are deployed, run the full no-
 
 ```bash
 npm run supabase:backend:e2e
+npm run supabase:webhook:dead-letter
 ```
 
 This requires `SKIMA_WORKER_SECRET` in the deployment shell so the script can call the deployed
-runtime worker.
+runtime worker. The dead-letter gate verifies that a configured outbound webhook failure records a
+failed delivery, an append-only dead-letter attempt, provider failure evidence, and a dead-letter
+background job.

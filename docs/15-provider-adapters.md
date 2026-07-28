@@ -20,10 +20,11 @@ Implemented:
 - server-side secret references in provider records
 - outbound webhook delivery through the `provider.queue.webhook-delivery` adapter
 - signed sandbox webhook receiver for hosted delivery gates
+- endpoint-level webhook retry/dead-letter policy overrides for controlled operations and tests
 
 Required remediation:
 
 - live vendor adapter certification before production vendors are enabled
-- non-2xx receiver retry/dead-letter evidence on hosted Supabase
+- `npm run supabase:webhook:dead-letter` evidence on hosted Supabase
 
 Business modules must never call vendor APIs directly.

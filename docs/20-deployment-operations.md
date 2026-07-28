@@ -9,6 +9,7 @@ Required command sequence:
 - `npm run supabase:functions:deploy`
 - `npm run supabase:remote:gate`
 - `npm run supabase:backend:e2e`
+- `npm run supabase:webhook:dead-letter`
 
 Required operational evidence:
 

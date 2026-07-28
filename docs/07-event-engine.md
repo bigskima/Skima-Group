@@ -12,8 +12,8 @@ Implemented:
 - payment webhook event intake
 - automatic outbound webhook delivery creation for configured webhook endpoints
 - signed outbound webhook attempts, retry scheduling, and dead-letter recording
+- dedicated hosted dead-letter gate script: `npm run supabase:webhook:dead-letter`
 
 Required remediation:
 
-- E2E proof for the webhook delivery runtime inside the service-request lifecycle
-- deeper retry/dead-letter tests for non-2xx receiver failure scenarios
+- hosted execution of `npm run supabase:webhook:dead-letter`

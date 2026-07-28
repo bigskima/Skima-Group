@@ -12,6 +12,7 @@ Required test layers:
 - worker and webhook tests
 - signed outbound webhook delivery tests
 - retry and dead-letter tests
+- hosted dead-letter gate with `npm run supabase:webhook:dead-letter`
 - no-frontend E2E lifecycle test
 - security/RLS tests for anon, users, admins, and service role
 
