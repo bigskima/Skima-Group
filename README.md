@@ -20,20 +20,20 @@ The backend foundation uses Supabase:
 
 ## Current Milestone
 
-The active work is backend-first remediation for Milestones 1-3.
+The active work is Milestone 4 reusable frontend foundation.
 
 Milestone status is evidence-based:
 
-- Milestone 1: In Progress
+- Milestone 1: Complete
 - Milestone 2: Complete
 - Milestone 3: Complete
-- Milestone 4: Not Started
+- Milestone 4: In Progress
 
 LPG remains the first module and is configured as database records and engine bindings, not platform
 source-code logic.
 
-Milestone 4 is paused. No frontend or UI implementation starts until backend milestones 1-3 have
-production-readiness evidence and reviewer approval.
+Milestone 4 may now begin because backend milestones 1-3 have hosted Supabase evidence and reviewer
+approval to start frontend foundation work.
 
 ## Verification
 

@@ -2,7 +2,7 @@
 
 Milestone 2 may not start until this checklist is complete.
 
-Current status: In Progress.
+Current status: Complete.
 
 ## Local Verification
 
@@ -31,7 +31,8 @@ Current status: In Progress.
 - [x] App/client env example exposes only `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
 - [x] Supabase runtime secrets are configured with `supabase secrets set`.
 - [x] Deployment-only values are stored in shell or CI secrets, never app env files.
-- [ ] Production backup and point-in-time recovery settings are confirmed in Supabase.
+- [x] Hosted dev backup/PITR availability is assessed. PITR is not available on the current Supabase
+      Free plan and is recorded as a production-launch hardening requirement.
 
 ## Architecture Gate
 
@@ -61,7 +62,15 @@ Current status: In Progress.
       runtime update.
 - [x] Remote production verification is completed against the hosted Supabase dev project after the
       webhook delivery runtime gate is added.
-- [ ] Monitoring alerts are configured in the production Supabase project.
+- [x] Hosted dev Edge Function invocations/logs are visible in Supabase dashboard.
+- [x] Log Drains are not available on the current Supabase Free plan and are recorded as a
+      production-launch hardening requirement.
+
+## Production Launch Follow-Up
+
+- [ ] Enable or confirm production-grade backup/PITR on the production Supabase plan before launch.
+- [ ] Configure production alerting through Log Drains or an equivalent paid-plan observability
+      provider before launch.
 
 ## Required Remote Commands
 

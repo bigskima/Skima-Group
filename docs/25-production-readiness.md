@@ -16,9 +16,9 @@ Production readiness requires:
 
 Current status:
 
-- Backend runtime remediation implementation for Milestones 2-3 is complete and pending reviewer
-  approval.
-- Milestone 1 remains in progress until production operations evidence is confirmed.
+- Backend milestones 1-3 are complete and approved to start Milestone 4.
+- Production launch still requires paid-plan operations hardening for PITR/backups and log-drain
+  alerting.
 - Runtime remediation migration applied to the hosted Supabase dev project.
 - Dispatch runtime vehicle selection repair migration applied to the hosted Supabase dev project.
 - Webhook delivery runtime migration applied to the hosted Supabase dev project.
@@ -29,9 +29,7 @@ Current status:
   sandbox webhook rejection.
 - Webhook-aware `npm run supabase:backend:e2e` passed and produced service request
   `723e675a-59fe-4eca-9fd0-87604a38d822`.
-- Worker and webhook secrets used during validation must be rotated before production use because
-  they were exposed in chat history.
+- Worker and webhook secrets exposed during validation were rotated before Milestone 4 start.
 - Dedicated outbound webhook non-2xx retry/dead-letter gate passed and produced webhook delivery
   `d35cde7e-d5b9-4ca5-aa64-5fde47e04a7e`.
-- Milestones 1-3 are not approved.
-- Milestone 4 is not started.
+- Milestone 4 reusable frontend foundation is now active.

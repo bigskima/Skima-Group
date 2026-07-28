@@ -24,9 +24,11 @@ const requiredDocumentationPaths = [
   "docs/21-milestone-status.md",
   "docs/22-architecture-decisions/ADR-0001-backend-first-sequential-production.md",
   "docs/22-architecture-decisions/ADR-0002-external-provider-boundaries.md",
+  "docs/22-architecture-decisions/ADR-0003-free-plan-operations-gate.md",
   "docs/23-change-requests/CR-0001-backend-first-remediation.md",
   "docs/24-known-limitations.md",
   "docs/25-production-readiness.md",
+  "docs/runbooks/milestone-4-production-gate.md",
 ] as const;
 
 for (const documentationPath of requiredDocumentationPaths) {
