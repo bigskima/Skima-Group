@@ -23,6 +23,7 @@ const requiredDocumentationPaths = [
   "docs/20-deployment-operations.md",
   "docs/21-milestone-status.md",
   "docs/22-architecture-decisions/ADR-0001-backend-first-sequential-production.md",
+  "docs/22-architecture-decisions/ADR-0002-external-provider-boundaries.md",
   "docs/23-change-requests/CR-0001-backend-first-remediation.md",
   "docs/24-known-limitations.md",
   "docs/25-production-readiness.md",

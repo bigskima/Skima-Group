@@ -26,6 +26,58 @@ export interface ProviderAdapter<TRequest, TResponse> {
   execute(request: TRequest): Promise<TResponse>;
 }
 
+export interface ProviderSelection {
+  readonly kind: ProviderKind;
+  readonly activeProviderKey: string;
+  readonly selectedBy: "configuration" | "policy" | "workflow";
+}
+
+export interface AiProviderRequest {
+  readonly taskKey: string;
+  readonly modelKey: string;
+  readonly prompt: string;
+  readonly input: Readonly<Record<string, unknown>>;
+  readonly responseFormat: "json_object" | "text";
+  readonly idempotencyKey: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
+export interface AiProviderResponse {
+  readonly output: Readonly<Record<string, unknown>> | string;
+  readonly modelInfo: Readonly<Record<string, unknown>>;
+  readonly usage?: Readonly<Record<string, unknown>>;
+  readonly safety?: Readonly<Record<string, unknown>>;
+}
+
+export type MapOperation =
+  | "geocode"
+  | "reverse_geocode"
+  | "route"
+  | "distance_matrix"
+  | "eta"
+  | "geofence";
+
+export interface GeoPoint {
+  readonly latitude: number;
+  readonly longitude: number;
+}
+
+export interface MapProviderRequest {
+  readonly operation: MapOperation;
+  readonly subjectType?: string;
+  readonly subjectId?: string;
+  readonly origin?: GeoPoint;
+  readonly destination?: GeoPoint;
+  readonly query?: string;
+  readonly options?: Readonly<Record<string, unknown>>;
+  readonly idempotencyKey: string;
+}
+
+export interface MapProviderResponse {
+  readonly standardized: Readonly<Record<string, unknown>>;
+  readonly providerMetadata: Readonly<Record<string, unknown>>;
+}
+
 export class ProviderRegistry {
   private readonly adapters = new Map<string, ProviderAdapter<unknown, unknown>>();
 

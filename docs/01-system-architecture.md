@@ -10,4 +10,9 @@ The backend is organized around:
 - Business modules as database configuration bound to reusable engines.
 - Provider adapters as configurable records with server-side secret references.
 
+External platforms provide specialized capabilities. Gemini or another AI vendor provides model
+intelligence; Google Maps, Mapbox, HERE, or OpenStreetMap provide map/location data; payment
+gateways process payments. Skima coordinates those services through adapters and keeps platform
+decisions inside reusable engines.
+
 Frontend clients are downstream consumers. They must not define backend behavior.

@@ -15,6 +15,9 @@ Required operational evidence:
 - Supabase runtime secrets configured
 - `SKIMA_WORKER_SECRET` configured with `supabase secrets set`
 - `SKIMA_PAYMENT_WEBHOOK_SECRET` configured with `supabase secrets set`
+- AI provider secrets such as `GEMINI_API_KEY` configured only when enabling a live AI provider
+- Map provider secrets such as `GOOGLE_MAPS_API_KEY`, `MAPBOX_ACCESS_TOKEN`, or `HERE_API_KEY`
+  configured only when enabling a live maps provider
 - health/readiness pass
 - monitoring alerts configured
 - backup/PITR reviewed before production

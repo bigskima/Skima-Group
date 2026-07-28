@@ -50,7 +50,7 @@ business-specific screens.
 - [x] Remote gate confirms executable pricing, escrow, settlement, provider workers, retry/dead
       letter processing, and reconciliation reject incomplete operations after backend remediation
       is pushed.
-- [ ] Full no-frontend lifecycle proves successful runtime execution across all engines.
+- [x] Full no-frontend lifecycle proves successful runtime execution across all engines.
 
 ## Engine Checklist
 
@@ -90,4 +90,5 @@ business-specific screens.
 - [x] Retry and dead-letter execution
 - [x] Financial reconciliation execution
 - [x] Hosted Supabase migration/deploy evidence for executable runtime engines
-- [ ] Hosted Supabase successful lifecycle evidence for executable runtime engines
+- [x] Hosted Supabase successful lifecycle evidence for executable runtime engines
+- [ ] Reviewer approves runtime engine evidence.
