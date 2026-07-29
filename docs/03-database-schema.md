@@ -18,8 +18,59 @@ Implemented groups:
 - `webhook_delivery_attempts`
 - webhook delivery retry, locking, and dead-letter metadata on `webhook_deliveries`
 - endpoint-level webhook retry/dead-letter policy overrides
+- private Supabase Storage bucket configuration for platform documents and media
+- configurable document requirement sets and document requirements
+- workflow-governed `application_records`, immutable application events, review tasks, and review
+  events
+- governed `document_submissions` and immutable document review events
+- driver profile application hydration fields and approval timestamp
+- structured vehicle specification fields, ownership type, and vehicle document-backed activation
+- `driver_vehicle_links` for approved driver-to-vehicle authorization
+- dispatch policy rules for separate driver-required and vehicle-required capabilities
+- `organization_branches` for branch-scoped business operations
+- `organization_invitations` for governed staff invitation and acceptance
+- `organization_staff_events` for append-only staff, branch, role, and ownership receipts
+- branch-scoped `user_roles.access_scope` and `user_roles.branch_id`
+- reusable catalog records: `catalog_units`, `catalog_categories`, `catalog_items`,
+  `catalog_item_variants`, `catalog_prices`, `catalog_item_media`, and `catalog_availability_rules`
+- stock/capacity and orderability runtime records: `catalog_stock_adjustments`,
+  `catalog_orderability_checks`, and append-only `catalog_runtime_events`
+- reusable order runtime records: `order_acceptance_policies`, `order_action_definitions`,
+  `order_records`, `order_line_items`, `order_assignments`, and append-only `order_events`
+- finance and communication runtime records: `payment_deposit_requests`, `payment_webhook_events`,
+  `withdrawal_beneficiaries`, `withdrawal_requests`, `transfer_executions`, `withdrawal_events`,
+  `commission_policies`, `commission_executions`, `settlement_accounts`, `settlement_statements`,
+  `communication_messages`, `communication_events`, `otp_challenges`, and `otp_attempts`
 
 Remote migration evidence for `20260728050000_webhook_delivery_runtime.sql` has been recorded
 against the hosted Supabase dev project. Remote migration evidence for
 `20260728060000_webhook_retry_policy_override.sql` has been recorded against the hosted Supabase dev
+project. Remote migration evidence for `20260728070000_application_document_runtime.sql` has also
+been recorded against the hosted Supabase dev project. Remote migration evidence for
+`20260728080000_driver_vehicle_onboarding_runtime.sql`,
+`20260728090000_lpg_dispatch_vehicle_capability_binding.sql`, and
+`20260728100000_application_activation_capability_variable_fix.sql` has also been recorded against
+the hosted Supabase dev project. Remote migration evidence for
+`20260728110000_organization_staff_runtime.sql` and
+`20260728120000_organization_role_variable_fix.sql` has also been recorded against the hosted
+Supabase dev project. Remote migration evidence for
+`20260728130000_catalog_availability_runtime.sql` has also been recorded against the hosted Supabase
+dev project. Remote migration evidence for `20260728140000_order_operations_runtime.sql` has also
+been recorded against the hosted Supabase dev project. Remote migration evidence for
+`20260728150000_finance_communication_runtime.sql`,
+`20260728160000_finance_runtime_variable_fix.sql`,
+`20260728170000_payment_webhook_append_only_fix.sql`,
+`20260728180000_withdrawal_beneficiary_crypto_fix.sql`, and
+`20260728190000_otp_crypto_schema_fix.sql` has also been recorded against the hosted Supabase dev
 project.
+
+Backend-domain remediation gaps:
+
+- document expiry worker and quarantine scanning provider execution
+- driver and vehicle expiry, suspension/reactivation, fleet assignment, ownership transfer, and
+  broader dispatch edge-case coverage
+- live NGN provider certification and credentials outside the deterministic sandbox adapter
+- live email, SMS, WhatsApp, AI, and maps provider certification outside sandbox adapters
+- production backup/PITR and external alerting evidence
+
+These gaps are tracked in `docs/26-backend-domain-audit.md`.

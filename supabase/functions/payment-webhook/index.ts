@@ -58,6 +58,59 @@ Deno.serve(async (request: Request): Promise<Response> => {
     optionalString(payload.externalReference) ??
     id;
 
+  const depositRequestId = optionalUuid(payload.depositRequestId) ??
+    optionalUuid(payload.deposit_request_id);
+  const providerStatus = optionalString(payload.providerStatus) ?? optionalString(payload.status);
+
+  if (depositRequestId || providerStatus) {
+    const depositResult = await supabase.rpc("process_wallet_deposit_provider_event", {
+      target_deposit_request_id: depositRequestId,
+      target_idempotency_key: idempotencyKey,
+      target_metadata: {
+        requestId: id,
+        source: "payment-webhook",
+      },
+      target_payload: payload,
+      target_provider_reference: optionalString(payload.providerReference) ??
+        optionalString(payload.provider_reference) ??
+        optionalString(payload.externalReference),
+      target_provider_status: providerStatus ?? "succeeded",
+      target_signature_verified: true,
+      target_source: optionalString(payload.source) ?? "provider.payment.webhook",
+    });
+
+    if (depositResult.error) {
+      await supabase.from("error_reports").upsert({
+        context: {
+          code: depositResult.error.code,
+          payload,
+          requestId: id,
+        },
+        fingerprint: `payment-deposit-webhook:${idempotencyKey}`,
+        message: depositResult.error.message,
+        severity: "error",
+        source: "payment-webhook",
+        status: "open",
+      });
+
+      return jsonResponse(
+        {
+          ok: false,
+          error: "database_error",
+          message: depositResult.error.message,
+          requestId: id,
+        },
+        400,
+      );
+    }
+
+    return jsonResponse({
+      ok: true,
+      depositRequestId: depositResult.data,
+      requestId: id,
+    });
+  }
+
   const eventResult = await supabase.rpc("record_platform_event", {
     target_event_type_key: eventTypeKey,
     target_idempotency_key: idempotencyKey,

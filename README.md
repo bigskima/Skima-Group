@@ -16,24 +16,36 @@ The backend foundation uses Supabase:
 - Supabase Postgres for platform data, policies, workflows, events, audit logs, and configuration
 - Supabase Row Level Security from the first migration
 - Supabase Edge Functions for health checks, authenticated APIs, runtime workers, and webhooks
-- Supabase Storage metadata through the platform storage/media tables
+- Supabase Storage buckets and metadata for governed platform documents and media
 
 ## Current Milestone
 
-The active work is Milestone 4 reusable frontend foundation.
+The active work is backend-first remediation for Milestones 1-3. Milestone 4 frontend work is
+paused.
 
 Milestone status is evidence-based:
 
-- Milestone 1: Complete
-- Milestone 2: Complete
-- Milestone 3: Complete
-- Milestone 4: In Progress
+- Milestone 1: Complete, pending reviewer approval
+- Milestone 2: Complete, pending reviewer approval
+- Milestone 3: Complete, pending reviewer approval
+- Milestone 4: Not Started
 
 LPG remains the first module and is configured as database records and engine bindings, not platform
 source-code logic.
 
-Milestone 4 may now begin because backend milestones 1-3 have hosted Supabase evidence and reviewer
-approval to start frontend foundation work.
+The hosted Supabase gates now prove the Milestones 1-3 backend through no-frontend API/RPC flows:
+business applications, document review, approval-to-activation, driver and vehicle onboarding,
+driver-vehicle authorization, capability-based dispatch eligibility, organization staff management,
+catalog/availability, order processing, NGN wallet deposits, signed payment-webhook processing,
+duplicate webhook protection, withdrawals, transfer success/failure reversal, escrow funding, driver
+commission, business settlement, communication queueing, OTP verification, reconciliation, worker
+processing, append-only audit/ledger/event records, and RLS/security negative checks.
+
+Live real-money payment, SMS, WhatsApp, email, AI, and maps vendors remain swappable provider
+adapter launch work. The hosted milestone gates use deterministic sandbox adapters so the platform
+logic is testable without putting production secrets or money at risk.
+
+See [Backend Domain Audit](docs/26-backend-domain-audit.md).
 
 ## Verification
 
@@ -57,6 +69,12 @@ npm run supabase:functions:deploy
 npm run supabase:remote:gate
 npm run supabase:backend:e2e
 npm run supabase:webhook:dead-letter
+npm run supabase:applications:e2e
+npm run supabase:drivers:e2e
+npm run supabase:staff:e2e
+npm run supabase:catalog:e2e
+npm run supabase:orders:e2e
+npm run supabase:finance-communication:e2e
 ```
 
 Docker is optional. Runtime validation uses a dedicated hosted Supabase development project through

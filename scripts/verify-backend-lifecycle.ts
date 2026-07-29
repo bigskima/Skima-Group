@@ -36,7 +36,9 @@ const assetId = await createAsset(customerUserId);
 
 await upsertCapability("driver", driverId, "capability.driver.cylinder-handling");
 await upsertCapability("driver", driverId, "capability.cargo.pressurized-cylinder");
+await upsertCapability("vehicle", vehicleId, "capability.cargo.pressurized-cylinder");
 await upsertCapability("partner", partnerId, "capability.partner.refill-fulfillment");
+await linkDriverVehicle(driverId, vehicleId);
 
 const platformWalletId = await requirePlatformWallet("platform");
 const escrowWalletId = await requirePlatformWallet("escrow");
@@ -435,6 +437,18 @@ async function createVehicle(ownerUserId: string): Promise<string> {
   }
 
   return data.id;
+}
+
+async function linkDriverVehicle(driverId: string, vehicleId: string): Promise<void> {
+  await requireMutation(
+    serviceClient.from("driver_vehicle_links").upsert({
+      driver_profile_id: driverId,
+      metadata: { gate: "backend_lifecycle", runId },
+      relationship_type: "driver_owned",
+      status: "active",
+      vehicle_id: vehicleId,
+    }, { onConflict: "driver_profile_id,vehicle_id,relationship_type" }),
+  );
 }
 
 async function createAsset(ownerUserId: string): Promise<string> {

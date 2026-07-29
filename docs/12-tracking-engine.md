@@ -16,10 +16,11 @@ Implemented:
 - `POST /functions/v1/api-gateway/runtime/tracking/points`
 - active session validation inside `record_tracking_point`
 - map provider catalog records for Google Maps, Mapbox, HERE, OpenStreetMap, and sandbox maps
+- no-frontend backend lifecycle gate persists tracking updates as part of the module-backed runtime
 
-Required remediation:
+Remaining hardening:
 
 - live map adapter execution after provider keys are configured as Supabase secrets
-- E2E proof that location updates are persisted and auditable
+- broader geofence, ETA, and route policy validation tests
 
 Business modules must call the Location Service and Map Provider Adapter, not map vendors directly.

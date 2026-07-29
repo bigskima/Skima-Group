@@ -9,9 +9,9 @@ Implemented:
 - `price_quotes` with idempotency, policy snapshots, expiration, and accepted quote state
 - configured fixed, distance, weight, time, hybrid, dynamic, subscription, marketplace, manual,
   negotiated, quoted, and AI-assisted calculation paths
+- authenticated API route coverage through `/runtime/pricing/quotes`
+- hosted no-frontend backend lifecycle proof using LPG as module configuration only
 
-Required remediation:
+Remaining hardening:
 
-- API route and integration tests for valid calculation, invalid currency, unknown policy, and
-  idempotency
-- remote E2E proof using LPG as module configuration only
+- broader invalid currency, unknown policy, expired quote, and idempotency edge-case gates

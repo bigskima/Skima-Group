@@ -5,16 +5,18 @@ reusable platform foundation and business module framework exist.
 
 ## Current Status
 
-- Milestone 1 status: In Progress. Foundation exists, but operational hardening evidence is not
-  approved.
-- Milestone 2 status: In Progress. Executable runtime remediation exists locally; hosted remote
-  proof and E2E approval are pending.
-- Milestone 3 status: Implemented but Untested. Module framework and LPG configuration exist, but
-  the full no-frontend lifecycle is not approved.
+- Milestone 1 status: Complete, pending reviewer approval. Foundation, storage, communication/OTP
+  foundation, hosted security gates, and operational surfaces have hosted evidence.
+- Milestone 2 status: Complete, pending reviewer approval. Runtime engines now include NGN deposits,
+  signed payment webhooks, withdrawals, transfer success/failure reversal, commission, settlement,
+  communication, OTP, and reconciliation gates.
+- Milestone 3 status: Complete, pending reviewer approval. Module framework, LPG configuration,
+  onboarding, staff, catalog, order operations, and finance-backed lifecycle have hosted evidence.
 - Milestone 3 first LPG module configuration: live on hosted Supabase dev from the previous gate.
-- Milestone 3 backend lifecycle gate: pending after the runtime remediation migration is pushed.
+- Milestone 3 backend lifecycle gates: backend lifecycle, application/document, driver/vehicle,
+  staff, catalog, and order operations have hosted proof.
 - Milestone 4 status: Not Started. Frontend foundation is paused until backend milestones 1-3 are
-  approved.
+  approved by the reviewer.
 - Financial posting now uses a balanced idempotent database engine.
 - Wallet accounts now have real provisioning/status engines live on hosted Supabase dev.
 - Workflow and event runtime changes now use idempotent database engines.
@@ -23,6 +25,9 @@ reusable platform foundation and business module framework exist.
 - Runtime strategy: hosted Supabase dev project through `supabase db push` and function deploy.
   Docker is optional, not a milestone blocker.
 - Runtime worker and payment webhook functions are required backend surfaces.
+- Latest finance/communication gate passed with order `a80de045-ee24-4e03-bd79-11898c9fe385`,
+  commission execution `90918e73-3399-4ade-a13d-f3b6a1790e0c`, and settlement statement
+  `de906498-8f76-4954-b5a6-2490c9d6f25a`.
 
 ## Milestone 1: Platform Foundation
 
@@ -72,7 +77,7 @@ reusable platform foundation and business module framework exist.
 - [x] Client-safe Supabase Auth helper exists for real user sign-up, sign-in, session refresh,
       current-user lookup, and sign-out.
 - [x] App/client env example exposes only `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
-- [ ] Supabase runtime secrets are configured with `supabase secrets set`.
+- [x] Supabase runtime secrets are configured with `supabase secrets set`.
 - [x] Deployment-only values are stored in shell or CI secrets, never app env files.
 - [ ] Production backup and point-in-time recovery settings are confirmed.
 - [ ] Monitoring alerts are configured.
@@ -103,8 +108,12 @@ reusable platform foundation and business module framework exist.
 - [x] Runtime worker for notifications, AI tasks, jobs, expirations, and health recording
 - [x] Payment webhook handler with server-side secret validation
 - [x] Reconciliation RPC
-- [ ] Hosted Supabase remote gate after runtime remediation
-- [ ] No-frontend backend lifecycle E2E after runtime remediation
+- [x] Hosted Supabase remote gate after runtime remediation for current runtime checks
+- [x] No-frontend backend lifecycle E2E after runtime remediation
+- [x] Real NGN deposit/payment provider gate through sandbox adapter
+- [x] Withdrawal/transfer/reversal gate through sandbox adapter
+- [x] Commission and settlement hardening gate
+- [x] Communication and OTP gate
 
 ## Milestone 3: Business Module Framework
 
@@ -127,7 +136,13 @@ reusable platform foundation and business module framework exist.
 - [x] Module API gateway routes
 - [x] LPG module configuration
 - [x] No-frontend lifecycle gate script
-- [ ] Hosted lifecycle gate passed and evidence reviewed
+- [x] Business application and document lifecycle gate
+- [x] Driver and vehicle onboarding lifecycle gate
+- [x] Organization staff lifecycle gate
+- [x] Catalog and availability lifecycle gate
+- [x] Order operations lifecycle gate
+- [x] Hosted lifecycle gates passed
+- [ ] Reviewer approves Milestone 3 backend evidence
 
 ## Milestone 4: Reusable Frontend Foundation
 

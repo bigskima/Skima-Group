@@ -22,7 +22,7 @@ Implemented:
 - output marked assist-only
 - provider catalog/configuration records for Gemini, OpenAI, Anthropic Claude, and sandbox AI
 
-Required remediation:
+Remaining hardening:
 
 - live Gemini adapter execution after `GEMINI_API_KEY` is configured as a Supabase secret
 - configured prompt/input/output validation

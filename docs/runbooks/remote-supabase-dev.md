@@ -201,9 +201,57 @@ After runtime remediation is pushed and functions are deployed, run the full no-
 ```bash
 npm run supabase:backend:e2e
 npm run supabase:webhook:dead-letter
+npm run supabase:applications:e2e
+npm run supabase:drivers:e2e
+npm run supabase:staff:e2e
+npm run supabase:catalog:e2e
+npm run supabase:orders:e2e
+npm run supabase:finance-communication:e2e
 ```
 
 This requires `SKIMA_WORKER_SECRET` in the deployment shell so the script can call the deployed
 runtime worker. The dead-letter gate verifies that a configured outbound webhook failure records a
 failed delivery, an append-only dead-letter attempt, provider failure evidence, and a dead-letter
 background job.
+
+The application/document gate verifies that a real authenticated applicant can create a reusable
+business application, register configured document submissions, hit the required-document rejection,
+submit, respond to an admin correction request, resubmit, and receive approval. It also verifies
+that a real platform admin can review documents and approve the application, that approval activates
+an organization and partner profile, that business-owner access is assigned, and that application
+event records remain append-only.
+
+The driver/vehicle gate verifies that users cannot self-approve driver or vehicle records, driver
+and vehicle applications use the same reusable review workflow, required documents are reviewed
+before approval, approval activates driver and vehicle records, the vehicle specification is stored
+as structured backend data, an active driver-vehicle authorization link is created, unapproved
+drivers are excluded from dispatch, and approved driver/vehicle capability pairs become dispatch
+eligible.
+
+The organization staff gate verifies that an approved business owner can create branches, configure
+organization-scoped roles without granting `platform.*` permissions, invite staff, accept
+invitations, enforce branch-scoped permissions, suspend/reactivate staff access, transfer
+organization ownership, reject direct membership/role/branch writes, and preserve append-only staff
+event receipts.
+
+The catalog/availability gate verifies that an approved business can configure reusable units,
+categories, products or services, variants, prices, media links, branch availability, stock/capacity
+adjustments, and idempotent customer orderability checks. It also verifies branch-scoped catalog
+permissions, cross-branch denial, outsider denial, direct table-write rejection, audit records, and
+append-only catalog runtime events.
+
+The order operations gate verifies that a real customer can create a module-backed order from
+orderable catalog items, stock/capacity is reserved with a locked recheck, unauthorized actions are
+rejected, branch-scoped business staff can accept, assign, prepare, mark ready, and fulfil the
+order, the customer can complete the order through the configured workflow, reserved stock is
+consumed once, notifications are queued, audit evidence exists, and order events remain append-only.
+
+The finance/communication gate verifies that a customer can initialize an NGN wallet deposit,
+receive a signed provider webhook, reject duplicate webhook processing safely, credit the wallet
+through the ledger, configure a withdrawal beneficiary, request withdrawal, process failed-transfer
+reversal and successful transfer paths, fund an order into escrow, execute driver commission,
+execute business settlement with platform fee, reconcile balances, queue communication, verify OTP,
+sync delivery statuses, and reject direct mutation of append-only payment/OTP records.
+
+These hosted gates use deterministic sandbox adapters. Real payment, transfer, email, SMS, WhatsApp,
+AI, and maps vendors are enabled later through provider configuration and Supabase secrets.

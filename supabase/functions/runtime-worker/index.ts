@@ -43,6 +43,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const limit = body.limit ?? DEFAULT_LIMIT;
 
     const notifications = await processNotifications(supabase, limit);
+    const communications = await syncCommunicationMessages(supabase, limit);
     const aiTasks = await processAiTasks(supabase, limit);
     const webhooks = await processWebhooks(supabase, limit);
     const jobs = await processBackgroundJobs(supabase, limit);
@@ -51,6 +52,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     await supabase.rpc("record_health_check", {
       target_details: {
         aiTasks,
+        communications,
         expirations,
         jobs,
         notifications,
@@ -65,6 +67,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
       ok: true,
       data: {
         aiTasks,
+        communications,
         expirations,
         jobs,
         notifications,
@@ -230,6 +233,21 @@ async function processNotifications(
   }
 
   return processed;
+}
+
+async function syncCommunicationMessages(
+  supabase: RuntimeSupabaseClient,
+  limit: number,
+): Promise<number> {
+  const result = await supabase.rpc("sync_communication_message_statuses", {
+    target_limit: limit,
+  });
+
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+
+  return typeof result.data === "number" ? result.data : 0;
 }
 
 async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): Promise<number> {

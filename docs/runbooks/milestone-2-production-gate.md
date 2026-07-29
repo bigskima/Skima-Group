@@ -2,7 +2,7 @@
 
 Milestone 3 may not start until this checklist is complete.
 
-Current status: Complete.
+Current status: Complete, pending reviewer approval.
 
 ## Scope
 
@@ -94,4 +94,22 @@ business-specific screens.
 - [x] Financial reconciliation execution
 - [x] Hosted Supabase migration/deploy evidence for webhook delivery runtime
 - [x] Hosted Supabase successful lifecycle evidence for webhook-aware runtime engines
+- [x] Driver and vehicle approval state is enforced by dispatch eligibility tests.
+- [x] Real NGN deposit initialization, verification, webhook, duplicate-protection, ledger, and
+      reconciliation gate.
+- [x] Withdrawal request, beneficiary verification, limits, reservation, transfer execution,
+      failure, reversal, and reconciliation gate.
+- [x] Driver commission calculation, reservation, release, duplicate prevention, reversal, and audit
+      gate.
+- [x] Business settlement accounts, schedules, holds, statements, retry, failure, reversal, and
+      audit gate.
+- [x] Communication/OTP, email, SMS, WhatsApp, and in-app delivery gates.
 - [ ] Reviewer approves runtime engine evidence.
+
+Latest hosted finance/communication gate:
+
+- `npm run supabase:finance-communication:e2e`
+- deposit request `38d84d40-18e4-46f1-95a1-f382d9b1d85e`
+- withdrawal request `cc95947f-2784-459f-bb2e-22c73c4deeb3`
+- commission execution `90918e73-3399-4ade-a13d-f3b6a1790e0c`
+- settlement statement `de906498-8f76-4954-b5a6-2490c9d6f25a`

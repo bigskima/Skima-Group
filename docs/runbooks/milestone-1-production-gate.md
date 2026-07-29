@@ -1,8 +1,10 @@
 # Milestone 1 Production Gate
 
-Milestone 2 may not start until this checklist is complete.
+Milestone 2 may not start until this checklist is complete. Because the backend-first directive was
+expanded on 2026-07-28, this milestone was reopened for foundation-level storage, communication,
+OTP, and role-specific security evidence.
 
-Current status: Complete.
+Current status: Complete, pending reviewer approval.
 
 ## Local Verification
 
@@ -58,13 +60,23 @@ Current status: Complete.
 - [x] Rate limit tables exist.
 - [x] Cache tables exist.
 - [x] Logging and error tables exist.
-- [x] Edge Functions are deployed to the hosted Supabase dev project after the webhook delivery
-      runtime update.
+- [x] Edge Functions are deployed to the hosted Supabase dev project after the application/document
+      route normalization update.
 - [x] Remote production verification is completed against the hosted Supabase dev project after the
       webhook delivery runtime gate is added.
 - [x] Hosted dev Edge Function invocations/logs are visible in Supabase dashboard.
 - [x] Log Drains are not available on the current Supabase Free plan and are recorded as a
       production-launch hardening requirement.
+- [x] Supabase Storage buckets and object-level policies are implemented locally for platform
+      documents and media in `20260728070000_application_document_runtime.sql`.
+- [x] Reusable document upload registration and review metadata is implemented locally.
+- [x] Hosted dev migration applied for storage, document, and application runtime.
+- [x] Hosted E2E evidence proves document storage policy, registration, review, audit, and
+      append-only behavior.
+- [x] Communication and OTP foundation tables, policies, runtime functions, and workers are
+      implemented.
+- [x] Role-specific RLS/security gates cover customer, business owner, business staff, driver,
+      support admin, finance admin, module admin, and super admin.
 
 ## Production Launch Follow-Up
 
@@ -84,6 +96,8 @@ npm run supabase:db:push
 npm run supabase:functions:deploy
 npm run supabase:provision-admin
 npm run supabase:remote:gate
+npm run supabase:applications:e2e
+npm run supabase:finance-communication:e2e
 ```
 
 Set `SKIMA_WORKER_SECRET`, `SKIMA_PAYMENT_WEBHOOK_SECRET`, and

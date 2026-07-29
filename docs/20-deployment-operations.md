@@ -10,6 +10,16 @@ Required command sequence:
 - `npm run supabase:remote:gate`
 - `npm run supabase:backend:e2e`
 - `npm run supabase:webhook:dead-letter`
+- `npm run supabase:applications:e2e`
+- `npm run supabase:drivers:e2e`
+- `npm run supabase:staff:e2e`
+- `npm run supabase:catalog:e2e`
+- `npm run supabase:orders:e2e`
+- `npm run supabase:finance-communication:e2e`
+
+Milestone 4 must not resume after these commands alone. A reviewer must also approve the Milestones
+1-3 evidence. The hosted development gates use deterministic sandbox adapters; live provider
+certification is handled as production launch hardening.
 
 Required operational evidence:
 
@@ -25,3 +35,14 @@ Required operational evidence:
 - monitoring alerts configured
 - backup/PITR reviewed before production
 - remote gates run with a real platform super admin session
+- Supabase Storage buckets and policies reviewed before document uploads are enabled
+- provider-specific NGN payment credentials configured only as Supabase secrets
+- communication provider credentials configured only as Supabase secrets
+- OTP secrets, expiry policy, and rate limits configured before production use
+
+Hosted dev evidence as of the finance/communication remediation:
+
+- remote gate passed after deploying `20260728150000` through `20260728190000`
+- full no-frontend backend lifecycle passed
+- application/document, driver/vehicle, staff, catalog, order, webhook dead-letter, and
+  finance/communication E2E gates passed

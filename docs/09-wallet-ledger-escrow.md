@@ -14,9 +14,22 @@ Implemented:
 - `refund_escrow_hold`
 - `expire_escrow_holds`
 - `settlement_executions` receipts linked to ledger transactions
+- NGN deposit ledger posting into customer wallets
+- withdrawal reserve, transfer success, failed-transfer reversal, and ledger receipts
+- order funding from customer wallet into escrow
+- driver commission credit from escrow
+- business settlement credit and platform fee split from escrow
+- settlement-clearing wallet provisioning
+- reconciliation including order totals, quote totals, wallet balances, and ledger postings
 
-Required remediation:
+Hosted evidence:
 
-- reconciliation evidence after an end-to-end lifecycle
-- remote gate evidence for refund, dispute, expiry, and release failure paths
+- `npm run supabase:finance-communication:e2e` proves the deposit, withdrawal, escrow, commission,
+  settlement, and reconciliation path against hosted Supabase.
+- Remote gates still keep incomplete-operation and append-only mutation checks active.
+
+Remaining production-launch work:
+
+- live payment/transfer provider certification
+- broader refund, dispute, partial-release, and expiry edge-case gates
 - scheduled worker evidence for expirations

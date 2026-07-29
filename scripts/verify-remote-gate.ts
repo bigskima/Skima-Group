@@ -53,6 +53,26 @@ await runGate(
   verifyBackendRuntimeRejectsIncompleteOperations,
 );
 await runGate(
+  "application and document runtime rejects incomplete operations",
+  verifyApplicationDocumentRuntimeRejectsIncompleteOperations,
+);
+await runGate(
+  "organization staff runtime rejects incomplete operations",
+  verifyOrganizationStaffRuntimeRejectsIncompleteOperations,
+);
+await runGate(
+  "catalog and availability runtime rejects incomplete operations",
+  verifyCatalogAvailabilityRuntimeRejectsIncompleteOperations,
+);
+await runGate(
+  "order operations runtime rejects incomplete operations",
+  verifyOrderOperationsRuntimeRejectsIncompleteOperations,
+);
+await runGate(
+  "finance and communication runtime rejects incomplete operations",
+  verifyFinanceCommunicationRuntimeRejectsIncompleteOperations,
+);
+await runGate(
   "first business module configuration is active",
   verifyFirstBusinessModuleConfiguration,
 );
@@ -192,6 +212,7 @@ async function verifyServiceRoleFoundationAccess(): Promise<void> {
   await requireReadable(serviceClient, "dispatch_requests", "status");
   await requireReadable(serviceClient, "dispatch_request_events", "status");
   await requireReadable(serviceClient, "dispatch_candidates", "status");
+  await requireReadable(serviceClient, "driver_vehicle_links", "status,relationship_type");
   await requireReadable(serviceClient, "tracking_sessions", "status");
   await requireReadable(serviceClient, "tracking_session_events", "status");
   await requireReadable(serviceClient, "tracking_points", "latitude,longitude");
@@ -212,6 +233,49 @@ async function verifyServiceRoleFoundationAccess(): Promise<void> {
     "provider_kind,operation_key,status",
   );
   await requireReadable(serviceClient, "webhook_delivery_attempts", "delivery_id,status");
+  await requireReadable(serviceClient, "document_requirement_sets", "key,status");
+  await requireReadable(serviceClient, "document_requirements", "key,status");
+  await requireReadable(serviceClient, "application_type_definitions", "key,status");
+  await requireReadable(serviceClient, "application_records", "status");
+  await requireReadable(serviceClient, "application_versions", "version,status");
+  await requireReadable(serviceClient, "application_review_tasks", "status");
+  await requireReadable(serviceClient, "application_events", "event_type_key,to_status");
+  await requireReadable(serviceClient, "application_review_events", "decision");
+  await requireReadable(serviceClient, "document_submissions", "status");
+  await requireReadable(serviceClient, "document_review_events", "decision");
+  await requireReadable(serviceClient, "organization_branches", "key,status");
+  await requireReadable(serviceClient, "organization_invitations", "status,invited_email");
+  await requireReadable(serviceClient, "organization_staff_events", "event_type_key,to_status");
+  await requireReadable(serviceClient, "catalog_units", "key,status");
+  await requireReadable(serviceClient, "catalog_categories", "key,status");
+  await requireReadable(serviceClient, "catalog_items", "key,status");
+  await requireReadable(serviceClient, "catalog_item_variants", "key,status");
+  await requireReadable(serviceClient, "catalog_prices", "currency_code,status");
+  await requireReadable(serviceClient, "catalog_item_media", "status,display_order");
+  await requireReadable(serviceClient, "catalog_availability_rules", "availability_status,status");
+  await requireReadable(serviceClient, "catalog_stock_adjustments", "reason,delta_quantity");
+  await requireReadable(serviceClient, "catalog_orderability_checks", "status,quantity");
+  await requireReadable(serviceClient, "catalog_runtime_events", "event_type_key,to_status");
+  await requireReadable(serviceClient, "order_acceptance_policies", "key,status");
+  await requireReadable(serviceClient, "order_action_definitions", "key,event_type_key,status");
+  await requireReadable(serviceClient, "order_records", "status,total_amount");
+  await requireReadable(serviceClient, "order_line_items", "fulfillment_status,quantity");
+  await requireReadable(serviceClient, "order_assignments", "participant_role,status");
+  await requireReadable(serviceClient, "order_events", "event_type_key,to_status");
+  await requireReadable(serviceClient, "payment_deposit_requests", "status,amount,currency_code");
+  await requireReadable(serviceClient, "payment_webhook_events", "event_type,status");
+  await requireReadable(serviceClient, "withdrawal_beneficiaries", "status,account_number_last4");
+  await requireReadable(serviceClient, "withdrawal_requests", "status,amount,total_debit_amount");
+  await requireReadable(serviceClient, "transfer_executions", "status,provider_reference");
+  await requireReadable(serviceClient, "withdrawal_events", "event_type,status");
+  await requireReadable(serviceClient, "commission_policies", "key,status");
+  await requireReadable(serviceClient, "commission_executions", "status,amount");
+  await requireReadable(serviceClient, "settlement_accounts", "status,settlement_mode");
+  await requireReadable(serviceClient, "settlement_statements", "status,gross_amount,net_amount");
+  await requireReadable(serviceClient, "communication_messages", "channel,purpose,status");
+  await requireReadable(serviceClient, "communication_events", "status");
+  await requireReadable(serviceClient, "otp_challenges", "purpose,status");
+  await requireReadable(serviceClient, "otp_attempts", "status");
 }
 
 async function verifyAuditLogsRejectDirectMutation(): Promise<void> {
@@ -849,6 +913,454 @@ async function verifyBackendRuntimeRejectsIncompleteOperations(): Promise<void> 
   );
 }
 
+async function verifyApplicationDocumentRuntimeRejectsIncompleteOperations(): Promise<void> {
+  await requireRpcError(
+    "application create runtime",
+    serviceClient.rpc("create_application_record", {
+      target_applicant_user_id: null,
+      target_application_type_key: "platform.remote_gate.missing_application_type",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_organization_id: null,
+      target_payload: {},
+      target_source: "platform.remote_gate",
+    }),
+    "target_applicant_user_id is required",
+  );
+
+  await requireRpcError(
+    "application payload runtime",
+    serviceClient.rpc("update_application_payload", {
+      target_application_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_payload: {},
+    }),
+    "target_application_id is required",
+  );
+
+  await requireRpcError(
+    "application submit runtime",
+    serviceClient.rpc("submit_application", {
+      target_application_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+    }),
+    "target_application_id is required",
+  );
+
+  await requireRpcError(
+    "document registration runtime",
+    serviceClient.rpc("register_document_submission", {
+      target_application_id: null,
+      target_byte_size: 100,
+      target_checksum: null,
+      target_content_type: "application/pdf",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_requirement_key: "business.registration",
+      target_source: "platform.remote_gate",
+      target_storage_bucket: "skima-platform-documents",
+      target_storage_path: "remote-gate/document.pdf",
+    }),
+    "target_application_id is required",
+  );
+
+  await requireRpcError(
+    "document review runtime",
+    serviceClient.rpc("review_document_submission", {
+      target_applicant_message: null,
+      target_decision: "approved",
+      target_document_submission_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_internal_notes: null,
+      target_metadata: {},
+    }),
+    "target_document_submission_id is required",
+  );
+
+  await requireRpcError(
+    "application reviewer runtime",
+    serviceClient.rpc("assign_application_reviewer", {
+      target_application_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_reviewer_user_id: crypto.randomUUID(),
+    }),
+    "target_application_id is required",
+  );
+
+  await requireRpcError(
+    "application correction runtime",
+    serviceClient.rpc("request_application_correction", {
+      target_applicant_message: "remote gate",
+      target_application_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_internal_notes: null,
+      target_metadata: {},
+    }),
+    "target_application_id is required",
+  );
+
+  await requireRpcError(
+    "application decision runtime",
+    serviceClient.rpc("decide_application_review", {
+      target_application_id: null,
+      target_decision: "approved",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_reason: "remote gate",
+    }),
+    "target_application_id is required",
+  );
+}
+
+async function verifyOrganizationStaffRuntimeRejectsIncompleteOperations(): Promise<void> {
+  await requireRpcError(
+    "organization branch runtime",
+    serviceClient.rpc("create_organization_branch", {
+      target_address: {},
+      target_branch_key: "Invalid Branch",
+      target_display_name: "Remote Gate Invalid Branch",
+      target_geo_location: {},
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_organization_id: null,
+      target_source: "platform.remote_gate",
+      target_status: "active",
+    }),
+    "target_branch_key must be a valid platform key",
+  );
+
+  await requireRpcError(
+    "organization role runtime",
+    serviceClient.rpc("configure_organization_role", {
+      target_branch_id: null,
+      target_description: "Remote gate invalid role",
+      target_display_name: "Remote Gate Invalid Role",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_organization_id: null,
+      target_permission_keys: ["platform.roles.manage"],
+      target_role_key: "business.remote_gate.invalid",
+      target_source: "platform.remote_gate",
+    }),
+    "organization roles cannot grant platform permissions",
+  );
+
+  await requireRpcError(
+    "organization invitation runtime",
+    serviceClient.rpc("invite_organization_staff", {
+      target_branch_key: null,
+      target_expires_at: new Date(Date.now() + 60_000).toISOString(),
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_invited_email: "not-an-email",
+      target_membership_type: "member",
+      target_metadata: {},
+      target_organization_id: null,
+      target_role_key: "business.remote_gate.invalid",
+      target_source: "platform.remote_gate",
+    }),
+    "target_invited_email must be a valid email address",
+  );
+
+  await requireRpcError(
+    "organization invitation acceptance runtime",
+    serviceClient.rpc("accept_organization_invitation", {
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_invitation_id: null,
+      target_metadata: {},
+    }),
+    "target_invitation_id is required",
+  );
+
+  await requireRpcError(
+    "organization staff status runtime",
+    serviceClient.rpc("set_organization_staff_status", {
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_organization_id: null,
+      target_reason: "remote gate",
+      target_status: "active",
+      target_user_id: null,
+    }),
+    "target_user_id is required",
+  );
+
+  await requireRpcError(
+    "organization ownership transfer runtime",
+    serviceClient.rpc("transfer_organization_ownership", {
+      target_from_user_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_organization_id: null,
+      target_to_user_id: null,
+    }),
+    "target_from_user_id and target_to_user_id are required",
+  );
+}
+
+async function verifyCatalogAvailabilityRuntimeRejectsIncompleteOperations(): Promise<void> {
+  await requireRpcError(
+    "catalog unit runtime",
+    serviceClient.rpc("configure_catalog_unit", {
+      target_decimal_precision: 0,
+      target_display_name: "Remote Gate Invalid Unit",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_organization_id: null,
+      target_source: "platform.remote_gate",
+      target_status: "active",
+      target_symbol: null,
+      target_unit_key: "Invalid Unit",
+      target_unit_kind: "quantity",
+    }),
+    "target_unit_key must be a valid platform key",
+  );
+
+  await requireRpcError(
+    "catalog category runtime",
+    serviceClient.rpc("configure_catalog_category", {
+      target_category_key: "category.remote_gate.invalid",
+      target_category_type: "invalid",
+      target_description: null,
+      target_display_name: "Remote Gate Invalid Category",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_module_key: null,
+      target_organization_id: null,
+      target_parent_key: null,
+      target_source: "platform.remote_gate",
+      target_status: "active",
+    }),
+    "target_category_type is not supported",
+  );
+
+  await requireRpcError(
+    "catalog item runtime",
+    serviceClient.rpc("configure_catalog_item", {
+      target_branch_id: null,
+      target_category_key: null,
+      target_description: null,
+      target_display_name: "Remote Gate Invalid Item",
+      target_fulfillment_methods: [],
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_item_key: "item.remote_gate.invalid",
+      target_item_type: "invalid",
+      target_max_quantity: null,
+      target_metadata: {},
+      target_min_quantity: 1,
+      target_module_key: null,
+      target_organization_id: null,
+      target_preparation_time_minutes: null,
+      target_source: "platform.remote_gate",
+      target_status: "active",
+    }),
+    "target_item_type is not supported",
+  );
+
+  await requireRpcError(
+    "catalog variant runtime",
+    serviceClient.rpc("configure_catalog_variant", {
+      target_display_name: "Remote Gate Invalid Variant",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_item_id: null,
+      target_metadata: {},
+      target_quantity_value: 1,
+      target_sku: null,
+      target_source: "platform.remote_gate",
+      target_status: "active",
+      target_unit_key: null,
+      target_variant_key: "variant.remote_gate.invalid",
+    }),
+    "target_item_id must reference an existing catalog item",
+  );
+
+  await requireRpcError(
+    "catalog price runtime",
+    serviceClient.rpc("configure_catalog_price", {
+      target_amount: 1,
+      target_compare_at_amount: null,
+      target_currency_code: "NGN",
+      target_effective_from: null,
+      target_effective_until: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_item_id: null,
+      target_metadata: {},
+      target_pricing_policy_key: null,
+      target_source: "platform.remote_gate",
+      target_status: "active",
+      target_tax_behavior: "exclusive",
+      target_variant_id: null,
+    }),
+    "target_item_id must reference an existing catalog item",
+  );
+
+  await requireRpcError(
+    "catalog availability runtime",
+    serviceClient.rpc("set_catalog_availability", {
+      target_availability_status: "available",
+      target_branch_id: null,
+      target_capacity_limit: null,
+      target_capacity_used: 0,
+      target_effective_from: null,
+      target_effective_until: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_item_id: null,
+      target_metadata: {},
+      target_reserved_quantity: 0,
+      target_schedule: {},
+      target_source: "platform.remote_gate",
+      target_status: "active",
+      target_stock_quantity: null,
+      target_variant_id: null,
+    }),
+    "target_item_id must reference an existing catalog item",
+  );
+
+  await requireRpcError(
+    "catalog stock adjustment runtime",
+    serviceClient.rpc("adjust_catalog_stock", {
+      target_availability_rule_id: null,
+      target_delta_quantity: 1,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_reason: "remote gate",
+      target_source: "platform.remote_gate",
+    }),
+    "target_availability_rule_id must reference an existing availability rule",
+  );
+
+  await requireRpcError(
+    "catalog orderability runtime",
+    serviceClient.rpc("validate_catalog_orderability", {
+      target_branch_id: null,
+      target_currency_code: "NGN",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_item_id: null,
+      target_metadata: {},
+      target_quantity: 1,
+      target_source: "platform.remote_gate",
+      target_variant_id: null,
+    }),
+    "target_item_id is required",
+  );
+}
+
+async function verifyOrderOperationsRuntimeRejectsIncompleteOperations(): Promise<void> {
+  await requireRpcError(
+    "order creation runtime",
+    serviceClient.rpc("create_order_from_catalog", {
+      target_acceptance_policy_key: null,
+      target_branch_id: null,
+      target_currency_code: "NGN",
+      target_fulfillment_method: "delivery",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_line_items: [],
+      target_metadata: {},
+      target_module_key: "lpg",
+      target_order_payload: {},
+      target_organization_id: null,
+      target_source: "platform.remote_gate",
+    }),
+    "target_organization_id is required",
+  );
+
+  await requireRpcError(
+    "order action runtime",
+    serviceClient.rpc("process_order_action", {
+      target_action_key: "order.accept",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_order_id: null,
+      target_payload: {},
+      target_reason: null,
+      target_source: "platform.remote_gate",
+    }),
+    "target_order_id is required",
+  );
+
+  await requireRpcError(
+    "order assignment runtime",
+    serviceClient.rpc("assign_order_participant", {
+      target_entity_id: null,
+      target_entity_type: "organization",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_order_id: null,
+      target_participant_role: "fulfillment_partner",
+      target_source: "platform.remote_gate",
+    }),
+    "target_order_id is required",
+  );
+}
+
+async function verifyFinanceCommunicationRuntimeRejectsIncompleteOperations(): Promise<void> {
+  await requireRpcError(
+    "deposit verification runtime",
+    serviceClient.rpc("verify_wallet_deposit", {
+      target_deposit_request_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+    }),
+    "target_deposit_request_id is required",
+  );
+
+  await requireRpcError(
+    "withdrawal approval runtime",
+    serviceClient.rpc("approve_wallet_withdrawal", {
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_source: "platform.remote_gate",
+      target_withdrawal_request_id: null,
+    }),
+    "target_withdrawal_request_id is required",
+  );
+
+  await requireRpcError(
+    "commission execution runtime",
+    serviceClient.rpc("execute_driver_commission", {
+      target_base_amount: null,
+      target_commission_policy_key: "commission.driver.percentage.default",
+      target_driver_wallet_id: null,
+      target_escrow_hold_id: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_order_id: null,
+      target_source: "platform.remote_gate",
+    }),
+    "target_order_id, target_escrow_hold_id, and target_driver_wallet_id are required",
+  );
+
+  await requireRpcError(
+    "communication queue runtime",
+    serviceClient.rpc("queue_communication_message", {
+      target_channel: null,
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+      target_payload: {},
+      target_provider_adapter_key: "provider.communication.sandbox",
+      target_purpose: "platform.remote_gate",
+      target_recipient_address: null,
+      target_recipient_entity_id: null,
+      target_recipient_entity_type: "user",
+      target_source: "platform.remote_gate",
+    }),
+    "target_channel is not supported",
+  );
+
+  await requireRpcError(
+    "OTP verification runtime",
+    serviceClient.rpc("verify_otp_challenge", {
+      target_challenge_id: null,
+      target_code: "123456",
+      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
+      target_metadata: {},
+    }),
+    "target_challenge_id is required",
+  );
+}
+
 async function verifyFirstBusinessModuleConfiguration(): Promise<void> {
   const { data: moduleRecord, error: moduleError } = await serviceClient
     .from("business_modules")
@@ -997,6 +1509,7 @@ async function verifyPlatformAdminReadAccess(adminClient: SupabaseClient): Promi
   await requireReadable(adminClient, "dispatch_requests", "status");
   await requireReadable(adminClient, "dispatch_request_events", "status");
   await requireReadable(adminClient, "dispatch_candidates", "status");
+  await requireReadable(adminClient, "driver_vehicle_links", "status,relationship_type");
   await requireReadable(adminClient, "tracking_sessions", "status");
   await requireReadable(adminClient, "tracking_session_events", "status");
   await requireReadable(adminClient, "tracking_points", "latitude,longitude");
@@ -1017,6 +1530,49 @@ async function verifyPlatformAdminReadAccess(adminClient: SupabaseClient): Promi
     "provider_kind,operation_key,status",
   );
   await requireReadable(adminClient, "webhook_delivery_attempts", "delivery_id,status");
+  await requireReadable(adminClient, "document_requirement_sets", "key,status");
+  await requireReadable(adminClient, "document_requirements", "key,status");
+  await requireReadable(adminClient, "application_type_definitions", "key,status");
+  await requireReadable(adminClient, "application_records", "status");
+  await requireReadable(adminClient, "application_versions", "version,status");
+  await requireReadable(adminClient, "application_review_tasks", "status");
+  await requireReadable(adminClient, "application_events", "event_type_key,to_status");
+  await requireReadable(adminClient, "application_review_events", "decision");
+  await requireReadable(adminClient, "document_submissions", "status");
+  await requireReadable(adminClient, "document_review_events", "decision");
+  await requireReadable(adminClient, "organization_branches", "key,status");
+  await requireReadable(adminClient, "organization_invitations", "status,invited_email");
+  await requireReadable(adminClient, "organization_staff_events", "event_type_key,to_status");
+  await requireReadable(adminClient, "catalog_units", "key,status");
+  await requireReadable(adminClient, "catalog_categories", "key,status");
+  await requireReadable(adminClient, "catalog_items", "key,status");
+  await requireReadable(adminClient, "catalog_item_variants", "key,status");
+  await requireReadable(adminClient, "catalog_prices", "currency_code,status");
+  await requireReadable(adminClient, "catalog_item_media", "status,display_order");
+  await requireReadable(adminClient, "catalog_availability_rules", "availability_status,status");
+  await requireReadable(adminClient, "catalog_stock_adjustments", "reason,delta_quantity");
+  await requireReadable(adminClient, "catalog_orderability_checks", "status,quantity");
+  await requireReadable(adminClient, "catalog_runtime_events", "event_type_key,to_status");
+  await requireReadable(adminClient, "order_acceptance_policies", "key,status");
+  await requireReadable(adminClient, "order_action_definitions", "key,event_type_key,status");
+  await requireReadable(adminClient, "order_records", "status,total_amount");
+  await requireReadable(adminClient, "order_line_items", "fulfillment_status,quantity");
+  await requireReadable(adminClient, "order_assignments", "participant_role,status");
+  await requireReadable(adminClient, "order_events", "event_type_key,to_status");
+  await requireReadable(adminClient, "payment_deposit_requests", "status,amount,currency_code");
+  await requireReadable(adminClient, "payment_webhook_events", "event_type,status");
+  await requireReadable(adminClient, "withdrawal_beneficiaries", "status,account_number_last4");
+  await requireReadable(adminClient, "withdrawal_requests", "status,amount,total_debit_amount");
+  await requireReadable(adminClient, "transfer_executions", "status,provider_reference");
+  await requireReadable(adminClient, "withdrawal_events", "event_type,status");
+  await requireReadable(adminClient, "commission_policies", "key,status");
+  await requireReadable(adminClient, "commission_executions", "status,amount");
+  await requireReadable(adminClient, "settlement_accounts", "status,settlement_mode");
+  await requireReadable(adminClient, "settlement_statements", "status,gross_amount,net_amount");
+  await requireReadable(adminClient, "communication_messages", "channel,purpose,status");
+  await requireReadable(adminClient, "communication_events", "status");
+  await requireReadable(adminClient, "otp_challenges", "purpose,status");
+  await requireReadable(adminClient, "otp_attempts", "status");
   await requireAdminCanReadFirstBusinessModule(adminClient);
 }
 

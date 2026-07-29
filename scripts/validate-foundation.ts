@@ -26,8 +26,10 @@ const requiredDocumentationPaths = [
   "docs/22-architecture-decisions/ADR-0002-external-provider-boundaries.md",
   "docs/22-architecture-decisions/ADR-0003-free-plan-operations-gate.md",
   "docs/23-change-requests/CR-0001-backend-first-remediation.md",
+  "docs/23-change-requests/CR-0002-pause-milestone-4-backend-domain-remediation.md",
   "docs/24-known-limitations.md",
   "docs/25-production-readiness.md",
+  "docs/26-backend-domain-audit.md",
   "docs/runbooks/milestone-4-production-gate.md",
 ] as const;
 
@@ -98,6 +100,84 @@ requireCondition(
   tables.includes("webhook_delivery_attempts"),
   "Webhook delivery runtime must include immutable delivery attempt records.",
 );
+requireCondition(
+  tables.includes("application_records"),
+  "Application runtime must include governed application records.",
+);
+requireCondition(
+  tables.includes("document_submissions"),
+  "Document runtime must include governed document submissions.",
+);
+requireCondition(
+  tables.includes("driver_vehicle_links"),
+  "Driver and vehicle runtime must include governed driver-vehicle authorization links.",
+);
+requireCondition(
+  tables.includes("organization_branches"),
+  "Organization staff runtime must include branch records.",
+);
+requireCondition(
+  tables.includes("organization_invitations"),
+  "Organization staff runtime must include governed staff invitations.",
+);
+requireCondition(
+  tables.includes("organization_staff_events"),
+  "Organization staff runtime must include immutable staff event records.",
+);
+
+const requiredCatalogRuntimeTables = [
+  "catalog_units",
+  "catalog_categories",
+  "catalog_items",
+  "catalog_item_variants",
+  "catalog_prices",
+  "catalog_item_media",
+  "catalog_availability_rules",
+  "catalog_stock_adjustments",
+  "catalog_orderability_checks",
+  "catalog_runtime_events",
+] as const;
+
+for (const table of requiredCatalogRuntimeTables) {
+  requireCondition(tables.includes(table), `Catalog runtime table is missing: ${table}.`);
+}
+
+const requiredOrderRuntimeTables = [
+  "order_acceptance_policies",
+  "order_action_definitions",
+  "order_records",
+  "order_line_items",
+  "order_assignments",
+  "order_events",
+] as const;
+
+for (const table of requiredOrderRuntimeTables) {
+  requireCondition(tables.includes(table), `Order runtime table is missing: ${table}.`);
+}
+
+const requiredFinanceCommunicationRuntimeTables = [
+  "payment_deposit_requests",
+  "payment_webhook_events",
+  "withdrawal_beneficiaries",
+  "withdrawal_requests",
+  "transfer_executions",
+  "withdrawal_events",
+  "commission_policies",
+  "commission_executions",
+  "settlement_accounts",
+  "settlement_statements",
+  "communication_messages",
+  "communication_events",
+  "otp_challenges",
+  "otp_attempts",
+] as const;
+
+for (const table of requiredFinanceCommunicationRuntimeTables) {
+  requireCondition(
+    tables.includes(table),
+    `Finance/communication runtime table is missing: ${table}.`,
+  );
+}
 
 for (const table of tables) {
   requireMatch(
@@ -194,6 +274,7 @@ const requiredEngineTables = [
   "price_quotes",
   "settlement_executions",
   "provider_execution_logs",
+  "driver_vehicle_links",
 ] as const;
 
 for (const table of requiredEngineTables) {
@@ -506,6 +587,78 @@ for (const functionName of executableRuntimeFunctions) {
   );
 }
 
+const applicationDocumentRuntimeFunctions = [
+  "create_application_record",
+  "update_application_payload",
+  "advance_application_record_state",
+  "register_document_submission",
+  "review_document_submission",
+  "submit_application",
+  "assign_application_reviewer",
+  "request_application_correction",
+  "activate_approved_application",
+  "decide_application_review",
+  "withdraw_application",
+] as const;
+
+for (const functionName of applicationDocumentRuntimeFunctions) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(`create or replace function public\\.${functionName}`),
+    `${functionName} application/document runtime function must exist.`,
+  );
+}
+
+for (
+  const table of [
+    "document_requirement_sets",
+    "document_requirements",
+    "application_type_definitions",
+    "application_records",
+    "application_versions",
+    "application_review_tasks",
+    "application_events",
+    "application_review_events",
+    "document_submissions",
+    "document_review_events",
+  ]
+) {
+  requireCondition(
+    tables.includes(table),
+    `Application/document runtime table is missing: ${table}.`,
+  );
+}
+
+requireMatch(
+  normalizedSql,
+  /skima-platform-documents/,
+  "Document runtime must configure a private Supabase Storage document bucket.",
+);
+
+requireMatch(
+  normalizedSql,
+  /workflow\.application\.review\.default/,
+  "Application runtime must seed the database-stored review workflow.",
+);
+
+requireMatch(
+  normalizedSql,
+  /application\.business\.default/,
+  "Application runtime must seed a reusable business application type.",
+);
+
+requireMatch(
+  normalizedSql,
+  /documents\.business\.onboarding\.default/,
+  "Document runtime must seed configurable business onboarding requirements.",
+);
+
+requireMatch(
+  normalizedSql,
+  /application engine event records are append-only/,
+  "Application and document review events must be append-only.",
+);
+
 requireMatch(
   normalizedSql,
   /'dispatch_policy'/,
@@ -517,6 +670,247 @@ requireMatch(
   /provider\.notification\.sandbox/,
   "Provider adapters must include deterministic sandbox notification execution.",
 );
+
+requireMatch(
+  normalizedSql,
+  /provider\.storage\.supabase/,
+  "Provider adapters must include Supabase Storage as the active document storage adapter.",
+);
+
+requireMatch(
+  normalizedSql,
+  /driver must be approved before becoming available/,
+  "Driver profiles must prevent availability before approval.",
+);
+
+requireMatch(
+  normalizedSql,
+  /vehicle approval cannot be self-assigned/,
+  "Vehicle records must prevent direct self-activation.",
+);
+
+requireMatch(
+  normalizedSql,
+  /driver_required_capabilities/,
+  "Dispatch runtime must support driver-specific capability requirements.",
+);
+
+requireMatch(
+  normalizedSql,
+  /vehicle_required_capabilities/,
+  "Dispatch runtime must support vehicle-specific capability requirements.",
+);
+
+requireMatch(
+  normalizedSql,
+  /driver_vehicle_links/,
+  "Dispatch runtime must require approved driver-vehicle links.",
+);
+
+const organizationStaffRuntimeFunctions = [
+  "has_permission_for_branch",
+  "can_manage_organization_staff",
+  "can_read_organization_staff",
+  "create_organization_branch",
+  "configure_organization_role",
+  "invite_organization_staff",
+  "accept_organization_invitation",
+  "set_organization_staff_status",
+  "transfer_organization_ownership",
+] as const;
+
+for (const functionName of organizationStaffRuntimeFunctions) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(`create or replace function public\\.${functionName}`),
+    `${functionName} organization staff runtime function must exist.`,
+  );
+}
+
+requireMatch(
+  normalizedSql,
+  /organization roles cannot grant platform permissions/,
+  "Organization staff runtime must prevent organization roles from granting platform permissions.",
+);
+
+requireMatch(
+  normalizedSql,
+  /organization staff events are append-only/,
+  "Organization staff event records must be append-only.",
+);
+
+requireMatch(
+  normalizedSql,
+  /create policy organization_memberships_no_direct_insert on public\.organization_memberships/,
+  "Organization memberships must reject direct authenticated inserts.",
+);
+
+requireMatch(
+  normalizedSql,
+  /create policy user_roles_no_direct_insert on public\.user_roles/,
+  "Organization user roles must reject direct authenticated inserts.",
+);
+
+const catalogRuntimeFunctions = [
+  "can_read_business_catalog",
+  "can_manage_business_catalog",
+  "record_catalog_runtime_event",
+  "resolve_catalog_module_id",
+  "configure_catalog_unit",
+  "configure_catalog_category",
+  "configure_catalog_item",
+  "configure_catalog_variant",
+  "configure_catalog_price",
+  "attach_catalog_item_media",
+  "set_catalog_availability",
+  "adjust_catalog_stock",
+  "validate_catalog_orderability",
+] as const;
+
+for (const functionName of catalogRuntimeFunctions) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(`create or replace function public\\.${functionName}`),
+    `${functionName} catalog runtime function must exist.`,
+  );
+}
+
+requireMatch(
+  normalizedSql,
+  /catalog runtime events are append-only/,
+  "Catalog runtime event records must be append-only.",
+);
+
+requireMatch(
+  normalizedSql,
+  /business catalog management permission is required/,
+  "Catalog runtime must enforce organization-scoped business catalog permissions.",
+);
+
+requireMatch(
+  normalizedSql,
+  /insufficient stock is available/,
+  "Catalog orderability must reject insufficient stock.",
+);
+
+for (const table of requiredCatalogRuntimeTables) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(`create policy ${table}_no_direct_insert on public\\.${table}`),
+    `${table} must reject direct authenticated inserts.`,
+  );
+}
+
+const orderRuntimeFunctions = [
+  "can_read_business_order",
+  "can_process_business_order",
+  "resolve_order_workflow_version",
+  "resolve_order_acceptance_policy",
+  "resolve_order_action_definition",
+  "apply_order_reservation_effect",
+  "record_order_notification",
+  "apply_order_action_internal",
+  "create_order_from_catalog",
+  "process_order_action",
+  "assign_order_participant",
+] as const;
+
+for (const functionName of orderRuntimeFunctions) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(`create or replace function public\\.${functionName}`),
+    `${functionName} order runtime function must exist.`,
+  );
+}
+
+requireMatch(
+  normalizedSql,
+  /workflow\.order\.processing\.default/,
+  "Order runtime must seed a database-stored order processing workflow.",
+);
+
+requireMatch(
+  normalizedSql,
+  /order events are append-only/,
+  "Order runtime event records must be append-only.",
+);
+
+requireMatch(
+  normalizedSql,
+  /business order processing permission is required/,
+  "Order runtime must enforce organization-scoped business order permissions.",
+);
+
+requireMatch(
+  normalizedSql,
+  /event\.order\.received/,
+  "Order runtime must record order received events.",
+);
+
+for (const table of requiredOrderRuntimeTables) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(`create policy ${table}_no_direct_insert on public\\.${table}`),
+    `${table} must reject direct authenticated inserts.`,
+  );
+}
+
+const financeCommunicationRuntimeFunctions = [
+  "initialize_wallet_deposit",
+  "process_wallet_deposit_provider_event",
+  "verify_wallet_deposit",
+  "configure_withdrawal_beneficiary",
+  "request_wallet_withdrawal",
+  "approve_wallet_withdrawal",
+  "process_wallet_withdrawal_transfer",
+  "fund_order_from_wallet",
+  "execute_driver_commission",
+  "execute_order_business_settlement",
+  "queue_communication_message",
+  "sync_communication_message_statuses",
+  "request_otp_challenge",
+  "verify_otp_challenge",
+] as const;
+
+for (const functionName of financeCommunicationRuntimeFunctions) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(`create or replace function public\\.${functionName}`),
+    `${functionName} finance/communication runtime function must exist.`,
+  );
+}
+
+requireMatch(
+  normalizedSql,
+  /NGN is the only enabled phase-one deposit currency/i,
+  "Phase-one NGN deposits must be enforced by the payment runtime.",
+);
+
+requireMatch(
+  normalizedSql,
+  /finance and communication runtime event records are append-only/,
+  "Payment, withdrawal, communication, and OTP receipts must be append-only.",
+);
+
+requireMatch(
+  normalizedSql,
+  /provider\.payment\.initialize/,
+  "Payment deposits must run through a provider adapter execution surface.",
+);
+
+requireMatch(
+  normalizedSql,
+  /provider\.payment\.transfer/,
+  "Withdrawals must run through a provider adapter transfer surface.",
+);
+
+for (const table of requiredFinanceCommunicationRuntimeTables) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(`create policy ${table}_no_direct_insert on public\\.${table}`),
+    `${table} must reject direct authenticated inserts.`,
+  );
+}
 
 requireMatch(
   normalizedSql,
@@ -595,6 +989,12 @@ await requireFile("supabase/functions/payment-webhook/index.ts");
 await requireFile("supabase/functions/webhook-sandbox-receiver/index.ts");
 await requireFile("scripts/verify-backend-lifecycle.ts");
 await requireFile("scripts/verify-webhook-dead-letter.ts");
+await requireFile("scripts/verify-application-document-lifecycle.ts");
+await requireFile("scripts/verify-driver-vehicle-onboarding.ts");
+await requireFile("scripts/verify-organization-staff-lifecycle.ts");
+await requireFile("scripts/verify-catalog-availability-lifecycle.ts");
+await requireFile("scripts/verify-order-operations-lifecycle.ts");
+await requireFile("scripts/verify-finance-communication-lifecycle.ts");
 
 requireCondition(
   !/create or replace function public\.[a-z0-9_]*lpg/.exec(normalizedSql),
