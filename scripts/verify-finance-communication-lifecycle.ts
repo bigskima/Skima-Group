@@ -171,7 +171,7 @@ const communicationId = await postGatewayId(
 );
 
 const challengeId = await postGatewayId(customer.accessToken, "/runtime/otp/challenges", {
-  channel: "email",
+  channel: "in_app",
   idempotencyKey: idempotency("otp"),
   maxAttempts: 5,
   metadata: { gate: "finance_communication_lifecycle", runId },
@@ -186,7 +186,8 @@ await requireGatewayError(customer.accessToken, "/runtime/otp/verify", {
   idempotencyKey: idempotency("otp-wrong"),
   metadata: { gate: "finance_communication_lifecycle", runId },
 }, "OTP verification failed");
-const otpCode = await requireOtpCode(challengeId);
+await requireOtpStorageIsProtected(customer, challengeId);
+const otpCode = await fetchInAppOtpCode(customer.accessToken, challengeId);
 await postGatewayId(customer.accessToken, "/runtime/otp/verify", {
   challengeId,
   code: otpCode,
@@ -488,7 +489,22 @@ async function invokeRuntimeWorker(): Promise<void> {
   }
 }
 
-async function requireOtpCode(challengeId: string): Promise<string> {
+async function fetchInAppOtpCode(accessToken: string, challengeId: string): Promise<string> {
+  const body = await postGateway(accessToken, "/runtime/otp/delivery", {
+    challengeId,
+    idempotencyKey: idempotency("otp-delivery"),
+    metadata: { gate: "finance_communication_lifecycle", runId },
+  });
+  const data = body.data;
+
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("OTP delivery did not return a data object.");
+  }
+
+  return requireStringValue((data as Record<string, unknown>).code, "OTP delivery code");
+}
+
+async function requireOtpStorageIsProtected(user: GateUser, challengeId: string): Promise<void> {
   const challenge = await requireSingle(
     serviceClient
       .from("otp_challenges")
@@ -524,7 +540,20 @@ async function requireOtpCode(challengeId: string): Promise<string> {
     throw new Error("OTP notification payload did not contain otp object.");
   }
 
-  return requireStringValue((otp as Record<string, unknown>).code, "OTP code");
+  requireCondition(
+    !("code" in otp),
+    "OTP notification payload exposed the raw OTP code.",
+  );
+  requireCondition(
+    (otp as Record<string, unknown>).redacted === true,
+    "OTP notification payload was not redacted.",
+  );
+
+  const directRead = await user.client
+    .from("otp_delivery_codes")
+    .select("code")
+    .eq("otp_challenge_id", challengeId);
+  requireCondition(Boolean(directRead.error), "OTP delivery code direct select was allowed.");
 }
 
 async function requireDepositStatus(depositId: string, expectedStatus: string): Promise<void> {
@@ -849,7 +878,7 @@ function requireEnv(key: string): string {
   const value = Deno.env.get(key);
 
   if (!value) {
-    throw new Error(`${key} is required in the deployment shell.`);
+    throw new Error(`${key} is required in the deployment shell, .env.local, or CI secret store.`);
   }
 
   return value;

@@ -1,4 +1,4 @@
-import { resolveProjectRef } from "./supabase-runtime.ts";
+import { loadLocalDeploymentEnv, resolveProjectRef } from "./supabase-runtime.ts";
 
 const COMMANDS = ["link", "db-push", "db-reset-linked", "functions-deploy", "status"] as const;
 
@@ -10,6 +10,8 @@ if (!command || !COMMANDS.includes(command)) {
   printUsage();
   Deno.exit(1);
 }
+
+await loadLocalDeploymentEnv();
 
 if (command === "link") {
   await linkProject();
@@ -135,7 +137,7 @@ function requireEnv(key: string): string {
   const value = Deno.env.get(key);
 
   if (!value) {
-    throw new Error(`${key} is required in the deployment shell or CI secret store.`);
+    throw new Error(`${key} is required in the deployment shell, .env.local, or CI secret store.`);
   }
 
   return value;

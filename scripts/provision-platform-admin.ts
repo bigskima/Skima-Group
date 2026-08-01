@@ -129,5 +129,7 @@ function requireFirstEnv(keys: readonly string[]): string {
     }
   }
 
-  throw new Error(`${keys.join(" or ")} is required in the deployment shell or CI secret store.`);
+  throw new Error(
+    `${keys.join(" or ")} is required in the deployment shell, .env.local, or CI secret store.`,
+  );
 }

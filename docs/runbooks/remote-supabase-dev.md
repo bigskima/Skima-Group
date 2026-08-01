@@ -20,13 +20,21 @@ SUPABASE_ANON_KEY=<anon-key>
 
 Do not place privileged values in app-side env files.
 
-Deployment-only values must come from the shell, CI secret store, or a password manager session:
+Deployment-only values must come from the shell, CI secret store, password manager session, or a
+gitignored local operator env file:
 
 ```bash
 SUPABASE_PROJECT_REF=<hosted-dev-project-ref>
 SUPABASE_DB_PASSWORD=<database-password>
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+SKIMA_WORKER_SECRET=<same worker secret configured in Supabase secrets>
+SKIMA_SUPER_ADMIN_EMAIL=<real-admin-email>
+SKIMA_SUPER_ADMIN_PASSWORD=<real-admin-password>
 ```
+
+The Deno scripts load `.env` and `.env.local` automatically when present. Shell variables take
+priority. Do not copy these privileged values into frontend `.env.example`, deployed app bundles, or
+client-side Vite variables.
 
 Runtime server-side secrets for Edge Functions must be stored in Supabase secrets:
 
@@ -186,7 +194,8 @@ Supabase Auth sessions only.
 
 `npm run supabase:remote:gate` verifies that exactly one active super admin assignment exists and
 requires a real super admin session. Provide either `SKIMA_ADMIN_ACCESS_TOKEN` or
-`SKIMA_SUPER_ADMIN_EMAIL` and `SKIMA_SUPER_ADMIN_PASSWORD` in the deployment shell.
+`SKIMA_SUPER_ADMIN_EMAIL` and `SKIMA_SUPER_ADMIN_PASSWORD` in the deployment shell, CI secret store,
+or a gitignored local operator env file.
 
 The next milestone remains blocked until the relevant local and hosted Supabase gates pass against
 the hosted dev project.
@@ -209,10 +218,10 @@ npm run supabase:orders:e2e
 npm run supabase:finance-communication:e2e
 ```
 
-This requires `SKIMA_WORKER_SECRET` in the deployment shell so the script can call the deployed
-runtime worker. The dead-letter gate verifies that a configured outbound webhook failure records a
-failed delivery, an append-only dead-letter attempt, provider failure evidence, and a dead-letter
-background job.
+This requires `SKIMA_WORKER_SECRET` in the deployment shell, CI secret store, or gitignored local
+operator env so the script can call the deployed runtime worker. The dead-letter gate verifies that
+a configured outbound webhook failure records a failed delivery, an append-only dead-letter attempt,
+provider failure evidence, and a dead-letter background job.
 
 The application/document gate verifies that a real authenticated applicant can create a reusable
 business application, register configured document submissions, hit the required-document rejection,

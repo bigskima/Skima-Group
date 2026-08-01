@@ -15,9 +15,39 @@ interface SupabaseApiKey {
   readonly api_key?: string;
 }
 
+let localEnvLoaded = false;
+
+export async function loadLocalDeploymentEnv(): Promise<void> {
+  if (localEnvLoaded) {
+    return;
+  }
+
+  localEnvLoaded = true;
+
+  const originalKeys = new Set(Object.keys(Deno.env.toObject()));
+
+  for (const path of [".env", ".env.local"]) {
+    const contents = await readOptionalTextFile(path);
+
+    if (!contents) {
+      continue;
+    }
+
+    for (const [key, value] of parseEnvFile(contents)) {
+      if (originalKeys.has(key)) {
+        continue;
+      }
+
+      Deno.env.set(key, value);
+    }
+  }
+}
+
 export async function resolveSupabaseRuntime(
   requirements: SupabaseRuntimeRequirements,
 ): Promise<SupabaseRuntime> {
+  await loadLocalDeploymentEnv();
+
   const projectRef = await resolveProjectRef();
   const supabaseUrl = trimTrailingSlash(
     Deno.env.get("SUPABASE_URL") ?? `https://${projectRef}.supabase.co`,
@@ -52,6 +82,8 @@ export async function resolveSupabaseRuntime(
 }
 
 export async function resolveProjectRef(): Promise<string> {
+  await loadLocalDeploymentEnv();
+
   const envProjectRef = Deno.env.get("SUPABASE_PROJECT_REF");
 
   if (envProjectRef) {
@@ -71,6 +103,80 @@ export async function resolveProjectRef(): Promise<string> {
   throw new Error(
     "SUPABASE_PROJECT_REF is required, or this workspace must be linked with supabase link.",
   );
+}
+
+async function readOptionalTextFile(path: string): Promise<string | null> {
+  try {
+    return await Deno.readTextFile(path);
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound || error instanceof Deno.errors.PermissionDenied) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function parseEnvFile(contents: string): ReadonlyArray<readonly [string, string]> {
+  const entries: Array<readonly [string, string]> = [];
+
+  for (const rawLine of contents.split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const normalizedLine = line.startsWith("export ") ? line.slice("export ".length).trim() : line;
+    const equalsIndex = normalizedLine.indexOf("=");
+
+    if (equalsIndex <= 0) {
+      continue;
+    }
+
+    const key = normalizedLine.slice(0, equalsIndex).trim();
+    const rawValue = normalizedLine.slice(equalsIndex + 1).trim();
+
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      continue;
+    }
+
+    entries.push([key, parseEnvValue(rawValue)]);
+  }
+
+  return entries;
+}
+
+function parseEnvValue(value: string): string {
+  if (value.length < 2) {
+    return value;
+  }
+
+  const first = value[0];
+  const last = value[value.length - 1];
+
+  if ((first === `"` && last === `"`) || (first === "'" && last === "'")) {
+    const unquoted = value.slice(1, -1);
+
+    if (first === `"`) {
+      return unquoted
+        .replaceAll("\\n", "\n")
+        .replaceAll("\\r", "\r")
+        .replaceAll("\\t", "\t")
+        .replaceAll(`\\"`, `"`)
+        .replaceAll("\\\\", "\\");
+    }
+
+    return unquoted;
+  }
+
+  const hashIndex = value.indexOf(" #");
+
+  if (hashIndex >= 0) {
+    return value.slice(0, hashIndex).trimEnd();
+  }
+
+  return value;
 }
 
 async function listProjectApiKeys(projectRef: string): Promise<readonly SupabaseApiKey[]> {

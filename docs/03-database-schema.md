@@ -62,14 +62,20 @@ been recorded against the hosted Supabase dev project. Remote migration evidence
 `20260728170000_payment_webhook_append_only_fix.sql`,
 `20260728180000_withdrawal_beneficiary_crypto_fix.sql`, and
 `20260728190000_otp_crypto_schema_fix.sql` has also been recorded against the hosted Supabase dev
-project.
+project. `20260728200000_live_provider_adapter_catalog.sql` adds live adapter catalog records for
+Paystack, Monnify, Flutterwave, Resend, and Twilio.
+`20260728210000_pause_live_communication_providers.sql` marks Resend and Twilio disabled until
+communication delivery is resumed. `20260728220000_paystack_webhook_and_in_app_otp_runtime.sql`
+activates the Paystack NGN adapter, requires verified payment webhook events, adds protected
+`otp_delivery_codes` and append-only `otp_delivery_code_accesses`, and exposes owner-only in-app OTP
+delivery through `fetch_in_app_otp_code`.
 
 Backend-domain remediation gaps:
 
 - document expiry worker and quarantine scanning provider execution
 - driver and vehicle expiry, suspension/reactivation, fleet assignment, ownership transfer, and
   broader dispatch edge-case coverage
-- live NGN provider certification and credentials outside the deterministic sandbox adapter
+- Paystack account/webhook/payout certification before real public money is enabled
 - live email, SMS, WhatsApp, AI, and maps provider certification outside sandbox adapters
 - production backup/PITR and external alerting evidence
 

@@ -65,9 +65,8 @@ New local remediation surface:
 - No-frontend hosted finance/communication gate script:
   `scripts/verify-finance-communication-lifecycle.ts`
 
-Milestone 4 is paused until reviewer approval is recorded for Milestones 1-3. The backend
-architecture now includes the requested production-domain runtime surfaces for hosted development
-gates:
+Milestones 1-3 were reviewer-approved on 2026-07-30. The backend architecture now includes the
+requested production-domain runtime surfaces for hosted development gates:
 
 - NGN payment, deposit, withdrawal, transfer, reconciliation, commission, and settlement execution
   through provider adapters

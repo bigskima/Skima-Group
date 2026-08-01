@@ -2,7 +2,7 @@
 
 Milestone 4 may not start until this checklist is complete.
 
-Current status: Complete, pending reviewer approval.
+Current status: Approved on 2026-07-30.
 
 ## Scope
 

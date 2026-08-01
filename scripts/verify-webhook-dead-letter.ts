@@ -179,7 +179,7 @@ function requireEnv(key: string): string {
   const value = Deno.env.get(key);
 
   if (!value) {
-    throw new Error(`${key} is required in the deployment shell.`);
+    throw new Error(`${key} is required in the deployment shell, .env.local, or CI secret store.`);
   }
 
   return value;

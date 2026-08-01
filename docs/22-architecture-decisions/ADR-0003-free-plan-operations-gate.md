@@ -12,13 +12,14 @@ Supabase dashboard.
 
 ## Decision
 
-The Free-plan PITR and Log Drains limitations do not prevent hosted development validation, but they
-also do not approve Milestone 4. Milestone 4 remains blocked until a reviewer approves the
-Milestones 1-3 backend evidence recorded in `docs/26-backend-domain-audit.md`.
+The Free-plan PITR and Log Drains limitations do not prevent hosted development validation. The
+reviewer approved the Milestones 1-3 backend evidence on 2026-07-30, so Milestone 4 frontend
+foundation work may begin while public production launch remains blocked on backup/recovery and
+alerting evidence.
 
 ## Consequences
 
-- Milestone 4 remains paused until reviewer approval.
+- Milestone 4 is unblocked by the 2026-07-30 backend approval.
 - The backend can be functionally validated on the hosted dev project with deterministic sandbox
   adapters.
 - Public production launch must not proceed until backup/recovery and alerting evidence are

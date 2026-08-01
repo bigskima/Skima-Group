@@ -19,6 +19,10 @@ await runGate("api gateway rejects anonymous requests", verifyGatewayRejectsAnon
 await runGate("runtime worker rejects unsigned requests", verifyRuntimeWorkerRejectsUnsigned);
 await runGate("payment webhook rejects unsigned requests", verifyPaymentWebhookRejectsUnsigned);
 await runGate(
+  "Paystack webhook rejects invalid signatures",
+  verifyPaystackWebhookRejectsInvalidSignature,
+);
+await runGate(
   "sandbox webhook receiver rejects unsigned requests",
   verifySandboxWebhookReceiverRejectsUnsigned,
 );
@@ -84,9 +88,13 @@ if (adminClient) {
     "real platform super admin can read governed records",
     () => verifyPlatformAdminReadAccess(adminClient),
   );
+  await runGate(
+    "real platform super admin can load frontend session context",
+    () => verifyFrontendSessionContext(adminClient),
+  );
 } else {
   throw new Error(
-    "Real admin session credentials are required for the production gate. Set SKIMA_ADMIN_ACCESS_TOKEN or SKIMA_SUPER_ADMIN_EMAIL and SKIMA_SUPER_ADMIN_PASSWORD in the deployment shell.",
+    "Real admin session credentials are required for the production gate. Set SKIMA_ADMIN_ACCESS_TOKEN or SKIMA_SUPER_ADMIN_EMAIL and SKIMA_SUPER_ADMIN_PASSWORD in the deployment shell, .env.local, or CI secret store.",
   );
 }
 
@@ -153,6 +161,29 @@ async function verifyPaymentWebhookRejectsUnsigned(): Promise<void> {
   requireCondition(
     response.status === 401 || response.status === 403,
     `payment-webhook unsigned request returned HTTP ${response.status}.`,
+  );
+}
+
+async function verifyPaystackWebhookRejectsInvalidSignature(): Promise<void> {
+  const response = await fetch(`${supabaseUrl}/functions/v1/payment-webhook`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-paystack-signature": "invalid-signature",
+    },
+    body: JSON.stringify({
+      data: {
+        id: crypto.randomUUID(),
+        reference: `remote-gate-${crypto.randomUUID()}`,
+        status: "success",
+      },
+      event: "charge.success",
+    }),
+  });
+
+  requireCondition(
+    response.status === 401 || response.status === 403,
+    `payment-webhook invalid Paystack signature returned HTTP ${response.status}.`,
   );
 }
 
@@ -1574,6 +1605,31 @@ async function verifyPlatformAdminReadAccess(adminClient: SupabaseClient): Promi
   await requireReadable(adminClient, "otp_challenges", "purpose,status");
   await requireReadable(adminClient, "otp_attempts", "status");
   await requireAdminCanReadFirstBusinessModule(adminClient);
+}
+
+async function verifyFrontendSessionContext(adminClient: SupabaseClient): Promise<void> {
+  const { data, error } = await adminClient.functions.invoke(
+    "api-gateway/runtime/session-context",
+    {
+      method: "GET",
+    },
+  );
+
+  if (error) {
+    throw error;
+  }
+
+  const envelope = data as Readonly<Record<string, unknown>>;
+  const sessionContext = envelope.data as Readonly<Record<string, unknown>> | undefined;
+  const permissions = sessionContext?.permissions;
+  const user = sessionContext?.user as Readonly<Record<string, unknown>> | undefined;
+
+  requireCondition(envelope.ok === true, "session context did not return ok=true.");
+  requireCondition(Boolean(user?.id), "session context did not include the authenticated user.");
+  requireCondition(
+    Array.isArray(permissions) && permissions.length > 0,
+    "session context did not include backend-driven permissions.",
+  );
 }
 
 async function requireReadable(

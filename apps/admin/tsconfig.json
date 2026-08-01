@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": ".",
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "paths": {
+      "@skima/frontend-core": ["../../packages/frontend-core/src/index.ts"],
+      "@skima/ui": ["../../packages/ui/src/index.tsx"],
+      "@skima/ui/styles.css": ["../../packages/ui/src/styles.css"]
+    },
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022",
+    "types": ["vite/client", "vitest/globals"]
+  },
+  "include": ["src", "../../packages/frontend-core/src", "../../packages/ui/src"]
+}

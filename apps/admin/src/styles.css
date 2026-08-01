@@ -1,0 +1,85 @@
+.skima-auth-page {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(15, 143, 125, 0.1), rgba(87, 80, 216, 0.08)),
+    var(--sk-color-page);
+  display: grid;
+  min-height: 100vh;
+  padding: var(--sk-space-4);
+}
+
+.skima-auth-panel {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--sk-color-border);
+  border-radius: var(--sk-radius-md);
+  box-shadow: var(--sk-shadow-md);
+  display: grid;
+  gap: var(--sk-space-5);
+  margin: 0 auto;
+  max-width: 440px;
+  padding: var(--sk-space-6);
+  width: 100%;
+}
+
+.skima-auth-panel h1 {
+  color: var(--sk-color-ink);
+  font-size: 2rem;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.skima-auth-panel p {
+  color: var(--sk-color-muted);
+  margin: 0;
+}
+
+.skima-form {
+  display: grid;
+  gap: var(--sk-space-4);
+}
+
+.skima-grid {
+  display: grid;
+  gap: var(--sk-space-4);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.skima-two-column {
+  display: grid;
+  gap: var(--sk-space-4);
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.8fr);
+}
+
+.skima-record-list {
+  display: grid;
+  gap: var(--sk-space-3);
+}
+
+.skima-record {
+  align-items: center;
+  background: var(--sk-color-surface-raised);
+  border: 1px solid var(--sk-color-border);
+  border-radius: var(--sk-radius-md);
+  display: flex;
+  gap: var(--sk-space-3);
+  justify-content: space-between;
+  padding: var(--sk-space-3);
+}
+
+.skima-record span {
+  color: var(--sk-color-muted);
+  font-size: 0.875rem;
+}
+
+.skima-record strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 980px) {
+  .skima-two-column {
+    grid-template-columns: 1fr;
+  }
+}

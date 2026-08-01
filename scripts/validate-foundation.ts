@@ -30,6 +30,8 @@ const requiredDocumentationPaths = [
   "docs/24-known-limitations.md",
   "docs/25-production-readiness.md",
   "docs/26-backend-domain-audit.md",
+  "docs/32-lpg-backend-first-reset-audit.md",
+  "docs/runbooks/provider-credential-activation.md",
   "docs/runbooks/milestone-4-production-gate.md",
 ] as const;
 
@@ -52,8 +54,22 @@ for await (const entry of Deno.readDir(migrationsDirectory)) {
 
 migrationFiles.sort();
 
-const sql = (await Promise.all(migrationFiles.map((path) => Deno.readTextFile(path)))).join("\n");
+const migrationTexts = await Promise.all(
+  migrationFiles.map(async (path) => ({ path, contents: await Deno.readTextFile(path) })),
+);
+const sql = migrationTexts.map((migration) => migration.contents).join("\n");
 const normalizedSql = sql.replace(/\s+/g, " ").toLowerCase();
+const platformMigrationSql = migrationTexts
+  .filter((migration) => !migration.path.includes("_lpg_bounded_context.sql"))
+  .map((migration) => migration.contents)
+  .join("\n");
+const normalizedPlatformMigrationSql = platformMigrationSql.replace(/\s+/g, " ").toLowerCase();
+const commissionExecutionFixSql = migrationTexts.find((migration) =>
+  migration.path.endsWith("20260801020000_commission_execution_transaction_fix.sql")
+)?.contents ?? "";
+const normalizedCommissionExecutionFixSql = commissionExecutionFixSql
+  .replace(/\s+/g, " ")
+  .toLowerCase();
 
 const tables = Array.from(sql.matchAll(/create table if not exists public\.([a-z_]+)/gi))
   .map((match) => match[1])
@@ -275,6 +291,9 @@ const requiredEngineTables = [
   "settlement_executions",
   "provider_execution_logs",
   "driver_vehicle_links",
+  "reference_namespaces",
+  "reference_sequences",
+  "public_references",
 ] as const;
 
 for (const table of requiredEngineTables) {
@@ -880,6 +899,71 @@ for (const functionName of financeCommunicationRuntimeFunctions) {
   );
 }
 
+const publicReferenceRuntimeFunctions = [
+  "configure_reference_namespace",
+  "generate_public_reference",
+  "assign_public_reference_after_insert",
+  "validate_public_reference_after_insert",
+  "prevent_subject_public_reference_update",
+] as const;
+
+for (const functionName of publicReferenceRuntimeFunctions) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(`create or replace function public\\.${functionName}`),
+    `${functionName} public reference runtime function must exist.`,
+  );
+}
+
+for (
+  const referenceNamespace of [
+    "reference.lpg.cylinder",
+    "reference.lpg.order",
+    "reference.lpg.scan-session",
+    "reference.payment.deposit",
+    "reference.withdrawal.request",
+    "reference.commission.execution",
+    "reference.settlement.statement",
+  ]
+) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(referenceNamespace.replace(/\./g, "\\.")),
+    `Public reference namespace is missing: ${referenceNamespace}.`,
+  );
+}
+
+for (
+  const publicReferenceTable of [
+    "lpg_cylinders",
+    "lpg_refill_quotes",
+    "lpg_refill_orders",
+    "lpg_cylinder_scans",
+    "payment_deposit_requests",
+    "withdrawal_requests",
+    "commission_executions",
+    "settlement_statements",
+  ]
+) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(`alter table public\\.${publicReferenceTable} add column if not exists public_reference text`),
+    `${publicReferenceTable} must expose a backend-owned public_reference column.`,
+  );
+}
+
+requireMatch(
+  normalizedSql,
+  /public business references are backend-managed and immutable/,
+  "Subject public reference fields must be immutable outside the backend assignment trigger.",
+);
+
+requireMatch(
+  normalizedSql,
+  /public business reference records are append-only/,
+  "Public reference receipt records must be append-only.",
+);
+
 requireMatch(
   normalizedSql,
   /NGN is the only enabled phase-one deposit currency/i,
@@ -900,9 +984,107 @@ requireMatch(
 
 requireMatch(
   normalizedSql,
+  /provider\.payment\.paystack[\s\S]*x-paystack-signature[\s\S]*hmac_sha512/,
+  "Paystack must be represented as a real signed NGN payment provider adapter.",
+);
+
+requireMatch(
+  await Deno.readTextFile("supabase/functions/payment-webhook/index.ts"),
+  /x-paystack-signature[\s\S]*PAYSTACK_SECRET_KEY[\s\S]*SHA-512/,
+  "Payment webhook must verify Paystack x-paystack-signature with PAYSTACK_SECRET_KEY.",
+);
+
+requireMatch(
+  normalizedSql,
   /provider\.payment\.transfer/,
   "Withdrawals must run through a provider adapter transfer surface.",
 );
+
+requireMatch(
+  normalizedCommissionExecutionFixSql,
+  /insert into public\.commission_executions \( service_request_id, order_id, escrow_hold_id, driver_wallet_id, commission_policy_id, transaction_id,/,
+  "Commission executions must store the release transaction in commission_executions.transaction_id.",
+);
+
+requireMatch(
+  normalizedCommissionExecutionFixSql,
+  /policy_record\.id, release_transaction_id, order_record\.currency_code/,
+  "Commission execution must use the release_transaction_id value returned by release_escrow_hold.",
+);
+
+requireMatch(
+  normalizedSql,
+  /otp_delivery_mode/,
+  "Communication provider selection must define the current OTP delivery mode.",
+);
+
+requireMatch(
+  normalizedSql,
+  /backend_generated_in_app_sandbox/,
+  "Current OTP delivery mode must be backend-generated in-app sandbox while live providers are paused.",
+);
+
+requireMatch(
+  normalizedSql,
+  /create table if not exists public\.otp_delivery_codes/,
+  "OTP codes must be kept in a protected backend delivery table.",
+);
+
+requireMatch(
+  normalizedSql,
+  /fetch_in_app_otp_code/,
+  "OTP runtime must expose an authenticated backend in-app delivery RPC.",
+);
+
+requireMatch(
+  normalizedSql,
+  /otp_redacted/,
+  "OTP notification and communication payloads must remain redacted.",
+);
+
+requireMatch(
+  normalizedSql,
+  /disabled_provider_keys.*provider\.communication\.resend.*provider\.communication\.twilio/s,
+  "Resend and Twilio must be explicitly disabled until production communication delivery resumes.",
+);
+
+requireMatch(
+  normalizedSql,
+  /platform\.verification.*qr_scan_policy/s,
+  "QR scan policy must be configured through the Verification Engine.",
+);
+
+for (
+  const providerKey of [
+    "provider.payment.paystack",
+    "provider.payment.monnify",
+    "provider.payment.flutterwave",
+    "provider.communication.resend",
+    "provider.communication.twilio",
+  ]
+) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(providerKey.replace(/\./g, "\\.")),
+    `Live provider adapter catalog record is missing: ${providerKey}.`,
+  );
+}
+
+for (
+  const secretReference of [
+    "supabase_secret:paystack_secret_key",
+    "supabase_secret:monnify_secret_key",
+    "supabase_secret:flutterwave_secret_key",
+    "supabase_secret:resend_api_key",
+    "supabase_secret:twilio_auth_token",
+  ]
+) {
+  requireMatch(
+    normalizedSql,
+    new RegExp(secretReference),
+    `Live provider secret reference is missing: ${secretReference}.`,
+  );
+}
 
 for (const table of requiredFinanceCommunicationRuntimeTables) {
   requireMatch(
@@ -995,10 +1177,11 @@ await requireFile("scripts/verify-organization-staff-lifecycle.ts");
 await requireFile("scripts/verify-catalog-availability-lifecycle.ts");
 await requireFile("scripts/verify-order-operations-lifecycle.ts");
 await requireFile("scripts/verify-finance-communication-lifecycle.ts");
+await requireFile("scripts/verify-public-reference-runtime.ts");
 
 requireCondition(
-  !/create or replace function public\.[a-z0-9_]*lpg/.exec(normalizedSql),
-  "LPG must not add LPG-specific platform functions.",
+  !/create or replace function public\.[a-z0-9_]*lpg/.exec(normalizedPlatformMigrationSql),
+  "Shared platform migrations must not add LPG-specific platform functions.",
 );
 
 const noDirectModuleInsertTables = [

@@ -1,13 +1,13 @@
 # Milestone 4 Production Gate
 
-Milestone 4 builds the reusable frontend foundation. It must not create isolated business screens or
-hardcode LPG behavior into UI code.
+Milestone 4 builds the reusable frontend foundation and the Phase 1 LPG-first product experience.
+Current product work is dedicated to LPG. Future service UI work is paused until the LPG product is
+production-ready, launched, and stable.
 
-Current status: Not Started.
+Current status: In Progress.
 
-Milestone 4 is paused by the backend-first directive dated 2026-07-28. This runbook is retained only
-as the future frontend gate. No frontend implementation should begin until Milestones 1-3 are
-implemented, tested, documented, and approved under `docs/26-backend-domain-audit.md`.
+Milestone 4 is unblocked by the Milestones 1-3 backend approval recorded on 2026-07-30. Frontend
+foundation implementation may begin under this gate.
 
 ## Scope
 
@@ -27,32 +27,56 @@ Required foundation:
 - API gateway client
 - typed runtime response handling
 - reusable permission-aware navigation model
-- no business-specific screens until primitives and integration contracts exist
+- isolated Phase 1 LPG product composition using reusable primitives
 
 ## Entry Evidence
 
-- [ ] Milestone 1 backend domain remediation is complete and reviewer-approved.
-- [ ] Milestone 2 backend domain remediation is complete and reviewer-approved.
-- [ ] Milestone 3 backend domain remediation is complete and reviewer-approved.
-- [ ] No-frontend E2E gates cover onboarding, documents, business operations, real NGN payments,
+- [x] Milestone 1 backend domain remediation is complete and reviewer-approved.
+- [x] Milestone 2 backend domain remediation is complete and reviewer-approved.
+- [x] Milestone 3 backend domain remediation is complete and reviewer-approved.
+- [x] No-frontend E2E gates cover onboarding, documents, business operations, NGN payment runtime,
       withdrawals, settlements, commissions, communication, OTP, and reconciliation.
 
 ## Completion Gate
 
-- [ ] Frontend app package exists with a production-capable build command.
-- [ ] Design system primitives exist and are reusable.
-- [ ] Supabase URL and anon key are the only client-side Supabase env values.
-- [ ] Authentication state is implemented through Supabase client sessions.
-- [ ] API calls go through a reusable gateway client.
-- [ ] Route guards are permission-aware and backend-driven.
-- [ ] Loading, empty, and error states are reusable.
-- [ ] No LPG-only UI logic exists in the frontend foundation.
-- [ ] `npm run verify` passes.
-- [ ] Frontend build passes.
-- [ ] Documentation is updated.
+- [x] Frontend app package exists with a production-capable build command.
+- [x] Mobile app package exists with a production-capable build command.
+- [x] Design system primitives exist and are reusable.
+- [x] Supabase URL and anon key are the only client-side Supabase env values.
+- [x] Authentication state is implemented through Supabase client sessions.
+- [x] API calls go through a reusable gateway client.
+- [x] Route guards are permission-aware and backend-driven.
+- [x] Light, dark, and system appearance modes use one shared frontend token system.
+- [x] Currency selection is constrained by backend-enabled currencies.
+- [x] Loading, empty, and error states are reusable.
+- [x] LPG-first mobile navigation is isolated in the Phase 1 product experience.
+- [x] Customer mobile navigation is focused on `Home`, `Cylinders`, `Orders`, `Wallet`, and
+      `Account`.
+- [x] Uploaded LPG customer, driver, and station visual references are archived under
+      `docs/lpg-ui/assets`.
+- [x] LPG screen-by-screen product documentation exists under `docs/lpg-ui/`.
+- [x] Mobile app signs in with Supabase Auth and loads `/runtime/session-context`.
+- [x] Mobile app renders role-aware live data from gateway routes for wallets, orders, service
+      requests, assignments, drivers, vehicles, branches, catalog items, applications, documents,
+      messages, and business lines.
+- [x] Mobile Control Center can register cylinders, save LPG addresses, create LPG refill quotes,
+      start applications, begin wallet funding, request and fetch in-app OTP codes, start tracking,
+      and record verification checks through governed gateway actions.
+- [ ] Mobile write flows for onboarding, applications, documents, payments, orders, dispatch,
+      verification, tracking, and profile operations are implemented.
+- [ ] Mobile QR camera, map rendering, uploads, and responsive/device E2E gates are implemented.
+- [x] Admin application and document review actions use authenticated gateway mutations.
+- [x] Admin governance, organization, catalog, operations, finance, integration, communication, OTP,
+      escrow, settlement, commission, and reconciliation controls are wired through governed gateway
+      actions.
+- [x] LPG-only UI logic is isolated outside shared foundation primitives.
+- [x] `npm run verify` passes.
+- [x] Frontend build passes.
+- [x] Hosted session-context smoke gate passes.
+- [x] Documentation is updated.
 - [ ] Reviewer approves Milestone 4 evidence.
 
-# MILESTONE 4 — PRODUCTION-GRADE REUSABLE FRONTEND DIRECTIVE
+# MILESTONE 4 - PRODUCTION-GRADE REUSABLE FRONTEND DIRECTIVE
 
 Milestone 4 must deliver a **production-grade, reusable frontend foundation**.
 
@@ -637,6 +661,8 @@ Build:
 - Permission-aware action buttons
 - Permission-aware menus
 - Permission-aware routes
+- Appearance preference controls for light, dark, and system modes
+- Currency preference controls from the backend Currency Engine
 
 Examples:
 
@@ -750,6 +776,8 @@ Milestone 4 must not be approved until:
 - Runtime response validation exists.
 - Route guards are permission-aware.
 - Navigation is backend-driven.
+- Light, dark, and system appearance modes are implemented with one token system.
+- Currency preference is populated from backend-enabled currencies.
 - Loading, empty and error states are reusable.
 - Responsive behavior is verified.
 - Accessibility requirements are tested.

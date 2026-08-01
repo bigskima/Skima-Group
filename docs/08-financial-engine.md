@@ -12,8 +12,11 @@ Implemented:
 - service request settlement through `execute_service_request_settlement`
 - reconciliation through `reconcile_service_request_financials`
 - payment webhook intake through `supabase/functions/payment-webhook`
+- Paystack backend transaction initialization through the authenticated `/runtime/payments/deposits`
+  route when `providerAdapterKey` is `provider.payment.paystack`
 - NGN wallet deposit initialization through `initialize_wallet_deposit`
-- signed deposit webhook processing and duplicate protection through
+- Paystack `x-paystack-signature` HMAC-SHA512 verification, sandbox secret verification, signed
+  deposit webhook processing, and duplicate protection through
   `process_wallet_deposit_provider_event`
 - explicit deposit verification through `verify_wallet_deposit`
 - withdrawal beneficiary verification through `configure_withdrawal_beneficiary`
@@ -28,5 +31,5 @@ Hosted evidence:
 - `npm run supabase:finance-communication:e2e` proves deposit, webhook duplicate protection,
   withdrawal success/failure, escrow funding, driver commission, business settlement, final wallet
   balances, and reconciliation.
-- Live provider adapter certification remains required before production payment vendors are
-  enabled.
+- Paystack Dashboard account/webhook verification and payout certification remain required before
+  real customer money is enabled.

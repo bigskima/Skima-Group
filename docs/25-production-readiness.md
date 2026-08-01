@@ -16,15 +16,18 @@ Production readiness requires:
 
 Current status:
 
-- Milestone 4 frontend work is paused until reviewer approval is recorded.
-- Milestones 1-3 backend implementation is complete for the hosted Supabase development gate and is
-  pending reviewer approval.
+- Milestones 1-3 backend implementation is approved for the hosted Supabase development gate.
+- Milestone 4 reusable frontend foundation work is unblocked and may begin under its production
+  gate.
 - Production launch still requires paid-plan operations hardening for PITR/backups and log-drain
   alerting.
 - `health`, `api-gateway`, `runtime-worker`, `payment-webhook`, and `webhook-sandbox-receiver` are
   deployed to hosted Supabase.
-- `npm run supabase:remote:gate` passed with real platform super-admin credentials after the finance
-  and communication runtime was deployed.
+- Paystack backend initialization and `x-paystack-signature` webhook verification are implemented.
+  The hosted gate now rejects invalid Paystack signatures when `PAYSTACK_SECRET_KEY` is configured.
+- `npm run supabase:remote:gate` passed on 2026-07-30 with real platform super-admin credentials
+  after deploying `20260728220000_paystack_webhook_and_in_app_otp_runtime.sql`; the gate includes
+  invalid Paystack signature rejection.
 - `npm run supabase:applications:e2e` passed with application
   `227a747e-e0c6-4a1b-bde6-5d6fff4948e3`, organization `a0a0552f-5393-4a54-9bff-2709f59163fa`, and
   partner `490b9529-458e-4a7b-a95d-384752d8aab1`.
@@ -48,20 +51,20 @@ Current status:
 - `npm run supabase:backend:e2e` passed with service request `5f0c5ffa-2063-41fd-babb-56a88e0856f0`.
 - `npm run supabase:webhook:dead-letter` passed with webhook delivery
   `77694e51-b988-460a-a9fd-3d451a6799fa`.
-- `npm run supabase:finance-communication:e2e` passed with deposit
-  `38d84d40-18e4-46f1-95a1-f382d9b1d85e`, withdrawal `cc95947f-2784-459f-bb2e-22c73c4deeb3`,
-  communication message `92f5dc5f-080c-4488-bb65-2d8d9853ef0b`, OTP challenge
-  `f23e8bd1-d215-445a-89e9-598242944b19`, order `a80de045-ee24-4e03-bd79-11898c9fe385`, escrow hold
-  `9ebc8534-d74b-441e-8497-225209cf6147`, commission execution
-  `90918e73-3399-4ade-a13d-f3b6a1790e0c`, and settlement statement
-  `de906498-8f76-4954-b5a6-2490c9d6f25a`.
+- `npm run supabase:finance-communication:e2e` passed on 2026-07-30 with deposit
+  `40936159-8929-4f94-a77f-85a1dcc4920f`, withdrawal `e850b91d-c004-4072-8924-c8b82435d1ac`,
+  communication message `9ebd3533-fcdf-4ca2-859a-ac2822670ec2`, OTP challenge
+  `467130d9-e4fc-4899-8d21-b2dfb80beab4`, order `cb04fa79-c4bf-43fe-8e14-d58701cda5e9`, escrow hold
+  `21e5e8a2-9f09-4bee-9d5a-7ee1aa8a9ba7`, commission execution
+  `fa391d9b-c02d-433e-80f5-487f8bc5b704`, and settlement statement
+  `9add94af-910b-4eb3-9ffc-da4239ca4488`.
 - Backend-domain audit is recorded in `docs/26-backend-domain-audit.md`.
 
 Current blockers before public production launch:
 
-- Reviewer approval for Milestones 1-3 evidence is still pending.
-- Live NGN provider credentials and adapter certification are still required before real customer
-  money is enabled. The current gate uses the deterministic sandbox payment adapter.
+- Paystack Dashboard account/webhook verification and payout certification are still required before
+  real customer money is enabled. The deterministic sandbox payment adapter remains available for
+  repeatable development gates.
 - Live email, SMS, WhatsApp, AI, and maps provider certification is still required before those
   vendors are enabled outside the sandbox.
 - Supabase Free-plan PITR and Log Drains are unavailable and must be replaced by a production

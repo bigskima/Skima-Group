@@ -34,6 +34,30 @@ Authenticated current routes:
 
 Authenticated runtime routes:
 
+Dedicated LPG launch routes:
+
+- `GET /functions/v1/api-gateway/lpg/catalog`
+- `GET|POST /functions/v1/api-gateway/lpg/locations`
+- `GET|POST /functions/v1/api-gateway/lpg/cylinders`
+- `GET /functions/v1/api-gateway/lpg/cylinders/history?cylinderId=<uuid>`
+- `GET|POST /functions/v1/api-gateway/lpg/quotes`
+- `GET|POST /functions/v1/api-gateway/lpg/orders`
+- `GET /functions/v1/api-gateway/lpg/orders/active`
+- `POST /functions/v1/api-gateway/lpg/orders/dispatch`
+- `POST /functions/v1/api-gateway/lpg/orders/accept-assignment`
+- `POST /functions/v1/api-gateway/lpg/scans`
+- `POST /functions/v1/api-gateway/lpg/refills/confirm`
+- `GET|POST /functions/v1/api-gateway/lpg/driver-locations`
+- `GET|POST /functions/v1/api-gateway/lpg/safety-incidents`
+- `POST /functions/v1/api-gateway/lpg/maps/geocode`
+- `POST /functions/v1/api-gateway/lpg/maps/reverse-geocode`
+- `POST /functions/v1/api-gateway/lpg/maps/route-estimate`
+
+The LPG routes are a bounded product API for Phase 1. They reuse shared Supabase Auth, wallets,
+ledger, escrow, payment, OTP, notification, verification, audit, driver, vehicle, capability, and
+provider-adapter infrastructure. Google Maps requests are executed server-side with
+`GOOGLE_MAPS_API_KEY` stored as a Supabase secret; the mobile app must not receive the server key.
+
 - `GET /functions/v1/api-gateway/runtime/catalog`
 - `GET /functions/v1/api-gateway/runtime/application-types`
 - `GET|POST /functions/v1/api-gateway/runtime/applications`
@@ -109,13 +133,16 @@ Authenticated runtime routes:
 - `GET|POST /functions/v1/api-gateway/runtime/communications/messages`
 - `POST /functions/v1/api-gateway/runtime/communications/sync`
 - `GET|POST /functions/v1/api-gateway/runtime/otp/challenges`
+- `POST /functions/v1/api-gateway/runtime/otp/delivery`
 - `POST /functions/v1/api-gateway/runtime/otp/verify`
 
 Worker and webhook surfaces:
 
 - `POST /functions/v1/runtime-worker` requires `x-skima-worker-secret`
-- `POST /functions/v1/payment-webhook` requires `x-skima-webhook-secret` and processes signed
-  deposit provider events through the payment adapter runtime
+- `POST /functions/v1/payment-webhook` accepts Paystack webhooks signed with `x-paystack-signature`
+  using `PAYSTACK_SECRET_KEY`. The sandbox path still accepts `x-skima-webhook-secret` for
+  deterministic hosted gates. New payment webhook events must be signature verified before the
+  ledger runtime will process them.
 - `POST /functions/v1/webhook-sandbox-receiver` requires a valid `x-skima-signature`
 
 All authenticated API routes enforce the configured database rate-limit policy
@@ -125,3 +152,7 @@ Every current finance and communication route is backed by database RPCs or work
 validation, idempotency, RLS/permission checks, append-only operational receipts, provider execution
 logs, and hosted no-frontend gate coverage. Live vendor endpoints are enabled later by changing
 provider adapter configuration and Supabase secrets, not by changing business modules.
+
+QR scanning uses `/runtime/verifications`. The frontend later decodes a QR payload and submits the
+normalized verification fields. The backend decides what the scan means from configured verification
+definitions and workflow events.

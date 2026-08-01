@@ -1,9 +1,13 @@
+import { createClient, type SupabaseClient, type User } from "npm:@supabase/supabase-js@2.110.9";
+
 import { createRequestSupabaseClient, requireAuthenticatedUser } from "../_shared/supabase-auth.ts";
 import { jsonResponse, optionsResponse, requestId } from "../_shared/http.ts";
 
 const ROUTES = new Set([
   "/health",
   "/admin/role-templates",
+  "/admin/profiles",
+  "/admin/profiles/status",
   "/admin/users",
   "/admin/users/revoke",
   "/admin/webhook-endpoints",
@@ -19,7 +23,24 @@ const ROUTES = new Set([
   "/engines/notification-templates",
   "/engines/ai-task-definitions",
   "/engines/provider-adapters",
+  "/lpg/catalog",
+  "/lpg/locations",
+  "/lpg/cylinders",
+  "/lpg/cylinders/history",
+  "/lpg/quotes",
+  "/lpg/orders",
+  "/lpg/orders/active",
+  "/lpg/orders/dispatch",
+  "/lpg/orders/accept-assignment",
+  "/lpg/scans",
+  "/lpg/refills/confirm",
+  "/lpg/driver-locations",
+  "/lpg/safety-incidents",
+  "/lpg/maps/geocode",
+  "/lpg/maps/reverse-geocode",
+  "/lpg/maps/route-estimate",
   "/runtime/catalog",
+  "/runtime/session-context",
   "/runtime/catalog/units",
   "/runtime/catalog/categories",
   "/runtime/catalog/items",
@@ -80,6 +101,7 @@ const ROUTES = new Set([
   "/runtime/communications/messages",
   "/runtime/communications/sync",
   "/runtime/otp/challenges",
+  "/runtime/otp/delivery",
   "/runtime/otp/verify",
   "/runtime/workflows/start",
   "/runtime/events/process",
@@ -213,6 +235,10 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     });
   }
 
+  if (routePath === "/runtime/session-context" && request.method === "GET") {
+    return resolveSessionContext(supabase, authResult.user, id);
+  }
+
   if (routePath === "/engines/currencies" && request.method === "GET") {
     return selectRecords(
       supabase
@@ -302,6 +328,457 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         .order("key", { ascending: true }),
       id,
     );
+  }
+
+  if (routePath === "/lpg/catalog" && request.method === "GET") {
+    const pricingResult = await supabase
+      .from("lpg_refill_pricing")
+      .select(
+        "id,station_branch_id,currency_code,price_per_kg,delivery_base_fee,platform_fee_amount,tax_rate_percent,driver_commission_amount,min_kg,max_kg,status,effective_from,effective_until,metadata",
+      )
+      .eq("status", "active")
+      .order("effective_from", { ascending: false });
+
+    if (pricingResult.error) {
+      return databaseError(pricingResult.error, id);
+    }
+
+    const stationsResult = await supabase
+      .from("lpg_station_branches")
+      .select(
+        "id,organization_id,branch_id,display_name,formatted_address,latitude,longitude,service_radius_meters,operating_hours,supported_cylinder_sizes_kg,refill_capacity_kg,current_available_kg,availability_status,approval_status,compliance_status,metadata",
+      )
+      .eq("approval_status", "approved")
+      .eq("compliance_status", "approved")
+      .order("display_name", { ascending: true });
+
+    if (stationsResult.error) {
+      return databaseError(stationsResult.error, id);
+    }
+
+    return jsonResponse({
+      ok: true,
+      data: {
+        pricing: Array.isArray(pricingResult.data) ? pricingResult.data : [],
+        stations: Array.isArray(stationsResult.data) ? stationsResult.data : [],
+      },
+      requestId: id,
+    });
+  }
+
+  if (routePath === "/lpg/locations") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("lpg_customer_locations")
+          .select(
+            "id,label,formatted_address,latitude,longitude,accuracy_meters,landmark,delivery_instructions,contact_name,contact_phone,verification_status,status,provider_source,provider_place_id,metadata,created_at,updated_at",
+          )
+          .neq("status", "deleted")
+          .order("created_at", { ascending: false }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("create_lpg_customer_location", {
+          target_accuracy_meters: optionalNumber(payload.accuracyMeters, "accuracyMeters"),
+          target_contact_name: optionalString(payload.contactName),
+          target_contact_phone: optionalString(payload.contactPhone),
+          target_delivery_instructions: optionalString(payload.deliveryInstructions),
+          target_formatted_address: requireString(payload.formattedAddress, "formattedAddress"),
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_label: requireString(payload.label, "label"),
+          target_landmark: optionalString(payload.landmark),
+          target_latitude: requireNumber(payload.latitude, "latitude"),
+          target_longitude: requireNumber(payload.longitude, "longitude"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_provider_place_id: optionalString(payload.providerPlaceId),
+          target_provider_source: optionalString(payload.providerSource),
+          target_source: optionalString(payload.source) ?? "skima.lpg.location_api",
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/lpg/cylinders") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("lpg_cylinders")
+          .select(
+            "id,public_reference,cylinder_identifier,qr_payload,barcode_payload,size_kg,max_capacity_kg,manufacturer,brand,colour,serial_number,manufactured_at,last_inspection_at,next_inspection_at,condition_status,valve_type,ownership_proof_asset_id,image_asset_ids,status,safety_restriction,notes,metadata,created_at,updated_at",
+          )
+          .neq("status", "deactivated")
+          .order("created_at", { ascending: false }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      return rpcResponseWithPublicReference(
+        supabase.rpc("register_lpg_cylinder", {
+          target_barcode_payload: optionalString(payload.barcodePayload),
+          target_brand: optionalString(payload.brand),
+          target_colour: optionalString(payload.colour),
+          target_condition_status: optionalString(payload.conditionStatus) ?? "unknown",
+          target_cylinder_identifier: requireString(
+            payload.cylinderIdentifier,
+            "cylinderIdentifier",
+          ),
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_image_asset_ids: optionalStringArray(payload.imageAssetIds) ?? [],
+          target_last_inspection_at: optionalString(payload.lastInspectionAt),
+          target_manufactured_at: optionalString(payload.manufacturedAt),
+          target_manufacturer: optionalString(payload.manufacturer),
+          target_max_capacity_kg: requireNumber(payload.maxCapacityKg, "maxCapacityKg"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_next_inspection_at: optionalString(payload.nextInspectionAt),
+          target_notes: optionalString(payload.notes),
+          target_ownership_proof_asset_id: optionalUuid(
+            payload.ownershipProofAssetId,
+            "ownershipProofAssetId",
+          ),
+          target_qr_payload: optionalString(payload.qrPayload),
+          target_serial_number: optionalString(payload.serialNumber),
+          target_size_kg: requireNumber(payload.sizeKg, "sizeKg"),
+          target_source: optionalString(payload.source) ?? "skima.lpg.cylinder_registry",
+          target_valve_type: optionalString(payload.valveType),
+        }),
+        id,
+        supabase,
+        "lpg_cylinders",
+      );
+    }
+  }
+
+  if (routePath === "/lpg/cylinders/history" && request.method === "GET") {
+    const cylinderId = url.searchParams.get("cylinderId");
+
+    if (cylinderId) {
+      return selectRecords(
+        supabase
+          .from("lpg_cylinder_history")
+          .select(
+            "id,cylinder_id,event_type,lpg_order_id,station_branch_id,driver_profile_id,kilograms_filled,observations,location,created_at",
+          )
+          .eq("cylinder_id", requireUuid(cylinderId, "cylinderId"))
+          .order("created_at", { ascending: false }),
+        id,
+      );
+    }
+
+    return selectRecords(
+      supabase
+        .from("lpg_cylinder_history")
+        .select(
+          "id,cylinder_id,event_type,lpg_order_id,station_branch_id,driver_profile_id,kilograms_filled,observations,location,created_at",
+        )
+        .order("created_at", { ascending: false }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/quotes") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("lpg_refill_quotes")
+          .select(
+            "id,public_reference,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,pricing_id,requested_kg,currency_code,lpg_amount,delivery_fee_amount,platform_fee_amount,tax_amount,driver_commission_amount,total_amount,status,expires_at,breakdown,metadata,created_at,updated_at",
+          )
+          .order("created_at", { ascending: false }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      return rpcResponseWithPublicReference(
+        supabase.rpc("create_lpg_refill_quote", {
+          target_cylinder_id: requireUuid(payload.cylinderId, "cylinderId"),
+          target_delivery_instructions: optionalString(payload.deliveryInstructions),
+          target_delivery_location_id: requireUuid(payload.deliveryLocationId, "deliveryLocationId"),
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_pickup_location_id: requireUuid(payload.pickupLocationId, "pickupLocationId"),
+          target_preferred_time: optionalString(payload.preferredTime),
+          target_requested_kg: requireNumber(payload.requestedKg, "requestedKg"),
+          target_source: optionalString(payload.source) ?? "skima.lpg.quote_api",
+          target_station_branch_id: optionalUuid(payload.stationBranchId, "stationBranchId"),
+        }),
+        id,
+        supabase,
+        "lpg_refill_quotes",
+      );
+    }
+  }
+
+  if (routePath === "/lpg/orders") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("lpg_refill_orders")
+          .select(
+            "id,public_reference,lpg_refill_quote_id,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,driver_profile_id,vehicle_id,tracking_session_id,escrow_hold_id,currency_code,requested_kg,actual_kg,total_amount,station_amount,delivery_fee_amount,platform_fee_amount,driver_commission_amount,status,payment_status,assignment_status,metadata,created_at,updated_at",
+          )
+          .order("created_at", { ascending: false }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      return rpcResponseWithPublicReference(
+        supabase.rpc("create_lpg_refill_order", {
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_lpg_refill_quote_id: requireUuid(payload.lpgRefillQuoteId, "lpgRefillQuoteId"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_source: optionalString(payload.source) ?? "skima.lpg.order_api",
+        }),
+        id,
+        supabase,
+        "lpg_refill_orders",
+      );
+    }
+  }
+
+  if (routePath === "/lpg/orders/active" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("lpg_refill_orders")
+        .select(
+          "id,public_reference,lpg_refill_quote_id,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,driver_profile_id,vehicle_id,tracking_session_id,escrow_hold_id,currency_code,requested_kg,actual_kg,total_amount,station_amount,delivery_fee_amount,platform_fee_amount,driver_commission_amount,status,payment_status,assignment_status,metadata,created_at,updated_at",
+        )
+        .in("status", [
+          "awaiting_payment",
+          "payment_reserved",
+          "matching_station",
+          "matching_driver",
+          "driver_offered",
+          "driver_accepted",
+          "pickup_en_route",
+          "pickup_verified",
+          "station_en_route",
+          "station_verified",
+          "refill_in_progress",
+          "refill_confirmed",
+          "station_settled",
+          "return_en_route",
+          "delivery_verification_pending",
+          "delivered",
+          "disputed",
+        ])
+        .order("created_at", { ascending: false }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/orders/dispatch" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("dispatch_lpg_order", {
+        target_candidate_limit: optionalInteger(payload.candidateLimit) ?? 5,
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.dispatch_api",
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/orders/accept-assignment" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("accept_lpg_driver_assignment", {
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_source: optionalString(payload.source) ?? "skima.lpg.driver_api",
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/scans" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    return rpcResponseWithPublicReference(
+      supabase.rpc("record_lpg_cylinder_scan", {
+        target_accuracy_meters: optionalNumber(payload.accuracyMeters, "accuracyMeters"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_latitude: optionalNumber(payload.latitude, "latitude"),
+        target_longitude: optionalNumber(payload.longitude, "longitude"),
+        target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+        target_payload: optionalRecord(payload.payload) ?? {},
+        target_scan_type: requireString(payload.scanType, "scanType"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.verification_api",
+      }),
+      id,
+      supabase,
+      "lpg_cylinder_scans",
+    );
+  }
+
+  if (routePath === "/lpg/refills/confirm" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("confirm_lpg_refill", {
+        target_actual_kg: requireNumber(payload.actualKg, "actualKg"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+        target_price_per_kg: requireNumber(payload.pricePerKg, "pricePerKg"),
+        target_safety_observations: optionalRecord(payload.safetyObservations) ?? {},
+        target_source: optionalString(payload.source) ?? "skima.lpg.station_api",
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/driver-locations") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("lpg_driver_locations")
+          .select(
+            "id,driver_profile_id,user_id,lpg_order_id,latitude,longitude,accuracy_meters,heading_degrees,speed_meters_per_second,online_status,recorded_at,metadata,created_at",
+          )
+          .order("recorded_at", { ascending: false }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("record_lpg_driver_location", {
+          target_accuracy_meters: optionalNumber(payload.accuracyMeters, "accuracyMeters"),
+          target_driver_profile_id: requireUuid(payload.driverProfileId, "driverProfileId"),
+          target_heading_degrees: optionalNumber(payload.headingDegrees, "headingDegrees"),
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_latitude: requireNumber(payload.latitude, "latitude"),
+          target_longitude: requireNumber(payload.longitude, "longitude"),
+          target_lpg_order_id: optionalUuid(payload.lpgOrderId, "lpgOrderId"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_online_status: optionalString(payload.onlineStatus) ?? "online",
+          target_recorded_at: optionalString(payload.recordedAt),
+          target_source: optionalString(payload.source) ?? "skima.lpg.driver_location_api",
+          target_speed_meters_per_second: optionalNumber(
+            payload.speedMetersPerSecond,
+            "speedMetersPerSecond",
+          ),
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/lpg/safety-incidents") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("lpg_safety_incidents")
+          .select(
+            "id,lpg_order_id,cylinder_id,station_branch_id,driver_profile_id,incident_type,severity,status,description,metadata,created_at,updated_at",
+          )
+          .order("created_at", { ascending: false }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("create_lpg_safety_incident", {
+          target_cylinder_id: optionalUuid(payload.cylinderId, "cylinderId"),
+          target_description: requireString(payload.description, "description"),
+          target_driver_profile_id: optionalUuid(payload.driverProfileId, "driverProfileId"),
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_incident_type: requireString(payload.incidentType, "incidentType"),
+          target_lpg_order_id: optionalUuid(payload.lpgOrderId, "lpgOrderId"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_severity: optionalString(payload.severity) ?? "medium",
+          target_source: optionalString(payload.source) ?? "skima.lpg.safety_api",
+          target_station_branch_id: optionalUuid(payload.stationBranchId, "stationBranchId"),
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/lpg/maps/geocode" && request.method === "POST") {
+    return handleGoogleGeocodeRequest(request, id, supabaseUrl, "geocode");
+  }
+
+  if (routePath === "/lpg/maps/reverse-geocode" && request.method === "POST") {
+    return handleGoogleGeocodeRequest(request, id, supabaseUrl, "reverse_geocode");
+  }
+
+  if (routePath === "/lpg/maps/route-estimate" && request.method === "POST") {
+    return handleGoogleRouteEstimateRequest(request, id, supabaseUrl);
   }
 
   if (routePath === "/runtime/catalog" && request.method === "GET") {
@@ -1440,7 +1917,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase
           .from("payment_deposit_requests")
           .select(
-            "id,wallet_id,customer_user_id,provider_adapter_id,transaction_id,reversal_transaction_id,currency_code,amount,status,provider_reference,checkout_url,source,metadata,initialized_at,verified_at,failed_at,reversed_at,created_at,updated_at",
+            "id,public_reference,wallet_id,customer_user_id,provider_adapter_id,transaction_id,reversal_transaction_id,currency_code,amount,status,provider_reference,checkout_url,source,metadata,initialized_at,verified_at,failed_at,reversed_at,created_at,updated_at",
           )
           .order("created_at", { ascending: false }),
         id,
@@ -1455,18 +1932,36 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }
 
       const payload = body.value;
-      return rpcResponse(
+      const amount = requireNumber(payload.amount, "amount");
+      const currencyCode = optionalString(payload.currencyCode) ?? "NGN";
+      const providerAdapterKey = optionalString(payload.providerAdapterKey) ??
+        "provider.payment.sandbox";
+
+      if (providerAdapterKey === "provider.payment.paystack") {
+        return initializePaystackDeposit({
+          amount,
+          currencyCode,
+          customerEmail: authResult.user.email,
+          id,
+          payload,
+          supabase,
+          supabaseUrl,
+        });
+      }
+
+      return rpcResponseWithPublicReference(
         supabase.rpc("initialize_wallet_deposit", {
-          target_amount: requireNumber(payload.amount, "amount"),
-          target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
+          target_amount: amount,
+          target_currency_code: currencyCode,
           target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
           target_metadata: optionalRecord(payload.metadata) ?? {},
-          target_provider_adapter_key: optionalString(payload.providerAdapterKey) ??
-            "provider.payment.sandbox",
+          target_provider_adapter_key: providerAdapterKey,
           target_source: optionalString(payload.source) ?? "platform.payment_engine",
           target_wallet_id: optionalUuid(payload.walletId, "walletId"),
         }),
         id,
+        supabase,
+        "payment_deposit_requests",
       );
     }
   }
@@ -1479,13 +1974,15 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const payload = body.value;
-    return rpcResponse(
+    return rpcResponseWithPublicReference(
       supabase.rpc("verify_wallet_deposit", {
         target_deposit_request_id: requireUuid(payload.depositRequestId, "depositRequestId"),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_metadata: optionalRecord(payload.metadata) ?? {},
       }),
       id,
+      supabase,
+      "payment_deposit_requests",
     );
   }
 
@@ -1546,7 +2043,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase
           .from("withdrawal_requests")
           .select(
-            "id,wallet_id,beneficiary_id,provider_adapter_id,reserve_transaction_id,reversal_transaction_id,currency_code,amount,fee_amount,total_debit_amount,status,provider_reference,source,metadata,requested_by,approved_by,requested_at,approved_at,processed_at,failed_at,reversed_at,created_at,updated_at",
+            "id,public_reference,wallet_id,beneficiary_id,provider_adapter_id,reserve_transaction_id,reversal_transaction_id,currency_code,amount,fee_amount,total_debit_amount,status,provider_reference,source,metadata,requested_by,approved_by,requested_at,approved_at,processed_at,failed_at,reversed_at,created_at,updated_at",
           )
           .order("created_at", { ascending: false }),
         id,
@@ -1561,7 +2058,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }
 
       const payload = body.value;
-      return rpcResponse(
+      return rpcResponseWithPublicReference(
         supabase.rpc("request_wallet_withdrawal", {
           target_amount: requireNumber(payload.amount, "amount"),
           target_beneficiary_id: requireUuid(payload.beneficiaryId, "beneficiaryId"),
@@ -1572,6 +2069,8 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           target_wallet_id: requireUuid(payload.walletId, "walletId"),
         }),
         id,
+        supabase,
+        "withdrawal_requests",
       );
     }
   }
@@ -1584,7 +2083,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const payload = body.value;
-    return rpcResponse(
+    return rpcResponseWithPublicReference(
       supabase.rpc("approve_wallet_withdrawal", {
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_metadata: optionalRecord(payload.metadata) ?? {},
@@ -1595,6 +2094,8 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         ),
       }),
       id,
+      supabase,
+      "withdrawal_requests",
     );
   }
 
@@ -1666,7 +2167,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const payload = body.value;
-    return rpcResponse(
+    return rpcResponseWithPublicReference(
       supabase.rpc("execute_driver_commission", {
         target_base_amount: optionalNumber(payload.baseAmount, "baseAmount"),
         target_commission_policy_key: optionalString(payload.commissionPolicyKey) ??
@@ -1679,6 +2180,8 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_source: optionalString(payload.source) ?? "platform.commission_engine",
       }),
       id,
+      supabase,
+      "commission_executions",
     );
   }
 
@@ -1687,7 +2190,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       supabase
         .from("commission_executions")
         .select(
-          "id,service_request_id,order_id,escrow_hold_id,driver_wallet_id,commission_policy_id,transaction_id,currency_code,amount,status,policy_snapshot,source,idempotency_key,metadata,created_at,updated_at",
+          "id,public_reference,service_request_id,order_id,escrow_hold_id,driver_wallet_id,commission_policy_id,transaction_id,currency_code,amount,status,policy_snapshot,source,idempotency_key,metadata,created_at,updated_at",
         )
         .order("created_at", { ascending: false }),
       id,
@@ -1702,7 +2205,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const payload = body.value;
-    return rpcResponse(
+    return rpcResponseWithPublicReference(
       supabase.rpc("execute_order_business_settlement", {
         target_business_wallet_id: requireUuid(payload.businessWalletId, "businessWalletId"),
         target_escrow_hold_id: requireUuid(payload.escrowHoldId, "escrowHoldId"),
@@ -1719,6 +2222,8 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_source: optionalString(payload.source) ?? "platform.settlement_engine",
       }),
       id,
+      supabase,
+      "settlement_statements",
     );
   }
 
@@ -1727,7 +2232,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       supabase
         .from("settlement_statements")
         .select(
-          "id,organization_id,service_request_id,order_id,escrow_hold_id,settlement_execution_id,currency_code,gross_amount,platform_fee_amount,net_amount,status,period_start,period_end,source,idempotency_key,metadata,created_at,updated_at",
+          "id,public_reference,organization_id,service_request_id,order_id,escrow_hold_id,settlement_execution_id,currency_code,gross_amount,platform_fee_amount,net_amount,status,period_start,period_end,source,idempotency_key,metadata,created_at,updated_at",
         )
         .order("created_at", { ascending: false }),
       id,
@@ -1827,6 +2332,31 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         id,
       );
     }
+  }
+
+  if (routePath === "/runtime/otp/delivery" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    const { data, error } = await supabase.rpc("fetch_in_app_otp_code", {
+      target_challenge_id: requireUuid(payload.challengeId, "challengeId"),
+      target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+      target_metadata: optionalRecord(payload.metadata) ?? {},
+    });
+
+    if (error) {
+      return databaseError(error, id);
+    }
+
+    return jsonResponse({
+      ok: true,
+      data,
+      requestId: id,
+    });
   }
 
   if (routePath === "/runtime/otp/verify" && request.method === "POST") {
@@ -2474,6 +3004,36 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
   }
 
+  if (routePath === "/admin/profiles" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("profiles")
+        .select("id,display_name,avatar_url,status,metadata,created_at,updated_at")
+        .order("created_at", { ascending: false }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/profiles/status" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("set_profile_status", {
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_reason: requireString(payload.reason, "reason"),
+        target_status: requireString(payload.status, "status"),
+        target_user_id: requireUuid(payload.userId, "userId"),
+      }),
+      id,
+    );
+  }
+
   if (routePath === "/admin/users") {
     if (request.method === "GET") {
       const { data, error } = await supabase
@@ -2557,6 +3117,47 @@ type JsonBodyResult =
   | { readonly value: Readonly<Record<string, unknown>> }
   | { readonly response: Response };
 
+interface InitializePaystackDepositParams {
+  readonly amount: number;
+  readonly currencyCode: string;
+  readonly customerEmail?: string;
+  readonly id: string;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly supabase: SupabaseClient;
+  readonly supabaseUrl: string;
+}
+
+interface PaystackInitializeResponse {
+  readonly status?: unknown;
+  readonly message?: unknown;
+  readonly data?: unknown;
+}
+
+interface GatewayProviderExecutionInput {
+  readonly errorMessage: string | null;
+  readonly idempotencyKey: string;
+  readonly operationKey: string;
+  readonly providerKind?: "payment" | "storage" | "maps" | "notification" | "ai" | "queue" | "cache" | "observability";
+  readonly providerAdapterKey: string;
+  readonly requestPayload: Readonly<Record<string, unknown>>;
+  readonly responsePayload: Readonly<Record<string, unknown>>;
+  readonly status: "succeeded" | "failed";
+}
+
+interface SessionRoleRow {
+  readonly id: string;
+  readonly organization_id: string | null;
+  readonly branch_id: string | null;
+  readonly role_id: string;
+  readonly status: string;
+  readonly access_scope: Readonly<Record<string, unknown>>;
+}
+
+interface SessionPermissionLinkRow {
+  readonly role_id: string;
+  readonly permission_id: string;
+}
+
 class RequestValidationError extends Error {
   override readonly name = "RequestValidationError";
 }
@@ -2568,6 +3169,181 @@ interface SelectQuery {
       | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2>;
+}
+
+async function resolveSessionContext(
+  supabase: SupabaseClient,
+  user: User,
+  id: string,
+): Promise<Response> {
+  const profileResult = await supabase
+    .from("profiles")
+    .select("id,display_name,avatar_url,status,metadata")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileResult.error) {
+    return databaseError(profileResult.error, id);
+  }
+
+  const adminResult = await supabase
+    .from("platform_admins")
+    .select("id,user_id,primary_role_id,admin_kind,title,status,metadata")
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (adminResult.error) {
+    return databaseError(adminResult.error, id);
+  }
+
+  const membershipsResult = await supabase
+    .from("organization_memberships")
+    .select("id,organization_id,membership_type,status,metadata")
+    .eq("user_id", user.id)
+    .eq("status", "active");
+
+  if (membershipsResult.error) {
+    return databaseError(membershipsResult.error, id);
+  }
+
+  const userRolesResult = await supabase
+    .from("user_roles")
+    .select("id,organization_id,branch_id,role_id,status,access_scope")
+    .eq("user_id", user.id)
+    .eq("status", "active");
+
+  if (userRolesResult.error) {
+    return databaseError(userRolesResult.error, id);
+  }
+
+  const userRoles = Array.isArray(userRolesResult.data)
+    ? userRolesResult.data as SessionRoleRow[]
+    : [];
+  const roleIds = Array.from(new Set(userRoles.map((role) => role.role_id)));
+  const organizationIds = Array.from(
+    new Set(
+      (Array.isArray(membershipsResult.data) ? membershipsResult.data : [])
+        .map((membership) => stringOrNull(getRecordValue(membership, "organization_id")))
+        .filter((organizationId): organizationId is string => organizationId !== null),
+    ),
+  );
+
+  const rolesResult = roleIds.length === 0 ? { data: [], error: null } : await supabase
+    .from("roles")
+    .select("id,organization_id,key,display_name,status,metadata")
+    .in("id", roleIds);
+
+  if (rolesResult.error) {
+    return databaseError(rolesResult.error, id);
+  }
+
+  const rolePermissionResult = roleIds.length === 0 ? { data: [], error: null } : await supabase
+    .from("role_permissions")
+    .select("role_id,permission_id")
+    .in("role_id", roleIds);
+
+  if (rolePermissionResult.error) {
+    return databaseError(rolePermissionResult.error, id);
+  }
+
+  const permissionLinks = Array.isArray(rolePermissionResult.data)
+    ? rolePermissionResult.data as SessionPermissionLinkRow[]
+    : [];
+  const permissionIds = Array.from(new Set(permissionLinks.map((link) => link.permission_id)));
+
+  const permissionsResult = permissionIds.length === 0 ? { data: [], error: null } : await supabase
+    .from("permissions")
+    .select("id,key,risk_level")
+    .in("id", permissionIds);
+
+  if (permissionsResult.error) {
+    return databaseError(permissionsResult.error, id);
+  }
+
+  const organizationsResult = organizationIds.length === 0
+    ? { data: [], error: null }
+    : await supabase
+      .from("organizations")
+      .select("id,slug,display_name,status")
+      .in("id", organizationIds);
+
+  if (organizationsResult.error) {
+    return databaseError(organizationsResult.error, id);
+  }
+
+  const roleById = recordsByStringId(Array.isArray(rolesResult.data) ? rolesResult.data : []);
+  const permissionById = recordsByStringId(
+    Array.isArray(permissionsResult.data) ? permissionsResult.data : [],
+  );
+  const permissionsByRoleId = new Map<string, string[]>();
+
+  for (const link of permissionLinks) {
+    const permission = permissionById.get(link.permission_id);
+    const permissionKey = stringOrNull(getRecordValue(permission, "key"));
+
+    if (!permissionKey) {
+      continue;
+    }
+
+    permissionsByRoleId.set(link.role_id, [
+      ...(permissionsByRoleId.get(link.role_id) ?? []),
+      permissionKey,
+    ]);
+  }
+
+  const permissionKeys = Array.from(
+    new Set(
+      Array.from(permissionsByRoleId.values()).flat(),
+    ),
+  ).sort();
+
+  const organizationsById = recordsByStringId(
+    Array.isArray(organizationsResult.data) ? organizationsResult.data : [],
+  );
+
+  return jsonResponse({
+    ok: true,
+    data: {
+      user: {
+        id: user.id,
+        email: user.email ?? null,
+      },
+      profile: profileResult.data ?? null,
+      platformAdmin: adminResult.data ?? null,
+      permissions: permissionKeys,
+      roles: userRoles.map((assignedRole) => {
+        const role = roleById.get(assignedRole.role_id);
+
+        return {
+          id: assignedRole.id,
+          roleId: assignedRole.role_id,
+          key: stringOrNull(getRecordValue(role, "key")),
+          displayName: stringOrNull(getRecordValue(role, "display_name")),
+          organizationId: assignedRole.organization_id,
+          branchId: assignedRole.branch_id,
+          status: assignedRole.status,
+          accessScope: assignedRole.access_scope,
+          permissions: (permissionsByRoleId.get(assignedRole.role_id) ?? []).sort(),
+        };
+      }),
+      organizations: (Array.isArray(membershipsResult.data) ? membershipsResult.data : [])
+        .map((membership) => {
+          const organizationId = stringOrNull(getRecordValue(membership, "organization_id"));
+          const organization = organizationId ? organizationsById.get(organizationId) : null;
+
+          return {
+            membershipId: stringOrNull(getRecordValue(membership, "id")),
+            organizationId,
+            slug: stringOrNull(getRecordValue(organization, "slug")),
+            displayName: stringOrNull(getRecordValue(organization, "display_name")),
+            membershipType: stringOrNull(getRecordValue(membership, "membership_type")),
+            status: stringOrNull(getRecordValue(membership, "status")),
+          };
+        }),
+    },
+    requestId: id,
+  });
 }
 
 async function rpcResponse(query: SelectQuery, id: string): Promise<Response> {
@@ -2582,6 +3358,621 @@ async function rpcResponse(query: SelectQuery, id: string): Promise<Response> {
     id: data,
     requestId: id,
   });
+}
+
+async function rpcResponseWithPublicReference(
+  query: SelectQuery,
+  id: string,
+  supabase: SupabaseClient,
+  tableName: string,
+): Promise<Response> {
+  const { data, error } = await query;
+
+  if (error) {
+    return databaseError(error as { readonly message: string; readonly code?: string }, id);
+  }
+
+  const recordId = stringOrNull(data);
+
+  if (!recordId) {
+    return databaseError({ message: "RPC did not return a record id." }, id);
+  }
+
+  const referenceResult = await supabase
+    .from(tableName)
+    .select("id,public_reference")
+    .eq("id", recordId)
+    .maybeSingle();
+
+  if (referenceResult.error) {
+    return databaseError(referenceResult.error, id);
+  }
+
+  const publicReference = stringOrNull(
+    getRecordValue(referenceResult.data, "public_reference"),
+  );
+
+  if (!publicReference) {
+    return databaseError(
+      { message: `Public reference was not assigned for ${tableName} record ${recordId}.` },
+      id,
+    );
+  }
+
+  return jsonResponse({
+    ok: true,
+    id: recordId,
+    publicReference,
+    requestId: id,
+  });
+}
+
+async function handleGoogleGeocodeRequest(
+  request: Request,
+  id: string,
+  supabaseUrl: string,
+  operation: "geocode" | "reverse_geocode",
+): Promise<Response> {
+  const body = await readJsonBody(request, id);
+
+  if ("response" in body) {
+    return body.response;
+  }
+
+  const googleMapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+
+  if (!googleMapsKey) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "server_misconfigured",
+        message: "Google Maps requires GOOGLE_MAPS_API_KEY in Supabase secrets.",
+        requestId: id,
+      },
+      500,
+    );
+  }
+
+  const payload = body.value;
+  const idempotencyKey = optionalString(payload.idempotencyKey) ??
+    createGatewayIdempotencyKey(id, operation);
+  const queryUrl = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+  const requestPayload: Record<string, unknown> = { operation };
+
+  if (operation === "geocode") {
+    const address = requireString(payload.address, "address");
+    queryUrl.searchParams.set("address", address);
+    requestPayload.address = address;
+  } else {
+    const latitude = requireNumber(payload.latitude, "latitude");
+    const longitude = requireNumber(payload.longitude, "longitude");
+    queryUrl.searchParams.set("latlng", `${latitude},${longitude}`);
+    requestPayload.latitude = latitude;
+    requestPayload.longitude = longitude;
+  }
+
+  queryUrl.searchParams.set("key", googleMapsKey);
+
+  const providerResponse = await fetch(queryUrl.toString());
+  const responsePayload = requireRecordOrEmpty(await readProviderJson(providerResponse));
+  const providerStatus = optionalString(responsePayload.status);
+
+  if (!providerResponse.ok || providerStatus !== "OK") {
+    const message = optionalString(responsePayload.error_message) ??
+      optionalString(responsePayload.status) ??
+      "Google Maps geocode request failed.";
+    await maybeRecordGatewayProviderExecution(supabaseUrl, {
+      errorMessage: message,
+      idempotencyKey: `${idempotencyKey}:maps`,
+      operationKey: `provider.maps.${operation}`,
+      providerAdapterKey: "provider.maps.google-maps",
+      providerKind: "maps",
+      requestPayload,
+      responsePayload: sanitizeProviderPayload(responsePayload),
+      status: "failed",
+    });
+
+    return jsonResponse(
+      {
+        ok: false,
+        error: "provider_error",
+        message,
+        requestId: id,
+      },
+      502,
+    );
+  }
+
+  const results = Array.isArray(responsePayload.results) ? responsePayload.results : [];
+  const firstResult = requireRecord(results[0], "Google Maps result");
+  const geometry = requireRecord(firstResult.geometry, "Google Maps geometry");
+  const location = requireRecord(geometry.location, "Google Maps location");
+  const latitude = requireNumber(location.lat, "Google Maps latitude");
+  const longitude = requireNumber(location.lng, "Google Maps longitude");
+  const data = {
+    formattedAddress: optionalString(firstResult.formatted_address),
+    location: {
+      latitude,
+      longitude,
+    },
+    locationType: optionalString(geometry.location_type),
+    operation,
+    placeId: optionalString(firstResult.place_id),
+    provider: "google_maps",
+  };
+
+  await maybeRecordGatewayProviderExecution(supabaseUrl, {
+    errorMessage: null,
+    idempotencyKey: `${idempotencyKey}:maps`,
+    operationKey: `provider.maps.${operation}`,
+    providerAdapterKey: "provider.maps.google-maps",
+    providerKind: "maps",
+    requestPayload,
+    responsePayload: data,
+    status: "succeeded",
+  });
+
+  return jsonResponse({
+    ok: true,
+    data,
+    requestId: id,
+  });
+}
+
+async function handleGoogleRouteEstimateRequest(
+  request: Request,
+  id: string,
+  supabaseUrl: string,
+): Promise<Response> {
+  const body = await readJsonBody(request, id);
+
+  if ("response" in body) {
+    return body.response;
+  }
+
+  const googleMapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+
+  if (!googleMapsKey) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "server_misconfigured",
+        message: "Google Maps requires GOOGLE_MAPS_API_KEY in Supabase secrets.",
+        requestId: id,
+      },
+      500,
+    );
+  }
+
+  const payload = body.value;
+  const origin = requireCoordinate(payload.origin, "origin");
+  const destination = requireCoordinate(payload.destination, "destination");
+  const idempotencyKey = optionalString(payload.idempotencyKey) ??
+    createGatewayIdempotencyKey(id, "route-estimate");
+  const requestPayload = {
+    computeAlternativeRoutes: false,
+    destination: {
+      location: {
+        latLng: {
+          latitude: destination.latitude,
+          longitude: destination.longitude,
+        },
+      },
+    },
+    origin: {
+      location: {
+        latLng: {
+          latitude: origin.latitude,
+          longitude: origin.longitude,
+        },
+      },
+    },
+    routingPreference: "TRAFFIC_AWARE",
+    travelMode: "DRIVE",
+  };
+
+  const providerResponse = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+    body: JSON.stringify(requestPayload),
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": googleMapsKey,
+      "X-Goog-FieldMask":
+        "routes.distanceMeters,routes.duration,routes.staticDuration,routes.polyline.encodedPolyline,routes.description,routes.warnings",
+    },
+    method: "POST",
+  });
+  const responsePayload = requireRecordOrEmpty(await readProviderJson(providerResponse));
+
+  if (!providerResponse.ok) {
+    const errorRecord = requireRecordOrEmpty(responsePayload.error);
+    const message = optionalString(errorRecord.message) ?? "Google Maps route request failed.";
+    await maybeRecordGatewayProviderExecution(supabaseUrl, {
+      errorMessage: message,
+      idempotencyKey: `${idempotencyKey}:maps`,
+      operationKey: "provider.maps.route_estimate",
+      providerAdapterKey: "provider.maps.google-maps",
+      providerKind: "maps",
+      requestPayload,
+      responsePayload: sanitizeProviderPayload(responsePayload),
+      status: "failed",
+    });
+
+    return jsonResponse(
+      {
+        ok: false,
+        error: "provider_error",
+        message,
+        requestId: id,
+      },
+      502,
+    );
+  }
+
+  const routes = Array.isArray(responsePayload.routes) ? responsePayload.routes : [];
+  const route = requireRecord(routes[0], "Google Maps route");
+  const polyline = requireRecordOrEmpty(route.polyline);
+  const data = {
+    distanceMeters: requireNumber(route.distanceMeters, "Google route distance"),
+    duration: optionalString(route.duration),
+    encodedPolyline: optionalString(polyline.encodedPolyline),
+    operation: "route_estimate",
+    provider: "google_maps",
+    staticDuration: optionalString(route.staticDuration),
+    summary: optionalString(route.description),
+  };
+
+  await maybeRecordGatewayProviderExecution(supabaseUrl, {
+    errorMessage: null,
+    idempotencyKey: `${idempotencyKey}:maps`,
+    operationKey: "provider.maps.route_estimate",
+    providerAdapterKey: "provider.maps.google-maps",
+    providerKind: "maps",
+    requestPayload,
+    responsePayload: data,
+    status: "succeeded",
+  });
+
+  return jsonResponse({
+    ok: true,
+    data,
+    requestId: id,
+  });
+}
+
+async function initializePaystackDeposit(
+  params: InitializePaystackDepositParams,
+): Promise<Response> {
+  const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!paystackSecretKey || !serviceRoleKey) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "server_misconfigured",
+        message: "Paystack deposits require PAYSTACK_SECRET_KEY and SUPABASE_SERVICE_ROLE_KEY.",
+        requestId: params.id,
+      },
+      500,
+    );
+  }
+
+  if (params.currencyCode !== "NGN") {
+    throw new RequestValidationError("Paystack deposits currently require NGN.");
+  }
+
+  const email = params.customerEmail ?? optionalString(params.payload.customerEmail);
+
+  if (!email) {
+    throw new RequestValidationError("A customer email is required for Paystack deposits.");
+  }
+
+  const idempotencyKey = requireString(params.payload.idempotencyKey, "idempotencyKey");
+  const initializeResult = await params.supabase.rpc("initialize_wallet_deposit", {
+    target_amount: params.amount,
+    target_currency_code: params.currencyCode,
+    target_idempotency_key: idempotencyKey,
+    target_metadata: optionalRecord(params.payload.metadata) ?? {},
+    target_provider_adapter_key: "provider.payment.paystack",
+    target_source: optionalString(params.payload.source) ?? "platform.payment_engine",
+    target_wallet_id: optionalUuid(params.payload.walletId, "walletId"),
+  });
+
+  if (initializeResult.error) {
+    return databaseError(initializeResult.error, params.id);
+  }
+
+  const depositId = requireString(initializeResult.data, "deposit id");
+  const serviceClient = createServiceClient(params.supabaseUrl, serviceRoleKey);
+  const { data: depositRecord, error: depositError } = await serviceClient
+    .from("payment_deposit_requests")
+    .select("id,public_reference,wallet_id,amount,currency_code,provider_reference,metadata")
+    .eq("id", depositId)
+    .single();
+
+  if (depositError) {
+    return databaseError(depositError, params.id);
+  }
+
+  const depositPublicReference = stringOrNull(getRecordValue(depositRecord, "public_reference"));
+
+  if (!depositPublicReference) {
+    return databaseError(
+      { message: `Public reference was not assigned for payment_deposit_requests record ${depositId}.` },
+      params.id,
+    );
+  }
+
+  const paystackRequestPayload = buildPaystackInitializePayload({
+    amount: Number(depositRecord.amount),
+    callbackUrl: optionalString(params.payload.callbackUrl) ??
+      Deno.env.get("SKIMA_PAYSTACK_CALLBACK_URL") ?? null,
+    currencyCode: String(depositRecord.currency_code),
+    depositId,
+    email,
+    metadata: {
+      ...(optionalRecord(params.payload.metadata) ?? {}),
+      depositRequestId: depositId,
+      providerAdapterKey: "provider.payment.paystack",
+      walletId: depositRecord.wallet_id,
+    },
+    providerReference: String(depositRecord.provider_reference),
+  });
+
+  const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
+    body: JSON.stringify(paystackRequestPayload),
+    headers: {
+      Authorization: `Bearer ${paystackSecretKey}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+  const paystackBody = await readPaystackJson(paystackResponse);
+
+  if (!paystackResponse.ok || paystackBody.status !== true) {
+    const providerMessage = typeof paystackBody.message === "string"
+      ? paystackBody.message
+      : "Paystack transaction initialization failed.";
+
+    await markPaystackDepositInitializationFailed(
+      serviceClient,
+      depositId,
+      depositRecord.metadata,
+      {
+        httpStatus: paystackResponse.status,
+        message: providerMessage,
+      },
+    );
+    await recordGatewayProviderExecution(serviceClient, {
+      errorMessage: providerMessage,
+      idempotencyKey: `${idempotencyKey}:paystack`,
+      operationKey: "provider.payment.initialize",
+      providerAdapterKey: "provider.payment.paystack",
+      requestPayload: paystackRequestPayload,
+      responsePayload: requireRecordOrEmpty(paystackBody),
+      status: "failed",
+    });
+
+    return jsonResponse(
+      {
+        ok: false,
+        error: "provider_error",
+        message: providerMessage,
+        requestId: params.id,
+      },
+      502,
+    );
+  }
+
+  const paystackData = requireRecord(paystackBody.data, "Paystack data");
+  const authorizationUrl = requireString(paystackData.authorization_url, "authorization_url");
+  const providerReference = optionalString(paystackData.reference) ??
+    String(depositRecord.provider_reference);
+  const mergedMetadata = {
+    ...requireRecordOrEmpty(depositRecord.metadata),
+    paystack: {
+      accessCode: optionalString(paystackData.access_code),
+      initializedAt: new Date().toISOString(),
+      reference: providerReference,
+    },
+  };
+  const { error: updateError } = await serviceClient
+    .from("payment_deposit_requests")
+    .update({
+      checkout_url: authorizationUrl,
+      metadata: mergedMetadata,
+      provider_reference: providerReference,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", depositId);
+
+  if (updateError) {
+    return databaseError(updateError, params.id);
+  }
+
+  await recordGatewayProviderExecution(serviceClient, {
+    errorMessage: null,
+    idempotencyKey: `${idempotencyKey}:paystack`,
+    operationKey: "provider.payment.initialize",
+    providerAdapterKey: "provider.payment.paystack",
+    requestPayload: paystackRequestPayload,
+    responsePayload: {
+      authorizationUrl,
+      reference: providerReference,
+    },
+    status: "succeeded",
+  });
+
+  return jsonResponse({
+    ok: true,
+    data: {
+      checkoutUrl: authorizationUrl,
+      currencyCode: String(depositRecord.currency_code),
+      depositRequestId: depositId,
+      providerAdapterKey: "provider.payment.paystack",
+      providerReference,
+      publicReference: depositPublicReference,
+    },
+    id: depositId,
+    requestId: params.id,
+  });
+}
+
+function createServiceClient(supabaseUrl: string, serviceRoleKey: string): SupabaseClient {
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  });
+}
+
+function buildPaystackInitializePayload(
+  input: {
+    readonly amount: number;
+    readonly callbackUrl: string | null;
+    readonly currencyCode: string;
+    readonly depositId: string;
+    readonly email: string;
+    readonly metadata: Readonly<Record<string, unknown>>;
+    readonly providerReference: string;
+  },
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    amount: toMinorCurrencyUnit(input.amount, "Paystack amount"),
+    currency: input.currencyCode,
+    email: input.email,
+    metadata: input.metadata,
+    reference: input.providerReference,
+  };
+  const callbackUrl = resolveOptionalHttpsUrl(input.callbackUrl, "callbackUrl");
+
+  if (callbackUrl) {
+    payload.callback_url = callbackUrl;
+  }
+
+  return payload;
+}
+
+function toMinorCurrencyUnit(amount: number, label: string): number {
+  const minorAmount = Math.round(amount * 100);
+
+  if (!Number.isSafeInteger(minorAmount) || minorAmount <= 0) {
+    throw new RequestValidationError(`${label} must convert to a positive minor-unit integer.`);
+  }
+
+  return minorAmount;
+}
+
+function resolveOptionalHttpsUrl(value: string | null, fieldName: string): string | null {
+  if (!value) {
+    return null;
+  }
+
+  let url: URL;
+
+  try {
+    url = new URL(value);
+  } catch (_error) {
+    throw new RequestValidationError(`${fieldName} must be a valid URL.`);
+  }
+
+  if (url.protocol !== "https:") {
+    throw new RequestValidationError(`${fieldName} must be an HTTPS URL.`);
+  }
+
+  return url.toString();
+}
+
+async function readPaystackJson(response: Response): Promise<PaystackInitializeResponse> {
+  try {
+    const value = await response.json();
+
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return { message: "Paystack returned a non-object response.", status: false };
+    }
+
+    return value as PaystackInitializeResponse;
+  } catch (_error) {
+    return { message: "Paystack returned invalid JSON.", status: false };
+  }
+}
+
+async function markPaystackDepositInitializationFailed(
+  serviceClient: SupabaseClient,
+  depositId: string,
+  existingMetadata: unknown,
+  failure: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  await serviceClient
+    .from("payment_deposit_requests")
+    .update({
+      checkout_url: null,
+      failed_at: new Date().toISOString(),
+      metadata: {
+        ...requireRecordOrEmpty(existingMetadata),
+        paystackInitializationFailure: failure,
+      },
+      status: "failed",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", depositId);
+}
+
+async function recordGatewayProviderExecution(
+  serviceClient: SupabaseClient,
+  input: GatewayProviderExecutionInput,
+): Promise<void> {
+  await serviceClient.rpc("record_provider_execution", {
+    target_error_message: input.errorMessage,
+    target_idempotency_key: input.idempotencyKey,
+    target_operation_key: input.operationKey,
+    target_provider_adapter_key: input.providerAdapterKey,
+    target_provider_kind: input.providerKind ?? "payment",
+    target_request_payload: input.requestPayload,
+    target_response_payload: input.responsePayload,
+    target_status: input.status,
+  });
+}
+
+async function maybeRecordGatewayProviderExecution(
+  supabaseUrl: string,
+  input: GatewayProviderExecutionInput,
+): Promise<void> {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!serviceRoleKey) {
+    return;
+  }
+
+  const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+  await recordGatewayProviderExecution(serviceClient, input);
+}
+
+async function readProviderJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch (_error) {
+    return {
+      error: "invalid_json",
+      status: response.status,
+    };
+  }
+}
+
+function sanitizeProviderPayload(value: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const sanitized = { ...value };
+
+  delete sanitized.access_token;
+  delete sanitized.key;
+  delete sanitized.secret;
+
+  return sanitized;
+}
+
+function createGatewayIdempotencyKey(id: string, operation: string): string {
+  return `api-gateway:${operation}:${id}`;
 }
 
 function isRateLimited(value: unknown): boolean {
@@ -2731,6 +4122,25 @@ function optionalNumber(value: unknown, fieldName: string): number | null {
   return requireNumber(value, fieldName);
 }
 
+function requireCoordinate(
+  value: unknown,
+  fieldName: string,
+): { readonly latitude: number; readonly longitude: number } {
+  const record = requireRecord(value, fieldName);
+  const latitude = requireNumber(record.latitude, `${fieldName}.latitude`);
+  const longitude = requireNumber(record.longitude, `${fieldName}.longitude`);
+
+  if (latitude < -90 || latitude > 90) {
+    throw new RequestValidationError(`${fieldName}.latitude must be between -90 and 90.`);
+  }
+
+  if (longitude < -180 || longitude > 180) {
+    throw new RequestValidationError(`${fieldName}.longitude must be between -180 and 180.`);
+  }
+
+  return { latitude, longitude };
+}
+
 function optionalBoolean(value: unknown): boolean | null {
   if (value === undefined || value === null) {
     return null;
@@ -2751,12 +4161,46 @@ function requireRecord(value: unknown, fieldName: string): Readonly<Record<strin
   return value as Readonly<Record<string, unknown>>;
 }
 
+function requireRecordOrEmpty(value: unknown): Readonly<Record<string, unknown>> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Readonly<Record<string, unknown>>;
+}
+
 function optionalRecord(value: unknown): Readonly<Record<string, unknown>> | null {
   if (value === undefined || value === null) {
     return null;
   }
 
   return requireRecord(value, "optional object field");
+}
+
+function getRecordValue(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return (value as Readonly<Record<string, unknown>>)[key];
+}
+
+function recordsByStringId(records: readonly unknown[]): Map<string, unknown> {
+  const byId = new Map<string, unknown>();
+
+  for (const record of records) {
+    const id = stringOrNull(getRecordValue(record, "id"));
+
+    if (id) {
+      byId.set(id, record);
+    }
+  }
+
+  return byId;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function requireArray(value: unknown, fieldName: string): readonly unknown[] {

@@ -4,7 +4,7 @@ Milestone 2 may not start until this checklist is complete. Because the backend-
 expanded on 2026-07-28, this milestone was reopened for foundation-level storage, communication,
 OTP, and role-specific security evidence.
 
-Current status: Complete, pending reviewer approval.
+Current status: Approved on 2026-07-30.
 
 ## Local Verification
 

@@ -578,7 +578,7 @@ async function resolveAdminSession(): Promise<AdminSession> {
 
   if (!adminEmail || !adminPassword) {
     throw new Error(
-      "Set SKIMA_ADMIN_ACCESS_TOKEN or SKIMA_SUPER_ADMIN_EMAIL and SKIMA_SUPER_ADMIN_PASSWORD in the deployment shell.",
+      "Set SKIMA_ADMIN_ACCESS_TOKEN or SKIMA_SUPER_ADMIN_EMAIL and SKIMA_SUPER_ADMIN_PASSWORD in the deployment shell, .env.local, or CI secret store.",
     );
   }
 

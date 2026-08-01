@@ -44,6 +44,26 @@ export async function requireAuthenticatedUser(
     return unauthorizedResponse(requestId);
   }
 
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("status")
+    .eq("id", data.user.id)
+    .maybeSingle();
+
+  if (!profileError && profile?.status === "disabled") {
+    return {
+      response: jsonResponse(
+        {
+          ok: false,
+          error: "account_disabled",
+          message: "This account is not active.",
+          requestId,
+        },
+        403,
+      ),
+    };
+  }
+
   return { user: data.user };
 }
 
