@@ -42,6 +42,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const body = await readWorkerBody(request);
     const limit = body.limit ?? DEFAULT_LIMIT;
 
+    const lpgLifecycle = await processLpgOrderLifecycle(supabase, limit);
     const notifications = await processNotifications(supabase, limit);
     const communications = await syncCommunicationMessages(supabase, limit);
     const aiTasks = await processAiTasks(supabase, limit);
@@ -55,6 +56,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         communications,
         expirations,
         jobs,
+        lpgLifecycle,
         notifications,
         webhooks,
         requestId: id,
@@ -70,6 +72,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         communications,
         expirations,
         jobs,
+        lpgLifecycle,
         notifications,
         webhooks,
       },
@@ -248,6 +251,21 @@ async function syncCommunicationMessages(
   }
 
   return typeof result.data === "number" ? result.data : 0;
+}
+
+async function processLpgOrderLifecycle(
+  supabase: RuntimeSupabaseClient,
+  limit: number,
+): Promise<unknown> {
+  const result = await supabase.rpc("process_lpg_order_lifecycle", {
+    target_limit: limit,
+  });
+
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+
+  return result.data ?? {};
 }
 
 async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): Promise<number> {

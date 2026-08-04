@@ -6,6 +6,10 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: "@lpg",
+        replacement: resolve(__dirname, "src"),
+      },
+      {
         find: "@skima/frontend-core",
         replacement: resolve(__dirname, "../../packages/frontend-core/src/index.ts"),
       },

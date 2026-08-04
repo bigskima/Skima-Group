@@ -60,10 +60,7 @@
 }
 
 body {
-  background:
-    radial-gradient(circle at 18% 8%, color-mix(in srgb, var(--brand) 13%, transparent), transparent 28%),
-    radial-gradient(circle at 88% 14%, color-mix(in srgb, var(--info) 12%, transparent), transparent 28%),
-    var(--page);
+  background: var(--page);
   color: var(--ink);
   margin: 0;
   min-width: 320px;
@@ -688,6 +685,28 @@ a:focus-visible {
   display: grid;
   justify-items: center;
   position: relative;
+}
+
+.runtime-media-image,
+.runtime-media-placeholder {
+  width: 88px;
+  height: 88px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.runtime-media-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: var(--soft);
+  border: 1px solid var(--line);
+}
+
+.runtime-media-placeholder svg {
+  width: 28px;
+  height: 28px;
 }
 
 .cylinder-art.is-gray {
@@ -1930,6 +1949,133 @@ a:focus-visible {
 .action-result a {
   color: var(--brand);
   font-weight: 900;
+}
+
+.workflow-header {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  margin-bottom: 20px;
+}
+
+.workflow-header h1 {
+  font-size: 1.35rem;
+  margin: 0;
+}
+
+.workflow-header p {
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+
+.workflow-form {
+  display: grid;
+  gap: 16px;
+}
+
+.workflow-form > label {
+  color: var(--ink-soft);
+  display: grid;
+  font-size: 0.82rem;
+  font-weight: 850;
+  gap: 7px;
+}
+
+.workflow-form input,
+.workflow-form select,
+.workflow-form textarea {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  min-height: 48px;
+  padding: 11px 13px;
+  width: 100%;
+}
+
+.workflow-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.form-message {
+  align-items: center;
+  border-radius: 8px;
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+}
+
+.form-message.is-error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.form-message.is-success {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.form-message svg {
+  flex: 0 0 auto;
+  height: 18px;
+  width: 18px;
+}
+
+.record-field {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 4px;
+  padding: 12px 0;
+}
+
+.record-field:last-child {
+  border-bottom: 0;
+}
+
+.record-field span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.route-empty-state {
+  display: grid;
+  justify-items: center;
+  padding: 44px 18px;
+  text-align: center;
+}
+
+.route-empty-state > span {
+  background: var(--soft);
+  border-radius: 50%;
+  color: var(--muted);
+  display: grid;
+  height: 56px;
+  place-items: center;
+  width: 56px;
+}
+
+.route-empty-state h2 {
+  font-size: 1rem;
+  margin: 14px 0 4px;
+}
+
+.route-empty-state p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.is-spinning {
+  animation: lpg-spin 900ms linear infinite;
+}
+
+@keyframes lpg-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

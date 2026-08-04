@@ -9,6 +9,7 @@
     "moduleResolution": "Bundler",
     "noEmit": true,
     "paths": {
+      "@lpg/*": ["src/*"],
       "@skima/frontend-core": ["../../packages/frontend-core/src/index.ts"],
       "@skima/mobile-design": ["../../packages/mobile-design/src/index.ts"]
     },

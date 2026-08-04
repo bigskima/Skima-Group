@@ -60,13 +60,14 @@ const migrationTexts = await Promise.all(
 const sql = migrationTexts.map((migration) => migration.contents).join("\n");
 const normalizedSql = sql.replace(/\s+/g, " ").toLowerCase();
 const platformMigrationSql = migrationTexts
-  .filter((migration) => !migration.path.includes("_lpg_bounded_context.sql"))
+  .filter((migration) => !migration.path.includes("_lpg_"))
   .map((migration) => migration.contents)
   .join("\n");
 const normalizedPlatformMigrationSql = platformMigrationSql.replace(/\s+/g, " ").toLowerCase();
-const commissionExecutionFixSql = migrationTexts.find((migration) =>
-  migration.path.endsWith("20260801020000_commission_execution_transaction_fix.sql")
-)?.contents ?? "";
+const commissionExecutionFixSql =
+  migrationTexts.find((migration) =>
+    migration.path.endsWith("20260801020000_commission_execution_transaction_fix.sql")
+  )?.contents ?? "";
 const normalizedCommissionExecutionFixSql = commissionExecutionFixSql
   .replace(/\s+/g, " ")
   .toLowerCase();
@@ -575,6 +576,24 @@ requireMatch(
   "LPG module configuration must define module-scoped permissions.",
 );
 
+requireMatch(
+  normalizedSql,
+  /create or replace function public\.reserve_lpg_refill_order_payment/,
+  "LPG bounded context must expose a backend-owned payment reservation bridge.",
+);
+
+requireMatch(
+  normalizedSql,
+  /target_actor_user_id must match lpg order customer/,
+  "LPG payment reservation must enforce the authenticated customer actor.",
+);
+
+requireMatch(
+  normalizedSql,
+  /lpg\.payment\.reserved/,
+  "LPG payment reservation must leave an immutable LPG order event.",
+);
+
 const executableRuntimeFunctions = [
   "create_module_service_request",
   "calculate_price_quote",
@@ -947,7 +966,9 @@ for (
 ) {
   requireMatch(
     normalizedSql,
-    new RegExp(`alter table public\\.${publicReferenceTable} add column if not exists public_reference text`),
+    new RegExp(
+      `alter table public\\.${publicReferenceTable} add column if not exists public_reference text`,
+    ),
     `${publicReferenceTable} must expose a backend-owned public_reference column.`,
   );
 }
@@ -1178,6 +1199,21 @@ await requireFile("scripts/verify-catalog-availability-lifecycle.ts");
 await requireFile("scripts/verify-order-operations-lifecycle.ts");
 await requireFile("scripts/verify-finance-communication-lifecycle.ts");
 await requireFile("scripts/verify-public-reference-runtime.ts");
+await requireFile("scripts/verify-lpg-payment-reservation.ts");
+
+const apiGatewaySql = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
+
+requireMatch(
+  apiGatewaySql,
+  /"\/lpg\/orders\/reserve-payment"/,
+  "API gateway must expose the LPG payment reservation route.",
+);
+
+requireMatch(
+  apiGatewaySql,
+  /reserve_lpg_refill_order_payment/,
+  "API gateway must route LPG payment reservation through the bounded-context RPC.",
+);
 
 requireCondition(
   !/create or replace function public\.[a-z0-9_]*lpg/.exec(normalizedPlatformMigrationSql),

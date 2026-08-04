@@ -24,18 +24,33 @@ const ROUTES = new Set([
   "/engines/ai-task-definitions",
   "/engines/provider-adapters",
   "/lpg/catalog",
+  "/lpg/config",
+  "/lpg/workspace-access",
   "/lpg/locations",
   "/lpg/cylinders",
+  "/lpg/cylinders/media",
   "/lpg/cylinders/history",
   "/lpg/quotes",
   "/lpg/orders",
+  "/lpg/orders/reserve-payment",
   "/lpg/orders/active",
   "/lpg/orders/dispatch",
   "/lpg/orders/accept-assignment",
+  "/lpg/orders/actions",
+  "/lpg/orders/delivery-challenge",
+  "/lpg/orders/settle-station",
+  "/lpg/orders/execute-driver-commission",
+  "/lpg/orders/refund",
+  "/lpg/orders/financial-summary",
+  "/lpg/stations",
+  "/lpg/stations/activate",
+  "/lpg/jobs",
+  "/lpg/inspections",
   "/lpg/scans",
   "/lpg/refills/confirm",
   "/lpg/driver-locations",
   "/lpg/safety-incidents",
+  "/lpg/maps/autocomplete",
   "/lpg/maps/geocode",
   "/lpg/maps/reverse-geocode",
   "/lpg/maps/route-estimate",
@@ -50,6 +65,9 @@ const ROUTES = new Set([
   "/runtime/catalog/availability",
   "/runtime/catalog/stock-adjustments",
   "/runtime/catalog/orderability",
+  "/runtime/media/upload-sessions",
+  "/runtime/media/read-sessions",
+  "/runtime/media/assets",
   "/runtime/order-actions",
   "/runtime/order-acceptance-policies",
   "/runtime/orders",
@@ -69,6 +87,7 @@ const ROUTES = new Set([
   "/runtime/documents",
   "/runtime/documents/review",
   "/runtime/drivers",
+  "/runtime/vehicle-types",
   "/runtime/vehicles",
   "/runtime/driver-vehicle-links",
   "/runtime/organization-branches",
@@ -366,6 +385,136 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     });
   }
 
+  if (routePath === "/lpg/config") {
+    if (request.method === "GET") {
+      return rpcDataResponse(supabase.rpc("read_lpg_runtime_config"), id);
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      const configType = requireString(payload.configType, "configType");
+
+      if (configType === "operationPolicy") {
+        return rpcResponse(
+          supabase.rpc("configure_lpg_operation_policy", {
+            target_display_name: requireString(payload.displayName, "displayName"),
+            target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+            target_metadata: optionalRecord(payload.metadata) ?? {},
+            target_policy: requireRecord(payload.policy, "policy"),
+            target_policy_key: requireString(payload.policyKey, "policyKey"),
+            target_policy_kind: requireString(payload.policyKind, "policyKind"),
+            target_priority: optionalInteger(payload.priority) ?? 100,
+            target_source: optionalString(payload.source) ?? "skima.lpg.config_api",
+          }),
+          id,
+        );
+      }
+
+      if (configType === "cylinderTypeProfile") {
+        return rpcResponse(
+          supabase.rpc("configure_lpg_cylinder_type_profile", {
+            target_display_name: requireString(payload.displayName, "displayName"),
+            target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+            target_key: requireString(payload.key, "key"),
+            target_max_capacity_kg: requireNumber(payload.maxCapacityKg, "maxCapacityKg"),
+            target_metadata: optionalRecord(payload.metadata) ?? {},
+            target_refill_tolerance_kg: optionalNumber(
+              payload.refillToleranceKg,
+              "refillToleranceKg",
+            ) ?? 0,
+            target_size_kg: requireNumber(payload.sizeKg, "sizeKg"),
+            target_source: optionalString(payload.source) ?? "skima.lpg.config_api",
+          }),
+          id,
+        );
+      }
+
+      if (configType === "pricing") {
+        return rpcResponse(
+          supabase.rpc("configure_lpg_refill_pricing", {
+            target_currency_code: requireString(payload.currencyCode, "currencyCode"),
+            target_delivery_base_fee: requireNumber(payload.deliveryBaseFee, "deliveryBaseFee"),
+            target_driver_commission_amount: requireNumber(
+              payload.driverCommissionAmount,
+              "driverCommissionAmount",
+            ),
+            target_effective_from: optionalString(payload.effectiveFrom),
+            target_effective_until: optionalString(payload.effectiveUntil),
+            target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+            target_max_kg: requireNumber(payload.maxKg, "maxKg"),
+            target_metadata: optionalRecord(payload.metadata) ?? {},
+            target_min_kg: requireNumber(payload.minKg, "minKg"),
+            target_platform_fee_amount: requireNumber(
+              payload.platformFeeAmount,
+              "platformFeeAmount",
+            ),
+            target_price_per_kg: requireNumber(payload.pricePerKg, "pricePerKg"),
+            target_source: optionalString(payload.source) ?? "skima.lpg.pricing_api",
+            target_station_branch_id: optionalUuid(payload.stationBranchId, "stationBranchId"),
+            target_tax_rate_percent: requireNumber(payload.taxRatePercent, "taxRatePercent"),
+          }),
+          id,
+        );
+      }
+
+      throw new RequestValidationError("configType is not supported.");
+    }
+  }
+
+  if (routePath === "/lpg/workspace-access" && request.method === "GET") {
+    return resolveLpgMobileWorkspaceAccess(supabase, authResult.user, id);
+  }
+
+  if (routePath === "/lpg/stations") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("lpg_station_branches")
+          .select(
+            "id,organization_id,branch_id,display_name,formatted_address,latitude,longitude,service_radius_meters,operating_hours,supported_cylinder_sizes_kg,refill_capacity_kg,current_available_kg,availability_status,approval_status,compliance_status,metadata,created_at,updated_at",
+          )
+          .order("display_name", { ascending: true }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      return lpgStationActivationResponse(supabase, body.value, id);
+    }
+  }
+
+  if (routePath === "/lpg/stations/activate" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    return lpgStationActivationResponse(supabase, body.value, id);
+  }
+
+  if (routePath === "/lpg/jobs" && request.method === "GET") {
+    return rpcDataResponse(
+      supabase.rpc("read_lpg_jobs", {
+        target_limit: optionalIntegerQuery(url.searchParams.get("limit")) ?? 50,
+        target_queue: url.searchParams.get("queue"),
+      }),
+      id,
+    );
+  }
+
   if (routePath === "/lpg/locations") {
     if (request.method === "GET") {
       return selectRecords(
@@ -416,7 +565,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase
           .from("lpg_cylinders")
           .select(
-            "id,public_reference,cylinder_identifier,qr_payload,barcode_payload,size_kg,max_capacity_kg,manufacturer,brand,colour,serial_number,manufactured_at,last_inspection_at,next_inspection_at,condition_status,valve_type,ownership_proof_asset_id,image_asset_ids,status,safety_restriction,notes,metadata,created_at,updated_at",
+            "id,public_reference,cylinder_identifier,qr_payload,barcode_payload,size_kg,max_capacity_kg,manufacturer,brand,colour,serial_number,manufactured_at,last_inspection_at,next_inspection_at,condition_status,valve_type,ownership_proof_asset_id,ownership_proof_media_asset_id,image_asset_ids,status,safety_restriction,notes,metadata,created_at,updated_at",
           )
           .neq("status", "deactivated")
           .order("created_at", { ascending: false }),
@@ -466,6 +615,27 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         "lpg_cylinders",
       );
     }
+  }
+
+  if (routePath === "/lpg/cylinders/media" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("attach_lpg_cylinder_media", {
+        target_cylinder_id: requireUuid(payload.cylinderId, "cylinderId"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_media_asset_id: requireUuid(payload.mediaAssetId, "mediaAssetId"),
+        target_media_role: optionalString(payload.mediaRole) ?? "image",
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_source: optionalString(payload.source) ?? "skima.lpg.mobile",
+      }),
+      id,
+    );
   }
 
   if (routePath === "/lpg/cylinders/history" && request.method === "GET") {
@@ -571,6 +741,43 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
   }
 
+  if (routePath === "/lpg/orders/reserve-payment" && request.method === "POST") {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!serviceRoleKey) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "server_misconfigured",
+          requestId: id,
+        },
+        500,
+      );
+    }
+
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+
+    return lpgPaymentReservationResponse(
+      serviceClient.rpc("reserve_lpg_refill_order_payment", {
+        target_actor_user_id: authResult.user.id,
+        target_customer_wallet_id: optionalUuid(payload.customerWalletId, "customerWalletId"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_source: optionalString(payload.source) ?? "skima.lpg.payment_api",
+      }),
+      id,
+      serviceClient,
+    );
+  }
+
   if (routePath === "/lpg/orders/active" && request.method === "GET") {
     return selectRecords(
       supabase
@@ -610,11 +817,29 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const payload = body.value;
+    const lpgOrderId = requireUuid(payload.lpgOrderId, "lpgOrderId");
+    const operationsCheck = await supabase.rpc("can_manage_lpg_operations");
+
+    if (operationsCheck.error) {
+      return databaseError(operationsCheck.error, id);
+    }
+
+    if (operationsCheck.data !== true) {
+      return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+    }
+
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
     return rpcResponse(
-      supabase.rpc("dispatch_lpg_order", {
-        target_candidate_limit: optionalInteger(payload.candidateLimit) ?? 5,
+      serviceClient.rpc("dispatch_lpg_order", {
+        target_candidate_limit: optionalInteger(payload.candidateLimit),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-        target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+        target_lpg_order_id: lpgOrderId,
         target_source: optionalString(payload.source) ?? "skima.lpg.dispatch_api",
       }),
       id,
@@ -629,15 +854,235 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const payload = body.value;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+    }
+
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
     return rpcResponse(
-      supabase.rpc("accept_lpg_driver_assignment", {
+      serviceClient.rpc("accept_lpg_driver_assignment", {
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
-        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_metadata: {
+          ...(optionalRecord(payload.metadata) ?? {}),
+          server_actor_user_id: authResult.user.id,
+        },
         target_source: optionalString(payload.source) ?? "skima.lpg.driver_api",
       }),
       id,
     );
+  }
+
+  if (routePath === "/lpg/orders/actions" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("process_lpg_order_action", {
+        target_action_key: requireString(payload.actionKey, "actionKey"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+        target_payload: optionalRecord(payload.payload) ?? {},
+        target_source: optionalString(payload.source) ?? "skima.lpg.order_action_api",
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/orders/delivery-challenge" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    const action = optionalString(payload.action) ?? "request";
+
+    if (action === "request") {
+      return rpcResponse(
+        supabase.rpc("request_lpg_delivery_challenge", {
+          target_channel: optionalString(payload.channel) ?? "in_app",
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_recipient_address: requireString(payload.recipientAddress, "recipientAddress"),
+          target_source: optionalString(payload.source) ?? "skima.lpg.delivery_challenge_api",
+        }),
+        id,
+      );
+    }
+
+    if (action === "verify") {
+      return rpcResponse(
+        supabase.rpc("verify_lpg_delivery_challenge", {
+          target_challenge_id: requireUuid(payload.challengeId, "challengeId"),
+          target_code: requireString(payload.code, "code"),
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+        }),
+        id,
+      );
+    }
+
+    throw new RequestValidationError("delivery challenge action is not supported.");
+  }
+
+  if (routePath === "/lpg/orders/settle-station" && request.method === "POST") {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+    }
+
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("settle_lpg_station_order", {
+        target_actor_user_id: authResult.user.id,
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_platform_wallet_id: optionalUuid(payload.platformWalletId, "platformWalletId"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.station_settlement_api",
+        target_station_wallet_id: optionalUuid(payload.stationWalletId, "stationWalletId"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/orders/execute-driver-commission" && request.method === "POST") {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+    }
+
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("execute_lpg_driver_commission", {
+        target_actor_user_id: authResult.user.id,
+        target_driver_wallet_id: optionalUuid(payload.driverWalletId, "driverWalletId"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_source: optionalString(payload.source) ?? "skima.lpg.driver_commission_api",
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/orders/refund" && request.method === "POST") {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+    }
+
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("refund_lpg_order_payment", {
+        target_actor_user_id: authResult.user.id,
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_reason_key: optionalString(payload.reasonKey) ?? "lpg.refund.manual",
+        target_refund_amount: optionalNumber(payload.refundAmount, "refundAmount"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.refund_api",
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/orders/financial-summary" && request.method === "GET") {
+    const lpgOrderId = requireUuid(url.searchParams.get("lpgOrderId"), "lpgOrderId");
+    const accessCheck = await supabase.rpc("can_access_lpg_order", {
+      target_lpg_order_id: lpgOrderId,
+    });
+
+    if (accessCheck.error) {
+      return databaseError(accessCheck.error, id);
+    }
+
+    if (accessCheck.data !== true) {
+      return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+    }
+
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcDataResponse(
+      serviceClient.rpc("reconcile_lpg_order_financials", {
+        target_lpg_order_id: lpgOrderId,
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/inspections") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("lpg_cylinder_inspections")
+          .select(
+            "id,lpg_order_id,cylinder_id,station_branch_id,inspected_by_user_id,verification_event_id,result,evidence_media_asset_ids,observations,source,idempotency_key,created_at,updated_at",
+          )
+          .order("created_at", { ascending: false }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("record_lpg_cylinder_inspection", {
+          target_evidence_media_asset_ids: optionalStringArray(payload.evidenceMediaAssetIds) ?? [],
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+          target_observations: optionalRecord(payload.observations) ?? {},
+          target_result: requireString(payload.result, "result"),
+          target_source: optionalString(payload.source) ?? "skima.lpg.inspection_api",
+        }),
+        id,
+      );
+    }
   }
 
   if (routePath === "/lpg/scans" && request.method === "POST") {
@@ -678,7 +1123,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_actual_kg: requireNumber(payload.actualKg, "actualKg"),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
-        target_price_per_kg: requireNumber(payload.pricePerKg, "pricePerKg"),
+        target_price_per_kg: optionalNumber(payload.pricePerKg, "pricePerKg"),
         target_safety_observations: optionalRecord(payload.safetyObservations) ?? {},
         target_source: optionalString(payload.source) ?? "skima.lpg.station_api",
       }),
@@ -779,6 +1224,164 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
   if (routePath === "/lpg/maps/route-estimate" && request.method === "POST") {
     return handleGoogleRouteEstimateRequest(request, id, supabaseUrl);
+  }
+
+  if (routePath === "/lpg/maps/autocomplete" && request.method === "POST") {
+    return handleMapsAutocompleteRequest(request, id, supabase, supabaseUrl);
+  }
+
+  if (routePath === "/runtime/media/assets") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("media_assets")
+          .select(
+            "id,organization_id,owner_user_id,asset_type_key,storage_bucket,storage_path,content_type,byte_size,checksum,status,metadata,created_at,updated_at",
+          )
+          .order("created_at", { ascending: false }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("register_media_asset", {
+          target_asset_type_key: optionalString(payload.assetTypeKey) ?? "media.generic",
+          target_byte_size: optionalInteger(payload.byteSize),
+          target_checksum: optionalString(payload.checksum),
+          target_content_type: optionalString(payload.contentType),
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_organization_id: optionalUuid(payload.organizationId, "organizationId"),
+          target_owner_user_id: optionalUuid(payload.ownerUserId, "ownerUserId"),
+          target_source: optionalString(payload.source) ?? "skima.media_registry_api",
+          target_status: optionalString(payload.status) ?? "active",
+          target_storage_bucket: requireString(payload.storageBucket, "storageBucket"),
+          target_storage_path: requireString(payload.storagePath, "storagePath"),
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/runtime/media/read-sessions" && request.method === "POST") {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+    }
+
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const assetId = requireUuid(body.value.assetId, "assetId");
+    requireString(body.value.idempotencyKey, "idempotencyKey");
+    const assetResult = await supabase
+      .from("media_assets")
+      .select("id,storage_bucket,storage_path,content_type,status")
+      .eq("id", assetId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (assetResult.error) {
+      return databaseError(assetResult.error, id);
+    }
+
+    if (!assetResult.data) {
+      return jsonResponse({ ok: false, error: "media_asset_not_found", requestId: id }, 404);
+    }
+
+    const storageBucket = requireString(
+      getRecordValue(assetResult.data, "storage_bucket"),
+      "storageBucket",
+    );
+    const storagePath = requireString(
+      getRecordValue(assetResult.data, "storage_path"),
+      "storagePath",
+    );
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const signedReadResult = await serviceClient.storage
+      .from(storageBucket)
+      .createSignedUrl(storagePath, 900);
+
+    if (signedReadResult.error) {
+      return databaseError(signedReadResult.error, id);
+    }
+
+    return jsonResponse({
+      ok: true,
+      data: {
+        assetId,
+        contentType: stringOrNull(getRecordValue(assetResult.data, "content_type")),
+        expiresInSeconds: 900,
+        signedUrl: signedReadResult.data.signedUrl,
+      },
+      requestId: id,
+    });
+  }
+
+  if (routePath === "/runtime/media/upload-sessions" && request.method === "POST") {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+    }
+
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    const storageBucket = optionalString(payload.storageBucket) ?? "skima-platform-media";
+
+    if (!["skima-platform-documents", "skima-platform-media"].includes(storageBucket)) {
+      throw new RequestValidationError("storageBucket must reference an approved platform bucket.");
+    }
+
+    const idempotencyKey = requireString(payload.idempotencyKey, "idempotencyKey");
+    const contentType = optionalString(payload.contentType);
+    const fileName = sanitizeStoragePathSegment(optionalString(payload.fileName) ?? "upload.bin");
+    const storagePath = optionalString(payload.storagePath) ??
+      `${authResult.user.id}/${sanitizeStoragePathSegment(idempotencyKey)}/${fileName}`;
+
+    if (!storagePath.startsWith(`${authResult.user.id}/`)) {
+      throw new RequestValidationError("storagePath must be scoped under the authenticated user id.");
+    }
+
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const signedUploadResult = await serviceClient.storage
+      .from(storageBucket)
+      .createSignedUploadUrl(storagePath);
+
+    if (signedUploadResult.error) {
+      return databaseError(signedUploadResult.error, id);
+    }
+
+    return jsonResponse({
+      ok: true,
+      data: {
+        contentType,
+        expiresInSeconds: 7200,
+        method: "PUT",
+        signedUrl: signedUploadResult.data.signedUrl,
+        storageBucket,
+        storagePath,
+        token: signedUploadResult.data.token,
+      },
+      requestId: id,
+    });
   }
 
   if (routePath === "/runtime/catalog" && request.method === "GET") {
@@ -1540,6 +2143,19 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           "id,user_id,organization_id,operational_status,verification_status,identity_profile,license_profile,service_profile,approved_at,metadata,created_at,updated_at",
         )
         .order("created_at", { ascending: false }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/vehicle-types" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("vehicle_types")
+        .select(
+          "id,key,display_name,capability_schema,status,created_at,updated_at",
+        )
+        .eq("status", "active")
+        .order("display_name", { ascending: true }),
       id,
     );
   }
@@ -2454,7 +3070,23 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     );
   }
 
-  if (routePath === "/runtime/tracking/sessions" && request.method === "POST") {
+  if (routePath === "/runtime/tracking/sessions") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("tracking_sessions")
+          .select(
+            "id,subject_type,subject_id,provider_adapter_id,status,started_by,started_at,ended_at,metadata,updated_at",
+          )
+          .order("started_at", { ascending: false }),
+        id,
+      );
+    }
+
+    if (request.method !== "POST") {
+      return jsonResponse({ ok: false, error: "method_not_allowed", requestId: id }, 405);
+    }
+
     const body = await readJsonBody(request, id);
 
     if ("response" in body) {
@@ -2475,7 +3107,31 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     );
   }
 
-  if (routePath === "/runtime/tracking/points" && request.method === "POST") {
+  if (routePath === "/runtime/tracking/points") {
+    if (request.method === "GET") {
+      const trackingSessionId = url.searchParams.get("trackingSessionId");
+      let query = supabase
+        .from("tracking_points")
+        .select(
+          "id,tracking_session_id,recorded_by,latitude,longitude,accuracy_meters,speed_meters_per_second,heading_degrees,metadata,recorded_at,created_at",
+        )
+        .order("recorded_at", { ascending: false })
+        .limit(500);
+
+      if (trackingSessionId) {
+        query = query.eq(
+          "tracking_session_id",
+          requireUuid(trackingSessionId, "trackingSessionId"),
+        );
+      }
+
+      return selectRecords(query, id);
+    }
+
+    if (request.method !== "POST") {
+      return jsonResponse({ ok: false, error: "method_not_allowed", requestId: id }, 405);
+    }
+
     const body = await readJsonBody(request, id);
 
     if ("response" in body) {
@@ -3171,6 +3827,181 @@ interface SelectQuery {
   ): PromiseLike<TResult1 | TResult2>;
 }
 
+async function resolveLpgMobileWorkspaceAccess(
+  supabase: SupabaseClient,
+  user: User,
+  id: string,
+): Promise<Response> {
+  const driverResult = await supabase
+    .from("driver_profiles")
+    .select("id,verification_status,operational_status")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (driverResult.error) {
+    return databaseError(driverResult.error, id);
+  }
+
+  const userRolesResult = await supabase
+    .from("user_roles")
+    .select("id,organization_id,branch_id,role_id,status")
+    .eq("user_id", user.id)
+    .eq("status", "active");
+
+  if (userRolesResult.error) {
+    return databaseError(userRolesResult.error, id);
+  }
+
+  const driverProfileId = stringOrNull(getRecordValue(driverResult.data, "id"));
+  let driverVehicleIds: string[] = [];
+  let driverCapabilityKeys: string[] = [];
+
+  if (
+    driverProfileId &&
+    stringOrNull(getRecordValue(driverResult.data, "verification_status")) === "approved"
+  ) {
+    const linkResult = await supabase
+      .from("driver_vehicle_links")
+      .select("vehicle_id,starts_at,ends_at,status")
+      .eq("driver_profile_id", driverProfileId)
+      .eq("status", "active");
+
+    if (linkResult.error) {
+      return databaseError(linkResult.error, id);
+    }
+
+    const now = Date.now();
+    const linkedVehicleIds = (Array.isArray(linkResult.data) ? linkResult.data : [])
+      .filter((link) => {
+        const startsAt = stringOrNull(getRecordValue(link, "starts_at"));
+        const endsAt = stringOrNull(getRecordValue(link, "ends_at"));
+        return (!startsAt || Date.parse(startsAt) <= now) && (!endsAt || Date.parse(endsAt) > now);
+      })
+      .map((link) => stringOrNull(getRecordValue(link, "vehicle_id")))
+      .filter((vehicleId): vehicleId is string => vehicleId !== null);
+
+    if (linkedVehicleIds.length > 0) {
+      const vehicleResult = await supabase
+        .from("vehicles")
+        .select("id")
+        .in("id", linkedVehicleIds)
+        .eq("status", "active");
+
+      if (vehicleResult.error) {
+        return databaseError(vehicleResult.error, id);
+      }
+
+      driverVehicleIds = (Array.isArray(vehicleResult.data) ? vehicleResult.data : [])
+        .map((vehicle) => stringOrNull(getRecordValue(vehicle, "id")))
+        .filter((vehicleId): vehicleId is string => vehicleId !== null);
+    }
+
+    const capabilityEntityIds = [driverProfileId, ...driverVehicleIds];
+    const capabilityResult = await supabase
+      .from("entity_capabilities")
+      .select("capability_key")
+      .in("entity_id", capabilityEntityIds)
+      .eq("status", "active");
+
+    if (capabilityResult.error) {
+      return databaseError(capabilityResult.error, id);
+    }
+
+    driverCapabilityKeys = Array.from(new Set(
+      (Array.isArray(capabilityResult.data) ? capabilityResult.data : [])
+        .map((capability) => stringOrNull(getRecordValue(capability, "capability_key")))
+        .filter((key): key is string => key !== null),
+    )).sort();
+  }
+
+  const userRoles = Array.isArray(userRolesResult.data) ? userRolesResult.data : [];
+  const roleIds = userRoles
+    .map((role) => stringOrNull(getRecordValue(role, "role_id")))
+    .filter((roleId): roleId is string => roleId !== null);
+  const rolesResult = roleIds.length === 0
+    ? { data: [], error: null }
+    : await supabase.from("roles").select("id,key").in("id", roleIds).eq("status", "active");
+
+  if (rolesResult.error) {
+    return databaseError(rolesResult.error, id);
+  }
+
+  const roleById = recordsByStringId(Array.isArray(rolesResult.data) ? rolesResult.data : []);
+  const stationAssignments = userRoles.filter((assignedRole) => {
+    const roleId = stringOrNull(getRecordValue(assignedRole, "role_id"));
+    const roleKey = roleId ? stringOrNull(getRecordValue(roleById.get(roleId), "key")) : null;
+    return roleKey?.startsWith("lpg.station.") === true;
+  });
+  const stationOrganizationIds = Array.from(new Set(
+    stationAssignments
+      .map((role) => stringOrNull(getRecordValue(role, "organization_id")))
+      .filter((organizationId): organizationId is string => organizationId !== null),
+  ));
+  const stationResult = stationOrganizationIds.length === 0
+    ? { data: [], error: null }
+    : await supabase
+      .from("lpg_station_branches")
+      .select("id,organization_id,branch_id,approval_status,compliance_status")
+      .in("organization_id", stationOrganizationIds)
+      .eq("approval_status", "approved")
+      .neq("compliance_status", "suspended");
+
+  if (stationResult.error) {
+    return databaseError(stationResult.error, id);
+  }
+
+  const approvedStations = Array.isArray(stationResult.data) ? stationResult.data : [];
+  const approvedStationIds = approvedStations
+    .map((station) => stringOrNull(getRecordValue(station, "id")))
+    .filter((stationId): stationId is string => stationId !== null);
+  const approvedBranchIds = approvedStations
+    .map((station) => stringOrNull(getRecordValue(station, "branch_id")))
+    .filter((branchId): branchId is string => branchId !== null);
+  const stationRoleKeys = stationAssignments
+    .map((assignedRole) => {
+      const roleId = stringOrNull(getRecordValue(assignedRole, "role_id"));
+      return roleId ? stringOrNull(getRecordValue(roleById.get(roleId), "key")) : null;
+    })
+    .filter((roleKey): roleKey is string => roleKey !== null);
+  const workspaces: Array<Record<string, unknown>> = [{
+    key: "customer",
+    status: "active",
+    subjectType: "profile",
+    subjectId: user.id,
+    capabilityKeys: [],
+    organizationIds: [],
+    branchIds: [],
+  }];
+
+  if (driverProfileId && driverVehicleIds.length > 0) {
+    workspaces.push({
+      key: "driver",
+      status: "active",
+      subjectType: "driver_profile",
+      subjectId: driverProfileId,
+      capabilityKeys: driverCapabilityKeys,
+      organizationIds: [],
+      branchIds: [],
+      vehicleIds: driverVehicleIds,
+    });
+  }
+
+  if (approvedStationIds.length > 0 && stationRoleKeys.length > 0) {
+    workspaces.push({
+      key: "station",
+      status: "active",
+      subjectType: "lpg_station_branch",
+      subjectId: approvedStationIds[0],
+      capabilityKeys: stationRoleKeys,
+      organizationIds: stationOrganizationIds,
+      branchIds: approvedBranchIds,
+      stationIds: approvedStationIds,
+    });
+  }
+
+  return jsonResponse({ ok: true, data: { workspaces }, requestId: id });
+}
+
 async function resolveSessionContext(
   supabase: SupabaseClient,
   user: User,
@@ -3360,6 +4191,53 @@ async function rpcResponse(query: SelectQuery, id: string): Promise<Response> {
   });
 }
 
+async function rpcDataResponse(query: SelectQuery, id: string): Promise<Response> {
+  const { data, error } = await query;
+
+  if (error) {
+    return databaseError(error as { readonly message: string; readonly code?: string }, id);
+  }
+
+  return jsonResponse({
+    ok: true,
+    data,
+    requestId: id,
+  });
+}
+
+function lpgStationActivationResponse(
+  supabase: SupabaseClient,
+  payload: Readonly<Record<string, unknown>>,
+  id: string,
+): Promise<Response> {
+  return rpcResponse(
+    supabase.rpc("activate_lpg_station_branch", {
+      target_application_id: optionalUuid(payload.applicationId, "applicationId"),
+      target_branch_id: optionalUuid(payload.branchId, "branchId"),
+      target_branch_key: optionalString(payload.branchKey),
+      target_current_available_kg: optionalNumber(payload.currentAvailableKg, "currentAvailableKg"),
+      target_display_name: optionalString(payload.displayName),
+      target_formatted_address: optionalString(payload.formattedAddress),
+      target_geofence: optionalRecord(payload.geofence) ?? {},
+      target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+      target_latitude: optionalNumber(payload.latitude, "latitude"),
+      target_longitude: optionalNumber(payload.longitude, "longitude"),
+      target_metadata: optionalRecord(payload.metadata) ?? {},
+      target_operating_hours: optionalRecord(payload.operatingHours) ?? {},
+      target_organization_id: optionalUuid(payload.organizationId, "organizationId"),
+      target_owner_user_id: optionalUuid(payload.ownerUserId, "ownerUserId"),
+      target_refill_capacity_kg: optionalNumber(payload.refillCapacityKg, "refillCapacityKg") ?? 0,
+      target_service_radius_meters: optionalInteger(payload.serviceRadiusMeters) ?? 8000,
+      target_source: optionalString(payload.source) ?? "skima.lpg.station_activation_api",
+      target_supported_cylinder_sizes_kg: optionalNumberArray(
+        payload.supportedCylinderSizesKg,
+        "supportedCylinderSizesKg",
+      ) ?? [],
+    }),
+    id,
+  );
+}
+
 async function rpcResponseWithPublicReference(
   query: SelectQuery,
   id: string,
@@ -3403,6 +4281,77 @@ async function rpcResponseWithPublicReference(
     ok: true,
     id: recordId,
     publicReference,
+    requestId: id,
+  });
+}
+
+async function lpgPaymentReservationResponse(
+  query: SelectQuery,
+  id: string,
+  supabase: SupabaseClient,
+): Promise<Response> {
+  const { data, error } = await query;
+
+  if (error) {
+    return databaseError(error as { readonly message: string; readonly code?: string }, id);
+  }
+
+  const lpgOrderId = stringOrNull(data);
+
+  if (!lpgOrderId) {
+    return databaseError({ message: "RPC did not return an LPG order id." }, id);
+  }
+
+  const orderResult = await supabase
+    .from("lpg_refill_orders")
+    .select(
+      "id,public_reference,service_request_id,escrow_hold_id,currency_code,total_amount,status,payment_status",
+    )
+    .eq("id", lpgOrderId)
+    .maybeSingle();
+
+  if (orderResult.error) {
+    return databaseError(orderResult.error, id);
+  }
+
+  const publicReference = stringOrNull(getRecordValue(orderResult.data, "public_reference"));
+
+  if (!publicReference) {
+    return databaseError(
+      { message: `Public reference was not assigned for LPG order ${lpgOrderId}.` },
+      id,
+    );
+  }
+
+  const escrowHoldId = stringOrNull(getRecordValue(orderResult.data, "escrow_hold_id"));
+  const holdResult = escrowHoldId
+    ? await supabase
+      .from("escrow_holds")
+      .select("id,wallet_id,status,currency_code,hold_amount")
+      .eq("id", escrowHoldId)
+      .maybeSingle()
+    : { data: null, error: null };
+
+  if (holdResult.error) {
+    return databaseError(holdResult.error, id);
+  }
+
+  return jsonResponse({
+    ok: true,
+    id: lpgOrderId,
+    publicReference,
+    data: {
+      lpgOrderId,
+      publicReference,
+      serviceRequestId: stringOrNull(getRecordValue(orderResult.data, "service_request_id")),
+      escrowHoldId,
+      escrowWalletId: stringOrNull(getRecordValue(holdResult.data, "wallet_id")),
+      escrowStatus: stringOrNull(getRecordValue(holdResult.data, "status")),
+      currencyCode: stringOrNull(getRecordValue(orderResult.data, "currency_code")),
+      totalAmount: getRecordValue(orderResult.data, "total_amount"),
+      status: stringOrNull(getRecordValue(orderResult.data, "status")),
+      paymentStatus: stringOrNull(getRecordValue(orderResult.data, "payment_status")),
+    },
     requestId: id,
   });
 }
@@ -3637,6 +4586,150 @@ async function handleGoogleRouteEstimateRequest(
     data,
     requestId: id,
   });
+}
+
+async function handleMapsAutocompleteRequest(
+  request: Request,
+  id: string,
+  supabase: SupabaseClient,
+  supabaseUrl: string,
+): Promise<Response> {
+  const body = await readJsonBody(request, id);
+
+  if ("response" in body) {
+    return body.response;
+  }
+
+  const payload = body.value;
+  const input = requireString(payload.input, "input");
+  const idempotencyKey = optionalString(payload.idempotencyKey) ??
+    createGatewayIdempotencyKey(id, "maps-autocomplete");
+  const mapsPolicyResult = await supabase.rpc("lpg_policy_config", {
+    target_policy_key: "lpg.maps.phase_one",
+  });
+
+  if (mapsPolicyResult.error) {
+    return databaseError(mapsPolicyResult.error, id);
+  }
+
+  const mapsPolicy = requireRecord(mapsPolicyResult.data, "LPG maps policy");
+  const activeProviderKey = requireString(mapsPolicy.active_provider_key, "active_provider_key");
+  const requestPayload: Record<string, unknown> = {
+    input,
+    operation: "autocomplete",
+    providerAdapterKey: activeProviderKey,
+  };
+
+  if (activeProviderKey === "provider.maps.sandbox") {
+    const data = {
+      operation: "autocomplete",
+      predictions: [
+        {
+          description: input,
+          matchedSubstrings: [{ length: input.length, offset: 0 }],
+          placeId: `sandbox:${crypto.randomUUID()}`,
+          structuredFormatting: {
+            mainText: input,
+            secondaryText: "Sandbox location",
+          },
+        },
+      ],
+      provider: "sandbox",
+    };
+
+    await maybeRecordGatewayProviderExecution(supabaseUrl, {
+      errorMessage: null,
+      idempotencyKey: `${idempotencyKey}:maps`,
+      operationKey: "provider.maps.autocomplete",
+      providerAdapterKey: activeProviderKey,
+      providerKind: "maps",
+      requestPayload,
+      responsePayload: data,
+      status: "succeeded",
+    });
+
+    return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (activeProviderKey !== "provider.maps.google-maps") {
+    throw new RequestValidationError("configured maps provider does not support autocomplete yet.");
+  }
+
+  const googleMapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+
+  if (!googleMapsKey) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "server_misconfigured",
+        message: "Google Maps requires GOOGLE_MAPS_API_KEY in Supabase secrets.",
+        requestId: id,
+      },
+      500,
+    );
+  }
+
+  const countryComponent = optionalString(payload.countryComponent);
+  const queryUrl = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
+  queryUrl.searchParams.set("input", input);
+  queryUrl.searchParams.set("key", googleMapsKey);
+
+  if (countryComponent) {
+    queryUrl.searchParams.set("components", countryComponent);
+    requestPayload.countryComponent = countryComponent;
+  }
+
+  const providerResponse = await fetch(queryUrl.toString());
+  const responsePayload = requireRecordOrEmpty(await readProviderJson(providerResponse));
+  const providerStatus = optionalString(responsePayload.status);
+
+  if (!providerResponse.ok || providerStatus !== "OK") {
+    const message = optionalString(responsePayload.error_message) ??
+      optionalString(responsePayload.status) ??
+      "Google Maps autocomplete request failed.";
+    await maybeRecordGatewayProviderExecution(supabaseUrl, {
+      errorMessage: message,
+      idempotencyKey: `${idempotencyKey}:maps`,
+      operationKey: "provider.maps.autocomplete",
+      providerAdapterKey: activeProviderKey,
+      providerKind: "maps",
+      requestPayload,
+      responsePayload: sanitizeProviderPayload(responsePayload),
+      status: "failed",
+    });
+
+    return jsonResponse(
+      {
+        ok: false,
+        error: "provider_error",
+        message,
+        requestId: id,
+      },
+      502,
+    );
+  }
+
+  const predictions = Array.isArray(responsePayload.predictions)
+    ? responsePayload.predictions
+    : [];
+  const data = {
+    operation: "autocomplete",
+    predictions,
+    provider: "google_maps",
+  };
+
+  await maybeRecordGatewayProviderExecution(supabaseUrl, {
+    errorMessage: null,
+    idempotencyKey: `${idempotencyKey}:maps`,
+    operationKey: "provider.maps.autocomplete",
+    providerAdapterKey: activeProviderKey,
+    providerKind: "maps",
+    requestPayload,
+    responsePayload: data,
+    status: "succeeded",
+  });
+
+  return jsonResponse({ ok: true, data, requestId: id });
 }
 
 async function initializePaystackDeposit(
@@ -4106,6 +5199,20 @@ function optionalInteger(value: unknown): number | null {
   return requireInteger(value, "optional integer field");
 }
 
+function optionalIntegerQuery(value: string | null): number | null {
+  if (value === null || value.trim().length === 0) {
+    return null;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed)) {
+    throw new RequestValidationError("query integer field must be an integer.");
+  }
+
+  return parsed;
+}
+
 function requireNumber(value: unknown, fieldName: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new RequestValidationError(`${fieldName} must be a finite number.`);
@@ -4120,6 +5227,18 @@ function optionalNumber(value: unknown, fieldName: string): number | null {
   }
 
   return requireNumber(value, fieldName);
+}
+
+function optionalNumberArray(value: unknown, fieldName: string): number[] | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "number" || !Number.isFinite(item))) {
+    throw new RequestValidationError(`${fieldName} must be an array of finite numbers.`);
+  }
+
+  return value;
 }
 
 function requireCoordinate(
@@ -4209,6 +5328,16 @@ function requireArray(value: unknown, fieldName: string): readonly unknown[] {
   }
 
   return value;
+}
+
+function sanitizeStoragePathSegment(value: string): string {
+  const sanitized = value.trim().replace(/[^A-Za-z0-9._-]/g, "-").replace(/-+/g, "-");
+
+  if (sanitized.length === 0 || sanitized === "." || sanitized === "..") {
+    throw new RequestValidationError("storage path segment is invalid.");
+  }
+
+  return sanitized.slice(0, 120);
 }
 
 function invalidRequest(requestIdValue: string, message: string): JsonBodyResult {
