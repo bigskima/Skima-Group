@@ -1,6 +1,6 @@
-# Skima Platform
+# Skima LPG
 
-Skima is a universal, AI-first operating system for logistics, commerce, mobility, and fulfillment.
+Skima LPG is the current Phase 1 launch product for LPG cylinder registration, refill ordering, station fulfilment, driver pickup/return, wallet-backed payment, tracking, verification, settlement, and commission workflows. It is built on reusable Skima platform engines, but the active customer, driver, station, and operations experiences are LPG-specific.
 
 This repository is starting from a clean platform foundation. The governing source of truth is:
 
@@ -20,8 +20,7 @@ The backend foundation uses Supabase:
 
 ## Current Milestone
 
-The backend-first remediation for Milestones 1-3 is approved. Milestone 4 reusable frontend
-foundation work has started.
+The backend-first remediation for Milestones 1-3 is approved. Milestone 4 now focuses on productionizing the dedicated Skima LPG launch application and LPG operations tooling, while keeping shared engines reusable underneath.
 
 Milestone status is evidence-based:
 
@@ -30,8 +29,7 @@ Milestone status is evidence-based:
 - Milestone 3: Approved
 - Milestone 4: In Progress
 
-LPG remains the first module and is configured as database records and engine bindings, not platform
-source-code logic.
+The reusable platform foundation remains in place, but LPG is no longer treated as a generic optional service in the launch UI. The current product surface is Skima LPG, backed by dedicated LPG runtime tables, routes, workflows, scans, station operations, driver jobs, settlements, and commissions.
 
 The hosted Supabase gates now prove the Milestones 1-3 backend through no-frontend API/RPC flows:
 business applications, document review, approval-to-activation, driver and vehicle onboarding,
@@ -52,17 +50,15 @@ See [Backend Domain Audit](docs/26-backend-domain-audit.md).
 
 Milestone 4 introduces:
 
-- `apps/admin` for the first reusable platform operations shell
-- `apps/mobile` for the first role-aware mobile interface foundation
+- `apps/lpg-mobile` for the dedicated Skima LPG launch mobile application
+- `apps/admin` for the current Skima LPG operations web console until it is moved or aliased to `apps/skima-admin-web`
+- `apps/mobile` as a reusable mobile foundation/reference shell only, not a second launch product
 - `packages/frontend-core` for client-safe Supabase setup, gateway access, runtime validation,
   permissions, navigation, and onboarding logic
 - `packages/mobile-design` for mobile design, media, role, and module visual contracts
 - `packages/ui` for the reusable design system primitives
 
-The first admin operation slice supports application and document review through authenticated
-gateway actions: reviewer assignment, correction requests, approval, rejection, and document
-decisions. It remains business-agnostic and uses backend application/document configuration instead
-of LPG-specific UI logic.
+The admin operations surface should operate the LPG business: LPG customers, drivers, stations, applications, orders, scans, settlements, commissions, safety/disputes, and LPG configuration. Shared admin primitives may remain reusable, but launch-facing admin navigation should not promote unrelated businesses.
 
 Frontend client env values must be Vite-prefixed:
 
@@ -83,7 +79,7 @@ npm run mobile:build
 ```
 
 The Phase 1 LPG mobile product is governed by the uploaded visual reference pack in
-[docs/lpg-ui](docs/lpg-ui/README.md). Use that pack for the customer, driver, station, role
+[apps/lpg-mobile/lpg-ui](apps/lpg-mobile/lpg-ui/README.md). Use that pack for the customer, driver, station, role
 switching, onboarding, wallet, order, scan, settlement, inventory, and account screens before
 approving mobile UI quality.
 

@@ -8,6 +8,7 @@ export function useGatewayQuery<TData>(input: {
   readonly path: string;
   readonly schema: ZodType<TData>;
   readonly enabled?: boolean;
+  readonly refetchIntervalMs?: number;
 }) {
   const session = useSession();
 
@@ -15,5 +16,6 @@ export function useGatewayQuery<TData>(input: {
     enabled: session.status === "authenticated" && (input.enabled ?? true),
     queryFn: ({ signal }) => session.api.get(input.path, input.schema, { signal }),
     queryKey: ["lpg-mobile", ...input.key, input.path],
+    refetchInterval: input.refetchIntervalMs,
   });
 }

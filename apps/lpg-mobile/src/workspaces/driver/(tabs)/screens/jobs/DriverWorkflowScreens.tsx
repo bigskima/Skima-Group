@@ -2,6 +2,7 @@ import { CheckCircle2, MapPin, Navigation, Phone, RefreshCw, ShieldCheck, Truck,
 import { type FormEvent, useState } from "react";
 
 import { useSession } from "@lpg/app/providers/SessionProvider";
+import { buildDriverLocationPayload } from "@lpg/features/drivers/locationPayload";
 import { useDeviceLocation } from "@lpg/features/location/useDeviceLocation";
 import { useJobDetailsQuery, useOrderFinancialSummaryQuery, useScansQuery } from "@lpg/features/orders/api";
 import { BarcodeScannerInput } from "@lpg/features/scanning/BarcodeScannerInput";
@@ -65,19 +66,14 @@ function DriverRouteStageScreen(props: DriverScreenProps & {
       const driverId = getRecordId(driver);
       if (!driverId) throw new Error("The assigned driver profile is missing.");
       const point = await location.request();
-      await session.api.post("/lpg/driver-locations", {
-        accuracyMeters: point.accuracyMeters,
+      await session.api.post("/lpg/driver-locations", buildDriverLocationPayload({
         driverProfileId: driverId,
-        headingDegrees: point.headingDegrees,
-        idempotencyKey: createLpgIdempotencyKey("driver-route", point.recordedAt),
-        latitude: point.latitude,
-        longitude: point.longitude,
+        location: point,
         lpgOrderId: orderId,
-        onlineStatus: "busy",
-        recordedAt: point.recordedAt,
-        source: "skima.lpg.mobile",
-        speedMetersPerSecond: point.speedMetersPerSecond,
-      }, ActionResponseSchema);
+        metadata: { routeActionKey: props.actionKey },
+        onlineStatus: "online",
+        purpose: `driver-route:${props.actionKey}`,
+      }), ActionResponseSchema);
       await command.mutateAsync({
         path: "/lpg/orders/actions",
         payload: {

@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npm run lpg-mobile:build",
+  "framework": "vite",
+  "installCommand": "npm install",
+  "outputDirectory": "apps/lpg-mobile/dist",
+  "rewrites": [
+    {
+      "destination": "/index.html",
+      "source": "/(.*)"
+    }
+  ]
+}

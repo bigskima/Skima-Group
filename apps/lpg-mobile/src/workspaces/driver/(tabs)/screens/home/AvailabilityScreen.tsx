@@ -3,8 +3,9 @@ import { type FormEvent, useState } from "react";
 
 import { useSession } from "@lpg/app/providers/SessionProvider";
 import { useDriversQuery, useDriverLocationsQuery } from "@lpg/features/drivers/api";
+import { buildDriverLocationPayload, type DriverOnlineStatus } from "@lpg/features/drivers/locationPayload";
 import { useDeviceLocation } from "@lpg/features/location/useDeviceLocation";
-import { ActionResponseSchema, createLpgIdempotencyKey, getFirstRecordString, getRecordId, type ActionResult } from "@lpg/shared/api/records";
+import { ActionResponseSchema, getFirstRecordString, getRecordId, type ActionResult } from "@lpg/shared/api/records";
 import { useGatewayMutation } from "@lpg/shared/api/useGatewayMutation";
 import { QueryState } from "@lpg/shared/ui/QueryState";
 import { WorkflowFormSkeleton } from "@lpg/shared/ui/ScreenSkeletons";
@@ -19,7 +20,9 @@ export function AvailabilityScreen(props: DriverScreenProps) {
   const driver = drivers.data?.find((record) => getFirstRecordString(record, ["user_id", "userId"]) === props.context.user.id) ?? null;
   const driverId = getRecordId(driver);
   const latest = locations.data?.find((record) => getFirstRecordString(record, ["driver_profile_id", "driverProfileId"]) === driverId) ?? null;
-  const [onlineStatus, setOnlineStatus] = useState(getFirstRecordString(latest, ["online_status", "onlineStatus"]) ?? "online");
+  const [onlineStatus, setOnlineStatus] = useState<DriverOnlineStatus>(
+    normalizeOnlineStatus(getFirstRecordString(latest, ["online_status", "onlineStatus"])),
+  );
   const [notice, setNotice] = useState<string | null>(null);
   const [localError, setLocalError] = useState<Error | null>(null);
   const mutation = useGatewayMutation<ActionResult, Record<string, unknown>>({
@@ -35,18 +38,12 @@ export function AvailabilityScreen(props: DriverScreenProps) {
     try {
       if (!driverId) throw new Error("An approved driver profile is required.");
       const position = await deviceLocation.request();
-      await mutation.mutateAsync({
-        accuracyMeters: position.accuracyMeters,
+      await mutation.mutateAsync(buildDriverLocationPayload({
         driverProfileId: driverId,
-        headingDegrees: position.headingDegrees,
-        idempotencyKey: createLpgIdempotencyKey("driver-availability", position.recordedAt),
-        latitude: position.latitude,
-        longitude: position.longitude,
+        location: position,
         onlineStatus,
-        recordedAt: position.recordedAt,
-        source: "skima.lpg.mobile",
-        speedMetersPerSecond: position.speedMetersPerSecond,
-      });
+        purpose: "driver-availability",
+      }));
       setNotice("Availability and location updated.");
       await session.refreshContext();
     } catch (error) {
@@ -61,9 +58,13 @@ export function AvailabilityScreen(props: DriverScreenProps) {
       <RecordField label="Last update" value={getFirstRecordString(latest, ["recorded_at", "recordedAt"]) ? new Date(getFirstRecordString(latest, ["recorded_at", "recordedAt"]) ?? "").toLocaleString() : "Not available"} />
     </section>
     <WorkflowForm error={localError ?? mutation.error ?? (deviceLocation.error ? new Error(deviceLocation.error) : undefined)} isPending={mutation.isPending || deviceLocation.isLocating} notice={notice} onSubmit={(event) => void submit(event)} submitLabel="Update Availability">
-      <label>Status<select value={onlineStatus} onChange={(event) => setOnlineStatus(event.currentTarget.value)}><option value="online">Online</option><option value="busy">Busy</option><option value="offline">Offline</option></select></label>
+      <label>Status<select value={onlineStatus} onChange={(event) => setOnlineStatus(normalizeOnlineStatus(event.currentTarget.value))}><option value="online">Online</option><option value="busy">Busy</option><option value="offline">Offline</option></select></label>
       <p className="action-copy">{onlineStatus === "online" ? <RadioTower aria-hidden="true" /> : <Radio aria-hidden="true" />}The dispatch policy uses the location recorded when you submit.</p>
       <p className="action-copy"><LocateFixed aria-hidden="true" />Location access is requested only for this update.</p>
     </WorkflowForm>
   </QueryState>;
+}
+
+function normalizeOnlineStatus(value: string | null): DriverOnlineStatus {
+  return value === "busy" || value === "offline" || value === "online" ? value : "online";
 }
