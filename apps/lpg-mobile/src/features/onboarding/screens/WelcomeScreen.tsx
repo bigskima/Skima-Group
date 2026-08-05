@@ -11,8 +11,8 @@ export function WelcomeScreen(props: {
         <div className="splash-content">
           <BrandLockup size="large" />
           <div>
-            <h1>One platform. Your LPG handled safely.</h1>
-            <p>Register cylinders, request refills, track movement, and verify delivery.</p>
+            <h1>Skima LPG. Refills handled safely.</h1>
+            <p>Register your real cylinder, order a refill, track every scan, and verify delivery.</p>
           </div>
           <div className="night-road" aria-hidden="true"><span /><i /><b /></div>
           <button type="button" className="primary-button" onClick={props.onGetStarted}>

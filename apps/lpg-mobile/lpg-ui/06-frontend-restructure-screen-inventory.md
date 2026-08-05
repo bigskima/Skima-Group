@@ -176,7 +176,7 @@ implementation.
 ## Architecture Confirmations
 
 - `apps/lpg-mobile` contains customer, driver, and station workspaces only.
-- Skima company administration remains in `apps/admin` and is not routed from LPG mobile.
+- Skima company administration remains outside LPG mobile. It is in `apps/admin` today and should move or alias to `apps/skima-admin-web` for the production admin product.
 - Runtime cylinder, driver, vehicle, station, document, inspection, and application media comes
   from `/runtime/media/upload-sessions` and `/runtime/media/assets` records.
 - Bundled or generated illustrations are limited to onboarding, empty, loading, safety, and other

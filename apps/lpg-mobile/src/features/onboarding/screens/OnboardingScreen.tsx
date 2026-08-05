@@ -12,8 +12,8 @@ import {
 const slides = [
   {
     art: <CylinderArt size="large" tone="red" />,
-    text: "Order LPG refill, track pickup, and pay through a secure wallet.",
-    title: "Everything you need, delivered smarter.",
+    text: "Upload your cylinder photos, choose kilograms, receive a quote, and pay securely.",
+    title: "Start with your real LPG cylinder.",
   },
   {
     art: <StationArt />,

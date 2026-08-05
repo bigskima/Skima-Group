@@ -10,6 +10,7 @@ export function useTrackingPointsQuery(trackingSessionId: string | null) {
     enabled: Boolean(trackingSessionId),
     key: ["tracking-points", trackingSessionId],
     path: `/runtime/tracking/points?trackingSessionId=${encodeURIComponent(trackingSessionId ?? "")}`,
+    refetchIntervalMs: 15_000,
     schema: RecordArraySchema,
   });
 }

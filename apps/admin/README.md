@@ -1,8 +1,6 @@
-# Admin App
+# Skima LPG Admin App
 
-The admin app is the first Milestone 4 frontend shell.
-
-It is a reusable platform operations frontend, not a business-specific dashboard. The app consumes
+The admin app is the current Milestone 4 operations frontend for Skima LPG. It may keep reusable operations primitives, but the launch admin experience should focus on the LPG business rather than unrelated service categories. The app consumes
 the approved Supabase backend through:
 
 - Supabase browser sessions
@@ -10,7 +8,7 @@ the approved Supabase backend through:
 - the shared API gateway client in `packages/frontend-core`
 - the reusable UI system in `packages/ui`
 
-Current admin capabilities:
+Current LPG operations capabilities built on shared platform engines:
 
 - authenticated Supabase sign-in and sign-out
 - backend-driven session context, roles, organizations, and permissions
@@ -24,10 +22,10 @@ Current admin capabilities:
 - document approval, rejection, and correction requests
 - admin role template configuration
 - platform admin assignment and revocation
-- business line, version, component, and activation configuration
+- LPG business line, version, component, and activation configuration
 - webhook endpoint creation and delivery queueing
 - organization branch, staff role, staff invitation, access status, and ownership controls
-- catalog unit, category, item, variant, price, media, availability, stock, and orderability
+- LPG catalog unit, category, item, variant, price, media, availability, stock, and orderability
   controls
 - order creation, order actions, participant assignment, service requests, pricing, workflow events,
   dispatch, tracking, verification, notifications, and AI task queueing

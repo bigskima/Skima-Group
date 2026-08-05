@@ -1,14 +1,10 @@
-# Mobile App
+# Mobile Foundation Reference
 
-The mobile app is the first customer, driver, partner, and admin-facing mobile surface. It is not a
-static shell: it signs in with Supabase Auth, loads the authenticated session context, and reads
-live platform data through the shared API gateway client.
+This app is not the Skima LPG launch product. It is a reusable mobile foundation/reference shell that signs in with Supabase Auth, loads the authenticated session context, and reads live platform data through the shared API gateway client.
 
-Phase 1 is LPG-first. The universal frontend foundation remains reusable, but the current product
-experience is composed from `src/phase-one-lpg.ts` so customers, drivers, stations, and admins see
-navigation and copy that match the LPG refill lifecycle.
+The intended launch mobile application is `apps/lpg-mobile`. Do not expand this reference shell into a competing generic customer product or a generic service marketplace.
 
-The mobile implementation must use:
+Any reusable mobile foundation code kept here must use:
 
 - Supabase Auth with only client-safe Supabase URL and anon key values
 - `packages/frontend-core` for session context, API gateway access, permissions, validation,
@@ -73,7 +69,7 @@ The mobile Control Center currently supports governed actions for:
 - switching between light, dark, and system interface modes
 - selecting a display currency from currencies enabled by the backend
 
-The Phase 1 navigation is role-specific:
+The dedicated LPG launch app uses this role-specific navigation contract:
 
 - customer: Home, Cylinders, Orders, Wallet, Account
 - driver: Home, Jobs, Scan, Earnings, Account
@@ -86,8 +82,7 @@ Only client-safe Supabase values may be exposed to the app:
 - `VITE_SUPABASE_ANON_KEY`
 - optional `VITE_API_GATEWAY_URL`
 
-See `docs/30-mobile-experience-foundation.md` and the LPG visual/product reference pack in
-`docs/lpg-ui/`.
+See the LPG visual/product reference pack in `apps/lpg-mobile/lpg-ui/`.
 
 Run the local mobile gates:
 

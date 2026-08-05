@@ -1,7 +1,6 @@
 # Skima Platform Roadmap
 
-This tracker follows `SKIMA_PLATFORM_CONSTITUTION.md`. LPG is the first module only after the
-reusable platform foundation and business module framework exist.
+This tracker follows `SKIMA_PLATFORM_CONSTITUTION.md`. The reusable foundation remains, but the active Phase 1 launch product is Skima LPG.
 
 ## Current Status
 
@@ -15,8 +14,7 @@ reusable platform foundation and business module framework exist.
 - Milestone 3 first LPG module configuration: live on hosted Supabase dev from the previous gate.
 - Milestone 3 backend lifecycle gates: backend lifecycle, application/document, driver/vehicle,
   staff, catalog, and order operations have hosted proof.
-- Milestone 4 status: Not Started. Frontend foundation is paused until backend milestones 1-3 are
-  approved by the reviewer.
+- Milestone 4 status: In Progress. Frontend work is now focused on productionizing the dedicated Skima LPG launch mobile app and LPG operations web tooling.
 - Financial posting now uses a balanced idempotent database engine.
 - Wallet accounts now have real provisioning/status engines live on hosted Supabase dev.
 - Workflow and event runtime changes now use idempotent database engines.
@@ -146,7 +144,9 @@ reusable platform foundation and business module framework exist.
 
 ## Milestone 4: Reusable Frontend Foundation
 
-- [ ] Blocked until backend milestones 1-3 are approved
+- [x] Milestone 4 scope corrected to Skima LPG launch product, not a generic service marketplace
+- [x] Dedicated `apps/lpg-mobile` launch app exists for customer, driver, and station LPG workspaces
+- [x] LPG workspace tabs match the approved customer, driver, and station contracts
 - [ ] Design system tokens
 - [ ] Buttons
 - [ ] Cards
