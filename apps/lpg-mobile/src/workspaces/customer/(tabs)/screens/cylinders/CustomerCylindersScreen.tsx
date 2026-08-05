@@ -5,13 +5,14 @@ import { firstMediaAssetId, RuntimeMediaImage } from "@lpg/features/media/Runtim
 import { recordKey } from "@lpg/shared/api/records";
 import { CylinderCard, PageHeading, PolishedEmpty, SafetyCard } from "@lpg/shared/ui/lpgComponents";
 import { QueryState } from "@lpg/shared/ui/QueryState";
+import { CylinderListSkeleton } from "@lpg/shared/ui/ScreenSkeletons";
 import type { CustomerScreenProps } from "../../navigation/customerRoutes";
 
 export function CustomerCylindersScreen(props: CustomerScreenProps) {
   const query = useCylindersQuery();
 
   return (
-    <QueryState loading={query.isLoading} error={query.error} onRetry={() => void query.refetch()}>
+    <QueryState loading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} skeleton={<CylinderListSkeleton />}>
       <PageHeading title="My Cylinders" subtitle="Manage your LPG cylinders" icon={<QrCode />} />
       <section className="register-banner">
         <div>

@@ -6,6 +6,7 @@ import { useCreateLocationMutation, useLocationsQuery } from "@lpg/features/prof
 import { formatStatus, getFirstRecordString, recordKey, statusTone } from "@lpg/shared/api/records";
 import { PolishedEmpty, StatusChip } from "@lpg/shared/ui/lpgComponents";
 import { QueryState } from "@lpg/shared/ui/QueryState";
+import { AddressBookSkeleton } from "@lpg/shared/ui/ScreenSkeletons";
 import { WorkflowForm, WorkflowHeader } from "@lpg/shared/ui/WorkflowScreen";
 import type { CustomerScreenProps } from "../../navigation/customerRoutes";
 
@@ -44,7 +45,7 @@ export function AddressesScreen(props: CustomerScreenProps) {
   };
 
   return (
-    <QueryState loading={locations.isLoading} error={locations.error}>
+    <QueryState loading={locations.isLoading} error={locations.error} skeleton={<AddressBookSkeleton />}>
       <WorkflowHeader title="Addresses" subtitle="Pickup and delivery locations" onBack={props.navigation.goBack} />
       <div className="stack">
         {(locations.data ?? []).map((location, index) => {

@@ -44,6 +44,9 @@ const ROUTES = new Set([
   "/lpg/orders/financial-summary",
   "/lpg/stations",
   "/lpg/stations/activate",
+  "/lpg/stations/runtime",
+  "/lpg/stations/settings",
+  "/lpg/stations/capacity-adjustments",
   "/lpg/jobs",
   "/lpg/inspections",
   "/lpg/scans",
@@ -68,6 +71,7 @@ const ROUTES = new Set([
   "/runtime/media/upload-sessions",
   "/runtime/media/read-sessions",
   "/runtime/media/assets",
+  "/runtime/media/entity-links",
   "/runtime/order-actions",
   "/runtime/order-acceptance-policies",
   "/runtime/orders",
@@ -96,6 +100,7 @@ const ROUTES = new Set([
   "/runtime/organization-user-roles",
   "/runtime/organization-invitations",
   "/runtime/organization-invitations/accept",
+  "/runtime/organization-staff/directory",
   "/runtime/organization-staff/status",
   "/runtime/organization-staff/ownership-transfer",
   "/runtime/organization-staff/events",
@@ -463,6 +468,19 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         );
       }
 
+      if (configType === "stationPrice") {
+        return rpcResponse(
+          supabase.rpc("configure_lpg_station_price", {
+            target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+            target_metadata: optionalRecord(payload.metadata) ?? {},
+            target_price_per_kg: requireNumber(payload.pricePerKg, "pricePerKg"),
+            target_source: optionalString(payload.source) ?? "skima.lpg.station_price",
+            target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+          }),
+          id,
+        );
+      }
+
       throw new RequestValidationError("configType is not supported.");
     }
   }
@@ -505,7 +523,71 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     return lpgStationActivationResponse(supabase, body.value, id);
   }
 
+  if (routePath === "/lpg/stations/runtime" && request.method === "GET") {
+    return rpcDataResponse(
+      supabase.rpc("read_lpg_station_runtime", {
+        target_limit: optionalIntegerQuery(url.searchParams.get("limit")) ?? 100,
+        target_station_branch_id: optionalUuid(
+          url.searchParams.get("stationBranchId"),
+          "stationBranchId",
+        ),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/settings" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("update_lpg_station_settings", {
+        target_availability_status: optionalString(payload.availabilityStatus),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_operating_hours: optionalRecord(payload.operatingHours),
+        target_source: optionalString(payload.source) ?? "skima.lpg.station_settings",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/capacity-adjustments" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("adjust_lpg_station_capacity", {
+        target_adjustment_kg: requireNumber(payload.adjustmentKg, "adjustmentKg"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_reason_key: requireString(payload.reasonKey, "reasonKey"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.station_capacity",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+      }),
+      id,
+    );
+  }
+
   if (routePath === "/lpg/jobs" && request.method === "GET") {
+    const lpgOrderId = url.searchParams.get("lpgOrderId");
+    if (lpgOrderId) {
+      return rpcDataResponse(
+        supabase.rpc("read_lpg_job_details", {
+          target_lpg_order_id: requireUuid(lpgOrderId, "lpgOrderId"),
+        }),
+        id,
+      );
+    }
     return rpcDataResponse(
       supabase.rpc("read_lpg_jobs", {
         target_limit: optionalIntegerQuery(url.searchParams.get("limit")) ?? 50,
@@ -1085,6 +1167,16 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
   }
 
+  if (routePath === "/lpg/scans" && request.method === "GET") {
+    let query = supabase
+      .from("lpg_cylinder_scans")
+      .select("id,public_reference,lpg_order_id,cylinder_id,scan_type,scanned_by_user_id,driver_profile_id,station_branch_id,verification_event_id,latitude,longitude,accuracy_meters,result,payload,created_at")
+      .order("created_at", { ascending: false });
+    const lpgOrderId = url.searchParams.get("lpgOrderId");
+    if (lpgOrderId) query = query.eq("lpg_order_id", requireUuid(lpgOrderId, "lpgOrderId"));
+    return selectRecords(query, id);
+  }
+
   if (routePath === "/lpg/scans" && request.method === "POST") {
     const body = await readJsonBody(request, id);
 
@@ -1215,15 +1307,15 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
   }
 
   if (routePath === "/lpg/maps/geocode" && request.method === "POST") {
-    return handleGoogleGeocodeRequest(request, id, supabaseUrl, "geocode");
+    return handleMapsGeocodeRequest(request, id, supabase, supabaseUrl, "geocode");
   }
 
   if (routePath === "/lpg/maps/reverse-geocode" && request.method === "POST") {
-    return handleGoogleGeocodeRequest(request, id, supabaseUrl, "reverse_geocode");
+    return handleMapsGeocodeRequest(request, id, supabase, supabaseUrl, "reverse_geocode");
   }
 
   if (routePath === "/lpg/maps/route-estimate" && request.method === "POST") {
-    return handleGoogleRouteEstimateRequest(request, id, supabaseUrl);
+    return handleMapsRouteEstimateRequest(request, id, supabase, supabaseUrl);
   }
 
   if (routePath === "/lpg/maps/autocomplete" && request.method === "POST") {
@@ -1269,6 +1361,28 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         id,
       );
     }
+  }
+
+  if (routePath === "/runtime/media/entity-links" && request.method === "GET") {
+    const entityType = requirePlatformKey(
+      url.searchParams.get("entityType"),
+      "entityType",
+    );
+    const entityId = requireUuid(url.searchParams.get("entityId"), "entityId");
+    return selectRecords(
+      supabase
+        .from("entity_media_links")
+        .select(
+          "id,organization_id,entity_type,entity_id,media_asset_id,media_role,is_primary,display_order,status,metadata,created_at,updated_at",
+        )
+        .eq("entity_type", entityType)
+        .eq("entity_id", entityId)
+        .eq("status", "active")
+        .order("is_primary", { ascending: false })
+        .order("display_order", { ascending: true })
+        .order("created_at", { ascending: false }),
+      id,
+    );
   }
 
   if (routePath === "/runtime/media/read-sessions" && request.method === "POST") {
@@ -2040,6 +2154,21 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     );
   }
 
+  if (routePath === "/runtime/applications/payload" && request.method === "GET") {
+    const applicationId = requireUuid(
+      url.searchParams.get("applicationId"),
+      "applicationId",
+    );
+    return selectRecords(
+      supabase
+        .from("application_versions")
+        .select("id,application_id,version,payload,change_summary,created_by,created_at")
+        .eq("application_id", applicationId)
+        .order("version", { ascending: false }),
+      id,
+    );
+  }
+
   if (routePath === "/runtime/applications/submit" && request.method === "POST") {
     const body = await readJsonBody(request, id);
 
@@ -2337,6 +2466,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_invitation_id: requireUuid(payload.invitationId, "invitationId"),
         target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/organization-staff/directory" && request.method === "GET") {
+    return rpcDataResponse(
+      supabase.rpc("read_organization_staff_directory", {
+        target_organization_id: requireUuid(
+          url.searchParams.get("organizationId"),
+          "organizationId",
+        ),
       }),
       id,
     );
@@ -4211,7 +4352,7 @@ function lpgStationActivationResponse(
   id: string,
 ): Promise<Response> {
   return rpcResponse(
-    supabase.rpc("activate_lpg_station_branch", {
+    supabase.rpc("activate_configured_lpg_station_branch", {
       target_application_id: optionalUuid(payload.applicationId, "applicationId"),
       target_branch_id: optionalUuid(payload.branchId, "branchId"),
       target_branch_key: optionalString(payload.branchKey),
@@ -4226,8 +4367,7 @@ function lpgStationActivationResponse(
       target_operating_hours: optionalRecord(payload.operatingHours) ?? {},
       target_organization_id: optionalUuid(payload.organizationId, "organizationId"),
       target_owner_user_id: optionalUuid(payload.ownerUserId, "ownerUserId"),
-      target_refill_capacity_kg: optionalNumber(payload.refillCapacityKg, "refillCapacityKg") ?? 0,
-      target_service_radius_meters: optionalInteger(payload.serviceRadiusMeters) ?? 8000,
+      target_refill_capacity_kg: optionalNumber(payload.refillCapacityKg, "refillCapacityKg"),
       target_source: optionalString(payload.source) ?? "skima.lpg.station_activation_api",
       target_supported_cylinder_sizes_kg: optionalNumberArray(
         payload.supportedCylinderSizesKg,
@@ -4356,9 +4496,115 @@ async function lpgPaymentReservationResponse(
   });
 }
 
-async function handleGoogleGeocodeRequest(
+type LpgMapsOperation = "autocomplete" | "geocode" | "reverse_geocode" | "route_estimate";
+
+async function resolveLpgMapsProvider(
+  supabase: SupabaseClient,
+  id: string,
+  operation: LpgMapsOperation,
+): Promise<{
+  policy: Record<string, unknown>;
+  providerKey: string;
+  response: Response | null;
+}> {
+  const mapsPolicyResult = await supabase.rpc("lpg_policy_config", {
+    target_policy_key: "lpg.maps.phase_one",
+  });
+
+  if (mapsPolicyResult.error) {
+    return { policy: {}, providerKey: "", response: databaseError(mapsPolicyResult.error, id) };
+  }
+
+  const policy = requireRecord(mapsPolicyResult.data, "LPG maps policy");
+  const providerKey = requireString(policy.active_provider_key, "active_provider_key");
+  const operations = Array.isArray(policy.operations)
+    ? policy.operations.filter((value): value is string => typeof value === "string")
+    : [];
+
+  if (!operations.includes(operation)) {
+    return {
+      policy,
+      providerKey,
+      response: jsonResponse({ ok: false, error: "server_misconfigured", message: `The configured maps policy does not enable ${operation}.`, requestId: id }, 500),
+    };
+  }
+
+  const adapterResult = await supabase
+    .from("provider_adapters")
+    .select("key,status,provider_kind")
+    .eq("provider_kind", "maps")
+    .eq("key", providerKey)
+    .maybeSingle();
+
+  if (adapterResult.error) {
+    return { policy, providerKey, response: databaseError(adapterResult.error, id) };
+  }
+
+  if (!adapterResult.data || adapterResult.data.status !== "active") {
+    return {
+      policy,
+      providerKey,
+      response: jsonResponse({ ok: false, error: "server_misconfigured", message: "The configured maps provider adapter is not active.", requestId: id }, 500),
+    };
+  }
+
+  return { policy, providerKey, response: null };
+}
+
+function unsupportedMapsProviderResponse(
+  providerKey: string,
+  operation: LpgMapsOperation,
+  id: string,
+): Response {
+  return jsonResponse({
+    ok: false,
+    error: "server_misconfigured",
+    message: `The configured maps adapter ${providerKey} does not implement ${operation}.`,
+    requestId: id,
+  }, 500);
+}
+
+function missingMapsSecretResponse(providerKey: string, id: string): Response {
+  return jsonResponse({
+    ok: false,
+    error: "server_misconfigured",
+    message: `The configured maps adapter ${providerKey} is missing its server secret.`,
+    requestId: id,
+  }, 500);
+}
+
+function stableStringHash(value: string): number {
+  let hash = 2166136261;
+  for (const character of value) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function clampCoordinate(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function haversineDistanceMeters(
+  origin: { readonly latitude: number; readonly longitude: number },
+  destination: { readonly latitude: number; readonly longitude: number },
+): number {
+  const earthRadiusMeters = 6_371_000;
+  const toRadians = (value: number) => value * Math.PI / 180;
+  const latitudeDelta = toRadians(destination.latitude - origin.latitude);
+  const longitudeDelta = toRadians(destination.longitude - origin.longitude);
+  const originLatitude = toRadians(origin.latitude);
+  const destinationLatitude = toRadians(destination.latitude);
+  const haversine = Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(originLatitude) * Math.cos(destinationLatitude) * Math.sin(longitudeDelta / 2) ** 2;
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
+async function handleMapsGeocodeRequest(
   request: Request,
   id: string,
+  supabase: SupabaseClient,
   supabaseUrl: string,
   operation: "geocode" | "reverse_geocode",
 ): Promise<Response> {
@@ -4368,36 +4614,91 @@ async function handleGoogleGeocodeRequest(
     return body.response;
   }
 
-  const googleMapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
-
-  if (!googleMapsKey) {
-    return jsonResponse(
-      {
-        ok: false,
-        error: "server_misconfigured",
-        message: "Google Maps requires GOOGLE_MAPS_API_KEY in Supabase secrets.",
-        requestId: id,
-      },
-      500,
-    );
-  }
-
   const payload = body.value;
   const idempotencyKey = optionalString(payload.idempotencyKey) ??
     createGatewayIdempotencyKey(id, operation);
-  const queryUrl = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-  const requestPayload: Record<string, unknown> = { operation };
+  const providerResult = await resolveLpgMapsProvider(supabase, id, operation);
+
+  if (providerResult.response) {
+    return providerResult.response;
+  }
+
+  const activeProviderKey = providerResult.providerKey;
+  const requestPayload: Record<string, unknown> = {
+    operation,
+    providerAdapterKey: activeProviderKey,
+  };
+  let address: string | null = null;
+  let latitude: number | null = null;
+  let longitude: number | null = null;
 
   if (operation === "geocode") {
-    const address = requireString(payload.address, "address");
-    queryUrl.searchParams.set("address", address);
+    address = requireString(payload.address, "address");
     requestPayload.address = address;
   } else {
-    const latitude = requireNumber(payload.latitude, "latitude");
-    const longitude = requireNumber(payload.longitude, "longitude");
-    queryUrl.searchParams.set("latlng", `${latitude},${longitude}`);
+    latitude = requireNumber(payload.latitude, "latitude");
+    longitude = requireNumber(payload.longitude, "longitude");
     requestPayload.latitude = latitude;
     requestPayload.longitude = longitude;
+  }
+
+  if (activeProviderKey === "provider.maps.sandbox") {
+    const originLatitude = requireNumber(
+      providerResult.policy.sandbox_origin_latitude,
+      "sandbox_origin_latitude",
+    );
+    const originLongitude = requireNumber(
+      providerResult.policy.sandbox_origin_longitude,
+      "sandbox_origin_longitude",
+    );
+    const hash = stableStringHash(address ?? `${latitude},${longitude}`);
+    const resolvedLatitude = latitude ?? clampCoordinate(
+      originLatitude + ((hash % 2001) - 1000) / 100000,
+      -90,
+      90,
+    );
+    const resolvedLongitude = longitude ?? clampCoordinate(
+      originLongitude + ((Math.floor(hash / 2001) % 2001) - 1000) / 100000,
+      -180,
+      180,
+    );
+    const data = {
+      formattedAddress: address ?? `Sandbox location ${resolvedLatitude.toFixed(5)}, ${resolvedLongitude.toFixed(5)}`,
+      location: { latitude: resolvedLatitude, longitude: resolvedLongitude },
+      locationType: "sandbox_estimate",
+      operation,
+      placeId: `sandbox:${stableStringHash(`${resolvedLatitude}:${resolvedLongitude}`).toString(16)}`,
+      provider: "sandbox",
+    };
+
+    await maybeRecordGatewayProviderExecution(supabaseUrl, {
+      errorMessage: null,
+      idempotencyKey: `${idempotencyKey}:maps`,
+      operationKey: `provider.maps.${operation}`,
+      providerAdapterKey: activeProviderKey,
+      providerKind: "maps",
+      requestPayload,
+      responsePayload: data,
+      status: "succeeded",
+    });
+    return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (activeProviderKey !== "provider.maps.google-maps") {
+    return unsupportedMapsProviderResponse(activeProviderKey, operation, id);
+  }
+
+  const googleMapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+
+  if (!googleMapsKey) {
+    return missingMapsSecretResponse(activeProviderKey, id);
+  }
+
+  const queryUrl = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+  if (operation === "geocode") {
+    queryUrl.searchParams.set("address", address ?? "");
+  } else {
+    queryUrl.searchParams.set("latlng", `${latitude},${longitude}`);
   }
 
   queryUrl.searchParams.set("key", googleMapsKey);
@@ -4414,7 +4715,7 @@ async function handleGoogleGeocodeRequest(
       errorMessage: message,
       idempotencyKey: `${idempotencyKey}:maps`,
       operationKey: `provider.maps.${operation}`,
-      providerAdapterKey: "provider.maps.google-maps",
+      providerAdapterKey: activeProviderKey,
       providerKind: "maps",
       requestPayload,
       responsePayload: sanitizeProviderPayload(responsePayload),
@@ -4436,13 +4737,13 @@ async function handleGoogleGeocodeRequest(
   const firstResult = requireRecord(results[0], "Google Maps result");
   const geometry = requireRecord(firstResult.geometry, "Google Maps geometry");
   const location = requireRecord(geometry.location, "Google Maps location");
-  const latitude = requireNumber(location.lat, "Google Maps latitude");
-  const longitude = requireNumber(location.lng, "Google Maps longitude");
+  const resolvedLatitude = requireNumber(location.lat, "Google Maps latitude");
+  const resolvedLongitude = requireNumber(location.lng, "Google Maps longitude");
   const data = {
     formattedAddress: optionalString(firstResult.formatted_address),
     location: {
-      latitude,
-      longitude,
+      latitude: resolvedLatitude,
+      longitude: resolvedLongitude,
     },
     locationType: optionalString(geometry.location_type),
     operation,
@@ -4454,7 +4755,7 @@ async function handleGoogleGeocodeRequest(
     errorMessage: null,
     idempotencyKey: `${idempotencyKey}:maps`,
     operationKey: `provider.maps.${operation}`,
-    providerAdapterKey: "provider.maps.google-maps",
+    providerAdapterKey: activeProviderKey,
     providerKind: "maps",
     requestPayload,
     responsePayload: data,
@@ -4468,9 +4769,10 @@ async function handleGoogleGeocodeRequest(
   });
 }
 
-async function handleGoogleRouteEstimateRequest(
+async function handleMapsRouteEstimateRequest(
   request: Request,
   id: string,
+  supabase: SupabaseClient,
   supabaseUrl: string,
 ): Promise<Response> {
   const body = await readJsonBody(request, id);
@@ -4479,25 +4781,18 @@ async function handleGoogleRouteEstimateRequest(
     return body.response;
   }
 
-  const googleMapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
-
-  if (!googleMapsKey) {
-    return jsonResponse(
-      {
-        ok: false,
-        error: "server_misconfigured",
-        message: "Google Maps requires GOOGLE_MAPS_API_KEY in Supabase secrets.",
-        requestId: id,
-      },
-      500,
-    );
-  }
-
   const payload = body.value;
   const origin = requireCoordinate(payload.origin, "origin");
   const destination = requireCoordinate(payload.destination, "destination");
   const idempotencyKey = optionalString(payload.idempotencyKey) ??
     createGatewayIdempotencyKey(id, "route-estimate");
+  const providerResult = await resolveLpgMapsProvider(supabase, id, "route_estimate");
+
+  if (providerResult.response) {
+    return providerResult.response;
+  }
+
+  const activeProviderKey = providerResult.providerKey;
   const requestPayload = {
     computeAlternativeRoutes: false,
     destination: {
@@ -4520,6 +4815,48 @@ async function handleGoogleRouteEstimateRequest(
     travelMode: "DRIVE",
   };
 
+  if (activeProviderKey === "provider.maps.sandbox") {
+    const distanceMeters = Math.round(haversineDistanceMeters(origin, destination));
+    const speedKph = requireNumber(
+      providerResult.policy.sandbox_route_speed_kph,
+      "sandbox_route_speed_kph",
+    );
+    if (speedKph <= 0) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", message: "Sandbox route speed must be greater than zero.", requestId: id }, 500);
+    }
+    const durationSeconds = Math.max(1, Math.round(distanceMeters / (speedKph * 1000 / 3600)));
+    const data = {
+      distanceMeters,
+      duration: `${durationSeconds}s`,
+      encodedPolyline: null,
+      operation: "route_estimate",
+      provider: "sandbox",
+      staticDuration: `${durationSeconds}s`,
+      summary: "Deterministic sandbox estimate",
+    };
+    await maybeRecordGatewayProviderExecution(supabaseUrl, {
+      errorMessage: null,
+      idempotencyKey: `${idempotencyKey}:maps`,
+      operationKey: "provider.maps.route_estimate",
+      providerAdapterKey: activeProviderKey,
+      providerKind: "maps",
+      requestPayload,
+      responsePayload: data,
+      status: "succeeded",
+    });
+    return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (activeProviderKey !== "provider.maps.google-maps") {
+    return unsupportedMapsProviderResponse(activeProviderKey, "route_estimate", id);
+  }
+
+  const googleMapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+
+  if (!googleMapsKey) {
+    return missingMapsSecretResponse(activeProviderKey, id);
+  }
+
   const providerResponse = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
     body: JSON.stringify(requestPayload),
     headers: {
@@ -4539,7 +4876,7 @@ async function handleGoogleRouteEstimateRequest(
       errorMessage: message,
       idempotencyKey: `${idempotencyKey}:maps`,
       operationKey: "provider.maps.route_estimate",
-      providerAdapterKey: "provider.maps.google-maps",
+      providerAdapterKey: activeProviderKey,
       providerKind: "maps",
       requestPayload,
       responsePayload: sanitizeProviderPayload(responsePayload),
@@ -4574,7 +4911,7 @@ async function handleGoogleRouteEstimateRequest(
     errorMessage: null,
     idempotencyKey: `${idempotencyKey}:maps`,
     operationKey: "provider.maps.route_estimate",
-    providerAdapterKey: "provider.maps.google-maps",
+    providerAdapterKey: activeProviderKey,
     providerKind: "maps",
     requestPayload,
     responsePayload: data,
@@ -4604,16 +4941,13 @@ async function handleMapsAutocompleteRequest(
   const input = requireString(payload.input, "input");
   const idempotencyKey = optionalString(payload.idempotencyKey) ??
     createGatewayIdempotencyKey(id, "maps-autocomplete");
-  const mapsPolicyResult = await supabase.rpc("lpg_policy_config", {
-    target_policy_key: "lpg.maps.phase_one",
-  });
+  const providerResult = await resolveLpgMapsProvider(supabase, id, "autocomplete");
 
-  if (mapsPolicyResult.error) {
-    return databaseError(mapsPolicyResult.error, id);
+  if (providerResult.response) {
+    return providerResult.response;
   }
 
-  const mapsPolicy = requireRecord(mapsPolicyResult.data, "LPG maps policy");
-  const activeProviderKey = requireString(mapsPolicy.active_provider_key, "active_provider_key");
+  const activeProviderKey = providerResult.providerKey;
   const requestPayload: Record<string, unknown> = {
     input,
     operation: "autocomplete",
@@ -4627,7 +4961,7 @@ async function handleMapsAutocompleteRequest(
         {
           description: input,
           matchedSubstrings: [{ length: input.length, offset: 0 }],
-          placeId: `sandbox:${crypto.randomUUID()}`,
+          placeId: `sandbox:${stableStringHash(input.toLowerCase()).toString(16)}`,
           structuredFormatting: {
             mainText: input,
             secondaryText: "Sandbox location",
@@ -4652,21 +4986,13 @@ async function handleMapsAutocompleteRequest(
   }
 
   if (activeProviderKey !== "provider.maps.google-maps") {
-    throw new RequestValidationError("configured maps provider does not support autocomplete yet.");
+    return unsupportedMapsProviderResponse(activeProviderKey, "autocomplete", id);
   }
 
   const googleMapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
 
   if (!googleMapsKey) {
-    return jsonResponse(
-      {
-        ok: false,
-        error: "server_misconfigured",
-        message: "Google Maps requires GOOGLE_MAPS_API_KEY in Supabase secrets.",
-        requestId: id,
-      },
-      500,
-    );
+    return missingMapsSecretResponse(activeProviderKey, id);
   }
 
   const countryComponent = optionalString(payload.countryComponent);
@@ -5122,6 +5448,15 @@ function requireString(value: unknown, fieldName: string): string {
   }
 
   return value;
+}
+
+function requirePlatformKey(value: unknown, fieldName: string): string {
+  const key = requireString(value, fieldName);
+  if (!/^[a-z][a-z0-9_.:-]{2,120}$/.test(key)) {
+    throw new RequestValidationError(`${fieldName} must be a valid platform key.`);
+  }
+
+  return key;
 }
 
 function optionalString(value: unknown): string | null {

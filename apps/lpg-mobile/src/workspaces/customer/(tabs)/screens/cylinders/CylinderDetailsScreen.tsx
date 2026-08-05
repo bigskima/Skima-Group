@@ -15,6 +15,7 @@ import {
 } from "@lpg/shared/api/records";
 import { PolishedEmpty, StatusChip } from "@lpg/shared/ui/lpgComponents";
 import { QueryState } from "@lpg/shared/ui/QueryState";
+import { CylinderDetailsSkeleton } from "@lpg/shared/ui/ScreenSkeletons";
 import { RecordField, WorkflowHeader } from "@lpg/shared/ui/WorkflowScreen";
 import { formatDate, formatDateValue } from "@lpg/shared/utilities/lpgFormat";
 import type { CustomerScreenProps } from "../../navigation/customerRoutes";
@@ -25,7 +26,7 @@ export function CylinderDetailsScreen(props: CustomerScreenProps) {
   const history = useCylinderHistoryQuery(getRecordId(selected));
 
   return (
-    <QueryState loading={cylinders.isLoading || history.isLoading} error={cylinders.error ?? history.error}>
+    <QueryState loading={cylinders.isLoading || history.isLoading} error={cylinders.error ?? history.error} skeleton={<CylinderDetailsSkeleton />}>
       <WorkflowHeader title="Cylinder Details" subtitle={displayReference(selected)} onBack={props.navigation.goBack} />
       {selected ? (
         <>

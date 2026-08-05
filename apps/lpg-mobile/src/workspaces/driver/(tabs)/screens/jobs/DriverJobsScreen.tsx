@@ -5,6 +5,7 @@ import { useJobsQuery } from "@lpg/features/orders/api";
 import { displayReference, formatStatus, getFirstRecordNumber, getRecordId, getStatus, recordKey, statusTone } from "@lpg/shared/api/records";
 import { PageHeading, PolishedEmpty, StatusChip } from "@lpg/shared/ui/lpgComponents";
 import { QueryState } from "@lpg/shared/ui/QueryState";
+import { DriverJobsSkeleton } from "@lpg/shared/ui/ScreenSkeletons";
 import { displayMoney, resolveCurrencyCode } from "@lpg/shared/utilities/display";
 import type { DriverScreenProps } from "../../navigation/driverRoutes";
 
@@ -13,7 +14,7 @@ export function DriverJobsScreen(props: DriverScreenProps) {
   const currencies = useCurrenciesQuery();
 
   return (
-    <QueryState loading={jobs.isLoading} error={jobs.error} onRetry={() => void jobs.refetch()}>
+    <QueryState loading={jobs.isLoading} error={jobs.error} onRetry={() => void jobs.refetch()} skeleton={<DriverJobsSkeleton />}>
       <PageHeading title="Jobs" subtitle="LPG work matched to your approved capability" />
       <div className="job-list">
         {(jobs.data ?? []).map((job, index) => {

@@ -16,6 +16,7 @@ import {
 } from "@lpg/shared/api/records";
 import { InfoTile, PageHeading, ProgressStepper, StatusChip, Timeline } from "@lpg/shared/ui/lpgComponents";
 import { QueryState } from "@lpg/shared/ui/QueryState";
+import { OrderDetailsSkeleton } from "@lpg/shared/ui/ScreenSkeletons";
 import { cylinderForOrder, formatCylinderTitle, orderTimelineItems, stationForOrder } from "@lpg/shared/utilities/lpgFormat";
 import type { CustomerScreenProps } from "../../navigation/customerRoutes";
 
@@ -29,7 +30,7 @@ export function CustomerOrderDetailsScreen(props: CustomerScreenProps) {
   const status = getStatus(selected, "pending");
 
   return (
-    <QueryState loading={orders.isLoading || cylinders.isLoading} error={orders.error ?? cylinders.error}>
+    <QueryState loading={orders.isLoading || cylinders.isLoading} error={orders.error ?? cylinders.error} skeleton={<OrderDetailsSkeleton />}>
       <PageHeading title={displayReference(selected, "Order details")} subtitle={formatStatus(status)} />
       {selected ? (
         <section className="order-detail-card">

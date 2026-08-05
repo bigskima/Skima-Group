@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AlertTriangle, LoaderCircle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 
 import { PolishedEmpty } from "./lpgComponents";
 
@@ -8,15 +8,10 @@ export function QueryState(props: {
   readonly error: unknown;
   readonly loading: boolean;
   readonly onRetry?: () => void;
+  readonly skeleton: ReactNode;
 }) {
   if (props.loading) {
-    return (
-      <section className="polished-empty" aria-live="polite">
-        <span><LoaderCircle aria-hidden="true" /></span>
-        <h2>Loading</h2>
-        <p>Getting the latest information for this screen.</p>
-      </section>
-    );
+    return props.skeleton;
   }
 
   if (props.error) {

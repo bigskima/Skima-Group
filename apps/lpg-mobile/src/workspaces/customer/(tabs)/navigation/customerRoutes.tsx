@@ -2,17 +2,27 @@ import type { SessionContext } from "@skima/frontend-core";
 import type { ComponentType } from "react";
 
 import type { NestedNavigator } from "@lpg/shared/types/navigation";
-import { RoutePendingScreen } from "@lpg/shared/ui/RoutePendingScreen";
+import { AddressesScreen } from "../screens/account/AddressesScreen";
 import { CustomerHomeScreen } from "../screens/home/CustomerHomeScreen";
 import { CustomerCylindersScreen } from "../screens/cylinders/CustomerCylindersScreen";
 import { CustomerOrdersScreen } from "../screens/orders/CustomerOrdersScreen";
 import { CustomerOrderDetailsScreen } from "../screens/orders/CustomerOrderDetailsScreen";
 import { CustomerWalletScreen } from "../screens/wallet/CustomerWalletScreen";
 import { CustomerAccountScreen } from "../screens/account/CustomerAccountScreen";
+import { DriverApplicationScreen } from "../screens/account/DriverApplicationScreen";
+import { NotificationsScreen } from "../screens/account/NotificationsScreen";
 import { PartnerRoutesScreen } from "../screens/account/PartnerRoutesScreen";
+import { StationApplicationScreen } from "../screens/account/StationApplicationScreen";
+import { SupportScreen } from "../screens/account/SupportScreen";
 import { RegisterCylinderScreen } from "../screens/cylinders/RegisterCylinderScreen";
 import { CylinderDetailsScreen } from "../screens/cylinders/CylinderDetailsScreen";
-import { CreateRefillOrderScreen } from "../screens/orders/CreateRefillOrderScreen";
+import { CylinderPhotoUploadScreen } from "../screens/cylinders/CylinderPhotoUploadScreen";
+import { CustomerLiveTrackingScreen } from "../screens/orders/CustomerLiveTrackingScreen";
+import { DeliveryVerificationScreen } from "../screens/orders/DeliveryVerificationScreen";
+import { NewRefillScreen } from "../screens/orders/NewRefillScreen";
+import { PaymentMethodsScreen } from "../screens/wallet/PaymentMethodsScreen";
+import { TopUpScreen } from "../screens/wallet/TopUpScreen";
+import { TransactionsScreen } from "../screens/wallet/TransactionsScreen";
 import type { CustomerTab } from "./customerTabs";
 
 export type CustomerRoute =
@@ -77,30 +87,24 @@ export const customerRouteTabs: Readonly<Record<CustomerRoute, CustomerTab>> = {
 
 export const customerRouteScreens: Readonly<Record<CustomerRoute, ComponentType<CustomerScreenProps>>> = {
   account: CustomerAccountScreen,
-  "account-addresses": pendingCustomerScreen("Addresses"),
-  "account-notifications": pendingCustomerScreen("Notifications"),
-  "account-support": pendingCustomerScreen("Support"),
+  "account-addresses": AddressesScreen,
+  "account-notifications": NotificationsScreen,
+  "account-support": SupportScreen,
   "cylinder-details": CylinderDetailsScreen,
-  "cylinder-photo": pendingCustomerScreen("Cylinder Photo"),
+  "cylinder-photo": CylinderPhotoUploadScreen,
   "cylinder-register": RegisterCylinderScreen,
   cylinders: CustomerCylindersScreen,
-  "delivery-verification": pendingCustomerScreen("Delivery Verification"),
-  "driver-application": pendingCustomerScreen("Driver Application"),
+  "delivery-verification": DeliveryVerificationScreen,
+  "driver-application": DriverApplicationScreen,
   home: CustomerHomeScreen,
   "order-details": CustomerOrderDetailsScreen,
-  "order-new": CreateRefillOrderScreen,
-  "order-tracking": pendingCustomerScreen("Live Tracking"),
+  "order-new": NewRefillScreen,
+  "order-tracking": CustomerLiveTrackingScreen,
   orders: CustomerOrdersScreen,
   "partner-routes": PartnerRoutesScreen,
-  "payment-methods": pendingCustomerScreen("Payment Methods"),
-  "station-application": pendingCustomerScreen("Station Application"),
+  "payment-methods": PaymentMethodsScreen,
+  "station-application": StationApplicationScreen,
   wallet: CustomerWalletScreen,
-  "wallet-top-up": pendingCustomerScreen("Top Up"),
-  "wallet-transactions": pendingCustomerScreen("Transactions"),
+  "wallet-top-up": TopUpScreen,
+  "wallet-transactions": TransactionsScreen,
 };
-
-function pendingCustomerScreen(title: string): ComponentType<CustomerScreenProps> {
-  return function PendingCustomerScreen(props: CustomerScreenProps) {
-    return <RoutePendingScreen title={title} onBack={props.navigation.goBack} />;
-  };
-}

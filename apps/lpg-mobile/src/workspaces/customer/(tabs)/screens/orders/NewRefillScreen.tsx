@@ -21,6 +21,7 @@ import {
   getRecordId,
 } from "@lpg/shared/api/records";
 import { QueryState } from "@lpg/shared/ui/QueryState";
+import { WorkflowFormSkeleton } from "@lpg/shared/ui/ScreenSkeletons";
 import { RecordField, WorkflowForm, WorkflowHeader } from "@lpg/shared/ui/WorkflowScreen";
 import { displayMoney, resolveCurrencyCode } from "@lpg/shared/utilities/display";
 import { formatCylinderTitle } from "@lpg/shared/utilities/lpgFormat";
@@ -100,7 +101,7 @@ export function NewRefillScreen(props: CustomerScreenProps) {
   };
 
   return (
-    <QueryState loading={loading} error={error}>
+    <QueryState loading={loading} error={error} skeleton={<WorkflowFormSkeleton />}>
       <WorkflowHeader title="New Refill" subtitle="Quote and payment are calculated by the backend" onBack={props.navigation.goBack} />
       {!quoteId ? (
         <WorkflowForm error={localError ?? createQuote.error} isPending={createQuote.isPending} onSubmit={(event) => void requestQuote(event)} submitLabel="Get Refill Quote">

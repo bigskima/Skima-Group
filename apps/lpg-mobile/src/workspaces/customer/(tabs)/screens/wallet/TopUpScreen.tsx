@@ -1,4 +1,4 @@
-import { CreditCard, ExternalLink, WalletCards } from "lucide-react";
+import { CreditCard, WalletCards } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { useCurrenciesQuery, useProviderAdaptersQuery } from "@lpg/features/config/api";
@@ -6,6 +6,7 @@ import { useDepositsQuery, useWalletBalancesQuery } from "@lpg/features/wallet/a
 import { ActionResponseSchema, createLpgIdempotencyKey, getActionResultId, getFirstRecordString, type ActionResult } from "@lpg/shared/api/records";
 import { useGatewayMutation } from "@lpg/shared/api/useGatewayMutation";
 import { QueryState } from "@lpg/shared/ui/QueryState";
+import { WorkflowFormSkeleton } from "@lpg/shared/ui/ScreenSkeletons";
 import { WorkflowForm, WorkflowHeader } from "@lpg/shared/ui/WorkflowScreen";
 import { resolveCurrencyCode } from "@lpg/shared/utilities/display";
 import type { CustomerScreenProps } from "../../navigation/customerRoutes";
@@ -62,7 +63,7 @@ export function TopUpScreen(props: CustomerScreenProps) {
   };
 
   return (
-    <QueryState loading={wallets.isLoading || currencies.isLoading || providers.isLoading} error={wallets.error ?? currencies.error ?? providers.error}>
+    <QueryState loading={wallets.isLoading || currencies.isLoading || providers.isLoading} error={wallets.error ?? currencies.error ?? providers.error} skeleton={<WorkflowFormSkeleton />}>
       <WorkflowHeader title="Top Up" subtitle="Fund your Skima wallet" onBack={props.navigation.goBack} />
       <section className="upload-hero"><WalletCards aria-hidden="true" /><strong>{currencyCode ?? "Wallet funding"}</strong></section>
       <WorkflowForm error={localError ?? mutation.error} isPending={mutation.isPending} notice={notice} onSubmit={(event) => void submit(event)} submitLabel="Continue To Payment">
@@ -78,7 +79,6 @@ export function TopUpScreen(props: CustomerScreenProps) {
           </select>
         </label>
         <p className="action-copy"><CreditCard aria-hidden="true" />Payment details are collected by the configured provider.</p>
-        <span className="visually-hidden"><ExternalLink aria-hidden="true" /></span>
       </WorkflowForm>
     </QueryState>
   );

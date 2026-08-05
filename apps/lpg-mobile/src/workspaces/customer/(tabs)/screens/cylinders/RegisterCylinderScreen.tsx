@@ -12,6 +12,7 @@ import {
   getFirstRecordString,
 } from "@lpg/shared/api/records";
 import { QueryState } from "@lpg/shared/ui/QueryState";
+import { WorkflowFormSkeleton } from "@lpg/shared/ui/ScreenSkeletons";
 import { WorkflowForm, WorkflowHeader } from "@lpg/shared/ui/WorkflowScreen";
 import type { CustomerScreenProps } from "../../navigation/customerRoutes";
 
@@ -70,7 +71,7 @@ export function RegisterCylinderScreen(props: CustomerScreenProps) {
   };
 
   return (
-    <QueryState loading={config.isLoading} error={config.error}>
+    <QueryState loading={config.isLoading} error={config.error} skeleton={<WorkflowFormSkeleton />}>
       <WorkflowHeader title="Register Cylinder" subtitle="Use the identity marked on your cylinder" onBack={props.navigation.goBack} />
       <WorkflowForm error={localError ?? mutation.error} isPending={mutation.isPending} onSubmit={(event) => void submit(event)} submitLabel="Register Cylinder">
         <label>

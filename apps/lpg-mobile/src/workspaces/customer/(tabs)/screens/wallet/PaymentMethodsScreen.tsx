@@ -5,6 +5,7 @@ import { useWithdrawalBeneficiariesQuery } from "@lpg/features/wallet/api";
 import { formatStatus, getFirstRecordString, recordKey, statusTone } from "@lpg/shared/api/records";
 import { MenuRow, PolishedEmpty, StatusChip } from "@lpg/shared/ui/lpgComponents";
 import { QueryState } from "@lpg/shared/ui/QueryState";
+import { WalletSkeleton } from "@lpg/shared/ui/ScreenSkeletons";
 import { WorkflowHeader } from "@lpg/shared/ui/WorkflowScreen";
 import type { CustomerScreenProps } from "../../navigation/customerRoutes";
 
@@ -14,7 +15,7 @@ export function PaymentMethodsScreen(props: CustomerScreenProps) {
   const paymentProviders = (providers.data ?? []).filter((provider) => getFirstRecordString(provider, ["provider_kind", "providerKind"]) === "payment" && getFirstRecordString(provider, ["status"]) === "active");
 
   return (
-    <QueryState loading={providers.isLoading || beneficiaries.isLoading} error={providers.error ?? beneficiaries.error}>
+    <QueryState loading={providers.isLoading || beneficiaries.isLoading} error={providers.error ?? beneficiaries.error} skeleton={<WalletSkeleton />}>
       <WorkflowHeader title="Payment Methods" subtitle="Backend-configured funding and payout channels" onBack={props.navigation.goBack} />
       <section className="record-list-section">
         <h2>Funding Providers</h2>

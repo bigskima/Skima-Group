@@ -4,6 +4,7 @@ import { useCurrenciesQuery } from "@lpg/features/config/api";
 import { useDepositsQuery, useWalletBalancesQuery, useWithdrawalsQuery } from "@lpg/features/wallet/api";
 import { PageHeading, TransactionList, WalletArt } from "@lpg/shared/ui/lpgComponents";
 import { QueryState } from "@lpg/shared/ui/QueryState";
+import { WalletSkeleton } from "@lpg/shared/ui/ScreenSkeletons";
 import { displayMoney, resolveCurrencyCode } from "@lpg/shared/utilities/display";
 import { walletTotal } from "@lpg/shared/utilities/lpgFormat";
 import type { CustomerScreenProps } from "../../navigation/customerRoutes";
@@ -16,7 +17,7 @@ export function CustomerWalletScreen(props: CustomerScreenProps) {
   const currencyCode = resolveCurrencyCode(currencies.data ?? [], wallets.data?.[0]);
 
   return (
-    <QueryState loading={wallets.isLoading || currencies.isLoading} error={wallets.error ?? currencies.error}>
+    <QueryState loading={wallets.isLoading || currencies.isLoading} error={wallets.error ?? currencies.error} skeleton={<WalletSkeleton />}>
       <PageHeading title="Wallet" subtitle="Your ledger-backed LPG balance" icon={<Bell />} />
       <section className="wallet-hero">
         <div>

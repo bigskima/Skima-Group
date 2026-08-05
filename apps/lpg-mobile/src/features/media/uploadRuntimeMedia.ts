@@ -50,6 +50,7 @@ export async function uploadRuntimeMedia(input: {
 export async function uploadRuntimeDocument(input: {
   readonly api: ApiGatewayClient;
   readonly file: File;
+  readonly idempotencyKey?: string;
 }): Promise<{
   readonly contentType: string;
   readonly idempotencyKey: string;
@@ -59,6 +60,7 @@ export async function uploadRuntimeDocument(input: {
   const upload = await uploadRuntimeFile({
     api: input.api,
     file: input.file,
+    idempotencyKey: input.idempotencyKey,
     scope: "document-upload",
     storageBucket: "skima-platform-documents",
   });
@@ -73,10 +75,11 @@ export async function uploadRuntimeDocument(input: {
 async function uploadRuntimeFile(input: {
   readonly api: ApiGatewayClient;
   readonly file: File;
+  readonly idempotencyKey?: string;
   readonly scope: string;
   readonly storageBucket: "skima-platform-documents" | "skima-platform-media";
 }) {
-  const idempotencyKey = createLpgIdempotencyKey(input.scope, input.file.name);
+  const idempotencyKey = input.idempotencyKey ?? createLpgIdempotencyKey(input.scope, input.file.name);
   const upload = await input.api.post(
     "/runtime/media/upload-sessions",
     {

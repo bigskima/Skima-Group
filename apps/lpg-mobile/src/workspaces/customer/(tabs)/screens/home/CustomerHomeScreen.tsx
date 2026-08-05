@@ -25,6 +25,7 @@ import {
   SectionHeader,
 } from "@lpg/shared/ui/lpgComponents";
 import { QueryState } from "@lpg/shared/ui/QueryState";
+import { CustomerHomeSkeleton } from "@lpg/shared/ui/ScreenSkeletons";
 import { displayMoney, resolveCurrencyCode } from "@lpg/shared/utilities/display";
 import { formatCylinderTitle, walletTotal } from "@lpg/shared/utilities/lpgFormat";
 import { resolveProfileName } from "@lpg/features/permissions/workspaceAccess";
@@ -47,7 +48,7 @@ export function CustomerHomeScreen(props: CustomerScreenProps) {
   const loading = cylinders.isLoading || orders.isLoading || locations.isLoading || wallets.isLoading || currencies.isLoading;
 
   return (
-    <QueryState loading={loading} error={error} onRetry={() => void Promise.all([
+    <QueryState skeleton={<CustomerHomeSkeleton />} loading={loading} error={error} onRetry={() => void Promise.all([
       cylinders.refetch(), orders.refetch(), locations.refetch(), wallets.refetch(), currencies.refetch(),
     ])}>
       <header className="page-title">

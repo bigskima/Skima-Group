@@ -2,11 +2,35 @@ import type { SessionContext } from "@skima/frontend-core";
 import type { ComponentType } from "react";
 
 import type { NestedNavigator } from "@lpg/shared/types/navigation";
-import { RoutePendingScreen } from "@lpg/shared/ui/RoutePendingScreen";
+import {
+  StationDocumentsScreen,
+  StationInventoryScreen,
+  StationPermissionsScreen,
+  StationProfileScreen,
+  StationReportsScreen,
+  StationRolesScreen,
+  StationSettingsScreen,
+  StationStaffScreen,
+} from "../screens/account/StationAccountDetailScreens";
 import { StationDashboardScreen } from "../screens/dashboard/StationDashboardScreen";
 import { StationJobsScreen } from "../screens/jobs/StationJobsScreen";
 import { StationJobDetailsScreen } from "../screens/jobs/StationJobDetailsScreen";
+import {
+  StationActualKilogramsScreen,
+  StationDriverArrivalScreen,
+  StationInspectionScreen,
+  StationOrderReleasedScreen,
+  StationRefillCompletionScreen,
+  StationRefillInProgressScreen,
+  StationScanResultScreen,
+} from "../screens/jobs/StationWorkflowScreens";
 import { StationScanScreen } from "../screens/scan/StationScanScreen";
+import {
+  StationSettlementDetailsScreen,
+  StationSettlementPayoutsScreen,
+  StationSettlementTransactionsScreen,
+  StationSettlementWithdrawalScreen,
+} from "../screens/settlements/StationSettlementDetailScreens";
 import { StationSettlementsScreen } from "../screens/settlements/StationSettlementsScreen";
 import { StationAccountScreen } from "../screens/account/StationAccountScreen";
 import type { StationTab } from "./stationTabs";
@@ -81,34 +105,28 @@ export const stationRouteTabs: Readonly<Record<StationRoute, StationTab>> = {
 
 export const stationRouteScreens: Readonly<Record<StationRoute, ComponentType<StationScreenProps>>> = {
   account: StationAccountScreen,
-  "actual-kilograms": pendingStationScreen("Actual Kilograms"),
+  "actual-kilograms": StationActualKilogramsScreen,
   dashboard: StationDashboardScreen,
-  "driver-arrival": pendingStationScreen("Driver Arrival"),
-  inspection: pendingStationScreen("Cylinder Inspection"),
-  inventory: pendingStationScreen("Inventory"),
+  "driver-arrival": StationDriverArrivalScreen,
+  inspection: StationInspectionScreen,
+  inventory: StationInventoryScreen,
   "job-details": StationJobDetailsScreen,
   jobs: StationJobsScreen,
-  "order-delivered": pendingStationScreen("Order Delivered"),
-  permissions: pendingStationScreen("Station Permissions"),
-  "refill-completion": pendingStationScreen("Refill Completion"),
-  "refill-in-progress": pendingStationScreen("Refill In Progress"),
-  roles: pendingStationScreen("Station Roles"),
+  "order-delivered": StationOrderReleasedScreen,
+  permissions: StationPermissionsScreen,
+  "refill-completion": StationRefillCompletionScreen,
+  "refill-in-progress": StationRefillInProgressScreen,
+  roles: StationRolesScreen,
   scan: StationScanScreen,
-  "scan-result": pendingStationScreen("Scan Result"),
-  "settlement-details": pendingStationScreen("Settlement Details"),
-  "settlement-payouts": pendingStationScreen("Payouts"),
-  "settlement-transactions": pendingStationScreen("Transactions"),
-  "settlement-withdrawal": pendingStationScreen("Withdraw"),
+  "scan-result": StationScanResultScreen,
+  "settlement-details": StationSettlementDetailsScreen,
+  "settlement-payouts": StationSettlementPayoutsScreen,
+  "settlement-transactions": StationSettlementTransactionsScreen,
+  "settlement-withdrawal": StationSettlementWithdrawalScreen,
   settlements: StationSettlementsScreen,
-  staff: pendingStationScreen("Staff"),
-  "station-documents": pendingStationScreen("Station Documents"),
-  "station-profile": pendingStationScreen("Station Profile"),
-  "station-reports": pendingStationScreen("Reports"),
-  "station-settings": pendingStationScreen("Station Settings"),
+  staff: StationStaffScreen,
+  "station-documents": StationDocumentsScreen,
+  "station-profile": StationProfileScreen,
+  "station-reports": StationReportsScreen,
+  "station-settings": StationSettingsScreen,
 };
-
-function pendingStationScreen(title: string): ComponentType<StationScreenProps> {
-  return function PendingStationScreen(props: StationScreenProps) {
-    return <RoutePendingScreen title={title} onBack={props.navigation.goBack} />;
-  };
-}

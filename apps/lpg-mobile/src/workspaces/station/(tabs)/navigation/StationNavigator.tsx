@@ -14,10 +14,11 @@ export function StationNavigator(props: { readonly context: SessionContext }) {
   const activeTab = stationRouteTabs[navigation.route];
   const Screen = stationRouteScreens[navigation.route];
   const visibleTabKeys = useMemo(() => new Set(tabs.map((tab) => tab.key)), [tabs]);
+  const replace = navigation.replace;
 
   useEffect(() => {
-    if (!visibleTabKeys.has(activeTab)) navigation.replace(initialRoute);
-  }, [activeTab, initialRoute, navigation, visibleTabKeys]);
+    if (!visibleTabKeys.has(activeTab)) replace(initialRoute);
+  }, [activeTab, initialRoute, replace, visibleTabKeys]);
 
   const changeTab = (tab: StationTab) => navigation.replace(stationTabRoots[tab]);
 

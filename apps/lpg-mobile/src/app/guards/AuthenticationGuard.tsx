@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { useSession } from "../providers/SessionProvider";
 import { StateScreen } from "../../shared/ui/lpgComponents";
+import { ApplicationBootSkeleton } from "../../shared/ui/ScreenSkeletons";
 
 export function AuthenticationGuard(props: {
   readonly publicExperience: ReactNode;
@@ -11,7 +12,7 @@ export function AuthenticationGuard(props: {
   const session = useSession();
 
   if (session.status === "loading") {
-    return <StateScreen title="Preparing Skima LPG" message="Loading your secure account." />;
+    return <ApplicationBootSkeleton />;
   }
 
   if (session.status === "unauthenticated") return props.publicExperience;

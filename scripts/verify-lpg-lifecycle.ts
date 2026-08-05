@@ -56,6 +56,19 @@ const configBody = await getGateway(admin.accessToken, "/lpg/config");
 const config = requireRecordValue(configBody.data, "LPG config");
 const cylinderProfiles = requireArrayValue(config.cylinderTypeProfiles, "cylinder type profiles");
 requireCondition(cylinderProfiles.length > 0, "LPG cylinder type profiles were not returned.");
+const activationPolicyRecord = await requireSingle(
+  serviceClient
+    .from("lpg_operation_policies")
+    .select("policy")
+    .eq("key", "lpg.station_activation.phase_one")
+    .eq("status", "active")
+    .single(),
+  "read station activation policy",
+);
+const configuredStationRadius = requireNumberValue(
+  requireRecordValue(activationPolicyRecord.policy, "station activation policy").service_radius_meters,
+  "configured station service radius",
+);
 mark("config and actors ready");
 
 await postGateway(admin.accessToken, "/lpg/maps/autocomplete", {
@@ -80,6 +93,56 @@ await requireRpcId(
     target_user_id: stationStaff.id,
   }),
   "assign station staff pump role",
+);
+const stationRuntimeBody = await getGateway(
+  stationOwner.accessToken,
+  `/lpg/stations/runtime?stationBranchId=${station.stationBranchId}`,
+);
+const stationRuntime = requireRecordValue(stationRuntimeBody.data, "station runtime");
+const stationRuntimeBranch = requireRecordValue(stationRuntime.branch, "station runtime branch");
+requireCondition(
+  stationRuntimeBranch.id === station.stationBranchId,
+  "station runtime returned a different branch.",
+);
+requireCondition(
+  stationRuntimeBranch.serviceRadiusMeters === configuredStationRadius,
+  "station activation did not use the configured service radius.",
+);
+await getGateway(
+  stationStaff.accessToken,
+  `/lpg/stations/runtime?stationBranchId=${station.stationBranchId}`,
+);
+await requireGatewayGetError(
+  outsider.accessToken,
+  `/lpg/stations/runtime?stationBranchId=${station.stationBranchId}`,
+  "branch-scoped LPG station access",
+);
+await requireGatewayGetError(
+  wrongStationOwner.accessToken,
+  `/lpg/stations/runtime?stationBranchId=${station.stationBranchId}`,
+  "branch-scoped LPG station access",
+);
+const stationSettingsPayload = {
+  availabilityStatus: "available",
+  idempotencyKey: idempotency("station-settings"),
+  metadata: { gate: "lpg_lifecycle", runId },
+  operatingHours: { mode: "gate" },
+  source,
+  stationBranchId: station.stationBranchId,
+};
+const stationSettingsId = await postGatewayId(
+  stationOwner.accessToken,
+  "/lpg/stations/settings",
+  stationSettingsPayload,
+);
+const stationSettingsReplayId = await postGatewayId(
+  stationOwner.accessToken,
+  "/lpg/stations/settings",
+  stationSettingsPayload,
+);
+requireCondition(
+  stationSettingsReplayId === stationSettingsId,
+  "station settings idempotency replay changed the station id.",
 );
 mark("stations and staff ready");
 
@@ -364,17 +427,39 @@ await postGatewayId(driver.accessToken, "/lpg/orders/actions", {
 await requireGatewayError(outsider.accessToken, "/lpg/scans", {
   idempotencyKey: idempotency("wrong-pickup-scan"),
   lpgOrderId,
-  payload: { gate: "lpg_lifecycle", runId },
+  payload: { gate: "lpg_lifecycle", runId, scannedCylinderId: cylinderId },
   scanType: "customer_pickup",
   source,
 }, "LPG order access permission");
+
+await requireGatewayError(driver.accessToken, "/lpg/scans", {
+  idempotencyKey: idempotency("wrong-cylinder-pickup-scan"),
+  lpgOrderId,
+  payload: { gate: "lpg_lifecycle", runId, scannedCylinderId: crypto.randomUUID() },
+  scanType: "customer_pickup",
+  source,
+}, "scanned cylinder does not match");
+await requireGatewayError(driver.accessToken, "/lpg/scans", {
+  idempotencyKey: idempotency("wrong-token-pickup-scan"),
+  latitude: pickupLatitude,
+  longitude: pickupLongitude,
+  lpgOrderId,
+  payload: {
+    gate: "lpg_lifecycle",
+    runId,
+    scannedCylinderId: cylinderId,
+    scannedToken: `wrong-${runKey}`,
+  },
+  scanType: "customer_pickup",
+  source,
+}, "scanned cylinder does not match");
 
 const pickupScanBody = await postGateway(driver.accessToken, "/lpg/scans", {
   idempotencyKey: idempotency("scan-pickup"),
   latitude: pickupLatitude,
   longitude: pickupLongitude,
   lpgOrderId,
-  payload: { gate: "lpg_lifecycle", runId },
+  payload: { gate: "lpg_lifecycle", runId, scannedCylinderId: cylinderId },
   scanType: "customer_pickup",
   source,
 });
@@ -387,7 +472,7 @@ await postGateway(driver.accessToken, "/lpg/scans", {
   latitude: pickupLatitude,
   longitude: pickupLongitude,
   lpgOrderId,
-  payload: { gate: "lpg_lifecycle", runId },
+  payload: { gate: "lpg_lifecycle", runId, scannedCylinderId: cylinderId },
   scanType: "customer_pickup",
   source,
 });
@@ -403,14 +488,14 @@ await postGatewayId(driver.accessToken, "/lpg/orders/actions", {
 await requireGatewayError(wrongStationOwner.accessToken, "/lpg/scans", {
   idempotencyKey: idempotency("wrong-station-receipt"),
   lpgOrderId,
-  payload: { gate: "lpg_lifecycle", runId },
+  payload: { gate: "lpg_lifecycle", runId, scannedCylinderId: cylinderId },
   scanType: "station_receipt",
   source,
 }, "LPG order access permission");
 await requireGatewayError(driver.accessToken, "/lpg/scans", {
   idempotencyKey: idempotency("driver-station-receipt"),
   lpgOrderId,
-  payload: { gate: "lpg_lifecycle", runId },
+  payload: { gate: "lpg_lifecycle", runId, scannedCylinderId: cylinderId },
   scanType: "station_receipt",
   source,
 }, "branch-scoped LPG scanner permission");
@@ -420,7 +505,7 @@ await postGateway(stationStaff.accessToken, "/lpg/scans", {
   latitude: stationLatitude,
   longitude: stationLongitude,
   lpgOrderId,
-  payload: { gate: "lpg_lifecycle", runId },
+  payload: { gate: "lpg_lifecycle", runId, scannedCylinderId: cylinderId },
   scanType: "station_receipt",
   source,
 });
@@ -475,7 +560,7 @@ await postGateway(stationStaff.accessToken, "/lpg/scans", {
   latitude: stationLatitude,
   longitude: stationLongitude,
   lpgOrderId,
-  payload: { gate: "lpg_lifecycle", runId },
+  payload: { gate: "lpg_lifecycle", runId, scannedCylinderId: cylinderId },
   scanType: "station_release",
   source,
 });
@@ -512,7 +597,7 @@ const deliveryScanBody = await postGateway(driver.accessToken, "/lpg/scans", {
   latitude: deliveryLatitude,
   longitude: deliveryLongitude,
   lpgOrderId,
-  payload: { deliveryChallengeId: challengeId, gate: "lpg_lifecycle", runId },
+  payload: { deliveryChallengeId: challengeId, gate: "lpg_lifecycle", runId, scannedCylinderId: cylinderId },
   scanType: "customer_delivery",
   source,
 });
@@ -743,7 +828,6 @@ async function setupStationForUser(
     organizationId,
     ownerUserId: owner.id,
     refillCapacityKg: capacityKg,
-    serviceRadiusMeters: 10000,
     source,
     supportedCylinderSizesKg: [12.5, 25, 50],
   });
@@ -1065,6 +1149,27 @@ async function requireGatewayError(
       "Content-Type": "application/json",
     },
     method: "POST",
+  });
+  const body = await readJson(response);
+
+  requireCondition(!response.ok, `${path} unexpectedly succeeded.`);
+  requireCondition(
+    String(body.message ?? body.error ?? "").includes(expectedMessage),
+    `${path} returned unexpected error: ${String(body.message ?? body.error)}`,
+  );
+}
+
+async function requireGatewayGetError(
+  accessToken: string,
+  path: string,
+  expectedMessage: string,
+): Promise<void> {
+  const response = await fetch(`${supabaseUrl}/functions/v1/api-gateway${path}`, {
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${accessToken}`,
+    },
+    method: "GET",
   });
   const body = await readJson(response);
 

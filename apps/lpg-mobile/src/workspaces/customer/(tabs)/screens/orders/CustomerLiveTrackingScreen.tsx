@@ -14,6 +14,7 @@ import {
 } from "@lpg/shared/api/records";
 import { PolishedEmpty, StatusChip } from "@lpg/shared/ui/lpgComponents";
 import { QueryState } from "@lpg/shared/ui/QueryState";
+import { OrderDetailsSkeleton } from "@lpg/shared/ui/ScreenSkeletons";
 import { RecordField, WorkflowHeader } from "@lpg/shared/ui/WorkflowScreen";
 import { formatTimeValue } from "@lpg/shared/utilities/lpgFormat";
 import type { CustomerScreenProps } from "../../navigation/customerRoutes";
@@ -27,7 +28,7 @@ export function CustomerLiveTrackingScreen(props: CustomerScreenProps) {
   const status = getStatus(order, "pending");
 
   return (
-    <QueryState loading={orders.isLoading || points.isLoading} error={orders.error ?? points.error}>
+    <QueryState loading={orders.isLoading || points.isLoading} error={orders.error ?? points.error} skeleton={<OrderDetailsSkeleton />}>
       <WorkflowHeader title="Live Tracking" subtitle={displayReference(order)} onBack={props.navigation.goBack} />
       {order ? (
         <>

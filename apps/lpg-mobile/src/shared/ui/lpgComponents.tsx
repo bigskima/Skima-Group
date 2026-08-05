@@ -482,12 +482,15 @@ export function TransactionList(props: {
   );
 }
 
-export function ProfileCard(props: { readonly context: SessionContext }) {
+export function ProfileCard(props: {
+  readonly context: SessionContext;
+  readonly media?: ReactNode;
+}) {
   const name = resolveProfileName(props.context);
 
   return (
     <section className="profile-card">
-      <div className="avatar-large">{initials(name)}</div>
+      <div className="avatar-large">{props.media ?? initials(name)}</div>
       <div>
         <h2>{name}</h2>
         <StatusChip tone={statusTone(props.context.profile?.status ?? "active")} label={formatStatus(props.context.profile?.status ?? "Verified")} />
@@ -827,7 +830,12 @@ export function PolishedEmpty(props: {
   );
 }
 
-export function MenuRow(props: { readonly icon: ReactNode; readonly title: string; readonly text: string }) {
+export function MenuRow(props: {
+  readonly icon: ReactNode;
+  readonly title: string;
+  readonly text: string;
+  readonly trailing?: ReactNode;
+}) {
   return (
     <article className="menu-row">
       <span>{props.icon}</span>
@@ -835,7 +843,7 @@ export function MenuRow(props: { readonly icon: ReactNode; readonly title: strin
         <strong>{props.title}</strong>
         <small>{props.text}</small>
       </div>
-      <ChevronRight aria-hidden="true" />
+      {props.trailing ?? <ChevronRight aria-hidden="true" />}
     </article>
   );
 }

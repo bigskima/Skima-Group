@@ -22,7 +22,7 @@ export function WorkspaceProvider(props: {
     () => resolveAvailableWorkspaces(props.session, access.data ?? { workspaces: [] }),
     [access.data, props.session],
   );
-  const [current, setCurrent] = useState<LpgWorkspace>("customer");
+  const [current, setCurrent] = useState<LpgWorkspace>(readStoredWorkspace);
 
   useEffect(() => {
     if (!available.includes(current)) setCurrent(available[0] ?? "customer");
@@ -45,4 +45,10 @@ export function useWorkspace(): WorkspaceState {
   const value = useContext(WorkspaceContext);
   if (!value) throw new Error("useWorkspace must be used within WorkspaceProvider.");
   return value;
+}
+
+function readStoredWorkspace(): LpgWorkspace {
+  if (typeof window === "undefined") return "customer";
+  const stored = window.localStorage.getItem(storageKey);
+  return stored === "driver" || stored === "station" || stored === "customer" ? stored : "customer";
 }

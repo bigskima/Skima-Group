@@ -2,13 +2,16 @@ import type { SessionContext } from "@skima/frontend-core";
 import type { ComponentType } from "react";
 
 import type { NestedNavigator } from "@lpg/shared/types/navigation";
-import { RoutePendingScreen } from "@lpg/shared/ui/RoutePendingScreen";
 import { DriverHomeScreen } from "../screens/home/DriverHomeScreen";
+import { AvailabilityScreen } from "../screens/home/AvailabilityScreen";
 import { DriverJobsScreen } from "../screens/jobs/DriverJobsScreen";
 import { DriverJobDetailsScreen } from "../screens/jobs/DriverJobDetailsScreen";
 import { DriverScanScreen } from "../screens/scan/DriverScanScreen";
 import { DriverEarningsScreen } from "../screens/earnings/DriverEarningsScreen";
 import { DriverAccountScreen } from "../screens/account/DriverAccountScreen";
+import { DriverDocumentsScreen, DriverProfileScreen, DriverServiceZoneScreen, DriverVehicleScreen } from "../screens/account/DriverAccountDetailScreens";
+import { DriverEarningsTransactionsScreen, DriverWithdrawalScreen } from "../screens/earnings/DriverEarningsDetailScreens";
+import { CustomerArrivalScreen, CustomerRouteScreen, DriverDeliveryVerificationScreen, JobCompletedScreen, PickupVerificationScreen, ReturnRouteScreen, ScanResultScreen, StationHandoffScreen, StationRouteScreen } from "../screens/jobs/DriverWorkflowScreens";
 import type { DriverTab } from "./driverTabs";
 
 export type DriverRoute =
@@ -75,31 +78,25 @@ export const driverRouteTabs: Readonly<Record<DriverRoute, DriverTab>> = {
 
 export const driverRouteScreens: Readonly<Record<DriverRoute, ComponentType<DriverScreenProps>>> = {
   account: DriverAccountScreen,
-  availability: pendingDriverScreen("Availability"),
-  "customer-arrival": pendingDriverScreen("Customer Arrival"),
-  "customer-route": pendingDriverScreen("Route To Customer"),
-  "delivery-verification": pendingDriverScreen("Delivery Verification"),
-  documents: pendingDriverScreen("Driver Documents"),
+  availability: AvailabilityScreen,
+  "customer-arrival": CustomerArrivalScreen,
+  "customer-route": CustomerRouteScreen,
+  "delivery-verification": DriverDeliveryVerificationScreen,
+  documents: DriverDocumentsScreen,
   earnings: DriverEarningsScreen,
-  "earnings-transactions": pendingDriverScreen("Earnings Transactions"),
-  "earnings-withdrawal": pendingDriverScreen("Withdraw Earnings"),
+  "earnings-transactions": DriverEarningsTransactionsScreen,
+  "earnings-withdrawal": DriverWithdrawalScreen,
   home: DriverHomeScreen,
-  "job-completed": pendingDriverScreen("Job Completed"),
+  "job-completed": JobCompletedScreen,
   "job-details": DriverJobDetailsScreen,
   jobs: DriverJobsScreen,
-  "pickup-verification": pendingDriverScreen("Pickup Verification"),
-  profile: pendingDriverScreen("Driver Profile"),
-  "return-route": pendingDriverScreen("Return Delivery"),
+  "pickup-verification": PickupVerificationScreen,
+  profile: DriverProfileScreen,
+  "return-route": ReturnRouteScreen,
   scan: DriverScanScreen,
-  "scan-result": pendingDriverScreen("Scan Result"),
-  "service-zone": pendingDriverScreen("Service Zone"),
-  "station-handoff": pendingDriverScreen("Station Handoff"),
-  "station-route": pendingDriverScreen("Route To Station"),
-  vehicle: pendingDriverScreen("Driver Vehicle"),
+  "scan-result": ScanResultScreen,
+  "service-zone": DriverServiceZoneScreen,
+  "station-handoff": StationHandoffScreen,
+  "station-route": StationRouteScreen,
+  vehicle: DriverVehicleScreen,
 };
-
-function pendingDriverScreen(title: string): ComponentType<DriverScreenProps> {
-  return function PendingDriverScreen(props: DriverScreenProps) {
-    return <RoutePendingScreen title={title} onBack={props.navigation.goBack} />;
-  };
-}

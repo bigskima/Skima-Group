@@ -51,6 +51,23 @@ export function useJobsQuery(queue: "driver" | "station") {
   });
 }
 
+export function useJobDetailsQuery(orderId: string | null) {
+  return useGatewayQuery({
+    enabled: Boolean(orderId),
+    key: ["jobs", "details", orderId],
+    path: `/lpg/jobs?lpgOrderId=${encodeURIComponent(orderId ?? "")}`,
+    schema: RecordObjectSchema,
+  });
+}
+
+export function useScansQuery(orderId: string | null = null) {
+  return useGatewayQuery({
+    key: ["scans", orderId],
+    path: orderId ? `/lpg/scans?lpgOrderId=${encodeURIComponent(orderId)}` : "/lpg/scans",
+    schema: RecordArraySchema,
+  });
+}
+
 export function useOrderFinancialSummaryQuery(orderId: string | null) {
   return useGatewayQuery({
     enabled: Boolean(orderId),

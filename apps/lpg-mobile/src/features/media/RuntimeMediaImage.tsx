@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ImageOff } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { z } from "zod";
 
 import { useSession } from "@lpg/app/providers/SessionProvider";
@@ -19,6 +19,7 @@ export function RuntimeMediaImage(props: {
   readonly fallback?: ReactNode;
 }) {
   const session = useSession();
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const query = useQuery({
     enabled: session.status === "authenticated" && Boolean(props.assetId),
     queryFn: () => session.api.post(
@@ -33,8 +34,8 @@ export function RuntimeMediaImage(props: {
     staleTime: 12 * 60 * 1000,
   });
 
-  if (query.data?.signedUrl) {
-    return <img className="runtime-media-image" src={query.data.signedUrl} alt={props.alt} />;
+  if (query.data?.signedUrl && query.data.signedUrl !== failedUrl) {
+    return <img className="runtime-media-image" src={query.data.signedUrl} alt={props.alt} loading="lazy" decoding="async" onError={() => setFailedUrl(query.data?.signedUrl ?? null)} />;
   }
 
   return props.fallback ?? (
@@ -51,6 +52,7 @@ export function firstMediaAssetId(record: PlatformRecord | null | undefined): st
     record?.vehicle_image_asset_ids,
     record?.vehicleImageAssetIds,
   ];
+
 
   for (const candidate of candidates) {
     if (Array.isArray(candidate)) {
