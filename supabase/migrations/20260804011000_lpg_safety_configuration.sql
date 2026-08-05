@@ -63,6 +63,20 @@ for each row execute function public.set_updated_at();
 alter table public.lpg_safety_incident_type_definitions enable row level security;
 alter table public.lpg_safety_severity_definitions enable row level security;
 
+drop policy if exists lpg_safety_incident_types_no_direct_select
+on public.lpg_safety_incident_type_definitions;
+create policy lpg_safety_incident_types_no_direct_select
+on public.lpg_safety_incident_type_definitions
+for select to authenticated
+using (false);
+
+drop policy if exists lpg_safety_severities_no_direct_select
+on public.lpg_safety_severity_definitions;
+create policy lpg_safety_severities_no_direct_select
+on public.lpg_safety_severity_definitions
+for select to authenticated
+using (false);
+
 revoke all on table public.lpg_safety_incident_type_definitions from public, anon, authenticated;
 revoke all on table public.lpg_safety_severity_definitions from public, anon, authenticated;
 
