@@ -18,11 +18,13 @@
     "mobile:dev": "vite --config apps/mobile/vite.config.ts --host 127.0.0.1 --port 5175",
     "mobile:test": "vitest run --config apps/mobile/vitest.config.ts",
     "mobile:validate": "deno run --allow-read scripts/validate-mobile-foundation.ts",
-    "lpg-mobile:build": "vite build --config apps/lpg-mobile/vite.config.ts",
-    "lpg-mobile:check": "tsc --noEmit -p apps/lpg-mobile/tsconfig.json",
-    "lpg-mobile:deploy:vercel": "npx vercel@latest --prod",
-    "lpg-mobile:dev": "vite --config apps/lpg-mobile/vite.config.ts --host 127.0.0.1 --port 5176",
-    "lpg-mobile:test": "vitest run --config apps/lpg-mobile/vitest.config.ts",
+    "lpg-mobile:build": "npm --prefix apps/lpg-mobile run build:web",
+    "lpg-mobile:check": "npm --prefix apps/lpg-mobile run check",
+    "lpg-mobile:dev": "npm --prefix apps/lpg-mobile start",
+    "lpg-mobile:android": "npm --prefix apps/lpg-mobile run android",
+    "lpg-mobile:ios": "npm --prefix apps/lpg-mobile run ios",
+    "lpg-mobile:web": "npm --prefix apps/lpg-mobile run web",
+    "lpg-mobile:test": "npm --prefix apps/lpg-mobile test",
     "verify": "npm run check && npm run lint && npm run validate && npm run frontend:validate && npm run mobile:validate",
     "supabase:link": "deno run --allow-env --allow-run --allow-read scripts/supabase-remote.ts link",
     "supabase:db:push": "deno run --allow-env --allow-run --allow-read scripts/supabase-remote.ts db-push",
@@ -71,6 +73,6 @@
     "vitest": "2.1.9"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

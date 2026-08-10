@@ -1,0 +1,161 @@
+import { Sparkles } from "lucide-react-native";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { domainQueries, useEntityMediaLinks } from "../api/domains";
+import { useGatewayMutation } from "../api/gateway";
+import { ActionResponseSchema, firstString } from "../api/records";
+import { colors, radii, spacing } from "../theme/tokens";
+import { idempotencyKey } from "../utilities/idempotency";
+import { RuntimeMediaImage } from "./RuntimeMediaImage";
+export function PresentationMediaPanel({
+  subjectId,
+  subjectType,
+  colour,
+  originalAssetId,
+}: {
+  subjectId: string;
+  subjectType: "lpg_cylinder" | "vehicle" | "station";
+  colour?: string | null;
+  originalAssetId?: string | null;
+}) {
+  const definitions = domainQueries.aiTasks();
+  const links = useEntityMediaLinks(subjectType, subjectId);
+  const task = definitions.data?.find((item) => {
+    const key = firstString(item, ["key", "task_key"]) ?? "";
+    return (
+      key.includes("presentation") &&
+      key.includes(subjectType.replace("lpg_", ""))
+    );
+  });
+  const taskKey = task ? firstString(task, ["key", "task_key"]) : null;
+  const presentation = (links.data ?? []).find((item) =>
+    (firstString(item, ["media_role", "mediaRole"]) ?? "").includes(
+      "presentation",
+    ),
+  );
+  const original = (links.data ?? []).find((item) =>
+    ["evidence", "original", "photo"].some((role) =>
+      (firstString(item, ["media_role", "mediaRole"]) ?? "").includes(role),
+    ),
+  );
+  const presentationId = firstString(presentation, [
+    "media_asset_id",
+    "mediaAssetId",
+  ]);
+  const originalId =
+    firstString(original, ["media_asset_id", "mediaAssetId"]) ??
+    originalAssetId ??
+    null;
+  const queue = useGatewayMutation({
+    path: "/runtime/ai/queue",
+    schema: ActionResponseSchema,
+  });
+  const [queued, setQueued] = useState(false);
+  const request = async () => {
+    if (!taskKey) return;
+    await queue.mutateAsync({
+      taskKey,
+      subjectType,
+      subjectId,
+      source: "skima.lpg.mobile",
+      idempotencyKey: idempotencyKey("presentation-media", subjectId),
+      input: {
+        purpose: "public_presentation",
+        confirmedColour: colour ?? undefined,
+        sourceMediaAssetId: originalId ?? undefined,
+        preserveOriginal: true,
+      },
+    });
+    setQueued(true);
+  };
+  return (
+    <View style={styles.panel}>
+      {presentationId ? (
+        <RuntimeMediaImage
+          assetId={presentationId}
+          label="Presentation image"
+        />
+      ) : originalId ? (
+        <RuntimeMediaImage assetId={originalId} label="Original evidence" />
+      ) : null}
+      <View style={styles.head}>
+        <View style={styles.icon}>
+          <Sparkles color="#6B35D3" size={22} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>
+            {presentationId
+              ? "Premium presentation image"
+              : originalId
+                ? "Authentic original image"
+                : "Premium presentation image"}
+          </Text>
+          <Text style={styles.body}>
+            Presentation derivatives are displayed separately. Original evidence
+            remains unchanged and authoritative.
+          </Text>
+        </View>
+      </View>
+      {queued ? (
+        <Text style={styles.queued}>Presentation request queued securely.</Text>
+      ) : !presentationId && taskKey ? (
+        <Pressable
+          disabled={queue.isPending}
+          onPress={() => void request()}
+          style={styles.button}
+        >
+          {queue.isPending ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <Text style={styles.buttonText}>Generate presentation</Text>
+          )}
+        </Pressable>
+      ) : !presentationId && !taskKey ? (
+        <Text style={styles.unavailable}>
+          Presentation generation is not configured for this asset yet.
+        </Text>
+      ) : null}
+      {queue.error ? (
+        <Text style={styles.error}>{queue.error.message}</Text>
+      ) : null}
+    </View>
+  );
+}
+const styles = StyleSheet.create({
+  panel: {
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: "#DDCDF8",
+    backgroundColor: "#FAF7FF",
+  },
+  head: { flexDirection: "row", gap: spacing.md },
+  icon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#EEE6FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  title: { color: colors.ink, fontSize: 17, fontWeight: "900" },
+  body: { color: colors.muted, lineHeight: 20, marginTop: 4 },
+  button: {
+    minHeight: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radii.md,
+    backgroundColor: "#6B35D3",
+  },
+  buttonText: { color: "white", fontWeight: "900" },
+  queued: { color: "#4A228F", fontWeight: "800" },
+  unavailable: { color: colors.muted, fontStyle: "italic" },
+  error: { color: colors.danger },
+});

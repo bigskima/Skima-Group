@@ -8,6 +8,7 @@ dist/
 build/
 coverage/
 .nyc_output/
+.expo/
 
 # Supabase local state
 supabase/.temp/
