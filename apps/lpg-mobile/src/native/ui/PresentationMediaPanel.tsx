@@ -13,6 +13,8 @@ import { ActionResponseSchema, firstString } from "../api/records";
 import { colors, radii, spacing } from "../theme/tokens";
 import { idempotencyKey } from "../utilities/idempotency";
 import { RuntimeMediaImage } from "./RuntimeMediaImage";
+import { useSession } from "../session/SessionProvider";
+import { useAppTheme } from "../theme/ThemeProvider";
 export function PresentationMediaPanel({
   subjectId,
   subjectType,
@@ -24,6 +26,8 @@ export function PresentationMediaPanel({
   colour?: string | null;
   originalAssetId?: string | null;
 }) {
+  const session = useSession();
+  const { palette } = useAppTheme();
   const definitions = domainQueries.aiTasks();
   const links = useEntityMediaLinks(subjectType, subjectId);
   const task = definitions.data?.find((item) => {
@@ -59,23 +63,33 @@ export function PresentationMediaPanel({
   const [queued, setQueued] = useState(false);
   const request = async () => {
     if (!taskKey) return;
-    await queue.mutateAsync({
-      taskKey,
-      subjectType,
-      subjectId,
-      source: "skima.lpg.mobile",
-      idempotencyKey: idempotencyKey("presentation-media", subjectId),
-      input: {
-        purpose: "public_presentation",
-        confirmedColour: colour ?? undefined,
-        sourceMediaAssetId: originalId ?? undefined,
-        preserveOriginal: true,
-      },
-    });
     setQueued(true);
+    try {
+      await queue.mutateAsync({
+        taskKey,
+        subjectType,
+        subjectId,
+        source: "skima.lpg.mobile",
+        idempotencyKey: idempotencyKey("presentation-media", subjectId),
+        input: {
+          purpose: "public_presentation",
+          confirmedColour: colour ?? undefined,
+          sourceMediaAssetId: originalId ?? undefined,
+          preserveOriginal: true,
+        },
+      });
+      await session.api.request("/runtime/ai/process", ActionResponseSchema, {
+        method: "POST",
+        body: {},
+        timeoutMs: 60_000,
+      });
+      await links.refetch();
+    } finally {
+      setQueued(false);
+    }
   };
   return (
-    <View style={styles.panel}>
+    <View style={[styles.panel, { backgroundColor: palette.surface, borderColor: palette.scheme === "dark" ? "#513879" : "#DDCDF8" }]}>
       {presentationId ? (
         <RuntimeMediaImage
           assetId={presentationId}
@@ -89,21 +103,21 @@ export function PresentationMediaPanel({
           <Sparkles color="#6B35D3" size={22} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>
+          <Text style={[styles.title, { color: palette.ink }]}>
             {presentationId
               ? "Premium presentation image"
               : originalId
                 ? "Authentic original image"
                 : "Premium presentation image"}
           </Text>
-          <Text style={styles.body}>
+          <Text style={[styles.body, { color: palette.muted }]}>
             Presentation derivatives are displayed separately. Original evidence
             remains unchanged and authoritative.
           </Text>
         </View>
       </View>
       {queued ? (
-        <Text style={styles.queued}>Presentation request queued securely.</Text>
+        <View style={styles.processing}><ActivityIndicator color="#6B35D3" /><Text style={styles.queued}>Generating your premium cylinder image…</Text></View>
       ) : !presentationId && taskKey ? (
         <Pressable
           disabled={queue.isPending}
@@ -156,6 +170,7 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "white", fontWeight: "900" },
   queued: { color: "#4A228F", fontWeight: "800" },
+  processing: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   unavailable: { color: colors.muted, fontStyle: "italic" },
   error: { color: colors.danger },
 });

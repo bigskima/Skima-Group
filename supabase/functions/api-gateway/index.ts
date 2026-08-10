@@ -28,6 +28,7 @@ const ROUTES = new Set([
   "/lpg/workspace-access",
   "/lpg/locations",
   "/lpg/cylinders",
+  "/lpg/cylinders/name",
   "/lpg/cylinders/media",
   "/lpg/cylinders/history",
   "/lpg/quotes",
@@ -59,6 +60,7 @@ const ROUTES = new Set([
   "/lpg/maps/route-estimate",
   "/runtime/catalog",
   "/runtime/session-context",
+  "/runtime/profile/avatar",
   "/runtime/catalog/units",
   "/runtime/catalog/categories",
   "/runtime/catalog/items",
@@ -136,6 +138,7 @@ const ROUTES = new Set([
   "/runtime/verifications",
   "/runtime/notifications/queue",
   "/runtime/ai/queue",
+  "/runtime/ai/process",
   "/runtime/settlements/execute",
   "/runtime/escrow/status",
   "/runtime/escrow/release",
@@ -261,6 +264,66 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
   if (routePath === "/runtime/session-context" && request.method === "GET") {
     return resolveSessionContext(supabase, authResult.user, id);
+  }
+
+  if (routePath === "/runtime/profile/avatar") {
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      return rpcResponse(
+        supabase.rpc("set_profile_avatar_media", {
+          target_media_asset_id: requireUuid(body.value.mediaAssetId, "mediaAssetId"),
+        }),
+        id,
+      );
+    }
+
+    if (request.method === "DELETE") {
+      const previous = await supabase
+        .from("profiles")
+        .select("avatar_url")
+        .eq("id", authResult.user.id)
+        .maybeSingle();
+
+      if (previous.error) return databaseError(previous.error, id);
+
+      const avatarValue = stringOrNull(getRecordValue(previous.data, "avatar_url"));
+      const assetId = avatarValue && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(avatarValue)
+        ? avatarValue
+        : null;
+      const clearResult = await supabase.rpc("clear_profile_avatar_media");
+      if (clearResult.error) return databaseError(clearResult.error, id);
+
+      if (assetId) {
+        const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (!serviceRoleKey) {
+          return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+        }
+
+        const asset = await supabase
+          .from("media_assets")
+          .select("id,storage_bucket,storage_path")
+          .eq("id", assetId)
+          .eq("owner_user_id", authResult.user.id)
+          .maybeSingle();
+
+        if (asset.error) return databaseError(asset.error, id);
+        if (asset.data) {
+          const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+          const bucket = requireString(getRecordValue(asset.data, "storage_bucket"), "storageBucket");
+          const path = requireString(getRecordValue(asset.data, "storage_path"), "storagePath");
+          const removal = await serviceClient.storage.from(bucket).remove([path]);
+          if (removal.error) return databaseError(removal.error, id);
+          const archive = await serviceClient
+            .from("media_assets")
+            .update({ status: "deleted", updated_at: new Date().toISOString() })
+            .eq("id", assetId);
+          if (archive.error) return databaseError(archive.error, id);
+        }
+      }
+
+      return jsonResponse({ ok: true, id: assetId, requestId: id });
+    }
   }
 
   if (routePath === "/engines/currencies" && request.method === "GET") {
@@ -647,7 +710,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase
           .from("lpg_cylinders")
           .select(
-            "id,public_reference,cylinder_identifier,qr_payload,barcode_payload,size_kg,max_capacity_kg,manufacturer,brand,colour,serial_number,manufactured_at,last_inspection_at,next_inspection_at,condition_status,valve_type,ownership_proof_asset_id,ownership_proof_media_asset_id,image_asset_ids,status,safety_restriction,notes,metadata,created_at,updated_at",
+            "id,public_reference,display_name,cylinder_identifier,qr_payload,barcode_payload,size_kg,max_capacity_kg,manufacturer,brand,colour,serial_number,manufactured_at,last_inspection_at,next_inspection_at,condition_status,valve_type,ownership_proof_asset_id,ownership_proof_media_asset_id,image_asset_ids,status,safety_restriction,notes,metadata,created_at,updated_at",
           )
           .neq("status", "deactivated")
           .order("created_at", { ascending: false }),
@@ -697,6 +760,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         "lpg_cylinders",
       );
     }
+  }
+
+  if (routePath === "/lpg/cylinders/name" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(
+      supabase.rpc("set_lpg_cylinder_display_name", {
+        target_cylinder_id: requireUuid(body.value.cylinderId, "cylinderId"),
+        target_display_name: requireString(body.value.displayName, "displayName"),
+      }),
+      id,
+    );
   }
 
   if (routePath === "/lpg/cylinders/media" && request.method === "POST") {
@@ -3391,17 +3466,55 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const payload = body.value;
+    const taskKey = requireString(payload.taskKey, "taskKey");
+    const subjectType = requireString(payload.subjectType, "subjectType");
+    const subjectId = optionalUuid(payload.subjectId, "subjectId");
+    const source = optionalString(payload.source) ?? "platform.ai_engine";
+    const input = optionalRecord(payload.input) ?? {};
+    const idempotencyKey = requireString(payload.idempotencyKey, "idempotencyKey");
+    const ownedPresentation = taskKey === "ai.lpg.cylinder.presentation";
     return rpcResponse(
-      supabase.rpc("queue_ai_task_run", {
-        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-        target_input: optionalRecord(payload.input) ?? {},
-        target_source: optionalString(payload.source) ?? "platform.ai_engine",
-        target_subject_id: optionalUuid(payload.subjectId, "subjectId"),
-        target_subject_type: requireString(payload.subjectType, "subjectType"),
-        target_task_key: requireString(payload.taskKey, "taskKey"),
+      ownedPresentation ? supabase.rpc("queue_owned_presentation_ai_task", {
+        target_idempotency_key: idempotencyKey,
+        target_input: input,
+        target_source: source,
+        target_subject_id: requireUuid(subjectId, "subjectId"),
+        target_subject_type: subjectType,
+        target_task_key: taskKey,
+      }) : supabase.rpc("queue_ai_task_run", {
+        target_idempotency_key: idempotencyKey,
+        target_input: input,
+        target_source: source,
+        target_subject_id: subjectId,
+        target_subject_type: subjectType,
+        target_task_key: taskKey,
       }),
       id,
     );
+  }
+
+  if (routePath === "/runtime/ai/process" && request.method === "POST") {
+    const workerSecret = Deno.env.get("SKIMA_WORKER_SECRET");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!workerSecret || !serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+    }
+    const response = await fetch(`${supabaseUrl}/functions/v1/runtime-worker`, {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`,
+        "content-type": "application/json",
+        "x-skima-worker-secret": workerSecret,
+      },
+      body: JSON.stringify({ limit: 5, scope: "ai" }),
+      signal: AbortSignal.timeout(55_000),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) {
+      return jsonResponse({ ok: false, error: "ai_worker_failed", details: result, requestId: id }, 502);
+    }
+    return jsonResponse({ ok: true, data: getRecordValue(result, "data") ?? result, requestId: id });
   }
 
   if (routePath === "/runtime/settlements/execute" && request.method === "POST") {

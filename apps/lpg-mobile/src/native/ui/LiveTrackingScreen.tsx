@@ -11,12 +11,15 @@ import {
   useTrackingPoints,
   useTrackingSessions,
 } from "../api/domains";
-import { firstNumber, firstString, type PlatformRecord } from "../api/records";
+import { firstNumber, firstString, nestedRecord, type PlatformRecord } from "../api/records";
 import { OperationalMap, type MapPoint } from "../maps/OperationalMap";
 import { colors, radii, spacing } from "../theme/tokens";
 import { Card } from "./Card";
 import { Screen } from "./Screen";
+import { ScreenSkeleton } from "./ScreenSkeleton";
+import { useAppTheme } from "../theme/ThemeProvider";
 export function LiveTrackingScreen() {
+  const { palette } = useAppTheme();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const sessions = useTrackingSessions();
   const details = useJobDetails(id ?? null);
@@ -29,9 +32,12 @@ export function LiveTrackingScreen() {
     ? firstString(session, ["id", "tracking_session_id"])
     : null;
   const points = useTrackingPoints(sessionId);
-  const mapped = (points.data ?? [])
+  const driverPath = [...(points.data ?? [])].reverse()
     .map(toPoint)
     .filter((point): point is MapPoint => Boolean(point));
+  const delivery = nestedRecord(details.data, "deliveryLocation") ?? nestedRecord(details.data, "delivery_location");
+  const destination = delivery ? locationPoint(delivery, "Customer destination", "destination") : null;
+  const mapped = [...driverPath, ...(destination ? [destination] : [])];
   const latest = points.data?.[0];
   const recorded = firstString(latest, [
     "recorded_at",
@@ -64,7 +70,7 @@ export function LiveTrackingScreen() {
       {sessions.isPending ||
       details.isPending ||
       (Boolean(sessionId) && points.isPending) ? (
-        <ActivityIndicator color={colors.brand} />
+        <ScreenSkeleton cards={2} />
       ) : sessions.error || points.error || details.error ? (
         <Card>
           <Text style={styles.error}>
@@ -84,13 +90,16 @@ export function LiveTrackingScreen() {
         </Card>
       ) : (
         <>
-          <OperationalMap points={mapped} connectPoints />
+          <View style={styles.mapShell}>
+            <OperationalMap points={mapped} connectPoints />
+            <View style={[styles.liveOverlay, { backgroundColor: palette.surface }]}><View style={[styles.pulse, { backgroundColor: !stale && driverPath.length ? colors.success : colors.accent }]} /><Text style={[styles.overlayText, { color: palette.ink }]}>{!stale && driverPath.length ? "Live driver movement" : "Waiting for driver signal"}</Text></View>
+          </View>
           <Card>
             <View style={styles.row}>
               <View>
                 <Text style={styles.label}>Location status</Text>
                 <Text style={styles.value}>
-                  {mapped.length
+                  {driverPath.length
                     ? stale
                       ? "Last location is stale"
                       : "Location recently updated"
@@ -102,17 +111,17 @@ export function LiveTrackingScreen() {
                   styles.pill,
                   {
                     backgroundColor:
-                      mapped.length && !stale ? "#DDF3E5" : "#FFF0D8",
+                      driverPath.length && !stale ? "#DDF3E5" : "#FFF0D8",
                   },
                 ]}
               >
                 <Text
                   style={{
-                    color: mapped.length && !stale ? colors.success : "#9A5B00",
+                    color: driverPath.length && !stale ? colors.success : "#9A5B00",
                     fontWeight: "800",
                   }}
                 >
-                  {mapped.length && !stale ? "LIVE" : "WAITING"}
+                  {driverPath.length && !stale ? "LIVE" : "WAITING"}
                 </Text>
               </View>
             </View>
@@ -123,7 +132,7 @@ export function LiveTrackingScreen() {
             </Text>
             <View style={styles.estimates}>
               <View style={styles.estimate}>
-                <Text style={styles.label}>Backend distance</Text>
+                <Text style={styles.label}>Route distance</Text>
                 <Text style={styles.value}>
                   {distance === null
                     ? "Unavailable"
@@ -131,7 +140,7 @@ export function LiveTrackingScreen() {
                 </Text>
               </View>
               <View style={styles.estimate}>
-                <Text style={styles.label}>Backend ETA</Text>
+                <Text style={styles.label}>Estimated arrival</Text>
                 <Text style={styles.value}>
                   {duration === null
                     ? "Unavailable"
@@ -149,8 +158,13 @@ function toPoint(record: PlatformRecord): MapPoint | null {
   const latitude = Number(record.latitude ?? record.lat);
   const longitude = Number(record.longitude ?? record.lng);
   return Number.isFinite(latitude) && Number.isFinite(longitude)
-    ? { latitude, longitude, label: "Verified tracking update" }
+    ? { latitude, longitude, label: "Delivery driver", kind: "driver" }
     : null;
+}
+function locationPoint(record: PlatformRecord, label: string, kind: MapPoint["kind"]): MapPoint | null {
+  const latitude = firstNumber(record, ["latitude", "lat"]);
+  const longitude = firstNumber(record, ["longitude", "lng"]);
+  return latitude !== null && longitude !== null ? { latitude, longitude, label, kind } : null;
 }
 const styles = StyleSheet.create({
   back: { color: colors.brand, fontWeight: "800" },
@@ -178,4 +192,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F6F4",
   },
   error: { color: colors.danger, lineHeight: 20 },
+  mapShell: { position: "relative" },
+  liveOverlay: { position: "absolute", left: spacing.md, top: spacing.md, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 12, paddingVertical: 9, borderRadius: radii.pill, shadowColor: "#000", shadowOpacity: .14, shadowRadius: 10, elevation: 4 },
+  pulse: { width: 9, height: 9, borderRadius: 5 },
+  overlayText: { fontSize: 12, fontWeight: "900" },
 });

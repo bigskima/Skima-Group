@@ -1,16 +1,17 @@
 import type { PropsWithChildren, ReactElement, ReactNode } from "react";
-import { ScrollView, StyleSheet, Text, View, useColorScheme, useWindowDimensions, type RefreshControlProps } from "react-native";
+import { ScrollView, StyleSheet, Text, View, useWindowDimensions, type RefreshControlProps } from "react-native";
 import { colors, spacing } from "../theme/tokens";
 import { useNetInfo } from "@react-native-community/netinfo";
+import { useAppTheme } from "../theme/ThemeProvider";
 
 export function Screen({ children, title, eyebrow, action, refreshControl }: PropsWithChildren<{ title: string; eyebrow?: string; action?: ReactNode; refreshControl?: ReactElement<RefreshControlProps> }>) {
-  const dark = useColorScheme() === "dark";
+  const { palette } = useAppTheme();
   const network = useNetInfo();
   const { width } = useWindowDimensions();
-  return <ScrollView refreshControl={refreshControl} style={[styles.page, { backgroundColor: dark ? colors.darkCanvas : colors.canvas }]} contentContainerStyle={styles.outer}>
+  return <ScrollView refreshControl={refreshControl} style={[styles.page, { backgroundColor: palette.canvas }]} contentContainerStyle={styles.outer}>
     <View style={[styles.content, { maxWidth: width >= 1024 ? 1180 : 760 }]}>
       {network.isConnected === false ? <View accessibilityRole="alert" style={styles.offline}><Text style={styles.offlineText}>You’re offline. Saved drafts remain available; reconnect before submitting backend actions.</Text></View> : null}
-      <View style={styles.heading}>{eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}<Text style={[styles.title, { color: dark ? colors.darkInk : colors.ink }]}>{title}</Text>{action}</View>
+      <View style={styles.heading}>{eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}<Text style={[styles.title, { color: palette.ink }]}>{title}</Text>{action}</View>
       {children}
     </View>
   </ScrollView>;

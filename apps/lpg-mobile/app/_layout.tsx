@@ -1,9 +1,13 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useColorScheme } from "react-native";
 import { AppProviders } from "../src/native/providers/AppProviders";
+import { useAppTheme } from "../src/native/theme/ThemeProvider";
 
 export default function RootLayout() {
-  const scheme = useColorScheme();
-  return <AppProviders><StatusBar style={scheme === "dark" ? "light" : "dark"} /><Stack screenOptions={{ headerShown: false }} /></AppProviders>;
+  return <AppProviders><AppNavigator /></AppProviders>;
+}
+
+function AppNavigator() {
+  const { scheme, palette } = useAppTheme();
+  return <><StatusBar style={scheme === "dark" ? "light" : "dark"} /><Stack screenOptions={{ headerShown: false, title: "SKIMA LPG", contentStyle: { backgroundColor: palette.canvas } }} /></>;
 }

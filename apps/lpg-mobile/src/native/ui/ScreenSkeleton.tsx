@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
-import { Animated, StyleSheet, View, useColorScheme } from "react-native";
+import { Animated, StyleSheet, View } from "react-native";
 import { colors, radii, spacing } from "../theme/tokens";
+import { useAppTheme } from "../theme/ThemeProvider";
 
 export function ScreenSkeleton({ cards = 3 }: { cards?: number }) {
-  const dark = useColorScheme() === "dark";
+  const { scheme, palette } = useAppTheme();
   const opacity = useRef(new Animated.Value(0.45)).current;
   useEffect(() => {
     const animation = Animated.loop(
@@ -23,7 +24,7 @@ export function ScreenSkeleton({ cards = 3 }: { cards?: number }) {
     animation.start();
     return () => animation.stop();
   }, [opacity]);
-  const fill = dark ? "#26352C" : "#E4EAE6";
+  const fill = scheme === "dark" ? "#304238" : "#E4EAE6";
   return (
     <View accessibilityLabel="Loading content" style={styles.stack}>
       <Animated.View
@@ -35,8 +36,8 @@ export function ScreenSkeleton({ cards = 3 }: { cards?: number }) {
           style={[
             styles.card,
             {
-              borderColor: dark ? "#29382F" : colors.border,
-              backgroundColor: dark ? colors.darkSurface : colors.surface,
+              borderColor: palette.border,
+              backgroundColor: palette.surface,
               opacity,
             },
           ]}

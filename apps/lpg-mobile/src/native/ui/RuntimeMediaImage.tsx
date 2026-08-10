@@ -15,9 +15,11 @@ const ReadSchema = z.object({
 export function RuntimeMediaImage({
   assetId,
   label,
+  variant = "card",
 }: {
   assetId: string | null;
   label: string;
+  variant?: "card" | "avatar" | "hero";
 }) {
   const session = useSession();
   const query = useQuery({
@@ -44,11 +46,11 @@ export function RuntimeMediaImage({
       source={query.data.signedUrl}
       contentFit="cover"
       transition={180}
-      style={styles.image}
+      style={[styles.image, variant === "avatar" && styles.avatar, variant === "hero" && styles.hero]}
       accessibilityLabel={label}
     />
   ) : (
-    <View style={styles.placeholder}>
+    <View style={[styles.placeholder, variant === "avatar" && styles.avatar, variant === "hero" && styles.hero]}>
       <ImageOff color={colors.muted} size={28} />
       <Text style={styles.label}>
         {query.isPending ? "Loading image…" : `${label} unavailable`}
@@ -63,6 +65,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: "#E9ECEA",
   },
+  avatar: { width: 96, height: 96, aspectRatio: 1, borderRadius: 48 },
+  hero: { aspectRatio: 16 / 10, borderRadius: radii.lg },
   placeholder: {
     width: "100%",
     aspectRatio: 4 / 3,

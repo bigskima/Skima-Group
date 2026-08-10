@@ -7,7 +7,6 @@ import {
   Text,
   TextInput,
   View,
-  useColorScheme,
 } from "react-native";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
@@ -24,11 +23,12 @@ import { draftStore } from "../storage/drafts";
 import { colors, radii, spacing } from "../theme/tokens";
 import { idempotencyKey } from "../utilities/idempotency";
 import { Screen } from "./Screen";
+import { useAppTheme } from "../theme/ThemeProvider";
 const TYPE = "customer-refill-request";
 export function NewRefillScreen() {
   const session = useSession();
   const owner = session.context?.profile?.id ?? session.context?.user.id ?? "";
-  const dark = useColorScheme() === "dark";
+  const { palette } = useAppTheme();
   const cylinders = domainQueries.cylinders();
   const locations = domainQueries.locations();
   const stations = domainQueries.stations();
@@ -90,6 +90,13 @@ export function NewRefillScreen() {
       setHydrated(true);
     });
   }, [owner]);
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!cylinderId && cylinders.data?.[0]) setCylinderId(recordId(cylinders.data[0]) ?? "");
+    const firstLocationId = locations.data?.[0] ? recordId(locations.data[0]) : null;
+    if (!pickupLocationId && firstLocationId) setPickupLocationId(firstLocationId);
+    if (!deliveryLocationId && firstLocationId) setDeliveryLocationId(firstLocationId);
+  }, [cylinderId, cylinders.data, deliveryLocationId, hydrated, locations.data, pickupLocationId]);
   useEffect(() => {
     if (!owner || !hydrated) return;
     const now = new Date().toISOString();
@@ -222,13 +229,13 @@ export function NewRefillScreen() {
         <View
           style={[
             styles.quote,
-            { backgroundColor: dark ? colors.darkSurface : colors.surface },
+            { backgroundColor: palette.surface },
           ]}
         >
           <Text
             style={[
               styles.quoteTitle,
-              { color: dark ? colors.darkInk : colors.ink },
+              { color: palette.ink },
             ]}
           >
             Backend quote received
@@ -292,6 +299,13 @@ export function NewRefillScreen() {
         </View>
       ) : (
         <>
+          {!locations.isPending && (locations.data ?? []).length === 0 ? (
+            <View style={[styles.locationRequired, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <Text style={[styles.groupTitle, { color: palette.ink }]}>Detect your delivery location first</Text>
+              <Text style={[styles.muted, { color: palette.muted }]}>A verified device location is required before the backend can price and dispatch this order.</Text>
+              <Pressable onPress={() => router.push("/(customer)/locations")} style={styles.locationButton}><Text style={styles.primaryText}>Detect location</Text></Pressable>
+            </View>
+          ) : null}
           <Choice
             title="Cylinder"
             records={cylinders.data ?? []}
@@ -490,4 +504,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     textAlignVertical: "top",
   },
+  locationRequired: { gap: spacing.sm, padding: spacing.lg, borderWidth: 1, borderRadius: radii.lg },
+  locationButton: { minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: radii.md, backgroundColor: colors.brand },
 });

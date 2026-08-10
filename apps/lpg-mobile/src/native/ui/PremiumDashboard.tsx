@@ -13,7 +13,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useColorScheme,
   useWindowDimensions,
 } from "react-native";
 import { domainQueries } from "../api/domains";
@@ -30,6 +29,8 @@ import { useSession } from "../session/SessionProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 export function CustomerDashboard() {
   const cylinders = domainQueries.cylinders();
@@ -84,7 +85,7 @@ export function CustomerDashboard() {
     0,
   );
   const walletCurrency =
-    firstString(wallets.data?.[0], ["currency_code", "currencyCode"]) ?? "GHS";
+    firstString(wallets.data?.[0], ["currency_code", "currencyCode"]) ?? "NGN";
   return (
     <DashboardFrame workspace="LPG" title="How can we help you today?">
       <LocationBar
@@ -199,7 +200,7 @@ export function DriverDashboard() {
   );
   const earningsCurrency =
     firstString(commissions.data?.[0], ["currency_code", "currencyCode"]) ??
-    "GHS";
+    "NGN";
   return (
     <DashboardFrame workspace="Driver" title="Ready for the road">
       <MetricHero
@@ -287,7 +288,7 @@ export function StationDashboard() {
   );
   const settlementCurrency =
     firstString(settlements.data?.[0], ["currency_code", "currencyCode"]) ??
-    "GHS";
+    "NGN";
   return (
     <DashboardFrame workspace="Station" title="Operational dashboard">
       <MetricStrip
@@ -351,7 +352,7 @@ function DashboardFrame({
   children: React.ReactNode;
 }) {
   const session = useSession();
-  const dark = useColorScheme() === "dark";
+  const dark = useAppTheme().scheme === "dark";
   return (
     <Screen
       eyebrow={`SKIMA ${workspace}`}
@@ -372,6 +373,7 @@ function DashboardFrame({
           <Bell color={dark ? colors.darkInk : colors.ink} size={21} />
         </Pressable>
       </View>
+      <WorkspaceSwitcher current={workspace === "LPG" ? "customer" : workspace === "Driver" ? "driver" : "station"} />
       {children}
     </Screen>
   );
@@ -395,7 +397,7 @@ function DashboardError({
   );
 }
 function LocationBar({ value, onPress }: { value: string; onPress(): void }) {
-  const dark = useColorScheme() === "dark";
+  const dark = useAppTheme().scheme === "dark";
   return (
     <Pressable
       accessibilityRole="button"
@@ -442,7 +444,7 @@ function Hero({
   action: string;
   onPress(): void;
 }) {
-  const dark = useColorScheme() === "dark";
+  const dark = useAppTheme().scheme === "dark";
   return (
     <View style={[styles.hero, dark && styles.heroDark]}>
       <View style={[styles.heroOrb, dark && styles.heroOrbDark]} />
@@ -463,7 +465,7 @@ function ActiveCard({
   record: PlatformRecord;
   href: string;
 }) {
-  const dark = useColorScheme() === "dark";
+  const dark = useAppTheme().scheme === "dark";
   return (
     <Pressable
       onPress={() => router.push(href as never)}
@@ -504,7 +506,7 @@ function MetricHero({
   );
 }
 function StatusBanner({ title, body }: { title: string; body: string }) {
-  const dark = useColorScheme() === "dark";
+  const dark = useAppTheme().scheme === "dark";
   return (
     <View style={[styles.statusBanner, dark && styles.darkCard]}>
       <ShieldCheck color={colors.success} size={28} />
@@ -522,7 +524,7 @@ function QuickActions({
 }: {
   actions: readonly { label: string; href: string; icon: typeof QrCode }[];
 }) {
-  const dark = useColorScheme() === "dark";
+  const dark = useAppTheme().scheme === "dark";
   return (
     <View style={[styles.quick, dark && styles.darkCard]}>
       {actions.map(({ label, href, icon: Icon }) => (
@@ -551,7 +553,7 @@ function Section({
   href: string;
   children: React.ReactNode;
 }) {
-  const dark = useColorScheme() === "dark";
+  const dark = useAppTheme().scheme === "dark";
   return (
     <View style={{ gap: spacing.md }}>
       <View style={styles.sectionHead}>
@@ -576,7 +578,7 @@ function RecordGrid({
   detailBase?: string;
 }) {
   const { width } = useWindowDimensions();
-  const dark = useColorScheme() === "dark";
+  const dark = useAppTheme().scheme === "dark";
   if (!records.length)
     return (
       <View style={[styles.empty, dark && styles.darkCard]}>
@@ -635,7 +637,7 @@ function MetricStrip({
 }: {
   metrics: readonly { label: string; value: string }[];
 }) {
-  const dark = useColorScheme() === "dark";
+  const dark = useAppTheme().scheme === "dark";
   return (
     <View style={[styles.metrics, dark && styles.darkCard]}>
       {metrics.map((metric) => (

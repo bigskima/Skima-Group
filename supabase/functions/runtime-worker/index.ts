@@ -103,6 +103,12 @@ interface WorkerBody {
 }
 
 interface RuntimeSupabaseClient {
+  storage: {
+    from(bucket: string): {
+      download(path: string): PromiseLike<{ data: Blob | null; error: RuntimeError | null }>;
+      upload(path: string, body: Uint8Array, options: { contentType: string; upsert: boolean }): PromiseLike<{ data: unknown; error: RuntimeError | null }>;
+    };
+  };
   from(table: string): {
     select(columns: string): {
       eq(column: string, value: unknown): {
@@ -271,7 +277,7 @@ async function processLpgOrderLifecycle(
 async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): Promise<number> {
   const { data, error } = await supabase
     .from("ai_task_runs")
-    .select("id,input,source,idempotency_key")
+    .select("id,input,source,idempotency_key,subject_type,subject_id,requested_by")
     .eq("status", "queued")
     .order("created_at", { ascending: true })
     .limit(limit);
@@ -285,48 +291,235 @@ async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): P
   for (const task of data ?? []) {
     const taskRunId = requireString(task.id);
     const idempotencyKey = requireString(task.idempotency_key);
+    const input = optionalRecord(task.input) ?? {};
+    const subjectType = requireString(task.subject_type);
+    const isPresentation = subjectType === "lpg_cylinder" && input.purpose === "public_presentation";
+    const adapter = isPresentation ? "provider.ai.google-gemini" : "provider.ai.sandbox";
+    const model = isPresentation ? (Deno.env.get("GEMINI_IMAGE_MODEL") ?? "gemini-3.1-flash-image") : "sandbox";
 
-    await requireRpc(supabase.rpc("update_ai_task_run_status", {
-      target_ai_task_run_id: taskRunId,
-      target_error_message: null,
-      target_idempotency_key: `${idempotencyKey}:running`,
-      target_metadata: { worker: "runtime-worker" },
-      target_model_info: { adapter: "provider.ai.sandbox", mode: "assist_only" },
-      target_output: {},
-      target_status: "running",
-    }));
+    try {
+      await requireRpc(supabase.rpc("update_ai_task_run_status", {
+        target_ai_task_run_id: taskRunId,
+        target_error_message: null,
+        target_idempotency_key: `${idempotencyKey}:running`,
+        target_metadata: { worker: "runtime-worker" },
+        target_model_info: { adapter, control: "assist_only", model },
+        target_output: {},
+        target_status: "running",
+      }));
 
-    const output = {
-      control: "assist_only",
-      recommendation: "sandbox_assistive_output",
-      reviewedByPolicy: false,
-    };
+      const output = isPresentation
+        ? await generateCylinderPresentation(supabase, task, input, model)
+        : {
+          control: "assist_only",
+          recommendation: "sandbox_assistive_output",
+          reviewedByPolicy: false,
+        };
 
-    await requireRpc(supabase.rpc("update_ai_task_run_status", {
-      target_ai_task_run_id: taskRunId,
-      target_error_message: null,
-      target_idempotency_key: `${idempotencyKey}:completed`,
-      target_metadata: { worker: "runtime-worker" },
-      target_model_info: { adapter: "provider.ai.sandbox", mode: "assist_only" },
-      target_output: output,
-      target_status: "completed",
-    }));
+      await requireRpc(supabase.rpc("update_ai_task_run_status", {
+        target_ai_task_run_id: taskRunId,
+        target_error_message: null,
+        target_idempotency_key: `${idempotencyKey}:completed`,
+        target_metadata: { worker: "runtime-worker" },
+        target_model_info: { adapter, control: "assist_only", model },
+        target_output: output,
+        target_status: "completed",
+      }));
 
-    await requireRpc(supabase.rpc("record_provider_execution", {
-      target_error_message: null,
-      target_idempotency_key: `${idempotencyKey}:provider`,
-      target_operation_key: "provider.ai.assist",
-      target_provider_adapter_key: "provider.ai.sandbox",
-      target_provider_kind: "ai",
-      target_request_payload: { input: task.input, taskRunId },
-      target_response_payload: output,
-      target_status: "succeeded",
-    }));
+      await requireRpc(supabase.rpc("record_provider_execution", {
+        target_error_message: null,
+        target_idempotency_key: `${idempotencyKey}:provider`,
+        target_operation_key: isPresentation ? "provider.ai.image.generate" : "provider.ai.assist",
+        target_provider_adapter_key: adapter,
+        target_provider_kind: "ai",
+        target_request_payload: { input: task.input, subjectType, taskRunId },
+        target_response_payload: output,
+        target_status: "succeeded",
+      }));
 
-    processed += 1;
+      processed += 1;
+    } catch (cause) {
+      const message = (cause instanceof Error ? cause.message : "AI task failed").slice(0, 1_000);
+      await requireRpc(supabase.rpc("update_ai_task_run_status", {
+        target_ai_task_run_id: taskRunId,
+        target_error_message: message,
+        target_idempotency_key: `${idempotencyKey}:failed`,
+        target_metadata: { worker: "runtime-worker" },
+        target_model_info: { adapter, control: "assist_only", model },
+        target_output: { generated: false },
+        target_status: "failed",
+      }));
+      await requireRpc(supabase.rpc("record_provider_execution", {
+        target_error_message: message,
+        target_idempotency_key: `${idempotencyKey}:provider-failed`,
+        target_operation_key: isPresentation ? "provider.ai.image.generate" : "provider.ai.assist",
+        target_provider_adapter_key: adapter,
+        target_provider_kind: "ai",
+        target_request_payload: { subjectType, taskRunId },
+        target_response_payload: {},
+        target_status: "failed",
+      }));
+    }
   }
 
   return processed;
+}
+
+async function generateCylinderPresentation(
+  supabase: RuntimeSupabaseClient,
+  task: RuntimeRow,
+  input: Readonly<Record<string, unknown>>,
+  model: string,
+): Promise<Readonly<Record<string, unknown>>> {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
+
+  const taskRunId = requireString(task.id);
+  const subjectId = requireString(task.subject_id);
+  const ownerUserId = requireString(task.requested_by);
+  const sourceMediaAssetId = optionalString(input.sourceMediaAssetId) ?? optionalString(input.source_media_asset_id);
+  const colour = optionalString(input.confirmedColour) ?? optionalString(input.confirmed_colour);
+  const promptParts: Array<Record<string, unknown>> = [{
+    text: [
+      "Create a premium, photorealistic product presentation image of the LPG cylinder for the authenticated owner.",
+      "Use a clean neutral studio background, balanced soft lighting, a complete unobstructed cylinder, and realistic proportions.",
+      "Preserve the cylinder's visible physical shape, colour, condition and markings from the source photo when supplied.",
+      "Do not invent certification marks, safety claims, serial numbers, logos, damage, accessories, text, people or scenery.",
+      "This is a presentation derivative only; the original evidence remains authoritative.",
+      colour ? `The owner-confirmed colour is ${colour}.` : "Do not infer a colour beyond the source evidence.",
+    ].join(" "),
+  }];
+
+  if (sourceMediaAssetId) {
+    const sourceResult = await supabase
+      .from("media_assets")
+      .select("id,owner_user_id,storage_bucket,storage_path,content_type,status,created_at")
+      .eq("id", sourceMediaAssetId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (sourceResult.error) throw new Error(sourceResult.error.message);
+    const source = sourceResult.data?.[0];
+    if (!source || source.owner_user_id !== ownerUserId || source.status !== "active") {
+      throw new Error("owned active source cylinder image was not found");
+    }
+    const sourceDownload = await supabase.storage
+      .from(requireString(source.storage_bucket))
+      .download(requireString(source.storage_path));
+    if (sourceDownload.error || !sourceDownload.data) {
+      throw new Error(sourceDownload.error?.message ?? "source image could not be downloaded");
+    }
+    const sourceBytes = new Uint8Array(await sourceDownload.data.arrayBuffer());
+    promptParts.unshift({
+      inlineData: {
+        data: bytesToBase64(sourceBytes),
+        mimeType: optionalString(source.content_type) ?? "image/jpeg",
+      },
+    });
+  }
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: promptParts }],
+        generationConfig: {
+          responseModalities: ["IMAGE"],
+          responseFormat: { image: { aspectRatio: "4:3", imageSize: "1K" } },
+        },
+      }),
+      signal: AbortSignal.timeout(45_000),
+    },
+  );
+  const responseBody = await response.json() as Record<string, unknown>;
+  if (!response.ok) {
+    const providerError = optionalRecord(responseBody.error);
+    throw new Error(optionalString(providerError?.message) ?? `Gemini image generation failed with ${response.status}`);
+  }
+
+  const candidates = Array.isArray(responseBody.candidates) ? responseBody.candidates : [];
+  const candidate = optionalRecord(candidates[0]);
+  const content = optionalRecord(candidate?.content);
+  const parts = Array.isArray(content?.parts) ? content.parts : [];
+  const imagePart = parts.map(optionalRecord).find((part) => Boolean(part?.inlineData ?? part?.inline_data));
+  const inlineData = optionalRecord(imagePart?.inlineData ?? imagePart?.inline_data);
+  const base64 = optionalString(inlineData?.data);
+  const contentType = optionalString(inlineData?.mimeType ?? inlineData?.mime_type) ?? "image/png";
+  if (!base64) throw new Error("Gemini returned no presentation image");
+
+  const bytes = base64ToBytes(base64);
+  const extension = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : "png";
+  const storageBucket = "skima-platform-media";
+  const storagePath = `${ownerUserId}/ai-presentations/${taskRunId}.${extension}`;
+  const upload = await supabase.storage.from(storageBucket).upload(storagePath, bytes, {
+    contentType,
+    upsert: false,
+  });
+  if (upload.error) throw new Error(upload.error.message);
+
+  const checksum = await sha256Hex(bytes);
+  const mediaResult = await supabase.rpc("register_media_asset", {
+    target_asset_type_key: "media.presentation.ai",
+    target_byte_size: bytes.byteLength,
+    target_checksum: checksum,
+    target_content_type: contentType,
+    target_idempotency_key: `${taskRunId}:media`,
+    target_metadata: {
+      derivative: true,
+      generatedBy: "provider.ai.google-gemini",
+      model,
+      sourceMediaAssetId,
+      subjectId,
+      subjectType: "lpg_cylinder",
+    },
+    target_organization_id: null,
+    target_owner_user_id: ownerUserId,
+    target_source: "platform.ai_engine",
+    target_status: "active",
+    target_storage_bucket: storageBucket,
+    target_storage_path: storagePath,
+  });
+  if (mediaResult.error) throw new Error(mediaResult.error.message);
+  const mediaAssetId = requireString(mediaResult.data);
+
+  await requireRpc(supabase.rpc("register_entity_presentation_media", {
+    target_entity_id: subjectId,
+    target_entity_type: "lpg_cylinder",
+    target_idempotency_key: `${taskRunId}:presentation-link`,
+    target_media_asset_id: mediaAssetId,
+    target_metadata: { aiTaskRunId: taskRunId, model },
+  }));
+
+  return {
+    generated: true,
+    mediaAssetId,
+    mediaRole: "presentation.ai",
+    model,
+    preserveOriginal: true,
+  };
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, Math.min(index + 0x8000, bytes.length)));
+  }
+  return btoa(binary);
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return bytesToHex(new Uint8Array(digest));
 }
 
 async function processWebhooks(supabase: RuntimeSupabaseClient, limit: number): Promise<number> {

@@ -45,6 +45,7 @@
     "supabase:lpg-lifecycle:e2e": "deno run --allow-env --allow-net --allow-read --allow-run scripts/verify-lpg-lifecycle.ts",
     "supabase:frontend-session:e2e": "deno run --allow-env --allow-net --allow-read --allow-run scripts/verify-frontend-session-context.ts",
     "supabase:bootstrap-admin": "deno run --allow-env --allow-net --allow-read --allow-run scripts/bootstrap-platform-admin.ts",
+    "supabase:data:reset": "deno run --allow-env --allow-net --allow-read --allow-run scripts/reset-remote-application-data.ts",
     "supabase:provision-admin": "deno run --allow-env --allow-net --allow-read --allow-run scripts/provision-platform-admin.ts",
     "supabase:provision-platform-wallets": "deno run --allow-env --allow-net --allow-read --allow-run scripts/provision-platform-wallets.ts",
     "supabase:admin-roles:list": "deno run --allow-env --allow-net --allow-read --allow-run scripts/list-platform-admin-roles.ts",

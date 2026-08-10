@@ -1,12 +1,13 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run lpg-mobile:build",
-  "framework": "vite",
-  "installCommand": "npm install",
+  "installCommand": "npm --prefix apps/lpg-mobile ci",
   "outputDirectory": "apps/lpg-mobile/dist",
+  "cleanUrls": true,
   "rewrites": [
     {
-      "destination": "/index.html",
-      "source": "/(.*)"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

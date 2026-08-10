@@ -9,21 +9,22 @@ import {
   Text,
   TextInput,
   View,
-  useColorScheme,
 } from "react-native";
 import { useGatewayMutation } from "../api/gateway";
-import { ActionResponseSchema } from "../api/records";
+import { ActionResponseSchema, recordId } from "../api/records";
 import { uploadMedia } from "../media/upload";
 import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
 import { colors, radii, spacing } from "../theme/tokens";
+import { useAppTheme } from "../theme/ThemeProvider";
 import { idempotencyKey } from "../utilities/idempotency";
 import { Screen } from "./Screen";
 const DRAFT = "customer-cylinder-registration";
 export function CylinderRegistrationScreen() {
   const session = useSession();
   const owner = session.context?.profile?.id ?? session.context?.user.id ?? "";
-  const dark = useColorScheme() === "dark";
+  const { palette } = useAppTheme();
+  const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [size, setSize] = useState("");
   const [colour, setColour] = useState("");
@@ -42,10 +43,16 @@ export function CylinderRegistrationScreen() {
     schema: ActionResponseSchema,
     invalidate: [["cylinders"]],
   });
+  const nameMutation = useGatewayMutation({
+    path: "/lpg/cylinders/name",
+    schema: ActionResponseSchema,
+    invalidate: [["cylinders"]],
+  });
   useEffect(() => {
     if (!owner) return;
     void draftStore.load(owner, DRAFT).then((draft) => {
       if (draft) {
+        setName(String(draft.values.name ?? ""));
         setIdentifier(String(draft.values.identifier ?? ""));
         setSize(String(draft.values.size ?? ""));
         setColour(String(draft.values.colour ?? ""));
@@ -69,14 +76,14 @@ export function CylinderRegistrationScreen() {
       type: DRAFT,
       ownerProfileId: owner,
       step: photo ? "review" : "details",
-      values: { identifier, size, colour, brand },
+      values: { name, identifier, size, colour, brand },
       pendingMedia: photo
         ? [{ uri: photo.uri, purpose: "cylinder-original" }]
         : [],
       createdAt: now,
       updatedAt: now,
     });
-  }, [brand, colour, hydrated, identifier, owner, photo, size]);
+  }, [brand, colour, hydrated, identifier, name, owner, photo, size]);
   const choosePhoto = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -100,8 +107,8 @@ export function CylinderRegistrationScreen() {
   const submit = async () => {
     setError(null);
     const kg = Number(size);
-    if (!identifier.trim() || !Number.isFinite(kg) || kg <= 0) {
-      setError("Enter the cylinder identifier and a valid size.");
+    if (name.trim().length < 2 || !identifier.trim() || !Number.isFinite(kg) || kg <= 0) {
+      setError("Name your cylinder, then enter its identifier and a valid size.");
       return;
     }
     setSubmitting(true);
@@ -118,7 +125,7 @@ export function CylinderRegistrationScreen() {
           assetTypeKey: "lpg.cylinder.original",
           onProgress: setUploadProgress,
         });
-      await mutation.mutateAsync({
+      const created = await mutation.mutateAsync({
         cylinderIdentifier: identifier.trim(),
         sizeKg: kg,
         maxCapacityKg: kg,
@@ -127,8 +134,11 @@ export function CylinderRegistrationScreen() {
         imageAssetIds: assetId ? [assetId] : [],
         conditionStatus: "unknown",
         idempotencyKey: idempotencyKey("register-cylinder", identifier.trim()),
-        metadata: {},
+        metadata: { customerDefinedName: name.trim() },
       });
+      const cylinderId = typeof created === "string" ? created : created ? recordId(created) : null;
+      if (!cylinderId) throw new Error("The cylinder service did not return an identifier.");
+      await nameMutation.mutateAsync({ cylinderId, displayName: name.trim() });
       await draftStore.clear(owner, DRAFT);
       router.replace("/(customer)/cylinders");
     } catch (cause) {
@@ -142,7 +152,7 @@ export function CylinderRegistrationScreen() {
       setUploadProgress(null);
     }
   };
-  const inputStyle = [styles.input, dark && styles.inputDark];
+  const inputStyle = [styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }];
   return (
     <Screen
       eyebrow="Cylinder registration"
@@ -154,10 +164,21 @@ export function CylinderRegistrationScreen() {
       }
     >
       <View style={styles.form}>
+        <View style={styles.fieldGroup}>
+          <Text style={[styles.label, { color: palette.ink }]}>What do you call this cylinder?</Text>
+          <Text style={[styles.hint, { color: palette.muted }]}>Use any useful name, such as Kitchen, Shop or Backup.</Text>
+          <TextInput
+            style={inputStyle}
+            placeholder="Your cylinder name"
+            placeholderTextColor={palette.muted}
+            value={name}
+            onChangeText={setName}
+          />
+        </View>
         <TextInput
           style={inputStyle}
           placeholder="Cylinder identifier"
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={palette.muted}
           value={identifier}
           onChangeText={setIdentifier}
         />
@@ -165,7 +186,7 @@ export function CylinderRegistrationScreen() {
           <TextInput
             style={[...inputStyle, styles.half]}
             placeholder="Size (kg)"
-            placeholderTextColor={colors.muted}
+            placeholderTextColor={palette.muted}
             keyboardType="decimal-pad"
             value={size}
             onChangeText={setSize}
@@ -173,7 +194,7 @@ export function CylinderRegistrationScreen() {
           <TextInput
             style={[...inputStyle, styles.half]}
             placeholder="Colour"
-            placeholderTextColor={colors.muted}
+            placeholderTextColor={palette.muted}
             value={colour}
             onChangeText={setColour}
           />
@@ -181,7 +202,7 @@ export function CylinderRegistrationScreen() {
         <TextInput
           style={inputStyle}
           placeholder="Brand (optional)"
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={palette.muted}
           value={brand}
           onChangeText={setBrand}
         />
@@ -203,11 +224,11 @@ export function CylinderRegistrationScreen() {
           </Text>
         ) : null}
         <Pressable
-          disabled={mutation.isPending || submitting}
+          disabled={mutation.isPending || nameMutation.isPending || submitting}
           onPress={() => void submit()}
           style={styles.submit}
         >
-          {mutation.isPending || submitting ? (
+          {mutation.isPending || nameMutation.isPending || submitting ? (
             <View style={styles.pendingRow}>
               <ActivityIndicator color="white" />
               <Text style={styles.submitText}>
@@ -230,6 +251,9 @@ export function CylinderRegistrationScreen() {
 }
 const styles = StyleSheet.create({
   form: { width: "100%", maxWidth: 620, gap: spacing.md },
+  fieldGroup: { gap: spacing.xs },
+  label: { fontSize: 15, fontWeight: "900" },
+  hint: { fontSize: 13, lineHeight: 18, marginBottom: spacing.xs },
   row: { flexDirection: "row", gap: spacing.md },
   half: { flex: 1 },
   input: {
@@ -241,11 +265,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     color: colors.ink,
     fontSize: 16,
-  },
-  inputDark: {
-    backgroundColor: colors.darkSurface,
-    borderColor: "#33443A",
-    color: colors.darkInk,
   },
   photo: { width: "100%", aspectRatio: 4 / 3, borderRadius: radii.lg },
   secondary: {

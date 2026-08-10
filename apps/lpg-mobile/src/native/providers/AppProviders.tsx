@@ -16,6 +16,7 @@ import { useNotificationLifecycle } from "../notifications/useNotificationLifecy
 import { BackendNotificationBridge } from "../notifications/BackendNotificationBridge";
 import { AppErrorBoundary } from "./AppErrorBoundary";
 import { GlobalQueryFailure } from "./GlobalQueryFailure";
+import { ThemeProvider } from "../theme/ThemeProvider";
 
 export function AppProviders({ children }: PropsWithChildren) {
   useNotificationLifecycle();
@@ -45,22 +46,24 @@ export function AppProviders({ children }: PropsWithChildren) {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <PersistQueryClientProvider
-          client={client}
-          persistOptions={{
-            persister,
-            buster: "lpg-expo-v1",
-            dehydrateOptions: {
-              shouldDehydrateQuery: (query) => query.meta?.persist === true,
-            },
-          }}
-        >
-          <GlobalQueryFailure />
-          <SessionProvider>
-            <BackendNotificationBridge />
-            <AppErrorBoundary>{children}</AppErrorBoundary>
-          </SessionProvider>
-        </PersistQueryClientProvider>
+        <ThemeProvider>
+          <PersistQueryClientProvider
+            client={client}
+            persistOptions={{
+              persister,
+              buster: "lpg-expo-v1",
+              dehydrateOptions: {
+                shouldDehydrateQuery: (query) => query.meta?.persist === true,
+              },
+            }}
+          >
+            <GlobalQueryFailure />
+            <SessionProvider>
+              <BackendNotificationBridge />
+              <AppErrorBoundary>{children}</AppErrorBoundary>
+            </SessionProvider>
+          </PersistQueryClientProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

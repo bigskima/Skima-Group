@@ -14,6 +14,7 @@ export interface MapPoint {
   latitude: number;
   longitude: number;
   label: string;
+  kind?: "driver" | "destination" | "pickup" | "station" | "location";
 }
 const TILE = 256;
 const HEIGHT = 360;
@@ -98,7 +99,7 @@ export function OperationalMap({
             { left: marker.left - 15, top: marker.top - 30 },
           ]}
         >
-          <MapPin color={colors.brand} fill="white" size={30} />
+          <MapPin color={marker.kind === "destination" ? colors.success : marker.kind === "pickup" ? "#9A6500" : colors.brand} fill="white" size={marker.kind === "driver" ? 34 : 30} />
           <Text numberOfLines={1} style={styles.markerLabel}>
             {marker.label}
           </Text>

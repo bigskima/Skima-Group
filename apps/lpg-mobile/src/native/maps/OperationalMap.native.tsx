@@ -5,6 +5,7 @@ export interface MapPoint {
   latitude: number;
   longitude: number;
   label: string;
+  kind?: "driver" | "destination" | "pickup" | "station" | "location";
 }
 export function OperationalMap({
   points,
@@ -41,6 +42,7 @@ export function OperationalMap({
           key={`${point.latitude}:${point.longitude}:${index}`}
           coordinate={point}
           title={point.label}
+          pinColor={point.kind === "destination" ? "#129447" : point.kind === "pickup" ? "#E8B84A" : "#ED1C2E"}
         />
       ))}
       {connectPoints && points.length > 1 ? (
