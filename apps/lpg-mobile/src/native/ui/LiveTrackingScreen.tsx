@@ -6,8 +6,12 @@ import {
   Text,
   View,
 } from "react-native";
-import { useTrackingPoints, useTrackingSessions } from "../api/domains";
-import { firstString, type PlatformRecord } from "../api/records";
+import {
+  useJobDetails,
+  useTrackingPoints,
+  useTrackingSessions,
+} from "../api/domains";
+import { firstNumber, firstString, type PlatformRecord } from "../api/records";
 import { OperationalMap, type MapPoint } from "../maps/OperationalMap";
 import { colors, radii, spacing } from "../theme/tokens";
 import { Card } from "./Card";
@@ -15,6 +19,7 @@ import { Screen } from "./Screen";
 export function LiveTrackingScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const sessions = useTrackingSessions();
+  const details = useJobDetails(id ?? null);
   const session = sessions.data?.find(
     (item) =>
       firstString(item, ["subject_type", "subjectType"]) === "lpg_order" &&
@@ -36,6 +41,16 @@ export function LiveTrackingScreen() {
   const stale = recorded
     ? Date.now() - new Date(recorded).getTime() > 120000
     : true;
+  const distance = firstNumber(details.data, [
+    "routeDistanceMeters",
+    "route_distance_meters",
+    "distanceMeters",
+  ]);
+  const duration = firstNumber(details.data, [
+    "routeDurationSeconds",
+    "route_duration_seconds",
+    "durationSeconds",
+  ]);
   return (
     <Screen
       eyebrow="Live fulfilment"
@@ -46,8 +61,27 @@ export function LiveTrackingScreen() {
         </Pressable>
       }
     >
-      {sessions.isPending || points.isPending ? (
+      {sessions.isPending ||
+      details.isPending ||
+      (Boolean(sessionId) && points.isPending) ? (
         <ActivityIndicator color={colors.brand} />
+      ) : sessions.error || points.error || details.error ? (
+        <Card>
+          <Text style={styles.error}>
+            {(sessions.error ?? points.error ?? details.error)?.message}
+          </Text>
+          <Pressable
+            onPress={() =>
+              void Promise.all([
+                sessions.refetch(),
+                sessionId ? points.refetch() : Promise.resolve(),
+                details.refetch(),
+              ])
+            }
+          >
+            <Text style={styles.back}>Retry live tracking</Text>
+          </Pressable>
+        </Card>
       ) : (
         <>
           <OperationalMap points={mapped} connectPoints />
@@ -87,6 +121,24 @@ export function LiveTrackingScreen() {
                 ? `Last backend update: ${new Date(recorded).toLocaleString()}`
                 : "No authorised tracking update has been returned."}
             </Text>
+            <View style={styles.estimates}>
+              <View style={styles.estimate}>
+                <Text style={styles.label}>Backend distance</Text>
+                <Text style={styles.value}>
+                  {distance === null
+                    ? "Unavailable"
+                    : `${(distance / 1000).toFixed(1)} km`}
+                </Text>
+              </View>
+              <View style={styles.estimate}>
+                <Text style={styles.label}>Backend ETA</Text>
+                <Text style={styles.value}>
+                  {duration === null
+                    ? "Unavailable"
+                    : `${Math.ceil(duration / 60)} min`}
+                </Text>
+              </View>
+            </View>
           </Card>
         </>
       )}
@@ -117,4 +169,13 @@ const styles = StyleSheet.create({
   value: { color: colors.ink, fontSize: 18, fontWeight: "900", marginTop: 4 },
   body: { color: colors.muted, lineHeight: 21 },
   pill: { borderRadius: radii.pill, paddingHorizontal: 11, paddingVertical: 7 },
+  estimates: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
+  estimate: {
+    flex: 1,
+    minWidth: 140,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: "#F3F6F4",
+  },
+  error: { color: colors.danger, lineHeight: 20 },
 });

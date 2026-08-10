@@ -51,6 +51,31 @@ export function CustomerDashboard() {
         <ScreenSkeleton cards={4} />
       </DashboardFrame>
     );
+  const customerError =
+    cylinders.error ??
+    active.error ??
+    locations.error ??
+    wallets.error ??
+    stations.error ??
+    transactions.error;
+  if (customerError)
+    return (
+      <DashboardFrame workspace="LPG" title="Your workspace needs a refresh">
+        <DashboardError
+          message={customerError.message}
+          onRetry={() =>
+            void Promise.all([
+              cylinders.refetch(),
+              active.refetch(),
+              locations.refetch(),
+              wallets.refetch(),
+              stations.refetch(),
+              transactions.refetch(),
+            ])
+          }
+        />
+      </DashboardFrame>
+    );
   const firstCylinder = cylinders.data?.[0];
   const firstOrder = active.data?.[0];
   const location = locations.data?.[0];
@@ -149,6 +174,22 @@ export function DriverDashboard() {
         <ScreenSkeleton cards={3} />
       </DashboardFrame>
     );
+  const driverError = jobs.error ?? commissions.error ?? vehicles.error;
+  if (driverError)
+    return (
+      <DashboardFrame workspace="Driver" title="Your workspace needs a refresh">
+        <DashboardError
+          message={driverError.message}
+          onRetry={() =>
+            void Promise.all([
+              jobs.refetch(),
+              commissions.refetch(),
+              vehicles.refetch(),
+            ])
+          }
+        />
+      </DashboardFrame>
+    );
   const active = jobs.data?.[0];
   const earningsTotal = (commissions.data ?? []).reduce(
     (total, entry) =>
@@ -221,6 +262,21 @@ export function StationDashboard() {
     return (
       <DashboardFrame workspace="Station" title="Preparing your workspace">
         <ScreenSkeleton cards={3} />
+      </DashboardFrame>
+    );
+  const stationError = jobs.error ?? settlements.error;
+  if (stationError)
+    return (
+      <DashboardFrame
+        workspace="Station"
+        title="Your workspace needs a refresh"
+      >
+        <DashboardError
+          message={stationError.message}
+          onRetry={() =>
+            void Promise.all([jobs.refetch(), settlements.refetch()])
+          }
+        />
       </DashboardFrame>
     );
   const active = jobs.data ?? [];
@@ -318,6 +374,24 @@ function DashboardFrame({
       </View>
       {children}
     </Screen>
+  );
+}
+function DashboardError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry(): void;
+}) {
+  return (
+    <View accessibilityRole="alert" style={styles.dashboardError}>
+      <CircleHelp color={colors.brand} size={28} />
+      <Text style={styles.statusTitle}>Unable to load live workspace data</Text>
+      <Text style={styles.cardBody}>{message}</Text>
+      <Pressable onPress={onRetry} style={styles.heroButton}>
+        <Text style={styles.heroButtonText}>Retry securely</Text>
+      </Pressable>
+    </View>
   );
 }
 function LocationBar({ value, onPress }: { value: string; onPress(): void }) {
@@ -813,4 +887,13 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
   },
   outlineText: { color: colors.brand, fontWeight: "900" },
+  dashboardError: {
+    alignItems: "flex-start",
+    gap: spacing.md,
+    padding: spacing.xl,
+    borderWidth: 1,
+    borderColor: "#F1B9BF",
+    borderRadius: radii.lg,
+    backgroundColor: "#FFF7F8",
+  },
 });

@@ -65,6 +65,7 @@ export function DocumentWorkflowScreen({
     [requirementSetId, requirements.data],
   );
   const [uploading, setUploading] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const register = useGatewayMutation({
     path: "/runtime/documents",
@@ -93,6 +94,7 @@ export function DocumentWorkflowScreen({
       return;
     }
     setUploading(key);
+    setUploadProgress(0);
     setMessage(null);
     try {
       const uploaded = await uploadFileToRuntime({
@@ -101,6 +103,7 @@ export function DocumentWorkflowScreen({
         fileName: file.name,
         contentType: file.mimeType ?? "application/octet-stream",
         scope: `application-document-${key}`,
+        onProgress: setUploadProgress,
       });
       await register.mutateAsync({
         applicationId,
@@ -121,6 +124,7 @@ export function DocumentWorkflowScreen({
       );
     } finally {
       setUploading(null);
+      setUploadProgress(0);
     }
   };
   const loading =
@@ -210,6 +214,11 @@ export function DocumentWorkflowScreen({
                           )
                         : "Awaiting upload"}
                     </Text>
+                    {uploading === key ? (
+                      <Text style={styles.progress}>
+                        Uploading {Math.round(uploadProgress * 100)}%
+                      </Text>
+                    ) : null}
                   </View>
                   <Pressable
                     accessibilityLabel={`Upload ${key}`}
@@ -267,6 +276,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textTransform: "capitalize",
   },
+  progress: { color: colors.brand, fontWeight: "900" },
   upload: {
     width: 50,
     height: 50,

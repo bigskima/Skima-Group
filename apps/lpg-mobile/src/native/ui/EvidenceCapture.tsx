@@ -29,6 +29,7 @@ export function EvidenceCapture({
   const [asset, setAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [uploadedAssetId, setUploadedAssetId] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const owner = session.context?.profile?.id ?? session.context?.user.id ?? "";
   useEffect(() => {
@@ -92,6 +93,7 @@ export function EvidenceCapture({
   const upload = async () => {
     if ((!asset && !uploadedAssetId) || !session.context) return;
     setPending(true);
+    setProgress(uploadedAssetId ? 1 : 0);
     setError(null);
     try {
       let id = uploadedAssetId;
@@ -103,6 +105,7 @@ export function EvidenceCapture({
           contentType: asset.mimeType ?? "image/jpeg",
           ownerUserId: session.context.user.id,
           assetTypeKey,
+          onProgress: setProgress,
         });
         setUploadedAssetId(id);
         const now = new Date().toISOString();
@@ -117,7 +120,10 @@ export function EvidenceCapture({
           updatedAt: now,
         });
       }
-      if (!id) throw new Error("The secure evidence asset is unavailable. Select the evidence again.");
+      if (!id)
+        throw new Error(
+          "The secure evidence asset is unavailable. Select the evidence again.",
+        );
       await onUploaded(id);
       await draftStore.clear(owner, draftType);
     } catch (cause) {
@@ -128,6 +134,7 @@ export function EvidenceCapture({
       );
     } finally {
       setPending(false);
+      setProgress(null);
     }
   };
   return (
@@ -173,7 +180,14 @@ export function EvidenceCapture({
           style={styles.primary}
         >
           {pending ? (
-            <ActivityIndicator color="white" />
+            <View style={styles.uploading}>
+              <ActivityIndicator color="white" />
+              <Text style={styles.primaryText}>
+                {uploadedAssetId
+                  ? "Registering securely"
+                  : `Uploading ${Math.round((progress ?? 0) * 100)}%`}
+              </Text>
+            </View>
           ) : (
             <Text style={styles.primaryText}>
               {uploadedAssetId
@@ -238,6 +252,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
   },
   primaryText: { color: "white", fontWeight: "900" },
+  uploading: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   errorRow: { flexDirection: "row", gap: 8, alignItems: "center" },
   error: { flex: 1, color: colors.danger },
 });

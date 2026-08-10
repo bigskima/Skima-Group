@@ -1,7 +1,16 @@
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View, useColorScheme } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useColorScheme,
+} from "react-native";
 import { useGatewayMutation } from "../api/gateway";
 import { ActionResponseSchema } from "../api/records";
 import { uploadMedia } from "../media/upload";
@@ -12,14 +21,252 @@ import { idempotencyKey } from "../utilities/idempotency";
 import { Screen } from "./Screen";
 const DRAFT = "customer-cylinder-registration";
 export function CylinderRegistrationScreen() {
-  const session = useSession(); const owner = session.context?.profile?.id ?? session.context?.user.id ?? ""; const dark = useColorScheme() === "dark";
-  const [identifier, setIdentifier] = useState(""); const [size, setSize] = useState(""); const [colour, setColour] = useState(""); const [brand, setBrand] = useState(""); const [photo, setPhoto] = useState<{ uri: string; fileName: string; mimeType: string } | null>(null); const [hydrated, setHydrated] = useState(false); const [error, setError] = useState<string | null>(null);
-  const mutation = useGatewayMutation({ path: "/lpg/cylinders", schema: ActionResponseSchema, invalidate: [["cylinders"]] });
-  useEffect(() => { if (!owner) return; void draftStore.load(owner, DRAFT).then((draft) => { if (draft) { setIdentifier(String(draft.values.identifier ?? "")); setSize(String(draft.values.size ?? "")); setColour(String(draft.values.colour ?? "")); setBrand(String(draft.values.brand ?? "")); const pending = draft.pendingMedia[0]; if (pending) setPhoto({ uri: pending.uri, fileName: "cylinder.jpg", mimeType: "image/jpeg" }); } setHydrated(true); }); }, [owner]);
-  useEffect(() => { if (!owner || !hydrated) return; const now = new Date().toISOString(); void draftStore.save({ version: 1, type: DRAFT, ownerProfileId: owner, step: photo ? "review" : "details", values: { identifier, size, colour, brand }, pendingMedia: photo ? [{ uri: photo.uri, purpose: "cylinder-original" }] : [], createdAt: now, updatedAt: now }); }, [brand, colour, hydrated, identifier, owner, photo, size]);
-  const choosePhoto = async () => { const permission = await ImagePicker.requestMediaLibraryPermissionsAsync(); if (!permission.granted) { setError("Photo-library permission was not granted."); return; } const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, quality: .9 }); if (!result.canceled) { const asset = result.assets[0]; setPhoto({ uri: asset.uri, fileName: asset.fileName ?? `cylinder-${Date.now()}.jpg`, mimeType: asset.mimeType ?? "image/jpeg" }); } };
-  const submit = async () => { setError(null); const kg = Number(size); if (!identifier.trim() || !Number.isFinite(kg) || kg <= 0) { setError("Enter the cylinder identifier and a valid size."); return; } try { let assetId: string | undefined; if (photo) assetId = await uploadMedia({ api: session.api, uri: photo.uri, fileName: photo.fileName, contentType: photo.mimeType, ownerUserId: session.context!.user.id, assetTypeKey: "lpg.cylinder.original" }); await mutation.mutateAsync({ cylinderIdentifier: identifier.trim(), sizeKg: kg, maxCapacityKg: kg, brand: brand.trim() || undefined, colour: colour.trim() || undefined, imageAssetIds: assetId ? [assetId] : [], conditionStatus: "unknown", idempotencyKey: idempotencyKey("register-cylinder", identifier.trim()), metadata: {} }); await draftStore.clear(owner, DRAFT); router.replace("/(customer)/cylinders"); } catch (cause) { setError(cause instanceof Error ? cause.message : "Cylinder registration failed."); } };
+  const session = useSession();
+  const owner = session.context?.profile?.id ?? session.context?.user.id ?? "";
+  const dark = useColorScheme() === "dark";
+  const [identifier, setIdentifier] = useState("");
+  const [size, setSize] = useState("");
+  const [colour, setColour] = useState("");
+  const [brand, setBrand] = useState("");
+  const [photo, setPhoto] = useState<{
+    uri: string;
+    fileName: string;
+    mimeType: string;
+  } | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const mutation = useGatewayMutation({
+    path: "/lpg/cylinders",
+    schema: ActionResponseSchema,
+    invalidate: [["cylinders"]],
+  });
+  useEffect(() => {
+    if (!owner) return;
+    void draftStore.load(owner, DRAFT).then((draft) => {
+      if (draft) {
+        setIdentifier(String(draft.values.identifier ?? ""));
+        setSize(String(draft.values.size ?? ""));
+        setColour(String(draft.values.colour ?? ""));
+        setBrand(String(draft.values.brand ?? ""));
+        const pending = draft.pendingMedia[0];
+        if (pending)
+          setPhoto({
+            uri: pending.uri,
+            fileName: "cylinder.jpg",
+            mimeType: "image/jpeg",
+          });
+      }
+      setHydrated(true);
+    });
+  }, [owner]);
+  useEffect(() => {
+    if (!owner || !hydrated) return;
+    const now = new Date().toISOString();
+    void draftStore.save({
+      version: 1,
+      type: DRAFT,
+      ownerProfileId: owner,
+      step: photo ? "review" : "details",
+      values: { identifier, size, colour, brand },
+      pendingMedia: photo
+        ? [{ uri: photo.uri, purpose: "cylinder-original" }]
+        : [],
+      createdAt: now,
+      updatedAt: now,
+    });
+  }, [brand, colour, hydrated, identifier, owner, photo, size]);
+  const choosePhoto = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setError("Photo-library permission was not granted.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.9,
+    });
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      setPhoto({
+        uri: asset.uri,
+        fileName: asset.fileName ?? `cylinder-${Date.now()}.jpg`,
+        mimeType: asset.mimeType ?? "image/jpeg",
+      });
+    }
+  };
+  const submit = async () => {
+    setError(null);
+    const kg = Number(size);
+    if (!identifier.trim() || !Number.isFinite(kg) || kg <= 0) {
+      setError("Enter the cylinder identifier and a valid size.");
+      return;
+    }
+    setSubmitting(true);
+    setUploadProgress(photo ? 0 : null);
+    try {
+      let assetId: string | undefined;
+      if (photo)
+        assetId = await uploadMedia({
+          api: session.api,
+          uri: photo.uri,
+          fileName: photo.fileName,
+          contentType: photo.mimeType,
+          ownerUserId: session.context!.user.id,
+          assetTypeKey: "lpg.cylinder.original",
+          onProgress: setUploadProgress,
+        });
+      await mutation.mutateAsync({
+        cylinderIdentifier: identifier.trim(),
+        sizeKg: kg,
+        maxCapacityKg: kg,
+        brand: brand.trim() || undefined,
+        colour: colour.trim() || undefined,
+        imageAssetIds: assetId ? [assetId] : [],
+        conditionStatus: "unknown",
+        idempotencyKey: idempotencyKey("register-cylinder", identifier.trim()),
+        metadata: {},
+      });
+      await draftStore.clear(owner, DRAFT);
+      router.replace("/(customer)/cylinders");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Cylinder registration failed.",
+      );
+    } finally {
+      setSubmitting(false);
+      setUploadProgress(null);
+    }
+  };
   const inputStyle = [styles.input, dark && styles.inputDark];
-  return <Screen eyebrow="Cylinder registration" title="Add your cylinder" action={<Pressable onPress={() => router.back()}><Text style={styles.link}>Cancel</Text></Pressable>}><View style={styles.form}><TextInput style={inputStyle} placeholder="Cylinder identifier" placeholderTextColor={colors.muted} value={identifier} onChangeText={setIdentifier} /><View style={styles.row}><TextInput style={[...inputStyle, styles.half]} placeholder="Size (kg)" placeholderTextColor={colors.muted} keyboardType="decimal-pad" value={size} onChangeText={setSize} /><TextInput style={[...inputStyle, styles.half]} placeholder="Colour" placeholderTextColor={colors.muted} value={colour} onChangeText={setColour} /></View><TextInput style={inputStyle} placeholder="Brand (optional)" placeholderTextColor={colors.muted} value={brand} onChangeText={setBrand} />{photo ? <Image source={{ uri: photo.uri }} resizeMode="cover" style={styles.photo} /> : null}<Pressable onPress={() => void choosePhoto()} style={styles.secondary}><Text style={styles.secondaryText}>{photo ? "Change photograph" : "Add cylinder photograph"}</Text></Pressable>{error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}<Pressable disabled={mutation.isPending} onPress={() => void submit()} style={styles.submit}>{mutation.isPending ? <ActivityIndicator color="white" /> : <Text style={styles.submitText}>Register cylinder</Text>}</Pressable><Text style={styles.note}>Your progress is saved to this profile on this device until registration succeeds.</Text></View></Screen>;
+  return (
+    <Screen
+      eyebrow="Cylinder registration"
+      title="Add your cylinder"
+      action={
+        <Pressable onPress={() => router.back()}>
+          <Text style={styles.link}>Cancel</Text>
+        </Pressable>
+      }
+    >
+      <View style={styles.form}>
+        <TextInput
+          style={inputStyle}
+          placeholder="Cylinder identifier"
+          placeholderTextColor={colors.muted}
+          value={identifier}
+          onChangeText={setIdentifier}
+        />
+        <View style={styles.row}>
+          <TextInput
+            style={[...inputStyle, styles.half]}
+            placeholder="Size (kg)"
+            placeholderTextColor={colors.muted}
+            keyboardType="decimal-pad"
+            value={size}
+            onChangeText={setSize}
+          />
+          <TextInput
+            style={[...inputStyle, styles.half]}
+            placeholder="Colour"
+            placeholderTextColor={colors.muted}
+            value={colour}
+            onChangeText={setColour}
+          />
+        </View>
+        <TextInput
+          style={inputStyle}
+          placeholder="Brand (optional)"
+          placeholderTextColor={colors.muted}
+          value={brand}
+          onChangeText={setBrand}
+        />
+        {photo ? (
+          <Image
+            source={{ uri: photo.uri }}
+            resizeMode="cover"
+            style={styles.photo}
+          />
+        ) : null}
+        <Pressable onPress={() => void choosePhoto()} style={styles.secondary}>
+          <Text style={styles.secondaryText}>
+            {photo ? "Change photograph" : "Add cylinder photograph"}
+          </Text>
+        </Pressable>
+        {error ? (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {error}
+          </Text>
+        ) : null}
+        <Pressable
+          disabled={mutation.isPending || submitting}
+          onPress={() => void submit()}
+          style={styles.submit}
+        >
+          {mutation.isPending || submitting ? (
+            <View style={styles.pendingRow}>
+              <ActivityIndicator color="white" />
+              <Text style={styles.submitText}>
+                {uploadProgress === null
+                  ? "Registering securely"
+                  : `Uploading ${Math.round(uploadProgress * 100)}%`}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.submitText}>Register cylinder</Text>
+          )}
+        </Pressable>
+        <Text style={styles.note}>
+          Your progress is saved to this profile on this device until
+          registration succeeds.
+        </Text>
+      </View>
+    </Screen>
+  );
 }
-const styles = StyleSheet.create({ form: { width: "100%", maxWidth: 620, gap: spacing.md }, row: { flexDirection: "row", gap: spacing.md }, half: { flex: 1 }, input: { minHeight: 54, borderWidth: 1, borderColor: colors.border, borderRadius: radii.md, paddingHorizontal: spacing.md, backgroundColor: colors.surface, color: colors.ink, fontSize: 16 }, inputDark: { backgroundColor: colors.darkSurface, borderColor: "#33443A", color: colors.darkInk }, photo: { width: "100%", aspectRatio: 4 / 3, borderRadius: radii.lg }, secondary: { minHeight: 52, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.brand, borderRadius: radii.md }, secondaryText: { color: colors.brand, fontWeight: "800" }, submit: { minHeight: 56, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand, borderRadius: radii.md }, submitText: { color: "white", fontWeight: "800" }, link: { color: colors.brand, fontWeight: "800" }, error: { color: colors.danger }, note: { color: colors.muted, fontSize: 13, lineHeight: 19 } });
+const styles = StyleSheet.create({
+  form: { width: "100%", maxWidth: 620, gap: spacing.md },
+  row: { flexDirection: "row", gap: spacing.md },
+  half: { flex: 1 },
+  input: {
+    minHeight: 54,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surface,
+    color: colors.ink,
+    fontSize: 16,
+  },
+  inputDark: {
+    backgroundColor: colors.darkSurface,
+    borderColor: "#33443A",
+    color: colors.darkInk,
+  },
+  photo: { width: "100%", aspectRatio: 4 / 3, borderRadius: radii.lg },
+  secondary: {
+    minHeight: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.brand,
+    borderRadius: radii.md,
+  },
+  secondaryText: { color: colors.brand, fontWeight: "800" },
+  submit: {
+    minHeight: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.brand,
+    borderRadius: radii.md,
+  },
+  submitText: { color: "white", fontWeight: "800" },
+  pendingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  link: { color: colors.brand, fontWeight: "800" },
+  error: { color: colors.danger },
+  note: { color: colors.muted, fontSize: 13, lineHeight: 19 },
+});

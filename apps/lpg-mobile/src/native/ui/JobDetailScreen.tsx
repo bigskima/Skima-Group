@@ -176,11 +176,7 @@ export function JobDetailScreen({
   );
   const stationCanSettle = Boolean(
     session.context?.platformAdmin ||
-    [
-      "lpg.orders.finance",
-      "business.finance.read",
-      "business.settlements.read",
-    ].some((permission) => permissions.has(permission)),
+      permissions.has("lpg.orders.finance"),
   );
   const scanType =
     workspace === "driver"

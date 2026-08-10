@@ -102,9 +102,13 @@ TaskManager.defineTask(TASK, async ({ data, error }) => {
 export async function startDriverTracking(
   input: Omit<TrackingConfig, "gateway" | "anonKey" | "supabaseUrl">,
 ) {
-  const gateway = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
   const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const gateway =
+    process.env.EXPO_PUBLIC_API_GATEWAY_URL ||
+    (supabaseUrl
+      ? `${supabaseUrl.replace(/\/$/, "")}/functions/v1/api-gateway`
+      : null);
   if (!gateway || !anonKey || !supabaseUrl) {
     throw new Error("Background tracking configuration is unavailable.");
   }
@@ -140,10 +144,13 @@ export async function startDriverTracking(
 }
 
 export async function stopDriverTracking() {
-  if (await Location.hasStartedLocationUpdatesAsync(TASK)) {
-    await Location.stopLocationUpdatesAsync(TASK);
+  try {
+    if (await Location.hasStartedLocationUpdatesAsync(TASK)) {
+      await Location.stopLocationUpdatesAsync(TASK);
+    }
+  } finally {
+    await SecureStore.deleteItemAsync(CONFIG);
   }
-  await SecureStore.deleteItemAsync(CONFIG);
 }
 
 export async function isDriverTracking() {

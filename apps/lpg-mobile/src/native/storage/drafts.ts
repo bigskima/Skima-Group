@@ -8,9 +8,11 @@ const DraftSchema = z.object({
   workflowId: z.string().optional(),
   step: z.string().min(1),
   values: z.record(z.unknown()),
-  pendingMedia: z.array(z.object({ uri: z.string(), purpose: z.string() })).default([]),
+  pendingMedia: z
+    .array(z.object({ uri: z.string(), purpose: z.string() }))
+    .default([]),
   createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime()
+  updatedAt: z.string().datetime(),
 });
 
 export type WorkflowDraft = z.infer<typeof DraftSchema>;
@@ -20,7 +22,14 @@ export const draftStore = {
   async load(owner: string, type: string): Promise<WorkflowDraft | null> {
     const value = await AsyncStorage.getItem(key(owner, type));
     if (!value) return null;
-    const parsed = DraftSchema.safeParse(JSON.parse(value));
+    let candidate: unknown;
+    try {
+      candidate = JSON.parse(value);
+    } catch {
+      await AsyncStorage.removeItem(key(owner, type));
+      return null;
+    }
+    const parsed = DraftSchema.safeParse(candidate);
     if (!parsed.success || parsed.data.version !== 1) {
       await AsyncStorage.removeItem(key(owner, type));
       return null;
@@ -28,7 +37,16 @@ export const draftStore = {
     return parsed.data;
   },
   async save(draft: WorkflowDraft) {
-    await AsyncStorage.setItem(key(draft.ownerProfileId, draft.type), JSON.stringify(DraftSchema.parse(draft)));
+    const existing = await this.load(draft.ownerProfileId, draft.type);
+    const validated = DraftSchema.parse({
+      ...draft,
+      createdAt: existing?.createdAt ?? draft.createdAt,
+    });
+    await AsyncStorage.setItem(
+      key(draft.ownerProfileId, draft.type),
+      JSON.stringify(validated),
+    );
   },
-  clear: (owner: string, type: string) => AsyncStorage.removeItem(key(owner, type))
+  clear: (owner: string, type: string) =>
+    AsyncStorage.removeItem(key(owner, type)),
 };

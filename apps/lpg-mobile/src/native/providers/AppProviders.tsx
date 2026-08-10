@@ -14,6 +14,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SessionProvider } from "../session/SessionProvider";
 import { useNotificationLifecycle } from "../notifications/useNotificationLifecycle";
 import { BackendNotificationBridge } from "../notifications/BackendNotificationBridge";
+import { AppErrorBoundary } from "./AppErrorBoundary";
+import { GlobalQueryFailure } from "./GlobalQueryFailure";
 
 export function AppProviders({ children }: PropsWithChildren) {
   useNotificationLifecycle();
@@ -53,9 +55,10 @@ export function AppProviders({ children }: PropsWithChildren) {
             },
           }}
         >
+          <GlobalQueryFailure />
           <SessionProvider>
             <BackendNotificationBridge />
-            {children}
+            <AppErrorBoundary>{children}</AppErrorBoundary>
           </SessionProvider>
         </PersistQueryClientProvider>
       </SafeAreaProvider>
