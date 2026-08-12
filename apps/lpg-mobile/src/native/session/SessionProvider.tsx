@@ -54,6 +54,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     [config],
   );
   const sessionRef = useRef<Session | null>(null);
+  const applyVersionRef = useRef(0);
   const [session, setSession] = useState<Session | null>(null);
   const [context, setContext] = useState<SessionContext | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -71,22 +72,32 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   const apply = useCallback(
     async (next: Session | null) => {
+      const applyVersion = ++applyVersionRef.current;
       sessionRef.current = next;
       setSession(next);
       setError(null);
       if (!next) {
         await stopDriverTracking().catch(() => undefined);
+        if (applyVersion !== applyVersionRef.current) return;
         setContext(null);
         setStatus("unauthenticated");
         return;
       }
       setStatus("loading");
       try {
-        setContext(
-          await api.get("/runtime/session-context", SessionContextSchema),
+        const nextContext = await api.get(
+          "/runtime/session-context",
+          SessionContextSchema,
         );
+        if (
+          applyVersion !== applyVersionRef.current ||
+          sessionRef.current?.access_token !== next.access_token
+        )
+          return;
+        setContext(nextContext);
         setStatus("authenticated");
       } catch (cause) {
+        if (applyVersion !== applyVersionRef.current) return;
         setError(
           cause instanceof Error
             ? cause.message
@@ -103,15 +114,18 @@ export function SessionProvider({ children }: PropsWithChildren) {
     const { data } = supabase.auth.onAuthStateChange(
       (_event, next) => void apply(next),
     );
-    const appState = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        supabase.auth.startAutoRefresh();
-        void apply(sessionRef.current);
-      } else supabase.auth.stopAutoRefresh();
-    });
+    const appState =
+      Platform.OS === "web"
+        ? null
+        : AppState.addEventListener("change", (state) => {
+            if (state === "active") {
+              supabase.auth.startAutoRefresh();
+              void apply(sessionRef.current);
+            } else supabase.auth.stopAutoRefresh();
+          });
     return () => {
       data.subscription.unsubscribe();
-      appState.remove();
+      appState?.remove();
     };
   }, [apply, supabase]);
 
@@ -125,6 +139,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       supabase,
       refresh: () => apply(sessionRef.current),
       signIn: async (email, password) => {
+        setError(null);
         setStatus("loading");
         const { data, error: authError } =
           await supabase.auth.signInWithPassword({ email, password });
@@ -133,7 +148,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
           setStatus("unauthenticated");
           return;
         }
-        await apply(data.session);
+        if (sessionRef.current?.access_token !== data.session?.access_token)
+          await apply(data.session);
       },
       signOut: async () => {
         await supabase.auth.signOut();
