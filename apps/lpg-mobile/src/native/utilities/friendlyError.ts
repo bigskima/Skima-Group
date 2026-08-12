@@ -1,7 +1,7 @@
 export function friendlyError(cause: unknown, fallback = "Something went wrong. Please try again.") {
   if (!(cause instanceof Error)) return fallback;
   const message = cause.message.toLowerCase();
-  if (message.includes("invalid login") || message.includes("invalid credentials"))
+  if (message.includes("invalid login") || message.includes("invalid credentials") || message.includes("email or password"))
     return "The email or password is incorrect. Check both and try again.";
   if (message.includes("already registered") || message.includes("already exists"))
     return "An account already uses this email. Sign in or reset your password.";

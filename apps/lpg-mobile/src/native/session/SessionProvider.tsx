@@ -31,7 +31,7 @@ interface SessionValue {
   error: string | null;
   api: ApiGatewayClient;
   supabase: SupabaseClient;
-  signIn(email: string, password: string): Promise<void>;
+  signIn(email: string, password: string): Promise<boolean>;
   signOut(): Promise<void>;
   refresh(): Promise<void>;
 }
@@ -78,12 +78,15 @@ export function SessionProvider({ children }: PropsWithChildren) {
       setError(null);
       if (!next) {
         await stopDriverTracking().catch(() => undefined);
-        if (applyVersion !== applyVersionRef.current) return;
+        if (applyVersion !== applyVersionRef.current) return false;
         setContext(null);
         setStatus("unauthenticated");
-        return;
+        return false;
       }
-      setStatus("loading");
+      // A valid Supabase session is sufficient to enter the customer app.
+      // Role and organization context is hydrated immediately afterwards and
+      // must never send an already-authenticated user back to the login page.
+      setStatus("authenticated");
       try {
         const nextContext = await api.get(
           "/runtime/session-context",
@@ -93,17 +96,15 @@ export function SessionProvider({ children }: PropsWithChildren) {
           applyVersion !== applyVersionRef.current ||
           sessionRef.current?.access_token !== next.access_token
         )
-          return;
+          return false;
         setContext(nextContext);
         setStatus("authenticated");
+        return true;
       } catch (cause) {
-        if (applyVersion !== applyVersionRef.current) return;
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Your account could not be loaded.",
-        );
-        setStatus("error");
+        if (applyVersion !== applyVersionRef.current) return false;
+        setContext(null);
+        setStatus("authenticated");
+        return true;
       }
     },
     [api],
@@ -137,7 +138,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
       session,
       status,
       supabase,
-      refresh: () => apply(sessionRef.current),
+      refresh: async () => {
+        await apply(sessionRef.current);
+      },
       signIn: async (email, password) => {
         setError(null);
         setStatus("loading");
@@ -146,10 +149,18 @@ export function SessionProvider({ children }: PropsWithChildren) {
         if (authError) {
           setError(authError.message);
           setStatus("unauthenticated");
-          return;
+          return false;
         }
-        if (sessionRef.current?.access_token !== data.session?.access_token)
-          await apply(data.session);
+        if (!data.session) {
+          setError("A sign-in session was not created.");
+          setStatus("unauthenticated");
+          return false;
+        }
+        sessionRef.current = data.session;
+        setSession(data.session);
+        setStatus("authenticated");
+        void apply(data.session);
+        return true;
       },
       signOut: async () => {
         await supabase.auth.signOut();

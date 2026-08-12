@@ -364,7 +364,7 @@ export function ApplicationOverviewScreen({
     types.isPending ||
     requirements.isPending ||
     documents.isPending ||
-    payloadVersions.isPending ||
+    (Boolean(currentId) && payloadVersions.isPending) ||
     config.isPending;
   if (loading)
     return (
