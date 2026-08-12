@@ -249,7 +249,7 @@ export function VehicleWorkflowScreen() {
         queryKey: ["lpg-expo", "applications"],
       });
       setShowForm(false);
-      setMessage("Vehicle submitted to the configured approval workflow.");
+      setMessage("Vehicle submitted for approval.");
     } catch (cause) {
       setMessage(
         cause instanceof Error
@@ -313,8 +313,8 @@ export function VehicleWorkflowScreen() {
             <Card>
               <Text style={styles.title}>Vehicle approval application</Text>
               <Text style={styles.body}>
-                Available types and approval are supplied by the platform. The
-                vehicle is not dispatch-eligible until backend approval.
+                Choose the vehicle you will use for deliveries. It must be
+                approved before you can accept assignments.
               </Text>
               <View style={styles.options}>
                 {(vehicleTypes.data ?? [])

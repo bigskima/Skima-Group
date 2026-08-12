@@ -3,6 +3,7 @@ import {
   Bell,
   ChevronRight,
   CircleHelp,
+  PackageCheck,
   MapPin,
   QrCode,
   ShieldCheck,
@@ -31,24 +32,25 @@ import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { BrandMark } from "./BrandMark";
+import { PromotionBanner } from "./PromotionBanner";
 
 export function CustomerDashboard() {
+  const { palette } = useAppTheme();
   const cylinders = domainQueries.cylinders();
   const active = domainQueries.activeOrders();
   const locations = domainQueries.locations();
   const wallets = domainQueries.wallets();
   const stations = domainQueries.stations();
-  const transactions = domainQueries.transactions();
   if (
     cylinders.isPending ||
     active.isPending ||
     locations.isPending ||
     wallets.isPending ||
-    stations.isPending ||
-    transactions.isPending
+    stations.isPending
   )
     return (
-      <DashboardFrame workspace="LPG" title="Preparing your workspace">
+      <DashboardFrame workspace="LPG" title="Getting things ready">
         <ScreenSkeleton cards={4} />
       </DashboardFrame>
     );
@@ -57,11 +59,10 @@ export function CustomerDashboard() {
     active.error ??
     locations.error ??
     wallets.error ??
-    stations.error ??
-    transactions.error;
+    stations.error;
   if (customerError)
     return (
-      <DashboardFrame workspace="LPG" title="Your workspace needs a refresh">
+      <DashboardFrame workspace="LPG" title="Your home needs a refresh">
         <DashboardError
           message={customerError.message}
           onRetry={() =>
@@ -71,7 +72,6 @@ export function CustomerDashboard() {
               locations.refetch(),
               wallets.refetch(),
               stations.refetch(),
-              transactions.refetch(),
             ])
           }
         />
@@ -87,7 +87,7 @@ export function CustomerDashboard() {
   const walletCurrency =
     firstString(wallets.data?.[0], ["currency_code", "currencyCode"]) ?? "NGN";
   return (
-    <DashboardFrame workspace="LPG" title="How can we help you today?">
+    <DashboardFrame workspace="LPG" title="What do you need today?">
       <LocationBar
         value={location ? displayTitle(location) : "Select a delivery location"}
         onPress={() => router.push("/(customer)/locations")}
@@ -101,8 +101,8 @@ export function CustomerDashboard() {
         eyebrow="Refill a cylinder"
         body={
           firstCylinder
-            ? `Status: ${(displayStatus(firstCylinder) ?? "available").replace(/_/g, " ")}`
-            : "Add your cylinder details and original photograph."
+            ? humanStatus(displayStatus(firstCylinder) ?? "available")
+            : "Add a name, size and clear photo. We’ll create its SKIMA identity."
         }
         action={firstCylinder ? "Refill now" : "Register cylinder"}
         onPress={() =>
@@ -119,6 +119,7 @@ export function CustomerDashboard() {
           href={`/(customer)/orders/${recordId(firstOrder) ?? ""}`}
         />
       ) : null}
+      <PromotionBanner audience="customer" />
       <QuickActions
         actions={[
           { label: "Refill", icon: QrCode, href: "/(customer)/orders/new" },
@@ -145,22 +146,7 @@ export function CustomerDashboard() {
           detailBase="/(customer)/station"
         />
       </Section>
-      <Section title="Recent activity" href="/(customer)/transactions">
-        <RecordGrid
-          records={transactions.data ?? []}
-          empty="Your verified payment activity will appear here."
-        />
-      </Section>
-      <MetricStrip
-        metrics={[
-          {
-            label: "Wallet balance",
-            value: formatMoney(walletBalance, walletCurrency),
-          },
-          { label: "Active orders", value: String(active.data?.length ?? 0) },
-          { label: "Cylinders", value: String(cylinders.data?.length ?? 0) },
-        ]}
-      />
+      <View style={[styles.customerSummary, { borderColor: palette.border }]}><View><Text style={[styles.summaryLabel, { color: palette.muted }]}>SKIMA wallet</Text><Text style={[styles.summaryValue, { color: palette.ink }]}>{formatMoney(walletBalance, walletCurrency)}</Text></View><Pressable onPress={() => router.push("/(customer)/wallet")} style={styles.summaryAction}><Text style={styles.summaryActionText}>View wallet</Text><ChevronRight color={colors.brand} size={17} /></Pressable></View>
     </DashboardFrame>
   );
 }
@@ -171,14 +157,14 @@ export function DriverDashboard() {
   const vehicles = domainQueries.vehicles();
   if (jobs.isPending || commissions.isPending || vehicles.isPending)
     return (
-      <DashboardFrame workspace="Driver" title="Preparing your workspace">
+      <DashboardFrame workspace="Driver" title="Checking today’s route">
         <ScreenSkeleton cards={3} />
       </DashboardFrame>
     );
   const driverError = jobs.error ?? commissions.error ?? vehicles.error;
   if (driverError)
     return (
-      <DashboardFrame workspace="Driver" title="Your workspace needs a refresh">
+      <DashboardFrame workspace="Driver" title="Your jobs need a refresh">
         <DashboardError
           message={driverError.message}
           onRetry={() =>
@@ -202,9 +188,9 @@ export function DriverDashboard() {
     firstString(commissions.data?.[0], ["currency_code", "currencyCode"]) ??
     "NGN";
   return (
-    <DashboardFrame workspace="Driver" title="Ready for the road">
+    <DashboardFrame workspace="Driver" title="Ready for the road?">
       <MetricHero
-        label="Backend-confirmed earnings"
+        label="Available earnings"
         value={formatMoney(earningsTotal, earningsCurrency)}
         secondary={`${jobs.data?.length ?? 0} available jobs`}
       />
@@ -217,7 +203,7 @@ export function DriverDashboard() {
         body={
           active
             ? displayTitle(active)
-            : "Assignments will be offered according to your capabilities and service area."
+            : "New jobs will appear here when they match your vehicle and service area."
         }
       />
       <Pressable
@@ -261,7 +247,7 @@ export function StationDashboard() {
   const settlements = domainQueries.settlements();
   if (jobs.isPending || settlements.isPending)
     return (
-      <DashboardFrame workspace="Station" title="Preparing your workspace">
+      <DashboardFrame workspace="Station" title="Preparing today’s station view">
         <ScreenSkeleton cards={3} />
       </DashboardFrame>
     );
@@ -270,7 +256,7 @@ export function StationDashboard() {
     return (
       <DashboardFrame
         workspace="Station"
-        title="Your workspace needs a refresh"
+        title="Your station view needs a refresh"
       >
         <DashboardError
           message={stationError.message}
@@ -290,7 +276,7 @@ export function StationDashboard() {
     firstString(settlements.data?.[0], ["currency_code", "currencyCode"]) ??
     "NGN";
   return (
-    <DashboardFrame workspace="Station" title="Operational dashboard">
+    <DashboardFrame workspace="Station" title="Keep today’s refills moving">
       <MetricStrip
         metrics={[
           { label: "Incoming jobs", value: String(active.length) },
@@ -312,8 +298,8 @@ export function StationDashboard() {
         ]}
       />
       <StatusBanner
-        title="Station operations"
-        body="Jobs, verification and settlement state are loaded directly from SKIMA."
+        title="Station ready"
+        body="Review incoming cylinders, record each refill and confirm every hand-off."
       />
       <QuickActions
         actions={[
@@ -352,34 +338,21 @@ function DashboardFrame({
   children: React.ReactNode;
 }) {
   const session = useSession();
-  const dark = useAppTheme().scheme === "dark";
+  const { scheme, palette } = useAppTheme();
+  const dark = scheme === "dark";
   return (
     <Screen
-      eyebrow={`SKIMA ${workspace}`}
+      eyebrow={title}
       title={`Hello${session.context?.profile?.display_name ? `, ${session.context.profile.display_name}` : ""}`}
+      action={<View style={styles.headerActions}><BrandMark compact /><Pressable accessibilityRole="button" accessibilityLabel="Open notifications" onPress={() => router.push(`/${workspace === "LPG" ? "(customer)" : workspace === "Driver" ? "(driver)" : "(station)"}/notifications` as never)} style={[styles.bell, { backgroundColor: palette.surface }]}><Bell color={palette.ink} size={20} /></Pressable></View>}
     >
-      <View style={styles.topline}>
-        <Text style={[styles.subtitle, dark && styles.darkMuted]}>{title}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open notifications"
-          onPress={() =>
-            router.push(
-              `/${workspace === "LPG" ? "(customer)" : workspace === "Driver" ? "(driver)" : "(station)"}/notifications` as never,
-            )
-          }
-          style={[styles.bell, dark && styles.darkCard]}
-        >
-          <Bell color={dark ? colors.darkInk : colors.ink} size={21} />
-        </Pressable>
-      </View>
       <WorkspaceSwitcher current={workspace === "LPG" ? "customer" : workspace === "Driver" ? "driver" : "station"} />
       {children}
     </Screen>
   );
 }
 function DashboardError({
-  message,
+  message: _message,
   onRetry,
 }: {
   message: string;
@@ -388,10 +361,10 @@ function DashboardError({
   return (
     <View accessibilityRole="alert" style={styles.dashboardError}>
       <CircleHelp color={colors.brand} size={28} />
-      <Text style={styles.statusTitle}>Unable to load live workspace data</Text>
-      <Text style={styles.cardBody}>{message}</Text>
+      <Text style={styles.statusTitle}>We couldn’t refresh this page</Text>
+      <Text style={styles.cardBody}>Check your connection and try again. Your saved information is still safe.</Text>
       <Pressable onPress={onRetry} style={styles.heroButton}>
-        <Text style={styles.heroButtonText}>Retry securely</Text>
+        <Text style={styles.heroButtonText}>Try again</Text>
       </Pressable>
     </View>
   );
@@ -431,6 +404,32 @@ function formatMoney(value: number, currency: string) {
     return `${currency} ${value.toFixed(2)}`;
   }
 }
+function humanStatus(value: string) {
+  const normalized = value.toLowerCase().replace(/[\s-]+/g, "_");
+  const labels: Record<string, string> = {
+    active: "Ready to refill",
+    available: "Ready to use",
+    awaiting_payment: "Waiting for payment",
+    payment_reserved: "Payment confirmed",
+    matching_station: "Finding a refill station",
+    matching_driver: "Finding your driver",
+    driver_offered: "Driver notified",
+    driver_accepted: "Driver assigned",
+    pickup_en_route: "Driver heading to pickup",
+    pickup_verified: "Cylinder collected",
+    station_en_route: "Heading to the station",
+    station_verified: "Received by the station",
+    refill_in_progress: "Refill in progress",
+    refill_confirmed: "Refill complete",
+    return_en_route: "On the way back to you",
+    delivery_verification_pending: "Ready for hand-over",
+    delivered: "Delivered",
+    completed: "Completed",
+    cancelled: "Cancelled",
+    pending: "In progress",
+  };
+  return labels[normalized] ?? normalized.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase());
+}
 function Hero({
   eyebrow,
   title,
@@ -448,6 +447,7 @@ function Hero({
   return (
     <View style={[styles.hero, dark && styles.heroDark]}>
       <View style={[styles.heroOrb, dark && styles.heroOrbDark]} />
+      <View style={styles.heroArtwork}><PackageCheck color={colors.brand} size={62} strokeWidth={1.7} /></View>
       <Text style={styles.heroEyebrow}>{eyebrow}</Text>
       <Text style={[styles.heroTitle, dark && styles.darkText]}>{title}</Text>
       <Text style={[styles.heroBody, dark && styles.darkMuted]}>{body}</Text>
@@ -478,7 +478,7 @@ function ActiveCard({
         </Text>
         <Text style={[styles.cardBody, dark && styles.darkMuted]}>
           {displaySubtitle(record) ??
-            (displayStatus(record) ?? "In progress").replace(/_/g, " ")}
+            humanStatus(displayStatus(record) ?? "In progress")}
         </Text>
       </View>
       <View style={styles.liveButton}>
@@ -618,11 +618,7 @@ function RecordGrid({
                 style={[styles.cardBody, dark && styles.darkMuted]}
                 numberOfLines={1}
               >
-                {(
-                  displayStatus(record) ??
-                  displaySubtitle(record) ??
-                  "Available"
-                ).replace(/_/g, " ")}
+                {humanStatus(displayStatus(record) ?? displaySubtitle(record) ?? "Available")}
               </Text>
             </View>
             <ChevronRight color={colors.muted} size={19} />
@@ -655,6 +651,7 @@ function MetricStrip({
 }
 
 const styles = StyleSheet.create({
+  headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   topline: {
     flexDirection: "row",
     alignItems: "center",
@@ -669,8 +666,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
+    shadowColor: "rgba(23,33,27,.12)",
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   location: {
     flexDirection: "row",
@@ -705,6 +705,7 @@ const styles = StyleSheet.create({
     top: 10,
     backgroundColor: "#FFDCE0",
   },
+  heroArtwork: { position: "absolute", right: "9%", top: "50%", width: 122, height: 122, marginTop: -61, alignItems: "center", justifyContent: "center", borderRadius: 61, backgroundColor: "rgba(255,255,255,.72)" },
   heroEyebrow: {
     color: colors.brand,
     fontSize: 13,
@@ -769,18 +770,18 @@ const styles = StyleSheet.create({
   quick: {
     flexDirection: "row",
     flexWrap: "wrap",
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    padding: spacing.sm,
+    gap: spacing.sm,
   },
   quickItem: {
     flex: 1,
     minWidth: 76,
     alignItems: "center",
     gap: 7,
+    minHeight: 94,
+    justifyContent: "center",
     padding: spacing.sm,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
   },
   quickIcon: {
     width: 46,
@@ -806,9 +807,12 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: spacing.md,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
+    shadowColor: "rgba(23,33,27,.08)",
+    shadowOpacity: 1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
   },
   recordMark: {
     width: 46,
@@ -898,4 +902,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     backgroundColor: "#FFF7F8",
   },
+  customerSummary: { minHeight: 94, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md, paddingVertical: spacing.md, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border },
+  summaryLabel: { color: colors.muted, fontSize: 12, fontWeight: "800" },
+  summaryValue: { color: colors.ink, fontSize: 24, fontWeight: "900", marginTop: 4 },
+  summaryAction: { flexDirection: "row", alignItems: "center", gap: 4 },
+  summaryActionText: { color: colors.brand, fontWeight: "900" },
 });

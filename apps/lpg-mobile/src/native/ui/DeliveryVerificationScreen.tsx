@@ -14,6 +14,7 @@ import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
 import { colors, radii, spacing } from "../theme/tokens";
 import { idempotencyKey } from "../utilities/idempotency";
+import { friendlyError } from "../utilities/friendlyError";
 import { Screen } from "./Screen";
 export function DeliveryVerificationScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -54,7 +55,7 @@ export function DeliveryVerificationScreen() {
           ? result
           : firstString(result, ["id", "challengeId", "challenge_id"]);
       if (typeof resultId !== "string")
-        throw new Error("The backend did not return a challenge identifier.");
+        throw new Error("A verification code could not be created. Please try again.");
       setChallengeId(resultId);
       const now = new Date().toISOString();
       await draftStore.save({
@@ -68,13 +69,9 @@ export function DeliveryVerificationScreen() {
         createdAt: now,
         updatedAt: now,
       });
-      setNotice("Verification code requested through the configured channel.");
+      setNotice("Verification code sent.");
     } catch (cause) {
-      setNotice(
-        cause instanceof Error
-          ? cause.message
-          : "Verification could not be requested.",
-      );
+      setNotice(friendlyError(cause, "The verification code could not be sent."));
     }
   };
   const verify = async () => {
@@ -92,11 +89,11 @@ export function DeliveryVerificationScreen() {
         idempotencyKey: idempotencyKey("delivery-verify", challengeId),
       });
       await draftStore.clear(owner, draftType);
-      setNotice("Delivery verified by the backend.");
+      setNotice("Delivery confirmed successfully.");
       router.replace(`/(customer)/orders/${id}` as never);
     } catch (cause) {
       setNotice(
-        cause instanceof Error ? cause.message : "Verification failed.",
+        friendlyError(cause, "Delivery could not be confirmed. Check the code and try again."),
       );
     }
   };
@@ -113,8 +110,8 @@ export function DeliveryVerificationScreen() {
       <View style={styles.card}>
         <Text style={styles.title}>Customer confirmation</Text>
         <Text style={styles.body}>
-          The backend binds this challenge to your account and order. A local
-          code entry never completes delivery by itself.
+          Enter the code sent for this order to confirm that your cylinder has
+          arrived safely.
         </Text>
         {!challengeId ? (
           <Pressable

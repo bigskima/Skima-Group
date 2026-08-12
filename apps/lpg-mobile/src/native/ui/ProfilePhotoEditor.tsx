@@ -8,6 +8,7 @@ import { uploadMedia } from "../media/upload";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, spacing } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
 import { RuntimeMediaImage } from "./RuntimeMediaImage";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -56,7 +57,7 @@ export function ProfilePhotoEditor() {
       await session.refresh();
       setMessage("Profile image updated.");
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "Profile image could not be updated.");
+      setMessage(friendlyError(cause, "Your profile image could not be updated."));
     } finally {
       setPending(null);
     }
@@ -72,7 +73,7 @@ export function ProfilePhotoEditor() {
       await session.refresh();
       setMessage("Profile image deleted.");
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "Profile image could not be deleted.");
+      setMessage(friendlyError(cause, "Your profile image could not be deleted."));
     } finally {
       setPending(null);
     }

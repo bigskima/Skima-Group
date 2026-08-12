@@ -27,6 +27,7 @@ import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
 import { colors, radii, spacing } from "../theme/tokens";
 import { idempotencyKey } from "../utilities/idempotency";
+import { friendlyError } from "../utilities/friendlyError";
 import { Card } from "./Card";
 import { EvidenceCapture } from "./EvidenceCapture";
 import { Screen } from "./Screen";
@@ -252,7 +253,7 @@ export function JobDetailScreen({
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey("station-inspection", id),
       });
-      setNotice("Inspection evidence recorded by the backend.");
+      setNotice("Inspection evidence saved.");
     } catch (cause) {
       setNotice(
         cause instanceof Error
@@ -272,10 +273,10 @@ export function JobDetailScreen({
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey(actionKey, id),
       });
-      setNotice("Workflow updated by the backend.");
+      setNotice("Job updated successfully.");
     } catch (cause) {
       setNotice(
-        cause instanceof Error ? cause.message : "Workflow action failed.",
+        friendlyError(cause, "The job could not be updated. Please try again."),
       );
     }
   };
@@ -311,10 +312,10 @@ export function JobDetailScreen({
         idempotencyKey: idempotencyKey("station-refill-confirm", id),
       });
       await draftStore.clear(draftOwner, `station-refill-${id}`);
-      setNotice("Refill confirmed by the backend.");
+      setNotice("Refill confirmed successfully.");
     } catch (cause) {
       setNotice(
-        cause instanceof Error ? cause.message : "Refill confirmation failed.",
+        friendlyError(cause, "The refill could not be confirmed. Please try again."),
       );
     }
   };
@@ -326,7 +327,7 @@ export function JobDetailScreen({
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey("station-settlement", id),
       });
-      setNotice("Station settlement posted by the backend.");
+      setNotice("Station settlement recorded.");
     } catch (cause) {
       setNotice(
         cause instanceof Error
@@ -343,7 +344,7 @@ export function JobDetailScreen({
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey("driver-commission", id),
       });
-      setNotice("Driver earnings posted by the backend.");
+      setNotice("Driver earnings recorded.");
     } catch (cause) {
       setNotice(
         cause instanceof Error
@@ -380,14 +381,17 @@ export function JobDetailScreen({
         <ActivityIndicator color={colors.brand} />
       ) : detail.error || (workspace === "station" && inspections.error) ? (
         <Text style={styles.error}>
-          {(detail.error ?? inspections.error)?.message}
+          {friendlyError(
+            detail.error ?? inspections.error,
+            "This job could not be loaded. Please try again.",
+          )}
         </Text>
       ) : (
         <>
           {routePoints.length ? <OperationalMap points={routePoints} /> : null}
           <Card>
             <Field
-              label="Workflow status"
+              label="Job status"
               value={status.replace(/[_-]/g, " ")}
             />
             <Field
@@ -405,7 +409,7 @@ export function JobDetailScreen({
           {routeDistance !== null || routeDuration !== null ? (
             <Card>
               <Field
-                label="Backend route distance"
+                label="Distance"
                 value={
                   routeDistance !== null
                     ? `${(routeDistance / 1000).toFixed(1)} km`
@@ -413,7 +417,7 @@ export function JobDetailScreen({
                 }
               />
               <Field
-                label="Backend route estimate"
+                label="Estimated time"
                 value={
                   routeDuration !== null
                     ? `${Math.ceil(routeDuration / 60)} min`
@@ -507,7 +511,7 @@ export function JobDetailScreen({
               {scan.isPending ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Text style={styles.submitText}>Verify with SKIMA backend</Text>
+                <Text style={styles.submitText}>Check cylinder code</Text>
               )}
             </Pressable>
           ) : null}
@@ -519,8 +523,7 @@ export function JobDetailScreen({
               <Text style={styles.formTitle}>Operator inspection result</Text>
               <Text style={styles.formBody}>
                 Record what you actually observed. Unsafe or rejected results
-                are sent to the backend safety workflow and must never be
-                presented as safe.
+                will pause this refill for the appropriate safety review.
               </Text>
               <View style={styles.resultOptions}>
                 {["safe", "unsafe", "manual_review", "rejected"].map(
@@ -571,11 +574,11 @@ export function JobDetailScreen({
           {workspace === "station" && !stationCanScan ? (
             <Card>
               <Text style={styles.formTitle}>
-                Operational access restricted
+                Action unavailable
               </Text>
               <Text style={styles.formBody}>
-                Your backend role can view this job but does not grant station
-                scanning or pump operations.
+                Your station access lets you view this job, but it does not
+                include cylinder scanning or refill actions.
               </Text>
             </Card>
           ) : null}
@@ -590,8 +593,8 @@ export function JobDetailScreen({
               />
               {existingInspectionResult !== "safe" ? (
                 <Text style={styles.error}>
-                  This inspection cannot proceed to refill. The backend safety
-                  workflow remains authoritative.
+                  This inspection cannot proceed to refill until the safety
+                  issue has been reviewed.
                 </Text>
               ) : null}
             </Card>

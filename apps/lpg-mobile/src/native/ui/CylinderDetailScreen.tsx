@@ -9,6 +9,7 @@ import { ActionResponseSchema, displayReference, displayStatus, firstNumber, fir
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { saveQrPng } from "../utilities/qrDownload";
+import { friendlyError } from "../utilities/friendlyError";
 import { Card } from "./Card";
 import { PresentationMediaPanel } from "./PresentationMediaPanel";
 import { Screen } from "./Screen";
@@ -25,9 +26,9 @@ export function CylinderDetailScreen() {
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const cylinder = query.data?.find((item) => recordId(item) === id || displayReference(item) === id);
-  const identifier = cylinder ? firstString(cylinder, ["cylinder_identifier", "cylinderIdentifier", "public_reference", "publicReference", "id"]) : null;
+  const cylinderReference = cylinder ? displayReference(cylinder) : null;
   const displayName = cylinder ? firstString(cylinder, ["display_name", "displayName"]) : null;
-  const qrValue = cylinder ? firstString(cylinder, ["qr_payload", "qrPayload"]) ?? identifier : null;
+  const qrValue = cylinder ? firstString(cylinder, ["qr_payload", "qrPayload"]) : null;
   const cylinderId = cylinder ? recordId(cylinder) : null;
   const nameMutation = useGatewayMutation({ path: "/lpg/cylinders/name", schema: ActionResponseSchema, invalidate: [["cylinders"]] });
 
@@ -41,7 +42,7 @@ export function CylinderDetailScreen() {
       setEditing(false);
       setMessage("Cylinder name saved.");
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "Cylinder name could not be saved.");
+      setMessage(friendlyError(cause, "We couldn’t save the new name. Please try again."));
     }
   };
 
@@ -51,18 +52,18 @@ export function CylinderDetailScreen() {
     try {
       await new Promise<void>((resolve, reject) => {
         qrRef.current?.toDataURL((base64) => {
-          void saveQrPng(`data:image/png;base64,${base64}`, `${safeFileName(displayName ?? identifier ?? "skima-cylinder")}-qr.png`).then(resolve, reject);
+          void saveQrPng(`data:image/png;base64,${base64}`, `${safeFileName(displayName ?? cylinderReference ?? "skima-cylinder")}-qr.png`).then(resolve, reject);
         });
       });
       setMessage("QR code is ready to save or share.");
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "QR code could not be downloaded.");
+      setMessage(friendlyError(cause, "We couldn’t save the QR code. Please try again."));
     }
   };
 
   return (
     <Screen eyebrow="Verified asset" title={displayName ?? "Cylinder details"} action={<Pressable onPress={() => router.back()}><Text style={styles.back}>Back</Text></Pressable>}>
-      {query.isPending ? <ScreenSkeleton cards={3} /> : query.error ? <Text style={styles.error}>{query.error.message}</Text> : !cylinder ? <Text style={[styles.muted, { color: palette.muted }]}>This cylinder is unavailable or you no longer have access.</Text> : (
+      {query.isPending ? <ScreenSkeleton cards={3} /> : query.error ? <Text style={styles.error}>We couldn’t load this cylinder. Please try again.</Text> : !cylinder ? <Text style={[styles.muted, { color: palette.muted }]}>This cylinder is unavailable or you no longer have access.</Text> : (
         <>
           <PresentationMediaPanel
             subjectId={cylinderId ?? id ?? ""}
@@ -85,7 +86,7 @@ export function CylinderDetailScreen() {
           </Card>
 
           <Card>
-            <Field label="Cylinder identifier" value={identifier ?? "Unavailable"} />
+            <Field label="SKIMA reference" value={cylinderReference ?? "Unavailable"} />
             <Field label="Size" value={`${firstNumber(cylinder, ["size_kg", "sizeKg"]) ?? "Configured"} kg`} />
             <Field label="Brand" value={firstString(cylinder, ["brand", "manufacturer"]) ?? "Not recorded"} />
             <Field label="Serial number" value={firstString(cylinder, ["serial_number", "serialNumber"]) ?? "Not recorded"} />
@@ -96,10 +97,7 @@ export function CylinderDetailScreen() {
 
           <View style={[styles.qrCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <View style={styles.qrHeader}><View style={[styles.qrIcon, { backgroundColor: palette.brandSoft }]}><QrCodeIcon color={colors.brand} size={22} /></View><View style={{ flex: 1 }}><Text style={[styles.qrTitle, { color: palette.ink }]}>Scannable cylinder identity</Text><Text style={[styles.muted, { color: palette.muted }]}>Download contains only this QR code—not the screen.</Text></View></View>
-            <View style={styles.qr}><QRCode ref={qrRef as never} value={qrValue ?? "unavailable"} size={184} color={colors.ink} backgroundColor="white" /></View>
-            <Text style={[styles.reference, { color: palette.ink }]}>{displayReference(cylinder)}</Text>
-            <Text style={styles.status}>{(displayStatus(cylinder) ?? "registered").replace(/[_-]/g, " ")}</Text>
-            <Pressable style={styles.primary} onPress={() => void downloadQr()}><Download color="white" size={19} /><Text style={styles.primaryText}>Download QR code</Text></Pressable>
+            {qrValue ? <><View style={styles.qr}><QRCode ref={qrRef as never} value={qrValue} size={184} color={colors.ink} backgroundColor="white" /></View><Text style={[styles.reference, { color: palette.ink }]}>{displayReference(cylinder)}</Text><Text style={styles.status}>{(displayStatus(cylinder) ?? "registered").replace(/[_-]/g, " ")}</Text><Pressable style={styles.primary} onPress={() => void downloadQr()}><Download color="white" size={19} /><Text style={styles.primaryText}>Download QR code</Text></Pressable></> : <Text style={[styles.muted, { color: palette.muted }]}>Your private scan code is being prepared. Refresh this page in a moment.</Text>}
           </View>
         </>
       )}
@@ -127,7 +125,7 @@ const styles = StyleSheet.create({
   field: { gap: 3 },
   label: { fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: .5 },
   value: { fontSize: 16, fontWeight: "700", textTransform: "capitalize" },
-  qrCard: { alignItems: "center", gap: spacing.sm, padding: spacing.xl, borderRadius: radii.lg, borderWidth: 1 },
+  qrCard: { alignItems: "center", gap: spacing.sm, padding: spacing.xl, borderRadius: radii.lg },
   qrHeader: { width: "100%", flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.sm },
   qrIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   qrTitle: { fontSize: 17, fontWeight: "900" },

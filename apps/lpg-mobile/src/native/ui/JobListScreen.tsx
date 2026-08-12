@@ -1,10 +1,212 @@
 import { router } from "expo-router";
-import { Clock3, MapPin, PackageCheck, Route, ScanLine } from "lucide-react-native";
-import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import {
+  Clock3,
+  MapPin,
+  PackageCheck,
+  Route,
+  ScanLine,
+} from "lucide-react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { domainQueries } from "../api/domains";
-import { displayReference, displayStatus, firstNumber, firstString, nestedRecord, recordId } from "../api/records";
+import {
+  displayReference,
+  displayStatus,
+  firstNumber,
+  firstString,
+  nestedRecord,
+  recordId,
+} from "../api/records";
 import { colors, radii, spacing } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
 import { Screen } from "./Screen";
-export function JobListScreen({ workspace }: { workspace: "driver" | "station" }) { const jobs = workspace === "driver" ? domainQueries.driverJobs() : domainQueries.stationJobs(); return <Screen eyebrow={workspace === "driver" ? "Qualified dispatch" : "Branch operations"} title={workspace === "driver" ? "Driver jobs" : "Station jobs"} refreshControl={<RefreshControl refreshing={jobs.isRefetching} onRefresh={() => void jobs.refetch()} tintColor={colors.brand} />}>{jobs.isPending ? <ActivityIndicator color={colors.brand} /> : jobs.error ? <View style={styles.empty}><Text style={styles.emptyTitle}>Jobs couldn’t be loaded</Text><Text style={styles.body}>{jobs.error.message}</Text><Pressable onPress={() => void jobs.refetch()}><Text style={styles.link}>Retry</Text></Pressable></View> : <>{(jobs.data ?? []).map((job, index) => { const id = recordId(job); const order = nestedRecord(job, "order") ?? job; const cylinder = nestedRecord(order, "cylinder"); const location = workspace === "driver" ? nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location") : nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch"); const status = displayStatus(job) ?? displayStatus(order) ?? "queued"; return <Pressable key={id ?? String(index)} disabled={!id} onPress={() => router.push(`/${workspace === "driver" ? "(driver)" : "(station)"}/job/${id}` as never)} style={styles.job}><View style={styles.head}><View style={styles.icon}>{workspace === "driver" ? <Route color={colors.brand} size={24} /> : <ScanLine color={colors.brand} size={24} />}</View><View style={{ flex: 1 }}><Text style={styles.title}>{displayReference(order) ?? displayReference(job) ?? "LPG job"}</Text><Text style={styles.status}>{status.replace(/[_-]/g, " ")}</Text></View><Text style={styles.size}>{cylinder ? `${firstNumber(cylinder, ["sizeKg", "size_kg"]) ?? "—"} kg` : "LPG"}</Text></View><View style={styles.divider} /><View style={styles.detail}><MapPin color={colors.muted} size={17} /><Text numberOfLines={2} style={styles.body}>{location ? firstString(location, ["formattedAddress", "formatted_address", "displayName", "display_name"]) ?? "Configured destination" : "Destination supplied by the active workflow"}</Text></View><View style={styles.detail}><Clock3 color={colors.muted} size={17} /><Text style={styles.body}>{formatDate(firstString(job, ["updated_at", "updatedAt", "created_at", "createdAt"]))}</Text></View></Pressable>; })}{(jobs.data ?? []).length === 0 ? <View style={styles.empty}><View style={styles.emptyIcon}><PackageCheck color={colors.brand} size={34} /></View><Text style={styles.emptyTitle}>No active jobs</Text><Text style={styles.body}>{workspace === "driver" ? "Qualified assignments appear only after backend dispatch and eligibility checks." : "Branch work appears only after an order reaches the station workflow queue."}</Text></View> : null}</>}</Screen>; }
-function formatDate(value: string | null) { if (!value) return "Schedule supplied by workflow"; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString(); }
-const styles = StyleSheet.create({ job: { gap: spacing.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: radii.lg, backgroundColor: colors.surface }, head: { flexDirection: "row", alignItems: "center", gap: spacing.md }, icon: { width: 50, height: 50, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF0F1" }, title: { color: colors.ink, fontSize: 17, fontWeight: "900" }, status: { color: colors.brandDark, fontWeight: "800", textTransform: "capitalize", marginTop: 4 }, size: { color: colors.ink, fontSize: 18, fontWeight: "900" }, divider: { height: 1, backgroundColor: colors.border }, detail: { flexDirection: "row", alignItems: "center", gap: 8 }, body: { flex: 1, color: colors.muted, lineHeight: 20 }, empty: { minHeight: 280, alignItems: "center", justifyContent: "center", gap: spacing.md, padding: spacing.xl }, emptyIcon: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF0F1" }, emptyTitle: { color: colors.ink, fontSize: 21, fontWeight: "900" }, link: { color: colors.brand, fontWeight: "900" } });
+export function JobListScreen({
+  workspace,
+}: {
+  workspace: "driver" | "station";
+}) {
+  const jobs =
+    workspace === "driver"
+      ? domainQueries.driverJobs()
+      : domainQueries.stationJobs();
+  return (
+    <Screen
+      eyebrow={
+        workspace === "driver" ? "Your deliveries" : "Branch activity"
+      }
+      title={workspace === "driver" ? "Driver jobs" : "Station jobs"}
+      refreshControl={
+        <RefreshControl
+          refreshing={jobs.isRefetching}
+          onRefresh={() => void jobs.refetch()}
+          tintColor={colors.brand}
+        />
+      }
+    >
+      {jobs.isPending ? (
+        <ActivityIndicator color={colors.brand} />
+      ) : jobs.error ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>Jobs couldn’t be loaded</Text>
+          <Text style={styles.body}>
+            {friendlyError(jobs.error, "Jobs could not be loaded. Please try again.")}
+          </Text>
+          <Pressable onPress={() => void jobs.refetch()}>
+            <Text style={styles.link}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <>
+          {(jobs.data ?? []).map((job, index) => {
+            const id = recordId(job);
+            const order = nestedRecord(job, "order") ?? job;
+            const cylinder = nestedRecord(order, "cylinder");
+            const location =
+              workspace === "driver"
+                ? (nestedRecord(order, "pickupLocation") ??
+                  nestedRecord(order, "pickup_location"))
+                : (nestedRecord(order, "station") ??
+                  nestedRecord(order, "stationBranch"));
+            const status =
+              displayStatus(job) ?? displayStatus(order) ?? "queued";
+            return (
+              <Pressable
+                key={id ?? String(index)}
+                disabled={!id}
+                onPress={() =>
+                  router.push(
+                    `/${workspace === "driver" ? "(driver)" : "(station)"}/job/${id}` as never,
+                  )
+                }
+                style={styles.job}
+              >
+                <View style={styles.head}>
+                  <View style={styles.icon}>
+                    {workspace === "driver" ? (
+                      <Route color={colors.brand} size={24} />
+                    ) : (
+                      <ScanLine color={colors.brand} size={24} />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.title}>
+                      {displayReference(order) ??
+                        displayReference(job) ??
+                        "LPG job"}
+                    </Text>
+                    <Text style={styles.status}>
+                      {status.replace(/[_-]/g, " ")}
+                    </Text>
+                  </View>
+                  <Text style={styles.size}>
+                    {cylinder
+                      ? `${firstNumber(cylinder, ["sizeKg", "size_kg"]) ?? "—"} kg`
+                      : "LPG"}
+                  </Text>
+                </View>
+                <View style={styles.divider} />
+                <View style={styles.detail}>
+                  <MapPin color={colors.muted} size={17} />
+                  <Text numberOfLines={2} style={styles.body}>
+                    {location
+                      ? (firstString(location, [
+                          "formattedAddress",
+                          "formatted_address",
+                          "displayName",
+                          "display_name",
+                        ]) ?? "Configured destination")
+                      : "Destination supplied by the active workflow"}
+                  </Text>
+                </View>
+                <View style={styles.detail}>
+                  <Clock3 color={colors.muted} size={17} />
+                  <Text style={styles.body}>
+                    {formatDate(
+                      firstString(job, [
+                        "updated_at",
+                        "updatedAt",
+                        "created_at",
+                        "createdAt",
+                      ]),
+                    )}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+          {(jobs.data ?? []).length === 0 ? (
+            <View style={styles.empty}>
+              <View style={styles.emptyIcon}>
+                <PackageCheck color={colors.brand} size={34} />
+              </View>
+              <Text style={styles.emptyTitle}>No active jobs</Text>
+              <Text style={styles.body}>
+                {workspace === "driver"
+                  ? "New assignments will appear here when they are ready for you."
+                  : "New refill jobs will appear here when they reach your station."}
+              </Text>
+            </View>
+          ) : null}
+        </>
+      )}
+    </Screen>
+  );
+}
+function formatDate(value: string | null) {
+  if (!value) return "Schedule supplied by workflow";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+const styles = StyleSheet.create({
+  job: {
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+  },
+  head: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  icon: {
+    width: 50,
+    height: 50,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF0F1",
+  },
+  title: { color: colors.ink, fontSize: 17, fontWeight: "900" },
+  status: {
+    color: colors.brandDark,
+    fontWeight: "800",
+    textTransform: "capitalize",
+    marginTop: 4,
+  },
+  size: { color: colors.ink, fontSize: 18, fontWeight: "900" },
+  divider: { height: 1, backgroundColor: colors.border },
+  detail: { flexDirection: "row", alignItems: "center", gap: 8 },
+  body: { flex: 1, color: colors.muted, lineHeight: 20 },
+  empty: {
+    minHeight: 280,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.md,
+    padding: spacing.xl,
+  },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF0F1",
+  },
+  emptyTitle: { color: colors.ink, fontSize: 21, fontWeight: "900" },
+  link: { color: colors.brand, fontWeight: "900" },
+});

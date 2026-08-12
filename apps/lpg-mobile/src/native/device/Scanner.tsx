@@ -4,6 +4,7 @@ import {
   type BarcodeScanningResult,
 } from "expo-camera";
 import * as Haptics from "expo-haptics";
+import { Flashlight, ScanLine } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, radii, spacing } from "../theme/tokens";
@@ -17,6 +18,7 @@ export function Scanner({
 }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [locked, setLocked] = useState(false);
+  const [torch, setTorch] = useState(false);
   const detected = (event: BarcodeScanningResult) => {
     if (locked || !enabled || !event.data.trim()) return;
     setLocked(true);
@@ -26,24 +28,24 @@ export function Scanner({
   if (!enabled)
     return (
       <View style={styles.notice}>
-        <Text style={styles.noticeTitle}>No authorised scan session</Text>
+        <Text style={styles.noticeTitle}>Open a job to start scanning</Text>
         <Text style={styles.noticeBody}>
-          Open an active job at the correct workflow stage before scanning.
+          Choose the pickup, refill or delivery you’re working on first.
         </Text>
       </View>
     );
   if (!permission?.granted)
     return (
       <View style={styles.notice}>
-        <Text style={styles.noticeTitle}>Camera permission required</Text>
+        <Text style={styles.noticeTitle}>Allow camera access</Text>
         <Text style={styles.noticeBody}>
-          SKIMA uses the camera only for authorised scan and evidence workflows.
+          SKIMA needs the camera to read the cylinder’s private scan code. No photo is taken here.
         </Text>
         <Pressable
           onPress={() => void requestPermission()}
           style={styles.button}
         >
-          <Text style={styles.buttonText}>Allow camera</Text>
+          <Text style={styles.buttonText}>Continue to camera</Text>
         </Pressable>
       </View>
     );
@@ -52,12 +54,15 @@ export function Scanner({
       <CameraView
         style={styles.camera}
         facing="back"
+        enableTorch={torch}
         barcodeScannerSettings={{
           barcodeTypes: ["qr", "code128", "datamatrix"],
         }}
         onBarcodeScanned={locked ? undefined : detected}
       />
+      <View pointerEvents="none" style={styles.topCopy}><ScanLine color="white" size={21} /><Text style={styles.topTitle}>Align the SKIMA code</Text><Text style={styles.topBody}>Hold steady inside the frame</Text></View>
       <View pointerEvents="none" style={styles.frame} />
+      <Pressable accessibilityLabel={torch ? "Turn flashlight off" : "Turn flashlight on"} onPress={() => setTorch((value) => !value)} style={[styles.torch, torch && styles.torchActive]}><Flashlight color="white" size={21} /></Pressable>
       {locked ? (
         <Pressable onPress={() => setLocked(false)} style={styles.rescan}>
           <Text style={styles.buttonText}>Scan again</Text>
@@ -68,8 +73,8 @@ export function Scanner({
 }
 const styles = StyleSheet.create({
   cameraWrap: {
-    height: 430,
-    borderRadius: radii.lg,
+    height: 520,
+    borderRadius: 30,
     overflow: "hidden",
     backgroundColor: "#07100B",
   },
@@ -78,12 +83,17 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: "14%",
     right: "14%",
-    top: "24%",
-    bottom: "24%",
+    top: "26%",
+    bottom: "25%",
     borderWidth: 3,
     borderColor: "white",
     borderRadius: radii.md,
   },
+  topCopy: { position: "absolute", left: spacing.lg, right: spacing.lg, top: spacing.lg, alignItems: "center", gap: 4 },
+  topTitle: { color: "white", fontSize: 18, fontWeight: "900" },
+  topBody: { color: "rgba(255,255,255,.72)", fontSize: 13 },
+  torch: { position: "absolute", right: spacing.lg, bottom: spacing.lg, width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: 24, backgroundColor: "rgba(0,0,0,.48)" },
+  torchActive: { backgroundColor: colors.brand },
   notice: {
     minHeight: 260,
     alignItems: "center",
@@ -110,7 +120,7 @@ const styles = StyleSheet.create({
   rescan: {
     position: "absolute",
     bottom: spacing.lg,
-    alignSelf: "center",
+    left: spacing.lg,
     backgroundColor: colors.brand,
     borderRadius: radii.pill,
     paddingHorizontal: 20,

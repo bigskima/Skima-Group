@@ -15,6 +15,7 @@ import { idempotencyKey } from "../utilities/idempotency";
 import { RuntimeMediaImage } from "./RuntimeMediaImage";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
+import { friendlyError } from "../utilities/friendlyError";
 export function PresentationMediaPanel({
   subjectId,
   subjectType,
@@ -61,9 +62,11 @@ export function PresentationMediaPanel({
     schema: ActionResponseSchema,
   });
   const [queued, setQueued] = useState(false);
+  const [processError, setProcessError] = useState<string | null>(null);
   const request = async () => {
     if (!taskKey) return;
     setQueued(true);
+    setProcessError(null);
     try {
       await queue.mutateAsync({
         taskKey,
@@ -84,6 +87,8 @@ export function PresentationMediaPanel({
         timeoutMs: 60_000,
       });
       await links.refetch();
+    } catch (cause) {
+      setProcessError(friendlyError(cause, "We couldn’t create the studio image right now. Your original photo is safe—please try again."));
     } finally {
       setQueued(false);
     }
@@ -104,15 +109,10 @@ export function PresentationMediaPanel({
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: palette.ink }]}>
-            {presentationId
-              ? "Premium presentation image"
-              : originalId
-                ? "Authentic original image"
-                : "Premium presentation image"}
+            {presentationId ? "Your studio cylinder image" : originalId ? "Your original cylinder photo" : "Create a cylinder image"}
           </Text>
           <Text style={[styles.body, { color: palette.muted }]}>
-            Presentation derivatives are displayed separately. Original evidence
-            remains unchanged and authoritative.
+            {presentationId ? "This polished view represents your cylinder throughout the app." : "Create a clean display image while keeping your original photo unchanged."}
           </Text>
         </View>
       </View>
@@ -127,17 +127,15 @@ export function PresentationMediaPanel({
           {queue.isPending ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text style={styles.buttonText}>Generate presentation</Text>
+            <Text style={styles.buttonText}>Create studio image</Text>
           )}
         </Pressable>
       ) : !presentationId && !taskKey ? (
         <Text style={styles.unavailable}>
-          Presentation generation is not configured for this asset yet.
+          Studio images aren’t available for this cylinder yet.
         </Text>
       ) : null}
-      {queue.error ? (
-        <Text style={styles.error}>{queue.error.message}</Text>
-      ) : null}
+      {queue.error || processError ? <Text style={styles.error}>{processError ?? "We couldn’t create the studio image. Please try again."}</Text> : null}
     </View>
   );
 }
@@ -146,8 +144,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.lg,
     borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: "#DDCDF8",
     backgroundColor: "#FAF7FF",
   },
   head: { flexDirection: "row", gap: spacing.md },

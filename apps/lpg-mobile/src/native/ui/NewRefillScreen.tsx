@@ -279,7 +279,7 @@ export function NewRefillScreen() {
           <Text style={styles.muted}>
             Valid until{" "}
             {formatDate(firstString(quoteRecord, ["expiresAt", "expires_at"]))}.
-            Pricing remains backend-authoritative.
+            Your quote is calculated from the selected cylinder, station and trip.
           </Text>
           <Pressable
             disabled={order.isPending || reserve.isPending}
@@ -302,7 +302,7 @@ export function NewRefillScreen() {
           {!locations.isPending && (locations.data ?? []).length === 0 ? (
             <View style={[styles.locationRequired, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <Text style={[styles.groupTitle, { color: palette.ink }]}>Detect your delivery location first</Text>
-              <Text style={[styles.muted, { color: palette.muted }]}>A verified device location is required before the backend can price and dispatch this order.</Text>
+              <Text style={[styles.muted, { color: palette.muted }]}>Add a precise pickup and delivery location before requesting your quote.</Text>
               <Pressable onPress={() => router.push("/(customer)/locations")} style={styles.locationButton}><Text style={styles.primaryText}>Detect location</Text></Pressable>
             </View>
           ) : null}
@@ -350,7 +350,7 @@ export function NewRefillScreen() {
             {quote.isPending ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.primaryText}>Request backend quote</Text>
+              <Text style={styles.primaryText}>Get my quote</Text>
             )}
           </Pressable>
         </>
@@ -427,7 +427,7 @@ function money(value: number | null, currency: string | null) {
   }
 }
 function formatDate(value: string | null) {
-  if (!value) return "the backend expiry";
+  if (!value) return "the quoted time";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }

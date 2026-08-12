@@ -102,7 +102,7 @@ export function StationSettingsScreen() {
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey("station-price", branchId),
       });
-      setNotice("Branch price updated from backend policy.");
+      setNotice("Branch price updated.");
     } catch (cause) {
       setNotice(
         cause instanceof Error
@@ -117,7 +117,7 @@ export function StationSettingsScreen() {
         <Card>
           <Text style={styles.title}>Access restricted</Text>
           <Text style={styles.body}>
-            Your current backend role does not include station management.
+            Your station access does not include settings management.
           </Text>
         </Card>
       </Screen>

@@ -14,6 +14,7 @@ import { useGatewayMutation } from "../api/gateway";
 import { ActionResponseSchema, firstString } from "../api/records";
 import { colors, radii, spacing } from "../theme/tokens";
 import { idempotencyKey } from "../utilities/idempotency";
+import { friendlyError } from "../utilities/friendlyError";
 import { Screen } from "./Screen";
 export function TopUpScreen() {
   const wallets = domainQueries.wallets();
@@ -74,7 +75,7 @@ export function TopUpScreen() {
       else router.replace("/(customer)/wallet");
     } catch (cause) {
       setError(
-        cause instanceof Error ? cause.message : "Top-up could not be started.",
+        friendlyError(cause, "The top-up could not be started. Please try again."),
       );
     }
   };
@@ -135,8 +136,8 @@ export function TopUpScreen() {
         )}
       </Pressable>
       <Text style={styles.note}>
-        Payment details are collected by the configured provider. SKIMA confirms
-        funding only after backend verification.
+        Payment details are entered on the secure payment page. Your balance
+        updates after the payment is confirmed.
       </Text>
     </Screen>
   );

@@ -156,7 +156,7 @@ export function EvidenceCapture({
           <Camera color={colors.muted} size={30} />
           <Text style={styles.body}>
             {uploadedAssetId
-              ? "Secure upload ready for backend registration"
+              ? "Upload ready to finish"
               : "No evidence captured"}
           </Text>
         </View>
@@ -184,15 +184,15 @@ export function EvidenceCapture({
               <ActivityIndicator color="white" />
               <Text style={styles.primaryText}>
                 {uploadedAssetId
-                  ? "Registering securely"
+                  ? "Finishing upload"
                   : `Uploading ${Math.round((progress ?? 0) * 100)}%`}
               </Text>
             </View>
           ) : (
             <Text style={styles.primaryText}>
               {uploadedAssetId
-                ? "Retry backend registration"
-                : "Upload authentic evidence"}
+                ? "Try upload again"
+                : "Upload evidence"}
             </Text>
           )}
         </Pressable>

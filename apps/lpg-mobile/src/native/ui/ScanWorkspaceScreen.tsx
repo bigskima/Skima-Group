@@ -12,6 +12,7 @@ import {
 import { Scanner } from "../device/Scanner";
 import { colors, radii, spacing } from "../theme/tokens";
 import { Screen } from "./Screen";
+import { useAppTheme } from "../theme/ThemeProvider";
 
 export function ScanWorkspaceScreen({
   workspace,
@@ -20,6 +21,7 @@ export function ScanWorkspaceScreen({
   workspace: "Driver" | "Station";
   jobs: UseQueryResult<PlatformRecord[], Error>;
 }) {
+  const { palette } = useAppTheme();
   const actionable = (jobs.data ?? []).filter((job) =>
     scanReady(workspace, displayStatus(job) ?? ""),
   );
@@ -35,12 +37,12 @@ export function ScanWorkspaceScreen({
     );
   };
   return (
-    <Screen eyebrow={`${workspace} verification`} title="Scan cylinder">
+    <Screen eyebrow={`${workspace} tools`} title="Scan a SKIMA cylinder">
       {actionable.length > 1 ? (
         <View style={styles.jobs}>
           <Text style={styles.title}>Choose the active job</Text>
           <Text style={styles.body}>
-            The scanned credential is submitted only against the job you select.
+            Pick the job you’re working on so SKIMA can check the right cylinder and next step.
           </Text>
           {actionable.map((job, index) => {
             const id = recordId(job) ?? String(index);
@@ -49,14 +51,14 @@ export function ScanWorkspaceScreen({
               <Pressable
                 key={id}
                 onPress={() => setSelectedId(id)}
-                style={[styles.job, selected && styles.selected]}
+                style={[styles.job, { backgroundColor: palette.surface, borderColor: selected ? colors.brand : palette.border }, selected && styles.selected]}
               >
                 <View style={{ flex: 1 }}>
                   <Text style={styles.jobTitle}>
                     {displayReference(job) ?? "LPG job"}
                   </Text>
                   <Text style={styles.body}>
-                    {(displayStatus(job) ?? "active").replace(/[_-]/g, " ")}
+                    {scanStatus(displayStatus(job) ?? "active")}
                   </Text>
                 </View>
                 {selected ? (
@@ -70,8 +72,7 @@ export function ScanWorkspaceScreen({
       <Scanner enabled={Boolean(jobId)} onDetected={detected} />
       {jobId ? (
         <Text style={styles.note}>
-          After detection, SKIMA opens this job for backend verification.
-          Scanning alone never changes workflow state.
+          We’ll check the code against this job before anything changes.
         </Text>
       ) : null}
     </Screen>
@@ -88,11 +89,10 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radii.md,
     backgroundColor: colors.surface,
   },
-  selected: { borderColor: colors.brand, backgroundColor: "#FFF6F7" },
+  selected: { backgroundColor: "#FFF6F7" },
   jobTitle: { color: colors.ink, fontSize: 16, fontWeight: "900" },
   note: { color: colors.muted, lineHeight: 20 },
 });
@@ -112,4 +112,20 @@ function scanReady(workspace: "Driver" | "Station", status: string) {
         "refill_confirmed",
         "station_settled",
       ].some((value) => status.includes(value));
+}
+function scanStatus(value: string) {
+  const normalized = value.replace(/[-\s]+/g, "_").toLowerCase();
+  const labels: Record<string, string> = {
+    assigned: "Ready for pickup",
+    pickup_pending: "Pickup waiting",
+    pickup_arrived: "At pickup",
+    pickup_en_route: "Heading to pickup",
+    pickup_verified: "Cylinder collected",
+    station_en_route: "Heading to station",
+    refill_confirmed: "Refill complete",
+    station_settled: "Ready to return",
+    delivery_verification_pending: "Ready for delivery",
+    return_en_route: "Returning to customer",
+  };
+  return labels[normalized] ?? "Ready to scan";
 }

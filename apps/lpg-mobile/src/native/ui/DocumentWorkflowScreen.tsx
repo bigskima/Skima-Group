@@ -23,6 +23,7 @@ import { uploadFileToRuntime } from "../media/upload";
 import { useSession } from "../session/SessionProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { idempotencyKey } from "../utilities/idempotency";
+import { friendlyError } from "../utilities/friendlyError";
 import { Card } from "./Card";
 import { Screen } from "./Screen";
 export function DocumentWorkflowScreen({
@@ -116,12 +117,10 @@ export function DocumentWorkflowScreen({
         idempotencyKey: `${uploaded.idempotencyKey}:register`,
       });
       setMessage(
-        `${firstString(requirement, ["display_name", "displayName"]) ?? key} uploaded securely.`,
+        `${firstString(requirement, ["display_name", "displayName"]) ?? key} uploaded.`,
       );
     } catch (cause) {
-      setMessage(
-        cause instanceof Error ? cause.message : "Document upload failed.",
-      );
+      setMessage(friendlyError(cause, "The document could not be uploaded. Please try again."));
     } finally {
       setUploading(null);
       setUploadProgress(0);
@@ -148,8 +147,8 @@ export function DocumentWorkflowScreen({
         <Card>
           <Text style={styles.title}>Application required</Text>
           <Text style={styles.body}>
-            Start your {workspace} application first. Its backend policy
-            determines which documents are accepted.
+            Start your {workspace} application first to see the documents you
+            need to provide.
           </Text>
           <Pressable
             style={styles.primary}

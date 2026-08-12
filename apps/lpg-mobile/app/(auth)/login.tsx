@@ -5,6 +5,8 @@ import { useSession } from "../../src/native/session/SessionProvider";
 import { colors, radii, spacing } from "../../src/native/theme/tokens";
 import { Screen } from "../../src/native/ui/Screen";
 import { useAppTheme } from "../../src/native/theme/ThemeProvider";
+import { BrandMark } from "../../src/native/ui/BrandMark";
+import { friendlyError } from "../../src/native/utilities/friendlyError";
 
 export default function Login() {
   const session = useSession();
@@ -12,15 +14,16 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   if (session.status === "authenticated") return <Redirect href="/" />;
-  return <Screen eyebrow="Welcome back" title="Move safely with SKIMA">
+  return <Screen eyebrow="Welcome back" title="Sign in to SKIMA">
     <View style={styles.wrap}>
-      <Text style={[styles.copy, { color: palette.muted }]}>Sign in to continue your LPG orders, assignments, or station operations.</Text>
+      <BrandMark />
+      <Text style={[styles.copy, { color: palette.muted }]}>Continue your refills, deliveries or station work.</Text>
       <View style={styles.form}>
         <TextInput accessibilityLabel="Email address" autoCapitalize="none" autoComplete="email" keyboardType="email-address" placeholder="Email address" placeholderTextColor={palette.muted} value={email} onChangeText={setEmail} style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]} />
         <TextInput accessibilityLabel="Password" autoComplete="current-password" placeholder="Password" placeholderTextColor={palette.muted} secureTextEntry value={password} onChangeText={setPassword} style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]} />
-        {session.error ? <Text accessibilityRole="alert" style={styles.error}>{session.error}</Text> : null}
+        {session.error ? <Text accessibilityRole="alert" style={styles.error}>{friendlyError(new Error(session.error), "We couldn’t sign you in. Check your details and try again.")}</Text> : null}
         <Pressable accessibilityRole="button" disabled={!email || !password || session.status === "loading"} onPress={() => void session.signIn(email.trim(), password)} style={({ pressed }) => [styles.button, pressed && { opacity: .85 }]}>
-          {session.status === "loading" ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign in securely</Text>}
+          {session.status === "loading" ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign in</Text>}
         </Pressable>
         <View style={styles.links}><Pressable onPress={() => router.push("/(auth)/register")}><Text style={styles.link}>Create an account</Text></Pressable><Pressable onPress={() => router.push("/(auth)/forgot-password")}><Text style={styles.link}>Forgot password?</Text></Pressable></View>
       </View>

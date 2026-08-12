@@ -139,7 +139,7 @@ export function DriverAvailabilityScreen() {
         >
           {tracking ? "Active" : "Stopped"}
         </Text>
-        <Text style={styles.label}>Last backend update</Text>
+        <Text style={styles.label}>Last updated</Text>
         <Text style={styles.value}>
           {firstString(latest, ["recorded_at", "recordedAt"])
             ? new Date(

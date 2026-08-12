@@ -117,7 +117,7 @@ export function StationInventoryScreen() {
             <Text style={styles.heroLabel}>AVAILABLE REFILL STOCK</Text>
             <Text style={styles.heroValue}>{available ?? "—"} kg</Text>
             <Text style={styles.heroBody}>
-              of {capacity ?? "unconfigured"} kg verified capacity
+              of {capacity ?? "not set"} kg station capacity
             </Text>
             <View style={styles.track}>
               <View

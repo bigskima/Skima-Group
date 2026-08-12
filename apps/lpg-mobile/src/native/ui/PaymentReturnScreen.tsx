@@ -20,6 +20,7 @@ import {
 } from "../api/records";
 import { useGatewayQuery } from "../api/gateway";
 import { colors, radii, spacing } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
 import { Card } from "./Card";
 import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
@@ -104,17 +105,17 @@ export function PaymentReturnScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.heroTitle}>
                 {succeeded
-                  ? "Backend credit confirmed"
+                  ? "Money added successfully"
                   : failed
-                    ? "Provider result recorded"
-                    : "Waiting for backend verification"}
+                    ? "Payment received"
+                    : "Confirming your payment"}
               </Text>
               <Text style={styles.heroBody}>
                 {succeeded
                   ? "Your wallet balance will reflect the authoritative ledger entry."
                   : failed
-                    ? "No wallet credit is shown unless the backend confirms it."
-                    : "The payment provider and secure webhook must confirm the deposit. This screen never marks a payment successful locally."}
+                    ? "Your wallet balance updates only after payment is confirmed."
+                    : "This may take a moment. You can safely leave this page and check your wallet again."}
               </Text>
             </View>
           </View>
@@ -127,9 +128,9 @@ export function PaymentReturnScreen() {
                     "publicReference",
                     "id",
                   ]) ?? "Available after confirmation")
-                : (requested ?? "Waiting for provider return data")}
+                : (requested ?? "Payment reference pending")}
             </Text>
-            <Text style={styles.label}>Backend status</Text>
+            <Text style={styles.label}>Payment status</Text>
             <Text
               style={[
                 styles.status,
@@ -157,7 +158,7 @@ export function PaymentReturnScreen() {
           </Pressable>
           {deposits.error ? (
             <Text accessibilityRole="alert" style={styles.error}>
-              {deposits.error.message}
+              {friendlyError(deposits.error, "Payment status is unavailable right now.")}
             </Text>
           ) : null}
         </>

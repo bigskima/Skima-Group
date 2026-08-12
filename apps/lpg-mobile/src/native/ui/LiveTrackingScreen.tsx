@@ -36,7 +36,8 @@ export function LiveTrackingScreen() {
     .map(toPoint)
     .filter((point): point is MapPoint => Boolean(point));
   const delivery = nestedRecord(details.data, "deliveryLocation") ?? nestedRecord(details.data, "delivery_location");
-  const destination = delivery ? locationPoint(delivery, "Customer destination", "destination") : null;
+  const destinationLabel = firstString(delivery, ["formattedAddress", "formatted_address", "label"]) ?? "Your delivery address";
+  const destination = delivery ? locationPoint(delivery, destinationLabel, "destination") : null;
   const mapped = [...driverPath, ...(destination ? [destination] : [])];
   const latest = points.data?.[0];
   const recorded = firstString(latest, [
@@ -73,9 +74,7 @@ export function LiveTrackingScreen() {
         <ScreenSkeleton cards={2} />
       ) : sessions.error || points.error || details.error ? (
         <Card>
-          <Text style={styles.error}>
-            {(sessions.error ?? points.error ?? details.error)?.message}
-          </Text>
+          <Text style={styles.error}>We couldn’t refresh the live map. Check your connection and try again.</Text>
           <Pressable
             onPress={() =>
               void Promise.all([
@@ -91,7 +90,7 @@ export function LiveTrackingScreen() {
       ) : (
         <>
           <View style={styles.mapShell}>
-            <OperationalMap points={mapped} connectPoints />
+            <OperationalMap points={mapped} connectPoints height={500} />
             <View style={[styles.liveOverlay, { backgroundColor: palette.surface }]}><View style={[styles.pulse, { backgroundColor: !stale && driverPath.length ? colors.success : colors.accent }]} /><Text style={[styles.overlayText, { color: palette.ink }]}>{!stale && driverPath.length ? "Live driver movement" : "Waiting for driver signal"}</Text></View>
           </View>
           <Card>
@@ -127,8 +126,8 @@ export function LiveTrackingScreen() {
             </View>
             <Text style={styles.body}>
               {recorded
-                ? `Last backend update: ${new Date(recorded).toLocaleString()}`
-                : "No authorised tracking update has been returned."}
+                ? `Last location update: ${new Date(recorded).toLocaleString()}`
+                : "The driver’s live location will appear after the journey starts."}
             </Text>
             <View style={styles.estimates}>
               <View style={styles.estimate}>

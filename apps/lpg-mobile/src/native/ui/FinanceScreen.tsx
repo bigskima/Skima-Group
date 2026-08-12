@@ -20,6 +20,7 @@ import {
 } from "../api/records";
 import { colors, radii, spacing } from "../theme/tokens";
 import { idempotencyKey } from "../utilities/idempotency";
+import { friendlyError } from "../utilities/friendlyError";
 import { Card } from "./Card";
 import { Screen } from "./Screen";
 
@@ -42,7 +43,7 @@ export function FinanceScreen({
     0;
   return (
     <Screen
-      eyebrow="Verified finance"
+      eyebrow="Your money"
       title={workspace === "driver" ? "Earnings" : "Settlements"}
       action={
         <Pressable
@@ -61,7 +62,7 @@ export function FinanceScreen({
         <Text style={styles.heroLabel}>AVAILABLE BALANCE</Text>
         <Text style={styles.heroAmount}>{money(available, currency)}</Text>
         <Text style={styles.heroBody}>
-          Backend-confirmed funds available for a verified payout destination.
+          Ready to withdraw to one of your approved payout accounts.
         </Text>
       </View>
       {entries.isPending || wallets.isPending ? (
@@ -109,7 +110,7 @@ export function FinanceScreen({
       ))}
       {(entries.data ?? []).length === 0 && !entries.isPending ? (
         <Text style={styles.empty}>
-          Backend-confirmed finance entries will appear here.
+          Your completed earnings and settlements will appear here.
         </Text>
       ) : null}
     </Screen>
@@ -185,7 +186,7 @@ export function WithdrawalScreen({
       setMessage("Payout account submitted for provider verification.");
     } catch (cause) {
       setMessage(
-        cause instanceof Error ? cause.message : "Account could not be added.",
+        friendlyError(cause, "The payout account could not be added."),
       );
     }
   };
@@ -215,15 +216,13 @@ export function WithdrawalScreen({
       setMessage("Withdrawal request submitted securely.");
     } catch (cause) {
       setMessage(
-        cause instanceof Error
-          ? cause.message
-          : "Withdrawal could not be submitted.",
+        friendlyError(cause, "The withdrawal could not be submitted."),
       );
     }
   };
   return (
     <Screen
-      eyebrow="Payout workflow"
+      eyebrow="Payouts"
       title="Withdraw funds"
       action={
         <Pressable onPress={() => router.back()}>
@@ -337,8 +336,7 @@ export function WithdrawalScreen({
       )}
       {message ? <Text style={styles.message}>{message}</Text> : null}
       <Text style={styles.note}>
-        Funds are reserved and transferred by the configured provider adapter
-        after backend verification.
+        Your request will be reviewed and sent to your selected payout account.
       </Text>
     </Screen>
   );

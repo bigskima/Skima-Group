@@ -727,33 +727,19 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
       const payload = body.value;
       return rpcResponseWithPublicReference(
-        supabase.rpc("register_lpg_cylinder", {
-          target_barcode_payload: optionalString(payload.barcodePayload),
+        supabase.rpc("register_customer_lpg_cylinder", {
           target_brand: optionalString(payload.brand),
           target_colour: optionalString(payload.colour),
           target_condition_status: optionalString(payload.conditionStatus) ?? "unknown",
-          target_cylinder_identifier: requireString(
-            payload.cylinderIdentifier,
-            "cylinderIdentifier",
-          ),
+          target_display_name: requireString(payload.displayName, "displayName"),
           target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
           target_image_asset_ids: optionalStringArray(payload.imageAssetIds) ?? [],
-          target_last_inspection_at: optionalString(payload.lastInspectionAt),
-          target_manufactured_at: optionalString(payload.manufacturedAt),
           target_manufacturer: optionalString(payload.manufacturer),
           target_max_capacity_kg: requireNumber(payload.maxCapacityKg, "maxCapacityKg"),
           target_metadata: optionalRecord(payload.metadata) ?? {},
-          target_next_inspection_at: optionalString(payload.nextInspectionAt),
-          target_notes: optionalString(payload.notes),
-          target_ownership_proof_asset_id: optionalUuid(
-            payload.ownershipProofAssetId,
-            "ownershipProofAssetId",
-          ),
-          target_qr_payload: optionalString(payload.qrPayload),
           target_serial_number: optionalString(payload.serialNumber),
           target_size_kg: requireNumber(payload.sizeKg, "sizeKg"),
-          target_source: optionalString(payload.source) ?? "skima.lpg.cylinder_registry",
-          target_valve_type: optionalString(payload.valveType),
+          target_source: optionalString(payload.source) ?? "skima.lpg.customer_cylinder_registration",
         }),
         id,
         supabase,
@@ -4776,6 +4762,7 @@ async function handleMapsGeocodeRequest(
       180,
     );
     const data = {
+      addressComponents: null,
       formattedAddress: address ?? `Sandbox location ${resolvedLatitude.toFixed(5)}, ${resolvedLongitude.toFixed(5)}`,
       location: { latitude: resolvedLatitude, longitude: resolvedLongitude },
       locationType: "sandbox_estimate",
@@ -4853,6 +4840,7 @@ async function handleMapsGeocodeRequest(
   const resolvedLatitude = requireNumber(location.lat, "Google Maps latitude");
   const resolvedLongitude = requireNumber(location.lng, "Google Maps longitude");
   const data = {
+    addressComponents: readGoogleAddressComponents(firstResult),
     formattedAddress: optionalString(firstResult.formatted_address),
     location: {
       latitude: resolvedLatitude,
@@ -4880,6 +4868,34 @@ async function handleMapsGeocodeRequest(
     data,
     requestId: id,
   });
+}
+
+function readGoogleAddressComponents(result: Record<string, unknown>) {
+  const components = Array.isArray(result.address_components) ? result.address_components : [];
+  const byType = (type: string, short = false) => {
+    const component = components.find((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+      const types: unknown[] = Array.isArray((value as Record<string, unknown>).types)
+        ? ((value as Record<string, unknown>).types as unknown[])
+        : [];
+      return types.includes(type);
+    });
+    if (!component || typeof component !== "object" || Array.isArray(component)) return null;
+    return optionalString((component as Record<string, unknown>)[short ? "short_name" : "long_name"]);
+  };
+  const streetNumber = byType("street_number");
+  const route = byType("route");
+  const premise = byType("premise") ?? byType("point_of_interest") ?? byType("establishment");
+  return {
+    name: premise,
+    street: [streetNumber, route].filter(Boolean).join(" ") || route,
+    district: byType("sublocality_level_1") ?? byType("sublocality") ?? byType("neighborhood") ?? byType("administrative_area_level_2"),
+    city: byType("locality") ?? byType("postal_town") ?? byType("administrative_area_level_2"),
+    region: byType("administrative_area_level_1"),
+    postalCode: byType("postal_code"),
+    country: byType("country"),
+    countryCode: byType("country", true),
+  };
 }
 
 async function handleMapsRouteEstimateRequest(

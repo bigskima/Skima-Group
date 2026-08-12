@@ -30,7 +30,7 @@ export function CustomerOrdersScreen() {
   const orders = domainQueries.orders();
   return (
     <Screen
-      eyebrow="Fulfilment"
+      eyebrow="Refills"
       title="My orders"
       action={
         <Pressable
@@ -45,7 +45,7 @@ export function CustomerOrdersScreen() {
         <ActivityIndicator color={colors.brand} />
       ) : orders.error ? (
         <ErrorState
-          message={orders.error.message}
+          message="Check your connection and try again."
           retry={() => void orders.refetch()}
         />
       ) : (
@@ -81,7 +81,7 @@ export function CustomerOrdersScreen() {
                     </Text>
                   </View>
                   <Text style={styles.status}>
-                    {status.replace(/[_-]/g, " ")}
+                    {friendlyOrderStatus(status)}
                   </Text>
                 </View>
                 <View style={styles.divider} />
@@ -91,7 +91,7 @@ export function CustomerOrdersScreen() {
                     <Text style={styles.value}>
                       {cylinder
                         ? `${firstNumber(cylinder, ["sizeKg", "size_kg"]) ?? "Configured"} kg · ${displayReference(cylinder)}`
-                        : "Backend-linked cylinder"}
+                        : "Cylinder details unavailable"}
                     </Text>
                   </View>
                   <Text style={styles.amount}>
@@ -116,7 +116,7 @@ export function CustomerOrdersScreen() {
                           "formattedAddress",
                           "formatted_address",
                         ]) ?? "Assigned station")
-                      : "Station assigned by dispatch"}
+                      : "Finding the best station"}
                   </Text>
                   <ChevronRight color={colors.muted} size={18} />
                 </View>
@@ -128,8 +128,7 @@ export function CustomerOrdersScreen() {
               <PackageCheck color={colors.brand} size={34} />
               <Text style={styles.emptyTitle}>Ready for your first refill</Text>
               <Text style={styles.body}>
-                Choose a registered cylinder and delivery address. Pricing and
-                dispatch are confirmed by the backend.
+                Choose a cylinder and pickup place. We’ll show the full price before you confirm.
               </Text>
               <Pressable
                 onPress={() => router.push("/(customer)/orders/new")}
@@ -199,9 +198,9 @@ export function CustomerOrderDetailScreen() {
           <View style={styles.detailHero}>
             <Truck color="white" size={29} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.heroLabel}>CURRENT WORKFLOW STATE</Text>
+              <Text style={styles.heroLabel}>WHERE YOUR REFILL IS NOW</Text>
               <Text style={styles.heroStatus}>
-                {status.replace(/[_-]/g, " ")}
+                {friendlyOrderStatus(status)}
               </Text>
               <Text style={styles.heroBody}>
                 Updated{" "}
@@ -217,7 +216,7 @@ export function CustomerOrderDetailScreen() {
               value={
                 cylinder
                   ? `${firstNumber(cylinder, ["sizeKg", "size_kg"]) ?? "Configured"} kg · ${displayReference(cylinder)}`
-                  : "Backend-linked cylinder"
+                  : "Cylinder details unavailable"
               }
             />
             <Field
@@ -230,7 +229,7 @@ export function CustomerOrderDetailScreen() {
                       "formattedAddress",
                       "formatted_address",
                     ]) ?? "Assigned station")
-                  : "Awaiting dispatch assignment"
+                  : "Finding the best station"
               }
             />
             <Field
@@ -281,10 +280,10 @@ export function CustomerOrderDetailScreen() {
             />
             <Field
               label="Payment"
-              value={(
+              value={friendlyPaymentStatus(
                 firstString(order, ["payment_status", "paymentStatus"]) ??
-                "Backend managed"
-              ).replace(/[_-]/g, " ")}
+                "pending"
+              )}
             />
           </Card>
           {trackable && id ? (
@@ -304,7 +303,7 @@ export function CustomerOrderDetailScreen() {
                 router.push(`/(customer)/orders/${id}/verify` as never)
               }
             >
-              <Text style={styles.secondaryText}>Verify delivery securely</Text>
+              <Text style={styles.secondaryText}>Confirm delivery</Text>
             </Pressable>
           ) : null}
           {id &&
@@ -323,10 +322,7 @@ export function CustomerOrderDetailScreen() {
               <Text style={styles.secondaryText}>View or share receipt</Text>
             </Pressable>
           ) : null}
-          <Text style={styles.safety}>
-            Only backend-confirmed scans, workflow transitions, payment status,
-            and tracking points are shown here.
-          </Text>
+          <Text style={styles.safety}>Every update appears after SKIMA confirms the hand-off, payment or location change.</Text>
         </>
       )}
     </Screen>
@@ -366,6 +362,44 @@ function formatDate(value: string | null) {
   if (!value) return "Time unavailable";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+function friendlyOrderStatus(value: string) {
+  const normalized = value.toLowerCase().replace(/[-\s]+/g, "_");
+  const labels: Record<string, string> = {
+    created: "Order started",
+    awaiting_payment: "Waiting for payment",
+    payment_reserved: "Payment confirmed",
+    matching_station: "Finding a refill station",
+    matching_driver: "Finding your driver",
+    driver_offered: "Driver notified",
+    driver_accepted: "Driver assigned",
+    pickup_en_route: "Driver heading to pickup",
+    pickup_verified: "Cylinder collected",
+    station_en_route: "Heading to the station",
+    station_verified: "Cylinder received at station",
+    refill_in_progress: "Refill in progress",
+    refill_confirmed: "Refill complete",
+    return_en_route: "On the way back to you",
+    delivery_verification_pending: "Ready for hand-over",
+    delivered: "Delivered",
+    completed: "Completed",
+    cancelled: "Cancelled",
+    pending: "Waiting for confirmation",
+  };
+  return labels[normalized] ?? normalized.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase());
+}
+function friendlyPaymentStatus(value: string) {
+  const normalized = value.toLowerCase().replace(/[-\s]+/g, "_");
+  const labels: Record<string, string> = {
+    pending: "Waiting for confirmation",
+    awaiting_payment: "Payment needed",
+    reserved: "Payment confirmed",
+    payment_reserved: "Payment confirmed",
+    paid: "Paid",
+    failed: "Payment failed",
+    refunded: "Refunded",
+  };
+  return labels[normalized] ?? "Payment update available";
 }
 const styles = StyleSheet.create({
   primarySmall: {

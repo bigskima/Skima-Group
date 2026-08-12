@@ -1,4 +1,4 @@
-# SKIMA LPG — FINAL PRODUCTION EXPO REACT NATIVE MIGRATION, UI/UX, MEDIA, MAPS, TRACKING, QR, SCANNING & RELEASE SPECIFICATION
+# SKIMA LPG — FINAL EXPO REACT NATIVE PRODUCT, UI/UX, MEDIA, MAPS, TRACKING, QR & WORKFLOW SPECIFICATION
 
 ## Authoritative implementation document
 
@@ -7,6 +7,106 @@ This document supersedes the previous LPG mobile frontend implementation instruc
 It is intended to be sufficiently complete for the developer/AI agent to **implement the production application directly**, not to create another planning document before development.
 
 The developer must read this document as a single system specification. Requirements are grouped by domain deliberately. Do not partially implement a domain, jump elsewhere, and later return to finish the missing half without maintaining the contracts and architecture defined here.
+
+---
+
+# 0. AUTHORITATIVE DELIVERY PHASES
+
+This phase ownership supersedes earlier LPG migration phase wording.
+
+Current status:
+
+```text
+Phase 1 — Expo foundation                                      COMPLETE
+Phase 2 — Customer, Driver and Station product completion      ACTIVE
+Phase 3 — Full SKIMA company administration workflow           QUEUED
+Phase 4 — Admin-to-product publishing and operational closure  LATER
+```
+
+## Phase 1 — Expo foundation
+
+Phase 1 established the Expo React Native application, providers, authentication/session bootstrap,
+routing, workspace access, reusable frontend foundations and valid backend connectivity.
+
+## Phase 2 — Complete the Customer, Driver and Station product
+
+Phase 2 owns every correction required inside the operational Expo application. It must be completed
+before Phase 3 begins.
+
+Phase 2 includes:
+
+```text
+premium native-mobile visual system and role-specific composition
+production customer-facing language throughout the application
+branded but configuration-driven asset placements and graceful fallbacks
+educational onboarding and contextual permission education
+customer home hierarchy and a backend-fed promotion surface
+complete address resolution, location search, pin adjustment and deep map zoom
+saved locations, live tracking, navigation context and stale-location handling
+simple customer cylinder registration with a SKIMA-owned cylinder identity
+opaque internal QR/NFC credentials and workflow-aware authorized scanning
+profile/media flows, evidence, notifications and payment-return flows
+loading, skeleton, empty, error, success, offline and reconnect states
+draft persistence, resume, retry and server revalidation
+responsive web and Android/iOS device behavior
+real backend journey validation and remaining integration fixes
+EAS configuration and required development, preview and installable builds
+```
+
+The mobile app must create reusable logical slots for company logos, wordmarks, onboarding artwork,
+promotions, safety content and other company media. Phase 2 must not hardcode final company media or
+pretend that mobile users can administer it.
+
+## Phase 3 — Full SKIMA company administration workflow
+
+Phase 3 is a separate company web application. It is not another workspace inside the Customer,
+Driver and Station Expo app.
+
+Phase 3 owns the authenticated admin workflows that create, review, publish, schedule, replace,
+disable and retire configuration consumed by products. This includes:
+
+```text
+company profile and organization settings
+brand asset library and logical placement management
+logo, wordmark, onboarding, campaign, safety and empty-state media publishing
+promotion/campaign creation, targeting, scheduling, priority and CTA management
+content and notification management
+service/module configuration and feature flags
+service areas, stations, drivers, customers and approval operations
+workflow, policy, pricing and settlement configuration through reusable engines
+wallet, payout, support and operational oversight
+admin roles, permissions, publishing history and operational audit views
+```
+
+The admin architecture must remain platform-wide and module-driven. LPG plugs into reusable admin
+engines; core administration must never hardcode LPG-specific behavior.
+
+## Phase 4 — Cross-surface publishing and operational closure
+
+Phase 4 owns work that can only be accepted after both Phase 2 and Phase 3 exist:
+
+```text
+admin publish -> configuration/media API -> Expo consumption
+brand and campaign preview across phone, tablet and web placements
+audience, geography, service, priority and schedule enforcement
+cache refresh, fallback, rollback and unpublished-content behavior
+end-to-end admin/customer/driver/station operational acceptance
+final correction of cross-surface integration defects
+```
+
+## Phase assignment rule
+
+Use this rule for every new requirement:
+
+```text
+Customer, Driver or Station product behavior                     -> Phase 2
+Admin creates/manages/publishes platform configuration           -> Phase 3
+Acceptance depends on both the admin and an operational product  -> Phase 4
+```
+
+Do not add standalone review projects for security or performance to these phases. Do not add
+app-store-readiness work or legacy Vite-removal work. This scope decision does not permit a feature
+to ignore its required authorization, privacy, responsiveness or reliable backend behavior.
 
 ---
 
@@ -986,7 +1086,8 @@ Do not use browser `localStorage` in the native application.
 
 # 20. ONBOARDING DOMAIN
 
-Onboarding should be role-aware and visually polished.
+Onboarding should be role-aware, educational and visually polished. It must feel like a native
+product introduction rather than a web form or an internal dashboard.
 
 The Welcome experience should include:
 
@@ -997,6 +1098,22 @@ concise product value proposition
 Get Started
 Login
 ```
+
+Branding and artwork must resolve through published logical asset placements. The UI may ship a
+neutral layout-safe fallback, but it must not hardcode the final company logo or campaign artwork.
+
+Customer onboarding should explain the service in short visual steps:
+
+```text
+Request a refill
+SKIMA collects the cylinder
+The cylinder is identified and tracked
+An authorized partner refills it
+SKIMA returns it to the customer
+```
+
+Use concise production copy, understandable progress, Back/Continue/Skip where appropriate and
+contextual permission education before triggering an operating-system permission prompt.
 
 Avoid the huge empty spaces visible in the previous prototype.
 
@@ -1081,9 +1198,13 @@ Header
 Greeting
 Location selector
 
+Published brand identity
+
 Primary Refill Card
 
 Active Order / Tracking Card
+
+Published promotion/banner placement
 
 Quick Actions
 
@@ -1099,6 +1220,10 @@ Safety / Promotional content
 Cards must be compact.
 
 Do not create huge empty hero cards.
+
+Promotions must come from a backend-managed campaign contract and support an artwork placement,
+title, short copy, CTA/action, audience, service/module, optional geographic targeting, active
+window, enabled state and priority. The app must not require a release to change a campaign.
 
 ---
 
@@ -1233,7 +1358,9 @@ support illustrations
 generic empty-state artwork
 ```
 
-These should remain backend/admin-manageable where supported.
+These must be backend/admin-manageable through the Phase 3 administration workflow. Phase 2 owns
+the reusable rendering placements, responsive composition, loading/fallback behavior and published
+asset consumption contract. Phase 3 owns upload, replacement, publishing, scheduling and removal.
 
 Conceptual slots may include:
 
@@ -1251,6 +1378,11 @@ mobile.empty.orders
 ```
 
 The mobile application should consume published assets by logical placement rather than hardcoding remote marketing images into components.
+
+A logical placement response should be capable of carrying the published media reference, suitable
+variants, accessibility text, destination/action metadata, active dates and revision information.
+Missing or unpublished assets must collapse gracefully without leaving a broken image or an empty
+marketing-sized hole in the interface.
 
 Native technical exceptions such as installed app icon and basic native splash assets may be bundled because the operating systems require them.
 
@@ -1618,6 +1750,18 @@ location permission recovery
 location accuracy awareness
 ```
 
+Coordinates must be reverse-geocoded through the configured maps adapter into the best available
+human-readable hierarchy:
+
+```text
+country -> state/region -> city/town -> locality/area -> street/road -> address/landmark
+```
+
+The location UI must prioritize that address over raw latitude/longitude, provide search and
+autocomplete where the configured provider supports them, allow manual map selection, and let the
+user adjust a detected pin before saving. When an exact street is unavailable, fall back cleanly to
+locality, city and state rather than showing an empty or fabricated address.
+
 Never block the entire product permanently simply because precise location permission is denied when manual address selection can satisfy the workflow.
 
 The backend remains authoritative for:
@@ -1668,9 +1812,17 @@ station marker
 customer delivery marker
 route polyline where supported
 camera fitting/viewport management
+deep user-controlled zoom appropriate for building/compound selection
+recenter/current-location control
+manual pin placement and pin adjustment in selection contexts
 ```
 
 Do not use static mock map images in production.
+
+Do not lock the camera at a city-level zoom after a precise device or selected coordinate exists.
+Tracking views should fit the relevant route and markers; location-selection views should permit
+close inspection of the selected building, compound, road or pickup point where provider data
+supports it.
 
 ---
 
@@ -2073,6 +2225,10 @@ audit records
 
 The frontend displays them.
 
+Manufacturer/model/serial information is supplementary metadata unless a configured safety or
+regulatory policy requires it. Customer registration must not depend on an obscure external
+identifier. Orders may change while the SKIMA cylinder identity remains stable.
+
 ---
 
 # 58. PRINTABLE QR LABEL DOMAIN
@@ -2172,6 +2328,11 @@ accessible instructions
 ```
 
 Do not use browser-style camera flows for native.
+
+Never send an unrecognized scan to Google Search or another external browser. A SKIMA scan is an
+internal verification action: submit the opaque credential and current workflow context to the
+backend, then render only the authorized result and valid next action returned by the verification
+engine.
 
 ---
 
@@ -3026,13 +3187,13 @@ Do not force mobile-only gestures on desktop users.
 
 # 96. ADMIN INTEGRATION BOUNDARY
 
-The SKIMA company admin portal remains separate.
+The SKIMA company admin portal remains separate and is delivered as Phase 3.
 
 The mobile migration should not merge the admin portal into the Expo customer/driver/station application.
 
 However, mobile may consume company-managed assets/configuration produced by the admin system.
 
-Company administration may eventually manage:
+Company administration must manage through reusable, permission-driven workflows:
 
 ```text
 company media
@@ -3096,6 +3257,22 @@ error
 ```
 
 when production data does not exist.
+
+---
+
+# 97A. CUSTOMER-FACING CONTENT DOMAIN
+
+Audit every visible string in Customer, Driver and Station experiences. Product users must receive
+concise, natural and reassuring language written for the action they are performing.
+
+Never expose raw status enums, provider names, API/database terminology, workflow-engine terms,
+configuration keys, internal permission names, stack traces or raw backend errors. Map internal
+states and errors through reusable, configuration-aware presentation copy while retaining technical
+details only in authorized logs and admin/operational surfaces.
+
+Copy should explain what happened, whether the user's action was saved or confirmed, and what they
+can do next. Empty, offline, permission-denied, retry and verification-pending messages are product
+states, not developer diagnostics.
 
 ---
 
@@ -3266,20 +3443,16 @@ Install on physical Android/iOS devices
 Native capability testing
 ```
 
-Android production path:
+Android device-acceptance path:
 
 ```text
 Expo React Native
 ↓
-EAS production build
+EAS internal/preview build
 ↓
-Signed Android App Bundle (.aab)
+Installable Android artifact
 ↓
-Internal testing
-↓
-Play Console
-↓
-Production release
+Physical-device acceptance
 ```
 
 iOS:
@@ -3289,13 +3462,9 @@ Expo React Native
 ↓
 EAS iOS build
 ↓
-Signed App Store build
+Development/preview distribution
 ↓
-TestFlight
-↓
-App Store Connect
-↓
-Production release
+Physical-device acceptance
 ```
 
 Do not treat Expo Go as the production validation environment.
@@ -3304,7 +3473,7 @@ Use development builds when native modules require them.
 
 ---
 
-# 105. RELEASE CONFIGURATION DOMAIN
+# 105. BUILD CONFIGURATION DOMAIN
 
 Prepare production configuration for:
 
@@ -3361,12 +3530,10 @@ Execute the migration in controlled order:
 23. Integrate offline/retry behavior
 24. Complete responsive web
 25. Complete accessibility
-26. Complete performance work
-27. Complete testing
-28. Produce Android development build
-29. Produce Android production build
-30. Produce iOS development/TestFlight build
-31. Production-release readiness
+26. Complete required journey and device testing
+27. Produce Android development/preview build
+28. Produce iOS development/preview build
+29. Validate Phase 2 completion criteria
 ```
 
 Do not build 50+ screens before validating the design system.
@@ -3648,7 +3815,7 @@ delivery evidence
 
 ---
 
-# 113. PRODUCTION READINESS GATE
+# 113. PHASE 2 COMPLETION GATE
 
 The migration is not complete merely because:
 
@@ -3680,11 +3847,9 @@ error handling
 skeleton loading
 light/dark themes
 accessibility
-performance
 responsive QA
 end-to-end workflow testing
-EAS production configuration
-store-ready binaries
+EAS development/preview configuration where required
 ```
 
 ---

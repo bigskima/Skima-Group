@@ -214,7 +214,7 @@ export function ApplicationOverviewScreen({
       return;
     }
     if (!type) {
-      setError("No active backend application policy is available.");
+      setError("Applications are unavailable right now. Please try again later.");
       return;
     }
     const stationCapacity = Number(capacity);
@@ -478,8 +478,8 @@ export function ApplicationOverviewScreen({
         <Text style={styles.heroLabel}>CONFIGURED APPROVAL</Text>
         <Text style={styles.heroTitle}>Apply with confidence</Text>
         <Text style={styles.heroBody}>
-          Your information is submitted to the platform approval workflow.
-          Requirements are controlled by backend policy.
+          Complete the required information and submit it for review. You can
+          return at any time while your application is still a draft.
         </Text>
       </View>
       {workspace === "driver" ? (

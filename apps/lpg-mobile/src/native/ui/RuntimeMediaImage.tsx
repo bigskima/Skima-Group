@@ -19,7 +19,7 @@ export function RuntimeMediaImage({
 }: {
   assetId: string | null;
   label: string;
-  variant?: "card" | "avatar" | "hero";
+  variant?: "card" | "avatar" | "hero" | "thumbnail";
 }) {
   const session = useSession();
   const query = useQuery({
@@ -46,11 +46,11 @@ export function RuntimeMediaImage({
       source={query.data.signedUrl}
       contentFit="cover"
       transition={180}
-      style={[styles.image, variant === "avatar" && styles.avatar, variant === "hero" && styles.hero]}
+      style={[styles.image, variant === "avatar" && styles.avatar, variant === "hero" && styles.hero, variant === "thumbnail" && styles.thumbnail]}
       accessibilityLabel={label}
     />
   ) : (
-    <View style={[styles.placeholder, variant === "avatar" && styles.avatar, variant === "hero" && styles.hero]}>
+    <View style={[styles.placeholder, variant === "avatar" && styles.avatar, variant === "hero" && styles.hero, variant === "thumbnail" && styles.thumbnail]}>
       <ImageOff color={colors.muted} size={28} />
       <Text style={styles.label}>
         {query.isPending ? "Loading image…" : `${label} unavailable`}
@@ -67,6 +67,7 @@ const styles = StyleSheet.create({
   },
   avatar: { width: 96, height: 96, aspectRatio: 1, borderRadius: 48 },
   hero: { aspectRatio: 16 / 10, borderRadius: radii.lg },
+  thumbnail: { width: 92, height: 92, aspectRatio: 1, borderRadius: 22 },
   placeholder: {
     width: "100%",
     aspectRatio: 4 / 3,
