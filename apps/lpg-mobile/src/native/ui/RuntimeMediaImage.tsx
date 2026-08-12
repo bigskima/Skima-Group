@@ -27,7 +27,7 @@ export function RuntimeMediaImage({
       "lpg-expo",
       "media-read",
       assetId,
-      session.context?.user.id ?? "anonymous",
+      session.session?.user.id ?? "anonymous",
     ],
     enabled: session.status === "authenticated" && Boolean(assetId),
     staleTime: 12 * 60 * 1000,

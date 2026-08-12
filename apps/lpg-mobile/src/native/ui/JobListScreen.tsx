@@ -37,10 +37,8 @@ export function JobListScreen({
       : domainQueries.stationJobs();
   return (
     <Screen
-      eyebrow={
-        workspace === "driver" ? "Your deliveries" : "Branch activity"
-      }
-      title={workspace === "driver" ? "Driver jobs" : "Station jobs"}
+      eyebrow={workspace === "driver" ? "Ready for you" : "At your station"}
+      title={workspace === "driver" ? "Deliveries" : "Refill requests"}
       refreshControl={
         <RefreshControl
           refreshing={jobs.isRefetching}
@@ -53,7 +51,7 @@ export function JobListScreen({
         <ActivityIndicator color={colors.brand} />
       ) : jobs.error ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Jobs couldn’t be loaded</Text>
+          <Text style={styles.emptyTitle}>Couldn't load this list</Text>
           <Text style={styles.body}>
             {friendlyError(jobs.error, "Jobs could not be loaded. Please try again.")}
           </Text>
@@ -98,10 +96,10 @@ export function JobListScreen({
                     <Text style={styles.title}>
                       {displayReference(order) ??
                         displayReference(job) ??
-                        "LPG job"}
+                        "Refill order"}
                     </Text>
                     <Text style={styles.status}>
-                      {status.replace(/[_-]/g, " ")}
+                      {jobStatusLabel(status)}
                     </Text>
                   </View>
                   <Text style={styles.size}>
@@ -120,8 +118,8 @@ export function JobListScreen({
                           "formatted_address",
                           "displayName",
                           "display_name",
-                        ]) ?? "Configured destination")
-                      : "Destination supplied by the active workflow"}
+                        ]) ?? "Location details will appear here")
+                      : "Location details will appear here"}
                   </Text>
                 </View>
                 <View style={styles.detail}>
@@ -159,9 +157,26 @@ export function JobListScreen({
   );
 }
 function formatDate(value: string | null) {
-  if (!value) return "Schedule supplied by workflow";
+  if (!value) return "Time not available";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? "Time not available" : date.toLocaleString();
+}
+function jobStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    accepted: "Accepted",
+    assigned: "Driver assigned",
+    at_station: "At station",
+    cancelled: "Cancelled",
+    collected: "Cylinder collected",
+    completed: "Completed",
+    delivered: "Delivered",
+    in_progress: "In progress",
+    pending: "Waiting to begin",
+    queued: "Ready to begin",
+    refill_completed: "Refill complete",
+    returning: "Returning to customer",
+  };
+  return labels[status.toLowerCase()] ?? "In progress";
 }
 const styles = StyleSheet.create({
   job: {

@@ -164,89 +164,10 @@ const resource = (
 });
 
 export const governanceConsoleConfig: AdminResourceConsoleConfig = {
-  eyebrow: "Control",
-  title: "Governance",
-  description: "Manage platform administrators, roles, modules, and governed webhooks.",
+  eyebrow: "Platform setup",
+  title: "Configuration",
+  description: "Configure service modules, reusable platform behavior, and governed webhooks.",
   groups: [
-    {
-      key: "access",
-      label: "Admin Access",
-      description: "Create, adjust, and revoke platform administrator authority.",
-      resources: [
-        resource("profiles", "User Profiles", "/admin/profiles", [
-          "id",
-          "display_name",
-          "status",
-          "created_at",
-        ]),
-        resource("admin-roles", "Admin Role Templates", "/admin/role-templates", [
-          "key",
-          "display_name",
-          "status",
-          "is_system",
-        ]),
-        resource("admin-users", "Admin Users", "/admin/users", [
-          "user_id",
-          "admin_kind",
-          "title",
-          "status",
-          "created_at",
-        ]),
-      ],
-      actions: [
-        action(
-          "set-profile-status",
-          "Change Account Status",
-          "/admin/profiles/status",
-          [
-            requiredText("userId", "User ID"),
-            statusSelect("status", "New Status", [
-              { label: "Active", value: "active" },
-              { label: "Disabled", value: "disabled" },
-              { label: "Pending", value: "pending" },
-            ]),
-            requiredText("reason", "Reason"),
-            optionalJson(),
-          ],
-          "platform.users.manage",
-          "danger",
-        ),
-        action(
-          "configure-admin-role",
-          "Configure Admin Role",
-          "/admin/role-templates",
-          [
-            requiredText("roleKey", "Role Key"),
-            requiredText("displayName", "Display Name"),
-            optionalText("description", "Description"),
-            requiredStringArray("permissionKeys", "Permission Keys"),
-            statusSelect(),
-            optionalJson(),
-          ],
-          "platform.configuration.manage",
-        ),
-        action(
-          "configure-admin-user",
-          "Add Admin User",
-          "/admin/users",
-          [
-            requiredText("userId", "User ID"),
-            requiredText("roleKey", "Role Key"),
-            optionalText("title", "Title"),
-            optionalJson(),
-          ],
-          "platform.configuration.manage",
-        ),
-        action(
-          "revoke-admin-user",
-          "Revoke Admin User",
-          "/admin/users/revoke",
-          [requiredText("userId", "User ID")],
-          "platform.configuration.manage",
-          "danger",
-        ),
-      ],
-    },
     {
       key: "modules",
       label: "Business Lines",

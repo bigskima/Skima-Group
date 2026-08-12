@@ -29,6 +29,7 @@ import {
 import { readOperationalLocation } from "../device/location";
 import { useSession } from "../session/SessionProvider";
 import { colors, radii, spacing } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { Card } from "./Card";
 import { Screen } from "./Screen";
@@ -194,11 +195,7 @@ export function ApplicationOverviewScreen({
       setLatitude(point.latitude);
       setLongitude(point.longitude);
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Station coordinates could not be captured.",
-      );
+      setError(friendlyError(cause, "We couldn't get your station location. Please try again."));
     }
   };
   const send = async () => {
@@ -210,7 +207,7 @@ export function ApplicationOverviewScreen({
       !legalOrLicence.trim() ||
       (workspace === "driver" && !serviceZone.trim())
     ) {
-      setError("Complete every required identity and service field.");
+      setError("Please complete all the required details.");
       return;
     }
     if (!type) {
@@ -230,7 +227,7 @@ export function ApplicationOverviewScreen({
         sizes.length === 0)
     ) {
       setError(
-        "Complete the organization key, capacity, hours, supported sizes, and verified station coordinates.",
+        "Add your station short name, capacity, opening hours, cylinder sizes and location.",
       );
       return;
     }
@@ -291,7 +288,7 @@ export function ApplicationOverviewScreen({
       }
       if (!applicationId)
         throw new Error(
-          "The application service did not return an identifier.",
+          "The application could not be saved.",
         );
       const hasMissingEvidence =
         requiredCount > 0 &&
@@ -316,11 +313,7 @@ export function ApplicationOverviewScreen({
         queryKey: ["lpg-expo", "applications"],
       });
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Application submission failed.",
-      );
+      setError(friendlyError(cause, "We couldn't submit your application. Please try again."));
     }
   };
   const activateStation = async () => {
@@ -332,7 +325,7 @@ export function ApplicationOverviewScreen({
       longitude === null
     ) {
       setError(
-        "Approved application, organization, and station coordinates are required.",
+        "Your approval and station location are needed before activation.",
       );
       return;
     }
@@ -354,9 +347,7 @@ export function ApplicationOverviewScreen({
       });
       await session.refresh();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Station activation failed.",
-      );
+      setError(friendlyError(cause, "We couldn't activate your station. Please try again."));
     }
   };
   const loading =
@@ -368,23 +359,25 @@ export function ApplicationOverviewScreen({
     config.isPending;
   if (loading)
     return (
-      <Screen eyebrow={`${workspace} onboarding`} title="Application">
+      <Screen
+        eyebrow={workspace === "driver" ? "Driver application" : "Station application"}
+        title="Getting things ready"
+      >
         <ActivityIndicator color={colors.brand} />
       </Screen>
     );
   if (current && !editable.has(status))
     return (
       <Screen
-        eyebrow={`${workspace} onboarding`}
+        eyebrow={`${workspace} application`}
         title="Application status"
         action={<Back />}
       >
         <View style={styles.hero}>
-          <Text style={styles.heroLabel}>BACKEND WORKFLOW</Text>
-          <Text style={styles.heroTitle}>{status.replace(/[_-]/g, " ")}</Text>
+          <Text style={styles.heroLabel}>APPLICATION STATUS</Text>
+          <Text style={styles.heroTitle}>{applicationStatusLabel(status)}</Text>
           <Text style={styles.heroBody}>
-            Your submitted identity and evidence remain attached to this
-            approval workflow.
+            {applicationStatusMessage(status)}
           </Text>
         </View>
         <Card>
@@ -399,14 +392,13 @@ export function ApplicationOverviewScreen({
             }
           />
           <Field
-            label="Required document policies"
+            label="Documents requested"
             value={String(requiredCount)}
           />
           <Field
             label="Last updated"
             value={
-              firstString(current, ["updated_at", "created_at"]) ??
-              "Unavailable"
+              formatDate(firstString(current, ["updated_at", "created_at"]))
             }
           />
         </Card>
@@ -416,7 +408,7 @@ export function ApplicationOverviewScreen({
             router.push(`/(customer)/${workspace}-documents` as never)
           }
         >
-          <Text style={styles.secondaryText}>Review submitted documents</Text>
+          <Text style={styles.secondaryText}>View submitted documents</Text>
         </Pressable>
         {workspace === "station" && status === "approved" && !stationActive ? (
           <>
@@ -453,7 +445,7 @@ export function ApplicationOverviewScreen({
                 <ActivityIndicator color="white" />
               ) : (
                 <Text style={styles.primaryText}>
-                  Activate approved station
+                  Activate station
                 </Text>
               )}
             </Pressable>
@@ -462,7 +454,7 @@ export function ApplicationOverviewScreen({
         {stationActive ? (
           <View style={styles.approved}>
             <ShieldCheck color={colors.success} />
-            <Text style={styles.approvedText}>Station branch is active.</Text>
+            <Text style={styles.approvedText}>Your station is active.</Text>
           </View>
         ) : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -470,16 +462,21 @@ export function ApplicationOverviewScreen({
     );
   return (
     <Screen
-      eyebrow={`${workspace} onboarding`}
-      title={`Become a SKIMA ${workspace}`}
+      eyebrow={`${workspace} application`}
+      title={workspace === "driver" ? "Drive with SKIMA" : "Join as a station"}
       action={<Back />}
     >
       <View style={styles.hero}>
-        <Text style={styles.heroLabel}>CONFIGURED APPROVAL</Text>
-        <Text style={styles.heroTitle}>Apply with confidence</Text>
+        <Text style={styles.heroLabel}>
+          {workspace === "driver" ? "DELIVER WITH SKIMA" : "PARTNER WITH SKIMA"}
+        </Text>
+        <Text style={styles.heroTitle}>
+          {workspace === "driver" ? "Start your application" : "Tell us about your station"}
+        </Text>
         <Text style={styles.heroBody}>
-          Complete the required information and submit it for review. You can
-          return at any time while your application is still a draft.
+          {workspace === "driver"
+            ? "Share your details so we can review your application. Your progress is saved as you go."
+            : "Share your business and service details. Your progress is saved as you go."}
         </Text>
       </View>
       {workspace === "driver" ? (
@@ -523,15 +520,12 @@ export function ApplicationOverviewScreen({
       )}
       <Card>
         <Field
-          label="Application policy"
-          value={
-            firstString(type, ["display_name", "displayName", "key"]) ??
-            "Unavailable"
-          }
+          label="Applying as"
+          value={workspace === "driver" ? "Delivery driver" : "Partner station"}
         />
         <Field
           label="Required documents"
-          value={`${requiredCount} configured`}
+          value={requiredCount === 1 ? "1 document" : `${requiredCount} documents`}
         />
       </Card>
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -547,13 +541,15 @@ export function ApplicationOverviewScreen({
         ) : (
           <Text style={styles.primaryText}>
             {requiredCount > 0 && missingRequirements.length > 0
-              ? "Save and add required documents"
+              ? "Save and add documents"
               : "Submit application"}
           </Text>
         )}
       </Pressable>
       <Text style={styles.note}>
-        Regulatory documents are handled separately from presentation media.
+        {requiredCount > 0
+          ? "You'll add the requested documents before your application is submitted."
+          : "Review your details before submitting your application."}
       </Text>
     </Screen>
   );
@@ -639,7 +635,7 @@ function StationFields(p: {
         onChange={p.setLegal}
       />
       <Input
-        placeholder="Organization key"
+        placeholder="Station short name (for example, skima-awka)"
         value={p.slug}
         onChange={(value) => p.setSlug(toSlug(value))}
       />
@@ -659,12 +655,12 @@ function StationFields(p: {
         <LocateFixed color={colors.brand} size={20} />
         <Text style={styles.locationText}>
           {p.latitude !== null && p.longitude !== null
-            ? `${p.latitude.toFixed(5)}, ${p.longitude.toFixed(5)}`
-            : "Capture verified station coordinates"}
+            ? "Station location captured"
+            : "Use my station location"}
         </Text>
       </Pressable>
       <Input
-        placeholder="Refill capacity (kg)"
+        placeholder="Daily refill capacity (kg)"
         value={p.capacity}
         onChange={p.setCapacity}
         keyboard="decimal-pad"
@@ -752,6 +748,34 @@ function resultId(result: string | PlatformRecord | null) {
     : result
       ? firstString(result, ["id", "applicationId", "application_id"])
       : null;
+}
+function applicationStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    approved: "Approved",
+    expired: "Expired",
+    rejected: "Not approved",
+    submitted: "Submitted",
+    under_review: "Under review",
+    reviewing: "Under review",
+    withdrawn: "Withdrawn",
+  };
+  return labels[status] ?? "In progress";
+}
+function applicationStatusMessage(status: string) {
+  if (status === "approved")
+    return "Your application has been approved. Complete any remaining setup to begin.";
+  if (status === "rejected")
+    return "We couldn't approve this application. Review the decision and contact support if you need help.";
+  if (status === "submitted" || status === "under_review" || status === "reviewing")
+    return "We're reviewing your application and will let you know when a decision is ready.";
+  if (status === "withdrawn") return "This application has been withdrawn.";
+  if (status === "expired") return "This application has expired. Start a new application when you're ready.";
+  return "We'll let you know when there is an update to your application.";
+}
+function formatDate(value: string | null) {
+  if (!value) return "Not available";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Not available" : date.toLocaleString();
 }
 function Field({ label, value }: { label: string; value: string }) {
   return (

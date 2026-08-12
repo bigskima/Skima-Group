@@ -51,7 +51,7 @@ export function AppProviders({ children }: PropsWithChildren) {
             client={client}
             persistOptions={{
               persister,
-              buster: "lpg-expo-v1",
+              buster: "lpg-expo-v2",
               dehydrateOptions: {
                 shouldDehydrateQuery: (query) => query.meta?.persist === true,
               },

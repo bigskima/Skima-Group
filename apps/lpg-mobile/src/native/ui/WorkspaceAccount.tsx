@@ -40,7 +40,7 @@ const menus = {
     { label: "Delivery addresses", href: "/(customer)/locations" },
     { label: "Stations near you", href: "/(customer)/stations" },
     { label: "Transactions", href: "/(customer)/transactions" },
-    { label: "Payment providers", href: "/(customer)/payment-methods" },
+    { label: "Payment methods", href: "/(customer)/payment-methods" },
   ],
 } as const;
 

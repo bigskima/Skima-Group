@@ -15,7 +15,7 @@ export function useGatewayQuery<T>(input: {
     queryKey: [
       "lpg-expo",
       ...input.key,
-      session.context?.user.id ?? "anonymous",
+      session.session?.user.id ?? "anonymous",
     ],
     enabled: session.status === "authenticated" && (input.enabled ?? true),
     queryFn: ({ signal }) =>

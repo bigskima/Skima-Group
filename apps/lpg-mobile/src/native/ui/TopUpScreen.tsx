@@ -82,7 +82,7 @@ export function TopUpScreen() {
   return (
     <Screen
       eyebrow="Wallet"
-      title="Top up securely"
+      title="Add money"
       action={
         <Pressable onPress={() => router.back()}>
           <Text style={styles.link}>Cancel</Text>
@@ -90,25 +90,26 @@ export function TopUpScreen() {
       }
     >
       <View style={styles.hero}>
-        <Text style={styles.heroLabel}>Funding currency</Text>
+        <Text style={styles.heroLabel}>Wallet currency</Text>
         <Text style={styles.heroValue}>{currency}</Text>
       </View>
       <TextInput
         value={amount}
         onChangeText={setAmount}
         keyboardType="decimal-pad"
-        placeholder="Amount"
+        placeholder="Enter amount"
         placeholderTextColor={colors.muted}
         style={styles.input}
       />
+      <Text style={styles.fieldLabel}>Choose how to pay</Text>
       <View style={styles.providers}>
         <Pressable
           onPress={() => setProvider("")}
           style={[styles.provider, !provider && styles.selected]}
         >
-          <Text style={styles.providerText}>Backend default</Text>
+          <Text style={styles.providerText}>Recommended</Text>
         </Pressable>
-        {paymentProviders.map((item) => {
+        {paymentProviders.map((item, index) => {
           const key = firstString(item, ["key"]) ?? "";
           return (
             <Pressable
@@ -117,7 +118,8 @@ export function TopUpScreen() {
               style={[styles.provider, provider === key && styles.selected]}
             >
               <Text style={styles.providerText}>
-                {firstString(item, ["display_name", "displayName"]) ?? key}
+                {firstString(item, ["display_name", "displayName"]) ??
+                  `Payment option ${index + 1}`}
               </Text>
             </Pressable>
           );
@@ -132,12 +134,12 @@ export function TopUpScreen() {
         {mutation.isPending ? (
           <ActivityIndicator color="white" />
         ) : (
-          <Text style={styles.primaryText}>Continue to payment provider</Text>
+          <Text style={styles.primaryText}>Continue securely</Text>
         )}
       </Pressable>
       <Text style={styles.note}>
-        Payment details are entered on the secure payment page. Your balance
-        updates after the payment is confirmed.
+        You'll review and approve the payment securely before your wallet is
+        updated.
       </Text>
     </Screen>
   );
@@ -161,6 +163,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   providers: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  fieldLabel: { color: colors.ink, fontWeight: "900" },
   provider: {
     paddingHorizontal: 14,
     paddingVertical: 11,

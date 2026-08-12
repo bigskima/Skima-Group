@@ -20,11 +20,11 @@ export class AppErrorBoundary extends Component<PropsWithChildren, State> {
     return (
       <View accessibilityRole="alert" style={styles.page}>
         <View style={styles.card}>
-          <Text style={styles.eyebrow}>SKIMA LPG</Text>
-          <Text style={styles.title}>This screen could not be displayed</Text>
+          <Text style={styles.eyebrow}>SKIMA</Text>
+          <Text style={styles.title}>We couldn't open this screen</Text>
           <Text style={styles.body}>
-            Your backend records have not been changed. Retry the screen; if the
-            issue continues, reopen the application.
+            Your information is safe. Try again, or close and reopen SKIMA if
+            this keeps happening.
           </Text>
           {__DEV__ ? (
             <Text style={styles.detail}>{this.state.error.message}</Text>
@@ -34,7 +34,7 @@ export class AppErrorBoundary extends Component<PropsWithChildren, State> {
             onPress={() => this.setState({ error: null })}
             style={styles.button}
           >
-            <Text style={styles.buttonText}>Retry screen</Text>
+            <Text style={styles.buttonText}>Try again</Text>
           </Pressable>
         </View>
       </View>

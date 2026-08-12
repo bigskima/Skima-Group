@@ -182,6 +182,7 @@ export function useSession() {
 function readConfig() {
   const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  const configuredGateway = process.env.EXPO_PUBLIC_API_GATEWAY_URL?.trim();
   if (!url || !anonKey)
     throw new Error(
       "EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY are required.",
@@ -190,7 +191,7 @@ function readConfig() {
     url,
     anonKey,
     gateway:
-      process.env.EXPO_PUBLIC_API_GATEWAY_URL ??
+      configuredGateway ||
       `${url.replace(/\/$/, "")}/functions/v1/api-gateway`,
   };
 }

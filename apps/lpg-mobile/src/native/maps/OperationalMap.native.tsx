@@ -1,6 +1,8 @@
 import MapView, { Marker, Polyline, type MapPressEvent } from "react-native-maps";
-import { useEffect, useRef } from "react";
-import { StyleSheet, View } from "react-native";
+import { Crosshair } from "lucide-react-native";
+import { useCallback, useEffect, useRef } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { colors, radii, spacing } from "../theme/tokens";
 
 export interface MapPoint {
   latitude: number;
@@ -23,6 +25,7 @@ export function OperationalMap({
   points,
   connectPoints = false,
   height = 420,
+  initialZoom = points.length > 1 ? 14 : 20,
   maxZoom = 21,
   minZoom = 3,
   onSelectPoint,
@@ -30,53 +33,116 @@ export function OperationalMap({
   const map = useRef<MapView>(null);
   const first = points[0];
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
-  const focus = (animated: boolean) => {
-    if (!first) return;
-    if (points.length > 1)
-      map.current?.fitToCoordinates([...points], {
-        edgePadding: { top: 70, right: 50, bottom: 70, left: 50 },
+  const zoom = clamp(initialZoom, minZoom, maxZoom);
+
+  const focus = useCallback((animated: boolean) => {
+    if (!first || !map.current) return;
+    if (points.length > 1) {
+      map.current.fitToCoordinates([...points], {
+        edgePadding: { top: 64, right: 46, bottom: 72, left: 46 },
         animated,
       });
-    else
-      map.current?.animateToRegion(
-        { ...first, latitudeDelta: 0.0035, longitudeDelta: 0.0035 },
-        animated ? 350 : 0,
-      );
-  };
-  useEffect(() => focus(true), [pointKey]);
-  if (!first) return <View style={[styles.empty, { height }]} />;
+      return;
+    }
+    map.current.animateCamera(
+      { center: first, pitch: 0, heading: 0, zoom },
+      { duration: animated ? 320 : 0 },
+    );
+  }, [first?.latitude, first?.longitude, pointKey, zoom]);
+
+  useEffect(() => {
+    focus(true);
+  }, [focus]);
+
+  if (!first)
+    return (
+      <View style={[styles.empty, { height }]}>
+        <View style={styles.emptyPin}><View style={styles.emptyDot} /></View>
+        <Text style={styles.emptyTitle}>Your precise location will appear here</Text>
+      </View>
+    );
+
   const select = (event: MapPressEvent) => onSelectPoint?.(event.nativeEvent.coordinate);
   return (
-    <MapView
-      ref={map}
-      style={[styles.map, { height }]}
-      initialRegion={{ ...first, latitudeDelta: 0.0035, longitudeDelta: 0.0035 }}
-      minZoomLevel={minZoom}
-      maxZoomLevel={maxZoom}
-      onMapReady={() => focus(false)}
-      onPress={select}
-      pitchEnabled
-      rotateEnabled={false}
-      scrollEnabled
-      showsCompass
-      showsMyLocationButton
-      zoomControlEnabled
-      zoomEnabled
-    >
-      {points.map((point, index) => (
-        <Marker
-          key={`${point.latitude}:${point.longitude}:${index}`}
-          coordinate={point}
-          title={point.label}
-          pinColor={point.kind === "destination" ? "#129447" : point.kind === "pickup" ? "#E8B84A" : point.kind === "station" ? "#2256A3" : "#ED1C2E"}
-        />
-      ))}
-      {connectPoints && points.length > 1 ? <Polyline coordinates={[...points]} strokeColor="#ED1C2E" strokeWidth={5} /> : null}
-    </MapView>
+    <View style={[styles.frame, { height }]}>
+      <MapView
+        ref={map}
+        accessibilityLabel={onSelectPoint ? "Interactive location map" : "Map showing operational locations"}
+        style={StyleSheet.absoluteFill}
+        initialCamera={{ center: first, pitch: 0, heading: 0, altitude: 0, zoom }}
+        minZoomLevel={minZoom}
+        maxZoomLevel={maxZoom}
+        onMapReady={() => focus(false)}
+        onPress={select}
+        pitchEnabled
+        rotateEnabled={false}
+        scrollEnabled
+        showsBuildings
+        showsCompass
+        showsPointsOfInterests
+        toolbarEnabled={false}
+        zoomControlEnabled
+        zoomEnabled
+      >
+        {points.map((point, index) => {
+          const tone = markerColor(point.kind);
+          return (
+            <Marker
+              anchor={{ x: 0.5, y: 1 }}
+              coordinate={point}
+              key={`${point.latitude}:${point.longitude}:${index}`}
+              title={point.label}
+            >
+              <View style={styles.markerWrap}>
+                <View style={[styles.marker, { borderColor: tone }]}>
+                  <View style={[styles.markerDot, { backgroundColor: tone }]} />
+                </View>
+                <View style={[styles.markerTip, { borderTopColor: tone }]} />
+              </View>
+            </Marker>
+          );
+        })}
+        {connectPoints && points.length > 1
+          ? <Polyline coordinates={[...points]} strokeColor={colors.brand} strokeWidth={5} />
+          : null}
+      </MapView>
+
+      {onSelectPoint
+        ? <View pointerEvents="none" style={styles.hint}><Text style={styles.hintText}>Tap the exact entrance or pickup point</Text></View>
+        : null}
+      <Pressable
+        accessibilityLabel="Recenter map"
+        onPress={() => focus(true)}
+        style={styles.recenter}
+      >
+        <Crosshair color={colors.ink} size={20} />
+      </Pressable>
+    </View>
   );
 }
 
+function markerColor(kind: MapPoint["kind"]) {
+  if (kind === "destination") return colors.success;
+  if (kind === "pickup") return "#A96D00";
+  if (kind === "station") return "#2256A3";
+  return colors.brand;
+}
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
 const styles = StyleSheet.create({
-  map: { width: "100%", overflow: "hidden", borderRadius: 28 },
-  empty: { width: "100%", borderRadius: 28, backgroundColor: "#E8ECE9" },
+  frame: { width: "100%", overflow: "hidden", borderRadius: radii.lg, backgroundColor: "#DCE5DF" },
+  empty: { width: "100%", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.lg, backgroundColor: "#E8ECE9" },
+  emptyPin: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 17, backgroundColor: "white" },
+  emptyDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.brand },
+  emptyTitle: { color: colors.muted, fontSize: 13, fontWeight: "800" },
+  markerWrap: { alignItems: "center" },
+  marker: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 17, borderWidth: 4, backgroundColor: "white", elevation: 7 },
+  markerDot: { width: 10, height: 10, borderRadius: 5 },
+  markerTip: { width: 0, height: 0, marginTop: -2, borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 10, borderLeftColor: "transparent", borderRightColor: "transparent" },
+  hint: { position: "absolute", left: spacing.sm, top: spacing.sm, maxWidth: "72%", paddingHorizontal: 11, paddingVertical: 7, borderRadius: radii.pill, backgroundColor: "rgba(23,33,27,.84)" },
+  hintText: { color: "white", fontSize: 11, fontWeight: "800" },
+  recenter: { position: "absolute", right: spacing.sm, top: spacing.sm, width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: "white", elevation: 7 },
 });

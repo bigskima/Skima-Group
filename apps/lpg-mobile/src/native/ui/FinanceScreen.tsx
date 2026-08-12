@@ -183,7 +183,7 @@ export function WithdrawalScreen({
         idempotencyKey: idempotencyKey(`${workspace}-beneficiary`, walletId),
       });
       setAdding(false);
-      setMessage("Payout account submitted for provider verification.");
+      setMessage("Your payout account is being checked. We’ll let you know when it is ready.");
     } catch (cause) {
       setMessage(
         friendlyError(cause, "The payout account could not be added."),

@@ -20,7 +20,11 @@ const DRAFT = "customer-cylinder-registration";
 
 export function CylinderRegistrationScreen() {
   const session = useSession();
-  const owner = session.context?.profile?.id ?? session.context?.user.id ?? "";
+  const owner =
+    session.context?.profile?.id ??
+    session.context?.user.id ??
+    session.session?.user.id ??
+    "";
   const { palette } = useAppTheme();
   const config = useLpgConfig();
   const [name, setName] = useState("");
@@ -100,7 +104,7 @@ export function CylinderRegistrationScreen() {
           uri: photo.uri,
           fileName: photo.fileName,
           contentType: photo.mimeType,
-          ownerUserId: session.context!.user.id,
+          ownerUserId: session.context?.user.id ?? session.session!.user.id,
           assetTypeKey: "lpg.cylinder.original",
           onProgress: setUploadProgress,
         });

@@ -110,7 +110,7 @@ export async function startDriverTracking(
       ? `${supabaseUrl.replace(/\/$/, "")}/functions/v1/api-gateway`
       : null);
   if (!gateway || !anonKey || !supabaseUrl) {
-    throw new Error("Background tracking configuration is unavailable.");
+    throw new Error("Live tracking is temporarily unavailable. Try again shortly.");
   }
   const foreground = await Location.requestForegroundPermissionsAsync();
   if (!foreground.granted) {

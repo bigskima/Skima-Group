@@ -6,7 +6,7 @@ import {
 import * as Haptics from "expo-haptics";
 import { Flashlight, ScanLine } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { colors, radii, spacing } from "../theme/tokens";
 
 export function Scanner({
@@ -16,6 +16,7 @@ export function Scanner({
   enabled: boolean;
   onDetected(value: string): void;
 }) {
+  const { height: windowHeight, width } = useWindowDimensions();
   const [permission, requestPermission] = useCameraPermissions();
   const [locked, setLocked] = useState(false);
   const [torch, setTorch] = useState(false);
@@ -28,9 +29,9 @@ export function Scanner({
   if (!enabled)
     return (
       <View style={styles.notice}>
-        <Text style={styles.noticeTitle}>Open a job to start scanning</Text>
+        <Text style={styles.noticeTitle}>Choose a job first</Text>
         <Text style={styles.noticeBody}>
-          Choose the pickup, refill or delivery you’re working on first.
+          SKIMA checks every scan against its assigned delivery or refill.
         </Text>
       </View>
     );
@@ -39,7 +40,7 @@ export function Scanner({
       <View style={styles.notice}>
         <Text style={styles.noticeTitle}>Allow camera access</Text>
         <Text style={styles.noticeBody}>
-          SKIMA needs the camera to read the cylinder’s private scan code. No photo is taken here.
+          SKIMA uses the camera only to read the cylinder code. No photo is taken.
         </Text>
         <Pressable
           onPress={() => void requestPermission()}
@@ -50,7 +51,7 @@ export function Scanner({
       </View>
     );
   return (
-    <View style={styles.cameraWrap}>
+    <View style={[styles.cameraWrap, { height: Math.min(width < 600 ? 420 : 460, Math.max(330, windowHeight * 0.54)) }]}>
       <CameraView
         style={styles.camera}
         facing="back"
@@ -60,7 +61,7 @@ export function Scanner({
         }}
         onBarcodeScanned={locked ? undefined : detected}
       />
-      <View pointerEvents="none" style={styles.topCopy}><ScanLine color="white" size={21} /><Text style={styles.topTitle}>Align the SKIMA code</Text><Text style={styles.topBody}>Hold steady inside the frame</Text></View>
+      <View pointerEvents="none" style={styles.topCopy}><ScanLine color="white" size={21} /><Text style={styles.topTitle}>Find the SKIMA code</Text><Text style={styles.topBody}>Keep it inside the frame</Text></View>
       <View pointerEvents="none" style={styles.frame} />
       <Pressable accessibilityLabel={torch ? "Turn flashlight off" : "Turn flashlight on"} onPress={() => setTorch((value) => !value)} style={[styles.torch, torch && styles.torchActive]}><Flashlight color="white" size={21} /></Pressable>
       {locked ? (
@@ -73,7 +74,6 @@ export function Scanner({
 }
 const styles = StyleSheet.create({
   cameraWrap: {
-    height: 520,
     borderRadius: 30,
     overflow: "hidden",
     backgroundColor: "#07100B",

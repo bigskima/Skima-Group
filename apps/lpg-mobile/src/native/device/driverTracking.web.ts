@@ -44,7 +44,7 @@ export async function startDriverTracking(input: Omit<TrackingConfig, "gateway" 
   const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const gateway = process.env.EXPO_PUBLIC_API_GATEWAY_URL || (supabaseUrl ? `${supabaseUrl.replace(/\/$/, "")}/functions/v1/api-gateway` : null);
-  if (!gateway || !anonKey || !supabaseUrl) throw new Error("Live tracking configuration is unavailable.");
+  if (!gateway || !anonKey || !supabaseUrl) throw new Error("Live tracking is temporarily unavailable. Try again shortly.");
   const config: TrackingConfig = { ...input, gateway, anonKey, supabaseUrl };
   localStorage.setItem(CONFIG, JSON.stringify(config));
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);

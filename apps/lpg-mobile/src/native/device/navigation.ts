@@ -19,7 +19,7 @@ export async function openDeviceNavigation(target: NavigationTarget) {
         default: `https://www.google.com/maps/dir/?api=1&destination=${target.latitude},${target.longitude}&travelmode=driving`,
       });
   if (!url || !(await Linking.canOpenURL(url))) {
-    throw new Error("A navigation provider is not available on this device.");
+    throw new Error("Navigation is unavailable on this device. Copy the address and open it in your preferred map app.");
   }
   await Linking.openURL(url);
 }

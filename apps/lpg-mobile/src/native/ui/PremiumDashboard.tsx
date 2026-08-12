@@ -4,6 +4,7 @@ import {
   Bell,
   Building2,
   ChevronRight,
+  CircleCheck,
   CircleHelp,
   MapPin,
   Navigation,
@@ -36,7 +37,7 @@ import {
 } from "../api/records";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { colors, radii, spacing } from "../theme/tokens";
+import { colors } from "../theme/tokens";
 import { BrandMark } from "./BrandMark";
 import { PromotionBanner } from "./PromotionBanner";
 import { ScreenSkeleton } from "./ScreenSkeleton";
@@ -45,327 +46,927 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 type Workspace = "customer" | "driver" | "station";
 type IconType = ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
 
-const roleTheme = {
-  customer: { start: "#F42A3B", end: "#8F0918", tint: "#FFF0F2", label: "CUSTOMER" },
-  driver: { start: "#1B5B43", end: "#10261D", tint: "#EAF7F0", label: "DRIVER" },
-  station: { start: "#513225", end: "#151C18", tint: "#F8F0E8", label: "STATION" },
-} as const;
-
 export function CustomerDashboard() {
   const cylinders = domainQueries.cylinders();
   const active = domainQueries.activeOrders();
   const locations = domainQueries.locations();
   const wallets = domainQueries.wallets();
   const stations = domainQueries.stations();
-  const pending = cylinders.isPending || active.isPending || locations.isPending || wallets.isPending || stations.isPending;
-  const failed = cylinders.error ?? active.error ?? locations.error ?? wallets.error ?? stations.error;
+  const sources = [cylinders, active, locations, wallets, stations];
+  const pending = sources.every((source) => source.isPending);
+  const failed = sources.every((source) => Boolean(source.error));
   const cylinder = cylinders.data?.[0];
   const order = active.data?.[0];
   const location = locations.data?.[0];
-  const balance = (wallets.data ?? []).reduce((sum, item) => sum + (firstNumber(item, ["balance", "available_balance", "availableBalance"]) ?? 0), 0);
+  const orderId = order ? recordId(order) : null;
+  const balance = (wallets.data ?? []).reduce(
+    (sum, item) => sum + (firstNumber(item, ["balance", "available_balance", "availableBalance"]) ?? 0),
+    0,
+  );
   const currency = firstString(wallets.data?.[0], ["currency_code", "currencyCode"]) ?? "NGN";
+  const primary = order && orderId
+    ? {
+        eyebrow: humanStatus(displayStatus(order) ?? "active"),
+        title: "Track your refill",
+        body: "Follow your cylinder from pickup to your doorstep.",
+        label: "View live order",
+        href: `/(customer)/orders/${orderId}/tracking`,
+        icon: Navigation,
+      }
+    : cylinder
+      ? {
+          eyebrow: "Ready when you are",
+          title: "Refill a cylinder",
+          body: "Choose a cylinder and arrange pickup in a few taps.",
+          label: "Start refill",
+          href: "/(customer)/orders/new",
+          icon: PackageCheck,
+        }
+      : {
+          eyebrow: "Let's get you started",
+          title: "Add your first cylinder",
+          body: "Register it once, then request refills whenever you need them.",
+          label: "Add cylinder",
+          href: "/(customer)/cylinder/register",
+          icon: QrCode,
+        };
 
   return (
-    <DashboardShell
-      workspace="customer"
-      headline="Gas refill, without the runaround."
-      subline="Pickup, refill and return in one clear journey."
-      primary={{
-        label: cylinder ? "Start refill" : "Add cylinder",
-        icon: cylinder ? PackageCheck : QrCode,
-        href: cylinder ? "/(customer)/orders/new" : "/(customer)/cylinder/register",
-      }}
-      utility={
-        <Pressable onPress={() => router.push("/(customer)/locations")} style={styles.glassLine}>
-          <MapPin color="white" size={16} />
-          <Text numberOfLines={1} style={styles.glassText}>
-            {location ? displayTitle(location) : "Set delivery location"}
-          </Text>
-          <ChevronRight color="rgba(255,255,255,.72)" size={16} />
-        </Pressable>
-      }
-    >
-      {pending ? <ScreenSkeleton cards={3} /> : failed ? <LoadError onRetry={() => void Promise.all([cylinders.refetch(), active.refetch(), locations.refetch(), wallets.refetch(), stations.refetch()])} /> : (
+    <MobileHome workspace="customer" context="Refill and delivery">
+      <CustomerLocation location={location} />
+      {pending ? (
+        <ScreenSkeleton cards={3} />
+      ) : failed ? (
+        <LoadError
+          onRetry={() => void Promise.all([
+            cylinders.refetch(),
+            active.refetch(),
+            locations.refetch(),
+            wallets.refetch(),
+            stations.refetch(),
+          ])}
+        />
+      ) : (
         <>
-          <ActionRail actions={[
-            { label: "Refill", hint: "New order", icon: PackageCheck, href: "/(customer)/orders/new" },
-            { label: "My cylinders", hint: `${cylinders.data?.length ?? 0} registered`, icon: QrCode, href: "/(customer)/cylinders" },
-            { label: "Track", hint: order ? "Order active" : "No active order", icon: Navigation, href: order ? `/(customer)/orders/${recordId(order)}/tracking` : "/(customer)/orders" },
-            { label: "Wallet", hint: formatMoney(balance, currency), icon: WalletCards, href: "/(customer)/wallet" },
-          ]} />
+          <CustomerPrimaryAction {...primary} />
 
-          {order ? <LiveOperation record={order} href={`/(customer)/orders/${recordId(order) ?? ""}`} /> : null}
+          {order && orderId ? (
+            <ActiveOrder record={order} href={`/(customer)/orders/${orderId}`} />
+          ) : null}
+
           <PromotionBanner audience="customer" />
 
-          <CompactSection title="Your cylinders" action="See all" href="/(customer)/cylinders">
-            <GroupedRecords records={cylinders.data ?? []} empty="Your registered cylinders will live here." detailBase="/(customer)/cylinder" icon={PackageCheck} />
-          </CompactSection>
+          <HomeSection
+            title="Your cylinders"
+            action={cylinder ? "See all" : "Add one"}
+            href={cylinder ? "/(customer)/cylinders" : "/(customer)/cylinder/register"}
+          >
+            <NaturalRecords
+              records={cylinders.data ?? []}
+              empty="Your cylinders will appear here after you add the first one."
+              detailBase="/(customer)/cylinder"
+              icon={PackageCheck}
+              limit={2}
+            />
+          </HomeSection>
 
-          <CompactSection title="Nearby stations" action="Explore" href="/(customer)/stations">
-            <GroupedRecords records={stations.data ?? []} empty="No stations are available around this location yet." detailBase="/(customer)/station" icon={Building2} />
-          </CompactSection>
-
-          <FinanceBar label="Available in wallet" value={formatMoney(balance, currency)} href="/(customer)/wallet" />
+          <View style={styles.customerUtilities}>
+            <UtilityLink
+              icon={WalletCards}
+              label="Wallet"
+              value={formatMoney(balance, currency)}
+              href="/(customer)/wallet"
+            />
+            <UtilityLink
+              icon={Building2}
+              label="Nearby stations"
+              value={`${stations.data?.length ?? 0} available`}
+              href="/(customer)/stations"
+            />
+          </View>
         </>
       )}
-    </DashboardShell>
+    </MobileHome>
   );
 }
 
 export function DriverDashboard() {
+  const { palette } = useAppTheme();
   const jobs = domainQueries.driverJobs();
   const commissions = domainQueries.commissions();
   const vehicles = domainQueries.vehicles();
-  const pending = jobs.isPending || commissions.isPending || vehicles.isPending;
-  const failed = jobs.error ?? commissions.error ?? vehicles.error;
-  const active = jobs.data?.[0];
-  const earnings = (commissions.data ?? []).reduce((sum, item) => sum + (firstNumber(item, ["amount", "commission_amount", "net_amount"]) ?? 0), 0);
+  const sources = [jobs, commissions, vehicles];
+  const pending = sources.every((source) => source.isPending);
+  const failed = sources.every((source) => Boolean(source.error));
+  const active = jobs.data?.find((item) => !["completed", "cancelled"].includes(normalizedStatus(displayStatus(item) ?? "")));
+  const activeId = active ? recordId(active) : null;
+  const earnings = (commissions.data ?? []).reduce(
+    (sum, item) => sum + (firstNumber(item, ["amount", "commission_amount", "net_amount"]) ?? 0),
+    0,
+  );
   const currency = firstString(commissions.data?.[0], ["currency_code", "currencyCode"]) ?? "NGN";
 
   return (
-    <DashboardShell
-      workspace="driver"
-      headline="Ready when the next route lands."
-      subline={active ? humanStatus(displayStatus(active) ?? "active") : "Stay online to receive nearby delivery work."}
-      primary={{ label: active ? "Open active job" : "Go online", icon: Truck, href: active ? `/(driver)/job/${recordId(active)}` : "/(driver)/availability" }}
-      utility={<HeaderMetric label="AVAILABLE EARNINGS" value={formatMoney(earnings, currency)} />}
-    >
-      {pending ? <ScreenSkeleton cards={3} /> : failed ? <LoadError onRetry={() => void Promise.all([jobs.refetch(), commissions.refetch(), vehicles.refetch()])} /> : (
+    <MobileHome workspace="driver" context="Driver workspace">
+      {pending ? (
+        <ScreenSkeleton cards={3} />
+      ) : failed ? (
+        <LoadError onRetry={() => void Promise.all([jobs.refetch(), commissions.refetch(), vehicles.refetch()])} />
+      ) : (
         <>
-          <StatusRail items={[
-            { label: "Jobs", value: String(jobs.data?.length ?? 0) },
-            { label: "Vehicles", value: String(vehicles.data?.length ?? 0) },
-            { label: "Earnings", value: String(commissions.data?.length ?? 0) },
-          ]} />
-          <ActionRail actions={[
-            { label: "Scan", hint: "Verify cylinder", icon: ScanLine, href: "/(driver)/scan" },
-            { label: "Availability", hint: "Location & status", icon: Navigation, href: "/(driver)/availability" },
-            { label: "Vehicles", hint: "Delivery fleet", icon: Truck, href: "/(driver)/vehicles" },
-            { label: "Earnings", hint: formatMoney(earnings, currency), icon: WalletCards, href: "/(driver)/earnings" },
-          ]} />
-          {active ? <LiveOperation record={active} href={`/(driver)/job/${recordId(active) ?? ""}`} label="ACTIVE ASSIGNMENT" /> : null}
-          <CompactSection title="Delivery queue" action="All jobs" href="/(driver)/jobs">
-            <GroupedRecords records={jobs.data ?? []} empty="You are clear. New assignments will appear here." detailBase="/(driver)/job" icon={Navigation} />
-          </CompactSection>
-          <SupportLine href="/(driver)/support" />
+          <DriverCockpit record={active} />
+
+          <View style={styles.driverActions}>
+            <OperationalAction
+              icon={ScanLine}
+              label="Scan cylinder"
+              hint="Verify a pickup or handover"
+              href="/(driver)/scan"
+            />
+            <OperationalAction
+              icon={Navigation}
+              label="Availability"
+              hint="Update your live status"
+              href="/(driver)/availability"
+            />
+          </View>
+
+          <View style={styles.driverMetrics}>
+            <MetricLink
+              label="Available earnings"
+              value={formatMoney(earnings, currency)}
+              href="/(driver)/earnings"
+            />
+            <View style={[styles.metricDivider, { backgroundColor: palette.border }]} />
+            <MetricLink
+              label="Delivery vehicle"
+              value={`${vehicles.data?.length ?? 0} registered`}
+              href="/(driver)/vehicles"
+            />
+          </View>
+
+          <HomeSection title="Next assignments" action="All jobs" href="/(driver)/jobs">
+            <NaturalRecords
+              records={activeId ? (jobs.data ?? []).filter((item) => recordId(item) !== activeId) : (jobs.data ?? [])}
+              empty="No additional jobs are waiting."
+              detailBase="/(driver)/job"
+              icon={Truck}
+              limit={3}
+            />
+          </HomeSection>
+
+          <SupportLine href="/(driver)/support" label="Driver support" />
         </>
       )}
-    </DashboardShell>
+    </MobileHome>
   );
 }
 
 export function StationDashboard() {
+  const { palette } = useAppTheme();
   const jobs = domainQueries.stationJobs();
   const settlements = domainQueries.settlements();
-  const pending = jobs.isPending || settlements.isPending;
-  const failed = jobs.error ?? settlements.error;
+  const sources = [jobs, settlements];
+  const pending = sources.every((source) => source.isPending);
+  const failed = sources.every((source) => Boolean(source.error));
   const records = jobs.data ?? [];
-  const inProgress = records.filter((item) => !["completed", "cancelled"].includes(displayStatus(item) ?? "")).length;
-  const settled = (settlements.data ?? []).reduce((sum, item) => sum + (firstNumber(item, ["net_amount", "netAmount", "amount"]) ?? 0), 0);
+  const current = records.find((item) => isStationProcessing(displayStatus(item)))
+    ?? records.find((item) => !["completed", "cancelled"].includes(normalizedStatus(displayStatus(item) ?? "")));
+  const currentId = current ? recordId(current) : null;
+  const waiting = records.filter((item) => isWaitingAtStation(displayStatus(item))).length;
+  const processing = records.filter((item) => isStationProcessing(displayStatus(item))).length;
+  const settled = (settlements.data ?? []).reduce(
+    (sum, item) => sum + (firstNumber(item, ["net_amount", "netAmount", "amount"]) ?? 0),
+    0,
+  );
   const currency = firstString(settlements.data?.[0], ["currency_code", "currencyCode"]) ?? "NGN";
 
   return (
-    <DashboardShell
-      workspace="station"
-      headline="A cleaner view of today’s floor."
-      subline="Receive, inspect, refill and release without losing the queue."
-      primary={{ label: "Scan cylinder", icon: ScanLine, href: "/(station)/scan" }}
-      utility={<HeaderMetric label="SETTLEMENTS" value={formatMoney(settled, currency)} />}
-    >
-      {pending ? <ScreenSkeleton cards={3} /> : failed ? <LoadError onRetry={() => void Promise.all([jobs.refetch(), settlements.refetch()])} /> : (
+    <MobileHome workspace="station" context="Station reception">
+      {pending ? (
+        <ScreenSkeleton cards={3} />
+      ) : failed ? (
+        <LoadError onRetry={() => void Promise.all([jobs.refetch(), settlements.refetch()])} />
+      ) : (
         <>
-          <StatusRail items={[
-            { label: "Waiting", value: String(records.length) },
-            { label: "In progress", value: String(inProgress) },
-            { label: "Settled", value: String(settlements.data?.length ?? 0) },
-          ]} />
-          <ActionRail actions={[
-            { label: "Scan", hint: "Receive cylinder", icon: ScanLine, href: "/(station)/scan" },
-            { label: "Inventory", hint: "Capacity & stock", icon: PackageCheck, href: "/(station)/inventory" },
-            { label: "Jobs", hint: `${records.length} in queue`, icon: QrCode, href: "/(station)/jobs" },
-            { label: "Settlements", hint: formatMoney(settled, currency), icon: WalletCards, href: "/(station)/settlements" },
-          ]} />
-          <CompactSection title="Refill queue" action="Open floor" href="/(station)/jobs">
-            <GroupedRecords records={records} empty="The station queue is clear." detailBase="/(station)/job" icon={PackageCheck} />
-          </CompactSection>
-          <SupportLine href="/(station)/support" />
+          <View style={styles.receptionHeading}>
+            <View>
+              <Text style={styles.receptionEyebrow}>TODAY AT RECEPTION</Text>
+              <Text style={[styles.receptionTitle, { color: palette.ink }]}>Keep cylinders moving safely.</Text>
+            </View>
+            <View style={styles.queueCount}>
+              <Text style={styles.queueNumber}>{records.length}</Text>
+              <Text style={[styles.queueLabel, { color: palette.muted }]}>in queue</Text>
+            </View>
+          </View>
+
+          <View style={styles.stationActions}>
+            <StationAction
+              primary
+              icon={ScanLine}
+              step="01"
+              title="Scan & Accept"
+              body="Verify the driver and cylinders at reception."
+              href="/(station)/scan"
+            />
+            <StationAction
+              icon={CircleCheck}
+              step="02"
+              title="Confirm & Release"
+              body="Record the actual fill and return to the driver."
+              href={currentId ? `/(station)/job/${currentId}` : "/(station)/jobs"}
+            />
+          </View>
+
+          <View style={styles.receptionStatus}>
+            <ReceptionMetric value={waiting} label="Awaiting acceptance" />
+            <ReceptionMetric value={processing} label="Being processed" />
+          </View>
+
+          <HomeSection title="Reception queue" action="Open queue" href="/(station)/jobs">
+            <ReceptionQueue records={records} />
+          </HomeSection>
+
+          <UtilityLink
+            icon={WalletCards}
+            label="Station settlements"
+            value={formatMoney(settled, currency)}
+            href="/(station)/settlements"
+          />
+          <SupportLine href="/(station)/support" label="Station support" />
         </>
       )}
-    </DashboardShell>
+    </MobileHome>
   );
 }
 
-function DashboardShell({ workspace, headline, subline, primary, utility, children }: {
+function MobileHome({ workspace, context, children }: {
   workspace: Workspace;
-  headline: string;
-  subline: string;
-  primary: { label: string; icon: IconType; href: string };
-  utility?: ReactNode;
+  context: string;
   children: ReactNode;
 }) {
   const session = useSession();
   const { palette } = useAppTheme();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const theme = roleTheme[workspace];
-  const Icon = primary.icon;
   const firstName = session.context?.profile?.display_name?.trim().split(/\s+/)[0];
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: palette.canvas }} contentContainerStyle={styles.page}>
-      <LinearGradient colors={[theme.start, theme.end]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.command, { paddingTop: Math.max(insets.top, 18) + 8 }]}>
-        <View style={styles.commandGlow} />
-        <View style={[styles.commandInner, { maxWidth: width >= 1024 ? 1120 : 780 }]}>
-          <View style={styles.topbar}>
-            <View style={styles.identity}><BrandMark compact inverse /><View><Text style={styles.role}>{theme.label} SPACE</Text><Text numberOfLines={1} style={styles.hello}>Hi{firstName ? `, ${firstName}` : ""}</Text></View></View>
-            <Pressable accessibilityLabel="Open notifications" onPress={() => router.push(`/${`(${workspace})`}/notifications` as never)} style={styles.glassButton}><Bell color="white" size={19} /></Pressable>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: palette.canvas }}
+      contentContainerStyle={[styles.page, { paddingTop: Math.max(insets.top, 12) }]}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={[styles.mobileFrame, { maxWidth: width >= 900 ? 760 : 640 }]}>
+        <View style={styles.appHeader}>
+          <View style={styles.identity}>
+            <BrandMark compact />
+            <View style={styles.identityCopy}>
+              <Text style={[styles.context, { color: palette.muted }]}>{context.toUpperCase()}</Text>
+              <Text numberOfLines={1} style={[styles.greeting, { color: palette.ink }]}>
+                {firstName ? `Hello, ${firstName}` : "Welcome to SKIMA"}
+              </Text>
+            </View>
           </View>
-          <View style={styles.commandBody}>
-            <View style={styles.commandCopy}><Text style={styles.headline}>{headline}</Text><Text style={styles.subline}>{subline}</Text></View>
-            {utility ? <View style={styles.utility}>{utility}</View> : null}
-          </View>
-          <Pressable onPress={() => router.push(primary.href as never)} style={styles.primaryCommand}>
-            <Icon color={theme.end} size={19} />
-            <Text style={[styles.primaryCommandText, { color: theme.end }]}>{primary.label}</Text>
-            <ChevronRight color={theme.end} size={18} />
+          <Pressable
+            accessibilityLabel="Open notifications"
+            onPress={() => router.push(`/${`(${workspace})`}/notifications` as never)}
+            style={[styles.notification, { backgroundColor: palette.surface, borderColor: palette.border }]}
+          >
+            <Bell color={palette.ink} size={19} />
+            <View style={styles.notificationDot} />
           </Pressable>
         </View>
-      </LinearGradient>
-      <View style={[styles.workspaceDock, { maxWidth: width >= 1024 ? 1120 : 780 }]}><WorkspaceSwitcher current={workspace} /></View>
-      <View style={[styles.content, { maxWidth: width >= 1024 ? 1120 : 780 }]}>{children}</View>
+
+        <View style={styles.workspaceSwitcher}>
+          <WorkspaceSwitcher current={workspace} />
+        </View>
+
+        <View style={styles.homeContent}>{children}</View>
+      </View>
     </ScrollView>
   );
 }
 
-function ActionRail({ actions }: { actions: readonly { label: string; hint: string; icon: IconType; href: string }[] }) {
+function CustomerLocation({ location }: { location?: PlatformRecord }) {
+  const { palette } = useAppTheme();
+  const title = location ? displayTitle(location) : "Choose a delivery location";
+  const detail = location
+    ? firstString(location, ["formatted_address", "formattedAddress", "address", "street_address", "streetAddress"])
+    : "We will use this for pickup and return";
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => router.push("/(customer)/locations")}
+      style={styles.locationRow}
+    >
+      <View style={[styles.locationIcon, { backgroundColor: palette.brandSoft }]}>
+        <MapPin color={colors.brand} size={19} />
+      </View>
+      <View style={styles.locationCopy}>
+        <Text style={[styles.locationLabel, { color: palette.muted }]}>DELIVERING TO</Text>
+        <Text numberOfLines={1} style={[styles.locationTitle, { color: palette.ink }]}>{title}</Text>
+        {detail && detail !== title ? (
+          <Text numberOfLines={1} style={[styles.locationDetail, { color: palette.muted }]}>{detail}</Text>
+        ) : null}
+      </View>
+      <Text style={styles.changeText}>Change</Text>
+    </Pressable>
+  );
+}
+
+function CustomerPrimaryAction({ eyebrow, title, body, label, href, icon: Icon }: {
+  eyebrow: string;
+  title: string;
+  body: string;
+  label: string;
+  href: string;
+  icon: IconType;
+}) {
+  return (
+    <Pressable onPress={() => router.push(href as never)} style={styles.customerAction}>
+      <LinearGradient
+        colors={["#F3283A", "#B40B1B"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.actionOrb} />
+      <View style={styles.customerActionCopy}>
+        <Text style={styles.customerActionEyebrow}>{eyebrow.toUpperCase()}</Text>
+        <Text style={styles.customerActionTitle}>{title}</Text>
+        <Text numberOfLines={2} style={styles.customerActionBody}>{body}</Text>
+        <View style={styles.customerActionButton}>
+          <Text style={styles.customerActionButtonText}>{label}</Text>
+          <ChevronRight color={colors.brandDark} size={17} strokeWidth={2.8} />
+        </View>
+      </View>
+      <View style={styles.customerActionIcon}>
+        <Icon color="white" size={31} strokeWidth={1.7} />
+      </View>
+    </Pressable>
+  );
+}
+
+function ActiveOrder({ record, href }: { record: PlatformRecord; href: string }) {
+  const { palette } = useAppTheme();
+  const status = displayStatus(record) ?? "active";
+  const progress = orderProgress(status);
+  const steps = ["Collected", "At station", "Returning", "Delivered"];
+
+  return (
+    <Pressable
+      onPress={() => router.push(href as never)}
+      style={[styles.activeOrder, { backgroundColor: palette.surface, borderColor: palette.border }]}
+    >
+      <View style={styles.activeOrderHead}>
+        <View>
+          <Text style={styles.liveEyebrow}>LIVE REFILL</Text>
+          <Text style={[styles.activeOrderTitle, { color: palette.ink }]}>{humanStatus(status)}</Text>
+        </View>
+        <View style={[styles.trackButton, { backgroundColor: palette.successSoft }]}>
+          <Navigation color={colors.success} size={17} />
+          <Text style={styles.trackButtonText}>Track</Text>
+        </View>
+      </View>
+      <View style={styles.progressRow}>
+        {steps.map((step, index) => {
+          const reached = index <= progress;
+          return (
+            <View key={step} style={styles.progressStep}>
+              <View style={styles.progressTop}>
+                {index > 0 ? <View style={[styles.progressLine, reached && styles.progressLineActive]} /> : <View style={styles.progressLineSpacer} />}
+                <View style={[styles.progressDot, reached && styles.progressDotActive]} />
+                {index < steps.length - 1 ? <View style={[styles.progressLine, index < progress && styles.progressLineActive]} /> : <View style={styles.progressLineSpacer} />}
+              </View>
+              <Text numberOfLines={1} style={[styles.progressLabel, { color: reached ? palette.ink : palette.muted }]}>{step}</Text>
+            </View>
+          );
+        })}
+      </View>
+    </Pressable>
+  );
+}
+
+function DriverCockpit({ record }: { record?: PlatformRecord }) {
+  const { palette } = useAppTheme();
+  const id = record ? recordId(record) : null;
+  if (!record || !id) {
+    return (
+      <View style={[styles.driverEmpty, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <View style={[styles.driverEmptyIcon, { backgroundColor: palette.successSoft }]}>
+          <Truck color={colors.success} size={27} />
+        </View>
+        <View style={styles.driverEmptyCopy}>
+          <Text style={[styles.driverEmptyTitle, { color: palette.ink }]}>You are clear for now.</Text>
+          <Text style={[styles.driverEmptyBody, { color: palette.muted }]}>Go online when you are ready for nearby delivery work.</Text>
+        </View>
+        <Pressable onPress={() => router.push("/(driver)/availability")} style={styles.goOnlineButton}>
+          <Text style={styles.goOnlineText}>Go online</Text>
+          <ChevronRight color="white" size={17} />
+        </Pressable>
+      </View>
+    );
+  }
+
+  const status = displayStatus(record) ?? "active";
+  const pickup = firstString(record, ["pickup_address", "pickupAddress", "customer_address", "customerAddress"])
+    ?? "Customer pickup";
+  const station = firstString(record, ["station_name", "stationName", "partner_name", "partnerName"])
+    ?? "Refill station";
+  const destination = firstString(record, ["delivery_address", "deliveryAddress", "dropoff_address", "dropoffAddress"])
+    ?? "Customer return";
+  const activeStop = driverRouteStep(status);
+
+  return (
+    <View style={styles.driverCockpit}>
+      <LinearGradient
+        colors={["#173D2D", "#0E1713"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={styles.driverCockpitHead}>
+        <View>
+          <Text style={styles.driverLive}>CURRENT ROUTE</Text>
+          <Text numberOfLines={1} style={styles.driverJobTitle}>{displayTitle(record)}</Text>
+        </View>
+        <View style={styles.driverStatusPill}>
+          <View style={styles.driverLiveDot} />
+          <Text numberOfLines={1} style={styles.driverStatusText}>{humanStatus(status)}</Text>
+        </View>
+      </View>
+
+      <View style={styles.routeMap}>
+        <RouteStop label="Pickup" value={pickup} active={activeStop === 0} complete={activeStop > 0} />
+        <RouteStop label="Refill" value={station} active={activeStop === 1} complete={activeStop > 1} />
+        <RouteStop label="Return" value={destination} active={activeStop === 2} complete={activeStop > 2} last />
+      </View>
+
+      <Pressable onPress={() => router.push(`/(driver)/job/${id}` as never)} style={styles.continueRoute}>
+        <Navigation color="#173D2D" size={18} />
+        <Text style={styles.continueRouteText}>Continue this job</Text>
+        <ChevronRight color="#173D2D" size={18} />
+      </Pressable>
+    </View>
+  );
+}
+
+function RouteStop({ label, value, active, complete, last = false }: {
+  label: string;
+  value: string;
+  active: boolean;
+  complete: boolean;
+  last?: boolean;
+}) {
+  return (
+    <View style={styles.routeStop}>
+      <View style={styles.routeMarkerColumn}>
+        <View style={[styles.routeMarker, (active || complete) && styles.routeMarkerActive]}>
+          {complete ? <CircleCheck color="white" size={12} /> : <View style={[styles.routeMarkerCore, active && styles.routeMarkerCoreActive]} />}
+        </View>
+        {!last ? <View style={[styles.routeConnector, complete && styles.routeConnectorActive]} /> : null}
+      </View>
+      <View style={styles.routeCopy}>
+        <Text style={styles.routeLabel}>{label.toUpperCase()}</Text>
+        <Text numberOfLines={1} style={[styles.routeValue, active && styles.routeValueActive]}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
+function OperationalAction({ icon: Icon, label, hint, href }: {
+  icon: IconType;
+  label: string;
+  hint: string;
+  href: string;
+}) {
   const { palette } = useAppTheme();
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.actionRail}>
-      {actions.map(({ label, hint, icon: Icon, href }, index) => (
-        <Pressable key={label} onPress={() => router.push(href as never)} style={[styles.actionTile, { backgroundColor: palette.surface }, index === 0 && styles.actionTilePrimary]}>
-          <View style={[styles.actionIcon, { backgroundColor: index === 0 ? "rgba(255,255,255,.18)" : palette.brandSoft }]}><Icon color={index === 0 ? "white" : colors.brand} size={21} /></View>
-          <Text style={[styles.actionLabel, { color: index === 0 ? "white" : palette.ink }]}>{label}</Text>
-          <Text numberOfLines={1} style={[styles.actionHint, { color: index === 0 ? "rgba(255,255,255,.72)" : palette.muted }]}>{hint}</Text>
-        </Pressable>
-      ))}
-    </ScrollView>
+    <Pressable onPress={() => router.push(href as never)} style={[styles.operationalAction, { borderColor: palette.border }]}>
+      <View style={[styles.operationalIcon, { backgroundColor: palette.successSoft }]}>
+        <Icon color={colors.success} size={19} />
+      </View>
+      <View style={styles.operationalCopy}>
+        <Text style={[styles.operationalLabel, { color: palette.ink }]}>{label}</Text>
+        <Text numberOfLines={1} style={[styles.operationalHint, { color: palette.muted }]}>{hint}</Text>
+      </View>
+      <ChevronRight color={palette.muted} size={17} />
+    </Pressable>
   );
 }
 
-function StatusRail({ items }: { items: readonly { label: string; value: string }[] }) {
+function MetricLink({ label, value, href }: { label: string; value: string; href: string }) {
   const { palette } = useAppTheme();
-  return <View style={[styles.statusRail, { backgroundColor: palette.surface }]}>{items.map((item, index) => <View key={item.label} style={[styles.statusItem, index > 0 && { borderLeftColor: palette.border, borderLeftWidth: 1 }]}><Text style={[styles.statusValue, { color: palette.ink }]}>{item.value}</Text><Text style={[styles.statusLabel, { color: palette.muted }]}>{item.label}</Text></View>)}</View>;
+  return (
+    <Pressable onPress={() => router.push(href as never)} style={styles.metricLink}>
+      <Text style={[styles.metricLabel, { color: palette.muted }]}>{label}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.metricValue, { color: palette.ink }]}>{value}</Text>
+    </Pressable>
+  );
 }
 
-function CompactSection({ title, action, href, children }: { title: string; action: string; href: string; children: ReactNode }) {
+function StationAction({ primary = false, icon: Icon, step, title, body, href }: {
+  primary?: boolean;
+  icon: IconType;
+  step: string;
+  title: string;
+  body: string;
+  href: string;
+}) {
   const { palette } = useAppTheme();
-  return <View style={styles.section}><View style={styles.sectionHead}><Text style={[styles.sectionTitle, { color: palette.ink }]}>{title}</Text><Pressable onPress={() => router.push(href as never)} style={styles.sectionAction}><Text style={styles.sectionActionText}>{action}</Text><ChevronRight color={colors.brand} size={15} /></Pressable></View>{children}</View>;
+  return (
+    <Pressable
+      onPress={() => router.push(href as never)}
+      style={[
+        styles.stationAction,
+        { backgroundColor: primary ? colors.brand : palette.surface, borderColor: primary ? colors.brand : palette.border },
+      ]}
+    >
+      <View style={styles.stationActionTop}>
+        <Text style={[styles.stationStep, { color: primary ? "rgba(255,255,255,.65)" : palette.muted }]}>{step}</Text>
+        <View style={[styles.stationActionIcon, { backgroundColor: primary ? "rgba(255,255,255,.16)" : palette.brandSoft }]}>
+          <Icon color={primary ? "white" : colors.brand} size={22} />
+        </View>
+      </View>
+      <View style={styles.stationActionCopy}>
+        <Text style={[styles.stationActionTitle, { color: primary ? "white" : palette.ink }]}>{title}</Text>
+        <Text style={[styles.stationActionBody, { color: primary ? "rgba(255,255,255,.72)" : palette.muted }]}>{body}</Text>
+      </View>
+      <View style={[styles.stationActionArrow, { backgroundColor: primary ? "white" : palette.soft }]}>
+        <ChevronRight color={primary ? colors.brand : palette.ink} size={17} />
+      </View>
+    </Pressable>
+  );
 }
 
-function GroupedRecords({ records, empty, detailBase, icon: Icon }: { records: PlatformRecord[]; empty: string; detailBase: string; icon: IconType }) {
+function ReceptionMetric({ value, label }: { value: number; label: string }) {
   const { palette } = useAppTheme();
-  if (!records.length) return <View style={[styles.group, styles.emptyGroup, { backgroundColor: palette.surface }]}><Icon color={colors.brand} size={24} /><Text style={[styles.emptyText, { color: palette.muted }]}>{empty}</Text></View>;
-  return <View style={[styles.group, { backgroundColor: palette.surface }]}>{records.slice(0, 4).map((record, index) => { const id = recordId(record) ?? String(index); return <Pressable key={id} onPress={() => router.push(`${detailBase}/${id}` as never)} style={[styles.recordRow, index > 0 && { borderTopColor: palette.border, borderTopWidth: StyleSheet.hairlineWidth }]}><View style={[styles.recordIcon, { backgroundColor: palette.soft }]}><Icon color={colors.brand} size={19} /></View><View style={styles.recordCopy}><Text numberOfLines={1} style={[styles.recordTitle, { color: palette.ink }]}>{displayTitle(record)}</Text><Text numberOfLines={1} style={[styles.recordMeta, { color: palette.muted }]}>{humanStatus(displayStatus(record) ?? displaySubtitle(record) ?? "available")}</Text></View><ChevronRight color={palette.muted} size={18} /></Pressable>; })}</View>;
+  return (
+    <View style={styles.receptionMetric}>
+      <Text style={[styles.receptionMetricValue, { color: palette.ink }]}>{value}</Text>
+      <Text style={[styles.receptionMetricLabel, { color: palette.muted }]}>{label}</Text>
+    </View>
+  );
 }
 
-function LiveOperation({ record, href, label = "LIVE ORDER" }: { record: PlatformRecord; href: string; label?: string }) {
+function ReceptionQueue({ records }: { records: PlatformRecord[] }) {
   const { palette } = useAppTheme();
-  return <Pressable onPress={() => router.push(href as never)} style={[styles.live, { backgroundColor: palette.successSoft }]}><View style={styles.pulse}><View style={styles.pulseCore} /></View><View style={styles.recordCopy}><Text style={styles.liveLabel}>{label}</Text><Text numberOfLines={1} style={[styles.recordTitle, { color: palette.ink }]}>{displayTitle(record)}</Text><Text numberOfLines={1} style={[styles.recordMeta, { color: palette.muted }]}>{humanStatus(displayStatus(record) ?? "in progress")}</Text></View><View style={styles.liveOpen}><Navigation color={colors.success} size={18} /></View></Pressable>;
+  if (!records.length) {
+    return (
+      <View style={styles.queueEmpty}>
+        <View style={[styles.queueEmptyIcon, { backgroundColor: palette.successSoft }]}>
+          <ShieldCheck color={colors.success} size={23} />
+        </View>
+        <View style={styles.recordCopy}>
+          <Text style={[styles.recordTitle, { color: palette.ink }]}>Reception is clear</Text>
+          <Text style={[styles.recordMeta, { color: palette.muted }]}>New assigned arrivals will appear here.</Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      {records.slice(0, 5).map((record, index) => {
+        const id = recordId(record) ?? String(index);
+        const status = humanStatus(displayStatus(record) ?? "pending");
+        return (
+          <Pressable
+            key={id}
+            onPress={() => router.push(`/(station)/job/${id}` as never)}
+            style={[styles.queueRow, index > 0 && { borderTopColor: palette.border, borderTopWidth: StyleSheet.hairlineWidth }]}
+          >
+            <View style={[styles.queueSequence, { backgroundColor: palette.soft }]}>
+              <Text style={[styles.queueSequenceText, { color: palette.ink }]}>{String(index + 1).padStart(2, "0")}</Text>
+            </View>
+            <View style={styles.recordCopy}>
+              <Text numberOfLines={1} style={[styles.recordTitle, { color: palette.ink }]}>{displayTitle(record)}</Text>
+              <Text numberOfLines={1} style={[styles.recordMeta, { color: palette.muted }]}>{displaySubtitle(record) ?? "Assigned refill"}</Text>
+            </View>
+            <View style={[styles.queueStatus, { backgroundColor: palette.warningSoft }]}>
+              <Text numberOfLines={1} style={styles.queueStatusText}>{status}</Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 }
 
-function HeaderMetric({ label, value }: { label: string; value: string }) {
-  return <View><Text style={styles.headerMetricLabel}>{label}</Text><Text numberOfLines={1} adjustsFontSizeToFit style={styles.headerMetricValue}>{value}</Text></View>;
+function HomeSection({ title, action, href, children }: {
+  title: string;
+  action: string;
+  href: string;
+  children: ReactNode;
+}) {
+  const { palette } = useAppTheme();
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHead}>
+        <Text style={[styles.sectionTitle, { color: palette.ink }]}>{title}</Text>
+        <Pressable onPress={() => router.push(href as never)} style={styles.sectionAction}>
+          <Text style={styles.sectionActionText}>{action}</Text>
+          <ChevronRight color={colors.brand} size={15} />
+        </Pressable>
+      </View>
+      {children}
+    </View>
+  );
 }
 
-function FinanceBar({ label, value, href }: { label: string; value: string; href: string }) {
+function NaturalRecords({ records, empty, detailBase, icon: Icon, limit = 4 }: {
+  records: PlatformRecord[];
+  empty: string;
+  detailBase: string;
+  icon: IconType;
+  limit?: number;
+}) {
   const { palette } = useAppTheme();
-  return <Pressable onPress={() => router.push(href as never)} style={[styles.finance, { borderColor: palette.border }]}><View><Text style={[styles.financeLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.financeValue, { color: palette.ink }]}>{value}</Text></View><View style={[styles.financeIcon, { backgroundColor: palette.brandSoft }]}><WalletCards color={colors.brand} size={20} /></View></Pressable>;
+  if (!records.length) {
+    return (
+      <View style={styles.naturalEmpty}>
+        <View style={[styles.recordIcon, { backgroundColor: palette.soft }]}>
+          <Icon color={colors.brand} size={19} />
+        </View>
+        <Text style={[styles.emptyText, { color: palette.muted }]}>{empty}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      {records.slice(0, limit).map((record, index) => {
+        const id = recordId(record) ?? String(index);
+        return (
+          <Pressable
+            key={id}
+            onPress={() => router.push(`${detailBase}/${id}` as never)}
+            style={[styles.recordRow, index > 0 && { borderTopColor: palette.border, borderTopWidth: StyleSheet.hairlineWidth }]}
+          >
+            <View style={[styles.recordIcon, { backgroundColor: palette.soft }]}>
+              <Icon color={colors.brand} size={19} />
+            </View>
+            <View style={styles.recordCopy}>
+              <Text numberOfLines={1} style={[styles.recordTitle, { color: palette.ink }]}>{displayTitle(record)}</Text>
+              <Text numberOfLines={1} style={[styles.recordMeta, { color: palette.muted }]}>
+                {humanStatus(displayStatus(record) ?? displaySubtitle(record) ?? "available")}
+              </Text>
+            </View>
+            <ChevronRight color={palette.muted} size={18} />
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 }
 
-function SupportLine({ href }: { href: string }) {
+function UtilityLink({ icon: Icon, label, value, href }: {
+  icon: IconType;
+  label: string;
+  value: string;
+  href: string;
+}) {
   const { palette } = useAppTheme();
-  return <Pressable onPress={() => router.push(href as never)} style={styles.support}><CircleHelp color={palette.muted} size={19} /><Text style={[styles.supportText, { color: palette.muted }]}>Need operational help?</Text><Text style={styles.supportLink}>Open support</Text></Pressable>;
+  return (
+    <Pressable onPress={() => router.push(href as never)} style={[styles.utilityLink, { borderColor: palette.border }]}>
+      <View style={[styles.utilityIcon, { backgroundColor: palette.soft }]}>
+        <Icon color={colors.brand} size={19} />
+      </View>
+      <View style={styles.recordCopy}>
+        <Text style={[styles.utilityLabel, { color: palette.muted }]}>{label}</Text>
+        <Text numberOfLines={1} style={[styles.utilityValue, { color: palette.ink }]}>{value}</Text>
+      </View>
+      <ChevronRight color={palette.muted} size={17} />
+    </Pressable>
+  );
+}
+
+function SupportLine({ href, label }: { href: string; label: string }) {
+  const { palette } = useAppTheme();
+  return (
+    <Pressable onPress={() => router.push(href as never)} style={styles.support}>
+      <CircleHelp color={palette.muted} size={18} />
+      <Text style={[styles.supportText, { color: palette.muted }]}>Need help on the job?</Text>
+      <Text style={styles.supportLink}>{label}</Text>
+    </Pressable>
+  );
 }
 
 function LoadError({ onRetry }: { onRetry(): void }) {
   const { palette } = useAppTheme();
-  return <View style={[styles.error, { backgroundColor: palette.surface }]}><CircleHelp color={colors.brand} size={26} /><View style={styles.recordCopy}><Text style={[styles.recordTitle, { color: palette.ink }]}>This view needs a refresh</Text><Text style={[styles.recordMeta, { color: palette.muted }]}>Your saved information is safe.</Text></View><Pressable onPress={onRetry}><Text style={styles.supportLink}>Try again</Text></Pressable></View>;
+  return (
+    <View style={[styles.error, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      <CircleHelp color={colors.brand} size={24} />
+      <View style={styles.recordCopy}>
+        <Text style={[styles.recordTitle, { color: palette.ink }]}>We could not refresh this screen</Text>
+        <Text style={[styles.recordMeta, { color: palette.muted }]}>Your saved information is safe.</Text>
+      </View>
+      <Pressable onPress={onRetry}><Text style={styles.supportLink}>Try again</Text></Pressable>
+    </View>
+  );
 }
 
 function formatMoney(value: number, currency: string) {
-  try { return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 0 }).format(value); }
-  catch { return `${currency} ${value.toFixed(0)}`; }
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(0)}`;
+  }
+}
+
+function orderProgress(value: string) {
+  const key = normalizedStatus(value);
+  if (["delivered", "completed"].includes(key)) return 3;
+  if (["return_en_route", "delivery_verification_pending"].includes(key)) return 2;
+  if (["station_en_route", "station_verified", "refill_in_progress", "refill_confirmed"].includes(key)) return 1;
+  if (["pickup_verified"].includes(key)) return 0;
+  return -1;
+}
+
+function driverRouteStep(value: string) {
+  const key = normalizedStatus(value);
+  if (["delivered", "completed"].includes(key)) return 3;
+  if (["return_en_route", "delivery_verification_pending"].includes(key)) return 2;
+  if (["station_en_route", "station_verified", "refill_in_progress", "refill_confirmed"].includes(key)) return 1;
+  return 0;
+}
+
+function isWaitingAtStation(value?: string | null) {
+  return ["driver_accepted", "pickup_en_route", "pickup_verified", "station_en_route"].includes(normalizedStatus(value ?? ""));
+}
+
+function isStationProcessing(value?: string | null) {
+  return ["station_verified", "refill_in_progress", "refill_confirmed"].includes(normalizedStatus(value ?? ""));
+}
+
+function normalizedStatus(value: string) {
+  return value.toLowerCase().replace(/[\s-]+/g, "_");
 }
 
 function humanStatus(value: string) {
-  const key = value.toLowerCase().replace(/[\s-]+/g, "_");
+  const key = normalizedStatus(value);
   const labels: Record<string, string> = {
-    active: "Ready", available: "Ready", pending: "In progress", awaiting_payment: "Awaiting payment",
-    payment_reserved: "Payment confirmed", matching_station: "Finding station", matching_driver: "Finding driver",
-    driver_offered: "Driver notified", driver_accepted: "Driver assigned", pickup_en_route: "Heading to pickup",
-    pickup_verified: "Cylinder collected", station_en_route: "Heading to station", station_verified: "At station",
-    refill_in_progress: "Refill underway", refill_confirmed: "Refill complete", return_en_route: "Returning to customer",
-    delivery_verification_pending: "Ready for handover", delivered: "Delivered", completed: "Completed", cancelled: "Cancelled",
+    active: "Ready",
+    available: "Ready",
+    pending: "In progress",
+    awaiting_payment: "Awaiting payment",
+    payment_reserved: "Payment confirmed",
+    matching_station: "Finding a station",
+    matching_driver: "Finding a driver",
+    driver_offered: "Driver notified",
+    driver_accepted: "Driver assigned",
+    pickup_en_route: "Heading to pickup",
+    pickup_verified: "Cylinder collected",
+    station_en_route: "Heading to station",
+    station_verified: "At the refill station",
+    refill_in_progress: "Refill underway",
+    refill_confirmed: "Refill complete",
+    return_en_route: "Returning to you",
+    delivery_verification_pending: "Ready for handover",
+    delivered: "Delivered",
+    completed: "Completed",
+    cancelled: "Cancelled",
   };
   return labels[key] ?? key.replace(/_/g, " ").replace(/^./, (char) => char.toUpperCase());
 }
 
 const styles = StyleSheet.create({
-  page: { paddingBottom: 112 },
-  command: { minHeight: 292, overflow: "hidden", paddingHorizontal: 18, paddingBottom: 34 },
-  commandGlow: { position: "absolute", width: 280, height: 280, borderRadius: 140, right: -110, top: -100, backgroundColor: "rgba(255,255,255,.10)" },
-  commandInner: { width: "100%", alignSelf: "center", gap: 17 },
-  topbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  identity: { flexDirection: "row", alignItems: "center", gap: 11 },
-  role: { color: "rgba(255,255,255,.64)", fontSize: 9, fontWeight: "900", letterSpacing: 1.4 },
-  hello: { maxWidth: 190, color: "white", fontSize: 17, fontWeight: "900", marginTop: 2 },
-  glassButton: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20, backgroundColor: "rgba(255,255,255,.14)" },
-  commandBody: { minHeight: 80, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: spacing.md },
-  commandCopy: { flex: 1, maxWidth: 520, gap: 5 },
-  headline: { color: "white", fontSize: 26, lineHeight: 30, fontWeight: "900", letterSpacing: -.65 },
-  subline: { color: "rgba(255,255,255,.72)", fontSize: 13, lineHeight: 18, maxWidth: 470 },
-  utility: { maxWidth: "44%" },
-  glassLine: { maxWidth: 280, minHeight: 42, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, borderRadius: 13, backgroundColor: "rgba(255,255,255,.12)" },
-  glassText: { flex: 1, color: "white", fontSize: 12, fontWeight: "800" },
-  primaryCommand: { alignSelf: "flex-start", minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, borderRadius: 14, backgroundColor: "white" },
-  primaryCommandText: { fontSize: 14, fontWeight: "900" },
-  headerMetricLabel: { color: "rgba(255,255,255,.55)", fontSize: 9, fontWeight: "900", textAlign: "right", letterSpacing: 1 },
-  headerMetricValue: { maxWidth: 190, color: "white", fontSize: 24, fontWeight: "900", textAlign: "right", marginTop: 3 },
-  workspaceDock: { width: "100%", alignSelf: "center", marginTop: -20, paddingHorizontal: 18, zIndex: 2 },
-  content: { width: "100%", alignSelf: "center", gap: 22, paddingHorizontal: 18, paddingTop: 18 },
-  actionRail: { gap: 10, paddingRight: 18 },
-  actionTile: { width: 142, minHeight: 116, justifyContent: "space-between", padding: 14, borderRadius: 20 },
-  actionTilePrimary: { backgroundColor: colors.brand },
-  actionIcon: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 12 },
-  actionLabel: { fontSize: 14, fontWeight: "900" },
-  actionHint: { fontSize: 11, fontWeight: "600" },
-  statusRail: { minHeight: 76, flexDirection: "row", alignItems: "center", borderRadius: 20, paddingVertical: 8 },
-  statusItem: { flex: 1, alignItems: "center", gap: 3, paddingHorizontal: 8 },
-  statusValue: { fontSize: 20, fontWeight: "900" },
-  statusLabel: { fontSize: 10, fontWeight: "700", textAlign: "center" },
-  section: { gap: 11 },
+  page: { flexGrow: 1, paddingBottom: 112 },
+  mobileFrame: { width: "100%", alignSelf: "center", paddingHorizontal: 18 },
+  appHeader: { minHeight: 58, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  identity: { flex: 1, flexDirection: "row", alignItems: "center", gap: 11 },
+  identityCopy: { flex: 1, gap: 2 },
+  context: { fontSize: 8, fontWeight: "900", letterSpacing: 1.25 },
+  greeting: { fontSize: 18, lineHeight: 22, fontWeight: "900", letterSpacing: -0.35 },
+  notification: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, borderWidth: StyleSheet.hairlineWidth },
+  notificationDot: { position: "absolute", top: 9, right: 9, width: 6, height: 6, borderRadius: 3, backgroundColor: colors.brand },
+  workspaceSwitcher: { minHeight: 8, marginTop: 9 },
+  homeContent: { gap: 22, paddingTop: 18 },
+
+  locationRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 11 },
+  locationIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 14 },
+  locationCopy: { flex: 1, gap: 1 },
+  locationLabel: { fontSize: 8, fontWeight: "900", letterSpacing: 1.1 },
+  locationTitle: { fontSize: 14, lineHeight: 18, fontWeight: "900" },
+  locationDetail: { fontSize: 10, lineHeight: 14 },
+  changeText: { color: colors.brand, fontSize: 11, fontWeight: "900" },
+
+  customerAction: { minHeight: 184, overflow: "hidden", flexDirection: "row", alignItems: "center", padding: 19, borderRadius: 28 },
+  actionOrb: { position: "absolute", width: 190, height: 190, right: -78, top: -82, borderRadius: 95, backgroundColor: "rgba(255,255,255,.09)" },
+  customerActionCopy: { flex: 1, alignItems: "flex-start", gap: 5, zIndex: 1 },
+  customerActionEyebrow: { color: "rgba(255,255,255,.68)", fontSize: 8, fontWeight: "900", letterSpacing: 1.1 },
+  customerActionTitle: { color: "white", fontSize: 25, lineHeight: 29, fontWeight: "900", letterSpacing: -0.65 },
+  customerActionBody: { maxWidth: 310, color: "rgba(255,255,255,.76)", fontSize: 12, lineHeight: 17 },
+  customerActionButton: { minHeight: 38, flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8, paddingHorizontal: 13, borderRadius: 13, backgroundColor: "white" },
+  customerActionButtonText: { color: colors.brandDark, fontSize: 12, fontWeight: "900" },
+  customerActionIcon: { width: 64, height: 64, alignItems: "center", justifyContent: "center", marginLeft: 8, borderRadius: 32, backgroundColor: "rgba(255,255,255,.14)" },
+
+  activeOrder: { minHeight: 132, gap: 17, padding: 16, borderRadius: 22, borderWidth: StyleSheet.hairlineWidth },
+  activeOrderHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  liveEyebrow: { color: colors.success, fontSize: 8, fontWeight: "900", letterSpacing: 1.2 },
+  activeOrderTitle: { fontSize: 18, lineHeight: 23, fontWeight: "900", marginTop: 3 },
+  trackButton: { minHeight: 36, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 11, borderRadius: 12 },
+  trackButtonText: { color: colors.success, fontSize: 11, fontWeight: "900" },
+  progressRow: { flexDirection: "row", alignItems: "flex-start" },
+  progressStep: { flex: 1, alignItems: "center", gap: 6 },
+  progressTop: { width: "100%", flexDirection: "row", alignItems: "center" },
+  progressLine: { flex: 1, height: 2, backgroundColor: "#DDE5DF" },
+  progressLineActive: { backgroundColor: colors.success },
+  progressLineSpacer: { flex: 1, height: 2, backgroundColor: "transparent" },
+  progressDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: "#DDE5DF" },
+  progressDotActive: { backgroundColor: colors.success },
+  progressLabel: { maxWidth: 70, fontSize: 8, fontWeight: "800", textAlign: "center" },
+
+  section: { gap: 9 },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  sectionTitle: { fontSize: 19, fontWeight: "900", letterSpacing: -.3 },
-  sectionAction: { flexDirection: "row", alignItems: "center", gap: 2 },
-  sectionActionText: { color: colors.brand, fontSize: 12, fontWeight: "900" },
-  group: { overflow: "hidden", borderRadius: 20 },
-  emptyGroup: { minHeight: 90, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 18 },
-  emptyText: { flex: 1, fontSize: 13, lineHeight: 18 },
-  recordRow: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14 },
+  sectionTitle: { fontSize: 19, lineHeight: 24, fontWeight: "900", letterSpacing: -0.35 },
+  sectionAction: { flexDirection: "row", alignItems: "center", gap: 2, minHeight: 32 },
+  sectionActionText: { color: colors.brand, fontSize: 11, fontWeight: "900" },
+  naturalEmpty: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 11 },
+  emptyText: { flex: 1, fontSize: 12, lineHeight: 17 },
+  recordRow: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 11 },
   recordIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 13 },
   recordCopy: { flex: 1, gap: 3 },
-  recordTitle: { fontSize: 14, fontWeight: "900" },
-  recordMeta: { fontSize: 12, lineHeight: 16 },
-  live: { minHeight: 88, flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 20 },
-  pulse: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 17, backgroundColor: "rgba(18,148,71,.13)" },
-  pulseCore: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.success },
-  liveLabel: { color: colors.success, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
-  liveOpen: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: "rgba(18,148,71,.12)" },
-  finance: { minHeight: 72, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 12 },
-  financeLabel: { fontSize: 11, fontWeight: "700" },
-  financeValue: { fontSize: 21, fontWeight: "900", marginTop: 2 },
-  financeIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14 },
-  support: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 8 },
-  supportText: { flex: 1, fontSize: 12 },
-  supportLink: { color: colors.brand, fontSize: 12, fontWeight: "900" },
-  error: { minHeight: 88, flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 20 },
+  recordTitle: { fontSize: 13, lineHeight: 17, fontWeight: "900" },
+  recordMeta: { fontSize: 11, lineHeight: 15 },
+  customerUtilities: { gap: 0 },
+  utilityLink: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: 11, borderTopWidth: StyleSheet.hairlineWidth },
+  utilityIcon: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 13 },
+  utilityLabel: { fontSize: 9, fontWeight: "800" },
+  utilityValue: { fontSize: 13, fontWeight: "900", marginTop: 1 },
+
+  driverCockpit: { minHeight: 344, overflow: "hidden", gap: 19, padding: 18, borderRadius: 28 },
+  driverCockpitHead: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10 },
+  driverLive: { color: "rgba(255,255,255,.55)", fontSize: 8, fontWeight: "900", letterSpacing: 1.2 },
+  driverJobTitle: { maxWidth: 235, color: "white", fontSize: 20, lineHeight: 25, fontWeight: "900", marginTop: 4 },
+  driverStatusPill: { maxWidth: 138, minHeight: 30, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 9, borderRadius: 15, backgroundColor: "rgba(255,255,255,.10)" },
+  driverLiveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#5BE28D" },
+  driverStatusText: { flexShrink: 1, color: "white", fontSize: 9, fontWeight: "900" },
+  routeMap: { flex: 1, paddingHorizontal: 2 },
+  routeStop: { minHeight: 62, flexDirection: "row", gap: 12 },
+  routeMarkerColumn: { width: 20, alignItems: "center" },
+  routeMarker: { width: 18, height: 18, alignItems: "center", justifyContent: "center", borderRadius: 9, borderWidth: 1, borderColor: "rgba(255,255,255,.26)" },
+  routeMarkerActive: { borderColor: "#5BE28D", backgroundColor: "#2A8E51" },
+  routeMarkerCore: { width: 5, height: 5, borderRadius: 3, backgroundColor: "rgba(255,255,255,.32)" },
+  routeMarkerCoreActive: { backgroundColor: "white" },
+  routeConnector: { flex: 1, width: 1, backgroundColor: "rgba(255,255,255,.20)" },
+  routeConnectorActive: { backgroundColor: "#2A8E51" },
+  routeCopy: { flex: 1, gap: 2, paddingBottom: 15 },
+  routeLabel: { color: "rgba(255,255,255,.46)", fontSize: 8, fontWeight: "900", letterSpacing: 1 },
+  routeValue: { color: "rgba(255,255,255,.66)", fontSize: 13, fontWeight: "800" },
+  routeValueActive: { color: "white" },
+  continueRoute: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, borderRadius: 14, backgroundColor: "white" },
+  continueRouteText: { flex: 1, color: "#173D2D", fontSize: 12, fontWeight: "900" },
+  driverEmpty: { minHeight: 224, alignItems: "flex-start", gap: 13, padding: 19, borderRadius: 26, borderWidth: StyleSheet.hairlineWidth },
+  driverEmptyIcon: { width: 50, height: 50, alignItems: "center", justifyContent: "center", borderRadius: 18 },
+  driverEmptyCopy: { gap: 5 },
+  driverEmptyTitle: { fontSize: 22, lineHeight: 27, fontWeight: "900", letterSpacing: -0.45 },
+  driverEmptyBody: { maxWidth: 340, fontSize: 12, lineHeight: 18 },
+  goOnlineButton: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, borderRadius: 14, backgroundColor: colors.success },
+  goOnlineText: { color: "white", fontSize: 12, fontWeight: "900" },
+  driverActions: { gap: 0 },
+  operationalAction: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 11, borderBottomWidth: StyleSheet.hairlineWidth },
+  operationalIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 14 },
+  operationalCopy: { flex: 1, gap: 2 },
+  operationalLabel: { fontSize: 13, fontWeight: "900" },
+  operationalHint: { fontSize: 10 },
+  driverMetrics: { minHeight: 70, flexDirection: "row", alignItems: "stretch" },
+  metricLink: { flex: 1, justifyContent: "center", gap: 3 },
+  metricDivider: { width: StyleSheet.hairlineWidth, marginHorizontal: 16 },
+  metricLabel: { fontSize: 9, fontWeight: "800" },
+  metricValue: { fontSize: 17, fontWeight: "900" },
+
+  receptionHeading: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 12 },
+  receptionEyebrow: { color: colors.brand, fontSize: 8, fontWeight: "900", letterSpacing: 1.2 },
+  receptionTitle: { maxWidth: 280, fontSize: 23, lineHeight: 28, fontWeight: "900", letterSpacing: -0.55, marginTop: 5 },
+  queueCount: { alignItems: "flex-end" },
+  queueNumber: { color: colors.brand, fontSize: 27, lineHeight: 29, fontWeight: "900" },
+  queueLabel: { fontSize: 9, fontWeight: "800" },
+  stationActions: { flexDirection: "row", alignItems: "stretch", gap: 10 },
+  stationAction: { flex: 1, minHeight: 210, justifyContent: "space-between", padding: 14, borderRadius: 23, borderWidth: StyleSheet.hairlineWidth },
+  stationActionTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  stationStep: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  stationActionIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 14 },
+  stationActionCopy: { gap: 5 },
+  stationActionTitle: { fontSize: 17, lineHeight: 21, fontWeight: "900", letterSpacing: -0.3 },
+  stationActionBody: { fontSize: 10, lineHeight: 15 },
+  stationActionArrow: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 12 },
+  receptionStatus: { minHeight: 62, flexDirection: "row", alignItems: "center" },
+  receptionMetric: { flex: 1, gap: 2 },
+  receptionMetricValue: { fontSize: 19, fontWeight: "900" },
+  receptionMetricLabel: { fontSize: 9, fontWeight: "800" },
+  queueEmpty: { minHeight: 70, flexDirection: "row", alignItems: "center", gap: 11 },
+  queueEmptyIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14 },
+  queueRow: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 11 },
+  queueSequence: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 12 },
+  queueSequenceText: { fontSize: 11, fontWeight: "900" },
+  queueStatus: { maxWidth: 112, minHeight: 27, justifyContent: "center", paddingHorizontal: 8, borderRadius: 10 },
+  queueStatusText: { color: "#9A6412", fontSize: 8, fontWeight: "900" },
+
+  support: { minHeight: 46, flexDirection: "row", alignItems: "center", gap: 8 },
+  supportText: { flex: 1, fontSize: 11 },
+  supportLink: { color: colors.brand, fontSize: 11, fontWeight: "900" },
+  error: { minHeight: 82, flexDirection: "row", alignItems: "center", gap: 11, padding: 14, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth },
 });

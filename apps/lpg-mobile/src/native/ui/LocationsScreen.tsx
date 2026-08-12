@@ -22,10 +22,17 @@ import { ScreenSkeleton } from "./ScreenSkeleton";
 
 const AddressSchema = z.object({
   name: z.string().nullable().optional(),
+  landmark: z.string().nullable().optional(),
+  premise: z.string().nullable().optional(),
   street: z.string().nullable().optional(),
+  route: z.string().nullable().optional(),
+  streetNumber: z.string().nullable().optional(),
   district: z.string().nullable().optional(),
+  locality: z.string().nullable().optional(),
+  subLocality: z.string().nullable().optional(),
   city: z.string().nullable().optional(),
   region: z.string().nullable().optional(),
+  state: z.string().nullable().optional(),
   postalCode: z.string().nullable().optional(),
   country: z.string().nullable().optional(),
   countryCode: z.string().nullable().optional(),
@@ -50,19 +57,28 @@ export function LocationsScreen() {
   const locations = domainQueries.locations();
   const [label, setLabel] = useState("");
   const [selected, setSelected] = useState<OperationalLocation | null>(null);
-  const [detecting, setDetecting] = useState(true);
+  const [detecting, setDetecting] = useState(false);
+  const [permissionContext, setPermissionContext] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [search, setSearch] = useState("");
   const [predictions, setPredictions] = useState<Record<string, unknown>[]>([]);
   const [manualAddress, setManualAddress] = useState("");
+  const [landmark, setLandmark] = useState("");
   const [manualLatitude, setManualLatitude] = useState("");
   const [manualLongitude, setManualLongitude] = useState("");
   const [showManual, setShowManual] = useState(false);
+  const [showCoordinates, setShowCoordinates] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeSuccess, setNoticeSuccess] = useState(false);
   const mutation = useGatewayMutation({ path: "/lpg/locations", schema: ActionResponseSchema, invalidate: [["locations"]] });
   const reverseLookup = useGatewayMutation({ path: "/lpg/maps/reverse-geocode", schema: MapLookupSchema });
   const geocode = useGatewayMutation({ path: "/lpg/maps/geocode", schema: MapLookupSchema });
   const autocomplete = useGatewayMutation({ path: "/lpg/maps/autocomplete", schema: AutocompleteSchema });
+
+  const showNotice = (message: string, success = false) => {
+    setNotice(message);
+    setNoticeSuccess(success);
+  };
 
   const enrich = async (point: OperationalLocation) => {
     try {
@@ -71,86 +87,82 @@ export function LocationsScreen() {
         longitude: point.longitude,
         idempotencyKey: idempotencyKey("reverse-location", `${point.latitude.toFixed(5)}:${point.longitude.toFixed(5)}`),
       });
-      if (result.provider !== "google_maps" || !result.formattedAddress) return point;
+      const resolved = normalizeAddress(result.addressComponents);
+      const formattedAddress = clean(result.formattedAddress) ?? point.formattedAddress;
+      if (!formattedAddress && !hasAddress(resolved)) return point;
       return {
         ...point,
-        formattedAddress: result.formattedAddress,
-        providerPlaceId: result.placeId ?? null,
+        formattedAddress: formattedAddress || "Selected map location",
+        providerPlaceId: result.placeId ?? point.providerPlaceId ?? null,
         providerSource: "maps_adapter" as const,
-        address: normalizeAddress(result.addressComponents),
+        address: mergeAddress(resolved, point.address),
       };
     } catch {
       return point;
     }
   };
 
+  const acceptPoint = (point: OperationalLocation) => {
+    setSelected(point);
+    setManualAddress(isGenericAddress(point.formattedAddress) ? "" : point.formattedAddress);
+    setManualLatitude(String(point.latitude));
+    setManualLongitude(String(point.longitude));
+    setShowManual(isGenericAddress(point.formattedAddress));
+    setShowCoordinates(false);
+  };
+
   const detect = async () => {
+    setPermissionContext(false);
     setDetecting(true);
-    setNotice(null);
+    showNotice("");
     try {
-      const point = await enrich(await readOperationalLocation());
-      setSelected(point);
-      setManualAddress(isGenericAddress(point.formattedAddress) ? "" : point.formattedAddress);
-      setManualLatitude(String(point.latitude));
-      setManualLongitude(String(point.longitude));
-      setShowManual(false);
+      acceptPoint(await enrich(await readOperationalLocation()));
     } catch (cause) {
-      setSelected(null);
-      setShowManual(true);
-      setNotice(friendlyError(cause, "We couldn’t find your current location. Search for your address or enter it manually."));
+      showNotice(friendlyError(cause, "We couldn't find your current location. Search for your address instead."));
     } finally {
       setDetecting(false);
     }
   };
 
-  useEffect(() => { void detect(); }, []);
-
   useEffect(() => {
     const query = search.trim();
-    if (query.length < 3) { setPredictions([]); return; }
+    if (query.length < 3) {
+      setPredictions([]);
+      return;
+    }
+    let active = true;
     const timer = setTimeout(() => {
       void autocomplete.mutateAsync({
         input: query,
         countryComponent: "country:ng",
         idempotencyKey: idempotencyKey("location-search", query.toLowerCase()),
       }).then((result) => {
-        if (result.provider === "google_maps") setPredictions(result.predictions);
-        else setPredictions([]);
-      }).catch(() => setPredictions([]));
-    }, 400);
-    return () => clearTimeout(timer);
+        if (active) setPredictions(result.predictions);
+      }).catch(() => {
+        if (active) setPredictions([]);
+      });
+    }, 350);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [search]);
 
   const choosePrediction = async (prediction: Record<string, unknown>) => {
     const description = readString(prediction.description);
     if (!description) return;
     setResolving(true);
-    setNotice(null);
+    showNotice("");
     try {
       const result = await geocode.mutateAsync({
         address: description,
         idempotencyKey: idempotencyKey("geocode-location", description.toLowerCase()),
       });
-      if (result.provider !== "google_maps") throw new Error("map provider unavailable");
-      const point: OperationalLocation = {
-        latitude: result.location.latitude,
-        longitude: result.location.longitude,
-        accuracyMeters: null,
-        recordedAt: new Date().toISOString(),
-        formattedAddress: result.formattedAddress ?? description,
-        providerPlaceId: result.placeId ?? null,
-        providerSource: "maps_adapter",
-        address: normalizeAddress(result.addressComponents),
-      };
-      setSelected(point);
-      setManualAddress(point.formattedAddress);
-      setManualLatitude(String(point.latitude));
-      setManualLongitude(String(point.longitude));
+      acceptPoint(locationFromLookup(result, description));
       setSearch("");
       setPredictions([]);
-      setShowManual(false);
     } catch (cause) {
-      setNotice(friendlyError(cause, "We couldn’t open that address. Try a more specific search or place the pin manually."));
+      showNotice(friendlyError(cause, "We couldn't open that address. Try a more specific search."));
     } finally {
       setResolving(false);
     }
@@ -158,34 +170,55 @@ export function LocationsScreen() {
 
   const selectMapPoint = async (coordinate: { latitude: number; longitude: number }) => {
     setResolving(true);
-    setNotice(null);
-    const local = await resolveOperationalAddress(coordinate.latitude, coordinate.longitude);
-    const point: OperationalLocation = {
-      ...coordinate,
-      accuracyMeters: null,
-      recordedAt: new Date().toISOString(),
-      formattedAddress: local.formattedAddress ?? "Pinned location",
-      providerPlaceId: null,
-      providerSource: "manual_pin",
-      address: local.address,
-    };
-    const enriched = await enrich(point);
-    setSelected(enriched);
-    setManualAddress(isGenericAddress(enriched.formattedAddress) ? "" : enriched.formattedAddress);
-    setManualLatitude(String(enriched.latitude));
-    setManualLongitude(String(enriched.longitude));
-    setShowManual(isGenericAddress(enriched.formattedAddress));
-    setResolving(false);
+    showNotice("");
+    try {
+      const local = await resolveOperationalAddress(coordinate.latitude, coordinate.longitude);
+      const point: OperationalLocation = {
+        ...coordinate,
+        accuracyMeters: null,
+        recordedAt: new Date().toISOString(),
+        formattedAddress: local.formattedAddress ?? "Pinned location",
+        providerPlaceId: null,
+        providerSource: "manual_pin",
+        address: local.address,
+      };
+      acceptPoint(await enrich(point));
+    } catch (cause) {
+      showNotice(friendlyError(cause, "We couldn't resolve that point. Move the pin or enter the address manually."));
+    } finally {
+      setResolving(false);
+    }
   };
 
-  const applyManual = () => {
+  const locateManualAddress = async () => {
+    const address = manualAddress.trim();
+    if (!address) {
+      showNotice("Enter the street, area or landmark you want us to find.");
+      return;
+    }
+    setResolving(true);
+    showNotice("");
+    try {
+      const result = await geocode.mutateAsync({
+        address,
+        idempotencyKey: idempotencyKey("manual-geocode-location", address.toLowerCase()),
+      });
+      acceptPoint(locationFromLookup(result, address));
+    } catch (cause) {
+      showNotice(friendlyError(cause, "We couldn't find that address. Add an area or landmark, or use coordinates."));
+    } finally {
+      setResolving(false);
+    }
+  };
+
+  const applyCoordinates = () => {
     const latitude = Number(manualLatitude);
     const longitude = Number(manualLongitude);
     if (!manualAddress.trim() || !validCoordinate(latitude, longitude)) {
-      setNotice("Enter the address and valid map coordinates so we can save the correct place.");
+      showNotice("Enter an address and valid coordinates to place the pin.");
       return;
     }
-    setSelected({
+    acceptPoint({
       latitude,
       longitude,
       accuracyMeters: null,
@@ -195,14 +228,31 @@ export function LocationsScreen() {
       providerSource: "manual_pin",
       address: emptyOperationalAddress(),
     });
-    setNotice(null);
+    showNotice("");
   };
 
   const save = async () => {
-    if (!label.trim()) { setNotice("Name this place—for example, Home, Office or Mum’s house."); return; }
-    if (!selected) { setNotice("Choose the location on the map before saving it."); return; }
-    const formattedAddress = isGenericAddress(selected.formattedAddress) ? manualAddress.trim() : selected.formattedAddress;
-    if (!formattedAddress) { setShowManual(true); setNotice("Add a nearby street, building or landmark so your driver can find you."); return; }
+    if (!label.trim()) {
+      showNotice("Name this place—for example, Home, Office or Mum's house.");
+      return;
+    }
+    if (!selected) {
+      showNotice("Choose the location on the map before saving it.");
+      return;
+    }
+    const baseAddress = isGenericAddress(selected.formattedAddress)
+      ? manualAddress.trim()
+      : selected.formattedAddress;
+    if (!baseAddress) {
+      setShowManual(true);
+      showNotice("Add a street, building or nearby landmark so your driver can find you.");
+      return;
+    }
+    const specificLandmark = landmark.trim();
+    const formattedAddress = specificLandmark
+      && !baseAddress.toLocaleLowerCase().includes(specificLandmark.toLocaleLowerCase())
+      ? `${specificLandmark}, ${baseAddress}`
+      : baseAddress;
     try {
       await mutation.mutateAsync({
         label: label.trim(),
@@ -212,108 +262,309 @@ export function LocationsScreen() {
         accuracyMeters: selected.accuracyMeters ?? undefined,
         providerSource: selected.providerSource,
         providerPlaceId: selected.providerPlaceId ?? undefined,
-        metadata: { addressComponents: selected.address, recordedAt: selected.recordedAt },
+        metadata: {
+          addressComponents: { ...selected.address, name: specificLandmark || selected.address.name },
+          landmark: specificLandmark || undefined,
+          recordedAt: selected.recordedAt,
+        },
         source: "skima.lpg.location_api",
         idempotencyKey: idempotencyKey("create-location", label.trim()),
       });
       setLabel("");
-      setNotice("Place saved. You can use it for your next pickup or delivery.");
+      setLandmark("");
+      showNotice("Place saved. It's ready for your next pickup or delivery.", true);
     } catch (cause) {
-      setNotice(friendlyError(cause, "We couldn’t save this place. Check the details and try again."));
+      showNotice(friendlyError(cause, "We couldn't save this place. Check the details and try again."));
     }
   };
 
-  const mapPoints = selected ? [{ latitude: selected.latitude, longitude: selected.longitude, label: label.trim() || "Selected location", kind: "destination" as const }] : [];
+  const mapPoints = selected
+    ? [{
+        latitude: selected.latitude,
+        longitude: selected.longitude,
+        label: label.trim() || "Exact pickup point",
+        kind: "destination" as const,
+      }]
+    : [];
 
   return (
-    <Screen eyebrow="Saved places" title="Where should we meet you?">
-      {locations.isPending ? <ScreenSkeleton cards={2} /> : (
-        <>
-          <View style={[styles.searchBox, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <Search color={palette.muted} size={20} />
-            <TextInput
-              accessibilityLabel="Search for an address"
-              autoComplete="street-address"
-              onChangeText={setSearch}
-              placeholder="Search street, area or landmark"
-              placeholderTextColor={palette.muted}
-              style={[styles.searchInput, { color: palette.ink }]}
-              value={search}
-            />
-            {autocomplete.isPending ? <ActivityIndicator color={colors.brand} size="small" /> : null}
-          </View>
-          {predictions.length ? (
-            <View style={[styles.predictions, { backgroundColor: palette.elevated, borderColor: palette.border }]}>
-              {predictions.slice(0, 5).map((prediction, index) => {
-                const description = readString(prediction.description) ?? "Suggested address";
-                return <Pressable key={`${description}:${index}`} onPress={() => void choosePrediction(prediction)} style={[styles.prediction, index > 0 && { borderTopColor: palette.border, borderTopWidth: 1 }]}><MapPin color={colors.brand} size={18} /><Text style={[styles.predictionText, { color: palette.ink }]}>{description}</Text><ChevronRight color={palette.muted} size={18} /></Pressable>;
-              })}
+    <Screen eyebrow="Delivery and pickup" title="Set your location">
+      <View style={[styles.currentRow, { borderBottomColor: palette.border }]}>
+        <View style={[styles.currentIcon, { backgroundColor: palette.brandSoft }]}><LocateFixed color={colors.brand} size={20} /></View>
+        <View style={styles.currentCopy}>
+          <Text style={[styles.microLabel, { color: palette.muted }]}>CURRENT LOCATION</Text>
+          <Text numberOfLines={2} style={[styles.currentAddress, { color: palette.ink }]}>
+            {selected ? compactAddress(selected) : "Use your device for the quickest setup"}
+          </Text>
+        </View>
+        <Pressable
+          disabled={detecting}
+          onPress={() => { showNotice(""); setPermissionContext(true); }}
+          style={[styles.compactAction, { backgroundColor: palette.brandSoft }]}
+        >
+          {detecting ? <ActivityIndicator color={colors.brand} size="small" /> : <Text style={styles.compactActionText}>{selected ? "Update" : "Use"}</Text>}
+        </Pressable>
+      </View>
+
+      {permissionContext ? (
+        <View style={[styles.permissionPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <View style={styles.permissionHeading}>
+            <Crosshair color={colors.brand} size={22} />
+            <View style={styles.permissionCopy}>
+              <Text style={[styles.permissionTitle, { color: palette.ink }]}>Find your exact pickup point</Text>
+              <Text style={[styles.supporting, { color: palette.muted }]}>SKIMA uses your location to position this pin and guide the assigned driver. You can adjust it before saving.</Text>
             </View>
+          </View>
+          <View style={styles.permissionActions}>
+            <Pressable onPress={() => setPermissionContext(false)} style={styles.textButton}><Text style={[styles.textButtonText, { color: palette.muted }]}>Not now</Text></Pressable>
+            <Pressable onPress={() => void detect()} style={styles.allowButton}><LocateFixed color="white" size={17} /><Text style={styles.allowButtonText}>Continue</Text></Pressable>
+          </View>
+        </View>
+      ) : null}
+
+      <View style={[styles.searchBox, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <Search color={palette.muted} size={19} />
+        <TextInput
+          accessibilityLabel="Search for an address"
+          autoComplete="street-address"
+          onChangeText={setSearch}
+          placeholder="Search street, area or landmark"
+          placeholderTextColor={palette.muted}
+          style={[styles.searchInput, { color: palette.ink }]}
+          value={search}
+        />
+        {autocomplete.isPending ? <ActivityIndicator color={colors.brand} size="small" /> : null}
+      </View>
+      {predictions.length ? (
+        <View style={[styles.predictions, { backgroundColor: palette.elevated, borderColor: palette.border }]}>
+          {predictions.slice(0, 5).map((prediction, index) => {
+            const description = readString(prediction.description) ?? "Suggested address";
+            return (
+              <Pressable
+                key={`${description}:${index}`}
+                onPress={() => void choosePrediction(prediction)}
+                style={[styles.prediction, index > 0 && { borderTopColor: palette.border, borderTopWidth: 1 }]}
+              >
+                <MapPin color={colors.brand} size={17} />
+                <Text style={[styles.predictionText, { color: palette.ink }]}>{description}</Text>
+                <ChevronRight color={palette.muted} size={17} />
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+
+      <View style={[styles.workspace, width >= 900 && styles.workspaceWide]}>
+        <View style={styles.mapColumn}>
+          <OperationalMap
+            points={mapPoints}
+            height={width < 600 ? 340 : 470}
+            initialZoom={20}
+            maxZoom={21}
+            onSelectPoint={(point) => void selectMapPoint(point)}
+          />
+          {resolving ? (
+            <View style={styles.mapBusy}><ActivityIndicator color="white" /><Text style={styles.mapBusyText}>Resolving address…</Text></View>
           ) : null}
+        </View>
 
-          <View style={[styles.locationWorkspace, width >= 900 && styles.locationWorkspaceWide]}>
-            <View style={styles.mapColumn}>
-              <OperationalMap points={mapPoints} height={width < 600 ? 410 : 500} initialZoom={18} maxZoom={19} onSelectPoint={(point) => void selectMapPoint(point)} />
-              {resolving ? <View style={styles.mapBusy}><ActivityIndicator color="white" /><Text style={styles.mapBusyText}>Finding this address…</Text></View> : null}
+        <View style={[styles.confirmPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <View style={styles.panelHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.panelTitle, { color: palette.ink }]}>Confirm the exact point</Text>
+              <Text style={[styles.supporting, { color: palette.muted }]}>Zoom in, then tap the entrance, gate or roadside pickup point.</Text>
             </View>
-            <View style={[styles.locationPanel, { backgroundColor: palette.surface }]}>
-              <View style={styles.panelHeader}>
-                <View style={[styles.locateIcon, { backgroundColor: palette.brandSoft }]}><Crosshair color={colors.brand} size={22} /></View>
-                <View style={{ flex: 1 }}><Text style={[styles.panelTitle, { color: palette.ink }]}>Confirm your pickup point</Text><Text style={[styles.panelCopy, { color: palette.muted }]}>Zoom in and tap the exact building, gate or roadside pickup point.</Text></View>
-              </View>
-              {detecting ? <View style={[styles.detecting, { backgroundColor: palette.soft }]}><ActivityIndicator color={colors.brand} /><Text style={[styles.detectingText, { color: palette.ink }]}>Finding your current location…</Text></View> : selected ? <AddressDetails location={selected} /> : <View style={[styles.emptySelection, { backgroundColor: palette.soft }]}><Text style={[styles.panelCopy, { color: palette.muted }]}>Search for an address or use your current location.</Text></View>}
-              <Pressable onPress={() => void detect()} style={[styles.currentButton, { borderColor: palette.border }]}><LocateFixed color={colors.brand} size={19} /><Text style={styles.currentText}>Use my current location</Text><RefreshCw color={palette.muted} size={17} /></Pressable>
-              <TextInput value={label} onChangeText={setLabel} placeholder="Name this place, e.g. Home" placeholderTextColor={palette.muted} style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]} />
-              {showManual ? (
-                <View style={styles.manual}>
-                  <Text style={[styles.manualTitle, { color: palette.ink }]}>Add address details</Text>
-                  <Text style={[styles.panelCopy, { color: palette.muted }]}>Use this only when the map cannot identify the street or building.</Text>
-                  <TextInput multiline value={manualAddress} onChangeText={setManualAddress} placeholder="Street, building, area and nearby landmark" placeholderTextColor={palette.muted} style={[styles.input, styles.addressInput, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]} />
-                  {!selected ? <View style={styles.coordinateRow}><TextInput value={manualLatitude} onChangeText={setManualLatitude} keyboardType="decimal-pad" placeholder="Latitude" placeholderTextColor={palette.muted} style={[styles.input, styles.coordinate, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]} /><TextInput value={manualLongitude} onChangeText={setManualLongitude} keyboardType="decimal-pad" placeholder="Longitude" placeholderTextColor={palette.muted} style={[styles.input, styles.coordinate, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]} /></View> : null}
-                  {!selected ? <Pressable onPress={applyManual} style={[styles.manualButton, { borderColor: colors.brand }]}><Text style={styles.currentText}>Place address on map</Text></Pressable> : null}
-                </View>
-              ) : <Pressable onPress={() => setShowManual(true)}><Text style={styles.manualLink}>Can’t see the right address? Add details</Text></Pressable>}
-              <Pressable disabled={mutation.isPending || detecting || !selected} onPress={() => void save()} style={[styles.primary, (!selected || detecting) && styles.disabled]}>{mutation.isPending ? <ActivityIndicator color="white" /> : <><Check color="white" size={19} /><Text style={styles.primaryText}>Save this place</Text></>}</Pressable>
-              {notice ? <Text accessibilityRole="alert" style={[styles.notice, { color: notice.startsWith("Place saved") ? colors.success : colors.danger }]}>{notice}</Text> : null}
-            </View>
+            {selected ? <View style={styles.readyBadge}><Check color={colors.success} size={14} /><Text style={styles.readyText}>Located</Text></View> : null}
           </View>
 
-          {(locations.data ?? []).length ? <View style={styles.savedSection}><Text style={[styles.sectionTitle, { color: palette.ink }]}>Your saved places</Text>{(locations.data ?? []).map((item, index) => <View key={recordId(item) ?? String(index)} style={[styles.savedPlace, { borderBottomColor: palette.border }]}><View style={[styles.savedPin, { backgroundColor: palette.brandSoft }]}><MapPin color={colors.brand} size={19} /></View><View style={{ flex: 1 }}><Text style={[styles.savedTitle, { color: palette.ink }]}>{displayTitle(item)}</Text><Text numberOfLines={2} style={[styles.savedAddress, { color: palette.muted }]}>{displaySubtitle(item) ?? "Saved pickup and delivery point"}</Text></View><ChevronRight color={palette.muted} size={19} /></View>)}</View> : null}
-        </>
-      )}
+          {selected
+            ? <AddressDetails location={selected} landmark={landmark} />
+            : <View style={[styles.emptySelection, { borderColor: palette.border }]}><MapPin color={palette.muted} size={20} /><Text style={[styles.supporting, { color: palette.muted }]}>Choose current location or search above to place the pin.</Text></View>}
+
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.inputLabel, { color: palette.ink }]}>Save as</Text>
+            <TextInput
+              value={label}
+              onChangeText={setLabel}
+              placeholder="Home, Office or another name"
+              placeholderTextColor={palette.muted}
+              style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
+            />
+          </View>
+          <View style={styles.fieldGroup}>
+            <Text style={[styles.inputLabel, { color: palette.ink }]}>Building or landmark <Text style={{ color: palette.muted, fontWeight: "600" }}>(optional)</Text></Text>
+            <TextInput
+              value={landmark}
+              onChangeText={setLandmark}
+              placeholder="Gate colour, building name or nearby landmark"
+              placeholderTextColor={palette.muted}
+              style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
+            />
+          </View>
+
+          {showManual ? (
+            <View style={[styles.manual, { borderTopColor: palette.border }]}>
+              <Text style={[styles.manualTitle, { color: palette.ink }]}>Enter the address manually</Text>
+              <Text style={[styles.supporting, { color: palette.muted }]}>Use this fallback if GPS or search cannot identify the place.</Text>
+              <TextInput
+                multiline
+                value={manualAddress}
+                onChangeText={setManualAddress}
+                placeholder="Street, building, locality, city and state"
+                placeholderTextColor={palette.muted}
+                style={[styles.input, styles.addressInput, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
+              />
+              <Pressable disabled={resolving} onPress={() => void locateManualAddress()} style={[styles.manualButton, { borderColor: colors.brand }]}>
+                {resolving ? <ActivityIndicator color={colors.brand} size="small" /> : <><Search color={colors.brand} size={16} /><Text style={styles.compactActionText}>Find this address</Text></>}
+              </Pressable>
+              {showCoordinates ? (
+                <>
+                  <Text style={[styles.coordinateNote, { color: palette.muted }]}>Advanced fallback: use coordinates only when an address cannot be found.</Text>
+                  <View style={styles.coordinateRow}>
+                    <TextInput value={manualLatitude} onChangeText={setManualLatitude} keyboardType="decimal-pad" placeholder="Latitude" placeholderTextColor={palette.muted} style={[styles.input, styles.coordinate, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]} />
+                    <TextInput value={manualLongitude} onChangeText={setManualLongitude} keyboardType="decimal-pad" placeholder="Longitude" placeholderTextColor={palette.muted} style={[styles.input, styles.coordinate, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]} />
+                  </View>
+                  <Pressable onPress={applyCoordinates} style={[styles.manualButton, { borderColor: palette.border }]}><Crosshair color={palette.ink} size={16} /><Text style={[styles.manualButtonText, { color: palette.ink }]}>Place coordinates on map</Text></Pressable>
+                </>
+              ) : <Pressable onPress={() => setShowCoordinates(true)}><Text style={[styles.coordinateLink, { color: palette.muted }]}>Use coordinates instead</Text></Pressable>}
+              <Pressable onPress={() => { setShowManual(false); setShowCoordinates(false); }}><Text style={styles.manualLink}>Close manual entry</Text></Pressable>
+            </View>
+          ) : <Pressable onPress={() => setShowManual(true)}><Text style={styles.manualLink}>Can't find it? Enter the address manually</Text></Pressable>}
+
+          <Pressable
+            disabled={mutation.isPending || detecting || !selected}
+            onPress={() => void save()}
+            style={[styles.primary, (!selected || detecting || mutation.isPending) && styles.disabled]}
+          >
+            {mutation.isPending
+              ? <ActivityIndicator color="white" />
+              : <><Check color="white" size={18} /><Text style={styles.primaryText}>Save this place</Text></>}
+          </Pressable>
+          {notice ? <Text accessibilityRole="alert" style={[styles.notice, { color: noticeSuccess ? colors.success : colors.danger }]}>{notice}</Text> : null}
+        </View>
+      </View>
+
+      <View style={styles.savedSection}>
+        <Text style={[styles.sectionTitle, { color: palette.ink }]}>Saved places</Text>
+        {locations.isPending ? <ScreenSkeleton cards={1} /> : (locations.data ?? []).length ? (
+          (locations.data ?? []).map((item, index) => (
+            <View key={recordId(item) ?? String(index)} style={[styles.savedPlace, { borderBottomColor: palette.border }]}>
+              <View style={[styles.savedPin, { backgroundColor: palette.brandSoft }]}><MapPin color={colors.brand} size={18} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.savedTitle, { color: palette.ink }]}>{displayTitle(item)}</Text>
+                <Text numberOfLines={2} style={[styles.savedAddress, { color: palette.muted }]}>{displaySubtitle(item) ?? "Saved pickup and delivery point"}</Text>
+              </View>
+              <ChevronRight color={palette.muted} size={18} />
+            </View>
+          ))
+        ) : <Text style={[styles.savedEmpty, { color: palette.muted }]}>Your saved places will appear here.</Text>}
+      </View>
     </Screen>
   );
 }
 
-function AddressDetails({ location }: { location: OperationalLocation }) {
+function AddressDetails({ location, landmark }: { location: OperationalLocation; landmark: string }) {
   const { palette } = useAppTheme();
+  const resolvedLandmark = clean(landmark) ?? distinctName(location.address);
   const details = [
     ["Country", location.address.country],
     ["State", location.address.region],
     ["City / town", location.address.city],
-    ["Area", location.address.district],
+    ["Locality / area", location.address.district],
     ["Street / road", location.address.street],
+    ["Landmark / building", resolvedLandmark],
   ].filter((item): item is [string, string] => Boolean(item[1]));
   return (
-    <View style={[styles.addressCard, { backgroundColor: palette.soft }]}>
-      <View style={styles.addressHeading}><MapPin color={colors.success} size={20} /><Text style={[styles.addressMain, { color: palette.ink }]}>{location.formattedAddress}</Text></View>
-      {details.length ? <View style={styles.addressGrid}>{details.map(([label, value]) => <View key={label} style={styles.addressDetail}><Text style={[styles.addressLabel, { color: palette.muted }]}>{label}</Text><Text style={[styles.addressValue, { color: palette.ink }]}>{value}</Text></View>)}</View> : <Text style={[styles.panelCopy, { color: palette.muted }]}>Move the pin if this is not the exact pickup point.</Text>}
-      <Text style={[styles.accuracy, { color: palette.muted }]}>{location.accuracyMeters ? `GPS accuracy: about ${Math.round(location.accuracyMeters)} metres` : "Pin selected manually"}</Text>
+    <View style={[styles.addressBlock, { borderTopColor: palette.border, borderBottomColor: palette.border }]}>
+      <View style={styles.addressHeading}><MapPin color={colors.success} size={19} /><Text style={[styles.addressMain, { color: palette.ink }]}>{location.formattedAddress}</Text></View>
+      {details.length ? (
+        <View style={styles.addressGrid}>
+          {details.map(([detailLabel, value]) => (
+            <View key={detailLabel} style={styles.addressDetail}>
+              <Text style={[styles.addressLabel, { color: palette.muted }]}>{detailLabel}</Text>
+              <Text style={[styles.addressValue, { color: palette.ink }]}>{value}</Text>
+            </View>
+          ))}
+        </View>
+      ) : <Text style={[styles.supporting, { color: palette.muted }]}>Move the pin if this is not the exact pickup point.</Text>}
+      <Text style={[styles.accuracy, { color: accuracyTone(location.accuracyMeters) }]}>{accuracyCopy(location.accuracyMeters)}</Text>
     </View>
   );
 }
 
-function normalizeAddress(value: z.infer<typeof AddressSchema> | null | undefined): OperationalAddress {
+function locationFromLookup(result: z.infer<typeof MapLookupSchema>, fallback: string): OperationalLocation {
   return {
-    name: value?.name ?? null,
-    street: value?.street ?? null,
-    district: value?.district ?? null,
-    city: value?.city ?? null,
-    region: value?.region ?? null,
-    postalCode: value?.postalCode ?? null,
-    country: value?.country ?? null,
-    countryCode: value?.countryCode ?? null,
+    latitude: result.location.latitude,
+    longitude: result.location.longitude,
+    accuracyMeters: null,
+    recordedAt: new Date().toISOString(),
+    formattedAddress: clean(result.formattedAddress) ?? fallback,
+    providerPlaceId: result.placeId ?? null,
+    providerSource: "maps_adapter",
+    address: normalizeAddress(result.addressComponents),
   };
+}
+
+function normalizeAddress(value: z.infer<typeof AddressSchema> | null | undefined): OperationalAddress {
+  const street = clean(value?.street)
+    ?? clean(value?.route)
+    ?? null;
+  const streetNumber = clean(value?.streetNumber);
+  return {
+    name: clean(value?.name) ?? clean(value?.landmark) ?? clean(value?.premise),
+    street: streetNumber && street && !street.startsWith(streetNumber) ? `${streetNumber} ${street}` : street,
+    district: clean(value?.district) ?? clean(value?.locality) ?? clean(value?.subLocality),
+    city: clean(value?.city),
+    region: clean(value?.region) ?? clean(value?.state),
+    postalCode: clean(value?.postalCode),
+    country: clean(value?.country),
+    countryCode: clean(value?.countryCode),
+  };
+}
+
+function mergeAddress(primary: OperationalAddress, fallback: OperationalAddress): OperationalAddress {
+  return {
+    name: primary.name ?? fallback.name,
+    street: primary.street ?? fallback.street,
+    district: primary.district ?? fallback.district,
+    city: primary.city ?? fallback.city,
+    region: primary.region ?? fallback.region,
+    postalCode: primary.postalCode ?? fallback.postalCode,
+    country: primary.country ?? fallback.country,
+    countryCode: primary.countryCode ?? fallback.countryCode,
+  };
+}
+
+function hasAddress(address: OperationalAddress) {
+  return Object.values(address).some(Boolean);
+}
+
+function compactAddress(location: OperationalLocation) {
+  const parts = [location.address.district, location.address.city, location.address.region]
+    .filter((value): value is string => Boolean(value));
+  return Array.from(new Set(parts)).join(", ") || location.formattedAddress;
+}
+
+function distinctName(address: OperationalAddress) {
+  const name = clean(address.name);
+  if (!name) return null;
+  const duplicates = [address.street, address.district, address.city]
+    .some((value) => clean(value)?.toLocaleLowerCase() === name.toLocaleLowerCase());
+  return duplicates ? null : name;
+}
+
+function accuracyCopy(accuracy: number | null) {
+  if (accuracy === null) return "Pin positioned manually—zoom in to confirm it.";
+  const metres = Math.max(1, Math.round(accuracy));
+  if (metres <= 20) return `High-accuracy GPS · within about ${metres} metres`;
+  if (metres <= 60) return `GPS accuracy · within about ${metres} metres`;
+  return `Approximate GPS · within about ${metres} metres. Move the pin for precision.`;
+}
+
+function accuracyTone(accuracy: number | null) {
+  if (accuracy !== null && accuracy <= 20) return colors.success;
+  if (accuracy !== null && accuracy > 60) return "#A96D00";
+  return colors.muted;
 }
 
 function isGenericAddress(value: string) {
@@ -325,54 +576,78 @@ function validCoordinate(latitude: number, longitude: number) {
 }
 
 function readString(value: unknown) {
-  return typeof value === "string" && value.trim() ? value : null;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function clean(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
 }
 
 const styles = StyleSheet.create({
-  searchBox: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.lg, borderWidth: 1 },
-  searchInput: { flex: 1, minHeight: 56, fontSize: 16 },
-  predictions: { marginTop: -18, overflow: "hidden", borderRadius: radii.lg, borderWidth: 1 },
-  prediction: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.md },
-  predictionText: { flex: 1, lineHeight: 20 },
-  locationWorkspace: { gap: spacing.md },
-  locationWorkspaceWide: { flexDirection: "row", alignItems: "stretch" },
+  currentRow: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: spacing.sm, borderBottomWidth: 1 },
+  currentIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20 },
+  currentCopy: { flex: 1, gap: 2 },
+  microLabel: { fontSize: 9, lineHeight: 12, fontWeight: "900", letterSpacing: 1 },
+  currentAddress: { fontSize: 14, lineHeight: 18, fontWeight: "800" },
+  compactAction: { minWidth: 60, minHeight: 38, alignItems: "center", justifyContent: "center", paddingHorizontal: 13, borderRadius: radii.pill },
+  compactActionText: { color: colors.brand, fontWeight: "900" },
+  permissionPanel: { gap: spacing.md, padding: spacing.md, borderRadius: radii.lg, borderWidth: 1 },
+  permissionHeading: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  permissionCopy: { flex: 1, gap: 4 },
+  permissionTitle: { fontSize: 16, lineHeight: 21, fontWeight: "900" },
+  permissionActions: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: spacing.sm },
+  textButton: { minHeight: 40, justifyContent: "center", paddingHorizontal: spacing.md },
+  textButtonText: { fontWeight: "800" },
+  allowButton: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: spacing.md, borderRadius: radii.pill, backgroundColor: colors.brand },
+  allowButtonText: { color: "white", fontWeight: "900" },
+  supporting: { fontSize: 13, lineHeight: 19 },
+  searchBox: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 14, borderRadius: radii.md, borderWidth: 1 },
+  searchInput: { flex: 1, minHeight: 50, fontSize: 15 },
+  predictions: { marginTop: -12, overflow: "hidden", borderRadius: radii.md, borderWidth: 1 },
+  prediction: { minHeight: 54, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 14 },
+  predictionText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  workspace: { gap: spacing.md },
+  workspaceWide: { flexDirection: "row", alignItems: "flex-start" },
   mapColumn: { flex: 1.35, minWidth: 0 },
-  mapBusy: { position: "absolute", left: "50%", top: "50%", transform: [{ translateX: -85 }, { translateY: -23 }], minWidth: 170, minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.pill, backgroundColor: "rgba(23,33,27,.88)" },
-  mapBusyText: { color: "white", fontWeight: "800" },
-  locationPanel: { flex: 1, gap: spacing.md, padding: spacing.lg, borderRadius: 28 },
-  panelHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
-  locateIcon: { width: 46, height: 46, alignItems: "center", justifyContent: "center", borderRadius: 23 },
-  panelTitle: { fontSize: 20, lineHeight: 25, fontWeight: "900" },
-  panelCopy: { lineHeight: 20, marginTop: 3 },
-  detecting: { minHeight: 82, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.md },
-  detectingText: { fontWeight: "800" },
-  emptySelection: { minHeight: 88, alignItems: "center", justifyContent: "center", padding: spacing.md, borderRadius: radii.md },
-  addressCard: { gap: spacing.md, padding: spacing.md, borderRadius: radii.lg },
+  mapBusy: { position: "absolute", left: "50%", top: "50%", transform: [{ translateX: -80 }, { translateY: -21 }], minWidth: 160, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.pill, backgroundColor: "rgba(23,33,27,.88)" },
+  mapBusyText: { color: "white", fontSize: 12, fontWeight: "800" },
+  confirmPanel: { flex: 1, gap: 13, padding: 18, borderRadius: radii.lg, borderWidth: 1 },
+  panelHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
+  panelTitle: { fontSize: 18, lineHeight: 23, fontWeight: "900" },
+  readyBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 9, paddingVertical: 6, borderRadius: radii.pill, backgroundColor: "rgba(18,148,71,.10)" },
+  readyText: { color: colors.success, fontSize: 10, fontWeight: "900" },
+  emptySelection: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: 12, borderTopWidth: 1, borderBottomWidth: 1 },
+  addressBlock: { gap: 11, paddingVertical: 13, borderTopWidth: 1, borderBottomWidth: 1 },
   addressHeading: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
-  addressMain: { flex: 1, fontSize: 16, lineHeight: 22, fontWeight: "900" },
-  addressGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  addressDetail: { width: "47%", gap: 2 },
-  addressLabel: { fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: .5 },
-  addressValue: { fontSize: 13, lineHeight: 17, fontWeight: "700" },
-  accuracy: { fontSize: 11, fontWeight: "700" },
-  currentButton: { minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.md, borderWidth: 1 },
-  currentText: { color: colors.brand, fontWeight: "900" },
-  input: { minHeight: 54, borderRadius: radii.md, borderWidth: 1, paddingHorizontal: spacing.md, fontSize: 16 },
-  addressInput: { minHeight: 90, paddingTop: spacing.md, textAlignVertical: "top" },
-  manual: { gap: spacing.sm },
-  manualTitle: { fontWeight: "900" },
-  manualLink: { color: colors.brand, fontWeight: "800", textAlign: "center" },
-  manualButton: { minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: radii.md, borderWidth: 1 },
+  addressMain: { flex: 1, fontSize: 15, lineHeight: 21, fontWeight: "900" },
+  addressGrid: { flexDirection: "row", flexWrap: "wrap", rowGap: 9, columnGap: spacing.sm },
+  addressDetail: { width: "48%", gap: 1 },
+  addressLabel: { fontSize: 9, lineHeight: 12, fontWeight: "800", textTransform: "uppercase", letterSpacing: .45 },
+  addressValue: { fontSize: 12, lineHeight: 16, fontWeight: "700" },
+  accuracy: { fontSize: 10, lineHeight: 14, fontWeight: "800" },
+  fieldGroup: { gap: 6 },
+  inputLabel: { fontSize: 12, fontWeight: "900" },
+  input: { minHeight: 48, borderRadius: 13, borderWidth: 1, paddingHorizontal: 13, fontSize: 14 },
+  addressInput: { minHeight: 78, paddingTop: 12, textAlignVertical: "top" },
+  manual: { gap: spacing.sm, paddingTop: 13, borderTopWidth: 1 },
+  manualTitle: { fontSize: 14, fontWeight: "900" },
+  manualLink: { color: colors.brand, fontSize: 12, fontWeight: "800", textAlign: "center" },
+  manualButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 13, borderWidth: 1 },
+  manualButtonText: { fontSize: 12, fontWeight: "900" },
+  coordinateNote: { fontSize: 11, lineHeight: 16 },
+  coordinateLink: { fontSize: 11, fontWeight: "800", textAlign: "center" },
   coordinateRow: { flexDirection: "row", gap: spacing.sm },
   coordinate: { flex: 1 },
-  primary: { minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.md, backgroundColor: colors.brand },
+  primary: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: 14, backgroundColor: colors.brand },
   disabled: { opacity: .45 },
-  primaryText: { color: "white", fontSize: 16, fontWeight: "900" },
-  notice: { fontWeight: "700", lineHeight: 20 },
-  savedSection: { gap: 0, marginTop: spacing.md },
-  sectionTitle: { fontSize: 21, fontWeight: "900", marginBottom: spacing.sm },
-  savedPlace: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, borderBottomWidth: 1, paddingVertical: spacing.md },
-  savedPin: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21 },
-  savedTitle: { fontSize: 16, fontWeight: "900" },
-  savedAddress: { marginTop: 3, lineHeight: 19 },
+  primaryText: { color: "white", fontSize: 14, fontWeight: "900" },
+  notice: { fontSize: 12, fontWeight: "700", lineHeight: 18, textAlign: "center" },
+  savedSection: { gap: 0, marginTop: spacing.sm },
+  sectionTitle: { fontSize: 19, fontWeight: "900", marginBottom: spacing.sm },
+  savedPlace: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: 1, paddingVertical: 11 },
+  savedPin: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 19 },
+  savedTitle: { fontSize: 14, fontWeight: "900" },
+  savedAddress: { marginTop: 2, fontSize: 12, lineHeight: 17 },
+  savedEmpty: { paddingVertical: spacing.md, fontSize: 13 },
 });

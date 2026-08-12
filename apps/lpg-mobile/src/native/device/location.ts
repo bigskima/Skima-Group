@@ -22,44 +22,56 @@ export interface OperationalAddress {
   countryCode: string | null;
 }
 
-export async function readOperationalLocation() {
-  const permission = await Location.requestForegroundPermissionsAsync();
-  if (!permission.granted) throw new Error("Location permission is required. Enable it in your browser or device settings, then try again.");
+export async function readOperationalLocation(options: { requestPermission?: boolean } = {}) {
+  let permission = await Location.getForegroundPermissionsAsync();
+  if (!permission.granted && options.requestPermission !== false)
+    permission = await Location.requestForegroundPermissionsAsync();
+
+  if (!permission.granted) {
+    const message = permission.canAskAgain
+      ? "Location access wasn't allowed. You can search for an address instead."
+      : "Location access is blocked in your device settings. You can search for an address instead.";
+    throw new Error(message);
+  }
+
   const point = await Location.getCurrentPositionAsync({
     accuracy: Location.Accuracy.Highest,
     mayShowUserSettingsDialog: true,
   });
   const latitude = point.coords.latitude;
   const longitude = point.coords.longitude;
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
-    throw new Error("The device returned an invalid location.");
-  }
+  if (!validCoordinate(latitude, longitude))
+    throw new Error("Your device returned an invalid location. Search for your address instead.");
 
   const resolved = await resolveOperationalAddress(latitude, longitude);
-  const formattedAddress = resolved.formattedAddress;
-  const resolvedAddress = resolved.address;
-
   return {
     latitude,
     longitude,
-    accuracyMeters: point.coords.accuracy,
+    accuracyMeters: finiteAccuracy(point.coords.accuracy),
     recordedAt: new Date(point.timestamp).toISOString(),
-    formattedAddress: formattedAddress ?? "Selected map location",
-    providerSource: formattedAddress ? "device_geocoder" as const : "device_coordinates" as const,
+    formattedAddress: resolved.formattedAddress ?? "Selected map location",
+    providerSource: resolved.formattedAddress
+      ? "device_geocoder" as const
+      : "device_coordinates" as const,
     providerPlaceId: null,
-    address: resolvedAddress,
+    address: resolved.address,
   };
 }
 
 export async function resolveOperationalAddress(latitude: number, longitude: number) {
   let address = emptyOperationalAddress();
+  let formattedAddress: string | null = null;
   try {
     const addresses = await Location.reverseGeocodeAsync({ latitude, longitude });
-    if (addresses[0]) address = readAddress(addresses[0]);
+    const result = addresses[0];
+    if (result) {
+      address = readAddress(result);
+      formattedAddress = clean(result.formattedAddress) ?? formatOperationalAddress(address);
+    }
   } catch {
-    // Web browsers commonly expose GPS without an operating-system geocoder.
+    // Some web browsers provide GPS without a device-level reverse geocoder.
   }
-  return { address, formattedAddress: formatAddress(address) };
+  return { address, formattedAddress: formattedAddress ?? formatOperationalAddress(address) };
 }
 
 export function emptyOperationalAddress(): OperationalAddress {
@@ -76,31 +88,55 @@ export function emptyOperationalAddress(): OperationalAddress {
 }
 
 function readAddress(address: Location.LocationGeocodedAddress): OperationalAddress {
+  const street = uniqueParts([address.streetNumber, address.street]).join(" ") || null;
   return {
-    name: address.name ?? null,
-    street: address.street ?? null,
-    district: address.district ?? address.subregion ?? null,
-    city: address.city ?? address.subregion ?? null,
-    region: address.region ?? null,
-    postalCode: address.postalCode ?? null,
-    country: address.country ?? null,
-    countryCode: address.isoCountryCode ?? null,
+    name: clean(address.name),
+    street,
+    district: clean(address.district) ?? clean(address.subregion),
+    city: clean(address.city),
+    region: clean(address.region),
+    postalCode: clean(address.postalCode),
+    country: clean(address.country),
+    countryCode: clean(address.isoCountryCode),
   };
 }
 
 export function formatOperationalAddress(address: OperationalAddress) {
-  const pieces = [
+  return uniqueParts([
     address.name,
-    address.street && address.street !== address.name ? address.street : null,
+    address.street,
     address.district,
     address.city,
     address.region,
     address.postalCode,
     address.country,
-  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
-  return Array.from(new Set(pieces)).join(", ") || null;
+  ]).join(", ") || null;
 }
 
-function formatAddress(address: OperationalAddress) {
-  return formatOperationalAddress(address);
+function uniqueParts(values: Array<string | null | undefined>) {
+  const seen = new Set<string>();
+  return values.flatMap((value) => {
+    const part = clean(value);
+    if (!part) return [];
+    const key = part.toLocaleLowerCase();
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [part];
+  });
+}
+
+function clean(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+function validCoordinate(latitude: number, longitude: number) {
+  return Number.isFinite(latitude)
+    && Number.isFinite(longitude)
+    && Math.abs(latitude) <= 90
+    && Math.abs(longitude) <= 180;
+}
+
+function finiteAccuracy(value: number | null) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }

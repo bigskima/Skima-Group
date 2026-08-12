@@ -5,11 +5,25 @@ import { jsonResponse, optionsResponse, requestId } from "../_shared/http.ts";
 
 const ROUTES = new Set([
   "/health",
+  "/admin/permissions",
+  "/admin/organizations",
   "/admin/role-templates",
   "/admin/profiles",
   "/admin/profiles/status",
   "/admin/users",
   "/admin/users/revoke",
+  "/admin/content/placements",
+  "/admin/content/publications",
+  "/admin/content/publications/state",
+  "/admin/system/overview",
+  "/admin/system/health",
+  "/admin/system/jobs",
+  "/admin/system/jobs/action",
+  "/admin/system/logs",
+  "/admin/system/errors",
+  "/admin/system/audit",
+  "/admin/system/configuration",
+  "/admin/system/job-queues",
   "/admin/webhook-endpoints",
   "/admin/webhook-deliveries",
   "/admin/webhook-attempts",
@@ -3853,11 +3867,298 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     );
   }
 
+  if (routePath === "/admin/permissions" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("permissions")
+        .select("id,key,description,risk_level,metadata,created_at,updated_at")
+        .order("key", { ascending: true }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/organizations") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("organizations")
+          .select("id,slug,legal_name,display_name,status,metadata,created_by,created_at,updated_at")
+          .order("created_at", { ascending: false }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("configure_platform_organization", {
+          target_display_name: requireString(payload.displayName, "displayName"),
+          target_idempotency_key: optionalString(payload.idempotencyKey),
+          target_legal_name: optionalString(payload.legalName),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_organization_id: optionalUuid(payload.organizationId, "organizationId"),
+          target_slug: requireString(payload.slug, "slug"),
+          target_status: optionalString(payload.status) ?? "active",
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/admin/content/placements") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("product_content_placements")
+          .select(
+            "id,key,display_name,surface_key,content_kind,allowed_audiences,status,constraints,metadata,created_by,updated_by,created_at,updated_at",
+          )
+          .order("surface_key", { ascending: true })
+          .order("key", { ascending: true }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("configure_product_content_placement", {
+          target_allowed_audiences: optionalStringArray(payload.allowedAudiences) ?? ["public"],
+          target_constraints: optionalRecord(payload.constraints) ?? {},
+          target_content_kind: requireString(payload.contentKind, "contentKind"),
+          target_display_name: requireString(payload.displayName, "displayName"),
+          target_key: requireString(payload.key, "key"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_status: optionalString(payload.status) ?? "active",
+          target_surface_key: requireString(payload.surfaceKey, "surfaceKey"),
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/admin/content/publications") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("product_content_publications")
+          .select(
+            "id,publication_key,placement_key,organization_id,module_key,audience_keys,country_codes,regions,cities,title,body,accessibility_label,cta_label,cta_action,media_asset_id,priority,revision,status,starts_at,ends_at,published_at,metadata,created_by,updated_by,created_at,updated_at",
+          )
+          .order("updated_at", { ascending: false })
+          .limit(150),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("configure_product_content_publication", {
+          target_accessibility_label: optionalString(payload.accessibilityLabel),
+          target_audience_keys: optionalStringArray(payload.audienceKeys) ?? ["public"],
+          target_body: optionalString(payload.body),
+          target_cities: optionalStringArray(payload.cities) ?? [],
+          target_country_codes: optionalStringArray(payload.countryCodes) ?? [],
+          target_cta_action: optionalRecord(payload.ctaAction) ?? {},
+          target_cta_label: optionalString(payload.ctaLabel),
+          target_ends_at: optionalString(payload.endsAt),
+          target_media_asset_id: optionalUuid(payload.mediaAssetId, "mediaAssetId"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_module_key: optionalString(payload.moduleKey),
+          target_organization_id: optionalUuid(payload.organizationId, "organizationId"),
+          target_placement_key: requireString(payload.placementKey, "placementKey"),
+          target_priority: optionalInteger(payload.priority) ?? 0,
+          target_publication_id: optionalUuid(payload.publicationId, "publicationId"),
+          target_publication_key: optionalString(payload.publicationKey),
+          target_regions: optionalStringArray(payload.regions) ?? [],
+          target_starts_at: optionalString(payload.startsAt),
+          target_status: optionalString(payload.status) ?? "draft",
+          target_title: optionalString(payload.title),
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/admin/content/publications/state" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    return rpcResponse(
+      supabase.rpc("set_product_content_publication_status", {
+        target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+        target_publication_id: requireUuid(body.value.publicationId, "publicationId"),
+        target_reason: optionalString(body.value.reason),
+        target_status: requireString(body.value.status, "status"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/system/overview" && request.method === "GET") {
+    const [healthResult, jobsResult, errorsResult, auditResult] = await Promise.all([
+      supabase.from("health_checks").select("id,status"),
+      supabase.from("background_jobs").select("id,status"),
+      supabase.from("error_reports").select("id,status,severity"),
+      supabase.from("audit_logs").select("id"),
+    ]);
+
+    const failedResult = [healthResult, jobsResult, errorsResult, auditResult].find((result) => result.error);
+    if (failedResult?.error) {
+      return databaseError(failedResult.error, id);
+    }
+
+    return jsonResponse({
+      ok: true,
+      data: {
+        healthChecks: Array.isArray(healthResult.data) ? healthResult.data : [],
+        jobs: Array.isArray(jobsResult.data) ? jobsResult.data : [],
+        errors: Array.isArray(errorsResult.data) ? errorsResult.data : [],
+        auditEvents: Array.isArray(auditResult.data) ? auditResult.data.length : 0,
+      },
+      requestId: id,
+    });
+  }
+
+  if (routePath === "/admin/system/health" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("health_checks")
+        .select("id,key,status,details,checked_at,created_at,updated_at")
+        .order("updated_at", { ascending: false })
+        .limit(120),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/system/jobs" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("background_jobs")
+        .select(
+          "id,queue_id,job_type_key,status,payload,attempts,max_attempts,run_at,locked_until,locked_by,last_error,created_by,created_at,updated_at",
+        )
+        .order("updated_at", { ascending: false })
+        .limit(120),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/system/jobs/action" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    return rpcResponse(
+      supabase.rpc("set_background_job_status", {
+        target_action: requireString(body.value.action, "action"),
+        target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+        target_job_id: requireUuid(body.value.jobId, "jobId"),
+        target_reason: optionalString(body.value.reason),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/system/logs" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("application_logs")
+        .select("id,severity,source,message,context,request_id,actor_user_id,created_at")
+        .order("created_at", { ascending: false })
+        .limit(120),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/system/errors" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("error_reports")
+        .select(
+          "id,fingerprint,severity,status,source,message,stack_trace,context,first_seen_at,last_seen_at,occurrence_count,created_at,updated_at",
+        )
+        .order("last_seen_at", { ascending: false })
+        .limit(120),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/system/audit" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("audit_logs")
+        .select("id,actor_user_id,action,entity_type,entity_id,before_state,after_state,metadata,created_at")
+        .order("created_at", { ascending: false })
+        .limit(120),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/system/configuration" && request.method === "GET") {
+    const { data, error } = await supabase
+      .from("configuration_entries")
+      .select(
+        "id,namespace,key,scope_type,scope_id,value,is_secret,status,version,effective_from,effective_until,created_by,updated_by,created_at,updated_at",
+      )
+      .order("namespace", { ascending: true })
+      .order("key", { ascending: true })
+      .limit(150);
+
+    if (error) {
+      return databaseError(error, id);
+    }
+
+    return jsonResponse({
+      ok: true,
+      data: (Array.isArray(data) ? data : []).map((record) => ({
+        ...(record as Record<string, unknown>),
+        value: (record as { readonly is_secret?: unknown }).is_secret === true ? { redacted: true } :
+          (record as { readonly value?: unknown }).value,
+      })),
+      requestId: id,
+    });
+  }
+
+  if (routePath === "/admin/system/job-queues" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("job_queues")
+        .select("id,key,status,concurrency_limit,retry_policy,created_by,created_at,updated_at")
+        .order("key", { ascending: true }),
+      id,
+    );
+  }
+
   if (routePath === "/admin/role-templates") {
     if (request.method === "GET") {
       const { data, error } = await supabase
         .from("platform_admin_role_templates")
-        .select("id,key,display_name,description,permission_keys,status,is_system,metadata")
+        .select("id,role_id,key,display_name,description,permission_keys,status,is_system,metadata")
         .order("key", { ascending: true });
 
       if (error) {

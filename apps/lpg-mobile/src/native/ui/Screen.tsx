@@ -22,7 +22,12 @@ export function Screen({ children, title, eyebrow, action, refreshControl }: Pro
   const { width } = useWindowDimensions();
   return (
     <ScrollView
+      automaticallyAdjustKeyboardInsets
+      contentInsetAdjustmentBehavior="automatic"
+      keyboardDismissMode="interactive"
+      keyboardShouldPersistTaps="handled"
       refreshControl={refreshControl}
+      showsVerticalScrollIndicator={false}
       style={[styles.page, { backgroundColor: palette.canvas }]}
       contentContainerStyle={styles.outer}
     >

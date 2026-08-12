@@ -8,13 +8,16 @@ import {
   FileCheck2,
   FileText,
   LayoutDashboard,
+  Megaphone,
   type LucideIcon,
   MessageSquareWarning,
   PlugZap,
   RefreshCcw,
+  ServerCog,
   Settings2,
   ShieldCheck,
   UserCheck,
+  UsersRound,
   WalletCards,
   XCircle,
 } from "lucide-react";
@@ -30,9 +33,6 @@ import {
   hasPermission,
   type NavigationItem,
   normalizeStatusLabel,
-  type OnboardingFlowDefinition,
-  resolveOnboardingFlow,
-  RouteCatalogSchema,
 } from "@skima/frontend-core";
 import {
   Button,
@@ -44,7 +44,6 @@ import {
   MetricTile,
   MoneyDisplay,
   type NavItem,
-  OnboardingChecklist,
   PageHeader,
   PageShell,
   PermissionProvider,
@@ -55,13 +54,16 @@ import {
 } from "@skima/ui";
 
 import { AdminResourceConsole } from "./admin-resource-console";
+import { AdminCompanyWorkspace } from "./admin-company-workspace";
+import { AdminSystemWorkspace } from "./admin-system-workspace";
+import { AdminAccessWorkspace } from "./admin-access-workspace";
+import { AdminContentWorkspace } from "./admin-content-workspace";
 import {
   catalogConsoleConfig,
   financeConsoleConfig,
   governanceConsoleConfig,
   integrationConsoleConfig,
   operationsConsoleConfig,
-  organizationConsoleConfig,
 } from "./admin-resource-config";
 import { useSessionState } from "./session";
 
@@ -113,14 +115,17 @@ type ReviewCommand =
 
 const navIconMap = {
   overview: LayoutDashboard,
+  company: Building2,
+  access: UsersRound,
   governance: Settings2,
   applications: ClipboardList,
   organizations: Building2,
   operations: Activity,
   finance: WalletCards,
+  content: Megaphone,
   catalog: Boxes,
   providers: PlugZap,
-  onboarding: BookOpenCheck,
+  system: ServerCog,
 } as const;
 
 const foundationNavigation: readonly NavigationItem[] = [
@@ -131,11 +136,18 @@ const foundationNavigation: readonly NavigationItem[] = [
     icon: "overview",
   },
   {
-    key: "governance",
-    label: "Governance",
-    href: "/governance",
-    icon: "governance",
-    requiredPermissions: ["platform.configuration.read"],
+    key: "company",
+    label: "Companies",
+    href: "/company",
+    icon: "company",
+    requiredPermissions: ["platform.organizations.read"],
+  },
+  {
+    key: "access",
+    label: "People & Access",
+    href: "/access",
+    icon: "access",
+    requiredPermissions: ["platform.admins.read"],
   },
   {
     key: "applications",
@@ -143,13 +155,6 @@ const foundationNavigation: readonly NavigationItem[] = [
     href: "/applications",
     icon: "applications",
     requiredPermissions: ["platform.applications.read"],
-  },
-  {
-    key: "organizations",
-    label: "Organizations",
-    href: "/organizations",
-    icon: "organizations",
-    requiredPermissions: ["platform.organizations.read"],
   },
   {
     key: "operations",
@@ -166,10 +171,24 @@ const foundationNavigation: readonly NavigationItem[] = [
     requiredPermissions: ["platform.financial.read"],
   },
   {
+    key: "content",
+    label: "Brand & Content",
+    href: "/content",
+    icon: "content",
+    requiredPermissions: ["platform.content.read"],
+  },
+  {
     key: "catalog",
-    label: "Catalog",
+    label: "Services",
     href: "/catalog",
     icon: "catalog",
+    requiredPermissions: ["platform.configuration.read"],
+  },
+  {
+    key: "governance",
+    label: "Configuration",
+    href: "/governance",
+    icon: "governance",
     requiredPermissions: ["platform.configuration.read"],
   },
   {
@@ -180,73 +199,13 @@ const foundationNavigation: readonly NavigationItem[] = [
     requiredPermissions: ["platform.providers.manage"],
   },
   {
-    key: "onboarding",
-    label: "Onboarding",
-    href: "/onboarding",
-    icon: "onboarding",
+    key: "system",
+    label: "Systems & Audit",
+    href: "/system",
+    icon: "system",
+    requiredPermissions: ["platform.health.read"],
   },
 ];
-
-const operatorOnboardingFlow: OnboardingFlowDefinition = {
-  key: "platform.admin.foundation",
-  title: "Getting Started",
-  audience: "platform",
-  steps: [
-    {
-      key: "session",
-      title: "Account Access",
-      description: "Sign in with an approved Skima account.",
-      href: "/",
-    },
-    {
-      key: "permissions",
-      title: "Access Level",
-      description: "Confirm your account has the right access for your responsibilities.",
-      dependsOn: ["session"],
-      href: "/",
-    },
-    {
-      key: "governance",
-      title: "Governance",
-      description: "Manage admin roles, business lines, and webhook controls.",
-      dependsOn: ["permissions"],
-      requiredPermissions: ["platform.configuration.read"],
-      href: "/governance",
-    },
-    {
-      key: "applications",
-      title: "Application Review",
-      description: "Review business, driver, vehicle, and document submissions.",
-      dependsOn: ["governance"],
-      requiredPermissions: ["platform.applications.read"],
-      href: "/applications",
-    },
-    {
-      key: "organizations",
-      title: "Organizations",
-      description: "Manage approved businesses, branches, staff, roles, and ownership.",
-      dependsOn: ["applications"],
-      requiredPermissions: ["platform.organizations.read"],
-      href: "/organizations",
-    },
-    {
-      key: "finance",
-      title: "Payments",
-      description: "Check wallet, deposit, withdrawal, settlement, and commission activity.",
-      dependsOn: ["organizations"],
-      requiredPermissions: ["platform.financial.read"],
-      href: "/finance",
-    },
-    {
-      key: "providers",
-      title: "Integrations",
-      description: "Review payment, notification, AI, map, and webhook connections.",
-      dependsOn: ["finance"],
-      requiredPermissions: ["platform.providers.manage"],
-      href: "/providers",
-    },
-  ],
-};
 
 export function App() {
   const sessionState = useSessionState();
@@ -287,7 +246,9 @@ export function App() {
   const can = (permission: string) =>
     sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
     hasPermission(permissionContext, permission);
-  const filteredNavigation = filterNavigationItems(foundationNavigation, permissionContext);
+  const filteredNavigation = sessionState.context.platformAdmin?.admin_kind === "super_admin"
+    ? foundationNavigation
+    : filterNavigationItems(foundationNavigation, permissionContext);
   const shellNavItems = filteredNavigation.map(toShellNavItem);
   const activeRoute = shellNavItems.some((item) => item.href === route) ? route : "/";
 
@@ -334,9 +295,16 @@ function LoginView() {
   return (
     <main className="skima-auth-page">
       <section className="skima-auth-panel">
-        <div>
-          <h1>Skima</h1>
-          <p>Operations Console</p>
+        <div className="admin-login-brand">
+          <span aria-hidden="true">S</span>
+          <div>
+            <h1>Skima</h1>
+            <p>Company administration</p>
+          </div>
+        </div>
+        <div className="admin-login-copy">
+          <h2>Welcome back</h2>
+          <p>Sign in with an approved administrator account.</p>
         </div>
         <form className="skima-form" onSubmit={submit}>
           <TextInput
@@ -359,7 +327,7 @@ function LoginView() {
           />
           {error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}
           <Button icon={ShieldCheck} isLoading={isSubmitting} type="submit">
-            Sign in
+            Continue securely
           </Button>
         </form>
       </section>
@@ -368,16 +336,24 @@ function LoginView() {
 }
 
 function Workspace(props: { readonly route: string; readonly onNavigate: (href: string) => void }) {
+  if (props.route === "/company") {
+    return <AdminCompanyWorkspace />;
+  }
+
+  if (props.route === "/access") {
+    return <AdminAccessWorkspace />;
+  }
+
+  if (props.route === "/content") {
+    return <AdminContentWorkspace />;
+  }
+
   if (props.route === "/governance") {
     return <AdminResourceConsole config={governanceConsoleConfig} />;
   }
 
   if (props.route === "/applications") {
     return <ApplicationsWorkspace />;
-  }
-
-  if (props.route === "/organizations") {
-    return <AdminResourceConsole config={organizationConsoleConfig} />;
   }
 
   if (props.route === "/operations") {
@@ -396,8 +372,8 @@ function Workspace(props: { readonly route: string; readonly onNavigate: (href: 
     return <AdminResourceConsole config={integrationConsoleConfig} />;
   }
 
-  if (props.route === "/onboarding") {
-    return <OnboardingWorkspace onNavigate={props.onNavigate} />;
+  if (props.route === "/system") {
+    return <AdminSystemWorkspace />;
   }
 
   return <OverviewWorkspace onNavigate={props.onNavigate} />;
@@ -405,76 +381,196 @@ function Workspace(props: { readonly route: string; readonly onNavigate: (href: 
 
 function OverviewWorkspace(props: { readonly onNavigate: (href: string) => void }) {
   const sessionState = useSessionState();
-  const capabilityCatalog = useGatewayData(
-    "capability-catalog",
-    "/engines/catalog",
-    RouteCatalogSchema,
-  );
-  const operationsCatalog = useGatewayData(
-    "operations-catalog",
-    "/runtime/catalog",
-    RouteCatalogSchema,
-  );
-  const serviceCatalog = useGatewayData("service-catalog", "/modules/catalog", RouteCatalogSchema);
-  const completedSteps = useMemo(
-    () =>
-      ["session", sessionState.context?.permissions.length ? "permissions" : ""]
-        .filter(Boolean) as string[],
-    [sessionState.context?.permissions.length],
-  );
-  const onboardingSteps = resolveOnboardingFlow(
-    operatorOnboardingFlow,
-    completedSteps,
-    { permissions: sessionState.context?.permissions ?? [] },
-    completedSteps.length === 1 ? "permissions" : undefined,
-  );
+  const administrators = useGatewayRecords("command-admins", "/admin/users");
+  const companies = useGatewayRecords("command-companies", "/admin/organizations");
+  const applications = useGatewayRecords("command-applications", "/runtime/applications");
+  const jobs = useGatewayRecords("command-jobs", "/admin/system/jobs");
+  const incidents = useGatewayRecords("command-incidents", "/admin/system/errors");
+  const pendingApplications = (applications.data ?? []).filter((record) =>
+    ["submitted", "resubmitted", "under_review", "additional_info_required"].includes(
+      getRecordString(record, "status") ?? "",
+    )
+  ).length;
+  const failedJobs = (jobs.data ?? []).filter((record) =>
+    getRecordString(record, "status") === "failed"
+  ).length;
+  const openIncidents = (incidents.data ?? []).filter((record) =>
+    ["open", "acknowledged"].includes(getRecordString(record, "status") ?? "")
+  ).length;
+  const activeAdmins = (administrators.data ?? []).filter((record) =>
+    getRecordString(record, "status") === "active"
+  ).length;
+  const requiresAttention = pendingApplications + failedJobs + openIncidents;
 
   return (
     <>
-      <PageHeader
-        eyebrow="Command Center"
-        title="Operations Overview"
-        description="Monitor access, platform capabilities, live work, and business lines from one governed workspace."
-        actions={
-          <Button icon={RefreshCcw} variant="outline" onClick={sessionState.refreshContext}>
-            Refresh
-          </Button>
-        }
-      />
-      <section className="skima-grid">
+      <section className="admin-command-hero">
+        <div>
+          <p className="admin-command-hero__eyebrow">Company command center</p>
+          <h1>Good to see you, {firstName(sessionState.context?.profile?.display_name)}.</h1>
+          <p>
+            Run company access, live operations, money movement, customer content, and platform
+            controls from one secure workspace.
+          </p>
+          <div className="admin-command-hero__actions">
+            <Button icon={Activity} onClick={() => props.onNavigate("/operations")}>Open live operations</Button>
+            <Button icon={UsersRound} variant="outline" onClick={() => props.onNavigate("/access")}>
+              Manage admin team
+            </Button>
+          </div>
+        </div>
+        <div className="admin-command-hero__signal">
+          <span>Operational attention</span>
+          <strong>{requiresAttention}</strong>
+          <small>{requiresAttention === 0 ? "No immediate action is waiting" : "items currently need review"}</small>
+        </div>
+      </section>
+      <section className="skima-grid skima-grid--compact">
         <MetricTile
-          label="Permissions"
-          value={sessionState.context?.permissions.length ?? 0}
-          icon={ShieldCheck}
+          label="Active admins"
+          value={activeAdmins}
+          icon={UsersRound}
         />
         <MetricTile
-          label="Capabilities"
-          value={capabilityCatalog.data?.routes.length ?? "0"}
-          icon={LayoutDashboard}
+          label="Companies"
+          value={companies.data?.length ?? 0}
+          icon={Building2}
           tone="info"
         />
         <MetricTile
-          label="Operations"
-          value={operationsCatalog.data?.routes.length ?? "0"}
-          icon={Activity}
-          tone="success"
+          label="Applications waiting"
+          value={pendingApplications}
+          icon={ClipboardList}
+          tone={pendingApplications ? "warning" : "success"}
         />
         <MetricTile
-          label="Business Lines"
-          value={serviceCatalog.data?.routes.length ?? "0"}
-          icon={Boxes}
-          tone="warning"
+          label="Platform incidents"
+          value={openIncidents + failedJobs}
+          icon={ServerCog}
+          tone={openIncidents + failedJobs ? "warning" : "success"}
         />
       </section>
-      <div className="skima-two-column">
-        <OnboardingChecklist
-          title={operatorOnboardingFlow.title}
-          steps={onboardingSteps}
-          onOpenStep={(step) => step.href && props.onNavigate(step.href)}
-        />
-        <SessionSummary />
+      <div className="admin-command-grid">
+        <section className="sk-panel admin-command-actions">
+          <div className="sk-panel__header">
+            <div>
+              <p className="admin-section-kicker">Workspaces</p>
+              <h2>Run the company</h2>
+            </div>
+          </div>
+          <div className="admin-launch-grid">
+            <CommandLaunch
+              icon={Building2}
+              title="Companies"
+              description="Company profiles, branches, teams, and operating status."
+              onClick={() => props.onNavigate("/company")}
+            />
+            <CommandLaunch
+              icon={ClipboardList}
+              title="Approvals"
+              description={`${pendingApplications} application${pendingApplications === 1 ? "" : "s"} waiting for action.`}
+              onClick={() => props.onNavigate("/applications")}
+            />
+            <CommandLaunch
+              icon={WalletCards}
+              title="Finance"
+              description="Wallets, deposits, escrow, payouts, and settlements."
+              onClick={() => props.onNavigate("/finance")}
+            />
+            <CommandLaunch
+              icon={Megaphone}
+              title="Brand & content"
+              description="Logos, promotions, onboarding, messages, and publishing."
+              onClick={() => props.onNavigate("/content")}
+            />
+            <CommandLaunch
+              icon={UsersRound}
+              title="People & access"
+              description="Multiple admins, custom roles, and permission scopes."
+              onClick={() => props.onNavigate("/access")}
+            />
+            <CommandLaunch
+              icon={ServerCog}
+              title="Systems & audit"
+              description="Health, jobs, incidents, service logs, and audit history."
+              onClick={() => props.onNavigate("/system")}
+            />
+          </div>
+        </section>
+        <section className="sk-panel admin-attention-panel">
+          <div className="sk-panel__header">
+            <div>
+              <p className="admin-section-kicker">Now</p>
+              <h2>Attention queue</h2>
+            </div>
+            <StatusBadge tone={requiresAttention ? "warning" : "success"}>
+              {requiresAttention ? `${requiresAttention} open` : "Clear"}
+            </StatusBadge>
+          </div>
+          <AttentionRow
+            label="Applications"
+            value={pendingApplications}
+            detail="Submitted profiles awaiting a decision"
+            onClick={() => props.onNavigate("/applications")}
+          />
+          <AttentionRow
+            label="Failed background work"
+            value={failedJobs}
+            detail="Jobs requiring retry or investigation"
+            onClick={() => props.onNavigate("/system")}
+          />
+          <AttentionRow
+            label="Open incidents"
+            value={openIncidents}
+            detail="Service issues not yet resolved"
+            onClick={() => props.onNavigate("/system")}
+          />
+          <div className="admin-session-compact">
+            <ShieldCheck aria-hidden="true" />
+            <span>
+              <strong>{sessionState.context?.platformAdmin?.title ?? "Platform administrator"}</strong>
+              <small>{sessionState.context?.permissions.length ?? 0} governed permissions</small>
+            </span>
+          </div>
+        </section>
       </div>
     </>
+  );
+}
+
+function CommandLaunch(props: {
+  readonly icon: LucideIcon;
+  readonly title: string;
+  readonly description: string;
+  readonly onClick: () => void;
+}) {
+  const Icon = props.icon;
+  return (
+    <button className="admin-launch-card" type="button" onClick={props.onClick}>
+      <span className="admin-launch-card__icon"><Icon aria-hidden="true" /></span>
+      <span>
+        <strong>{props.title}</strong>
+        <small>{props.description}</small>
+      </span>
+      <span className="admin-launch-card__arrow" aria-hidden="true">→</span>
+    </button>
+  );
+}
+
+function AttentionRow(props: {
+  readonly label: string;
+  readonly value: number;
+  readonly detail: string;
+  readonly onClick: () => void;
+}) {
+  return (
+    <button className="admin-attention-row" type="button" onClick={props.onClick}>
+      <span>
+        <strong>{props.label}</strong>
+        <small>{props.detail}</small>
+      </span>
+      <span className={props.value > 0 ? "is-active" : undefined}>{props.value}</span>
+    </button>
   );
 }
 
@@ -1293,76 +1389,6 @@ function ProvidersWorkspace() {
   );
 }
 
-function OnboardingWorkspace(props: { readonly onNavigate: (href: string) => void }) {
-  const sessionState = useSessionState();
-  const completedSteps = [
-    "session",
-    sessionState.context?.permissions.length ? "permissions" : "",
-    sessionState.context?.permissions.includes("platform.configuration.read") ? "governance" : "",
-    sessionState.context?.permissions.includes("platform.applications.read") ? "applications" : "",
-    sessionState.context?.permissions.includes("platform.organizations.read")
-      ? "organizations"
-      : "",
-    sessionState.context?.permissions.includes("platform.financial.read") ? "finance" : "",
-  ].filter(Boolean);
-  const steps = resolveOnboardingFlow(
-    operatorOnboardingFlow,
-    completedSteps,
-    { permissions: sessionState.context?.permissions ?? [] },
-  );
-
-  return (
-    <>
-      <PageHeader
-        eyebrow="Guidance"
-        title="Onboarding"
-        description="Follow the core operating sequence for account access, permissions, reviews, organizations, finance, and integrations."
-      />
-      <OnboardingChecklist
-        title={operatorOnboardingFlow.title}
-        steps={steps}
-        onOpenStep={(step) => step.href && props.onNavigate(step.href)}
-      />
-    </>
-  );
-}
-
-function SessionSummary() {
-  const sessionState = useSessionState();
-  const roles = sessionState.context?.roles ?? [];
-  const organizations = sessionState.context?.organizations ?? [];
-
-  return (
-    <section className="sk-panel">
-      <div className="sk-panel__header">
-        <h2>Account</h2>
-        <StatusBadge tone={sessionState.context?.platformAdmin ? "success" : "info"}>
-          {sessionState.context?.platformAdmin?.admin_kind
-            ? normalizeStatusLabel(sessionState.context.platformAdmin.admin_kind)
-            : "Authenticated"}
-        </StatusBadge>
-      </div>
-      <div className="skima-record-list">
-        <RecordLine
-          label="User"
-          value={sessionState.context?.user.email ?? sessionState.context?.user.id ?? ""}
-        />
-        <RecordLine label="Roles" value={String(roles.length)} />
-        <RecordLine label="Organizations" value={String(organizations.length)} />
-      </div>
-    </section>
-  );
-}
-
-function RecordLine(props: { readonly label: string; readonly value: string }) {
-  return (
-    <div className="skima-record">
-      <span>{props.label}</span>
-      <strong>{props.value}</strong>
-    </div>
-  );
-}
-
 function RecordsTable(props: {
   readonly title: string;
   readonly query: ReturnType<typeof useGatewayRecords>;
@@ -1576,6 +1602,11 @@ function dateSortValue(value: string | null): number {
   const time = new Date(value).getTime();
 
   return Number.isNaN(time) ? 0 : time;
+}
+
+function firstName(value: string | null | undefined): string {
+  const normalized = value?.trim();
+  return normalized ? normalized.split(/\s+/)[0] : "there";
 }
 
 function optionalTrimmedValue(value: string): string | null {

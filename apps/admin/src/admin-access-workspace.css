@@ -1,0 +1,633 @@
+.skima-access-notice,
+.skima-access-owner-note,
+.skima-access-switcher,
+.skima-access-toolbar,
+.skima-access-person,
+.skima-access-row-actions,
+.skima-access-role-heading,
+.skima-access-role-kicker,
+.skima-access-scope-heading,
+.skima-access-permission,
+.skima-access-dialog-intro,
+.skima-access-warning {
+  align-items: center;
+  display: flex;
+}
+
+.skima-access-notice {
+  background: var(--sk-color-success-soft);
+  border: 1px solid color-mix(in srgb, var(--sk-color-success) 24%, transparent);
+  border-radius: var(--sk-radius-md);
+  color: var(--sk-color-success);
+  gap: var(--sk-space-3);
+  min-height: 46px;
+  padding: var(--sk-space-2) var(--sk-space-4);
+}
+
+.skima-access-notice.is-danger {
+  background: var(--sk-color-danger-soft);
+  border-color: color-mix(in srgb, var(--sk-color-danger) 24%, transparent);
+  color: var(--sk-color-danger);
+}
+
+.skima-access-notice svg,
+.skima-access-owner-note svg,
+.skima-access-switcher svg,
+.skima-access-protected svg,
+.skima-access-dialog-intro svg,
+.skima-access-warning svg {
+  height: 18px;
+  width: 18px;
+}
+
+.skima-access-notice span {
+  flex: 1;
+  font-weight: 700;
+}
+
+.skima-access-notice button {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.skima-access-owner-note {
+  background:
+    radial-gradient(circle at 94% 0%, rgba(87, 80, 216, 0.16), transparent 34%),
+    linear-gradient(120deg, #17191f, #232834);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--sk-radius-md);
+  box-shadow: var(--sk-shadow-sm);
+  color: #f7f9fc;
+  gap: var(--sk-space-4);
+  min-height: 92px;
+  padding: var(--sk-space-4) var(--sk-space-5);
+}
+
+.skima-access-owner-note__icon {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--sk-radius-md);
+  color: #f3c96b;
+  display: inline-flex;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.skima-access-owner-note > div {
+  flex: 1;
+}
+
+.skima-access-owner-note strong {
+  font-size: 1rem;
+}
+
+.skima-access-owner-note p {
+  color: rgba(247, 249, 252, 0.68);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  margin: 4px 0 0;
+  max-width: 900px;
+}
+
+.skima-access-metrics .sk-metric {
+  min-height: 96px;
+}
+
+.skima-access-metrics .sk-metric strong {
+  font-size: 1.45rem;
+}
+
+.skima-access-switcher {
+  align-self: start;
+  background: var(--sk-color-surface-strong);
+  border: 1px solid var(--sk-color-border);
+  border-radius: var(--sk-radius-md);
+  gap: var(--sk-space-1);
+  padding: 4px;
+  width: fit-content;
+}
+
+.skima-access-switcher button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--sk-color-muted);
+  cursor: pointer;
+  display: flex;
+  font-weight: 750;
+  gap: var(--sk-space-2);
+  min-height: 38px;
+  padding: 0 var(--sk-space-3);
+}
+
+.skima-access-switcher button.is-active {
+  background: var(--sk-color-surface);
+  box-shadow: var(--sk-shadow-xs);
+  color: var(--sk-color-ink);
+}
+
+.skima-access-switcher button > span {
+  align-items: center;
+  background: var(--sk-color-surface-strong);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.75rem;
+  justify-content: center;
+  min-width: 23px;
+  padding: 3px 7px;
+}
+
+.skima-access-team {
+  padding: 0;
+  overflow: hidden;
+}
+
+.skima-access-team > .skima-access-toolbar {
+  padding: var(--sk-space-4) var(--sk-space-5);
+}
+
+.skima-access-team .sk-table-wrap {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.skima-access-toolbar {
+  gap: var(--sk-space-4);
+  justify-content: space-between;
+}
+
+.skima-access-toolbar h2,
+.skima-access-role-detail h2,
+.skima-access-scope-heading h3,
+.skima-access-permission-picker-heading h3 {
+  margin: 0;
+}
+
+.skima-access-toolbar p,
+.skima-access-role-detail p,
+.skima-access-scope-heading p,
+.skima-access-permission-picker-heading p {
+  color: var(--sk-color-muted);
+  font-size: 0.875rem;
+  margin: 4px 0 0;
+}
+
+.skima-access-search {
+  align-items: center;
+  background: var(--sk-color-surface-raised);
+  border: 1px solid var(--sk-color-border);
+  border-radius: var(--sk-radius-md);
+  display: flex;
+  gap: var(--sk-space-2);
+  min-height: 38px;
+  padding: 0 var(--sk-space-3);
+  width: min(270px, 100%);
+}
+
+.skima-access-search svg {
+  color: var(--sk-color-muted);
+  height: 17px;
+  width: 17px;
+}
+
+.skima-access-search input {
+  background: transparent;
+  border: 0;
+  color: var(--sk-color-text);
+  min-width: 0;
+  outline: 0;
+  width: 100%;
+}
+
+.skima-access-person {
+  gap: var(--sk-space-3);
+}
+
+.skima-access-avatar {
+  background: var(--sk-color-surface-strong);
+  border: 1px solid var(--sk-color-border);
+  border-radius: 50%;
+  height: 38px;
+  object-fit: cover;
+  width: 38px;
+}
+
+.skima-access-avatar.is-placeholder {
+  align-items: center;
+  background: linear-gradient(135deg, var(--sk-color-primary-soft), var(--sk-color-accent-soft));
+  color: var(--sk-color-primary-strong);
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 850;
+  justify-content: center;
+}
+
+.skima-access-person > span,
+.skima-access-responsibility {
+  display: grid;
+  gap: 3px;
+}
+
+.skima-access-person small,
+.skima-access-responsibility small {
+  color: var(--sk-color-muted);
+  font-size: 0.78rem;
+}
+
+.skima-access-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.skima-access-row-actions {
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.skima-access-protected {
+  align-items: center;
+  color: var(--sk-color-warning);
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 800;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.skima-access-role-layout {
+  align-items: start;
+  display: grid;
+  gap: var(--sk-space-5);
+  grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.65fr);
+}
+
+.skima-access-role-list {
+  padding: 0;
+  overflow: hidden;
+  position: sticky;
+  top: 96px;
+}
+
+.skima-access-role-list > .skima-access-toolbar {
+  border-bottom: 1px solid var(--sk-color-border);
+  padding: var(--sk-space-4);
+}
+
+.skima-access-role-options {
+  display: grid;
+  max-height: 640px;
+  overflow-y: auto;
+  padding: var(--sk-space-2);
+}
+
+.skima-access-role-options > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--sk-radius-md);
+  color: var(--sk-color-text);
+  cursor: pointer;
+  display: grid;
+  gap: var(--sk-space-3);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: var(--sk-space-3);
+  text-align: left;
+}
+
+.skima-access-role-options > button:hover,
+.skima-access-role-options > button.is-active {
+  background: var(--sk-color-primary-soft);
+}
+
+.skima-access-role-options > button > span:nth-child(2) {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.skima-access-role-options strong,
+.skima-access-role-options small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skima-access-role-options small {
+  color: var(--sk-color-muted);
+  font-size: 0.75rem;
+}
+
+.skima-access-role-icon {
+  align-items: center;
+  background: var(--sk-color-surface);
+  border: 1px solid var(--sk-color-border);
+  border-radius: 7px;
+  color: var(--sk-color-primary);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.skima-access-role-icon svg {
+  height: 17px;
+  width: 17px;
+}
+
+.skima-access-role-detail {
+  gap: var(--sk-space-5);
+}
+
+.skima-access-role-heading {
+  align-items: flex-start;
+  gap: var(--sk-space-4);
+  justify-content: space-between;
+}
+
+.skima-access-role-heading h2 {
+  font-size: 1.45rem;
+  margin-top: var(--sk-space-2);
+}
+
+.skima-access-role-kicker {
+  flex-wrap: wrap;
+  gap: var(--sk-space-2);
+}
+
+.skima-access-role-kicker > span:last-child {
+  color: var(--sk-color-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+}
+
+.skima-access-role-facts {
+  background: var(--sk-color-surface-raised);
+  border: 1px solid var(--sk-color-border);
+  border-radius: var(--sk-radius-md);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.skima-access-role-facts div {
+  display: grid;
+  gap: 5px;
+  padding: var(--sk-space-3) var(--sk-space-4);
+}
+
+.skima-access-role-facts div + div {
+  border-left: 1px solid var(--sk-color-border);
+}
+
+.skima-access-role-facts span {
+  color: var(--sk-color-muted);
+  font-size: 0.76rem;
+}
+
+.skima-access-role-facts strong {
+  font-size: 1.05rem;
+}
+
+.skima-access-scope-heading {
+  justify-content: space-between;
+}
+
+.skima-access-permission-groups {
+  display: grid;
+  gap: var(--sk-space-3);
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+}
+
+.skima-access-permission-groups > section,
+.skima-access-permission-picker > section {
+  border: 1px solid var(--sk-color-border);
+  border-radius: var(--sk-radius-md);
+  overflow: hidden;
+}
+
+.skima-access-permission-groups > section > header,
+.skima-access-permission-picker > section > header {
+  align-items: center;
+  background: var(--sk-color-surface-raised);
+  border-bottom: 1px solid var(--sk-color-border);
+  display: flex;
+  font-weight: 800;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 0 var(--sk-space-3);
+}
+
+.skima-access-permission-groups > section > div {
+  display: grid;
+}
+
+.skima-access-permission {
+  align-items: flex-start;
+  gap: var(--sk-space-2);
+  min-height: 58px;
+  padding: var(--sk-space-3);
+}
+
+.skima-access-permission + .skima-access-permission {
+  border-top: 1px solid var(--sk-color-border);
+}
+
+.skima-access-permission > svg {
+  color: var(--sk-color-primary);
+  height: 16px;
+  margin-top: 2px;
+  width: 16px;
+}
+
+.skima-access-permission > span {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+}
+
+.skima-access-permission small {
+  color: var(--sk-color-muted);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.skima-access-empty {
+  color: var(--sk-color-muted);
+  padding: var(--sk-space-6);
+  text-align: center;
+}
+
+.skima-access-dialog-intro,
+.skima-access-warning {
+  align-items: flex-start;
+  background: var(--sk-color-info-soft);
+  border-radius: var(--sk-radius-md);
+  color: var(--sk-color-info);
+  gap: var(--sk-space-3);
+  padding: var(--sk-space-3);
+}
+
+.skima-access-dialog-intro svg,
+.skima-access-warning svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.skima-access-dialog-intro p,
+.skima-access-warning p {
+  color: inherit;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.skima-access-warning {
+  background: var(--sk-color-warning-soft);
+  color: var(--sk-color-warning);
+}
+
+.skima-access-warning.is-danger {
+  background: var(--sk-color-danger-soft);
+  color: var(--sk-color-danger);
+  margin-bottom: var(--sk-space-4);
+}
+
+.skima-access-role-form-grid {
+  display: grid;
+  gap: var(--sk-space-3);
+  grid-template-columns: 1fr 1fr;
+}
+
+.skima-access-permission-picker-heading {
+  align-items: end;
+  display: flex;
+  gap: var(--sk-space-4);
+  justify-content: space-between;
+}
+
+.skima-access-catalog-note {
+  background: var(--sk-color-warning-soft);
+  border-radius: var(--sk-radius-md);
+  color: var(--sk-color-warning);
+  font-size: 0.82rem;
+  margin: 0;
+  padding: var(--sk-space-2) var(--sk-space-3);
+}
+
+.skima-access-permission-picker {
+  display: grid;
+  gap: var(--sk-space-3);
+  max-height: 340px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.skima-access-permission-picker > section > header > span {
+  align-items: baseline;
+  display: flex;
+  gap: var(--sk-space-2);
+}
+
+.skima-access-permission-picker > section > header small {
+  color: var(--sk-color-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.skima-access-permission-picker > section > div {
+  display: grid;
+  gap: var(--sk-space-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: var(--sk-space-3);
+}
+
+.skima-access-permission-picker .sk-checkbox {
+  background: var(--sk-color-surface-raised);
+  border: 1px solid var(--sk-color-border);
+  border-radius: 7px;
+  padding: var(--sk-space-2);
+}
+
+.skima-access-permission-picker .sk-checkbox__label {
+  font-size: 0.84rem;
+}
+
+.skima-access-permission-picker .sk-checkbox__helper {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.skima-access-selection-count {
+  color: var(--sk-color-muted);
+  font-size: 0.82rem;
+  font-weight: 750;
+  margin-right: auto;
+}
+
+@media (max-width: 1100px) {
+  .skima-access-role-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .skima-access-role-list {
+    position: static;
+  }
+
+  .skima-access-role-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .skima-access-owner-note,
+  .skima-access-toolbar,
+  .skima-access-role-heading,
+  .skima-access-permission-picker-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .skima-access-owner-note > .sk-badge {
+    align-self: flex-start;
+  }
+
+  .skima-access-switcher {
+    display: grid;
+    width: 100%;
+  }
+
+  .skima-access-switcher button {
+    justify-content: flex-start;
+  }
+
+  .skima-access-switcher button > span {
+    margin-left: auto;
+  }
+
+  .skima-access-role-options,
+  .skima-access-role-form-grid,
+  .skima-access-permission-picker > section > div {
+    grid-template-columns: 1fr;
+  }
+
+  .skima-access-role-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .skima-access-role-facts div + div {
+    border-left: 0;
+    border-top: 1px solid var(--sk-color-border);
+  }
+
+  .skima-access-search {
+    width: 100%;
+  }
+}

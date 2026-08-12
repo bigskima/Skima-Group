@@ -46,15 +46,10 @@ async function reconcile(owner: string, messages: Record<string, unknown>[]) {
   for (const message of fresh.reverse()) {
     const payload = nestedRecord(message, "payload");
     await presentBackendNotification({
-      title:
-        firstString(payload, ["title", "subject"]) ??
-        (firstString(message, ["purpose"]) ?? "SKIMA update").replace(
-          /[_-]/g,
-          " ",
-        ),
+      title: firstString(payload, ["title", "subject"]) ?? notificationTitle(message),
       body:
         firstString(payload, ["body", "message", "text"]) ??
-        "A new backend update is available.",
+        "You have a new update in SKIMA.",
       path:
         firstString(payload, ["deepLink", "deep_link", "route"]) ?? undefined,
     });
@@ -63,4 +58,18 @@ async function reconcile(owner: string, messages: Record<string, unknown>[]) {
     key,
     JSON.stringify([...currentIds, ...seen].slice(0, 250)),
   );
+}
+
+function notificationTitle(message: Record<string, unknown>) {
+  const purpose = firstString(message, ["purpose"]);
+  const titles: Record<string, string> = {
+    delivery_completed: "Delivery complete",
+    driver_assigned: "Driver assigned",
+    order_created: "Order received",
+    payment_received: "Payment received",
+    pickup_confirmed: "Cylinder collected",
+    refill_completed: "Refill complete",
+    returning: "Your cylinder is on the way",
+  };
+  return (purpose && titles[purpose]) || "SKIMA update";
 }
