@@ -145,6 +145,10 @@ export function NewRefillScreen() {
       setError("Select a cylinder, pickup location, and delivery location.");
       return;
     }
+    if (!stationId) {
+      setError("Choose the approved station that will refill your cylinder.");
+      return;
+    }
     if (!Number.isFinite(kilograms) || kilograms <= 0) {
       setError("Enter the kilograms to refill.");
       return;

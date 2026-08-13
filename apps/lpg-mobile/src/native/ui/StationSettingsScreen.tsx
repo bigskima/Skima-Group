@@ -8,7 +8,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useStationRuntime } from "../api/domains";
+import { domainQueries, useStationRuntime } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
   ActionResponseSchema,
@@ -27,18 +27,22 @@ export function StationSettingsScreen() {
   const session = useSession();
   const canManage = Boolean(
     session.context?.platformAdmin ||
+    session.context?.permissions.includes("platform.partner_price.manage") ||
     session.context?.permissions.includes("lpg.stations.manage") ||
     session.context?.roles.some((role) =>
+      role.permissions.includes("platform.partner_price.manage") ||
       role.permissions.includes("lpg.stations.manage"),
     ),
   );
   const runtime = useStationRuntime();
+  const catalogPrices = domainQueries.stationCatalogPrices();
   const branch = nestedRecord(runtime.data, "branch");
   const branchId = branch ? recordId(branch) : null;
   const hours =
     nestedRecord(branch, "operatingHours") ??
     nestedRecord(branch, "operating_hours");
-  const pricing = nestedRecords(runtime.data, "pricing")[0];
+  const pricing = catalogPrices.data?.[0] ?? nestedRecords(runtime.data, "pricing")[0];
+  const catalogItemId = firstString(pricing, ["itemId", "item_id"]);
   const [availability, setAvailability] = useState("available");
   const [opens, setOpens] = useState("");
   const [closes, setCloses] = useState("");
@@ -52,7 +56,7 @@ export function StationSettingsScreen() {
   const pricingMutation = useGatewayMutation({
     path: "/lpg/config",
     schema: ActionResponseSchema,
-    invalidate: [["station-runtime"]],
+    invalidate: [["station-runtime"], ["station-catalog-prices"]],
   });
   useEffect(() => {
     if (branch) {
@@ -94,9 +98,14 @@ export function StationSettingsScreen() {
       setNotice("Enter a valid branch price per kilogram.");
       return;
     }
+    if (!catalogItemId) {
+      setNotice("Add an active LPG refill item to this branch catalog before setting its price.");
+      return;
+    }
     try {
       await pricingMutation.mutateAsync({
         configType: "stationPrice",
+        itemId: catalogItemId ?? undefined,
         stationBranchId: branchId,
         pricePerKg: amount,
         source: "skima.lpg.mobile",
@@ -192,6 +201,15 @@ export function StationSettingsScreen() {
               Only refill price is editable here. Delivery, tax, platform, and
               driver amounts remain server-managed by policy.
             </Text>
+            {catalogItemId ? (
+              <Text style={styles.body}>
+                Editing {firstString(pricing, ["displayName", "display_name", "itemKey"]) ?? "LPG refill"}.
+              </Text>
+            ) : (
+              <Text style={styles.warning}>
+                No active LPG refill catalog item is configured for this branch.
+              </Text>
+            )}
             <TextInput
               value={price}
               onChangeText={setPrice}
@@ -201,7 +219,7 @@ export function StationSettingsScreen() {
               style={styles.input}
             />
             <Pressable
-              disabled={pricingMutation.isPending}
+              disabled={pricingMutation.isPending || !catalogItemId}
               onPress={() => void savePrice()}
               style={styles.secondary}
             >
@@ -263,4 +281,5 @@ const styles = StyleSheet.create({
   },
   secondaryText: { color: colors.brand, fontWeight: "900" },
   notice: { color: colors.success, fontWeight: "700" },
+  warning: { color: colors.danger, fontWeight: "700" },
 });

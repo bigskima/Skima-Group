@@ -15,6 +15,14 @@ const ROUTES = new Set([
   "/admin/content/placements",
   "/admin/content/publications",
   "/admin/content/publications/state",
+  "/admin/financial-policies",
+  "/admin/financial-policies/history",
+  "/admin/financial-policies/resolve",
+  "/admin/financial-policies/submit",
+  "/admin/financial-policies/review",
+  "/admin/financial-policies/activate",
+  "/admin/financial-policies/deactivate",
+  "/admin/financial-policies/rollback",
   "/admin/system/overview",
   "/admin/system/health",
   "/admin/system/jobs",
@@ -60,6 +68,7 @@ const ROUTES = new Set([
   "/lpg/stations",
   "/lpg/stations/activate",
   "/lpg/stations/runtime",
+  "/lpg/stations/catalog-prices",
   "/lpg/stations/settings",
   "/lpg/stations/capacity-adjustments",
   "/lpg/jobs",
@@ -340,6 +349,158 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
   }
 
+  if (routePath === "/admin/financial-policies") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("financial_policy_versions")
+          .select(
+            "id,version,lifecycle_status,organization_id,module_id,service_key,geography_type,geography_key,currency_code,priority,configuration,effective_from,effective_until,change_reason,validation_snapshot,based_on_version_id,supersedes_version_id,rollback_of_version_id,submitted_by,submitted_at,approved_by,approved_at,activated_by,activated_at,deactivated_by,deactivated_at,created_by,created_at,updated_at,financial_policy_definitions!inner(id,key,display_name,policy_family,approval_required,allow_partner_delegation,status,metadata)",
+          )
+          .order("created_at", { ascending: false }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      const payload = body.value;
+
+      return rpcResponse(
+        supabase.rpc("create_financial_policy_version", {
+          target_allow_partner_delegation: optionalBoolean(payload.allowPartnerDelegation) ?? false,
+          target_approval_required: optionalBoolean(payload.approvalRequired) ?? true,
+          target_based_on_version_id: optionalUuid(payload.basedOnVersionId, "basedOnVersionId"),
+          target_change_reason: requireString(payload.changeReason, "changeReason"),
+          target_configuration: requireRecord(payload.configuration, "configuration"),
+          target_currency_code: requireString(payload.currencyCode, "currencyCode"),
+          target_display_name: requireString(payload.displayName, "displayName"),
+          target_effective_from: requireString(payload.effectiveFrom, "effectiveFrom"),
+          target_effective_until: optionalString(payload.effectiveUntil),
+          target_geography_key: optionalString(payload.geographyKey),
+          target_geography_type: optionalString(payload.geographyType) ?? "global",
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_module_key: optionalString(payload.moduleKey),
+          target_organization_id: optionalUuid(payload.organizationId, "organizationId"),
+          target_policy_family: requireString(payload.policyFamily, "policyFamily"),
+          target_policy_key: requireString(payload.policyKey, "policyKey"),
+          target_priority: optionalInteger(payload.priority) ?? 100,
+          target_rollback_of_version_id: optionalUuid(payload.rollbackOfVersionId, "rollbackOfVersionId"),
+          target_service_key: optionalString(payload.serviceKey),
+          target_supersedes_version_id: optionalUuid(payload.supersedesVersionId, "supersedesVersionId"),
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/admin/financial-policies/history" && request.method === "GET") {
+    const policyVersionId = optionalUuid(url.searchParams.get("policyVersionId"), "policyVersionId");
+    let query = supabase
+      .from("financial_policy_events")
+      .select("id,policy_version_id,event_type,actor_user_id,previous_state,new_state,reason,created_at")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (policyVersionId) {
+      query = query.eq("policy_version_id", policyVersionId);
+    }
+
+    return selectRecords(
+      query,
+      id,
+    );
+  }
+
+  if (routePath === "/admin/financial-policies/resolve" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcDataResponse(
+      supabase.rpc("resolve_financial_policy", {
+        target_at: optionalString(payload.at) ?? new Date().toISOString(),
+        target_currency_code: requireString(payload.currencyCode, "currencyCode"),
+        target_geography_key: optionalString(payload.geographyKey),
+        target_geography_type: optionalString(payload.geographyType) ?? "global",
+        target_module_key: optionalString(payload.moduleKey),
+        target_organization_id: optionalUuid(payload.organizationId, "organizationId"),
+        target_policy_key: requireString(payload.policyKey, "policyKey"),
+        target_service_key: optionalString(payload.serviceKey),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/financial-policies/submit" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(
+      supabase.rpc("submit_financial_policy_version", {
+        target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+        target_policy_version_id: requireUuid(body.value.policyVersionId, "policyVersionId"),
+        target_reason: requireString(body.value.reason, "reason"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/financial-policies/review" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(
+      supabase.rpc("review_financial_policy_version", {
+        target_decision: requireString(body.value.decision, "decision"),
+        target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+        target_policy_version_id: requireUuid(body.value.policyVersionId, "policyVersionId"),
+        target_reason: requireString(body.value.reason, "reason"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/financial-policies/activate" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(
+      supabase.rpc("activate_financial_policy_version", {
+        target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+        target_policy_version_id: requireUuid(body.value.policyVersionId, "policyVersionId"),
+        target_reason: requireString(body.value.reason, "reason"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/financial-policies/deactivate" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(
+      supabase.rpc("deactivate_financial_policy_version", {
+        target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+        target_policy_version_id: requireUuid(body.value.policyVersionId, "policyVersionId"),
+        target_reason: requireString(body.value.reason, "reason"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/financial-policies/rollback" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(
+      supabase.rpc("rollback_financial_policy_version", {
+        target_active_version_id: requireUuid(body.value.activeVersionId, "activeVersionId"),
+        target_effective_from: requireString(body.value.effectiveFrom, "effectiveFrom"),
+        target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+        target_reason: requireString(body.value.reason, "reason"),
+        target_restore_version_id: requireUuid(body.value.restoreVersionId, "restoreVersionId"),
+      }),
+      id,
+    );
+  }
+
   if (routePath === "/engines/currencies" && request.method === "GET") {
     return selectRecords(
       supabase
@@ -435,7 +596,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const pricingResult = await supabase
       .from("lpg_refill_pricing")
       .select(
-        "id,station_branch_id,currency_code,price_per_kg,delivery_base_fee,platform_fee_amount,tax_rate_percent,driver_commission_amount,min_kg,max_kg,status,effective_from,effective_until,metadata",
+        "id,station_branch_id,currency_code,price_per_kg,min_kg,max_kg,status,effective_from,effective_until",
       )
       .eq("status", "active")
       .order("effective_from", { ascending: false });
@@ -520,32 +681,42 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       if (configType === "pricing") {
         return rpcResponse(
           supabase.rpc("configure_lpg_refill_pricing", {
-            target_currency_code: requireString(payload.currencyCode, "currencyCode"),
-            target_delivery_base_fee: requireNumber(payload.deliveryBaseFee, "deliveryBaseFee"),
-            target_driver_commission_amount: requireNumber(
-              payload.driverCommissionAmount,
-              "driverCommissionAmount",
-            ),
+            target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
+            target_delivery_base_fee: 0,
+            target_driver_commission_amount: 0,
             target_effective_from: optionalString(payload.effectiveFrom),
             target_effective_until: optionalString(payload.effectiveUntil),
             target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-            target_max_kg: requireNumber(payload.maxKg, "maxKg"),
+            target_max_kg: optionalNumber(payload.maxKg, "maxKg") ?? 999999999.999,
             target_metadata: optionalRecord(payload.metadata) ?? {},
-            target_min_kg: requireNumber(payload.minKg, "minKg"),
-            target_platform_fee_amount: requireNumber(
-              payload.platformFeeAmount,
-              "platformFeeAmount",
-            ),
+            target_min_kg: optionalNumber(payload.minKg, "minKg") ?? 0.001,
+            target_platform_fee_amount: 0,
             target_price_per_kg: requireNumber(payload.pricePerKg, "pricePerKg"),
             target_source: optionalString(payload.source) ?? "skima.lpg.pricing_api",
-            target_station_branch_id: optionalUuid(payload.stationBranchId, "stationBranchId"),
-            target_tax_rate_percent: requireNumber(payload.taxRatePercent, "taxRatePercent"),
+            target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+            target_tax_rate_percent: 0,
           }),
           id,
         );
       }
 
       if (configType === "stationPrice") {
+        if (payload.itemId) {
+          return rpcResponse(
+            supabase.rpc("configure_lpg_station_catalog_price", {
+              target_effective_from: optionalString(payload.effectiveFrom) ?? new Date().toISOString(),
+              target_effective_until: optionalString(payload.effectiveUntil),
+              target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+              target_item_id: requireUuid(payload.itemId, "itemId"),
+              target_metadata: optionalRecord(payload.metadata) ?? {},
+              target_price_per_kg: requireNumber(payload.pricePerKg, "pricePerKg"),
+              target_source: optionalString(payload.source) ?? "skima.lpg.station_catalog_price",
+              target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+            }),
+            id,
+          );
+        }
+
         return rpcResponse(
           supabase.rpc("configure_lpg_station_price", {
             target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
@@ -604,6 +775,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     return rpcDataResponse(
       supabase.rpc("read_lpg_station_runtime", {
         target_limit: optionalIntegerQuery(url.searchParams.get("limit")) ?? 100,
+        target_station_branch_id: optionalUuid(
+          url.searchParams.get("stationBranchId"),
+          "stationBranchId",
+        ),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/catalog-prices" && request.method === "GET") {
+    return rpcDataResponse(
+      supabase.rpc("read_lpg_station_catalog_prices", {
         target_station_branch_id: optionalUuid(
           url.searchParams.get("stationBranchId"),
           "stationBranchId",
@@ -828,7 +1011,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase
           .from("lpg_refill_quotes")
           .select(
-            "id,public_reference,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,pricing_id,requested_kg,currency_code,lpg_amount,delivery_fee_amount,platform_fee_amount,tax_amount,driver_commission_amount,total_amount,status,expires_at,breakdown,metadata,created_at,updated_at",
+            "id,public_reference,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,pricing_id,requested_kg,quoted_kg,currency_code,lpg_amount,delivery_fee_amount,platform_fee_amount,tax_amount,driver_commission_amount,total_amount,status,expires_at,breakdown,financial_policy_snapshot,metadata,created_at,updated_at",
           )
           .order("created_at", { ascending: false }),
         id,
@@ -843,18 +1026,34 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }
 
       const payload = body.value;
+      const stationBranchId = requireUuid(payload.stationBranchId, "stationBranchId");
+      const pickupLocationId = requireUuid(payload.pickupLocationId, "pickupLocationId");
+      const deliveryLocationId = requireUuid(payload.deliveryLocationId, "deliveryLocationId");
+      const routeSnapshotResult = await buildLpgCommercialRouteSnapshot(
+        supabase,
+        pickupLocationId,
+        deliveryLocationId,
+        stationBranchId,
+        id,
+      );
+
+      if ("response" in routeSnapshotResult) {
+        return routeSnapshotResult.response;
+      }
+
       return rpcResponseWithPublicReference(
-        supabase.rpc("create_lpg_refill_quote", {
+        supabase.rpc("create_lpg_refill_quote_from_commercial_snapshot", {
           target_cylinder_id: requireUuid(payload.cylinderId, "cylinderId"),
           target_delivery_instructions: optionalString(payload.deliveryInstructions),
-          target_delivery_location_id: requireUuid(payload.deliveryLocationId, "deliveryLocationId"),
+          target_delivery_location_id: deliveryLocationId,
           target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
           target_metadata: optionalRecord(payload.metadata) ?? {},
-          target_pickup_location_id: requireUuid(payload.pickupLocationId, "pickupLocationId"),
+          target_pickup_location_id: pickupLocationId,
           target_preferred_time: optionalString(payload.preferredTime),
           target_requested_kg: requireNumber(payload.requestedKg, "requestedKg"),
+          target_route_snapshot: routeSnapshotResult.data,
           target_source: optionalString(payload.source) ?? "skima.lpg.quote_api",
-          target_station_branch_id: optionalUuid(payload.stationBranchId, "stationBranchId"),
+          target_station_branch_id: stationBranchId,
         }),
         id,
         supabase,
@@ -869,7 +1068,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase
           .from("lpg_refill_orders")
           .select(
-            "id,public_reference,lpg_refill_quote_id,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,driver_profile_id,vehicle_id,tracking_session_id,escrow_hold_id,currency_code,requested_kg,actual_kg,total_amount,station_amount,delivery_fee_amount,platform_fee_amount,driver_commission_amount,status,payment_status,assignment_status,metadata,created_at,updated_at",
+            "id,public_reference,lpg_refill_quote_id,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,driver_profile_id,vehicle_id,tracking_session_id,escrow_hold_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,station_amount,delivery_fee_amount,platform_fee_amount,driver_commission_amount,status,payment_status,assignment_status,financial_policy_snapshot,metadata,created_at,updated_at",
           )
           .order("created_at", { ascending: false }),
         id,
@@ -940,7 +1139,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       supabase
         .from("lpg_refill_orders")
         .select(
-          "id,public_reference,lpg_refill_quote_id,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,driver_profile_id,vehicle_id,tracking_session_id,escrow_hold_id,currency_code,requested_kg,actual_kg,total_amount,station_amount,delivery_fee_amount,platform_fee_amount,driver_commission_amount,status,payment_status,assignment_status,metadata,created_at,updated_at",
+          "id,public_reference,lpg_refill_quote_id,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,driver_profile_id,vehicle_id,tracking_session_id,escrow_hold_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,station_amount,delivery_fee_amount,platform_fee_amount,driver_commission_amount,status,payment_status,assignment_status,financial_policy_snapshot,metadata,created_at,updated_at",
         )
         .in("status", [
           "awaiting_payment",
@@ -2668,12 +2867,20 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }
 
       const payload = body.value;
+      const pricingContext = optionalRecord(payload.pricingContext) ?? {};
+      const moneyPath = findAuthoritativeMoneyField(pricingContext);
+      if (moneyPath) {
+        throw new RequestValidationError(
+          `pricingContext.${moneyPath} cannot be supplied by the client; configure financial policy in admin.`,
+        );
+      }
+
       return rpcResponse(
         supabase.rpc("calculate_price_quote", {
           target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
           target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
           target_module_key: requireString(payload.moduleKey, "moduleKey"),
-          target_pricing_context: optionalRecord(payload.pricingContext) ?? {},
+          target_pricing_context: pricingContext,
           target_pricing_policy_key: optionalString(payload.pricingPolicyKey),
           target_service_request_id: requireUuid(payload.serviceRequestId, "serviceRequestId"),
           target_source: optionalString(payload.source) ?? "platform.pricing_engine",
@@ -2891,15 +3098,34 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }
 
       const payload = body.value;
+      const withdrawalAmount = requireNumber(payload.amount, "amount");
+      const withdrawalWalletId = requireUuid(payload.walletId, "walletId");
+      const feeResult = await supabase.rpc("calculate_withdrawal_fee_from_policy", {
+        target_amount: withdrawalAmount,
+        target_wallet_id: withdrawalWalletId,
+      });
+
+      if (feeResult.error) {
+        return databaseError(feeResult.error, id);
+      }
+
+      const feeSnapshot = requireRecord(feeResult.data, "withdrawal fee policy result");
+      const calculatedFeeAmount = requireNumber(
+        feeSnapshot.calculatedFeeAmount,
+        "calculated withdrawal fee",
+      );
       return rpcResponseWithPublicReference(
         supabase.rpc("request_wallet_withdrawal", {
-          target_amount: requireNumber(payload.amount, "amount"),
+          target_amount: withdrawalAmount,
           target_beneficiary_id: requireUuid(payload.beneficiaryId, "beneficiaryId"),
-          target_fee_amount: optionalNumber(payload.feeAmount, "feeAmount") ?? 0,
+          target_fee_amount: calculatedFeeAmount,
           target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_metadata: {
+            ...(optionalRecord(payload.metadata) ?? {}),
+            financialPolicySnapshot: feeSnapshot,
+          },
           target_source: optionalString(payload.source) ?? "platform.withdrawal_engine",
-          target_wallet_id: requireUuid(payload.walletId, "walletId"),
+          target_wallet_id: withdrawalWalletId,
         }),
         id,
         supabase,
@@ -3001,10 +3227,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
     const payload = body.value;
     return rpcResponseWithPublicReference(
-      supabase.rpc("execute_driver_commission", {
-        target_base_amount: optionalNumber(payload.baseAmount, "baseAmount"),
-        target_commission_policy_key: optionalString(payload.commissionPolicyKey) ??
-          "commission.driver.percentage.default",
+      supabase.rpc("execute_driver_commission_from_order", {
         target_driver_wallet_id: requireUuid(payload.driverWalletId, "driverWalletId"),
         target_escrow_hold_id: requireUuid(payload.escrowHoldId, "escrowHoldId"),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
@@ -3039,15 +3262,12 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
     const payload = body.value;
     return rpcResponseWithPublicReference(
-      supabase.rpc("execute_order_business_settlement", {
+      supabase.rpc("execute_order_business_settlement_from_snapshot", {
         target_business_wallet_id: requireUuid(payload.businessWalletId, "businessWalletId"),
         target_escrow_hold_id: requireUuid(payload.escrowHoldId, "escrowHoldId"),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_metadata: optionalRecord(payload.metadata) ?? {},
         target_order_id: requireUuid(payload.orderId, "orderId"),
-        target_platform_fee_amount:
-          optionalNumber(payload.platformFeeAmount, "platformFeeAmount") ??
-            0,
         target_platform_fee_wallet_id: optionalUuid(
           payload.platformFeeWalletId,
           "platformFeeWalletId",
@@ -3519,23 +3739,14 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
   }
 
   if (routePath === "/runtime/settlements/execute" && request.method === "POST") {
-    const body = await readJsonBody(request, id);
-
-    if ("response" in body) {
-      return body.response;
-    }
-
-    const payload = body.value;
-    return rpcResponse(
-      supabase.rpc("execute_service_request_settlement", {
-        target_distribution: requireArray(payload.distribution, "distribution"),
-        target_escrow_hold_id: requireUuid(payload.escrowHoldId, "escrowHoldId"),
-        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-        target_metadata: optionalRecord(payload.metadata) ?? {},
-        target_service_request_id: requireUuid(payload.serviceRequestId, "serviceRequestId"),
-        target_source: optionalString(payload.source) ?? "platform.settlement_engine",
-      }),
-      id,
+    return jsonResponse(
+      {
+        ok: false,
+        error: "policy_controlled_route",
+        message: "Settlement distributions must be executed by a governed workflow using locked order snapshots.",
+        requestId: id,
+      },
+      403,
     );
   }
 
@@ -3559,22 +3770,14 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
   }
 
   if (routePath === "/runtime/escrow/release" && request.method === "POST") {
-    const body = await readJsonBody(request, id);
-
-    if ("response" in body) {
-      return body.response;
-    }
-
-    const payload = body.value;
-    return rpcResponse(
-      supabase.rpc("release_escrow_hold", {
-        target_distribution: requireArray(payload.distribution, "distribution"),
-        target_escrow_hold_id: requireUuid(payload.escrowHoldId, "escrowHoldId"),
-        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-        target_metadata: optionalRecord(payload.metadata) ?? {},
-        target_source: optionalString(payload.source) ?? "platform.escrow_engine",
-      }),
-      id,
+    return jsonResponse(
+      {
+        ok: false,
+        error: "policy_controlled_route",
+        message: "Escrow release distributions must be executed by governed payment, settlement, or payout workflows.",
+        requestId: id,
+      },
+      403,
     );
   }
 
@@ -5572,6 +5775,160 @@ async function handleMapsRouteEstimateRequest(
   });
 }
 
+async function buildLpgCommercialRouteSnapshot(
+  supabase: SupabaseClient,
+  pickupLocationId: string,
+  deliveryLocationId: string,
+  stationBranchId: string,
+  id: string,
+): Promise<
+  | { readonly data: Readonly<Record<string, unknown>> }
+  | { readonly response: Response }
+> {
+  const [pickupResult, deliveryResult, stationResult] = await Promise.all([
+    supabase
+      .from("lpg_customer_locations")
+      .select("id,latitude,longitude")
+      .eq("id", pickupLocationId)
+      .maybeSingle(),
+    supabase
+      .from("lpg_customer_locations")
+      .select("id,latitude,longitude")
+      .eq("id", deliveryLocationId)
+      .maybeSingle(),
+    supabase
+      .from("lpg_station_branches")
+      .select("id,latitude,longitude")
+      .eq("id", stationBranchId)
+      .eq("approval_status", "approved")
+      .eq("compliance_status", "approved")
+      .maybeSingle(),
+  ]);
+
+  const locationError = pickupResult.error ?? deliveryResult.error ?? stationResult.error;
+  if (locationError) {
+    return { response: databaseError(locationError, id) };
+  }
+
+  if (!pickupResult.data || !deliveryResult.data || !stationResult.data) {
+    return {
+      response: jsonResponse(
+        {
+          ok: false,
+          error: "invalid_request",
+          message: "The selected pickup, delivery, and approved station locations are required.",
+          requestId: id,
+        },
+        400,
+      ),
+    };
+  }
+
+  const pickup = requireCoordinate(pickupResult.data, "pickup location");
+  const station = requireCoordinate(stationResult.data, "station location");
+  const delivery = requireCoordinate(deliveryResult.data, "delivery location");
+  const providerResult = await resolveLpgMapsProvider(supabase, id, "route_estimate");
+  if (providerResult.response) return { response: providerResult.response };
+
+  const firstLeg = await estimateCommercialRouteLeg(pickup, station, providerResult, id);
+  if ("response" in firstLeg) return firstLeg;
+  const secondLeg = await estimateCommercialRouteLeg(station, delivery, providerResult, id);
+  if ("response" in secondLeg) return secondLeg;
+
+  return {
+    data: {
+      calculatedAt: new Date().toISOString(),
+      distanceMeters: firstLeg.data.distanceMeters + secondLeg.data.distanceMeters,
+      durationSeconds: firstLeg.data.durationSeconds + secondLeg.data.durationSeconds,
+      legs: [
+        { ...firstLeg.data, destination: "station", origin: "customer_pickup" },
+        { ...secondLeg.data, destination: "customer_return", origin: "station" },
+      ],
+      provider: firstLeg.data.provider,
+      providerAdapterKey: providerResult.providerKey,
+      routeType: "customer_pickup_station_customer_return",
+    },
+  };
+}
+
+async function estimateCommercialRouteLeg(
+  origin: { readonly latitude: number; readonly longitude: number },
+  destination: { readonly latitude: number; readonly longitude: number },
+  providerResult: { readonly policy: Record<string, unknown>; readonly providerKey: string },
+  id: string,
+): Promise<
+  | { readonly data: { readonly distanceMeters: number; readonly durationSeconds: number; readonly provider: string } }
+  | { readonly response: Response }
+> {
+  if (providerResult.providerKey === "provider.maps.sandbox") {
+    const distanceMeters = Math.round(haversineDistanceMeters(origin, destination));
+    const speedKph = requireNumber(
+      providerResult.policy.sandbox_route_speed_kph,
+      "sandbox_route_speed_kph",
+    );
+    return {
+      data: {
+        distanceMeters,
+        durationSeconds: Math.max(1, Math.round(distanceMeters / (speedKph * 1000 / 3600))),
+        provider: "sandbox",
+      },
+    };
+  }
+
+  if (providerResult.providerKey !== "provider.maps.google-maps") {
+    return { response: unsupportedMapsProviderResponse(providerResult.providerKey, "route_estimate", id) };
+  }
+
+  const googleMapsKey = Deno.env.get("GOOGLE_MAPS_API_KEY");
+  if (!googleMapsKey) return { response: missingMapsSecretResponse(providerResult.providerKey, id) };
+
+  const providerResponse = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+    body: JSON.stringify({
+      computeAlternativeRoutes: false,
+      destination: {
+        location: { latLng: { latitude: destination.latitude, longitude: destination.longitude } },
+      },
+      origin: {
+        location: { latLng: { latitude: origin.latitude, longitude: origin.longitude } },
+      },
+      routingPreference: "TRAFFIC_AWARE",
+      travelMode: "DRIVE",
+    }),
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": googleMapsKey,
+      "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
+    },
+    method: "POST",
+  });
+  const responsePayload = requireRecordOrEmpty(await readProviderJson(providerResponse));
+  if (!providerResponse.ok) {
+    const errorRecord = requireRecordOrEmpty(responsePayload.error);
+    return {
+      response: jsonResponse(
+        {
+          ok: false,
+          error: "provider_error",
+          message: optionalString(errorRecord.message) ?? "Google Maps route request failed.",
+          requestId: id,
+        },
+        502,
+      ),
+    };
+  }
+
+  const routes = Array.isArray(responsePayload.routes) ? responsePayload.routes : [];
+  const route = requireRecord(routes[0], "Google Maps route");
+  const duration = optionalString(route.duration) ?? "0s";
+  return {
+    data: {
+      distanceMeters: requireNumber(route.distanceMeters, "Google route distance"),
+      durationSeconds: Math.max(0, Math.round(Number(duration.replace(/s$/, "")))),
+      provider: "google_maps",
+    },
+  };
+}
+
 async function handleMapsAutocompleteRequest(
   request: Request,
   id: string,
@@ -6276,6 +6633,43 @@ function optionalRecord(value: unknown): Readonly<Record<string, unknown>> | nul
   }
 
   return requireRecord(value, "optional object field");
+}
+
+function findAuthoritativeMoneyField(
+  value: unknown,
+  path = "",
+): string | null {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const result = findAuthoritativeMoneyField(value[index], `${path}[${index}]`);
+      if (result) return result;
+    }
+
+    return null;
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  for (const [key, nestedValue] of Object.entries(value)) {
+    if (isAuthoritativeMoneyKey(key)) {
+      return path ? `${path}.${key}` : key;
+    }
+
+    const result = findAuthoritativeMoneyField(
+      nestedValue,
+      path ? `${path}.${key}` : key,
+    );
+    if (result) return result;
+  }
+
+  return null;
+}
+
+function isAuthoritativeMoneyKey(key: string): boolean {
+  return /(^|_|\b)(amount|fee|price|markup|margin|rate|percent|percentage|tax|discount|total|subtotal|commission|payout|charge|surcharge)(_|$|\b)/i
+    .test(key);
 }
 
 function getRecordValue(value: unknown, key: string): unknown {

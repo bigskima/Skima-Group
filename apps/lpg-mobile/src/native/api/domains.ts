@@ -33,6 +33,12 @@ export const domainQueries = {
       path: "/lpg/stations",
       schema: RecordArraySchema,
     }),
+  stationCatalogPrices: () =>
+    useGatewayQuery({
+      key: ["station-catalog-prices"],
+      path: "/lpg/stations/catalog-prices",
+      schema: RecordArraySchema,
+    }),
   locations: () =>
     useGatewayQuery({
       key: ["locations"],
