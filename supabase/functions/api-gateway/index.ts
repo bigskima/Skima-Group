@@ -2373,15 +2373,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
   if (routePath === "/runtime/applications") {
     if (request.method === "GET") {
-      return selectRecords(
-        supabase
-          .from("application_records")
-          .select(
-            "id,application_type_id,applicant_user_id,organization_id,workflow_instance_id,assigned_reviewer_user_id,active_version,status,locked_at,submitted_at,decided_at,approved_at,rejected_at,suspended_at,withdrawn_at,activated_subject_type,activated_subject_id,metadata,created_at,updated_at",
-          )
-          .order("created_at", { ascending: false }),
-        id,
-      );
+      return applicationsResponse(supabase, supabaseUrl, id);
     }
 
     if (request.method === "POST") {
@@ -2942,13 +2934,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
   }
 
   if (routePath === "/runtime/wallet-balances" && request.method === "GET") {
-    return selectRecords(
-      supabase
-        .from("wallet_balances")
-        .select("wallet_id,currency_code,balance")
-        .order("wallet_id", { ascending: true }),
-      id,
-    );
+    return walletBalancesResponse(supabase, id);
   }
 
   if (routePath === "/runtime/payments/deposits") {
@@ -5198,6 +5184,281 @@ function lpgStationActivationResponse(
   );
 }
 
+async function applicationsResponse(
+  supabase: SupabaseClient,
+  supabaseUrl: string,
+  id: string,
+): Promise<Response> {
+  const applicationResult = await supabase
+    .from("application_records")
+    .select(
+      "id,application_type_id,applicant_user_id,organization_id,workflow_instance_id,assigned_reviewer_user_id,active_version,status,locked_at,submitted_at,decided_at,approved_at,rejected_at,suspended_at,withdrawn_at,activated_subject_type,activated_subject_id,metadata,created_at,updated_at",
+    )
+    .order("created_at", { ascending: false });
+
+  if (applicationResult.error) {
+    return databaseError(applicationResult.error, id);
+  }
+
+  const applications = Array.isArray(applicationResult.data) ? applicationResult.data : [];
+  const applicationIds = uniqueStrings(applications.map((record) => stringOrNull(getRecordValue(record, "id"))));
+  const profileIds = uniqueStrings(
+    applications.flatMap((record) => [
+      stringOrNull(getRecordValue(record, "applicant_user_id")),
+      stringOrNull(getRecordValue(record, "assigned_reviewer_user_id")),
+    ]),
+  );
+
+  const profilesById = new Map<string, unknown>();
+  if (profileIds.length > 0) {
+    const profileResult = await supabase
+      .from("profiles")
+      .select("id,display_name,avatar_url,status,metadata,created_at,updated_at")
+      .in("id", profileIds);
+
+    if (profileResult.error) {
+      return databaseError(profileResult.error, id);
+    }
+
+    for (const profile of profileResult.data ?? []) {
+      const profileId = stringOrNull(getRecordValue(profile, "id"));
+      if (profileId) profilesById.set(profileId, profile);
+    }
+  }
+
+  const avatarAssetIdsByProfileId = new Map<string, string>();
+  const avatarSignedUrlByAssetId = new Map<string, string>();
+  for (const [profileId, profile] of profilesById) {
+    const avatarValue = stringOrNull(getRecordValue(profile, "avatar_url"));
+    if (avatarValue && isUuidString(avatarValue)) {
+      avatarAssetIdsByProfileId.set(profileId, avatarValue);
+    }
+  }
+
+  const avatarAssetIds = uniqueStrings(Array.from(avatarAssetIdsByProfileId.values()));
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (avatarAssetIds.length > 0 && serviceRoleKey) {
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const avatarResult = await serviceClient
+      .from("media_assets")
+      .select("id,storage_bucket,storage_path,status")
+      .in("id", avatarAssetIds)
+      .eq("status", "active");
+
+    if (!avatarResult.error) {
+      for (const asset of avatarResult.data ?? []) {
+        const assetId = stringOrNull(getRecordValue(asset, "id"));
+        const storageBucket = stringOrNull(getRecordValue(asset, "storage_bucket"));
+        const storagePath = stringOrNull(getRecordValue(asset, "storage_path"));
+        if (!assetId || !storageBucket || !storagePath) continue;
+
+        const signedResult = await serviceClient.storage
+          .from(storageBucket)
+          .createSignedUrl(storagePath, 900);
+
+        if (!signedResult.error && signedResult.data?.signedUrl) {
+          avatarSignedUrlByAssetId.set(assetId, signedResult.data.signedUrl);
+        }
+      }
+    }
+  }
+
+  const avatarUrlForProfile = (profile: unknown): string | null => {
+    const directAvatarUrl = stringOrNull(getRecordValue(profile, "avatar_url"));
+    if (directAvatarUrl && /^https?:\/\//i.test(directAvatarUrl)) {
+      return directAvatarUrl;
+    }
+
+    const profileId = stringOrNull(getRecordValue(profile, "id"));
+    const assetId = profileId ? avatarAssetIdsByProfileId.get(profileId) : null;
+    return assetId ? avatarSignedUrlByAssetId.get(assetId) ?? null : null;
+  };
+
+  const latestPayloadByApplicationId = new Map<string, unknown>();
+  if (applicationIds.length > 0) {
+    const versionResult = await supabase
+      .from("application_versions")
+      .select("id,application_id,version,payload,created_by,created_at")
+      .in("application_id", applicationIds)
+      .order("version", { ascending: false });
+
+    if (versionResult.error) {
+      return databaseError(versionResult.error, id);
+    }
+
+    for (const version of versionResult.data ?? []) {
+      const applicationId = stringOrNull(getRecordValue(version, "application_id"));
+      if (applicationId && !latestPayloadByApplicationId.has(applicationId)) {
+        latestPayloadByApplicationId.set(applicationId, version);
+      }
+    }
+  }
+
+  const data = applications.map((application) => {
+    const applicationId = stringOrNull(getRecordValue(application, "id"));
+    const applicantUserId = stringOrNull(getRecordValue(application, "applicant_user_id"));
+    const reviewerUserId = stringOrNull(getRecordValue(application, "assigned_reviewer_user_id"));
+    const applicantProfile = applicantUserId ? profilesById.get(applicantUserId) : null;
+    const reviewerProfile = reviewerUserId ? profilesById.get(reviewerUserId) : null;
+    const latestVersion = applicationId ? latestPayloadByApplicationId.get(applicationId) : null;
+    const payload = requireRecordOrEmpty(getRecordValue(latestVersion, "payload"));
+    const applicantEmail = nestedString(payload, ["contact", "email"]);
+    const applicantPhone = nestedString(payload, ["contact", "phone"]);
+    const applicantName = firstNonEmptyString([
+      nestedString(payload, ["identity", "fullName"]),
+      nestedString(payload, ["identity", "full_name"]),
+      nestedString(payload, ["organization", "displayName"]),
+      nestedString(payload, ["organization", "display_name"]),
+      stringOrNull(getRecordValue(applicantProfile, "display_name")),
+      applicantEmail,
+      applicantUserId,
+    ]);
+    const reviewerName = firstNonEmptyString([
+      stringOrNull(getRecordValue(reviewerProfile, "display_name")),
+      reviewerUserId,
+    ]);
+
+    return {
+      ...requireRecordOrEmpty(application),
+      applicant_display_name: applicantName,
+      applicant_email: applicantEmail,
+      applicant_phone: applicantPhone,
+      applicant_profile: profileSummary(applicantProfile, avatarUrlForProfile(applicantProfile)),
+      application_payload: payload,
+      application_subject_name: applicationSubjectName(payload),
+      latest_version: latestVersion ?? null,
+      reviewer_display_name: reviewerName,
+      reviewer_profile: profileSummary(reviewerProfile, avatarUrlForProfile(reviewerProfile)),
+    };
+  });
+
+  return jsonResponse({ ok: true, data, requestId: id });
+}
+
+async function walletBalancesResponse(
+  supabase: SupabaseClient,
+  id: string,
+): Promise<Response> {
+  const balanceResult = await supabase
+    .from("wallet_balances")
+    .select("wallet_id,currency_code,balance")
+    .order("wallet_id", { ascending: true });
+
+  if (balanceResult.error) return databaseError(balanceResult.error, id);
+
+  const balances = Array.isArray(balanceResult.data) ? balanceResult.data : [];
+  const walletIds = uniqueStrings(balances.map((record) => stringOrNull(getRecordValue(record, "wallet_id"))));
+  const walletsById = new Map<string, unknown>();
+
+  if (walletIds.length > 0) {
+    const walletResult = await supabase
+      .from("wallet_accounts")
+      .select("id,wallet_type,owner_entity_type,owner_entity_id,currency_code,status")
+      .in("id", walletIds);
+
+    if (walletResult.error) return databaseError(walletResult.error, id);
+
+    for (const wallet of walletResult.data ?? []) {
+      const walletId = stringOrNull(getRecordValue(wallet, "id"));
+      if (walletId) walletsById.set(walletId, wallet);
+    }
+  }
+
+  const profileIds = uniqueStrings(
+    Array.from(walletsById.values()).flatMap((wallet) => {
+      const ownerType = stringOrNull(getRecordValue(wallet, "owner_entity_type"));
+      const ownerId = stringOrNull(getRecordValue(wallet, "owner_entity_id"));
+      return ownerType === "profile" || ownerType === "customer" || ownerType === "user" ? [ownerId] : [];
+    }),
+  );
+  const profileById = new Map<string, unknown>();
+  if (profileIds.length > 0) {
+    const profileResult = await supabase
+      .from("profiles")
+      .select("id,display_name,avatar_url,status")
+      .in("id", profileIds);
+
+    if (profileResult.error) return databaseError(profileResult.error, id);
+
+    for (const profile of profileResult.data ?? []) {
+      const profileId = stringOrNull(getRecordValue(profile, "id"));
+      if (profileId) profileById.set(profileId, profile);
+    }
+  }
+
+  const driverProfileIds = uniqueStrings(
+    Array.from(walletsById.values()).flatMap((wallet) =>
+      stringOrNull(getRecordValue(wallet, "owner_entity_type")) === "driver"
+        ? [stringOrNull(getRecordValue(wallet, "owner_entity_id"))]
+        : []
+    ),
+  );
+  const driverProfileById = new Map<string, unknown>();
+  if (driverProfileIds.length > 0) {
+    const driverResult = await supabase
+      .from("driver_profiles")
+      .select("id,user_id,profiles(id,display_name,avatar_url,status)")
+      .in("id", driverProfileIds);
+
+    if (driverResult.error) return databaseError(driverResult.error, id);
+
+    for (const driver of driverResult.data ?? []) {
+      const driverId = stringOrNull(getRecordValue(driver, "id"));
+      if (driverId) driverProfileById.set(driverId, driver);
+    }
+  }
+
+  const stationBranchIds = uniqueStrings(
+    Array.from(walletsById.values()).flatMap((wallet) =>
+      stringOrNull(getRecordValue(wallet, "owner_entity_type")) === "station_branch"
+        ? [stringOrNull(getRecordValue(wallet, "owner_entity_id"))]
+        : []
+    ),
+  );
+  const stationById = new Map<string, unknown>();
+  if (stationBranchIds.length > 0) {
+    const stationResult = await supabase
+      .from("lpg_station_branches")
+      .select("id,display_name,formatted_address,organization_id")
+      .in("id", stationBranchIds);
+
+    if (stationResult.error) return databaseError(stationResult.error, id);
+
+    for (const station of stationResult.data ?? []) {
+      const stationId = stringOrNull(getRecordValue(station, "id"));
+      if (stationId) stationById.set(stationId, station);
+    }
+  }
+
+  const data = balances.map((balance) => {
+    const walletId = stringOrNull(getRecordValue(balance, "wallet_id"));
+    const wallet = walletId ? walletsById.get(walletId) : null;
+    const ownerType = stringOrNull(getRecordValue(wallet, "owner_entity_type"));
+    const ownerId = stringOrNull(getRecordValue(wallet, "owner_entity_id"));
+    const profile = ownerId ? profileById.get(ownerId) : null;
+    const driver = ownerId ? driverProfileById.get(ownerId) : null;
+    const driverProfile = getRecordValue(driver, "profiles");
+    const station = ownerId ? stationById.get(ownerId) : null;
+    const ownerName = firstNonEmptyString([
+      stringOrNull(getRecordValue(profile, "display_name")),
+      nestedString(driverProfile, ["display_name"]),
+      stringOrNull(getRecordValue(station, "display_name")),
+      ownerId,
+    ]);
+
+    return {
+      ...requireRecordOrEmpty(balance),
+      owner_display_name: ownerName,
+      owner_entity_id: ownerId,
+      owner_entity_type: ownerType,
+      wallet_status: stringOrNull(getRecordValue(wallet, "status")),
+      wallet_type: stringOrNull(getRecordValue(wallet, "wallet_type")),
+    };
+  });
+
+  return jsonResponse({ ok: true, data, requestId: id });
+}
+
 async function rpcResponseWithPublicReference(
   query: SelectQuery,
   id: string,
@@ -6678,6 +6939,57 @@ function getRecordValue(value: unknown, key: string): unknown {
   }
 
   return (value as Readonly<Record<string, unknown>>)[key];
+}
+
+function nestedString(value: unknown, path: readonly string[]): string | null {
+  let current: unknown = value;
+
+  for (const key of path) {
+    current = getRecordValue(current, key);
+  }
+
+  return stringOrNull(current);
+}
+
+function uniqueStrings(values: readonly (string | null)[]): string[] {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+function firstNonEmptyString(values: readonly (string | null)[]): string | null {
+  return values.find((value): value is string => Boolean(value?.trim())) ?? null;
+}
+
+function isUuidString(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function profileSummary(
+  profile: unknown,
+  avatarUrlOverride: string | null = null,
+): Readonly<Record<string, unknown>> | null {
+  const profileId = stringOrNull(getRecordValue(profile, "id"));
+  if (!profileId) return null;
+  const avatarValue = stringOrNull(getRecordValue(profile, "avatar_url"));
+
+  return {
+    id: profileId,
+    avatarAssetId: avatarValue && isUuidString(avatarValue) ? avatarValue : null,
+    avatarUrl: avatarUrlOverride ?? (avatarValue && /^https?:\/\//i.test(avatarValue) ? avatarValue : null),
+    displayName: stringOrNull(getRecordValue(profile, "display_name")),
+    status: stringOrNull(getRecordValue(profile, "status")),
+  };
+}
+
+function applicationSubjectName(payload: Readonly<Record<string, unknown>>): string | null {
+  return firstNonEmptyString([
+    nestedString(payload, ["organization", "displayName"]),
+    nestedString(payload, ["organization", "display_name"]),
+    nestedString(payload, ["identity", "fullName"]),
+    nestedString(payload, ["identity", "full_name"]),
+    nestedString(payload, ["station", "formattedAddress"]),
+    nestedString(payload, ["station", "formatted_address"]),
+    nestedString(payload, ["service", "zone"]),
+  ]);
 }
 
 function recordsByStringId(records: readonly unknown[]): Map<string, unknown> {

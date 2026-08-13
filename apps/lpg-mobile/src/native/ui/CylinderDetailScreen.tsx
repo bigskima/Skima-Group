@@ -76,8 +76,15 @@ export function CylinderDetailScreen() {
   };
 
   const downloadQr = async () => {
-    if (!qrRef.current) return;
     setMessage(null);
+    if (!qrValue) {
+      setMessage("This cylinder does not have a scan code yet. Refresh the page in a moment.");
+      return;
+    }
+    if (!qrRef.current) {
+      setMessage("The QR code is still preparing. Try again in a moment.");
+      return;
+    }
     try {
       await new Promise<void>((resolve, reject) => {
         qrRef.current?.toDataURL((base64) => {
@@ -216,9 +223,11 @@ export function CylinderDetailScreen() {
               <>
                 <View style={styles.qrFrame}>
                   <QRCode
-                    ref={qrRef as never}
                     backgroundColor="white"
                     color={colors.ink}
+                    getRef={(ref) => {
+                      qrRef.current = ref as QrHandle | null;
+                    }}
                     size={192}
                     value={qrValue}
                   />

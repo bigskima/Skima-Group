@@ -111,6 +111,7 @@ type ReviewCommand =
     readonly applicationId: string;
     readonly decision: "approved" | "rejected";
     readonly reason: string;
+    readonly reviewerUserId: string | null;
   }
   | {
     readonly type: "document-review";
@@ -756,6 +757,9 @@ function ApplicationReviewQueue(props: {
           const title = getRecordString(applicationType, "display_name") ??
             normalizeStatusLabel(getRecordString(applicationType, "key") ?? "Application");
           const status = getRecordString(application, "status") ?? "unknown";
+          const applicantName = applicantDisplayName(application);
+          const applicantEmail = getRecordString(application, "applicant_email");
+          const subjectName = getRecordString(application, "application_subject_name");
 
           return (
             <button
@@ -769,6 +773,13 @@ function ApplicationReviewQueue(props: {
               <span className="skima-review-item__header">
                 <strong>{title}</strong>
                 <StatusBadge tone={statusTone(status)}>{normalizeStatusLabel(status)}</StatusBadge>
+              </span>
+              <span className="skima-review-item__person">
+                <ApplicantAvatar application={application} />
+                <span>
+                  <strong>{applicantName}</strong>
+                  <small>{subjectName ?? applicantEmail ?? "Applicant details pending"}</small>
+                </span>
               </span>
               <p>
                 {formatShortId(applicationId)} ·{" "}
@@ -807,10 +818,14 @@ function ApplicationReviewPanel(props: {
   const applicationId = requireRecordString(application, "id");
   const applicationName = getRecordString(props.applicationType, "display_name") ??
     normalizeStatusLabel(getRecordString(props.applicationType, "key") ?? "Application");
+  const applicantName = applicantDisplayName(application);
+  const applicantEmail = getRecordString(application, "applicant_email");
+  const applicantPhone = getRecordString(application, "applicant_phone");
+  const subjectName = getRecordString(application, "application_subject_name");
   const canAssign = Boolean(props.currentUserId) &&
     ["submitted", "resubmitted", "under_review"].includes(status);
   const canRequestCorrection = status === "under_review";
-  const canDecide = status === "under_review";
+  const canDecide = Boolean(props.currentUserId) && ["submitted", "resubmitted", "under_review"].includes(status);
 
   return (
     <section className="sk-panel">
@@ -821,15 +836,34 @@ function ApplicationReviewPanel(props: {
         </div>
         <StatusBadge tone={statusTone(status)}>{normalizeStatusLabel(status)}</StatusBadge>
       </div>
+      <div className="skima-applicant-card">
+        <ApplicantAvatar application={application} size="lg" />
+        <div>
+          <p>Applicant</p>
+          <h3>{applicantName}</h3>
+          <small>
+            {[applicantEmail, applicantPhone, subjectName].filter(Boolean).join(" • ") ||
+              "No contact details submitted yet"}
+          </small>
+        </div>
+      </div>
       <DetailList
         items={[
           {
             label: "Applicant",
-            value: getRecordString(application, "applicant_user_id") ?? "None",
+            value: applicantName,
+          },
+          {
+            label: "Applicant Contact",
+            value: [applicantEmail, applicantPhone].filter(Boolean).join(" • ") || "Not provided",
+          },
+          {
+            label: "Application Subject",
+            value: subjectName ?? "Not provided",
           },
           {
             label: "Reviewer",
-            value: getRecordString(application, "assigned_reviewer_user_id") ?? "Unassigned",
+            value: getRecordString(application, "reviewer_display_name") ?? "Unassigned",
           },
           {
             label: "Submitted",
@@ -1123,6 +1157,7 @@ function ReviewActionDialog(props: {
         applicationId,
         decision: state.type === "approve" ? "approved" : "rejected",
         reason: reason.trim(),
+        reviewerUserId: props.currentUserId,
       });
       return;
     }
@@ -1243,6 +1278,22 @@ async function executeReviewCommand(
   }
 
   if (command.type === "decision") {
+    if (command.reviewerUserId) {
+      await api.post(
+        "/runtime/applications/reviewer",
+        {
+          applicationId: command.applicationId,
+          reviewerUserId: command.reviewerUserId,
+          idempotencyKey: createClientIdempotencyKey(
+            "application-review.auto-assign",
+            command.applicationId,
+          ),
+          metadata: { source: "admin_review_console", reason: "auto_start_before_decision" },
+        },
+        MutationIdSchema,
+      );
+    }
+
     return api.post(
       "/runtime/applications/decisions",
       {
@@ -1355,10 +1406,11 @@ function FinanceWorkspace() {
         title="Wallet Balances"
         query={balances}
         preferredKeys={[
-          "wallet_id",
+          "owner_display_name",
+          "owner_entity_type",
+          "wallet_type",
           "currency_code",
-          "available_balance_minor",
-          "reserved_balance_minor",
+          "balance",
         ]}
         valueRenderer={(key, value, record) => {
           if (key.endsWith("_balance_minor") && typeof value === "number") {
@@ -1534,6 +1586,10 @@ function renderRecordValue(value: unknown): ReactNode {
       return <StatusBadge>{normalizeStatusLabel(value)}</StatusBadge>;
     }
 
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+      return <span title={value}>{formatShortId(value)}</span>;
+    }
+
     return value;
   }
 
@@ -1569,6 +1625,34 @@ function getNestedRecordString(
   }
 
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function ApplicantAvatar(props: {
+  readonly application: PlatformRecord;
+  readonly size?: "sm" | "lg";
+}) {
+  const avatarUrl = getNestedRecordString(props.application, ["applicant_profile", "avatarUrl"]);
+  const displayName = applicantDisplayName(props.application);
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "A";
+  const className = `skima-applicant-avatar ${props.size === "lg" ? "is-large" : ""}`;
+
+  if (avatarUrl && /^https?:\/\//i.test(avatarUrl)) {
+    return <img className={className} src={avatarUrl} alt="" />;
+  }
+
+  return <span className={className}>{initials}</span>;
+}
+
+function applicantDisplayName(application: PlatformRecord): string {
+  return getRecordString(application, "applicant_display_name") ??
+    getNestedRecordString(application, ["applicant_profile", "displayName"]) ??
+    getRecordString(application, "applicant_email") ??
+    formatShortId(getRecordString(application, "applicant_user_id"));
 }
 
 function requireRecordString(record: PlatformRecord, key: string): string {

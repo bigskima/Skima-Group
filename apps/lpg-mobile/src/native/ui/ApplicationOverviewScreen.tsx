@@ -62,6 +62,7 @@ export function ApplicationOverviewScreen({
   const [longitude, setLongitude] = useState<number | null>(null);
   const [sizes, setSizes] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [detectingLocation, setDetectingLocation] = useState(false);
   const category = workspace === "station" ? "business" : "driver";
   const type = useMemo(
     () =>
@@ -190,12 +191,23 @@ export function ApplicationOverviewScreen({
     invalidate: [["stations"], ["station-runtime"]],
   });
   const locate = async () => {
+    setError(null);
+    setDetectingLocation(true);
     try {
       const point = await readOperationalLocation();
       setLatitude(point.latitude);
       setLongitude(point.longitude);
+      if (!address.trim() && point.formattedAddress) {
+        setAddress(point.formattedAddress);
+      }
+      if (workspace === "driver" && !serviceZone.trim()) {
+        const zone = point.address.city ?? point.address.district ?? point.address.region;
+        if (zone) setServiceZone(zone);
+      }
     } catch (cause) {
-      setError(friendlyError(cause, "We couldn't get your station location. Please try again."));
+      setError(friendlyError(cause, "We couldn't get your current location. Please try again."));
+    } finally {
+      setDetectingLocation(false);
     }
   };
   const send = async () => {
@@ -240,6 +252,9 @@ export function ApplicationOverviewScreen({
             },
             identity: { address: address.trim(), fullName: name.trim() },
             licence: { number: legalOrLicence.trim() },
+            location: latitude !== null && longitude !== null
+              ? { formattedAddress: address.trim(), latitude, longitude }
+              : null,
             service: { zone: serviceZone.trim() },
             workingHours: {},
             zones: [serviceZone.trim()],
@@ -380,6 +395,7 @@ export function ApplicationOverviewScreen({
             {applicationStatusMessage(status)}
           </Text>
         </View>
+        <ApplicationProgress status={status} />
         <Card>
           <Field
             label="Application reference"
@@ -432,6 +448,7 @@ export function ApplicationOverviewScreen({
               latitude={latitude}
               longitude={longitude}
               locate={locate}
+              locating={detectingLocation}
               profiles={profiles}
               sizes={sizes}
               setSizes={setSizes}
@@ -491,6 +508,10 @@ export function ApplicationOverviewScreen({
           setLicence={setLegalOrLicence}
           zone={serviceZone}
           setZone={setServiceZone}
+          latitude={latitude}
+          longitude={longitude}
+          locate={locate}
+          locating={detectingLocation}
         />
       ) : (
         <StationFields
@@ -513,6 +534,7 @@ export function ApplicationOverviewScreen({
           latitude={latitude}
           longitude={longitude}
           locate={locate}
+          locating={detectingLocation}
           profiles={profiles}
           sizes={sizes}
           setSizes={setSizes}
@@ -565,6 +587,10 @@ function DriverFields(p: {
   setLicence(v: string): void;
   zone: string;
   setZone(v: string): void;
+  latitude: number | null;
+  longitude: number | null;
+  locate(): Promise<void>;
+  locating: boolean;
 }) {
   return (
     <>
@@ -585,6 +611,22 @@ function DriverFields(p: {
         onChange={p.setAddress}
         multiline
       />
+      <Pressable
+        disabled={p.locating}
+        style={styles.location}
+        onPress={() => void p.locate()}
+      >
+        {p.locating ? (
+          <ActivityIndicator color={colors.brand} />
+        ) : (
+          <LocateFixed color={colors.brand} size={20} />
+        )}
+        <Text style={styles.locationText}>
+          {p.latitude !== null && p.longitude !== null
+            ? "Current location captured"
+            : "Use current location"}
+        </Text>
+      </Pressable>
       <Input
         placeholder="Driver licence number"
         value={p.licence}
@@ -618,6 +660,7 @@ function StationFields(p: {
   latitude: number | null;
   longitude: number | null;
   locate(): Promise<void>;
+  locating: boolean;
   profiles: PlatformRecord[];
   sizes: number[];
   setSizes(v: number[]): void;
@@ -651,8 +694,12 @@ function StationFields(p: {
         onChange={p.setAddress}
         multiline
       />
-      <Pressable style={styles.location} onPress={() => void p.locate()}>
-        <LocateFixed color={colors.brand} size={20} />
+      <Pressable disabled={p.locating} style={styles.location} onPress={() => void p.locate()}>
+        {p.locating ? (
+          <ActivityIndicator color={colors.brand} />
+        ) : (
+          <LocateFixed color={colors.brand} size={20} />
+        )}
         <Text style={styles.locationText}>
           {p.latitude !== null && p.longitude !== null
             ? "Station location captured"
@@ -772,6 +819,46 @@ function applicationStatusMessage(status: string) {
   if (status === "expired") return "This application has expired. Start a new application when you're ready.";
   return "We'll let you know when there is an update to your application.";
 }
+
+function ApplicationProgress({ status }: { status: string }) {
+  const steps = [
+    { key: "submitted", label: "Submitted" },
+    { key: "under_review", label: "Review" },
+    { key: "approved", label: "Decision" },
+    { key: "active", label: "Activation" },
+  ];
+  const activeIndex = status === "approved"
+    ? 2
+    : status === "under_review" || status === "reviewing"
+    ? 1
+    : status === "rejected"
+    ? 2
+    : 0;
+
+  return (
+    <View style={styles.progressCard}>
+      {steps.map((step, index) => {
+        const active = index <= activeIndex;
+        const rejected = status === "rejected" && step.key === "approved";
+        return (
+          <View key={step.key} style={styles.progressStep}>
+            <View style={[
+              styles.progressDot,
+              active && styles.progressDotActive,
+              rejected && styles.progressDotRejected,
+            ]}>
+              <Text style={styles.progressNumber}>{index + 1}</Text>
+            </View>
+            <Text style={[styles.progressLabel, active && styles.progressLabelActive]}>
+              {step.label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 function formatDate(value: string | null) {
   if (!value) return "Not available";
   const date = new Date(value);
@@ -808,6 +895,30 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
   },
   heroBody: { color: "#FFF1F2", lineHeight: 21 },
+  progressCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+  },
+  progressStep: { flex: 1, alignItems: "center", gap: 6 },
+  progressDot: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 15,
+    backgroundColor: "#E7ECE9",
+  },
+  progressDotActive: { backgroundColor: colors.brand },
+  progressDotRejected: { backgroundColor: colors.danger },
+  progressNumber: { color: "white", fontSize: 11, fontWeight: "900" },
+  progressLabel: { color: colors.muted, fontSize: 10, fontWeight: "800", textAlign: "center" },
+  progressLabelActive: { color: colors.ink },
   input: {
     minHeight: 56,
     borderWidth: 1,
