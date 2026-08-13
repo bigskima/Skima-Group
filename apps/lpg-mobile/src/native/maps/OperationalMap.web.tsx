@@ -9,15 +9,15 @@ import {
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from "react-native";
+import {
+  averageCoordinate,
+  getMapsRuntimeConfig,
+  type MapPoint,
+} from "../domains/maps";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 
-export interface MapPoint {
-  latitude: number;
-  longitude: number;
-  label: string;
-  kind?: "driver" | "destination" | "pickup" | "station" | "location";
-}
+export type { MapPoint } from "../domains/maps";
 
 export interface OperationalMapProps {
   points: readonly MapPoint[];
@@ -31,38 +31,36 @@ export interface OperationalMapProps {
 
 const TILE = 256;
 const DEFAULT_HEIGHT = 420;
-const tileTemplate = process.env.EXPO_PUBLIC_MAP_TILE_URL ?? "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const configuredTileZoom = Number(process.env.EXPO_PUBLIC_MAP_TILE_MAX_ZOOM);
-const providerTileMaxZoom = Number.isFinite(configuredTileZoom)
-  ? clamp(Math.round(configuredTileZoom), 1, 24)
-  : 19;
 
 export function OperationalMap({
   points,
   connectPoints = false,
   height = DEFAULT_HEIGHT,
   initialZoom = points.length > 1 ? 13 : 20,
-  maxZoom = Math.max(21, providerTileMaxZoom),
+  maxZoom,
   minZoom = 3,
   onSelectPoint,
 }: OperationalMapProps) {
   const { palette } = useAppTheme();
+  const mapConfig = getMapsRuntimeConfig();
+  const providerTileMaxZoom = mapConfig.tile.maxZoom;
+  const effectiveMaxZoom = maxZoom ?? Math.max(21, providerTileMaxZoom);
   const [width, setWidth] = useState(720);
-  const derivedCenter = useMemo(() => averagePoint(points), [points]);
+  const derivedCenter = useMemo(() => averageCoordinate(points), [points]);
   const [center, setCenter] = useState(derivedCenter);
-  const [zoom, setZoom] = useState(() => clamp(initialZoom, minZoom, maxZoom));
+  const [zoom, setZoom] = useState(() => clamp(initialZoom, minZoom, effectiveMaxZoom));
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
 
   useEffect(() => {
     if (!derivedCenter) return;
     setCenter(derivedCenter);
     setZoom(points.length > 1
-      ? fitZoom(points, width, height, minZoom, maxZoom)
-      : clamp(initialZoom, minZoom, maxZoom));
-  }, [pointKey, width, height, initialZoom, maxZoom, minZoom]);
+      ? fitZoom(points, width, height, minZoom, effectiveMaxZoom)
+      : clamp(initialZoom, minZoom, effectiveMaxZoom));
+  }, [pointKey, width, height, initialZoom, effectiveMaxZoom, minZoom]);
 
   const layout = center
-    ? createLayout(center, points, width, height, zoom, providerTileMaxZoom)
+    ? createLayout(center, points, width, height, zoom, mapConfig.tile.rasterTileTemplate, providerTileMaxZoom)
     : null;
   const onLayout = (event: LayoutChangeEvent) =>
     setWidth(Math.max(280, event.nativeEvent.layout.width));
@@ -70,8 +68,8 @@ export function OperationalMap({
     if (!derivedCenter) return;
     setCenter(derivedCenter);
     setZoom(points.length > 1
-      ? fitZoom(points, width, height, minZoom, maxZoom)
-      : clamp(initialZoom, minZoom, maxZoom));
+      ? fitZoom(points, width, height, minZoom, effectiveMaxZoom)
+      : clamp(initialZoom, minZoom, effectiveMaxZoom));
   };
   const select = (event: GestureResponderEvent) => {
     if (!center || !onSelectPoint) return;
@@ -143,7 +141,7 @@ export function OperationalMap({
         <Pressable accessibilityLabel="Recenter map" onPress={(event) => { event.stopPropagation(); recenter(); }} style={styles.control}>
           <Crosshair color={colors.ink} size={19} />
         </Pressable>
-        <Pressable accessibilityLabel="Zoom map in" onPress={(event) => { event.stopPropagation(); setZoom((value) => Math.min(maxZoom, value + 1)); }} style={styles.control}>
+        <Pressable accessibilityLabel="Zoom map in" onPress={(event) => { event.stopPropagation(); setZoom((value) => Math.min(effectiveMaxZoom, value + 1)); }} style={styles.control}>
           <Plus color={colors.ink} size={19} />
         </Pressable>
         <Pressable accessibilityLabel="Zoom map out" onPress={(event) => { event.stopPropagation(); setZoom((value) => Math.max(minZoom, value - 1)); }} style={styles.control}>
@@ -151,17 +149,9 @@ export function OperationalMap({
         </Pressable>
       </View>
       <View pointerEvents="none" style={styles.zoomBadge}><Text style={styles.zoomText}>Street detail · {zoom}</Text></View>
-      <Text pointerEvents="none" style={styles.attribution}>© OpenStreetMap contributors</Text>
+      <Text pointerEvents="none" style={styles.attribution}>{mapConfig.tile.attribution}</Text>
     </Pressable>
   );
-}
-
-function averagePoint(points: readonly MapPoint[]) {
-  if (!points.length) return null;
-  return {
-    latitude: points.reduce((sum, point) => sum + point.latitude, 0) / points.length,
-    longitude: points.reduce((sum, point) => sum + point.longitude, 0) / points.length,
-  };
 }
 
 function fitZoom(points: readonly MapPoint[], width: number, height: number, minimum: number, maximum: number) {
@@ -183,6 +173,7 @@ function createLayout(
   width: number,
   height: number,
   zoom: number,
+  tileTemplate: string,
   tileMaxZoom: number,
 ) {
   const sourceZoom = Math.min(zoom, tileMaxZoom);

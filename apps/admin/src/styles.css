@@ -268,6 +268,18 @@
   color: #ffffff;
 }
 
+.skima-document-view {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.skima-document-view small {
+  color: #b42335;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 .admin-command-hero__signal {
   align-items: center;
   backdrop-filter: blur(10px);

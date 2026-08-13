@@ -5,6 +5,7 @@ import {
   Building2,
   CheckCircle2,
   ClipboardList,
+  Eye,
   FileCheck2,
   FileText,
   LayoutDashboard,
@@ -70,6 +71,12 @@ import { useSessionState } from "./session";
 const RecordSchema = z.record(z.unknown());
 const RecordArraySchema = z.array(RecordSchema);
 const MutationIdSchema = z.string().uuid();
+const MediaReadSessionSchema = z.object({
+  assetId: z.string().uuid(),
+  contentType: z.string().nullable().optional(),
+  expiresInSeconds: z.number().optional(),
+  signedUrl: z.string().url(),
+});
 
 const APPLICATION_REVIEW_PERMISSION = "platform.applications.review";
 const DOCUMENT_REVIEW_PERMISSION = "platform.documents.review";
@@ -913,6 +920,10 @@ function DocumentReviewList(props: {
                 getRecordString(document, "requirement_id"),
               );
               const title = getRecordString(requirement, "display_name") ?? "Document";
+              const fileName = getNestedRecordString(document, ["metadata", "originalFileName"]) ??
+                getNestedRecordString(document, ["media_assets", "metadata", "originalFileName"]) ??
+                getRecordString(document, "storage_path")?.split("/").at(-1) ??
+                "Uploaded file";
 
               return (
                 <article className="skima-document-row" key={documentId}>
@@ -929,6 +940,10 @@ function DocumentReviewList(props: {
                         value: getRecordString(document, "content_type") ?? "Not provided",
                       },
                       {
+                        label: "File",
+                        value: fileName,
+                      },
+                      {
                         label: "Submitted",
                         value: formatDate(getRecordString(document, "submitted_at")),
                       },
@@ -943,6 +958,7 @@ function DocumentReviewList(props: {
                     ]}
                   />
                   <div className="skima-action-row">
+                    <DocumentViewButton document={document} />
                     <Button
                       icon={FileCheck2}
                       variant="outline"
@@ -995,6 +1011,50 @@ function DocumentReviewList(props: {
           </div>
         )}
     </section>
+  );
+}
+
+function DocumentViewButton(props: { readonly document: PlatformRecord }) {
+  const { api } = useSessionState();
+  const mediaAssetId = getRecordString(props.document, "media_asset_id") ??
+    getNestedRecordString(props.document, ["media_assets", "id"]);
+  const [error, setError] = useState<string | null>(null);
+  const readSession = useMutation({
+    mutationFn: () =>
+      api.post(
+        "/runtime/media/read-sessions",
+        {
+          assetId: mediaAssetId,
+          idempotencyKey: createClientIdempotencyKey(
+            "admin.application-document.view",
+            mediaAssetId ?? undefined,
+          ),
+        },
+        MediaReadSessionSchema,
+      ),
+    onSuccess: (session) => {
+      setError(null);
+      window.open(session.signedUrl, "_blank", "noopener,noreferrer");
+    },
+    onError: (cause) => {
+      setError(cause instanceof Error ? cause.message : "The document file could not be opened.");
+    },
+  });
+
+  return (
+    <span className="skima-document-view">
+      <Button
+        icon={Eye}
+        variant="outline"
+        size="sm"
+        requiredPermission={DOCUMENT_REVIEW_PERMISSION}
+        disabled={!mediaAssetId || readSession.isPending}
+        onClick={() => readSession.mutate()}
+      >
+        {readSession.isPending ? "Opening" : "View File"}
+      </Button>
+      {error ? <small role="alert">{error}</small> : null}
+    </span>
   );
 }
 
@@ -1490,6 +1550,23 @@ function renderRecordValue(value: unknown): ReactNode {
 
 function getRecordString(record: PlatformRecord | null | undefined, key: string): string | null {
   const value = record?.[key];
+
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function getNestedRecordString(
+  record: PlatformRecord | null | undefined,
+  path: readonly string[],
+): string | null {
+  let value: unknown = record;
+
+  for (const key of path) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+
+    value = (value as PlatformRecord)[key];
+  }
 
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }

@@ -48,6 +48,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     "expo-router",
+    "@maplibre/maplibre-react-native",
     "expo-secure-store",
     [
       "expo-camera",

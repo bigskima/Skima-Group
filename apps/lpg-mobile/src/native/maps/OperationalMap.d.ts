@@ -1,9 +1,6 @@
-export interface MapPoint {
-  latitude: number;
-  longitude: number;
-  label: string;
-  kind?: "driver" | "destination" | "pickup" | "station" | "location";
-}
+import type { MapPoint } from "../domains/maps";
+
+export type { MapPoint } from "../domains/maps";
 export interface OperationalMapProps {
   points: readonly MapPoint[];
   connectPoints?: boolean;

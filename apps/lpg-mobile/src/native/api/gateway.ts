@@ -9,6 +9,7 @@ export function useGatewayQuery<T>(input: {
   enabled?: boolean;
   refetchInterval?: number;
   persist?: boolean;
+  globalError?: boolean;
 }) {
   const session = useSession();
   return useQuery({
@@ -21,7 +22,10 @@ export function useGatewayQuery<T>(input: {
     queryFn: ({ signal }) =>
       session.api.get(input.path, input.schema, { signal }),
     refetchInterval: input.refetchInterval,
-    meta: { persist: input.persist === true },
+    meta: {
+      globalError: input.globalError === true,
+      persist: input.persist === true,
+    },
   });
 }
 export function useGatewayMutation<T, V>(input: {

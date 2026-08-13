@@ -17,6 +17,7 @@ export function GlobalQueryFailure() {
         .getAll()
         .find(
           (query) =>
+            query.meta?.globalError === true &&
             query.getObserversCount() > 0 &&
             query.state.status === "error" &&
             query.state.fetchStatus !== "fetching",

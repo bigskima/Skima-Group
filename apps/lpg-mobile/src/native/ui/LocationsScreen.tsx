@@ -1,7 +1,6 @@
 import { Check, ChevronRight, Crosshair, LocateFixed, MapPin, RefreshCw, Search } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
-import { z } from "zod";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import { ActionResponseSchema, displaySubtitle, displayTitle, recordId } from "../api/records";
@@ -12,6 +11,7 @@ import {
   type OperationalAddress,
   type OperationalLocation,
 } from "../device/location";
+import { useMapsGatewayAdapter, type AddressPayload, type MapLookup } from "../domains/maps/gateway";
 import { OperationalMap } from "../maps/OperationalMap";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, spacing } from "../theme/tokens";
@@ -19,37 +19,6 @@ import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
-
-const AddressSchema = z.object({
-  name: z.string().nullable().optional(),
-  landmark: z.string().nullable().optional(),
-  premise: z.string().nullable().optional(),
-  street: z.string().nullable().optional(),
-  route: z.string().nullable().optional(),
-  streetNumber: z.string().nullable().optional(),
-  district: z.string().nullable().optional(),
-  locality: z.string().nullable().optional(),
-  subLocality: z.string().nullable().optional(),
-  city: z.string().nullable().optional(),
-  region: z.string().nullable().optional(),
-  state: z.string().nullable().optional(),
-  postalCode: z.string().nullable().optional(),
-  country: z.string().nullable().optional(),
-  countryCode: z.string().nullable().optional(),
-}).passthrough();
-
-const MapLookupSchema = z.object({
-  addressComponents: AddressSchema.nullable().optional(),
-  formattedAddress: z.string().nullable().optional(),
-  location: z.object({ latitude: z.number(), longitude: z.number() }),
-  placeId: z.string().nullable().optional(),
-  provider: z.string(),
-}).passthrough();
-
-const AutocompleteSchema = z.object({
-  predictions: z.array(z.record(z.unknown())),
-  provider: z.string(),
-}).passthrough();
 
 export function LocationsScreen() {
   const { palette } = useAppTheme();
@@ -71,9 +40,10 @@ export function LocationsScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeSuccess, setNoticeSuccess] = useState(false);
   const mutation = useGatewayMutation({ path: "/lpg/locations", schema: ActionResponseSchema, invalidate: [["locations"]] });
-  const reverseLookup = useGatewayMutation({ path: "/lpg/maps/reverse-geocode", schema: MapLookupSchema });
-  const geocode = useGatewayMutation({ path: "/lpg/maps/geocode", schema: MapLookupSchema });
-  const autocomplete = useGatewayMutation({ path: "/lpg/maps/autocomplete", schema: AutocompleteSchema });
+  const maps = useMapsGatewayAdapter();
+  const reverseLookup = maps.reverseGeocode;
+  const geocode = maps.geocode;
+  const autocomplete = maps.autocomplete;
 
   const showNotice = (message: string, success = false) => {
     setNotice(message);
@@ -355,7 +325,7 @@ export function LocationsScreen() {
       ) : null}
 
       <View style={[styles.workspace, width >= 900 && styles.workspaceWide]}>
-        <View style={styles.mapColumn}>
+        <View style={[styles.mapColumn, width >= 900 && styles.mapColumnWide]}>
           <OperationalMap
             points={mapPoints}
             height={width < 600 ? 340 : 470}
@@ -368,7 +338,7 @@ export function LocationsScreen() {
           ) : null}
         </View>
 
-        <View style={[styles.confirmPanel, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <View style={[styles.confirmPanel, width >= 900 && styles.confirmPanelWide, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <View style={styles.panelHeader}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.panelTitle, { color: palette.ink }]}>Confirm the exact point</Text>
@@ -492,7 +462,7 @@ function AddressDetails({ location, landmark }: { location: OperationalLocation;
   );
 }
 
-function locationFromLookup(result: z.infer<typeof MapLookupSchema>, fallback: string): OperationalLocation {
+function locationFromLookup(result: MapLookup, fallback: string): OperationalLocation {
   return {
     latitude: result.location.latitude,
     longitude: result.location.longitude,
@@ -505,7 +475,7 @@ function locationFromLookup(result: z.infer<typeof MapLookupSchema>, fallback: s
   };
 }
 
-function normalizeAddress(value: z.infer<typeof AddressSchema> | null | undefined): OperationalAddress {
+function normalizeAddress(value: AddressPayload | null | undefined): OperationalAddress {
   const street = clean(value?.street)
     ?? clean(value?.route)
     ?? null;
@@ -607,12 +577,14 @@ const styles = StyleSheet.create({
   predictions: { marginTop: -12, overflow: "hidden", borderRadius: radii.md, borderWidth: 1 },
   prediction: { minHeight: 54, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 14 },
   predictionText: { flex: 1, fontSize: 13, lineHeight: 18 },
-  workspace: { gap: spacing.md },
+  workspace: { width: "100%", gap: spacing.md },
   workspaceWide: { flexDirection: "row", alignItems: "flex-start" },
-  mapColumn: { flex: 1.35, minWidth: 0 },
+  mapColumn: { width: "100%", minWidth: 0 },
+  mapColumnWide: { flex: 1.35 },
   mapBusy: { position: "absolute", left: "50%", top: "50%", transform: [{ translateX: -80 }, { translateY: -21 }], minWidth: 160, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.pill, backgroundColor: "rgba(23,33,27,.88)" },
   mapBusyText: { color: "white", fontSize: 12, fontWeight: "800" },
-  confirmPanel: { flex: 1, gap: 13, padding: 18, borderRadius: radii.lg, borderWidth: 1 },
+  confirmPanel: { width: "100%", gap: 13, padding: 18, borderRadius: radii.lg, borderWidth: 1 },
+  confirmPanelWide: { flex: 1 },
   panelHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   panelTitle: { fontSize: 18, lineHeight: 23, fontWeight: "900" },
   readyBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 9, paddingVertical: 6, borderRadius: radii.pill, backgroundColor: "rgba(18,148,71,.10)" },
@@ -643,7 +615,7 @@ const styles = StyleSheet.create({
   disabled: { opacity: .45 },
   primaryText: { color: "white", fontSize: 14, fontWeight: "900" },
   notice: { fontSize: 12, fontWeight: "700", lineHeight: 18, textAlign: "center" },
-  savedSection: { gap: 0, marginTop: spacing.sm },
+  savedSection: { gap: 0, marginTop: spacing.md, paddingBottom: 32 },
   sectionTitle: { fontSize: 19, fontWeight: "900", marginBottom: spacing.sm },
   savedPlace: { minHeight: 68, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: 1, paddingVertical: 11 },
   savedPin: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 19 },

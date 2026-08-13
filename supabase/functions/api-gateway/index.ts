@@ -2314,7 +2314,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase
           .from("document_submissions")
           .select(
-            "id,requirement_id,application_id,subject_type,subject_id,owner_user_id,organization_id,media_asset_id,status,storage_bucket,storage_path,content_type,byte_size,checksum,submitted_at,reviewed_at,reviewer_user_id,expires_at,decision_reason,metadata,created_at,updated_at",
+            "id,requirement_id,application_id,subject_type,subject_id,owner_user_id,organization_id,media_asset_id,status,storage_bucket,storage_path,content_type,byte_size,checksum,submitted_at,reviewed_at,reviewer_user_id,expires_at,decision_reason,metadata,created_at,updated_at,media_assets(id,asset_type_key,storage_bucket,storage_path,content_type,byte_size,status,metadata,created_at)",
           )
           .order("created_at", { ascending: false }),
         id,
