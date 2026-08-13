@@ -9,6 +9,34 @@ set description = excluded.description,
     risk_level = excluded.risk_level,
     updated_at = timezone('utc', now());
 
+insert into public.product_content_placements (
+  key,
+  display_name,
+  surface_key,
+  content_kind,
+  allowed_audiences,
+  constraints,
+  metadata
+)
+values (
+  'mobile.onboarding.customer.refill',
+  'Customer onboarding - refill',
+  'mobile.auth.onboarding',
+  'onboarding',
+  array['public','customer'],
+  '{}'::jsonb,
+  '{"phase_owner":3,"replaceable_by_admin":true}'::jsonb
+)
+on conflict (key) do update
+set display_name = excluded.display_name,
+    surface_key = excluded.surface_key,
+    content_kind = excluded.content_kind,
+    allowed_audiences = excluded.allowed_audiences,
+    constraints = excluded.constraints,
+    metadata = public.product_content_placements.metadata || excluded.metadata,
+    status = 'active',
+    updated_at = timezone('utc', now());
+
 insert into public.role_permissions (role_id, permission_id)
 select role_record.id, permission_record.id
 from public.roles role_record

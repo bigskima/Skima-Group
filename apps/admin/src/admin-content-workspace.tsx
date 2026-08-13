@@ -2,18 +2,26 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   Eye,
+  Flame,
+  Home,
   ImagePlus,
+  Images,
+  type LucideIcon,
   Megaphone,
   MonitorSmartphone,
+  PackageCheck,
   PauseCircle,
   Pencil,
   Plus,
+  QrCode,
   RefreshCcw,
   Send,
   Target,
+  Truck,
   UploadCloud,
 } from "lucide-react";
-import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import {
@@ -73,11 +81,14 @@ const PublicationSchema = z.object({
   starts_at: z.string().nullable().optional(),
   ends_at: z.string().nullable().optional(),
   published_at: z.string().nullable().optional(),
+  metadata: z.record(z.unknown()).optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
 }).passthrough();
 
 const UploadSessionSchema = z.object({
+  token: z.string(),
+  publicUrl: z.string().url(),
   signedUrl: z.string().url(),
   method: z.literal("PUT"),
   storageBucket: z.string(),
@@ -127,10 +138,35 @@ interface PublicationFormState {
   readonly ctaType: string;
   readonly ctaTarget: string;
   readonly mediaAssetId: string;
+  readonly mediaPublicUrl: string;
   readonly priority: string;
   readonly status: string;
   readonly startsAt: string;
   readonly endsAt: string;
+}
+
+interface ContentSurfacePreset {
+  readonly key: string;
+  readonly label: string;
+  readonly surface: string;
+  readonly description: string;
+  readonly recommendedSize: string;
+  readonly icon: LucideIcon;
+  readonly placementKey: string;
+  readonly placementDisplayName: string;
+  readonly placementSurfaceKey: string;
+  readonly placementContentKind: string;
+  readonly placementAudiences: string;
+  readonly publicationKey: string;
+  readonly title: string;
+  readonly body: string;
+  readonly moduleKey: string;
+  readonly audienceKeys: string;
+  readonly ctaLabel: string;
+  readonly ctaType: string;
+  readonly ctaTarget: string;
+  readonly priority: string;
+  readonly publicationMode?: "fixed" | "unique";
 }
 
 const emptyPlacement: PlacementFormState = {
@@ -159,6 +195,7 @@ const emptyPublication: PublicationFormState = {
   ctaType: "",
   ctaTarget: "",
   mediaAssetId: "",
+  mediaPublicUrl: "",
   priority: "0",
   status: "draft",
   startsAt: "",
@@ -167,8 +204,218 @@ const emptyPublication: PublicationFormState = {
 
 const CONTENT_MANAGE_PERMISSION = "platform.content.manage";
 
+const contentSurfacePresets: readonly ContentSurfacePreset[] = [
+  {
+    key: "primary-logo",
+    label: "App logo",
+    surface: "Header brand logo",
+    description: "Shown on welcome, sign in, create account, forgot password, reset password, and full app headers.",
+    recommendedSize: "Transparent PNG/WebP/SVG, 900×300px or 3:1",
+    icon: ImagePlus,
+    placementKey: "mobile.brand.logo.primary",
+    placementDisplayName: "Primary mobile brand",
+    placementSurfaceKey: "mobile.global.header",
+    placementContentKind: "brand",
+    placementAudiences: "public, customer, driver, station",
+    publicationKey: "content.brand.primary.admin",
+    title: "SKIMA",
+    body: "",
+    moduleKey: "",
+    audienceKeys: "public, customer, driver, station",
+    ctaLabel: "",
+    ctaType: "",
+    ctaTarget: "",
+    priority: "500",
+    publicationMode: "fixed",
+  },
+  {
+    key: "compact-logo",
+    label: "Small app icon",
+    surface: "Compact in-app logo",
+    description: "Shown in the customer, driver, and station top header where the red S fallback currently appears.",
+    recommendedSize: "Transparent PNG/WebP/SVG, 512×512px or 1:1",
+    icon: MonitorSmartphone,
+    placementKey: "mobile.brand.logo.compact",
+    placementDisplayName: "Compact mobile brand",
+    placementSurfaceKey: "mobile.global.compact-header",
+    placementContentKind: "brand",
+    placementAudiences: "public, customer, driver, station",
+    publicationKey: "content.brand.compact.admin",
+    title: "S",
+    body: "",
+    moduleKey: "",
+    audienceKeys: "public, customer, driver, station",
+    ctaLabel: "",
+    ctaType: "",
+    ctaTarget: "",
+    priority: "500",
+    publicationMode: "fixed",
+  },
+  {
+    key: "customer-home-banner",
+    label: "Add home banner",
+    surface: "Customer home carousel",
+    description: "Adds one scrollable customer home banner. Create more than one to fill the sideways carousel.",
+    recommendedSize: "WebP/PNG, 1920×840px or 16:7",
+    icon: Megaphone,
+    placementKey: "mobile.home.promotion",
+    placementDisplayName: "Mobile home promotion",
+    placementSurfaceKey: "mobile.customer.home",
+    placementContentKind: "promotion",
+    placementAudiences: "customer",
+    publicationKey: "content.home.promotion.admin",
+    title: "Your refill, handled end to end",
+    body: "Register once, request in a few taps and follow your cylinder all the way home.",
+    moduleKey: "lpg",
+    audienceKeys: "customer",
+    ctaLabel: "Request a refill",
+    ctaType: "route",
+    ctaTarget: "/(customer)/orders/new",
+    priority: "500",
+    publicationMode: "unique",
+  },
+  {
+    key: "welcome-hero",
+    label: "Welcome fallback",
+    surface: "Fallback welcome image",
+    description: "Optional fallback image used only when a specific onboarding slide has no image yet.",
+    recommendedSize: "WebP/PNG, 1600×1200px or 4:3",
+    icon: Images,
+    placementKey: "mobile.welcome.hero",
+    placementDisplayName: "Welcome introduction",
+    placementSurfaceKey: "mobile.auth.welcome",
+    placementContentKind: "onboarding",
+    placementAudiences: "public",
+    publicationKey: "content.welcome.hero.admin",
+    title: "Gas refill, without the runaround",
+    body: "A smoother way to request, refill, track, and receive your cylinder.",
+    moduleKey: "lpg",
+    audienceKeys: "public",
+    ctaLabel: "",
+    ctaType: "",
+    ctaTarget: "",
+    priority: "500",
+    publicationMode: "fixed",
+  },
+  {
+    key: "onboarding-request",
+    label: "Slide 1 — Request",
+    surface: "Welcome onboarding stage 1",
+    description: "First onboarding image: customer starts a cylinder refill request.",
+    recommendedSize: "WebP/PNG, 1600×1200px or 4:3",
+    icon: PackageCheck,
+    placementKey: "mobile.onboarding.customer.request",
+    placementDisplayName: "Customer onboarding - request",
+    placementSurfaceKey: "mobile.auth.onboarding",
+    placementContentKind: "onboarding",
+    placementAudiences: "public, customer",
+    publicationKey: "content.onboarding.customer.request.admin",
+    title: "Request your refill",
+    body: "Choose your cylinder and tell us where to collect it.",
+    moduleKey: "lpg",
+    audienceKeys: "public, customer",
+    ctaLabel: "",
+    ctaType: "",
+    ctaTarget: "",
+    priority: "500",
+    publicationMode: "fixed",
+  },
+  {
+    key: "onboarding-pickup",
+    label: "Slide 2 — Pickup",
+    surface: "Welcome onboarding stage 2",
+    description: "Second onboarding image: verified driver collects the customer's cylinder.",
+    recommendedSize: "WebP/PNG, 1600×1200px or 4:3",
+    icon: Truck,
+    placementKey: "mobile.onboarding.customer.pickup",
+    placementDisplayName: "Customer onboarding - pickup",
+    placementSurfaceKey: "mobile.auth.onboarding",
+    placementContentKind: "onboarding",
+    placementAudiences: "public, customer",
+    publicationKey: "content.onboarding.customer.pickup.admin",
+    title: "We collect it",
+    body: "A verified driver collects your cylinder at the arranged time.",
+    moduleKey: "lpg",
+    audienceKeys: "public, customer",
+    ctaLabel: "",
+    ctaType: "",
+    ctaTarget: "",
+    priority: "500",
+    publicationMode: "fixed",
+  },
+  {
+    key: "onboarding-track",
+    label: "Slide 3 — Track",
+    surface: "Welcome onboarding stage 3",
+    description: "Third onboarding image: QR/cylinder identity and live progress tracking.",
+    recommendedSize: "WebP/PNG, 1600×1200px or 4:3",
+    icon: QrCode,
+    placementKey: "mobile.onboarding.customer.track",
+    placementDisplayName: "Customer onboarding - track",
+    placementSurfaceKey: "mobile.auth.onboarding",
+    placementContentKind: "onboarding",
+    placementAudiences: "public, customer",
+    publicationKey: "content.onboarding.customer.track.admin",
+    title: "Identified and tracked",
+    body: "Your cylinder is checked at every hand-off, and you can follow its journey.",
+    moduleKey: "lpg",
+    audienceKeys: "public, customer",
+    ctaLabel: "",
+    ctaType: "",
+    ctaTarget: "",
+    priority: "500",
+    publicationMode: "fixed",
+  },
+  {
+    key: "onboarding-refill",
+    label: "Slide 4 — Refill",
+    surface: "Welcome onboarding stage 4",
+    description: "Fourth onboarding image: partner station refills and verifies the cylinder.",
+    recommendedSize: "WebP/PNG, 1600×1200px or 4:3",
+    icon: Flame,
+    placementKey: "mobile.onboarding.customer.refill",
+    placementDisplayName: "Customer onboarding - refill",
+    placementSurfaceKey: "mobile.auth.onboarding",
+    placementContentKind: "onboarding",
+    placementAudiences: "public, customer",
+    publicationKey: "content.onboarding.customer.refill.admin",
+    title: "Refilled by a partner station",
+    body: "A trusted station refills your cylinder and confirms the amount supplied.",
+    moduleKey: "lpg",
+    audienceKeys: "public, customer",
+    ctaLabel: "",
+    ctaType: "",
+    ctaTarget: "",
+    priority: "500",
+    publicationMode: "fixed",
+  },
+  {
+    key: "onboarding-return",
+    label: "Slide 5 — Return",
+    surface: "Welcome onboarding stage 5",
+    description: "Fifth onboarding image: the same cylinder is returned safely to the customer.",
+    recommendedSize: "WebP/PNG, 1600×1200px or 4:3",
+    icon: Home,
+    placementKey: "mobile.onboarding.customer.return",
+    placementDisplayName: "Customer onboarding - return",
+    placementSurfaceKey: "mobile.auth.onboarding",
+    placementContentKind: "onboarding",
+    placementAudiences: "public, customer",
+    publicationKey: "content.onboarding.customer.return.admin",
+    title: "Returned to your door",
+    body: "Your driver brings the same identified cylinder safely back to you.",
+    moduleKey: "lpg",
+    audienceKeys: "public, customer",
+    ctaLabel: "",
+    ctaType: "",
+    ctaTarget: "",
+    priority: "500",
+    publicationMode: "fixed",
+  },
+];
+
 export function AdminContentWorkspace() {
-  const { api, context, status } = useSessionState();
+  const { api, context, status, supabase } = useSessionState();
   const queryClient = useQueryClient();
   const [activePlacementKey, setActivePlacementKey] = useState<string | null>(null);
   const [selectedPublicationId, setSelectedPublicationId] = useState<string | null>(null);
@@ -203,6 +450,7 @@ export function AdminContentWorkspace() {
     [activePlacementPublications, publications, selectedPublicationId],
   );
   const selectedMediaAssetId = selectedPublication?.media_asset_id ?? null;
+  const selectedPublicMediaUrl = selectedPublication ? publicationMediaUrl(selectedPublication) : null;
 
   const mediaPreviewQuery = useQuery({
     queryKey: ["admin-content", "media-preview", selectedMediaAssetId],
@@ -215,7 +463,7 @@ export function AdminContentWorkspace() {
         },
         MediaReadSessionSchema,
       ),
-    enabled: status === "authenticated" && Boolean(selectedMediaAssetId),
+    enabled: status === "authenticated" && Boolean(selectedMediaAssetId) && !selectedPublicMediaUrl,
     retry: false,
   });
 
@@ -261,8 +509,14 @@ export function AdminContentWorkspace() {
   });
 
   const savePublication = useMutation({
-    mutationFn: () =>
-      api.post(
+    mutationFn: async () => {
+      await ensurePresetPlacement({
+        api,
+        existingPlacements: placements,
+        placementKey: publicationForm.placementKey,
+      });
+
+      return api.post(
         "/admin/content/publications",
         {
           accessibilityLabel: nullableText(publicationForm.accessibilityLabel),
@@ -273,8 +527,11 @@ export function AdminContentWorkspace() {
           ctaAction: readCtaAction(publicationForm),
           ctaLabel: nullableText(publicationForm.ctaLabel),
           endsAt: nullableIso(publicationForm.endsAt),
+          mediaPublicUrl: nullableText(publicationForm.mediaPublicUrl),
           mediaAssetId: nullableText(publicationForm.mediaAssetId),
-          metadata: {},
+          metadata: nullableText(publicationForm.mediaPublicUrl)
+            ? { media_public_url: nullableText(publicationForm.mediaPublicUrl) }
+            : {},
           moduleKey: nullableText(publicationForm.moduleKey),
           organizationId: nullableText(publicationForm.organizationId),
           placementKey: publicationForm.placementKey,
@@ -288,7 +545,8 @@ export function AdminContentWorkspace() {
           title: nullableText(publicationForm.title),
         },
         MutationSchema,
-      ),
+      );
+    },
     onSuccess: async () => {
       setDialog(null);
       setFormError(null);
@@ -303,9 +561,15 @@ export function AdminContentWorkspace() {
         assetTypeKey: "content.publication.media",
         file,
         ownerUserId: context?.user.id ?? null,
+        supabase,
       }),
-    onSuccess: (assetId) => {
-      setPublicationForm((current) => ({ ...current, mediaAssetId: assetId }));
+    onSuccess: (media) => {
+      setUploadPreviewUrl(media.publicUrl);
+      setPublicationForm((current) => ({
+        ...current,
+        mediaAssetId: media.mediaAssetId ?? current.mediaAssetId,
+        mediaPublicUrl: media.publicUrl,
+      }));
     },
   });
 
@@ -355,6 +619,37 @@ export function AdminContentWorkspace() {
     setDialog({ type: "publication", publication });
   };
 
+  const openPresetPublicationDialog = (preset: ContentSurfacePreset) => {
+    const existingPublication = findPresetPublication(preset, publications);
+
+    if (existingPublication && preset.publicationMode !== "unique") {
+      setActivePlacementKey(preset.placementKey);
+      setSelectedPublicationId(existingPublication.id);
+      openPublicationDialog(existingPublication);
+      return;
+    }
+
+    setFormError(null);
+    setUploadPreviewUrl(null);
+    setActivePlacementKey(preset.placementKey);
+    setSelectedPublicationId(null);
+    setPublicationForm({
+      ...emptyPublication,
+      audienceKeys: preset.audienceKeys,
+      body: preset.body,
+      ctaLabel: preset.ctaLabel,
+      ctaTarget: preset.ctaTarget,
+      ctaType: preset.ctaType,
+      moduleKey: preset.moduleKey,
+      placementKey: preset.placementKey,
+      priority: preset.priority,
+      publicationKey: createPresetPublicationKey(preset),
+      status: "published",
+      title: preset.title,
+    });
+    setDialog({ type: "publication" });
+  };
+
   const columns = useMemo(
     () => buildPublicationColumns(openPublicationDialog, setPublicationState.mutate, setSelectedPublicationId),
     [setPublicationState.mutate],
@@ -376,7 +671,12 @@ export function AdminContentWorkspace() {
 
   const publishedCount = publications.filter((publication) => publication.status === "published").length;
   const scheduledCount = publications.filter((publication) => Boolean(publication.starts_at)).length;
-  const mediaCount = publications.filter((publication) => Boolean(publication.media_asset_id)).length;
+  const mediaCount = publications.filter((publication) =>
+    Boolean(publication.media_asset_id) || Boolean(publicationMediaUrl(publication))
+  ).length;
+  const publicationPlacementOptions = buildPlacementOptions(placements, publicationForm.placementKey);
+  const activeFormPreset = contentSurfacePresets.find((preset) => preset.placementKey === publicationForm.placementKey) ?? null;
+  const ActiveFormIcon = activeFormPreset?.icon;
 
   return (
     <>
@@ -411,6 +711,56 @@ export function AdminContentWorkspace() {
         <MetricTile label="Published" value={publishedCount} icon={Send} tone="success" />
         <MetricTile label="Scheduled" value={scheduledCount} icon={Megaphone} tone="warning" />
         <MetricTile label="Media linked" value={mediaCount} icon={ImagePlus} />
+      </section>
+
+      <section className="sk-panel admin-content-media-workbench">
+        <div className="sk-panel__header">
+          <div>
+            <p className="admin-section-kicker">Quick upload slots</p>
+            <h2>App logo, banners and 5 welcome slides</h2>
+          </div>
+          <StatusBadge tone="info">Admin managed</StatusBadge>
+        </div>
+        <div className="admin-content-presets">
+          {contentSurfacePresets.map((preset) => {
+            const Icon = preset.icon;
+            const presetPublications = publications.filter((publication) => publication.placement_key === preset.placementKey);
+            const currentPublication = findPresetPublication(preset, publications) ?? sortContentPublications(presetPublications)[0] ?? null;
+            const currentMediaUrl = currentPublication ? publicationMediaUrl(currentPublication) : null;
+            const publishedForSlot = presetPublications.filter((publication) => publication.status === "published").length;
+            const isCarousel = preset.publicationMode === "unique";
+            return (
+              <button
+                className="admin-content-preset-card"
+                key={preset.key}
+                type="button"
+                onClick={() => openPresetPublicationDialog(preset)}
+              >
+                <span className="admin-content-presets__icon"><Icon aria-hidden="true" /></span>
+                <span className="admin-content-preset-card__copy">
+                  <strong>{preset.label}</strong>
+                  <small>{preset.surface}</small>
+                  <em>{preset.description}</em>
+                  <span>{preset.recommendedSize}</span>
+                </span>
+                <span className={`admin-content-preset-card__preview${currentMediaUrl ? " has-media" : ""}`}>
+                  <AdminPreviewImage
+                    alt=""
+                    fallback={<ImagePlus aria-hidden="true" />}
+                    url={currentMediaUrl}
+                  />
+                </span>
+                <span className="admin-content-preset-card__meta">
+                  {isCarousel
+                    ? `${publishedForSlot} banner${publishedForSlot === 1 ? "" : "s"} live`
+                    : currentMediaUrl
+                    ? "Image connected"
+                    : "Needs image"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       {(savePlacement.error || savePublication.error || uploadMedia.error || setPublicationState.error)
@@ -483,7 +833,7 @@ export function AdminContentWorkspace() {
         </section>
 
         <PublicationInspector
-          mediaUrl={uploadPreviewUrl ?? mediaPreviewQuery.data?.signedUrl ?? null}
+          mediaUrl={uploadPreviewUrl ?? (selectedPublication ? publicationMediaUrl(selectedPublication) : null) ?? mediaPreviewQuery.data?.signedUrl ?? null}
           publication={selectedPublication}
           placement={placements.find((placement) => placement.key === selectedPublication?.placement_key) ?? null}
           previewLoading={mediaPreviewQuery.isLoading}
@@ -605,72 +955,21 @@ export function AdminContentWorkspace() {
             savePublication.mutate();
           }}
         >
-          <div className="admin-form-grid">
-            <TextInput
-              label="Publication key"
-              name="publicationKey"
-              helperText="Leave blank to generate one from the title."
-              value={publicationForm.publicationKey}
-              onChange={(event) => setPublicationForm({ ...publicationForm, publicationKey: event.currentTarget.value })}
-            />
-            <SelectInput
-              label="Placement"
-              name="placementKey"
-              value={publicationForm.placementKey}
-              options={placements.map((placement) => ({ label: placement.display_name, value: placement.key }))}
-              onChange={(event) => setPublicationForm({ ...publicationForm, placementKey: event.currentTarget.value })}
-              required
-            />
-          </div>
-
-          <div className="admin-form-grid">
-            <TextInput
-              label="Title"
-              name="title"
-              value={publicationForm.title}
-              onChange={(event) => setPublicationForm({ ...publicationForm, title: event.currentTarget.value })}
-            />
-            <TextInput
-              label="Audience keys"
-              name="audienceKeys"
-              value={publicationForm.audienceKeys}
-              onChange={(event) => setPublicationForm({ ...publicationForm, audienceKeys: event.currentTarget.value })}
-            />
-          </div>
-
-          <TextAreaInput
-            label="Body"
-            name="body"
-            rows={4}
-            value={publicationForm.body}
-            onChange={(event) => setPublicationForm({ ...publicationForm, body: event.currentTarget.value })}
-          />
-
-          <div className="admin-form-grid">
-            <TextInput
-              label="CTA label"
-              name="ctaLabel"
-              value={publicationForm.ctaLabel}
-              onChange={(event) => setPublicationForm({ ...publicationForm, ctaLabel: event.currentTarget.value })}
-            />
-            <SelectInput
-              label="CTA action"
-              name="ctaType"
-              value={publicationForm.ctaType}
-              options={ctaOptions}
-              onChange={(event) => setPublicationForm({ ...publicationForm, ctaType: event.currentTarget.value })}
-            />
-          </div>
-
-          <TextInput
-            label="CTA target"
-            name="ctaTarget"
-            value={publicationForm.ctaTarget}
-            onChange={(event) => setPublicationForm({ ...publicationForm, ctaTarget: event.currentTarget.value })}
-          />
+          {activeFormPreset ? (
+            <div className="admin-content-slot-hint">
+              <span className="admin-content-slot-hint__icon">
+                {ActiveFormIcon ? <ActiveFormIcon aria-hidden="true" /> : null}
+              </span>
+              <span>
+                <strong>{activeFormPreset.label}</strong>
+                <small>{activeFormPreset.description}</small>
+                <em>{activeFormPreset.recommendedSize}</em>
+              </span>
+            </div>
+          ) : null}
 
           <div className="admin-content-upload">
-            <label htmlFor="admin-content-media">Media</label>
+            <label htmlFor="admin-content-media">Upload image for this app slot</label>
             <input
               id="admin-content-media"
               className="sk-input"
@@ -689,21 +988,21 @@ export function AdminContentWorkspace() {
               <span>
                 {uploadMedia.isPending
                   ? "Uploading media"
-                  : publicationForm.mediaAssetId
-                  ? `Media asset: ${publicationForm.mediaAssetId}`
-                  : "Upload an image or paste an existing media asset id below."}
+                  : publicationForm.mediaPublicUrl
+                  ? "Image uploaded and ready for app delivery."
+                  : "Choose the image file for this logo, banner, or slide."}
               </span>
             </div>
           </div>
 
-          <TextInput
-            label="Media asset id"
-            name="mediaAssetId"
-            value={publicationForm.mediaAssetId}
-            onChange={(event) => setPublicationForm({ ...publicationForm, mediaAssetId: event.currentTarget.value })}
-          />
-
-          <div className="admin-form-grid admin-form-grid--thirds">
+          <div className="admin-form-grid">
+            <TextInput
+              label="Title"
+              name="title"
+              helperText="Shown on banners and onboarding slides. Leave short for clean mobile UI."
+              value={publicationForm.title}
+              onChange={(event) => setPublicationForm({ ...publicationForm, title: event.currentTarget.value })}
+            />
             <SelectInput
               label="Status"
               name="status"
@@ -711,67 +1010,149 @@ export function AdminContentWorkspace() {
               options={publicationStatusOptions}
               onChange={(event) => setPublicationForm({ ...publicationForm, status: event.currentTarget.value })}
             />
+          </div>
+
+          <TextAreaInput
+            label="Short copy"
+            name="body"
+            rows={3}
+            value={publicationForm.body}
+            onChange={(event) => setPublicationForm({ ...publicationForm, body: event.currentTarget.value })}
+          />
+
+          <TextInput
+            label="Public image URL"
+            name="mediaPublicUrl"
+            helperText="Filled automatically after upload. The app reads this URL."
+            value={publicationForm.mediaPublicUrl}
+            onChange={(event) => setPublicationForm({ ...publicationForm, mediaPublicUrl: event.currentTarget.value })}
+          />
+
+          <div className="admin-form-grid">
             <TextInput
-              label="Priority"
+              label="Priority / carousel order"
               name="priority"
               type="number"
+              helperText="Higher priority appears first."
               value={publicationForm.priority}
               onChange={(event) => setPublicationForm({ ...publicationForm, priority: event.currentTarget.value })}
             />
             <TextInput
-              label="Module key"
-              name="moduleKey"
-              value={publicationForm.moduleKey}
-              onChange={(event) => setPublicationForm({ ...publicationForm, moduleKey: event.currentTarget.value })}
+              label="CTA label"
+              name="ctaLabel"
+              value={publicationForm.ctaLabel}
+              onChange={(event) => setPublicationForm({ ...publicationForm, ctaLabel: event.currentTarget.value })}
             />
           </div>
 
-          <div className="admin-form-grid">
-            <TextInput
-              label="Starts"
-              name="startsAt"
-              type="datetime-local"
-              value={publicationForm.startsAt}
-              onChange={(event) => setPublicationForm({ ...publicationForm, startsAt: event.currentTarget.value })}
-            />
-            <TextInput
-              label="Ends"
-              name="endsAt"
-              type="datetime-local"
-              value={publicationForm.endsAt}
-              onChange={(event) => setPublicationForm({ ...publicationForm, endsAt: event.currentTarget.value })}
-            />
-          </div>
+          <details className="admin-content-advanced">
+            <summary>Advanced targeting and routing</summary>
+            <div className="admin-form-grid">
+              <TextInput
+                label="Publication key"
+                name="publicationKey"
+                helperText="Fixed slots update the same publication. Carousel banners use unique keys."
+                value={publicationForm.publicationKey}
+                onChange={(event) => setPublicationForm({ ...publicationForm, publicationKey: event.currentTarget.value })}
+              />
+              <SelectInput
+                label="Placement"
+                name="placementKey"
+                value={publicationForm.placementKey}
+                options={publicationPlacementOptions}
+                onChange={(event) => setPublicationForm({ ...publicationForm, placementKey: event.currentTarget.value })}
+                required
+              />
+            </div>
 
-          <div className="admin-form-grid">
-            <TextInput
-              label="Countries"
-              name="countryCodes"
-              helperText="Comma separated ISO country codes."
-              value={publicationForm.countryCodes}
-              onChange={(event) => setPublicationForm({ ...publicationForm, countryCodes: event.currentTarget.value })}
-            />
-            <TextInput
-              label="Cities"
-              name="cities"
-              value={publicationForm.cities}
-              onChange={(event) => setPublicationForm({ ...publicationForm, cities: event.currentTarget.value })}
-            />
-          </div>
+            <div className="admin-form-grid">
+              <TextInput
+                label="Audience keys"
+                name="audienceKeys"
+                value={publicationForm.audienceKeys}
+                onChange={(event) => setPublicationForm({ ...publicationForm, audienceKeys: event.currentTarget.value })}
+              />
+              <TextInput
+                label="Module key"
+                name="moduleKey"
+                value={publicationForm.moduleKey}
+                onChange={(event) => setPublicationForm({ ...publicationForm, moduleKey: event.currentTarget.value })}
+              />
+            </div>
 
-          <TextInput
-            label="Regions"
-            name="regions"
-            value={publicationForm.regions}
-            onChange={(event) => setPublicationForm({ ...publicationForm, regions: event.currentTarget.value })}
-          />
+            <div className="admin-form-grid">
+              <SelectInput
+                label="CTA action"
+                name="ctaType"
+                value={publicationForm.ctaType}
+                options={ctaOptions}
+                onChange={(event) => setPublicationForm({ ...publicationForm, ctaType: event.currentTarget.value })}
+              />
+              <TextInput
+                label="CTA target"
+                name="ctaTarget"
+                helperText="Use an app route such as /(customer)/orders/new for in-app banners."
+                value={publicationForm.ctaTarget}
+                onChange={(event) => setPublicationForm({ ...publicationForm, ctaTarget: event.currentTarget.value })}
+              />
+            </div>
 
-          <TextInput
-            label="Accessibility label"
-            name="accessibilityLabel"
-            value={publicationForm.accessibilityLabel}
-            onChange={(event) => setPublicationForm({ ...publicationForm, accessibilityLabel: event.currentTarget.value })}
-          />
+            <div className="admin-form-grid">
+              <TextInput
+                label="Starts"
+                name="startsAt"
+                type="datetime-local"
+                value={publicationForm.startsAt}
+                onChange={(event) => setPublicationForm({ ...publicationForm, startsAt: event.currentTarget.value })}
+              />
+              <TextInput
+                label="Ends"
+                name="endsAt"
+                type="datetime-local"
+                value={publicationForm.endsAt}
+                onChange={(event) => setPublicationForm({ ...publicationForm, endsAt: event.currentTarget.value })}
+              />
+            </div>
+
+            <div className="admin-form-grid">
+              <TextInput
+                label="Countries"
+                name="countryCodes"
+                helperText="Comma separated ISO country codes."
+                value={publicationForm.countryCodes}
+                onChange={(event) => setPublicationForm({ ...publicationForm, countryCodes: event.currentTarget.value })}
+              />
+              <TextInput
+                label="Cities"
+                name="cities"
+                value={publicationForm.cities}
+                onChange={(event) => setPublicationForm({ ...publicationForm, cities: event.currentTarget.value })}
+              />
+            </div>
+
+            <div className="admin-form-grid">
+              <TextInput
+                label="Regions"
+                name="regions"
+                value={publicationForm.regions}
+                onChange={(event) => setPublicationForm({ ...publicationForm, regions: event.currentTarget.value })}
+              />
+              <TextInput
+                label="Accessibility label"
+                name="accessibilityLabel"
+                value={publicationForm.accessibilityLabel}
+                onChange={(event) => setPublicationForm({ ...publicationForm, accessibilityLabel: event.currentTarget.value })}
+              />
+            </div>
+
+            <TextInput
+              label="Media asset id"
+              helperText="Optional legacy media asset id."
+              name="mediaAssetId"
+              value={publicationForm.mediaAssetId}
+              onChange={(event) => setPublicationForm({ ...publicationForm, mediaAssetId: event.currentTarget.value })}
+            />
+          </details>
 
           {formError || uploadMedia.error
             ? <p className="admin-form-error">{formError ?? readError(uploadMedia.error)}</p>
@@ -946,7 +1327,18 @@ function PublicationInspector(props: {
         {props.previewLoading
           ? <LoadingState label="Loading media" />
           : props.mediaUrl
-          ? <img src={props.mediaUrl} alt={props.publication.accessibility_label ?? props.publication.title ?? ""} />
+          ? (
+            <AdminPreviewImage
+              alt={props.publication.accessibility_label ?? props.publication.title ?? ""}
+              fallback={
+                <div className="admin-content-preview-fallback">
+                  <Eye aria-hidden="true" />
+                  <span>Image URL unavailable</span>
+                </div>
+              }
+              url={props.mediaUrl}
+            />
+          )
           : (
             <div className="admin-content-preview-fallback">
               <Eye aria-hidden="true" />
@@ -984,11 +1376,90 @@ function PublicationInspector(props: {
   );
 }
 
+function AdminPreviewImage(props: {
+  readonly alt: string;
+  readonly fallback: ReactNode;
+  readonly url: string | null;
+}) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+
+  if (!props.url || failedUrl === props.url) {
+    return <>{props.fallback}</>;
+  }
+
+  return (
+    <img
+      alt={props.alt}
+      src={props.url}
+      onError={() => setFailedUrl(props.url)}
+    />
+  );
+}
+
+function findPresetPublication(
+  preset: ContentSurfacePreset,
+  publications: readonly PublicationRecord[],
+): PublicationRecord | null {
+  if (preset.publicationMode === "unique") return null;
+
+  const matching = publications.filter((publication) => publication.placement_key === preset.placementKey);
+  return matching.find((publication) => publication.publication_key === preset.publicationKey) ??
+    sortContentPublications(matching)[0] ??
+    null;
+}
+
+function sortContentPublications(publications: readonly PublicationRecord[]): PublicationRecord[] {
+  return [...publications].sort((left, right) =>
+    (right.priority ?? 0) - (left.priority ?? 0) ||
+    (right.revision ?? 0) - (left.revision ?? 0) ||
+    Date.parse(right.published_at ?? right.updated_at ?? right.created_at ?? "") -
+      Date.parse(left.published_at ?? left.updated_at ?? left.created_at ?? ""),
+  );
+}
+
+function createPresetPublicationKey(preset: ContentSurfacePreset): string {
+  if (preset.publicationMode !== "unique") return preset.publicationKey;
+  const suffix = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+  return `${preset.publicationKey}.${suffix}`;
+}
+
+function buildPlacementOptions(
+  placements: readonly PlacementRecord[],
+  currentPlacementKey: string,
+) {
+  const options = placements.map((placement) => ({
+    label: placement.display_name,
+    value: placement.key,
+  }));
+
+  if (currentPlacementKey && !options.some((option) => option.value === currentPlacementKey)) {
+    const preset = contentSurfacePresets.find((candidate) => candidate.placementKey === currentPlacementKey);
+    options.push({
+      label: preset?.placementDisplayName ?? currentPlacementKey,
+      value: currentPlacementKey,
+    });
+  }
+
+  return options;
+}
+
+function withCacheVersion(url: string, version: number): string {
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.set("v", String(version || Date.now()));
+    return parsed.toString();
+  } catch {
+    const separator = url.includes("?") ? "&" : "?";
+    return `${url}${separator}v=${encodeURIComponent(String(version || Date.now()))}`;
+  }
+}
+
 async function uploadAdminContentMedia(input: {
   readonly api: ApiGatewayClient;
   readonly assetTypeKey: string;
   readonly file: File;
   readonly ownerUserId: string | null;
+  readonly supabase: SupabaseClient;
 }) {
   const contentType = input.file.type || "application/octet-stream";
   const idempotencyKey = createClientIdempotencyKey("admin.content.media", input.file.name);
@@ -998,41 +1469,57 @@ async function uploadAdminContentMedia(input: {
       contentType,
       fileName: input.file.name,
       idempotencyKey,
-      storageBucket: "skima-platform-media",
+      storageBucket: "skima-product-content",
     },
     UploadSessionSchema,
   );
 
-  const uploadResponse = await fetch(upload.signedUrl, {
-    body: input.file,
-    headers: { "content-type": contentType },
-    method: upload.method,
-  });
+  const uploadResult = await input.supabase.storage
+    .from(upload.storageBucket)
+    .uploadToSignedUrl(upload.storagePath, upload.token, input.file, {
+      contentType,
+      upsert: true,
+    });
 
-  if (!uploadResponse.ok) {
-    throw new Error("The media upload did not complete.");
+  if (uploadResult.error) {
+    throw new Error(uploadResult.error.message || "The media upload did not complete.");
   }
 
-  const registered = await input.api.post(
-    "/runtime/media/assets",
+  void input.assetTypeKey;
+  void input.ownerUserId;
+
+  return {
+    mediaAssetId: null,
+    publicUrl: withCacheVersion(upload.publicUrl, input.file.lastModified),
+  };
+}
+
+async function ensurePresetPlacement(input: {
+  readonly api: ApiGatewayClient;
+  readonly existingPlacements: readonly PlacementRecord[];
+  readonly placementKey: string;
+}) {
+  if (input.existingPlacements.some((placement) => placement.key === input.placementKey)) {
+    return;
+  }
+
+  const preset = contentSurfacePresets.find((candidate) => candidate.placementKey === input.placementKey);
+  if (!preset) return;
+
+  await input.api.post(
+    "/admin/content/placements",
     {
-      assetTypeKey: input.assetTypeKey,
-      byteSize: input.file.size,
-      contentType,
-      idempotencyKey: `${idempotencyKey}:asset`,
-      metadata: { originalFileName: input.file.name, purpose: "admin.content" },
-      ownerUserId: input.ownerUserId,
-      source: "skima.admin.content",
-      storageBucket: upload.storageBucket,
-      storagePath: upload.storagePath,
+      allowedAudiences: listFromInput(preset.placementAudiences, ["public"]),
+      constraints: {},
+      contentKind: preset.placementContentKind,
+      displayName: preset.placementDisplayName,
+      key: preset.placementKey,
+      metadata: { adminPreset: preset.key },
+      status: "active",
+      surfaceKey: preset.placementSurfaceKey,
     },
     MutationSchema,
   );
-
-  if (typeof registered === "string") return registered;
-  const id = recordString(registered as PlatformRecord, "id");
-  if (!id) throw new Error("The media service did not return an asset id.");
-  return id;
 }
 
 function publicationToForm(publication: PublicationRecord): PublicationFormState {
@@ -1052,8 +1539,9 @@ function publicationToForm(publication: PublicationRecord): PublicationFormState
     accessibilityLabel: publication.accessibility_label ?? "",
     ctaLabel: publication.cta_label ?? "",
     ctaType: recordString(ctaAction, "type") ?? "",
-    ctaTarget: recordString(ctaAction, "target") ?? recordString(ctaAction, "href") ?? "",
+    ctaTarget: recordString(ctaAction, "value") ?? recordString(ctaAction, "target") ?? recordString(ctaAction, "href") ?? "",
     mediaAssetId: publication.media_asset_id ?? "",
+    mediaPublicUrl: publicationMediaUrl(publication) ?? "",
     priority: String(publication.priority ?? 0),
     status: publication.status,
     startsAt: datetimeLocal(publication.starts_at ?? null),
@@ -1061,10 +1549,15 @@ function publicationToForm(publication: PublicationRecord): PublicationFormState
   };
 }
 
+function publicationMediaUrl(publication: PublicationRecord): string | null {
+  const metadata = isRecord(publication.metadata) ? publication.metadata : {};
+  return recordString(metadata, "media_public_url") ?? recordString(metadata, "mediaPublicUrl");
+}
+
 function readCtaAction(form: PublicationFormState) {
   const type = form.ctaType.trim();
   const target = form.ctaTarget.trim();
-  return type ? { type, target } : {};
+  return type ? { type, target, value: target } : {};
 }
 
 function nullableText(value: string): string | null {
@@ -1128,6 +1621,10 @@ function statusTone(status: string): "neutral" | "success" | "warning" | "danger
 function recordString(record: PlatformRecord | null | undefined, key: string): string | null {
   const value = record?.[key];
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function isRecord(value: unknown): value is PlatformRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readError(error: unknown): string {

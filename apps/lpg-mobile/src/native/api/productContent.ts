@@ -64,6 +64,8 @@ function readProductContentRecord(value: unknown): ProductContentRecord {
   const record = isRecord(value) ? value : {};
   const bucket = readString(record.media_storage_bucket);
   const path = readString(record.media_storage_path);
+  const metadata = isRecord(record.metadata) ? record.metadata : {};
+  const metadataMediaUrl = readString(metadata.media_public_url) ?? readString(metadata.mediaPublicUrl);
   return {
     publicationId: readString(record.publication_id) ?? "",
     publicationKey: readString(record.publication_key) ?? "",
@@ -75,10 +77,10 @@ function readProductContentRecord(value: unknown): ProductContentRecord {
     ctaLabel: readString(record.cta_label),
     ctaAction: isRecord(record.cta_action) ? record.cta_action : {},
     mediaAssetId: readString(record.media_asset_id),
-    mediaUrl: bucket && path ? publicMediaUrl(bucket, path) : null,
+    mediaUrl: metadataMediaUrl ?? (bucket && path ? publicMediaUrl(bucket, path) : null),
     priority: readNumber(record.priority) ?? 0,
     revision: readNumber(record.revision) ?? 1,
-    metadata: isRecord(record.metadata) ? record.metadata : {},
+    metadata,
   };
 }
 

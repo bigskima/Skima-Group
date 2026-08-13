@@ -6,8 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { useSession } from "../../src/native/session/SessionProvider";
 import { useAppTheme } from "../../src/native/theme/ThemeProvider";
 import { colors, radii, spacing } from "../../src/native/theme/tokens";
-import { BrandMark } from "../../src/native/ui/BrandMark";
-import { Screen } from "../../src/native/ui/Screen";
+import { AuthShell } from "../../src/native/ui/AuthShell";
 import { friendlyError } from "../../src/native/utilities/friendlyError";
 
 export default function Login() {
@@ -25,9 +24,9 @@ export default function Login() {
     try {
       const signedIn = await session.signIn(email.trim().toLowerCase(), password);
       if (signedIn) router.replace("/(customer)");
-      else setMessage("We couldn’t open your account. Check the message below and try again.");
+      else setMessage("We couldn't sign you in. Check your details and try again.");
     } catch (cause) {
-      setMessage(friendlyError(cause, "We couldn’t sign you in. Please try again."));
+      setMessage(friendlyError(cause, "We couldn't sign you in. Check your details and try again."));
     } finally {
       setPending(false);
     }
@@ -36,49 +35,90 @@ export default function Login() {
   if (session.status === "authenticated") return <Redirect href="/(customer)" />;
 
   return (
-    <Screen eyebrow="Welcome back" title="Sign in to SKIMA">
-      <View style={styles.wrap}>
-        <BrandMark />
-        <Text style={[styles.copy, { color: palette.muted }]}>Continue your refill, delivery or station work.</Text>
-        <View style={styles.form}>
-          <View style={[styles.field, { backgroundColor: palette.input, borderColor: palette.border }]}>
-            <Mail color={palette.muted} size={18} />
-            <TextInput accessibilityLabel="Email address" autoCapitalize="none" autoComplete="email" keyboardType="email-address" placeholder="Email address" placeholderTextColor={palette.muted} value={email} onChangeText={setEmail} onSubmitEditing={() => undefined} style={[styles.input, { color: palette.ink }]} />
-          </View>
-          <View style={[styles.field, { backgroundColor: palette.input, borderColor: palette.border }]}>
-            <LockKeyhole color={palette.muted} size={18} />
-            <TextInput accessibilityLabel="Password" autoComplete="current-password" placeholder="Password" placeholderTextColor={palette.muted} secureTextEntry value={password} onChangeText={setPassword} onSubmitEditing={() => void submit()} style={[styles.input, { color: palette.ink }]} />
-          </View>
-          {session.error || message ? (
-            <Text accessibilityRole="alert" style={styles.error}>
-              {session.error ? friendlyError(new Error(session.error), "We couldn’t sign you in. Check your details and try again.") : message}
-            </Text>
-          ) : null}
-          <Pressable accessibilityRole="button" disabled={!email.trim() || !password || pending} onPress={() => void submit()} style={({ pressed }) => [styles.button, (pressed || pending) && { opacity: .76 }]}>
-            <LinearGradient colors={[colors.brand, colors.brandDark]} style={styles.buttonFill}>
-              {pending ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Sign in</Text>}
-            </LinearGradient>
+    <AuthShell
+      eyebrow="Welcome back"
+      title="Sign in to SKIMA"
+      body="Continue your refill, delivery, driver or station work from one secure account."
+      footer={
+        <View style={styles.footerLinks}>
+          <Pressable onPress={() => router.push("/(auth)/register")}>
+            <Text style={styles.linkStrong}>Create account</Text>
           </Pressable>
-          <View style={styles.links}>
-            <Pressable onPress={() => router.push("/(auth)/register")}><Text style={styles.link}>Create account</Text></Pressable>
-            <Pressable onPress={() => router.push("/(auth)/forgot-password")}><Text style={styles.link}>Forgot password?</Text></Pressable>
-          </View>
+          <Pressable onPress={() => router.push("/(auth)/forgot-password")}>
+            <Text style={styles.linkMuted}>Forgot password?</Text>
+          </Pressable>
         </View>
+      }
+    >
+      <View style={[styles.field, { backgroundColor: palette.input, borderColor: palette.border }]}>
+        <Mail color={palette.muted} size={18} />
+        <TextInput
+          accessibilityLabel="Email address"
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          onChangeText={setEmail}
+          placeholder="Email address"
+          placeholderTextColor={palette.muted}
+          returnKeyType="next"
+          style={[styles.input, { color: palette.ink }]}
+          value={email}
+        />
       </View>
-    </Screen>
+
+      <View style={[styles.field, { backgroundColor: palette.input, borderColor: palette.border }]}>
+        <LockKeyhole color={palette.muted} size={18} />
+        <TextInput
+          accessibilityLabel="Password"
+          autoComplete="current-password"
+          onChangeText={setPassword}
+          onSubmitEditing={() => void submit()}
+          placeholder="Password"
+          placeholderTextColor={palette.muted}
+          secureTextEntry
+          style={[styles.input, { color: palette.ink }]}
+          value={password}
+        />
+      </View>
+
+      {session.error || message ? (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {session.error ? friendlyError(new Error(session.error), "We couldn't sign you in. Check your details and try again.") : message}
+        </Text>
+      ) : null}
+
+      <Pressable
+        accessibilityRole="button"
+        disabled={!email.trim() || !password || pending}
+        onPress={() => void submit()}
+        style={({ pressed }) => [styles.button, (!email.trim() || !password) && styles.disabled, (pressed || pending) && styles.pressed]}
+      >
+        <LinearGradient colors={[colors.brand, colors.brandDark]} style={styles.buttonFill}>
+          {pending ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Sign in</Text>}
+        </LinearGradient>
+      </Pressable>
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { width: "100%", maxWidth: 460, gap: 18 },
-  copy: { fontSize: 14, lineHeight: 20 },
-  form: { gap: 12 },
-  field: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, paddingHorizontal: spacing.md },
-  input: { flex: 1, minHeight: 50, fontSize: 15 },
-  button: { minHeight: 52, overflow: "hidden", borderRadius: radii.md },
+  field: {
+    minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+  },
+  input: { flex: 1, minHeight: 52, fontSize: 15, fontWeight: "700" },
+  button: { minHeight: 54, overflow: "hidden", borderRadius: radii.md },
   buttonFill: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.lg },
   buttonText: { color: "white", fontSize: 15, fontWeight: "900" },
-  error: { color: colors.danger, fontSize: 12, lineHeight: 18 },
-  links: { flexDirection: "row", justifyContent: "space-between", gap: spacing.md, paddingTop: 2 },
-  link: { color: colors.brand, fontSize: 12, fontWeight: "900" },
+  error: { color: colors.danger, fontSize: 12, lineHeight: 18, fontWeight: "800" },
+  footerLinks: { flexDirection: "row", justifyContent: "space-between", gap: spacing.md },
+  linkStrong: { color: colors.brand, fontSize: 13, fontWeight: "900" },
+  linkMuted: { color: colors.muted, fontSize: 13, fontWeight: "900" },
+  disabled: { opacity: 0.52 },
+  pressed: { opacity: 0.76 },
 });

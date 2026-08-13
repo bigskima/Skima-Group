@@ -1535,7 +1535,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const payload = body.value;
     const storageBucket = optionalString(payload.storageBucket) ?? "skima-platform-media";
 
-    if (!["skima-platform-documents", "skima-platform-media"].includes(storageBucket)) {
+    if (!["skima-platform-documents", "skima-platform-media", "skima-product-content"].includes(storageBucket)) {
       throw new RequestValidationError("storageBucket must reference an approved platform bucket.");
     }
 
@@ -1565,6 +1565,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         expiresInSeconds: 7200,
         method: "PUT",
         signedUrl: signedUploadResult.data.signedUrl,
+        publicUrl: createPublicStorageUrl(supabaseUrl, storageBucket, storagePath),
         storageBucket,
         storagePath,
         token: signedUploadResult.data.token,
@@ -3912,9 +3913,26 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
   }
 
   if (routePath === "/admin/content/placements") {
+    const permissionResponse = await requireAnyPermission(supabase, id, [
+      "platform.content.read",
+      "platform.content.manage",
+    ]);
+
+    if (permissionResponse) {
+      return permissionResponse;
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+    }
+
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+
     if (request.method === "GET") {
       return selectRecords(
-        supabase
+        serviceClient
           .from("product_content_placements")
           .select(
             "id,key,display_name,surface_key,content_kind,allowed_audiences,status,constraints,metadata,created_by,updated_by,created_at,updated_at",
@@ -3933,26 +3951,54 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }
 
       const payload = body.value;
-      return rpcResponse(
-        supabase.rpc("configure_product_content_placement", {
-          target_allowed_audiences: optionalStringArray(payload.allowedAudiences) ?? ["public"],
-          target_constraints: optionalRecord(payload.constraints) ?? {},
-          target_content_kind: requireString(payload.contentKind, "contentKind"),
-          target_display_name: requireString(payload.displayName, "displayName"),
-          target_key: requireString(payload.key, "key"),
-          target_metadata: optionalRecord(payload.metadata) ?? {},
-          target_status: optionalString(payload.status) ?? "active",
-          target_surface_key: requireString(payload.surfaceKey, "surfaceKey"),
-        }),
+      const managePermissionResponse = await requireAnyPermission(supabase, id, ["platform.content.manage"]);
+
+      if (managePermissionResponse) {
+        return managePermissionResponse;
+      }
+
+      return upsertResponse(
+        serviceClient
+          .from("product_content_placements")
+          .upsert({
+            allowed_audiences: optionalStringArray(payload.allowedAudiences) ?? ["public"],
+            constraints: optionalRecord(payload.constraints) ?? {},
+            content_kind: requireString(payload.contentKind, "contentKind"),
+            display_name: requireString(payload.displayName, "displayName"),
+            key: requireString(payload.key, "key"),
+            metadata: optionalRecord(payload.metadata) ?? {},
+            status: optionalString(payload.status) ?? "active",
+            surface_key: requireString(payload.surfaceKey, "surfaceKey"),
+            updated_by: authResult.user.id,
+          }, { onConflict: "key" })
+          .select("id")
+          .single(),
         id,
       );
     }
   }
 
   if (routePath === "/admin/content/publications") {
+    const permissionResponse = await requireAnyPermission(supabase, id, [
+      "platform.content.read",
+      "platform.content.manage",
+    ]);
+
+    if (permissionResponse) {
+      return permissionResponse;
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+    }
+
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+
     if (request.method === "GET") {
       return selectRecords(
-        supabase
+        serviceClient
           .from("product_content_publications")
           .select(
             "id,publication_key,placement_key,organization_id,module_key,audience_keys,country_codes,regions,cities,title,body,accessibility_label,cta_label,cta_action,media_asset_id,priority,revision,status,starts_at,ends_at,published_at,metadata,created_by,updated_by,created_at,updated_at",
@@ -3971,31 +4017,14 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }
 
       const payload = body.value;
-      return rpcResponse(
-        supabase.rpc("configure_product_content_publication", {
-          target_accessibility_label: optionalString(payload.accessibilityLabel),
-          target_audience_keys: optionalStringArray(payload.audienceKeys) ?? ["public"],
-          target_body: optionalString(payload.body),
-          target_cities: optionalStringArray(payload.cities) ?? [],
-          target_country_codes: optionalStringArray(payload.countryCodes) ?? [],
-          target_cta_action: optionalRecord(payload.ctaAction) ?? {},
-          target_cta_label: optionalString(payload.ctaLabel),
-          target_ends_at: optionalString(payload.endsAt),
-          target_media_asset_id: optionalUuid(payload.mediaAssetId, "mediaAssetId"),
-          target_metadata: optionalRecord(payload.metadata) ?? {},
-          target_module_key: optionalString(payload.moduleKey),
-          target_organization_id: optionalUuid(payload.organizationId, "organizationId"),
-          target_placement_key: requireString(payload.placementKey, "placementKey"),
-          target_priority: optionalInteger(payload.priority) ?? 0,
-          target_publication_id: optionalUuid(payload.publicationId, "publicationId"),
-          target_publication_key: optionalString(payload.publicationKey),
-          target_regions: optionalStringArray(payload.regions) ?? [],
-          target_starts_at: optionalString(payload.startsAt),
-          target_status: optionalString(payload.status) ?? "draft",
-          target_title: optionalString(payload.title),
-        }),
-        id,
-      );
+      const organizationId = optionalUuid(payload.organizationId, "organizationId");
+      const managePermissionResponse = await requireAnyPermission(supabase, id, ["platform.content.manage"], organizationId);
+
+      if (managePermissionResponse) {
+        return managePermissionResponse;
+      }
+
+      return configureContentPublicationResponse(serviceClient, payload, authResult.user, id);
     }
   }
 
@@ -4006,13 +4035,53 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       return body.response;
     }
 
-    return rpcResponse(
-      supabase.rpc("set_product_content_publication_status", {
-        target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
-        target_publication_id: requireUuid(body.value.publicationId, "publicationId"),
-        target_reason: optionalString(body.value.reason),
-        target_status: requireString(body.value.status, "status"),
-      }),
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+    }
+
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const publicationId = requireUuid(body.value.publicationId, "publicationId");
+    const publicationResult = await serviceClient
+      .from("product_content_publications")
+      .select("id,organization_id,metadata,published_at")
+      .eq("id", publicationId)
+      .maybeSingle();
+
+    if (publicationResult.error) {
+      return databaseError(publicationResult.error, id);
+    }
+
+    if (!publicationResult.data) {
+      return jsonResponse({ ok: false, error: "not_found", requestId: id }, 404);
+    }
+
+    const organizationId = stringOrNull(getRecordValue(publicationResult.data, "organization_id"));
+    const managePermissionResponse = await requireAnyPermission(supabase, id, ["platform.content.manage"], organizationId);
+
+    if (managePermissionResponse) {
+      return managePermissionResponse;
+    }
+
+    const targetStatus = requireString(body.value.status, "status");
+    const reason = optionalString(body.value.reason);
+    const currentMetadata = requireRecordOrEmpty(getRecordValue(publicationResult.data, "metadata"));
+
+    return upsertResponse(
+      serviceClient
+        .from("product_content_publications")
+        .update({
+          metadata: reason ? { ...currentMetadata, last_status_reason: reason } : currentMetadata,
+          published_at: targetStatus === "published" && !getRecordValue(publicationResult.data, "published_at")
+            ? new Date().toISOString()
+            : getRecordValue(publicationResult.data, "published_at"),
+          status: targetStatus,
+          updated_by: authResult.user.id,
+        })
+        .eq("id", publicationId)
+        .select("id")
+        .single(),
       id,
     );
   }
@@ -4744,6 +4813,154 @@ async function rpcDataResponse(query: SelectQuery, id: string): Promise<Response
     data,
     requestId: id,
   });
+}
+
+async function upsertResponse(query: SelectQuery, id: string): Promise<Response> {
+  const { data, error } = await query;
+
+  if (error) {
+    return databaseError(error as { readonly message: string; readonly code?: string }, id);
+  }
+
+  return jsonResponse({
+    ok: true,
+    data,
+    id: stringOrNull(getRecordValue(data, "id")) ?? undefined,
+    requestId: id,
+  });
+}
+
+async function requireAnyPermission(
+  supabase: SupabaseClient,
+  id: string,
+  permissionKeys: readonly string[],
+  organizationId: string | null = null,
+): Promise<Response | null> {
+  const results = await Promise.all(
+    permissionKeys.map((permissionKey) =>
+      supabase.rpc("has_permission", {
+        target_organization_id: organizationId,
+        target_permission: permissionKey,
+      })
+    ),
+  );
+  const failed = results.find((result) => result.error);
+
+  if (failed?.error) {
+    return databaseError(failed.error, id);
+  }
+
+  if (results.some((result) => result.data === true)) {
+    return null;
+  }
+
+  return jsonResponse(
+    {
+      ok: false,
+      error: "forbidden",
+      message: "You do not have permission for this admin action.",
+      requestId: id,
+    },
+    403,
+  );
+}
+
+async function configureContentPublicationResponse(
+  serviceClient: SupabaseClient,
+  payload: Readonly<Record<string, unknown>>,
+  user: User,
+  id: string,
+): Promise<Response> {
+  const publicationId = optionalUuid(payload.publicationId, "publicationId");
+  const publicationKey = optionalString(payload.publicationKey);
+  const mediaPublicUrl = optionalString(payload.mediaPublicUrl);
+  const metadata = {
+    ...(optionalRecord(payload.metadata) ?? {}),
+    ...(mediaPublicUrl
+      ? {
+        mediaPublicUrl,
+        media_public_url: mediaPublicUrl,
+      }
+      : {}),
+  };
+
+  if (!publicationId && !publicationKey) {
+    throw new RequestValidationError("publicationKey is required when creating a publication.");
+  }
+
+  const existingResult = publicationId
+    ? await serviceClient
+      .from("product_content_publications")
+      .select("id,publication_key,revision,published_at,metadata")
+      .eq("id", publicationId)
+      .maybeSingle()
+    : await serviceClient
+      .from("product_content_publications")
+      .select("id,publication_key,revision,published_at,metadata")
+      .eq("publication_key", publicationKey)
+      .maybeSingle();
+
+  if (existingResult.error) {
+    return databaseError(existingResult.error, id);
+  }
+
+  const status = optionalString(payload.status) ?? "draft";
+  const baseRecord = {
+    accessibility_label: optionalString(payload.accessibilityLabel),
+    audience_keys: optionalStringArray(payload.audienceKeys) ?? ["public"],
+    body: optionalString(payload.body),
+    cities: optionalStringArray(payload.cities) ?? [],
+    country_codes: optionalStringArray(payload.countryCodes) ?? [],
+    cta_action: optionalRecord(payload.ctaAction) ?? {},
+    cta_label: optionalString(payload.ctaLabel),
+    ends_at: optionalString(payload.endsAt),
+    media_asset_id: optionalUuid(payload.mediaAssetId, "mediaAssetId"),
+    metadata: {
+      ...requireRecordOrEmpty(getRecordValue(existingResult.data, "metadata")),
+      ...metadata,
+    },
+    module_key: optionalString(payload.moduleKey),
+    organization_id: optionalUuid(payload.organizationId, "organizationId"),
+    placement_key: requireString(payload.placementKey, "placementKey"),
+    priority: optionalInteger(payload.priority) ?? 0,
+    published_at: status === "published" && !getRecordValue(existingResult.data, "published_at")
+      ? new Date().toISOString()
+      : getRecordValue(existingResult.data, "published_at"),
+    regions: optionalStringArray(payload.regions) ?? [],
+    starts_at: optionalString(payload.startsAt),
+    status,
+    title: optionalString(payload.title),
+    updated_by: user.id,
+  };
+
+  if (existingResult.data) {
+    return upsertResponse(
+      serviceClient
+        .from("product_content_publications")
+        .update({
+          ...baseRecord,
+          publication_key: publicationKey ?? stringOrNull(getRecordValue(existingResult.data, "publication_key")),
+          revision: (numberOrNull(getRecordValue(existingResult.data, "revision")) ?? 1) + 1,
+        })
+        .eq("id", requireUuid(getRecordValue(existingResult.data, "id"), "publicationId"))
+        .select("id")
+        .single(),
+      id,
+    );
+  }
+
+  return upsertResponse(
+    serviceClient
+      .from("product_content_publications")
+      .insert({
+        ...baseRecord,
+        created_by: user.id,
+        publication_key: requireString(publicationKey, "publicationKey"),
+      })
+      .select("id")
+      .single(),
+    id,
+  );
 }
 
 function lpgStationActivationResponse(
@@ -6085,6 +6302,16 @@ function recordsByStringId(records: readonly unknown[]): Map<string, unknown> {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function createPublicStorageUrl(supabaseUrl: string, storageBucket: string, storagePath: string): string {
+  const safeBucket = encodeURIComponent(storageBucket);
+  const safePath = storagePath.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+  return `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/public/${safeBucket}/${safePath}`;
 }
 
 function requireArray(value: unknown, fieldName: string): readonly unknown[] {

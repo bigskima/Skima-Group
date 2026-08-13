@@ -5,6 +5,121 @@
   align-items: start;
 }
 
+.admin-content-media-workbench {
+  margin-bottom: 16px;
+}
+
+.admin-content-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-content-preset-card {
+  display: grid;
+  min-height: 170px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px 12px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--sk-border-subtle, rgba(255, 255, 255, 0.09));
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.admin-content-preset-card:hover {
+  border-color: rgba(255, 71, 94, 0.48);
+  background: rgba(255, 71, 94, 0.1);
+}
+
+.admin-content-presets__icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(255, 71, 94, 0.14);
+  color: var(--sk-accent, #ff475e);
+}
+
+.admin-content-presets__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.admin-content-presets strong,
+.admin-content-presets small {
+  display: block;
+}
+
+.admin-content-preset-card__copy {
+  min-width: 0;
+}
+
+.admin-content-presets small {
+  margin-top: 2px;
+  color: var(--sk-text-muted, rgba(255, 255, 255, 0.62));
+  font-size: 0.76rem;
+}
+
+.admin-content-preset-card__copy em,
+.admin-content-preset-card__copy span {
+  display: block;
+  margin-top: 6px;
+  color: var(--sk-text-muted, rgba(255, 255, 255, 0.62));
+  font-size: 0.74rem;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.admin-content-preset-card__copy span {
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 800;
+}
+
+.admin-content-preset-card__preview {
+  display: grid;
+  min-height: 68px;
+  grid-column: 1 / -1;
+  place-items: center;
+  overflow: hidden;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--sk-text-muted, rgba(255, 255, 255, 0.62));
+}
+
+.admin-content-preset-card__preview.has-media {
+  border-style: solid;
+}
+
+.admin-content-preset-card__preview img {
+  width: 100%;
+  height: 84px;
+  object-fit: cover;
+}
+
+.admin-content-preset-card__preview svg {
+  width: 22px;
+  height: 22px;
+}
+
+.admin-content-preset-card__meta {
+  grid-column: 1 / -1;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: rgba(255, 71, 94, 0.12);
+  color: #ffd4da;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
 .admin-content-placements,
 .admin-content-publications,
 .admin-content-inspector {
@@ -168,6 +283,70 @@
   color: var(--sk-accent, #ff475e);
 }
 
+.admin-content-slot-hint {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 13px;
+  border: 1px solid rgba(255, 71, 94, 0.28);
+  border-radius: 14px;
+  background: rgba(255, 71, 94, 0.08);
+}
+
+.admin-content-slot-hint__icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255, 71, 94, 0.16);
+  color: var(--sk-accent, #ff475e);
+}
+
+.admin-content-slot-hint__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.admin-content-slot-hint strong,
+.admin-content-slot-hint small,
+.admin-content-slot-hint em {
+  display: block;
+}
+
+.admin-content-slot-hint small,
+.admin-content-slot-hint em {
+  margin-top: 3px;
+  color: var(--sk-text-muted, rgba(255, 255, 255, 0.68));
+  font-size: 0.8rem;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.admin-content-slot-hint em {
+  color: rgba(255, 255, 255, 0.86);
+  font-weight: 900;
+}
+
+.admin-content-advanced {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--sk-border-subtle, rgba(255, 255, 255, 0.08));
+  padding-top: 6px;
+}
+
+.admin-content-advanced summary {
+  cursor: pointer;
+  color: var(--sk-text-muted, rgba(255, 255, 255, 0.72));
+  font-weight: 900;
+}
+
+.admin-content-advanced[open] summary {
+  margin-bottom: 12px;
+  color: inherit;
+}
+
 .admin-content-notice {
   margin-bottom: 14px;
   padding: 12px 14px;
@@ -184,6 +363,16 @@
 
 @media (max-width: 1180px) {
   .admin-content-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-content-presets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .admin-content-presets {
     grid-template-columns: 1fr;
   }
 }

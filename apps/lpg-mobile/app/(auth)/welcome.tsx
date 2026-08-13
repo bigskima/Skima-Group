@@ -21,6 +21,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import type { ProductContentRecord } from "../../src/native/api/productContent";
 import { usePublishedProductContent } from "../../src/native/api/productContent";
 import { useAppTheme } from "../../src/native/theme/ThemeProvider";
 import { colors, radii, spacing } from "../../src/native/theme/tokens";
@@ -33,6 +34,7 @@ const placements = [
   "mobile.onboarding.customer.refill",
   "mobile.onboarding.customer.return",
 ] as const;
+const contentPlacements = ["mobile.welcome.hero", ...placements] as const;
 
 const fallbacks = [
   {
@@ -63,20 +65,18 @@ export default function Welcome() {
   const { palette } = useAppTheme();
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(0);
-  const content = usePublishedProductContent(placements, {
+  const content = usePublishedProductContent(contentPlacements, {
     audience: "public",
     moduleKey: "lpg",
   });
   const steps = useMemo(
     () =>
       placements.map((placement, stepIndex) => {
-        const publication = content.data?.find(
-          (item) => item.placementKey === placement,
-        );
+        const publication = findTopPublication(content.data, placement);
         return {
           title: publication?.title ?? fallbacks[stepIndex].title,
           body: publication?.body ?? fallbacks[stepIndex].body,
-          mediaUrl: publication?.mediaUrl ?? null,
+          mediaUrl: publication?.mediaUrl ?? findTopPublication(content.data, "mobile.welcome.hero")?.mediaUrl ?? null,
         };
       }),
     [content.data],
@@ -123,7 +123,7 @@ export default function Welcome() {
                 <Image
                   accessibilityElementsHidden
                   contentFit="cover"
-                  source={step.mediaUrl}
+                  source={{ uri: step.mediaUrl }}
                   style={StyleSheet.absoluteFill}
                 />
               ) : null}
@@ -249,6 +249,15 @@ export default function Welcome() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function findTopPublication(
+  publications: ProductContentRecord[] | undefined,
+  placementKey: string,
+) {
+  return publications
+    ?.filter((item) => item.placementKey === placementKey)
+    .sort((left, right) => right.priority - left.priority)[0];
 }
 
 const styles = StyleSheet.create({
