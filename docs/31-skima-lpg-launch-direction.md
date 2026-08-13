@@ -56,3 +56,16 @@ results, settlements, or commissions.
 Generic Skima-owned illustrations may be used only for onboarding, empty states, safety guidance,
 and loading placeholders.
 
+## Financial Policy Governance
+
+All LPG pricing, markup, delivery-fee, commission, payout, settlement, fee, discount, refund, and
+adjustment work must comply with the universal
+[SKIMA Financial Policy Governance Directive](32-financial-policy-governance-directive.md).
+
+LPG is a module of the reusable financial platform. The dashboard must allow authorized SKIMA
+finance and operations administrators to manage applicable policy configuration through backend
+APIs, while the backend engines and ledger remain authoritative. A station may control only its
+explicitly delegated pricing records; it may not alter SKIMA-wide financial policy. Accepted LPG
+quotes and orders must preserve the immutable financial snapshot and resolved policy versions used
+to create them.
+

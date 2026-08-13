@@ -5,6 +5,7 @@ Skima LPG is the current Phase 1 launch product for LPG cylinder registration, r
 This repository is starting from a clean platform foundation. The governing source of truth is:
 
 - [SKIMA_PLATFORM_CONSTITUTION.md](SKIMA_PLATFORM_CONSTITUTION.md)
+- [Financial Policy Governance Directive](docs/32-financial-policy-governance-directive.md)
 - [AGENTS.md](AGENTS.md)
 - [to do.md](to%20do.md)
 
@@ -59,6 +60,11 @@ Milestone 4 introduces:
 - `packages/ui` for the reusable design system primitives
 
 The admin operations surface should operate the LPG business: LPG customers, drivers, stations, applications, orders, scans, settlements, commissions, safety/disputes, and LPG configuration. Shared admin primitives may remain reusable, but launch-facing admin navigation should not promote unrelated businesses.
+
+Company-adjustable financial policies are governed through the authorized backend policy layer,
+with immutable versions, approval controls, audit history, and scoped effective dates. The admin
+dashboard is the controlled management surface, not an alternative financial source of truth. See
+the [Financial Policy Governance Directive](docs/32-financial-policy-governance-directive.md).
 
 Frontend client env values must be Vite-prefixed:
 

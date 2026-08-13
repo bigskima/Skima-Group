@@ -113,6 +113,20 @@ This tracker follows `SKIMA_PLATFORM_CONSTITUTION.md`. The reusable foundation r
 - [x] Commission and settlement hardening gate
 - [x] Communication and OTP gate
 
+## Financial Policy Governance (mandatory cross-platform hardening)
+
+- [ ] Implement the reusable, backend-authoritative financial policy lifecycle defined in
+      `docs/32-financial-policy-governance-directive.md`: scoped immutable versions, approvals,
+      effective dating, conflict prevention, audit history, and safe rollback.
+- [ ] Provide authorized company-admin policy APIs and UI; restrict delegated partner/station scope
+      and prohibit customer/driver authority over financial rules.
+- [ ] Snapshot resolved policy/configuration and financial composition in accepted quotes, orders,
+      and active obligations; make later changes future-effective only.
+- [ ] Replace client-supplied authoritative fee, commission-base, payout, and settlement amounts
+      with server-side policy-derived calculations.
+- [ ] Add automated governance coverage for RBAC, delegated scope, approvals, overlap prevention,
+      effective dating, audit records, rollback, and snapshot immutability.
+
 ## Milestone 3: Business Module Framework
 
 - [x] Module registry

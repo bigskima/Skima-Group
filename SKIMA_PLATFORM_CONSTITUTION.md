@@ -278,6 +278,25 @@ The Financial Engine decides:
 - Who receives platform fees
 - Who receives refunds
 
+### Financial Policy Governance
+
+Every company-adjustable financial rule must be managed as an authorized, versioned, auditable
+backend policy. The Admin Dashboard is the controlled management surface; it is never a financial
+source of truth and must not calculate authoritative amounts. Pricing, commission, payout,
+settlement, fee, discount, refund, and adjustment policies must be configuration-driven, scoped,
+effective-dated, and protected by RBAC and approval controls where appropriate.
+
+Missing, invalid, inactive, unapproved, or ambiguous policy configuration must fail closed for the
+affected financial operation. A zero amount is valid only when explicitly authorized by policy; it
+must never be an implicit fallback.
+
+An accepted quote, order, or other active financial obligation must retain its policy/version and
+financial snapshot. Later policy changes apply only to future work according to their effective time
+and scope, and never mutate historical ledger records or silently change an existing obligation.
+
+Partners may manage only financial settings explicitly delegated to their own scope. Customers and
+drivers never control authoritative financial policy or monetary amounts.
+
 This engine works with:
 
 - Settlement Engine
@@ -585,6 +604,9 @@ Before writing code, always verify:
 - Can providers be swapped through adapters?
 - Can currencies be enabled through configuration?
 - Can payment policies change without code changes?
+- Can company-adjustable financial policies be managed through authorized, versioned, auditable
+  backend configuration?
+- Do accepted financial obligations preserve their resolved policy and financial snapshots?
 - Will this still work if 100 new business modules are added?
 
 If the answer to any question is "No", redesign before implementing.

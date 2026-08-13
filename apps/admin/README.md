@@ -33,8 +33,15 @@ Current LPG operations capabilities built on shared platform engines:
   outcome recording, escrow release/refund, settlement, commission, and reconciliation actions
 - provider, policy, communication, OTP, webhook delivery, and payment event visibility
 
+Company-adjustable financial policy must use the controlled lifecycle in the
+[Financial Policy Governance Directive](../../docs/32-financial-policy-governance-directive.md):
+authorized authoring, approval where required, versioning, effective dates, scoped activation,
+history, auditability, and safe rollback. The finance action console is not a substitute for that
+policy-management workspace, and admin-entered monetary values must never become authoritative
+when a backend policy can derive them.
+
 Every write action goes through the authenticated gateway and backend policy/RLS/RPC layer. The UI
-does not create direct table writes or fake financial operations.
+does not create direct table writes or become a financial source of truth.
 
 Client env values must be Vite-prefixed and client-safe:
 

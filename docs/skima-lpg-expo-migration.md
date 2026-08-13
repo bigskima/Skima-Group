@@ -314,6 +314,11 @@ It must not independently become the source of truth for those actions.
 
 If an existing API is inconvenient for React Native, create a frontend adapter.
 
+Company-adjustable financial policy is additionally governed by the universal
+[SKIMA Financial Policy Governance Directive](32-financial-policy-governance-directive.md).
+The mobile application must submit only permitted operational inputs and render backend results;
+it must not calculate, activate, or override authoritative financial amounts or policy versions.
+
 Do not redesign the API merely for convenience.
 
 If a required capability is genuinely absent, create a clearly identified backend-gap entry specifying:
@@ -3193,6 +3198,14 @@ The mobile migration should not merge the admin portal into the Expo customer/dr
 
 However, mobile may consume company-managed assets/configuration produced by the admin system.
 
+The separate-admin boundary does not defer financial-policy governance. The company admin system
+must provide the authorized policy authoring, approval, scheduling, activation, history, and
+rollback workflow required by the
+[SKIMA Financial Policy Governance Directive](32-financial-policy-governance-directive.md). It must
+call backend policy/configuration APIs and must never become a client-side financial source of
+truth. Existing finance action screens are not substitutes for this controlled policy-management
+surface.
+
 Company administration must manage through reusable, permission-driven workflows:
 
 ```text
@@ -3423,6 +3436,7 @@ KYC media never enters AI transformation
 presentation derivatives never become evidence
 QR detection does not bypass backend verification
 financial state cannot be altered locally
+company-managed financial policies cannot be calculated, activated, or overridden locally
 ```
 
 ---
@@ -3871,6 +3885,8 @@ EAS development/preview configuration where required
 > **The backend remains the authority for identity, workflow, permissions, pricing, dispatch, scans, verification and finance.**
 
 > **The ledger remains the financial source of truth.**
+
+> **Company-adjustable financial policy is governed by the [SKIMA Financial Policy Governance Directive](32-financial-policy-governance-directive.md).**
 
 > **The reference journey images establish the visual-quality target but never override backend business logic.**
 

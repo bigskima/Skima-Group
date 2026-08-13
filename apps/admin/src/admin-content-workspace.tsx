@@ -676,6 +676,7 @@ export function AdminContentWorkspace() {
   ).length;
   const publicationPlacementOptions = buildPlacementOptions(placements, publicationForm.placementKey);
   const activeFormPreset = contentSurfacePresets.find((preset) => preset.placementKey === publicationForm.placementKey) ?? null;
+  const activePlacementPreset = contentSurfacePresets.find((preset) => preset.placementKey === activePlacement?.key) ?? null;
   const ActiveFormIcon = activeFormPreset?.icon;
 
   return (
@@ -813,15 +814,26 @@ export function AdminContentWorkspace() {
               <p className="admin-section-kicker">Publication queue</p>
               <h2>{activePlacement?.display_name ?? "All publications"}</h2>
             </div>
-            <Button
-              icon={Pencil}
-              variant="outline"
-              requiredPermission={CONTENT_MANAGE_PERMISSION}
-              disabled={!activePlacement}
-              onClick={() => activePlacement ? openPlacementDialog(activePlacement) : undefined}
-            >
-              Edit placement
-            </Button>
+            <div className="admin-inline-actions">
+              {activePlacementPreset?.publicationMode === "unique" ? (
+                <Button
+                  icon={Plus}
+                  requiredPermission={CONTENT_MANAGE_PERMISSION}
+                  onClick={() => openPresetPublicationDialog(activePlacementPreset)}
+                >
+                  Add another banner
+                </Button>
+              ) : null}
+              <Button
+                icon={Pencil}
+                variant="outline"
+                requiredPermission={CONTENT_MANAGE_PERMISSION}
+                disabled={!activePlacement}
+                onClick={() => activePlacement ? openPlacementDialog(activePlacement) : undefined}
+              >
+                Edit placement
+              </Button>
+            </div>
           </div>
           <DataTable
             caption="Content publications"
@@ -1048,10 +1060,15 @@ export function AdminContentWorkspace() {
               onChange={(event) => setPublicationForm({ ...publicationForm, priority: event.currentTarget.value })}
             />
             <TextInput
-              label="CTA label"
-              name="ctaLabel"
-              value={publicationForm.ctaLabel}
-              onChange={(event) => setPublicationForm({ ...publicationForm, ctaLabel: event.currentTarget.value })}
+              label="CTA route"
+              name="ctaTarget"
+              helperText="Controls where the banner arrow navigates, for example /(customer)/orders/new."
+              value={publicationForm.ctaTarget}
+              onChange={(event) => setPublicationForm({
+                ...publicationForm,
+                ctaTarget: event.currentTarget.value,
+                ctaType: event.currentTarget.value.trim() && !publicationForm.ctaType ? "route" : publicationForm.ctaType,
+              })}
             />
           </div>
 
@@ -1098,13 +1115,7 @@ export function AdminContentWorkspace() {
                 options={ctaOptions}
                 onChange={(event) => setPublicationForm({ ...publicationForm, ctaType: event.currentTarget.value })}
               />
-              <TextInput
-                label="CTA target"
-                name="ctaTarget"
-                helperText="Use an app route such as /(customer)/orders/new for in-app banners."
-                value={publicationForm.ctaTarget}
-                onChange={(event) => setPublicationForm({ ...publicationForm, ctaTarget: event.currentTarget.value })}
-              />
+              <div />
             </div>
 
             <div className="admin-form-grid">
@@ -1438,7 +1449,7 @@ function findPublicationMediaUrl(publications: readonly PublicationRecord[]): st
 
 function createPresetPublicationKey(preset: ContentSurfacePreset): string {
   if (preset.publicationMode !== "unique") return preset.publicationKey;
-  const suffix = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+  const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
   return `${preset.publicationKey}.${suffix}`;
 }
 
