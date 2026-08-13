@@ -102,6 +102,23 @@ interface WorkerBody {
   readonly limit?: number;
 }
 
+interface ImageProviderConfig {
+  readonly provider: "cloudflare" | "gemini";
+  readonly adapter: string;
+  readonly model: string;
+}
+
+interface SourceImage {
+  readonly bytes: Uint8Array;
+  readonly contentType: string;
+}
+
+interface GeneratedImage {
+  readonly base64: string;
+  readonly contentType: string;
+  readonly providerMetadata: Readonly<Record<string, unknown>>;
+}
+
 interface RuntimeSupabaseClient {
   storage: {
     from(bucket: string): {
@@ -294,8 +311,9 @@ async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): P
     const input = optionalRecord(task.input) ?? {};
     const subjectType = requireString(task.subject_type);
     const isPresentation = subjectType === "lpg_cylinder" && input.purpose === "public_presentation";
-    const adapter = isPresentation ? "provider.ai.google-gemini" : "provider.ai.sandbox";
-    const model = isPresentation ? (Deno.env.get("GEMINI_IMAGE_MODEL") ?? "gemini-3.1-flash-image") : "sandbox";
+    const imageProvider = isPresentation ? resolveImageProvider() : null;
+    const adapter = imageProvider?.adapter ?? "provider.ai.sandbox";
+    const model = imageProvider?.model ?? "sandbox";
 
     try {
       await requireRpc(supabase.rpc("update_ai_task_run_status", {
@@ -309,7 +327,7 @@ async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): P
       }));
 
       const output = isPresentation
-        ? await generateCylinderPresentation(supabase, task, input, model)
+        ? await generateCylinderPresentation(supabase, task, input, imageProvider)
         : {
           control: "assist_only",
           recommendation: "sandbox_assistive_output",
@@ -369,26 +387,20 @@ async function generateCylinderPresentation(
   supabase: RuntimeSupabaseClient,
   task: RuntimeRow,
   input: Readonly<Record<string, unknown>>,
-  model: string,
+  provider: ImageProviderConfig | null,
 ): Promise<Readonly<Record<string, unknown>>> {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
+  const resolvedProvider = provider ?? resolveImageProvider();
 
   const taskRunId = requireString(task.id);
   const subjectId = requireString(task.subject_id);
   const ownerUserId = requireString(task.requested_by);
   const sourceMediaAssetId = optionalString(input.sourceMediaAssetId) ?? optionalString(input.source_media_asset_id);
   const colour = optionalString(input.confirmedColour) ?? optionalString(input.confirmed_colour);
-  const promptParts: Array<Record<string, unknown>> = [{
-    text: [
-      "Create a premium, photorealistic product presentation image of the LPG cylinder for the authenticated owner.",
-      "Use a clean neutral studio background, balanced soft lighting, a complete unobstructed cylinder, and realistic proportions.",
-      "Preserve the cylinder's visible physical shape, colour, condition and markings from the source photo when supplied.",
-      "Do not invent certification marks, safety claims, serial numbers, logos, damage, accessories, text, people or scenery.",
-      "This is a presentation derivative only; the original evidence remains authoritative.",
-      colour ? `The owner-confirmed colour is ${colour}.` : "Do not infer a colour beyond the source evidence.",
-    ].join(" "),
-  }];
+  const stylePrompt = optionalString(input.stylePrompt) ?? optionalString(input.style_prompt);
+  const avoidPreviousResult = input.avoidPreviousResult === true || input.avoid_previous_result === true;
+  const cylinder = await loadCylinderForPrompt(supabase, subjectId);
+  const prompt = buildCylinderPresentationPrompt(cylinder, colour, stylePrompt, avoidPreviousResult);
+  let sourceImage: SourceImage | null = null;
 
   if (sourceMediaAssetId) {
     const sourceResult = await supabase
@@ -409,10 +421,234 @@ async function generateCylinderPresentation(
       throw new Error(sourceDownload.error?.message ?? "source image could not be downloaded");
     }
     const sourceBytes = new Uint8Array(await sourceDownload.data.arrayBuffer());
+    sourceImage = {
+      bytes: sourceBytes,
+      contentType: optionalString(source.content_type) ?? "image/jpeg",
+    };
+  }
+
+  const generated = resolvedProvider.provider === "cloudflare"
+    ? await generateWithCloudflare(prompt, sourceImage, resolvedProvider.model)
+    : await generateWithGemini(prompt, sourceImage, resolvedProvider.model);
+  const base64 = generated.base64;
+  const contentType = generated.contentType;
+
+  const bytes = base64ToBytes(base64);
+  const extension = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : "png";
+  const storageBucket = "skima-platform-media";
+  const storagePath = `${ownerUserId}/ai-presentations/${taskRunId}.${extension}`;
+  const upload = await supabase.storage.from(storageBucket).upload(storagePath, bytes, {
+    contentType,
+    upsert: false,
+  });
+  if (upload.error) throw new Error(upload.error.message);
+
+  const checksum = await sha256Hex(bytes);
+  const mediaResult = await supabase.rpc("register_media_asset", {
+    target_asset_type_key: "media.presentation.ai",
+    target_byte_size: bytes.byteLength,
+    target_checksum: checksum,
+    target_content_type: contentType,
+    target_idempotency_key: `${taskRunId}:media`,
+    target_metadata: {
+      derivative: true,
+      generatedBy: resolvedProvider.adapter,
+      model: resolvedProvider.model,
+      provider: resolvedProvider.provider,
+      providerMetadata: generated.providerMetadata,
+      sourceMediaAssetId,
+      subjectId,
+      subjectType: "lpg_cylinder",
+    },
+    target_organization_id: null,
+    target_owner_user_id: ownerUserId,
+    target_source: "platform.ai_engine",
+    target_status: "active",
+    target_storage_bucket: storageBucket,
+    target_storage_path: storagePath,
+  });
+  if (mediaResult.error) throw new Error(mediaResult.error.message);
+  const mediaAssetId = requireString(mediaResult.data);
+
+  await requireRpc(supabase.rpc("register_entity_presentation_media", {
+    target_entity_id: subjectId,
+    target_entity_type: "lpg_cylinder",
+    target_idempotency_key: `${taskRunId}:presentation-link`,
+    target_media_asset_id: mediaAssetId,
+    target_metadata: {
+      aiTaskRunId: taskRunId,
+      model: resolvedProvider.model,
+      provider: resolvedProvider.adapter,
+    },
+  }));
+
+  return {
+    generated: true,
+    mediaAssetId,
+    mediaRole: "presentation.ai",
+    model: resolvedProvider.model,
+    preserveOriginal: true,
+    provider: resolvedProvider.adapter,
+  };
+}
+
+function resolveImageProvider(): ImageProviderConfig {
+  const preferred = (Deno.env.get("AI_IMAGE_PROVIDER") ?? "").trim().toLowerCase();
+  const cloudflareConfigured = Boolean(Deno.env.get("CLOUDFLARE_ACCOUNT_ID") && Deno.env.get("CLOUDFLARE_API_TOKEN"));
+
+  if (preferred === "cloudflare" || (!preferred && cloudflareConfigured)) {
+    return {
+      provider: "cloudflare",
+      adapter: "provider.ai.cloudflare-workers-ai",
+      model: Deno.env.get("CLOUDFLARE_AI_MODEL") ?? "@cf/black-forest-labs/flux-1-schnell",
+    };
+  }
+
+  if (preferred && preferred !== "gemini") {
+    throw new Error(`AI_IMAGE_PROVIDER '${preferred}' is not supported`);
+  }
+
+  return {
+    provider: "gemini",
+    adapter: "provider.ai.google-gemini",
+    model: Deno.env.get("GEMINI_IMAGE_MODEL") ?? "gemini-3.1-flash-image",
+  };
+}
+
+async function loadCylinderForPrompt(
+  supabase: RuntimeSupabaseClient,
+  subjectId: string,
+): Promise<Readonly<Record<string, unknown>> | null> {
+  const result = await supabase
+    .from("lpg_cylinders")
+    .select("id,display_name,size_kg,max_capacity_kg,brand,colour,status,created_at")
+    .eq("id", subjectId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (result.error) throw new Error(result.error.message);
+  return optionalRecord(result.data?.[0]);
+}
+
+function buildCylinderPresentationPrompt(
+  cylinder: Readonly<Record<string, unknown>> | null,
+  colour: string | null,
+  stylePrompt: string | null,
+  avoidPreviousResult: boolean,
+): string {
+  const displayName = optionalString(cylinder?.display_name ?? cylinder?.displayName);
+  const sizeKg = typeof cylinder?.size_kg === "number" ? cylinder.size_kg : optionalString(cylinder?.size_kg);
+  const brand = optionalString(cylinder?.brand);
+  const resolvedColour = colour ?? optionalString(cylinder?.colour);
+  const details = [
+    displayName ? `Owner label: ${displayName}.` : null,
+    sizeKg ? `Cylinder size: ${sizeKg} kg LPG cylinder.` : null,
+    brand ? `Visible brand or maker, if shown: ${brand}.` : null,
+    resolvedColour ? `Owner-confirmed cylinder colour: ${resolvedColour}.` : "Use a common red LPG cylinder colour unless source evidence indicates otherwise.",
+  ].filter(Boolean).join(" ");
+
+  return [
+    "Create a premium photorealistic product presentation image of one LPG gas cylinder.",
+    "Use a clean neutral studio background, balanced soft lighting, full unobstructed cylinder body, realistic proportions, and a sharp ecommerce/product-catalog look.",
+    "The cylinder should look safe, practical, modern, and suitable for a professional gas refill app.",
+    details,
+    stylePrompt ? `Preferred style direction: ${stylePrompt}.` : null,
+    avoidPreviousResult ? "This is a regeneration request. Produce a visibly different but still accurate composition, lighting mood, and camera angle." : null,
+    "Do not add people, hands, kitchens, fire, smoke, extra accessories, fake certification marks, serial numbers, QR codes, hardcoded app logos, or readable text.",
+    "This is only a visual presentation derivative; do not imply safety inspection or certification.",
+  ].filter(Boolean).join(" ").slice(0, 2048);
+}
+
+async function generateWithCloudflare(
+  prompt: string,
+  sourceImage: SourceImage | null,
+  model: string,
+): Promise<GeneratedImage> {
+  const accountId = Deno.env.get("CLOUDFLARE_ACCOUNT_ID");
+  const apiToken = Deno.env.get("CLOUDFLARE_API_TOKEN");
+  if (!accountId || !apiToken) {
+    throw new Error("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are not configured");
+  }
+
+  const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${model.replace(/^\/+/, "")}`;
+  const useMultipart = model.includes("flux-2");
+  const response = useMultipart
+    ? await postCloudflareMultipart(url, apiToken, prompt, sourceImage, model)
+    : await fetch(url, {
+      method: "POST",
+      headers: {
+        "authorization": `Bearer ${apiToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt,
+        seed: Math.floor(Math.random() * 2_147_483_647),
+        steps: readIntegerEnv("CLOUDFLARE_AI_STEPS", 8, 1, 8),
+      }),
+      signal: AbortSignal.timeout(45_000),
+    });
+
+  const responseBody = await response.json().catch(() => null) as Record<string, unknown> | null;
+  if (!response.ok || responseBody?.success === false) {
+    throw new Error(readCloudflareError(responseBody) ?? `Cloudflare Workers AI image generation failed with ${response.status}`);
+  }
+
+  const result = optionalRecord(responseBody?.result) ?? optionalRecord(responseBody) ?? {};
+  const rawImage = optionalString(result.image) ?? optionalString(result.dataURI) ?? optionalString(result.dataUri);
+  if (!rawImage) throw new Error("Cloudflare Workers AI returned no presentation image");
+  const base64 = rawImage.includes(",") ? rawImage.split(",").pop() ?? "" : rawImage;
+  if (!base64) throw new Error("Cloudflare Workers AI returned an empty presentation image");
+
+  return {
+    base64,
+    contentType: optionalString(result.contentType ?? result.content_type) ?? "image/jpeg",
+    providerMetadata: {
+      model,
+      sourceImageUsed: useMultipart && Boolean(sourceImage),
+    },
+  };
+}
+
+async function postCloudflareMultipart(
+  url: string,
+  apiToken: string,
+  prompt: string,
+  sourceImage: SourceImage | null,
+  model: string,
+): Promise<Response> {
+  const form = new FormData();
+  form.append("prompt", prompt);
+  form.append("steps", String(readIntegerEnv("CLOUDFLARE_AI_STEPS", 8, 1, 25)));
+  form.append("width", String(readIntegerEnv("CLOUDFLARE_AI_WIDTH", 1024, 512, 2048)));
+  form.append("height", String(readIntegerEnv("CLOUDFLARE_AI_HEIGHT", 1024, 512, 2048)));
+  if (sourceImage) {
+    const imageBuffer = new ArrayBuffer(sourceImage.bytes.byteLength);
+    new Uint8Array(imageBuffer).set(sourceImage.bytes);
+    form.append("input_image_0", new Blob([imageBuffer], { type: sourceImage.contentType }), "source-cylinder.jpg");
+  }
+
+  return fetch(url, {
+    method: "POST",
+    headers: { "authorization": `Bearer ${apiToken}` },
+    body: form,
+    signal: AbortSignal.timeout(model.includes("flux-2") ? 90_000 : 45_000),
+  });
+}
+
+async function generateWithGemini(
+  prompt: string,
+  sourceImage: SourceImage | null,
+  model: string,
+): Promise<GeneratedImage> {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
+
+  const promptParts: Array<Record<string, unknown>> = [{ text: prompt }];
+  if (sourceImage) {
     promptParts.unshift({
       inlineData: {
-        data: bytesToBase64(sourceBytes),
-        mimeType: optionalString(source.content_type) ?? "image/jpeg",
+        data: bytesToBase64(sourceImage.bytes),
+        mimeType: sourceImage.contentType,
       },
     });
   }
@@ -448,56 +684,23 @@ async function generateCylinderPresentation(
   const contentType = optionalString(inlineData?.mimeType ?? inlineData?.mime_type) ?? "image/png";
   if (!base64) throw new Error("Gemini returned no presentation image");
 
-  const bytes = base64ToBytes(base64);
-  const extension = contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg" : "png";
-  const storageBucket = "skima-platform-media";
-  const storagePath = `${ownerUserId}/ai-presentations/${taskRunId}.${extension}`;
-  const upload = await supabase.storage.from(storageBucket).upload(storagePath, bytes, {
-    contentType,
-    upsert: false,
-  });
-  if (upload.error) throw new Error(upload.error.message);
-
-  const checksum = await sha256Hex(bytes);
-  const mediaResult = await supabase.rpc("register_media_asset", {
-    target_asset_type_key: "media.presentation.ai",
-    target_byte_size: bytes.byteLength,
-    target_checksum: checksum,
-    target_content_type: contentType,
-    target_idempotency_key: `${taskRunId}:media`,
-    target_metadata: {
-      derivative: true,
-      generatedBy: "provider.ai.google-gemini",
-      model,
-      sourceMediaAssetId,
-      subjectId,
-      subjectType: "lpg_cylinder",
-    },
-    target_organization_id: null,
-    target_owner_user_id: ownerUserId,
-    target_source: "platform.ai_engine",
-    target_status: "active",
-    target_storage_bucket: storageBucket,
-    target_storage_path: storagePath,
-  });
-  if (mediaResult.error) throw new Error(mediaResult.error.message);
-  const mediaAssetId = requireString(mediaResult.data);
-
-  await requireRpc(supabase.rpc("register_entity_presentation_media", {
-    target_entity_id: subjectId,
-    target_entity_type: "lpg_cylinder",
-    target_idempotency_key: `${taskRunId}:presentation-link`,
-    target_media_asset_id: mediaAssetId,
-    target_metadata: { aiTaskRunId: taskRunId, model },
-  }));
-
   return {
-    generated: true,
-    mediaAssetId,
-    mediaRole: "presentation.ai",
-    model,
-    preserveOriginal: true,
+    base64,
+    contentType,
+    providerMetadata: { model, sourceImageUsed: Boolean(sourceImage) },
   };
+}
+
+function readCloudflareError(responseBody: Record<string, unknown> | null): string | null {
+  const errors = Array.isArray(responseBody?.errors) ? responseBody.errors : [];
+  const firstError = optionalRecord(errors[0]);
+  return optionalString(firstError?.message) ?? optionalString(responseBody?.message);
+}
+
+function readIntegerEnv(name: string, fallback: number, min: number, max: number): number {
+  const raw = Number(Deno.env.get(name));
+  if (!Number.isFinite(raw)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(raw)));
 }
 
 function base64ToBytes(value: string): Uint8Array {

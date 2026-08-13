@@ -12,6 +12,7 @@ import {
   QrCode,
   ScanLine,
   ShieldCheck,
+  Sparkles,
   Truck,
   WalletCards,
 } from "lucide-react-native";
@@ -25,7 +26,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { domainQueries } from "../api/domains";
+import { domainQueries, useEntityMediaLinks } from "../api/domains";
 import {
   displayStatus,
   displaySubtitle,
@@ -40,6 +41,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { colors } from "../theme/tokens";
 import { BrandMark } from "./BrandMark";
 import { PromotionBanner } from "./PromotionBanner";
+import { RuntimeMediaImage } from "./RuntimeMediaImage";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
@@ -121,11 +123,9 @@ export function CustomerDashboard() {
             action={cylinder ? "See all" : "Add one"}
             href={cylinder ? "/(customer)/cylinders" : "/(customer)/cylinder/register"}
           >
-            <NaturalRecords
+            <CustomerCylinderRecords
               records={cylinders.data ?? []}
               empty="Your cylinders will appear here after you add the first one."
-              detailBase="/(customer)/cylinder"
-              icon={PackageCheck}
               limit={2}
             />
           </HomeSection>
@@ -722,6 +722,101 @@ function NaturalRecords({ records, empty, detailBase, icon: Icon, limit = 4 }: {
   );
 }
 
+function CustomerCylinderRecords({ records, empty, limit = 2 }: {
+  records: PlatformRecord[];
+  empty: string;
+  limit?: number;
+}) {
+  const { palette } = useAppTheme();
+  if (!records.length) {
+    return (
+      <View style={styles.naturalEmpty}>
+        <View style={[styles.recordIcon, { backgroundColor: palette.soft }]}>
+          <PackageCheck color={colors.brand} size={19} />
+        </View>
+        <Text style={[styles.emptyText, { color: palette.muted }]}>{empty}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      {records.slice(0, limit).map((record, index) => (
+        <CustomerCylinderRow
+          cylinder={record}
+          index={index}
+          key={recordId(record) ?? String(index)}
+        />
+      ))}
+    </View>
+  );
+}
+
+function CustomerCylinderRow({ cylinder, index }: { cylinder: PlatformRecord; index: number }) {
+  const { palette } = useAppTheme();
+  const id = recordId(cylinder);
+  const links = useEntityMediaLinks("lpg_cylinder", id);
+  const presentation = (links.data ?? []).find((item) =>
+    (firstString(item, ["media_role", "mediaRole"]) ?? "").includes("presentation"),
+  );
+  const presentationId = firstString(presentation, ["media_asset_id", "mediaAssetId"]);
+  const originalId = firstAssetId(cylinder.image_asset_ids ?? cylinder.imageAssetIds);
+  const status = displayStatus(cylinder) ?? "registered";
+
+  return (
+    <Pressable
+      disabled={!id}
+      onPress={() => router.push(`/(customer)/cylinder/${id}` as never)}
+      style={[
+        styles.recordRow,
+        styles.cylinderRecordRow,
+        index > 0 && { borderTopColor: palette.border, borderTopWidth: StyleSheet.hairlineWidth },
+      ]}
+    >
+      <RuntimeMediaImage
+        assetId={presentationId ?? originalId}
+        label={`${displayTitle(cylinder)} cylinder`}
+        variant="thumbnail"
+      />
+      <View style={styles.recordCopy}>
+        <View style={styles.cylinderTitleRow}>
+          <Text numberOfLines={1} style={[styles.recordTitle, { color: palette.ink }]}>
+            {displayTitle(cylinder)}
+          </Text>
+          {presentationId ? (
+            <View style={styles.enhancedBadge}>
+              <Sparkles color="#6B35D3" size={10} />
+              <Text style={styles.enhancedBadgeText}>AI</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text numberOfLines={1} style={[styles.recordMeta, { color: palette.muted }]}>
+          {firstNumber(cylinder, ["size_kg", "sizeKg"]) ?? "Configured"} kg · {friendlyCylinderStatus(status)}
+        </Text>
+      </View>
+      <ChevronRight color={palette.muted} size={18} />
+    </Pressable>
+  );
+}
+
+function firstAssetId(value: unknown) {
+  return Array.isArray(value)
+    ? value.find((item): item is string => typeof item === "string") ?? null
+    : null;
+}
+
+function friendlyCylinderStatus(value: string) {
+  const normalized = value.toLowerCase().replace(/[-\s]+/g, "_");
+  const labels: Record<string, string> = {
+    active: "Ready",
+    registered: "Ready",
+    damaged: "Needs attention",
+    unsafe: "Not safe",
+    expired: "Inspection needed",
+  };
+  return labels[normalized] ?? humanStatus(value);
+}
+
 function UtilityLink({ icon: Icon, label, value, href }: {
   icon: IconType;
   label: string;
@@ -887,8 +982,20 @@ const styles = StyleSheet.create({
   naturalEmpty: { minHeight: 62, flexDirection: "row", alignItems: "center", gap: 11 },
   emptyText: { flex: 1, fontSize: 12, lineHeight: 17 },
   recordRow: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 11 },
+  cylinderRecordRow: { minHeight: 72 },
   recordIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 13 },
   recordCopy: { flex: 1, gap: 3 },
+  cylinderTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  enhancedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "#F0E9FF",
+  },
+  enhancedBadgeText: { color: "#5A2AB5", fontSize: 9, fontWeight: "900" },
   recordTitle: { fontSize: 13, lineHeight: 17, fontWeight: "900" },
   recordMeta: { fontSize: 11, lineHeight: 15 },
   customerUtilities: { gap: 0 },
