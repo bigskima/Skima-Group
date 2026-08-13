@@ -726,7 +726,8 @@ export function AdminContentWorkspace() {
             const Icon = preset.icon;
             const presetPublications = publications.filter((publication) => publication.placement_key === preset.placementKey);
             const currentPublication = findPresetPublication(preset, publications) ?? sortContentPublications(presetPublications)[0] ?? null;
-            const currentMediaUrl = currentPublication ? publicationMediaUrl(currentPublication) : null;
+            const currentMediaUrl = findPublicationMediaUrl(presetPublications) ??
+              (currentPublication ? publicationMediaUrl(currentPublication) : null);
             const publishedForSlot = presetPublications.filter((publication) => publication.status === "published").length;
             const isCarousel = preset.publicationMode === "unique";
             return (
@@ -935,6 +936,7 @@ export function AdminContentWorkspace() {
               form="admin-content-publication-form"
               type="submit"
               isLoading={savePublication.isPending}
+              disabled={uploadMedia.isPending}
               requiredPermission={CONTENT_MANAGE_PERMISSION}
             >
               Save publication
@@ -949,6 +951,14 @@ export function AdminContentWorkspace() {
             event.preventDefault();
             if (!publicationForm.placementKey) {
               setFormError("Choose a placement before saving this publication.");
+              return;
+            }
+            if (uploadMedia.isPending) {
+              setFormError("Wait for the image upload to finish before saving.");
+              return;
+            }
+            if (activeFormPreset && !publicationForm.mediaPublicUrl && !publicationForm.mediaAssetId) {
+              setFormError(`Upload an image for ${activeFormPreset.label} before saving.`);
               return;
             }
             setFormError(null);
@@ -1415,6 +1425,15 @@ function sortContentPublications(publications: readonly PublicationRecord[]): Pu
     Date.parse(right.published_at ?? right.updated_at ?? right.created_at ?? "") -
       Date.parse(left.published_at ?? left.updated_at ?? left.created_at ?? ""),
   );
+}
+
+function findPublicationMediaUrl(publications: readonly PublicationRecord[]): string | null {
+  for (const publication of sortContentPublications(publications)) {
+    const mediaUrl = publicationMediaUrl(publication);
+    if (mediaUrl) return mediaUrl;
+  }
+
+  return null;
 }
 
 function createPresetPublicationKey(preset: ContentSurfacePreset): string {

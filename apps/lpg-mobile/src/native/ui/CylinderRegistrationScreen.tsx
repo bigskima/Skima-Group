@@ -1,11 +1,31 @@
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import { Camera, Check, ChevronDown, ShieldCheck, Sparkles } from "lucide-react-native";
+import {
+  Camera,
+  Check,
+  ChevronDown,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { useGatewayMutation } from "../api/gateway";
-import { ActionResponseSchema, firstNumber, firstString, nestedRecords } from "../api/records";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useLpgConfig } from "../api/domains";
+import { useGatewayMutation } from "../api/gateway";
+import {
+  ActionResponseSchema,
+  firstNumber,
+  firstString,
+  nestedRecords,
+  type PlatformRecord,
+} from "../api/records";
 import { uploadMedia } from "../media/upload";
 import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
@@ -32,12 +52,25 @@ export function CylinderRegistrationScreen() {
   const [colour, setColour] = useState("");
   const [brand, setBrand] = useState("");
   const [showOptional, setShowOptional] = useState(false);
-  const [photo, setPhoto] = useState<{ uri: string; fileName: string; mimeType: string } | null>(null);
+  const [photo, setPhoto] = useState<{
+    uri: string;
+    fileName: string;
+    mimeType: string;
+  } | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitLabel, setSubmitLabel] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const mutation = useGatewayMutation({ path: "/lpg/cylinders", schema: ActionResponseSchema, invalidate: [["cylinders"]] });
+  const mutation = useGatewayMutation({
+    path: "/lpg/cylinders",
+    schema: ActionResponseSchema,
+    invalidate: [["cylinders"]],
+  });
+  const presentationMutation = useGatewayMutation({
+    path: "/runtime/ai/queue",
+    schema: ActionResponseSchema,
+  });
   const sizeOptions = nestedRecords(config.data, "cylinderTypeProfiles");
 
   useEffect(() => {
@@ -50,7 +83,13 @@ export function CylinderRegistrationScreen() {
         setBrand(String(draft.values.brand ?? ""));
         setShowOptional(Boolean(draft.values.colour || draft.values.brand));
         const pending = draft.pendingMedia[0];
-        if (pending) setPhoto({ uri: pending.uri, fileName: "cylinder.jpg", mimeType: "image/jpeg" });
+        if (pending) {
+          setPhoto({
+            uri: pending.uri,
+            fileName: "cylinder.jpg",
+            mimeType: "image/jpeg",
+          });
+        }
       }
       setHydrated(true);
     });
@@ -77,10 +116,18 @@ export function CylinderRegistrationScreen() {
       setError("Allow photo access to choose a cylinder picture. You can continue without one and add it later.");
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, quality: 0.9 });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.9,
+    });
     if (!result.canceled) {
       const asset = result.assets[0];
-      setPhoto({ uri: asset.uri, fileName: asset.fileName ?? `cylinder-${Date.now()}.jpg`, mimeType: asset.mimeType ?? "image/jpeg" });
+      setPhoto({
+        uri: asset.uri,
+        fileName: asset.fileName ?? `cylinder-${Date.now()}.jpg`,
+        mimeType: asset.mimeType ?? "image/jpeg",
+      });
       setError(null);
     }
   };
@@ -88,17 +135,25 @@ export function CylinderRegistrationScreen() {
   const submit = async () => {
     setError(null);
     const kg = Number(size);
-    const profile = sizeOptions.find((option) => firstNumber(option, ["sizeKg", "size_kg"]) === kg);
-    const maxCapacityKg = profile ? firstNumber(profile, ["maxCapacityKg", "max_capacity_kg"]) ?? kg : kg;
+    const profile = sizeOptions.find(
+      (option) => firstNumber(option, ["sizeKg", "size_kg"]) === kg,
+    );
+    const maxCapacityKg = profile
+      ? firstNumber(profile, ["maxCapacityKg", "max_capacity_kg"]) ?? kg
+      : kg;
+
     if (name.trim().length < 2 || !Number.isFinite(kg) || kg <= 0) {
       setError("Give your cylinder a name and choose its size.");
       return;
     }
+
     setSubmitting(true);
+    setSubmitLabel(photo ? "Uploading cylinder photo" : "Creating cylinder identity");
     setUploadProgress(photo ? 0 : null);
+
     try {
       let assetId: string | undefined;
-      if (photo)
+      if (photo) {
         assetId = await uploadMedia({
           api: session.api,
           uri: photo.uri,
@@ -108,7 +163,10 @@ export function CylinderRegistrationScreen() {
           assetTypeKey: "lpg.cylinder.original",
           onProgress: setUploadProgress,
         });
-      await mutation.mutateAsync({
+      }
+
+      setSubmitLabel("Creating SKIMA identity");
+      const response = await mutation.mutateAsync({
         displayName: name.trim(),
         sizeKg: kg,
         maxCapacityKg,
@@ -119,87 +177,388 @@ export function CylinderRegistrationScreen() {
         idempotencyKey: idempotencyKey("register-cylinder", `${owner}:${name.trim()}:${kg}`),
         metadata: { registrationExperience: "guided_v2" },
       });
+
+      const createdRecord = actionRecord(response);
+      const cylinderId = firstString(createdRecord, ["id"]);
+      const cylinderReference =
+        firstString(createdRecord, ["publicReference", "public_reference"]) ??
+        cylinderId;
+
+      if (assetId && cylinderId) {
+        setSubmitLabel("Preparing studio cylinder image");
+        try {
+          await presentationMutation.mutateAsync({
+            taskKey: "ai.lpg.cylinder.presentation",
+            subjectType: "lpg_cylinder",
+            subjectId: cylinderId,
+            source: "skima.lpg.mobile",
+            idempotencyKey: idempotencyKey("presentation-media", cylinderId),
+            input: {
+              purpose: "public_presentation",
+              confirmedColour: colour.trim() || undefined,
+              sourceMediaAssetId: assetId,
+              preserveOriginal: true,
+            },
+          });
+          await session.api.request("/runtime/ai/process", ActionResponseSchema, {
+            method: "POST",
+            body: {},
+            timeoutMs: 60_000,
+          });
+        } catch {
+          // Do not block cylinder registration when optional AI presentation is delayed.
+        }
+      }
+
       await draftStore.clear(owner, DRAFT);
-      router.replace("/(customer)/cylinders");
+      router.replace(cylinderReference ? (`/(customer)/cylinder/${cylinderReference}` as never) : "/(customer)/cylinders");
     } catch (cause) {
-      setError(friendlyError(cause, "We couldn’t register this cylinder. Check the details and try again."));
+      setError(friendlyError(cause, "We couldn't register this cylinder. Check the details and try again."));
     } finally {
       setSubmitting(false);
+      setSubmitLabel(null);
       setUploadProgress(null);
     }
   };
 
-  if (config.isPending) return <Screen eyebrow="Add a cylinder" title="Let’s identify yours"><ScreenSkeleton cards={3} /></Screen>;
-  const inputStyle = [styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }];
+  if (config.isPending) {
+    return (
+      <Screen eyebrow="Add a cylinder" title="Let's identify yours">
+        <ScreenSkeleton cards={3} />
+      </Screen>
+    );
+  }
+
+  const inputStyle = [
+    styles.input,
+    {
+      backgroundColor: palette.input,
+      borderColor: palette.border,
+      color: palette.ink,
+    },
+  ];
+
   return (
-    <Screen eyebrow="Add a cylinder" title="Let’s identify yours" action={<Pressable onPress={() => router.back()}><Text style={styles.link}>Cancel</Text></Pressable>}>
-      <View style={[styles.identityNote, { backgroundColor: palette.ink }]}>
-        <View style={styles.identityIcon}><ShieldCheck color="white" size={26} /></View>
-        <View style={{ flex: 1, gap: 3 }}><Text style={styles.identityTitle}>SKIMA creates the identity</Text><Text style={styles.identityBody}>No serial number hunt. We’ll issue a permanent SKIMA reference and private scan code after registration.</Text></View>
+    <Screen
+      eyebrow="Add a cylinder"
+      title="Let's identify yours"
+      action={
+        <Pressable onPress={() => router.back()}>
+          <Text style={styles.link}>Cancel</Text>
+        </Pressable>
+      }
+    >
+      <View
+        style={[
+          styles.identityNote,
+          {
+            backgroundColor: palette.elevated,
+            borderColor: palette.border,
+            shadowColor: palette.shadow,
+          },
+        ]}
+      >
+        <View style={styles.identityIcon}>
+          <ShieldCheck color="white" size={24} />
+        </View>
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text style={[styles.identityTitle, { color: palette.ink }]}>
+            SKIMA creates the identity
+          </Text>
+          <Text style={[styles.identityBody, { color: palette.muted }]}>
+            We'll issue the permanent SKIMA reference and private scan code after registration.
+          </Text>
+        </View>
       </View>
 
       <View style={styles.form}>
-        <View style={styles.stepHeading}><Text style={styles.stepNumber}>1</Text><View><Text style={[styles.stepTitle, { color: palette.ink }]}>Name your cylinder</Text><Text style={[styles.hint, { color: palette.muted }]}>Choose any name that makes sense to you.</Text></View></View>
-        <TextInput style={inputStyle} placeholder="Kitchen cylinder" placeholderTextColor={palette.muted} value={name} onChangeText={setName} />
+        <View style={styles.stepHeading}>
+          <Text style={styles.stepNumber}>1</Text>
+          <View>
+            <Text style={[styles.stepTitle, { color: palette.ink }]}>
+              Name your cylinder
+            </Text>
+            <Text style={[styles.hint, { color: palette.muted }]}>
+              Choose any name that makes sense to you.
+            </Text>
+          </View>
+        </View>
+        <TextInput
+          onChangeText={setName}
+          placeholder="Kitchen cylinder"
+          placeholderTextColor={palette.muted}
+          style={inputStyle}
+          value={name}
+        />
 
-        <View style={styles.stepHeading}><Text style={styles.stepNumber}>2</Text><View><Text style={[styles.stepTitle, { color: palette.ink }]}>Choose the size</Text><Text style={[styles.hint, { color: palette.muted }]}>Look for the kilogram marking on the cylinder.</Text></View></View>
+        <View style={styles.stepHeading}>
+          <Text style={styles.stepNumber}>2</Text>
+          <View>
+            <Text style={[styles.stepTitle, { color: palette.ink }]}>
+              Choose the size
+            </Text>
+            <Text style={[styles.hint, { color: palette.muted }]}>
+              Look for the kilogram marking on the cylinder.
+            </Text>
+          </View>
+        </View>
         <View style={styles.sizes}>
           {sizeOptions.map((option, index) => {
             const kg = firstNumber(option, ["sizeKg", "size_kg"]);
             if (kg === null) return null;
             const value = String(kg);
             const selected = value === size;
-            return <Pressable key={firstString(option, ["id", "key"]) ?? String(index)} onPress={() => setSize(value)} style={[styles.sizeOption, { backgroundColor: selected ? colors.brand : palette.surface, borderColor: selected ? colors.brand : palette.border }]}><Text style={[styles.sizeValue, { color: selected ? "white" : palette.ink }]}>{kg} kg</Text><Text style={[styles.sizeLabel, { color: selected ? "rgba(255,255,255,.78)" : palette.muted }]}>{firstString(option, ["displayName", "display_name"]) ?? "Cylinder"}</Text>{selected ? <Check color="white" size={18} /> : null}</Pressable>;
+            return (
+              <Pressable
+                key={firstString(option, ["id", "key"]) ?? String(index)}
+                onPress={() => setSize(value)}
+                style={[
+                  styles.sizeOption,
+                  {
+                    backgroundColor: selected ? colors.brand : palette.surface,
+                    borderColor: selected ? colors.brand : palette.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.sizeValue, { color: selected ? "white" : palette.ink }]}>
+                  {kg} kg
+                </Text>
+                <Text style={[styles.sizeLabel, { color: selected ? "rgba(255,255,255,.78)" : palette.muted }]}>
+                  {firstString(option, ["displayName", "display_name"]) ?? "Cylinder"}
+                </Text>
+                {selected ? <Check color="white" size={18} /> : null}
+              </Pressable>
+            );
           })}
         </View>
-        {!sizeOptions.length ? <Text style={styles.error}>Cylinder sizes are unavailable right now. Please try again shortly.</Text> : null}
+        {!sizeOptions.length ? (
+          <Text style={styles.error}>
+            Cylinder sizes are unavailable right now. Please try again shortly.
+          </Text>
+        ) : null}
 
-        <View style={styles.stepHeading}><Text style={styles.stepNumber}>3</Text><View><Text style={[styles.stepTitle, { color: palette.ink }]}>Add a clear photo</Text><Text style={[styles.hint, { color: palette.muted }]}>Recommended for easier recognition and a polished cylinder image.</Text></View></View>
-        <Pressable onPress={() => void choosePhoto()} style={[styles.photoPicker, { backgroundColor: palette.soft, borderColor: palette.border }]}>
-          {photo ? <Image source={{ uri: photo.uri }} resizeMode="cover" style={styles.photo} /> : <><View style={[styles.cameraIcon, { backgroundColor: palette.surface }]}><Camera color={colors.brand} size={27} /></View><Text style={[styles.photoTitle, { color: palette.ink }]}>Choose cylinder photo</Text><Text style={[styles.photoHint, { color: palette.muted }]}>Use a bright, full view of the cylinder.</Text></>}
-          {photo ? <View style={styles.changePhoto}><Camera color="white" size={17} /><Text style={styles.changePhotoText}>Change photo</Text></View> : null}
+        <View style={styles.stepHeading}>
+          <Text style={styles.stepNumber}>3</Text>
+          <View>
+            <Text style={[styles.stepTitle, { color: palette.ink }]}>
+              Add a clear photo
+            </Text>
+            <Text style={[styles.hint, { color: palette.muted }]}>
+              Recommended for recognition and a polished cylinder image.
+            </Text>
+          </View>
+        </View>
+        <Pressable
+          onPress={() => void choosePhoto()}
+          style={[styles.photoPicker, { backgroundColor: palette.soft, borderColor: palette.border }]}
+        >
+          {photo ? (
+            <Image source={{ uri: photo.uri }} resizeMode="cover" style={styles.photo} />
+          ) : (
+            <>
+              <View style={[styles.cameraIcon, { backgroundColor: palette.surface }]}>
+                <Camera color={colors.brand} size={26} />
+              </View>
+              <Text style={[styles.photoTitle, { color: palette.ink }]}>
+                Choose cylinder photo
+              </Text>
+              <Text style={[styles.photoHint, { color: palette.muted }]}>
+                Use a bright, full view of the cylinder.
+              </Text>
+            </>
+          )}
+          {photo ? (
+            <View style={styles.changePhoto}>
+              <Camera color="white" size={17} />
+              <Text style={styles.changePhotoText}>Change photo</Text>
+            </View>
+          ) : null}
         </Pressable>
 
-        <Pressable onPress={() => setShowOptional((value) => !value)} style={styles.optionalToggle}><Text style={[styles.optionalText, { color: palette.ink }]}>Optional details</Text><ChevronDown color={palette.muted} size={20} /></Pressable>
-        {showOptional ? <View style={styles.optionalFields}><TextInput style={inputStyle} placeholder="Colour (optional)" placeholderTextColor={palette.muted} value={colour} onChangeText={setColour} /><TextInput style={inputStyle} placeholder="Brand or maker (optional)" placeholderTextColor={palette.muted} value={brand} onChangeText={setBrand} /></View> : null}
-
-        {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-        <Pressable disabled={mutation.isPending || submitting || !name.trim() || !size} onPress={() => void submit()} style={[styles.submit, (!name.trim() || !size) && styles.disabled]}>
-          {mutation.isPending || submitting ? <View style={styles.pendingRow}><ActivityIndicator color="white" /><Text style={styles.submitText}>{uploadProgress === null ? "Creating your cylinder" : `Uploading photo ${Math.round(uploadProgress * 100)}%`}</Text></View> : <><Sparkles color="white" size={19} /><Text style={styles.submitText}>Create SKIMA cylinder</Text></>}
+        <Pressable
+          onPress={() => setShowOptional((value) => !value)}
+          style={styles.optionalToggle}
+        >
+          <Text style={[styles.optionalText, { color: palette.ink }]}>
+            Optional details
+          </Text>
+          <ChevronDown color={palette.muted} size={20} />
         </Pressable>
-        <Text style={[styles.note, { color: palette.muted }]}>You can leave and come back—your progress stays on this device until registration is complete.</Text>
+        {showOptional ? (
+          <View style={styles.optionalFields}>
+            <TextInput
+              onChangeText={setColour}
+              placeholder="Colour (optional)"
+              placeholderTextColor={palette.muted}
+              style={inputStyle}
+              value={colour}
+            />
+            <TextInput
+              onChangeText={setBrand}
+              placeholder="Brand or maker (optional)"
+              placeholderTextColor={palette.muted}
+              style={inputStyle}
+              value={brand}
+            />
+          </View>
+        ) : null}
+
+        {error ? (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {error}
+          </Text>
+        ) : null}
+        <Pressable
+          disabled={mutation.isPending || submitting || !name.trim() || !size}
+          onPress={() => void submit()}
+          style={[styles.submit, (!name.trim() || !size) && styles.disabled]}
+        >
+          {mutation.isPending || submitting ? (
+            <View style={styles.pendingRow}>
+              <ActivityIndicator color="white" />
+              <Text style={styles.submitText}>
+                {uploadProgress === null
+                  ? submitLabel ?? "Creating your cylinder"
+                  : `Uploading photo ${Math.round(uploadProgress * 100)}%`}
+              </Text>
+            </View>
+          ) : (
+            <>
+              <Sparkles color="white" size={19} />
+              <Text style={styles.submitText}>Create SKIMA cylinder</Text>
+            </>
+          )}
+        </Pressable>
+        <Text style={[styles.note, { color: palette.muted }]}>
+          You can leave and come back. Your progress stays on this device until registration is complete.
+        </Text>
       </View>
     </Screen>
   );
 }
 
+function actionRecord(value: unknown): PlatformRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as PlatformRecord
+    : null;
+}
+
 const styles = StyleSheet.create({
-  identityNote: { maxWidth: 720, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: 28 },
-  identityIcon: { width: 52, height: 52, alignItems: "center", justifyContent: "center", borderRadius: 26, backgroundColor: colors.brand },
-  identityTitle: { color: "white", fontSize: 18, fontWeight: "900" },
-  identityBody: { color: "rgba(255,255,255,.72)", lineHeight: 20 },
+  identityNote: {
+    maxWidth: 720,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 28,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 22,
+  },
+  identityIcon: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 24,
+    backgroundColor: colors.brand,
+  },
+  identityTitle: { fontSize: 17, fontWeight: "900" },
+  identityBody: { lineHeight: 20 },
   form: { width: "100%", maxWidth: 720, gap: spacing.md },
-  stepHeading: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.sm },
-  stepNumber: { width: 34, height: 34, color: "white", lineHeight: 34, textAlign: "center", borderRadius: 17, overflow: "hidden", backgroundColor: colors.brand, fontWeight: "900" },
-  stepTitle: { fontSize: 18, fontWeight: "900" },
+  stepHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginTop: spacing.xs,
+  },
+  stepNumber: {
+    width: 32,
+    height: 32,
+    color: "white",
+    lineHeight: 32,
+    textAlign: "center",
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: colors.brand,
+    fontWeight: "900",
+  },
+  stepTitle: { fontSize: 17, fontWeight: "900" },
   hint: { fontSize: 13, lineHeight: 18, marginTop: 2 },
-  input: { minHeight: 56, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: 16 },
+  input: {
+    minHeight: 54,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    fontSize: 16,
+  },
   sizes: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  sizeOption: { minWidth: 135, flex: 1, minHeight: 92, justifyContent: "center", gap: 3, padding: spacing.md, borderWidth: 1, borderRadius: radii.lg },
-  sizeValue: { fontSize: 21, fontWeight: "900" },
+  sizeOption: {
+    minWidth: 132,
+    flex: 1,
+    minHeight: 82,
+    justifyContent: "center",
+    gap: 3,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderRadius: radii.lg,
+  },
+  sizeValue: { fontSize: 20, fontWeight: "900" },
   sizeLabel: { fontSize: 11, fontWeight: "700" },
-  photoPicker: { minHeight: 220, overflow: "hidden", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderWidth: 1, borderStyle: "dashed", borderRadius: 28 },
-  cameraIcon: { width: 60, height: 60, alignItems: "center", justifyContent: "center", borderRadius: 30 },
+  photoPicker: {
+    minHeight: 184,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderRadius: 28,
+  },
+  cameraIcon: {
+    width: 58,
+    height: 58,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 29,
+  },
   photoTitle: { fontSize: 17, fontWeight: "900" },
   photoHint: { fontSize: 13 },
-  photo: { width: "100%", height: 300 },
-  changePhoto: { position: "absolute", right: spacing.md, bottom: spacing.md, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radii.pill, backgroundColor: "rgba(23,33,27,.82)" },
+  photo: { width: "100%", height: 260 },
+  changePhoto: {
+    position: "absolute",
+    right: spacing.md,
+    bottom: spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radii.pill,
+    backgroundColor: "rgba(23,33,27,.82)",
+  },
   changePhotoText: { color: "white", fontWeight: "900" },
-  optionalToggle: { minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: colors.border },
+  optionalToggle: {
+    minHeight: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
   optionalText: { fontWeight: "900" },
   optionalFields: { gap: spacing.sm },
-  submit: { minHeight: 58, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.brand, borderRadius: radii.md },
-  disabled: { opacity: .45 },
+  submit: {
+    minHeight: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.brand,
+    borderRadius: radii.md,
+  },
+  disabled: { opacity: 0.45 },
   submitText: { color: "white", fontSize: 16, fontWeight: "900" },
   pendingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   link: { color: colors.brand, fontWeight: "900" },

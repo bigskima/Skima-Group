@@ -73,10 +73,11 @@ export default function Welcome() {
     () =>
       placements.map((placement, stepIndex) => {
         const publication = findTopPublication(content.data, placement);
+        const mediaPublication = findTopMediaPublication(content.data, placement);
         return {
           title: publication?.title ?? fallbacks[stepIndex].title,
           body: publication?.body ?? fallbacks[stepIndex].body,
-          mediaUrl: publication?.mediaUrl ?? findTopPublication(content.data, "mobile.welcome.hero")?.mediaUrl ?? null,
+          mediaUrl: mediaPublication?.mediaUrl ?? findTopMediaPublication(content.data, "mobile.welcome.hero")?.mediaUrl ?? null,
         };
       }),
     [content.data],
@@ -99,7 +100,15 @@ export default function Welcome() {
       >
         <View style={[styles.shell, wide && styles.shellWide]}>
           <View style={styles.topbar}>
-            <BrandMark />
+            <View style={styles.logoLockup}>
+              <View style={[styles.logoPlate, { backgroundColor: palette.elevated, borderColor: palette.border }]}>
+                <BrandMark compact />
+              </View>
+              <View>
+                <Text style={[styles.logoKicker, { color: palette.muted }]}>SKIMA LPG</Text>
+                <Text style={[styles.logoText, { color: palette.ink }]}>Refill journey</Text>
+              </View>
+            </View>
             {!finalStep ? (
               <Pressable
                 accessibilityRole="button"
@@ -127,7 +136,10 @@ export default function Welcome() {
                   style={StyleSheet.absoluteFill}
                 />
               ) : null}
-              <View style={styles.mediaShade} />
+              <LinearGradient
+                colors={["rgba(7,16,11,.10)", "rgba(7,16,11,.12)", "rgba(7,16,11,.62)"]}
+                style={StyleSheet.absoluteFill}
+              />
               <View style={styles.orb} />
 
               <View style={styles.visualHeader}>
@@ -260,6 +272,15 @@ function findTopPublication(
     .sort((left, right) => right.priority - left.priority)[0];
 }
 
+function findTopMediaPublication(
+  publications: ProductContentRecord[] | undefined,
+  placementKey: string,
+) {
+  return publications
+    ?.filter((item) => item.placementKey === placementKey && item.mediaUrl)
+    .sort((left, right) => right.priority - left.priority)[0];
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   outer: {
@@ -277,6 +298,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  logoLockup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  logoPlate: {
+    width: 58,
+    height: 58,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 22,
+  },
+  logoKicker: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.4,
+  },
+  logoText: {
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: -0.2,
+  },
   skip: {
     minHeight: 40,
     justifyContent: "center",
@@ -286,34 +330,27 @@ const styles = StyleSheet.create({
   stage: { gap: 20 },
   stageWide: { flexDirection: "row", alignItems: "center", gap: 56 },
   visual: {
-    minHeight: 252,
+    minHeight: 308,
     flex: 1.08,
     overflow: "hidden",
     justifyContent: "space-between",
-    padding: 20,
-    borderRadius: 30,
-  },
-  mediaShade: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: "rgba(7,16,11,.48)",
+    padding: 18,
+    borderRadius: 34,
   },
   orb: {
     position: "absolute",
-    width: 210,
-    height: 210,
-    right: -72,
-    top: -88,
-    borderRadius: 105,
-    backgroundColor: "rgba(237,28,46,.48)",
+    width: 190,
+    height: 190,
+    right: -64,
+    top: -72,
+    borderRadius: 95,
+    backgroundColor: "rgba(237,28,46,.35)",
   },
   visualHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingHorizontal: 2,
   },
   visualLabel: {
     color: "rgba(255,255,255,.72)",
@@ -327,29 +364,36 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   heroIcon: {
-    width: 84,
-    height: 84,
-    alignSelf: "center",
+    position: "absolute",
+    right: 18,
+    bottom: 78,
+    width: 64,
+    height: 64,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,.22)",
-    borderRadius: 42,
-    backgroundColor: "rgba(255,255,255,.12)",
+    borderColor: "rgba(255,255,255,.28)",
+    borderRadius: 32,
+    backgroundColor: "rgba(7,16,11,.50)",
   },
   journey: {
     position: "relative",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,.14)",
+    borderRadius: radii.pill,
+    backgroundColor: "rgba(7,16,11,.46)",
   },
   routeLine: {
     position: "absolute",
-    left: 20,
-    right: 20,
+    left: 28,
+    right: 28,
     height: 2,
-    backgroundColor: "rgba(255,255,255,.18)",
+    backgroundColor: "rgba(255,255,255,.22)",
   },
   journeyStop: {
     width: 30,

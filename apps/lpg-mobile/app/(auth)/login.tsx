@@ -45,7 +45,7 @@ export default function Login() {
             <Text style={styles.linkStrong}>Create account</Text>
           </Pressable>
           <Pressable onPress={() => router.push("/(auth)/forgot-password")}>
-            <Text style={styles.linkMuted}>Forgot password?</Text>
+            <Text style={[styles.linkMuted, { color: palette.muted }]}>Forgot password?</Text>
           </Pressable>
         </View>
       }
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   error: { color: colors.danger, fontSize: 12, lineHeight: 18, fontWeight: "800" },
   footerLinks: { flexDirection: "row", justifyContent: "space-between", gap: spacing.md },
   linkStrong: { color: colors.brand, fontSize: 13, fontWeight: "900" },
-  linkMuted: { color: colors.muted, fontSize: 13, fontWeight: "900" },
+  linkMuted: { fontSize: 13, fontWeight: "900" },
   disabled: { opacity: 0.52 },
   pressed: { opacity: 0.76 },
 });

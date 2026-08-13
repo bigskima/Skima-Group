@@ -10,9 +10,10 @@ export function BrandMark({ compact = false, inverse = false }: { compact?: bool
     audience: "public",
     moduleKey: "lpg",
   });
-  const publication = content.data
+  const publications = content.data
     ?.filter((item) => item.placementKey === placement)
-    .sort((left, right) => right.priority - left.priority)[0];
+    .sort((left, right) => right.priority - left.priority) ?? [];
+  const publication = publications.find((item) => item.mediaUrl) ?? publications[0];
   const { palette } = useAppTheme();
   const title = publication?.title ?? (compact ? "S" : "SKIMA");
 

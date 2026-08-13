@@ -46,7 +46,7 @@ export default function ResetPassword() {
       action={<BackAction />}
       footer={
         <Pressable onPress={() => router.push("/(auth)/login")}>
-          <Text style={styles.centerLink}>Return to <Text style={styles.linkStrong}>sign in</Text></Text>
+          <Text style={[styles.centerLink, { color: palette.muted }]}>Return to <Text style={styles.linkStrong}>sign in</Text></Text>
         </Pressable>
       }
     >
@@ -90,7 +90,7 @@ export default function ResetPassword() {
         </LinearGradient>
       </Pressable>
 
-      {message ? <Text style={[styles.message, { color: message.includes("couldn't") || message.includes("match") ? colors.danger : colors.brandDark }]}>{message}</Text> : null}
+      {message ? <Text style={[styles.message, { color: message.includes("couldn't") || message.includes("match") ? colors.danger : colors.success }]}>{message}</Text> : null}
     </AuthShell>
   );
 }
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   buttonFill: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.lg },
   buttonText: { color: "white", fontSize: 15, fontWeight: "900" },
   message: { fontSize: 12, lineHeight: 18, fontWeight: "800" },
-  centerLink: { color: colors.muted, textAlign: "center", fontSize: 13, fontWeight: "800" },
+  centerLink: { textAlign: "center", fontSize: 13, fontWeight: "800" },
   linkStrong: { color: colors.brand, fontWeight: "900" },
   backButton: { minHeight: 38, justifyContent: "center", paddingHorizontal: 12, borderRadius: radii.pill, backgroundColor: "rgba(255,255,255,.12)" },
   backText: { color: "white", fontSize: 12, fontWeight: "900" },
