@@ -771,7 +771,10 @@ function ApplicationReviewQueue(props: {
               onClick={() => props.onSelect(applicationId)}
             >
               <span className="skima-review-item__header">
-                <strong>{title}</strong>
+                <span>
+                  <ApplicationTypeTag applicationType={applicationType} />
+                  <strong>{title}</strong>
+                </span>
                 <StatusBadge tone={statusTone(status)}>{normalizeStatusLabel(status)}</StatusBadge>
               </span>
               <span className="skima-review-item__person">
@@ -822,6 +825,13 @@ function ApplicationReviewPanel(props: {
   const applicantEmail = getRecordString(application, "applicant_email");
   const applicantPhone = getRecordString(application, "applicant_phone");
   const subjectName = getRecordString(application, "application_subject_name");
+  const applicationNoun = applicationActionNoun(props.applicationType);
+  const approvedDocuments = props.documents.filter((document) =>
+    getRecordString(document, "status") === "approved"
+  ).length;
+  const pendingDocuments = props.documents.filter((document) =>
+    !["approved", "rejected", "expired"].includes(getRecordString(document, "status") ?? "")
+  ).length;
   const canAssign = Boolean(props.currentUserId) &&
     ["submitted", "resubmitted", "under_review"].includes(status);
   const canRequestCorrection = status === "under_review";
@@ -831,10 +841,23 @@ function ApplicationReviewPanel(props: {
     <section className="sk-panel">
       <div className="sk-panel__header">
         <div>
+          <ApplicationTypeTag applicationType={props.applicationType} />
           <h2>{applicationName}</h2>
           <p className="skima-muted">{formatShortId(applicationId)}</p>
         </div>
         <StatusBadge tone={statusTone(status)}>{normalizeStatusLabel(status)}</StatusBadge>
+      </div>
+      <div className="skima-review-status-split">
+        <div>
+          <span>Application status</span>
+          <strong>{normalizeStatusLabel(status)}</strong>
+          <small>Final {applicationNoun.toLowerCase()} approval is a separate admin decision.</small>
+        </div>
+        <div>
+          <span>Document verification statuses</span>
+          <strong>{approvedDocuments} of {props.documents.length} approved</strong>
+          <small>{pendingDocuments} document{pendingDocuments === 1 ? "" : "s"} still pending or in review.</small>
+        </div>
       </div>
       <div className="skima-applicant-card">
         <ApplicantAvatar application={application} size="lg" />
@@ -906,7 +929,7 @@ function ApplicationReviewPanel(props: {
           disabled={!canDecide || props.isSubmitting}
           onClick={() => props.onOpenAction({ type: "approve", application })}
         >
-          Approve
+          Approve {applicationNoun}
         </Button>
         <Button
           icon={XCircle}
@@ -915,7 +938,7 @@ function ApplicationReviewPanel(props: {
           disabled={!canDecide || props.isSubmitting}
           onClick={() => props.onOpenAction({ type: "reject", application })}
         >
-          Reject
+          Reject {applicationNoun}
         </Button>
       </div>
       <DocumentReviewList
@@ -939,7 +962,10 @@ function DocumentReviewList(props: {
   return (
     <section className="sk-panel">
       <div className="sk-panel__header">
-        <h2>Submitted Documents</h2>
+        <div>
+          <h2>Individual document verification statuses</h2>
+          <p className="skima-muted">Document approval does not approve the applicant.</p>
+        </div>
         <StatusBadge>{String(props.documents.length)}</StatusBadge>
       </div>
       {props.documents.length === 0
@@ -1625,6 +1651,39 @@ function getNestedRecordString(
   }
 
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function ApplicationTypeTag(props: { readonly applicationType: PlatformRecord | null }) {
+  return <span className="skima-application-type-tag">{applicationKindLabel(props.applicationType)}</span>;
+}
+
+function applicationActionNoun(applicationType: PlatformRecord | null): string {
+  const kind = applicationKindLabel(applicationType).replace(/\s+APPLICATION$/i, "");
+  return kind.charAt(0) + kind.slice(1).toLowerCase();
+}
+
+function applicationKindLabel(applicationType: PlatformRecord | null): string {
+  const category = getRecordString(applicationType, "application_category");
+  const key = getRecordString(applicationType, "key") ?? "";
+  const workspace = getNestedRecordString(applicationType, ["metadata", "workspace"]);
+
+  if (category === "driver" || workspace === "driver" || key.includes(".driver.")) {
+    return "DRIVER APPLICATION";
+  }
+
+  if (workspace === "station" || key.includes(".station.")) {
+    return "STATION APPLICATION";
+  }
+
+  if (category === "vehicle" || key.includes(".vehicle.")) {
+    return "VEHICLE APPLICATION";
+  }
+
+  if (category) {
+    return `${normalizeStatusLabel(category).toUpperCase()} APPLICATION`;
+  }
+
+  return "APPLICATION";
 }
 
 function ApplicantAvatar(props: {

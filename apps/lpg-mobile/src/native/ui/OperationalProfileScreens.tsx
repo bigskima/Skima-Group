@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import {
   BarChart3,
   Building2,
+  CreditCard,
   MapPin,
   ShieldCheck,
   UserRound,
@@ -124,6 +125,13 @@ export function DriverProfileScreen() {
               ).replace(/[_-]/g, " ")}
             />
           </Card>
+          <Pressable
+            style={styles.primary}
+            onPress={() => router.push("/(driver)/id-card" as never)}
+          >
+            <CreditCard color="white" size={19} />
+            <Text style={styles.primaryText}>View SKIMA Driver ID</Text>
+          </Pressable>
         </>
       )}
     </Screen>
@@ -611,6 +619,16 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.ink, fontSize: 17, fontWeight: "900" },
   body: { color: colors.muted, lineHeight: 20 },
+  primary: {
+    minHeight: 56,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    borderRadius: radii.md,
+    backgroundColor: colors.brand,
+  },
+  primaryText: { color: "white", fontWeight: "900" },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   metrics: { flexDirection: "row", gap: spacing.md },
   metric: {

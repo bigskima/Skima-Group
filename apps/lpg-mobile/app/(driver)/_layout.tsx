@@ -12,6 +12,7 @@ export default function Layout() {
           "job/[id]",
           "notifications",
           "application",
+          "id-card",
           "vehicles",
           "documents",
           "vehicle-documents",

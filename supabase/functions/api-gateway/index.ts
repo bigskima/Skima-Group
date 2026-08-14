@@ -112,6 +112,8 @@ const ROUTES = new Set([
   "/runtime/applications/corrections",
   "/runtime/applications/decisions",
   "/runtime/applications/withdraw",
+  "/runtime/driver-id-cards",
+  "/runtime/driver-id-cards/verify",
   "/runtime/documents/requirements",
   "/runtime/documents",
   "/runtime/documents/review",
@@ -183,6 +185,11 @@ async function handleRequest(request: Request): Promise<Response> {
   try {
     if (request.method === "OPTIONS") {
       return optionsResponse();
+    }
+
+    const routePath = normalizeGatewayPath(new URL(request.url).pathname);
+    if (routePath === "/runtime/driver-id-cards/verify" && request.method === "GET") {
+      return publicDriverIdVerificationResponse(request, id);
     }
 
     return await handleAuthenticatedRequest(request, id);
@@ -2499,15 +2506,11 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       return body.response;
     }
 
-    const payload = body.value;
-    return rpcResponse(
-      supabase.rpc("decide_application_review", {
-        target_application_id: requireUuid(payload.applicationId, "applicationId"),
-        target_decision: requireString(payload.decision, "decision"),
-        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-        target_metadata: optionalRecord(payload.metadata) ?? {},
-        target_reason: requireString(payload.reason, "reason"),
-      }),
+    return applicationDecisionResponse(
+      supabase,
+      supabaseUrl,
+      body.value,
+      authResult.user,
       id,
     );
   }
@@ -2531,12 +2534,16 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     );
   }
 
+  if (routePath === "/runtime/driver-id-cards" && request.method === "GET") {
+    return driverIdCardResponse(supabase, supabaseUrl, authResult.user, request, id);
+  }
+
   if (routePath === "/runtime/drivers" && request.method === "GET") {
     return selectRecords(
       supabase
         .from("driver_profiles")
         .select(
-          "id,user_id,organization_id,operational_status,verification_status,identity_profile,license_profile,service_profile,approved_at,metadata,created_at,updated_at",
+          "id,user_id,organization_id,operational_status,verification_status,identity_profile,license_profile,service_profile,approved_at,driver_display_name,public_driver_id,profile_photo_asset_id,driver_card_issued_at,driver_card_status,metadata,created_at,updated_at",
         )
         .order("created_at", { ascending: false }),
       id,
@@ -4772,7 +4779,10 @@ async function resolveLpgMobileWorkspaceAccess(
     branchIds: [],
   }];
 
-  if (driverProfileId && driverVehicleIds.length > 0) {
+  if (
+    driverProfileId &&
+    stringOrNull(getRecordValue(driverResult.data, "verification_status")) === "approved"
+  ) {
     workspaces.push({
       key: "driver",
       status: "active",
@@ -5182,6 +5192,578 @@ function lpgStationActivationResponse(
     }),
     id,
   );
+}
+
+async function applicationDecisionResponse(
+  supabase: SupabaseClient,
+  supabaseUrl: string,
+  payload: Readonly<Record<string, unknown>>,
+  user: User,
+  id: string,
+): Promise<Response> {
+  const applicationId = requireUuid(payload.applicationId, "applicationId");
+  const decision = requireString(payload.decision, "decision");
+  const idempotencyKey = requireString(payload.idempotencyKey, "idempotencyKey");
+  const metadata = optionalRecord(payload.metadata) ?? {};
+  const reason = requireString(payload.reason, "reason");
+
+  const decisionResult = await supabase.rpc("decide_application_review", {
+    target_application_id: applicationId,
+    target_decision: decision,
+    target_idempotency_key: idempotencyKey,
+    target_metadata: metadata,
+    target_reason: reason,
+  });
+
+  if (decisionResult.error) {
+    return databaseError(decisionResult.error, id);
+  }
+
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const effects: Record<string, unknown> = {};
+
+  if (serviceRoleKey) {
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const effectResult = await applyApplicationDecisionEffects({
+      applicationId,
+      decision,
+      id,
+      idempotencyKey,
+      metadata,
+      reviewerUserId: user.id,
+      serviceClient,
+      supabaseUrl,
+    });
+
+    if ("response" in effectResult) {
+      return effectResult.response;
+    }
+
+    Object.assign(effects, effectResult.effects);
+  }
+
+  return jsonResponse({
+    ok: true,
+    data: {
+      applicationId,
+      effects,
+    },
+    id: applicationId,
+    requestId: id,
+  });
+}
+
+async function applyApplicationDecisionEffects(input: {
+  readonly applicationId: string;
+  readonly decision: string;
+  readonly id: string;
+  readonly idempotencyKey: string;
+  readonly metadata: Readonly<Record<string, unknown>>;
+  readonly reviewerUserId: string;
+  readonly serviceClient: SupabaseClient;
+  readonly supabaseUrl: string;
+}): Promise<{ readonly effects: Readonly<Record<string, unknown>> } | { readonly response: Response }> {
+  const applicationResult = await input.serviceClient
+    .from("application_records")
+    .select(
+      "id,application_type_id,applicant_user_id,organization_id,activated_subject_type,activated_subject_id,status,approved_at,rejected_at,metadata",
+    )
+    .eq("id", input.applicationId)
+    .maybeSingle();
+
+  if (applicationResult.error) {
+    return { response: databaseError(applicationResult.error, input.id) };
+  }
+
+  if (!applicationResult.data) {
+    return {
+      response: jsonResponse({
+        ok: false,
+        error: "application_not_found",
+        requestId: input.id,
+      }, 404),
+    };
+  }
+
+  const applicationTypeId = requireUuid(
+    getRecordValue(applicationResult.data, "application_type_id"),
+    "applicationTypeId",
+  );
+  const applicationTypeResult = await input.serviceClient
+    .from("application_type_definitions")
+    .select("id,key,display_name,application_category,metadata")
+    .eq("id", applicationTypeId)
+    .maybeSingle();
+
+  if (applicationTypeResult.error) {
+    return { response: databaseError(applicationTypeResult.error, input.id) };
+  }
+
+  const applicationType = applicationTypeResult.data;
+  const category = stringOrNull(getRecordValue(applicationType, "application_category")) ?? "generic";
+  const typeKey = stringOrNull(getRecordValue(applicationType, "key")) ?? "application.generic";
+  const typeName = stringOrNull(getRecordValue(applicationType, "display_name")) ??
+    normalizePlainStatus(typeKey);
+  const workspace = firstNonEmptyString([
+    nestedString(getRecordValue(applicationType, "metadata"), ["workspace"]),
+    category === "driver" ? "driver" : null,
+    typeKey.includes("station") ? "station" : null,
+  ]);
+  const effects: Record<string, unknown> = {
+    applicationCategory: category,
+    applicationTypeKey: typeKey,
+  };
+
+  if (input.decision === "approved") {
+    if (category === "driver") {
+      const driverProfileId = await resolveApprovedDriverProfileId(
+        input.serviceClient,
+        applicationResult.data,
+        input.id,
+      );
+
+      if ("response" in driverProfileId) {
+        return driverProfileId;
+      }
+
+      if (driverProfileId.id) {
+        const cardResult = await input.serviceClient.rpc("ensure_driver_card_identity", {
+          target_application_id: input.applicationId,
+          target_driver_profile_id: driverProfileId.id,
+        });
+
+        if (cardResult.error) {
+          return { response: databaseError(cardResult.error, input.id) };
+        }
+
+        effects.driverProfileId = driverProfileId.id;
+        effects.publicDriverId = cardResult.data;
+      }
+    }
+
+    if (category === "business" && workspace === "station") {
+      const stationActivationResult = await input.serviceClient.rpc(
+        "activate_configured_lpg_station_branch",
+        {
+          target_application_id: input.applicationId,
+          target_idempotency_key: `${input.idempotencyKey}:station-activation`,
+          target_metadata: {
+            ...input.metadata,
+            finalApplicationDecision: true,
+            reviewerUserId: input.reviewerUserId,
+          },
+          target_source: "skima.application.final_approval",
+        },
+      );
+
+      if (stationActivationResult.error) {
+        return { response: databaseError(stationActivationResult.error, input.id) };
+      }
+
+      effects.stationBranchId = stationActivationResult.data;
+    }
+  }
+
+  const noticeResult = await queueApplicationDecisionNotice({
+    application: applicationResult.data,
+    applicationTypeKey: typeKey,
+    applicationTypeName: typeName,
+    decision: input.decision,
+    effects,
+    id: input.id,
+    idempotencyKey: input.idempotencyKey,
+    serviceClient: input.serviceClient,
+    workspace,
+  });
+
+  if ("response" in noticeResult) {
+    return noticeResult;
+  }
+
+  effects.noticeQueued = noticeResult.messageId;
+  return { effects };
+}
+
+async function resolveApprovedDriverProfileId(
+  serviceClient: SupabaseClient,
+  application: unknown,
+  id: string,
+): Promise<{ readonly id: string | null } | { readonly response: Response }> {
+  const activatedSubjectType = stringOrNull(getRecordValue(application, "activated_subject_type"));
+  const activatedSubjectId = stringOrNull(getRecordValue(application, "activated_subject_id"));
+
+  if (activatedSubjectType === "driver" && activatedSubjectId) {
+    return { id: activatedSubjectId };
+  }
+
+  const applicantUserId = stringOrNull(getRecordValue(application, "applicant_user_id"));
+  if (!applicantUserId) {
+    return { id: null };
+  }
+
+  const driverResult = await serviceClient
+    .from("driver_profiles")
+    .select("id")
+    .eq("user_id", applicantUserId)
+    .maybeSingle();
+
+  if (driverResult.error) {
+    return { response: databaseError(driverResult.error, id) };
+  }
+
+  return { id: stringOrNull(getRecordValue(driverResult.data, "id")) };
+}
+
+async function queueApplicationDecisionNotice(input: {
+  readonly application: unknown;
+  readonly applicationTypeKey: string;
+  readonly applicationTypeName: string;
+  readonly decision: string;
+  readonly effects: Readonly<Record<string, unknown>>;
+  readonly id: string;
+  readonly idempotencyKey: string;
+  readonly serviceClient: SupabaseClient;
+  readonly workspace: string | null;
+}): Promise<{ readonly messageId: string | null } | { readonly response: Response }> {
+  const applicantUserId = stringOrNull(getRecordValue(input.application, "applicant_user_id"));
+  if (!applicantUserId) {
+    return { messageId: null };
+  }
+
+  const approved = input.decision === "approved";
+  const workspaceLabel = input.workspace === "driver"
+    ? "Driver"
+    : input.workspace === "station"
+    ? "Station"
+    : input.applicationTypeName.replace(/\s*application\s*$/i, "");
+  const title = approved
+    ? `Your ${workspaceLabel} application has been approved`
+    : `Your ${workspaceLabel} application was not approved`;
+  const body = approved
+    ? `You can now access your ${workspaceLabel} workspace.`
+    : "Review the decision message and submit corrections if requested.";
+  const path = approved
+    ? input.workspace === "driver"
+      ? "/(driver)"
+      : input.workspace === "station"
+      ? "/(station)"
+      : "/(customer)"
+    : input.workspace === "driver"
+    ? "/(customer)/driver-application"
+    : input.workspace === "station"
+    ? "/(customer)/station-application"
+    : "/(customer)";
+
+  const messageResult = await input.serviceClient
+    .from("communication_messages")
+    .upsert({
+      channel: "in_app",
+      created_by: applicantUserId,
+      idempotency_key: `${input.idempotencyKey}:application-notice`,
+      metadata: {
+        applicationId: stringOrNull(getRecordValue(input.application, "id")),
+        applicationTypeKey: input.applicationTypeKey,
+        decision: input.decision,
+        effects: input.effects,
+      },
+      payload: {
+        body,
+        path,
+        title,
+      },
+      purpose: `application.${input.workspace ?? "generic"}.${approved ? "approved" : "rejected"}`,
+      recipient_entity_id: applicantUserId,
+      recipient_entity_type: "profile",
+      source: "skima.application.review",
+      status: "queued",
+    }, { onConflict: "source,idempotency_key" })
+    .select("id")
+    .maybeSingle();
+
+  if (messageResult.error) {
+    return { response: databaseError(messageResult.error, input.id) };
+  }
+
+  return { messageId: stringOrNull(getRecordValue(messageResult.data, "id")) };
+}
+
+async function driverIdCardResponse(
+  supabase: SupabaseClient,
+  supabaseUrl: string,
+  user: User,
+  request: Request,
+  id: string,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const driverProfileId = optionalUuid(url.searchParams.get("driverProfileId"), "driverProfileId");
+  const driverResult = await supabase
+    .from("driver_profiles")
+    .select(
+      "id,user_id,operational_status,verification_status,identity_profile,service_profile,approved_at,driver_display_name,public_driver_id,profile_photo_asset_id,driver_card_issued_at,driver_card_status,metadata",
+    )
+    .eq(driverProfileId ? "id" : "user_id", driverProfileId ?? user.id)
+    .maybeSingle();
+
+  if (driverResult.error) {
+    return databaseError(driverResult.error, id);
+  }
+
+  if (!driverResult.data) {
+    return jsonResponse({ ok: false, error: "driver_card_not_found", requestId: id }, 404);
+  }
+
+  if (
+    !driverProfileId &&
+    stringOrNull(getRecordValue(driverResult.data, "user_id")) !== user.id
+  ) {
+    return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+  }
+
+  if (
+    driverProfileId &&
+    stringOrNull(getRecordValue(driverResult.data, "user_id")) !== user.id
+  ) {
+    const allowed = await requireAnyPermission(
+      supabase,
+      id,
+      ["platform.drivers.read", "platform.drivers.manage", "platform.drivers.verify"],
+      null,
+    );
+    if (allowed) return allowed;
+  }
+
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const serviceClient = serviceRoleKey ? createServiceClient(supabaseUrl, serviceRoleKey) : supabase;
+  const cardData = await buildDriverCardData(serviceClient, supabaseUrl, driverResult.data, id);
+
+  if ("response" in cardData) {
+    return cardData.response;
+  }
+
+  return jsonResponse({ ok: true, data: cardData.data, requestId: id });
+}
+
+async function publicDriverIdVerificationResponse(request: Request, id: string): Promise<Response> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+  }
+
+  const url = new URL(request.url);
+  const publicDriverId = url.searchParams.get("driverId")?.trim() ??
+    url.searchParams.get("code")?.trim() ??
+    "";
+
+  if (!/^SKD-[A-Z0-9]{8,20}$/i.test(publicDriverId)) {
+    return jsonResponse({ ok: false, error: "invalid_driver_id", requestId: id }, 400);
+  }
+
+  const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+  const driverResult = await serviceClient
+    .from("driver_profiles")
+    .select(
+      "id,user_id,operational_status,verification_status,identity_profile,service_profile,approved_at,driver_display_name,public_driver_id,profile_photo_asset_id,driver_card_issued_at,driver_card_status,metadata",
+    )
+    .eq("public_driver_id", publicDriverId.toUpperCase())
+    .maybeSingle();
+
+  if (driverResult.error) {
+    return databaseError(driverResult.error, id);
+  }
+
+  if (!driverResult.data) {
+    return jsonResponse({ ok: false, error: "driver_card_not_found", requestId: id }, 404);
+  }
+
+  const cardData = await buildDriverCardData(serviceClient, supabaseUrl, driverResult.data, id);
+  if ("response" in cardData) {
+    return cardData.response;
+  }
+
+  const data = cardData.data;
+  return jsonResponse({
+    ok: true,
+    data: {
+      cardStatus: data.cardStatus,
+      displayName: data.displayName,
+      driverProfileId: data.driverProfileId,
+      issuedAt: data.issuedAt,
+      photoUrl: data.photoUrl,
+      publicDriverId: data.publicDriverId,
+      status: data.status,
+      vehicleType: data.vehicleType,
+      verified: data.status === "active",
+    },
+    requestId: id,
+  });
+}
+
+async function buildDriverCardData(
+  client: SupabaseClient,
+  supabaseUrl: string,
+  driver: unknown,
+  id: string,
+): Promise<{ readonly data: Record<string, unknown> } | { readonly response: Response }> {
+  const driverProfileId = requireUuid(getRecordValue(driver, "id"), "driverProfileId");
+  let publicDriverId = stringOrNull(getRecordValue(driver, "public_driver_id"));
+
+  if (!publicDriverId) {
+    const cardResult = await client.rpc("ensure_driver_card_identity", {
+      target_application_id: null,
+      target_driver_profile_id: driverProfileId,
+    });
+
+    if (cardResult.error) {
+      return { response: databaseError(cardResult.error, id) };
+    }
+
+    publicDriverId = stringOrNull(cardResult.data);
+  }
+
+  const userId = stringOrNull(getRecordValue(driver, "user_id"));
+  const profileResult = userId
+    ? await client
+      .from("profiles")
+      .select("id,display_name")
+      .eq("id", userId)
+      .maybeSingle()
+    : { data: null, error: null };
+
+  if (profileResult.error) {
+    return { response: databaseError(profileResult.error, id) };
+  }
+
+  const activeVehicle = await readDriverCardVehicle(client, driverProfileId, id);
+  if ("response" in activeVehicle) {
+    return activeVehicle;
+  }
+
+  const verificationStatus = stringOrNull(getRecordValue(driver, "verification_status")) ?? "unverified";
+  const cardStatus = stringOrNull(getRecordValue(driver, "driver_card_status")) ??
+    (verificationStatus === "approved" ? "active" : "pending");
+  const status = verificationStatus === "approved" && cardStatus === "active"
+    ? "active"
+    : cardStatus === "suspended" || verificationStatus === "suspended"
+    ? "suspended"
+    : cardStatus === "revoked" || verificationStatus === "rejected"
+    ? "revoked"
+    : cardStatus;
+  const identityProfile = getRecordValue(driver, "identity_profile");
+  const serviceProfile = getRecordValue(driver, "service_profile");
+  const displayName = firstNonEmptyString([
+    stringOrNull(getRecordValue(driver, "driver_display_name")),
+    nestedString(identityProfile, ["driverDisplayName"]),
+    nestedString(identityProfile, ["driver_display_name"]),
+    nestedString(identityProfile, ["fullName"]),
+    nestedString(identityProfile, ["full_name"]),
+    stringOrNull(getRecordValue(profileResult.data, "display_name")),
+    "SKIMA Driver",
+  ]);
+  const photoAssetId = stringOrNull(getRecordValue(driver, "profile_photo_asset_id"));
+  const photoUrl = photoAssetId ? await signedMediaAssetUrl(client, photoAssetId) : null;
+
+  return {
+    data: {
+      approvedAt: stringOrNull(getRecordValue(driver, "approved_at")),
+      cardStatus,
+      displayName,
+      driverProfileId,
+      issuedAt: stringOrNull(getRecordValue(driver, "driver_card_issued_at")),
+      operationalStatus: stringOrNull(getRecordValue(driver, "operational_status")) ?? "offline",
+      photoUrl,
+      publicDriverId,
+      serviceZones: stringArrayFromUnknown(getRecordValue(serviceProfile, "zones")),
+      status,
+      vehicleStatus: activeVehicle.data.status,
+      vehicleType: activeVehicle.data.type,
+      verificationUrl: publicDriverId ? driverVerificationUrl(supabaseUrl, publicDriverId) : null,
+    },
+  };
+}
+
+async function readDriverCardVehicle(
+  client: SupabaseClient,
+  driverProfileId: string,
+  id: string,
+): Promise<{ readonly data: { readonly status: string | null; readonly type: string | null } } | { readonly response: Response }> {
+  const linkResult = await client
+    .from("driver_vehicle_links")
+    .select("vehicle_id,status")
+    .eq("driver_profile_id", driverProfileId)
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (linkResult.error) {
+    return { response: databaseError(linkResult.error, id) };
+  }
+
+  const vehicleId = stringOrNull(getRecordValue(linkResult.data?.[0], "vehicle_id"));
+  if (!vehicleId) {
+    return { data: { status: null, type: null } };
+  }
+
+  const vehicleResult = await client
+    .from("vehicles")
+    .select("id,status,vehicle_type_id")
+    .eq("id", vehicleId)
+    .maybeSingle();
+
+  if (vehicleResult.error) {
+    return { response: databaseError(vehicleResult.error, id) };
+  }
+
+  const vehicleTypeId = stringOrNull(getRecordValue(vehicleResult.data, "vehicle_type_id"));
+  const typeResult = vehicleTypeId
+    ? await client
+      .from("vehicle_types")
+      .select("display_name")
+      .eq("id", vehicleTypeId)
+      .maybeSingle()
+    : { data: null, error: null };
+
+  if (typeResult.error) {
+    return { response: databaseError(typeResult.error, id) };
+  }
+
+  return {
+    data: {
+      status: stringOrNull(getRecordValue(vehicleResult.data, "status")),
+      type: stringOrNull(getRecordValue(typeResult.data, "display_name")),
+    },
+  };
+}
+
+async function signedMediaAssetUrl(client: SupabaseClient, assetId: string): Promise<string | null> {
+  const assetResult = await client
+    .from("media_assets")
+    .select("storage_bucket,storage_path,status")
+    .eq("id", assetId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (assetResult.error || !assetResult.data) {
+    return null;
+  }
+
+  const bucket = stringOrNull(getRecordValue(assetResult.data, "storage_bucket"));
+  const path = stringOrNull(getRecordValue(assetResult.data, "storage_path"));
+  if (!bucket || !path) {
+    return null;
+  }
+
+  const signedResult = await client.storage.from(bucket).createSignedUrl(path, 900);
+  return signedResult.error ? null : signedResult.data.signedUrl;
+}
+
+function driverVerificationUrl(supabaseUrl: string, publicDriverId: string): string {
+  const base = Deno.env.get("SKIMA_DRIVER_VERIFY_BASE_URL") ??
+    `${supabaseUrl.replace(/\/$/, "")}/functions/v1/api-gateway/runtime/driver-id-cards/verify`;
+  const url = new URL(base);
+  url.searchParams.set("driverId", publicDriverId);
+  return url.toString();
 }
 
 async function applicationsResponse(
@@ -6957,6 +7539,20 @@ function uniqueStrings(values: readonly (string | null)[]): string[] {
 
 function firstNonEmptyString(values: readonly (string | null)[]): string | null {
   return values.find((value): value is string => Boolean(value?.trim())) ?? null;
+}
+
+function stringArrayFromUnknown(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+}
+
+function normalizePlainStatus(value: string): string {
+  return value
+    .split(/[_:.-]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
 }
 
 function isUuidString(value: string): boolean {

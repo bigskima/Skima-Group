@@ -1,6 +1,8 @@
 import { router } from "expo-router";
 import { Building2, Truck, UserRound } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { domainQueries } from "../api/domains";
+import { firstString, nestedRecords } from "../api/records";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii } from "../theme/tokens";
@@ -10,11 +12,14 @@ type Workspace = "customer" | "driver" | "station";
 export function WorkspaceSwitcher({ current }: { current: Workspace }) {
   const session = useSession();
   const { palette } = useAppTheme();
-  const keys = session.context?.roles.map((role) => role.key?.toLowerCase() ?? "") ?? [];
+  const access = domainQueries.workspaceAccess(session.status === "authenticated");
+  const workspaces = nestedRecords(access.data, "workspaces")
+    .filter((item) => firstString(item, ["status"]) === "active")
+    .map((item) => firstString(item, ["key"]));
   const options = [
     { key: "customer" as const, label: "Customer", icon: UserRound },
-    ...(keys.some((key) => key.includes("driver")) ? [{ key: "driver" as const, label: "Driver", icon: Truck }] : []),
-    ...(keys.some((key) => key.includes("station") || key.includes("partner")) ? [{ key: "station" as const, label: "Station", icon: Building2 }] : []),
+    ...(workspaces.includes("driver") ? [{ key: "driver" as const, label: "Driver", icon: Truck }] : []),
+    ...(workspaces.includes("station") ? [{ key: "station" as const, label: "Station", icon: Building2 }] : []),
   ];
   if (options.length < 2) return null;
   return (

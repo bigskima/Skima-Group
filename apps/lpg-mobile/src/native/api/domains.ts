@@ -45,6 +45,20 @@ export const domainQueries = {
       path: "/lpg/locations",
       schema: RecordArraySchema,
     }),
+  workspaceAccess: (enabled = true) =>
+    useGatewayQuery({
+      key: ["workspace-access"],
+      path: "/lpg/workspace-access",
+      schema: RecordObjectSchema,
+      enabled,
+    }),
+  driverIdCard: (enabled = true) =>
+    useGatewayQuery({
+      key: ["driver-id-card"],
+      path: "/runtime/driver-id-cards",
+      schema: RecordObjectSchema,
+      enabled,
+    }),
   wallets: () =>
     useGatewayQuery({
       key: ["wallets"],

@@ -110,6 +110,55 @@
   overflow-wrap: anywhere;
 }
 
+.skima-application-type-tag {
+  background: #101d21;
+  border-radius: 999px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin: 0 0 6px;
+  padding: 5px 9px;
+  text-transform: uppercase;
+}
+
+.skima-review-status-split {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 12px 0;
+}
+
+.skima-review-status-split > div {
+  background: #f8fbfa;
+  border: 1px solid #dce8e4;
+  border-radius: 14px;
+  padding: 13px;
+}
+
+.skima-review-status-split span {
+  color: #0d8f79;
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.skima-review-status-split strong {
+  color: #101d21;
+  display: block;
+  font-size: 1.05rem;
+  margin-bottom: 3px;
+}
+
+.skima-review-status-split small {
+  color: #66767d;
+  line-height: 1.4;
+}
+
 .skima-review-item__person,
 .skima-applicant-card {
   align-items: center;

@@ -204,7 +204,15 @@ export function DocumentWorkflowScreen({
                         ? "Required"
                         : "Optional"}{" "}
                       · {existing.length} submitted
+                      {firstNumber(requirement, ["max_count", "maxCount"])
+                        ? ` · up to ${firstNumber(requirement, ["max_count", "maxCount"])} files`
+                        : ""}
                     </Text>
+                    {firstString(requirement, ["description"]) ? (
+                      <Text style={styles.body}>
+                        {firstString(requirement, ["description"])}
+                      </Text>
+                    ) : null}
                     <Text style={styles.status}>
                       {existing.length
                         ? (displayStatus(existing[0]) ?? "submitted").replace(

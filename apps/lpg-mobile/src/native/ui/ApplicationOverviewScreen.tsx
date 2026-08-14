@@ -26,7 +26,10 @@ import {
   recordId,
   type PlatformRecord,
 } from "../api/records";
-import { readOperationalLocation } from "../device/location";
+import {
+  readOperationalLocation,
+  type OperationalLocation,
+} from "../device/location";
 import { useSession } from "../session/SessionProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
@@ -50,9 +53,12 @@ export function ApplicationOverviewScreen({
   const [name, setName] = useState(
     session.context?.profile?.display_name ?? "",
   );
+  const [driverDisplayName, setDriverDisplayName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [legalOrLicence, setLegalOrLicence] = useState("");
+  const [stationRole, setStationRole] = useState("");
+  const [authoritySummary, setAuthoritySummary] = useState("");
   const [serviceZone, setServiceZone] = useState("");
   const [slug, setSlug] = useState("");
   const [capacity, setCapacity] = useState("");
@@ -60,6 +66,7 @@ export function ApplicationOverviewScreen({
   const [closes, setCloses] = useState("");
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
+  const [lastLocation, setLastLocation] = useState<OperationalLocation | null>(null);
   const [sizes, setSizes] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [detectingLocation, setDetectingLocation] = useState(false);
@@ -132,7 +139,10 @@ export function ApplicationOverviewScreen({
     const licence = nestedRecord(payload, "licence");
     const service = nestedRecord(payload, "service");
     const organization = nestedRecord(payload, "organization");
+    const authority = nestedRecord(payload, "authority");
     const station = nestedRecord(payload, "station");
+    const storedLocation = nestedRecord(payload, "location") ??
+      nestedRecord(station, "location");
     const hours =
       nestedRecord(station, "operatingHours") ??
       nestedRecord(station, "operating_hours");
@@ -142,9 +152,14 @@ export function ApplicationOverviewScreen({
         name,
     );
     setPhone(firstString(contact, ["phone"]) ?? phone);
+    setDriverDisplayName(
+      firstString(identity, ["driverDisplayName", "driver_display_name"]) ??
+        driverDisplayName,
+    );
     setAddress(
       firstString(identity, ["address"]) ??
         firstString(station, ["formattedAddress", "formatted_address"]) ??
+        firstString(storedLocation, ["formattedAddress", "formatted_address"]) ??
         address,
     );
     setLegalOrLicence(
@@ -153,6 +168,11 @@ export function ApplicationOverviewScreen({
         legalOrLicence,
     );
     setServiceZone(firstString(service, ["zone"]) ?? serviceZone);
+    setStationRole(firstString(authority, ["role", "relationship"]) ?? stationRole);
+    setAuthoritySummary(
+      firstString(authority, ["summary", "evidenceSummary", "evidence_summary"]) ??
+        authoritySummary,
+    );
     setSlug(firstString(organization, ["slug"]) ?? slug);
     const storedCapacity = firstNumber(station, [
       "refillCapacityKg",
@@ -161,8 +181,14 @@ export function ApplicationOverviewScreen({
     if (storedCapacity !== null) setCapacity(String(storedCapacity));
     setOpens(firstString(hours, ["opensAt", "opens_at"]) ?? opens);
     setCloses(firstString(hours, ["closesAt", "closes_at"]) ?? closes);
-    setLatitude(firstNumber(station, ["latitude", "lat"]));
-    setLongitude(firstNumber(station, ["longitude", "lng", "lon"]));
+    setLatitude(
+      firstNumber(station, ["latitude", "lat"]) ??
+        firstNumber(storedLocation, ["latitude", "lat"]),
+    );
+    setLongitude(
+      firstNumber(station, ["longitude", "lng", "lon"]) ??
+        firstNumber(storedLocation, ["longitude", "lng", "lon"]),
+    );
     const storedSizes =
       station?.supportedCylinderSizesKg ?? station?.supported_cylinder_sizes_kg;
     if (Array.isArray(storedSizes))
@@ -195,6 +221,7 @@ export function ApplicationOverviewScreen({
     setDetectingLocation(true);
     try {
       const point = await readOperationalLocation();
+      setLastLocation(point);
       setLatitude(point.latitude);
       setLongitude(point.longitude);
       if (!address.trim() && point.formattedAddress) {
@@ -217,7 +244,8 @@ export function ApplicationOverviewScreen({
       !phone.trim() ||
       !address.trim() ||
       !legalOrLicence.trim() ||
-      (workspace === "driver" && !serviceZone.trim())
+      (workspace === "driver" && !serviceZone.trim()) ||
+      (workspace === "station" && (!stationRole.trim() || !authoritySummary.trim()))
     ) {
       setError("Please complete all the required details.");
       return;
@@ -243,6 +271,19 @@ export function ApplicationOverviewScreen({
       );
       return;
     }
+    const structuredLocation =
+      latitude !== null && longitude !== null
+        ? {
+            accuracyMeters: lastLocation?.accuracyMeters ?? null,
+            address: lastLocation?.address ?? {},
+            formattedAddress: lastLocation?.formattedAddress ?? address.trim(),
+            latitude,
+            longitude,
+            providerPlaceId: lastLocation?.providerPlaceId ?? null,
+            providerSource: lastLocation?.providerSource ?? "manual_pin",
+            recordedAt: lastLocation?.recordedAt ?? new Date().toISOString(),
+          }
+        : null;
     const payload =
       workspace === "driver"
         ? {
@@ -250,11 +291,16 @@ export function ApplicationOverviewScreen({
               email: session.context?.user.email,
               phone: phone.trim(),
             },
-            identity: { address: address.trim(), fullName: name.trim() },
+            driver: {
+              displayName: driverDisplayName.trim() || name.trim(),
+            },
+            identity: {
+              address: address.trim(),
+              driverDisplayName: driverDisplayName.trim() || null,
+              fullName: name.trim(),
+            },
             licence: { number: legalOrLicence.trim() },
-            location: latitude !== null && longitude !== null
-              ? { formattedAddress: address.trim(), latitude, longitude }
-              : null,
+            location: structuredLocation,
             service: { zone: serviceZone.trim() },
             workingHours: {},
             zones: [serviceZone.trim()],
@@ -263,6 +309,10 @@ export function ApplicationOverviewScreen({
             contact: {
               email: session.context?.user.email,
               phone: phone.trim(),
+            },
+            authority: {
+              evidenceSummary: authoritySummary.trim(),
+              role: stationRole.trim(),
             },
             organization: {
               displayName: name.trim(),
@@ -273,6 +323,7 @@ export function ApplicationOverviewScreen({
             station: {
               formattedAddress: address.trim(),
               latitude,
+              location: structuredLocation,
               longitude,
               operatingHours: { opensAt: opens, closesAt: closes },
               refillCapacityKg: stationCapacity,
@@ -358,6 +409,13 @@ export function ApplicationOverviewScreen({
         refillCapacityKg: Number(capacity),
         currentAvailableKg: Number(capacity),
         supportedCylinderSizesKg: sizes,
+        metadata: {
+          authority: {
+            evidenceSummary: authoritySummary.trim(),
+            role: stationRole.trim(),
+          },
+          location: lastLocation,
+        },
         idempotencyKey: idempotencyKey("station-activation", applicationId),
       });
       await session.refresh();
@@ -431,6 +489,10 @@ export function ApplicationOverviewScreen({
             <StationFields
               name={name}
               setName={setName}
+              stationRole={stationRole}
+              setStationRole={setStationRole}
+              authoritySummary={authoritySummary}
+              setAuthoritySummary={setAuthoritySummary}
               phone={phone}
               setPhone={setPhone}
               address={address}
@@ -500,6 +562,8 @@ export function ApplicationOverviewScreen({
         <DriverFields
           name={name}
           setName={setName}
+          driverDisplayName={driverDisplayName}
+          setDriverDisplayName={setDriverDisplayName}
           phone={phone}
           setPhone={setPhone}
           address={address}
@@ -517,6 +581,10 @@ export function ApplicationOverviewScreen({
         <StationFields
           name={name}
           setName={setName}
+          stationRole={stationRole}
+          setStationRole={setStationRole}
+          authoritySummary={authoritySummary}
+          setAuthoritySummary={setAuthoritySummary}
           phone={phone}
           setPhone={setPhone}
           address={address}
@@ -579,6 +647,8 @@ export function ApplicationOverviewScreen({
 function DriverFields(p: {
   name: string;
   setName(v: string): void;
+  driverDisplayName: string;
+  setDriverDisplayName(v: string): void;
   phone: string;
   setPhone(v: string): void;
   address: string;
@@ -598,6 +668,11 @@ function DriverFields(p: {
         placeholder="Full legal name"
         value={p.name}
         onChange={p.setName}
+      />
+      <Input
+        placeholder="Driver operational name (optional)"
+        value={p.driverDisplayName}
+        onChange={p.setDriverDisplayName}
       />
       <Input
         placeholder="Phone number"
@@ -643,6 +718,10 @@ function DriverFields(p: {
 function StationFields(p: {
   name: string;
   setName(v: string): void;
+  stationRole: string;
+  setStationRole(v: string): void;
+  authoritySummary: string;
+  setAuthoritySummary(v: string): void;
   phone: string;
   setPhone(v: string): void;
   address: string;
@@ -676,6 +755,17 @@ function StationFields(p: {
         placeholder="Registered legal name"
         value={p.legal}
         onChange={p.setLegal}
+      />
+      <Input
+        placeholder="Your role at this station (Owner, Director, Manager...)"
+        value={p.stationRole}
+        onChange={p.setStationRole}
+      />
+      <Input
+        placeholder="Authority summary (why you can represent this station)"
+        value={p.authoritySummary}
+        onChange={p.setAuthoritySummary}
+        multiline
       />
       <Input
         placeholder="Station short name (for example, skima-awka)"

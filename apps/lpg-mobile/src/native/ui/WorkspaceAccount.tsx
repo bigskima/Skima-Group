@@ -18,6 +18,7 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 const menus = {
   driver: [
+    { label: "View SKIMA Driver ID", href: "/(driver)/id-card" },
     { label: "Driver profile", href: "/(driver)/profile" },
     { label: "Service zones", href: "/(driver)/service-zone" },
     { label: "Application and approval", href: "/(driver)/application" },
