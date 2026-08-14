@@ -1439,7 +1439,7 @@ function FinanceWorkspace() {
           "balance",
         ]}
         valueRenderer={(key, value, record) => {
-          if (key.endsWith("_balance_minor") && typeof value === "number") {
+          if (key === "balance" && typeof value === "number") {
             return (
               <MoneyDisplay value={formatMoney(value, String(record.currency_code ?? "NGN"))} />
             );

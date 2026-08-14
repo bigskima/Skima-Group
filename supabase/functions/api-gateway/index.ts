@@ -113,6 +113,7 @@ const ROUTES = new Set([
   "/runtime/applications/decisions",
   "/runtime/applications/withdraw",
   "/runtime/driver-id-cards",
+  "/runtime/driver-id-cards/photo",
   "/runtime/driver-id-cards/verify",
   "/runtime/documents/requirements",
   "/runtime/documents",
@@ -2362,8 +2363,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const payload = body.value;
-    return rpcResponse(
-      supabase.rpc("review_document_submission", {
+    const reviewResult = await supabase.rpc("review_document_submission", {
         target_applicant_message: optionalString(payload.applicantMessage),
         target_decision: requireString(payload.decision, "decision"),
         target_document_submission_id: requireUuid(
@@ -2373,9 +2373,22 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_internal_notes: optionalString(payload.internalNotes),
         target_metadata: optionalRecord(payload.metadata) ?? {},
-      }),
+      });
+
+    if (reviewResult.error) return databaseError(reviewResult.error, id);
+
+    const noticeResult = await queueDocumentReviewNotice({
+      applicantMessage: optionalString(payload.applicantMessage),
+      decision: requireString(payload.decision, "decision"),
+      documentSubmissionId: requireUuid(payload.documentSubmissionId, "documentSubmissionId"),
       id,
-    );
+      idempotencyKey: requireString(payload.idempotencyKey, "idempotencyKey"),
+      requestClient: supabase,
+      supabaseUrl,
+    });
+    if ("response" in noticeResult) return noticeResult.response;
+
+    return jsonResponse({ ok: true, data: reviewResult.data, id: reviewResult.data, requestId: id });
   }
 
   if (routePath === "/runtime/applications") {
@@ -2487,16 +2500,27 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const payload = body.value;
-    return rpcResponse(
-      supabase.rpc("request_application_correction", {
+    const correctionResult = await supabase.rpc("request_application_correction", {
         target_applicant_message: requireString(payload.applicantMessage, "applicantMessage"),
         target_application_id: requireUuid(payload.applicationId, "applicationId"),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_internal_notes: optionalString(payload.internalNotes),
         target_metadata: optionalRecord(payload.metadata) ?? {},
-      }),
+      });
+
+    if (correctionResult.error) return databaseError(correctionResult.error, id);
+
+    const noticeResult = await queueApplicationCorrectionNotice({
+      applicantMessage: requireString(payload.applicantMessage, "applicantMessage"),
+      applicationId: requireUuid(payload.applicationId, "applicationId"),
       id,
-    );
+      idempotencyKey: requireString(payload.idempotencyKey, "idempotencyKey"),
+      requestClient: supabase,
+      supabaseUrl,
+    });
+    if ("response" in noticeResult) return noticeResult.response;
+
+    return jsonResponse({ ok: true, data: correctionResult.data, id: correctionResult.data, requestId: id });
   }
 
   if (routePath === "/runtime/applications/decisions" && request.method === "POST") {
@@ -2536,6 +2560,16 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
   if (routePath === "/runtime/driver-id-cards" && request.method === "GET") {
     return driverIdCardResponse(supabase, supabaseUrl, authResult.user, request, id);
+  }
+
+  if (routePath === "/runtime/driver-id-cards/photo" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    return updateDriverCardPhotoResponse(supabase, supabaseUrl, authResult.user, body.value, id);
   }
 
   if (routePath === "/runtime/drivers" && request.method === "GET") {
@@ -3687,8 +3721,16 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const input = optionalRecord(payload.input) ?? {};
     const idempotencyKey = requireString(payload.idempotencyKey, "idempotencyKey");
     const ownedPresentation = taskKey === "ai.lpg.cylinder.presentation";
+    const ownedDriverCardPhoto = taskKey === "ai.driver.card_photo.enhance";
     return rpcResponse(
       ownedPresentation ? supabase.rpc("queue_owned_presentation_ai_task", {
+        target_idempotency_key: idempotencyKey,
+        target_input: input,
+        target_source: source,
+        target_subject_id: requireUuid(subjectId, "subjectId"),
+        target_subject_type: subjectType,
+        target_task_key: taskKey,
+      }) : ownedDriverCardPhoto ? supabase.rpc("queue_owned_driver_card_photo_ai_task", {
         target_idempotency_key: idempotencyKey,
         target_input: input,
         target_source: source,
@@ -5468,7 +5510,9 @@ async function queueApplicationDecisionNotice(input: {
       },
       payload: {
         body,
+        deepLink: path,
         path,
+        route: path,
         title,
       },
       purpose: `application.${input.workspace ?? "generic"}.${approved ? "approved" : "rejected"}`,
@@ -5485,6 +5529,246 @@ async function queueApplicationDecisionNotice(input: {
   }
 
   return { messageId: stringOrNull(getRecordValue(messageResult.data, "id")) };
+}
+
+async function queueApplicationCorrectionNotice(input: {
+  readonly applicantMessage: string;
+  readonly applicationId: string;
+  readonly id: string;
+  readonly idempotencyKey: string;
+  readonly requestClient: SupabaseClient;
+  readonly supabaseUrl: string;
+}): Promise<{ readonly messageId: string | null } | { readonly response: Response }> {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const client = serviceRoleKey ? createServiceClient(input.supabaseUrl, serviceRoleKey) : input.requestClient;
+  const applicationResult = await client
+    .from("application_records")
+    .select("id,applicant_user_id,application_type_id")
+    .eq("id", input.applicationId)
+    .maybeSingle();
+
+  if (applicationResult.error) return { response: databaseError(applicationResult.error, input.id) };
+
+  const applicantUserId = stringOrNull(getRecordValue(applicationResult.data, "applicant_user_id"));
+  const applicationTypeId = stringOrNull(getRecordValue(applicationResult.data, "application_type_id"));
+  if (!applicantUserId) return { messageId: null };
+
+  const typeResult = applicationTypeId
+    ? await client
+      .from("application_type_definitions")
+      .select("key,display_name,application_category,metadata")
+      .eq("id", applicationTypeId)
+      .maybeSingle()
+    : { data: null, error: null };
+  if (typeResult.error) return { response: databaseError(typeResult.error, input.id) };
+
+  const workspace = workspaceFromApplicationType(typeResult.data);
+  const route = applicationRouteForWorkspace(workspace);
+  const typeName = stringOrNull(getRecordValue(typeResult.data, "display_name")) ??
+    normalizePlainStatus(stringOrNull(getRecordValue(typeResult.data, "key")) ?? "application");
+  const messageResult = await client
+    .from("communication_messages")
+    .upsert({
+      channel: "in_app",
+      created_by: applicantUserId,
+      idempotency_key: `${input.idempotencyKey}:applicant-correction-notice`,
+      metadata: {
+        applicationId: input.applicationId,
+        applicationTypeKey: stringOrNull(getRecordValue(typeResult.data, "key")),
+        reviewAction: "correction_required",
+      },
+      payload: {
+        body: input.applicantMessage,
+        deepLink: route,
+        path: route,
+        route,
+        title: `${typeName} needs an update`,
+      },
+      purpose: `application.${workspace ?? "generic"}.correction_required`,
+      recipient_entity_id: applicantUserId,
+      recipient_entity_type: "profile",
+      source: "skima.application.review",
+      status: "queued",
+    }, { onConflict: "source,idempotency_key" })
+    .select("id")
+    .maybeSingle();
+
+  if (messageResult.error) return { response: databaseError(messageResult.error, input.id) };
+  return { messageId: stringOrNull(getRecordValue(messageResult.data, "id")) };
+}
+
+async function queueDocumentReviewNotice(input: {
+  readonly applicantMessage: string | null;
+  readonly decision: string;
+  readonly documentSubmissionId: string;
+  readonly id: string;
+  readonly idempotencyKey: string;
+  readonly requestClient: SupabaseClient;
+  readonly supabaseUrl: string;
+}): Promise<{ readonly messageId: string | null } | { readonly response: Response }> {
+  if (input.decision !== "correction_required" || !input.applicantMessage) {
+    return { messageId: null };
+  }
+
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const client = serviceRoleKey ? createServiceClient(input.supabaseUrl, serviceRoleKey) : input.requestClient;
+  const documentResult = await client
+    .from("document_submissions")
+    .select("id,application_id,requirement_id,owner_user_id,document_requirements(display_name,key)")
+    .eq("id", input.documentSubmissionId)
+    .maybeSingle();
+
+  if (documentResult.error) return { response: databaseError(documentResult.error, input.id) };
+  if (!documentResult.data) return { messageId: null };
+
+  const applicationId = stringOrNull(getRecordValue(documentResult.data, "application_id"));
+  const applicationResult = applicationId
+    ? await client
+      .from("application_records")
+      .select("id,applicant_user_id,application_type_id")
+      .eq("id", applicationId)
+      .maybeSingle()
+    : { data: null, error: null };
+  if (applicationResult.error) return { response: databaseError(applicationResult.error, input.id) };
+
+  const applicationTypeId = stringOrNull(getRecordValue(applicationResult.data, "application_type_id"));
+  const typeResult = applicationTypeId
+    ? await client
+      .from("application_type_definitions")
+      .select("key,display_name,application_category,metadata")
+      .eq("id", applicationTypeId)
+      .maybeSingle()
+    : { data: null, error: null };
+  if (typeResult.error) return { response: databaseError(typeResult.error, input.id) };
+
+  const applicantUserId = stringOrNull(getRecordValue(applicationResult.data, "applicant_user_id")) ??
+    stringOrNull(getRecordValue(documentResult.data, "owner_user_id"));
+  if (!applicantUserId) return { messageId: null };
+
+  const requirement = getRecordValue(documentResult.data, "document_requirements");
+  const requirementName = stringOrNull(getRecordValue(requirement, "display_name")) ??
+    normalizePlainStatus(stringOrNull(getRecordValue(requirement, "key")) ?? "Document");
+  const workspace = workspaceFromApplicationType(typeResult.data);
+  const route = workspace ? `/(customer)/${workspace}-documents` : "/(customer)";
+  const messageResult = await client
+    .from("communication_messages")
+    .upsert({
+      channel: "in_app",
+      created_by: applicantUserId,
+      idempotency_key: `${input.idempotencyKey}:document-correction-notice`,
+      metadata: {
+        applicationId,
+        documentSubmissionId: input.documentSubmissionId,
+        reviewAction: "document_correction_required",
+      },
+      payload: {
+        body: input.applicantMessage,
+        deepLink: route,
+        path: route,
+        route,
+        title: `${requirementName} needs an update`,
+      },
+      purpose: `application.${workspace ?? "generic"}.document_correction_required`,
+      recipient_entity_id: applicantUserId,
+      recipient_entity_type: "profile",
+      source: "skima.application.review",
+      status: "queued",
+    }, { onConflict: "source,idempotency_key" })
+    .select("id")
+    .maybeSingle();
+
+  if (messageResult.error) return { response: databaseError(messageResult.error, input.id) };
+  return { messageId: stringOrNull(getRecordValue(messageResult.data, "id")) };
+}
+
+async function updateDriverCardPhotoResponse(
+  supabase: SupabaseClient,
+  supabaseUrl: string,
+  user: User,
+  payload: Readonly<Record<string, unknown>>,
+  id: string,
+): Promise<Response> {
+  const mediaAssetId = requireUuid(payload.mediaAssetId, "mediaAssetId");
+  const requestedDriverProfileId = optionalUuid(payload.driverProfileId, "driverProfileId");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!serviceRoleKey) {
+    return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+  }
+
+  const assetResult = await supabase
+    .from("media_assets")
+    .select("id,owner_user_id,content_type,status")
+    .eq("id", mediaAssetId)
+    .maybeSingle();
+
+  if (assetResult.error) return databaseError(assetResult.error, id);
+
+  const assetOwnerId = stringOrNull(getRecordValue(assetResult.data, "owner_user_id"));
+  const contentType = stringOrNull(getRecordValue(assetResult.data, "content_type")) ?? "";
+  if (!assetResult.data || assetOwnerId !== user.id || !contentType.startsWith("image/")) {
+    return jsonResponse({ ok: false, error: "driver_card_photo_asset_forbidden", requestId: id }, 403);
+  }
+
+  const driverResult = await supabase
+    .from("driver_profiles")
+    .select("id,user_id,metadata")
+    .eq(requestedDriverProfileId ? "id" : "user_id", requestedDriverProfileId ?? user.id)
+    .maybeSingle();
+
+  if (driverResult.error) return databaseError(driverResult.error, id);
+  if (!driverResult.data || stringOrNull(getRecordValue(driverResult.data, "user_id")) !== user.id) {
+    return jsonResponse({ ok: false, error: "driver_profile_not_found", requestId: id }, 404);
+  }
+
+  const driverProfileId = requireUuid(getRecordValue(driverResult.data, "id"), "driverProfileId");
+  const existingMetadata = optionalRecord(getRecordValue(driverResult.data, "metadata")) ?? {};
+  const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+  const updateResult = await serviceClient
+    .from("driver_profiles")
+    .update({
+      metadata: {
+        ...existingMetadata,
+        driver_card_photo: {
+          mediaAssetId,
+          source: optionalString(payload.source) ?? "skima.lpg.mobile",
+          updatedAt: new Date().toISOString(),
+        },
+      },
+      profile_photo_asset_id: mediaAssetId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", driverProfileId)
+    .select("id")
+    .maybeSingle();
+
+  if (updateResult.error) return databaseError(updateResult.error, id);
+
+  return jsonResponse({
+    ok: true,
+    data: {
+      driverProfileId,
+      mediaAssetId,
+    },
+    id: driverProfileId,
+    requestId: id,
+  });
+}
+
+function workspaceFromApplicationType(applicationType: unknown): string | null {
+  const category = stringOrNull(getRecordValue(applicationType, "application_category"));
+  const key = stringOrNull(getRecordValue(applicationType, "key")) ?? "";
+  const workspace = nestedString(getRecordValue(applicationType, "metadata"), ["workspace"]);
+
+  if (category === "driver" || workspace === "driver" || key.includes(".driver.")) return "driver";
+  if (workspace === "station" || key.includes(".station.")) return "station";
+  return null;
+}
+
+function applicationRouteForWorkspace(workspace: string | null): string {
+  if (workspace === "driver") return "/(customer)/driver-application";
+  if (workspace === "station") return "/(customer)/station-application";
+  return "/(customer)";
 }
 
 async function driverIdCardResponse(
@@ -5672,6 +5956,7 @@ async function buildDriverCardData(
       driverProfileId,
       issuedAt: stringOrNull(getRecordValue(driver, "driver_card_issued_at")),
       operationalStatus: stringOrNull(getRecordValue(driver, "operational_status")) ?? "offline",
+      photoAssetId,
       photoUrl,
       publicDriverId,
       serviceZones: stringArrayFromUnknown(getRecordValue(serviceProfile, "zones")),

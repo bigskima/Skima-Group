@@ -1,0 +1,1374 @@
+I want you to **fully migrate SKIMA’s mapping/location implementation to MapLibre now**. Do not treat this as merely changing one map component. Build the mapping foundation properly so SKIMA can support a premium Uber/Bolt/Glovo-style location and live-tracking experience without being dependent on Google Maps.
+
+The immediate objective is:
+
+**MapLibre becomes SKIMA’s map renderer, while routing, geocoding, tiles, GPS/location, live tracking and dispatch remain independent services behind our own Maps/Location domain.**
+
+Do not create another temporary shell. Implement the real reusable mapping foundation and wire at least one real LPG journey end-to-end.
+
+## 1. Audit the current mapping implementation first
+
+Inspect everything currently related to:
+
+* Google Maps
+* `react-native-maps`
+* Google Maps API keys
+* Google Places
+* geocoding
+* reverse geocoding
+* routing
+* distance calculations
+* ETA
+* customer location
+* saved addresses
+* station coordinates
+* driver coordinates
+* live driver tracking
+* service areas
+* dispatch location logic
+* Expo Location
+* Android/iOS location permissions
+* map-related environment variables
+* map-related backend functions
+* any hardcoded provider URLs
+* any Google-specific coordinate/address models
+
+Identify what is reusable and what is Google/provider-specific.
+
+Do **not** delete valid SKIMA location/business data. Migrate the renderer/provider layer without damaging existing location, dispatch or order architecture.
+
+---
+
+# 2. Install and configure MapLibre correctly
+
+Use the current official MapLibre React Native package:
+
+`@maplibre/maplibre-react-native`
+
+Install it using Expo-compatible installation.
+
+Add the MapLibre Expo config plugin to our existing `app.config.ts`.
+
+Our project already uses React Native New Architecture, so preserve that.
+
+Important:
+
+**Do not expect this to work inside Expo Go.**
+
+MapLibre contains native code, therefore create/use the proper Expo development build and ensure Android/iOS native builds work.
+
+Do not downgrade the architecture just to make mapping easier.
+
+Use the current MapLibre v11 API rather than copying obsolete MapLibre/Mapbox examples.
+
+In particular, be careful because newer MapLibre APIs use components/interfaces such as:
+
+* `Map`
+* `Camera`
+* `UserLocation`
+* `NativeUserLocation`
+* `ViewAnnotation`
+* `GeoJSONSource`
+* `VectorSource`
+* `Layer`
+* `Images`
+* `OfflineManager`
+
+Do not blindly use old tutorials built around legacy `MapView` APIs.
+
+---
+
+# 3. Create a proper SKIMA Maps bounded/shared domain
+
+I do not want random map calls scattered across screens.
+
+Create a proper shared mapping/location architecture such as:
+
+`domains/maps/`
+or the equivalent structure that fits the existing project architecture.
+
+It should expose SKIMA-owned interfaces such as:
+
+`MapProvider`
+
+`TileProvider`
+
+`RoutingProvider`
+
+`GeocodingProvider`
+
+`ReverseGeocodingProvider`
+
+`LocationProvider`
+
+`DistanceMatrixProvider`
+
+`TrackingProvider`
+
+`MapMatchingProvider`
+
+Where appropriate.
+
+The rest of SKIMA should ask our own domain for things like:
+
+`getCurrentLocation()`
+
+`searchPlaces()`
+
+`reverseGeocode()`
+
+`calculateRoute()`
+
+`calculateDistance()`
+
+`calculateETA()`
+
+`calculateDistanceMatrix()`
+
+`subscribeToDriverLocation()`
+
+`updateDriverLocation()`
+
+`fitRouteOnMap()`
+
+etc.
+
+A screen should **not** know whether the underlying service is Google, MapLibre, OSRM, Valhalla, Nominatim, MapTiler, Mapbox or anything else.
+
+That provider decision belongs behind the domain/adapters.
+
+---
+
+# 4. Understand the separation clearly
+
+MapLibre should handle the **visual map rendering**.
+
+Do not incorrectly treat MapLibre as providing every mapping service.
+
+Architecture should look approximately like:
+
+**SKIMA UI**
+↓
+**SKIMA Maps/Location Domain**
+↓
+different adapters
+
+### Rendering
+
+MapLibre React Native
+
+### GPS/device location
+
+Expo Location / approved native location implementation
+
+### Base-map tiles/style
+
+Configurable tile/style provider
+
+### Address/place search
+
+Configurable geocoding provider
+
+### Reverse geocoding
+
+Configurable reverse-geocoding provider
+
+### Routing
+
+Configurable routing provider
+
+### Distance/ETA
+
+Routing/distance-matrix provider
+
+### Driver live tracking
+
+SKIMA backend/realtime infrastructure
+
+### Dispatch
+
+SKIMA backend Decision/Dispatch Engine
+
+MapLibre must **not** become the source of truth for dispatch or operational coordinates.
+
+---
+
+# 5. Keep SKIMA provider-independent
+
+Create provider adapters.
+
+For example:
+
+`MapLibreRendererAdapter`
+
+`OsmTileAdapter`
+
+`NominatimGeocoderAdapter`
+
+`OsrmRoutingAdapter`
+
+`ValhallaRoutingAdapter`
+
+and later we should be able to add:
+
+`GoogleMapsAdapter`
+
+`GoogleRoutesAdapter`
+
+`MapboxAdapter`
+
+`MapTilerAdapter`
+
+etc.
+
+without redesigning the customer order system.
+
+Provider choice should come from configuration where practical.
+
+Example configuration concept:
+
+`maps.renderer_provider = maplibre`
+
+`maps.tile_provider = ...`
+
+`maps.routing_provider = osrm`
+
+`maps.geocoding_provider = ...`
+
+`maps.distance_matrix_provider = ...`
+
+The exact schema should follow our existing configuration/rules architecture rather than blindly copying these names.
+
+---
+
+# 6. Do not build production SKIMA directly on public OSM servers
+
+OpenStreetMap data is open, but the public OSM tile infrastructure is not an unlimited commercial map backend.
+
+Therefore:
+
+Use appropriate free/demo infrastructure for development if necessary, but isolate it behind provider configuration.
+
+Do not hardcode:
+
+`tile.openstreetmap.org`
+
+or public Nominatim endpoints everywhere in the app.
+
+The official OpenStreetMap Foundation specifically states that its public tile servers have limited donated capacity, and its public Nominatim instance has its own usage policy. We must therefore retain the ability to switch or self-host later.
+
+Our goal now is **₦0 development**, not to create a future scaling problem.
+
+---
+
+# 7. Routing architecture
+
+For the open-source routing path, evaluate **OSRM and/or Valhalla** behind our routing interface.
+
+OSRM is an open-source routing engine using OpenStreetMap road data.
+
+Valhalla is also open source and provides routing plus capabilities such as:
+
+* route calculation
+* distance/time matrices
+* map matching
+* turn-by-turn routing
+* multiple travel modes
+
+Do not let the mobile frontend call a routing engine directly everywhere.
+
+Prefer:
+
+Mobile
+→ SKIMA backend mapping/routing endpoint
+→ configured routing provider
+
+where security, caching, provider switching, quotas and observability justify backend mediation.
+
+The backend response should use a SKIMA-defined normalized route structure.
+
+For example conceptually:
+
+* route ID
+* origin
+* destination
+* waypoints
+* encoded/GeoJSON route geometry
+* distance meters
+* duration seconds
+* ETA
+* provider
+* calculated timestamp
+* traffic availability if applicable
+* confidence/quality if relevant
+
+Do not leak provider-specific response structures throughout SKIMA.
+
+---
+
+# 8. Geocoding and address search
+
+SKIMA needs both:
+
+### Forward geocoding
+
+User searches:
+
+`Unizik Junction, Awka`
+
+and we receive candidate locations/coordinates.
+
+### Reverse geocoding
+
+We already have:
+
+latitude/longitude
+
+and need to display an understandable address/area.
+
+Implement a normalized SKIMA location model.
+
+Something like:
+
+* latitude
+* longitude
+* display address
+* street
+* locality
+* city
+* LGA/administrative area where available
+* state
+* country
+* postal code where available
+* provider place ID if applicable
+* provider metadata
+* precision/accuracy
+* manually confirmed flag
+
+Do not make Google's `place_id` or Google's address components mandatory columns for SKIMA.
+
+Provider-specific identifiers can be optional metadata.
+
+---
+
+# 9. Coordinate rules
+
+Use a consistent coordinate convention everywhere.
+
+Be extremely careful because mapping libraries and GeoJSON commonly represent coordinates as:
+
+`[longitude, latitude]`
+
+while developers frequently think in:
+
+`latitude, longitude`.
+
+Create typed helpers/types so these cannot be accidentally reversed.
+
+Do not pass anonymous numeric arrays throughout business logic without clear typing.
+
+Database entities should have unambiguous fields such as:
+
+`latitude`
+`longitude`
+
+and transformation to `[longitude, latitude]` should happen at the mapping boundary.
+
+Add tests specifically protecting against lat/lng reversal.
+
+---
+
+# 10. Customer map experience
+
+Build the customer experience so it can eventually feel like Uber/Bolt quality.
+
+For LPG ordering the map should support:
+
+* obtain customer's device location
+* center map intelligently
+* show current-location indicator
+* show accuracy where useful
+* allow customer to move/select pickup point
+* draggable/selectable pin where appropriate
+* reverse-geocode selected location
+* search for another address
+* show saved customer addresses
+* confirm pickup address/location
+* show eligible service area
+* show assigned station when business rules allow it to be exposed
+* show assigned driver
+* show driver approaching customer
+* show cylinder journey where appropriate
+* show route
+* show ETA
+* show distance
+* show relevant order status
+* update movement without reloading the entire screen
+
+Do not overwhelm the customer with technical coordinates.
+
+---
+
+# 11. Premium UI expectations
+
+The fact that we're using an open-source map must **not** make the app look open-source, unfinished or generic.
+
+I am highly concerned about SKIMA's UI quality.
+
+The map screen should feel premium.
+
+Use:
+
+* full-bleed map where appropriate
+* clean SKIMA-branded markers
+* polished bottom sheets
+* smooth camera transitions
+* route-fitting animations
+* clean typography
+* proper loading skeleton/state
+* subtle map controls
+* clear location confirmation
+* premium driver vehicle marker
+* station marker
+* pickup marker
+* destination marker
+* route polyline
+* dark/light compatibility where appropriate
+* correct safe areas
+* no clutter
+* no ugly default debugging markers
+
+Do **not** copy Uber's exact design.
+
+Build a distinct SKIMA experience with equivalent quality.
+
+---
+
+# 12. Map styles
+
+MapLibre supports style specifications.
+
+Create a proper map-style configuration rather than permanently using a demo style URL.
+
+During development a demo/free style may be used to get the system operational.
+
+But architecture must support:
+
+`map_style_light`
+
+`map_style_dark`
+
+and potentially future service-specific styles.
+
+Map styling/provider should be configurable.
+
+SKIMA's business UI should remain ours even if the base-map provider changes.
+
+---
+
+# 13. Driver live location
+
+Build real driver tracking correctly.
+
+The driver's phone location should feed the **SKIMA backend**, not directly become some customer-controlled map object.
+
+Conceptually:
+
+Driver app
+→ authenticated location update
+→ SKIMA tracking backend
+→ validated/persisted/realtime state
+→ authorized customer/station/admin subscription
+→ MapLibre renders the current position.
+
+Location updates should contain enough metadata for operational reliability, for example where appropriate:
+
+* driver ID
+* job/order ID
+* latitude
+* longitude
+* accuracy
+* heading
+* speed
+* timestamp
+* source/device metadata where appropriate
+
+The backend must verify that the driver is allowed to update that job's tracking state.
+
+Do not let one driver publish coordinates for another driver/job.
+
+---
+
+# 14. Tracking frequency must be intelligent
+
+Do not spam the database every second.
+
+Implement configurable tracking rules based on state.
+
+For example:
+
+* driver offline → no active tracking
+* available/idle → low-frequency updates where needed
+* assigned and driving to customer → higher frequency
+* transporting cylinder → operational tracking frequency
+* arriving/stationary → reduced updates
+* job completed → stop job tracking
+
+Use movement/distance/time thresholds where practical.
+
+Tracking policy should ultimately be configurable from backend/admin configuration.
+
+Do not hardcode one interval throughout the app.
+
+---
+
+# 15. Smooth marker movement
+
+The customer should not see the driver marker jumping badly every time a GPS coordinate arrives.
+
+Add interpolation/smoothing of visual movement.
+
+Use:
+
+* heading/bearing
+* previous location
+* new location
+* timestamps
+* camera logic
+
+to animate the vehicle marker naturally.
+
+But never falsify operational location data.
+
+Visual interpolation is presentation only.
+
+Raw trusted coordinates remain backend data.
+
+---
+
+# 16. GPS quality
+
+Handle:
+
+* low accuracy
+* stale GPS
+* impossible jumps
+* denied permission
+* approximate permission
+* GPS unavailable
+* device location disabled
+* poor network
+* background restrictions
+
+The UI must tell the user what is wrong and provide a recovery path.
+
+Do not crash or endlessly spin.
+
+---
+
+# 17. Background driver tracking
+
+For an active LPG delivery job, investigate and implement the appropriate existing Expo/background-location architecture so that necessary driver location updates can continue when the driver:
+
+* locks the phone
+* minimizes SKIMA
+* temporarily switches apps
+
+subject to Android/iOS platform restrictions and permissions.
+
+Do not request invasive background permissions from ordinary customers unnecessarily.
+
+Driver permissions and customer permissions are different use cases.
+
+Also make the app explain why driver background location is required.
+
+---
+
+# 18. Customer privacy
+
+Do not expose a customer's precise stored location to unrelated drivers.
+
+A driver should receive operational address/location data only when authorized for the relevant assignment and according to the LPG workflow.
+
+Do not expose all customer locations on the client.
+
+---
+
+# 19. Driver privacy
+
+Customers should only receive the tracking information necessary for their active delivery/order.
+
+Do not expose historical/private driver movement outside valid business use.
+
+---
+
+# 20. Station locations
+
+Station onboarding/verification should store a verified operational location.
+
+We need:
+
+* station latitude
+* station longitude
+* formatted address
+* service area relationship
+* verification status
+* geographic metadata where useful
+
+This should feed:
+
+* nearest eligible station calculation
+* dispatch
+* route calculation
+* operational map
+* admin monitoring
+
+Again, do not make the map renderer the source of truth.
+
+---
+
+# 21. Service areas
+
+Our hierarchical geography/service-area system should remain backend-managed.
+
+Support geographic boundaries, not just textual city names.
+
+Where service areas already exist, integrate maps with them.
+
+Long term we should be capable of:
+
+* polygons
+* multipolygons
+* radius zones where appropriate
+* city/LGA/state hierarchy
+* fallback areas
+* station coverage
+* driver coverage
+
+MapLibre should visualize these boundaries when needed.
+
+Eligibility remains server-side rules.
+
+Do not rely on a hidden frontend polygon to decide whether a user can order LPG.
+
+---
+
+# 22. Dispatch
+
+Map migration must integrate with—not replace—the existing Dispatch/Decision Engine.
+
+Dispatch should use server-trusted geographic data.
+
+It should be capable of evaluating things such as:
+
+* customer pickup location
+* available drivers
+* station location
+* driver capability
+* station eligibility
+* driver eligibility
+* service area
+* actual route distance where appropriate
+* estimated travel time
+* existing workload
+* vehicle suitability
+* operational rules
+
+Do not simply calculate straight-line distance and call it dispatch.
+
+Straight-line/geodesic distance may be useful for preliminary filtering, while road-route time/distance can be used where needed for final decisions.
+
+---
+
+# 23. Distance and ETA must belong to backend business logic too
+
+Visual ETA shown on the customer app can come from route information, but financial/dispatch decisions must not depend solely on values calculated by a customer's frontend.
+
+Anything affecting:
+
+* pricing
+* driver selection
+* eligibility
+* commission
+* route reimbursement
+* service radius
+* dispatch
+
+must use trusted backend calculations/rules.
+
+---
+
+# 24. Map matching
+
+Design for map matching later/now where reasonable.
+
+Raw phone GPS can wander away from the road.
+
+A routing engine such as Valhalla supports matching GPS coordinates to mapped roads.
+
+Keep a capability slot for this so driver presentation/navigation can improve without rewriting tracking.
+
+Do not make it a blocker if unnecessary for the first functioning milestone.
+
+---
+
+# 25. Route polyline/geometry
+
+Routing provider responses should be normalized into a standard format MapLibre can render.
+
+Prefer a reusable route geometry abstraction, such as GeoJSON LineString internally where appropriate.
+
+The same route should be renderable in:
+
+* customer mobile
+* driver mobile
+* station workspace if needed
+* admin web map
+
+without provider-specific conversion spread everywhere.
+
+---
+
+# 26. Build shared map components
+
+Do not duplicate map logic on every screen.
+
+Create reusable components/hooks equivalent to:
+
+`SkimaMap`
+
+`SkimaMapCamera`
+
+`CurrentLocationMarker`
+
+`CustomerMarker`
+
+`DriverMarker`
+
+`StationMarker`
+
+`PickupMarker`
+
+`DestinationMarker`
+
+`RouteLayer`
+
+`ServiceAreaLayer`
+
+`MapBottomSheet`
+
+`LocationSearch`
+
+`LocationConfirmation`
+
+`MapLoadingState`
+
+`MapErrorState`
+
+`useCurrentLocation`
+
+`useRoute`
+
+`useReverseGeocode`
+
+`usePlaceSearch`
+
+`useDriverTracking`
+
+`useMapConfiguration`
+
+Naming can follow our existing conventions.
+
+The important thing is reusable architecture.
+
+---
+
+# 27. Web admin map
+
+The admin portal is a separate web application.
+
+Do not try to force the React Native package into the admin web app.
+
+For web, use the appropriate **MapLibre GL JS** implementation while sharing:
+
+* map domain types
+* coordinates
+* route models
+* location backend APIs
+* provider configuration
+* service-area data
+
+as much as reasonably possible.
+
+The renderer implementation can differ between native and web.
+
+---
+
+# 28. Admin configuration
+
+Anything that constitutes SKIMA financial/operational/provider policy should be configurable through our backend/admin architecture where appropriate.
+
+For maps, provide configurable settings such as:
+
+* active tile provider
+* style URL/configuration
+* routing provider
+* geocoding provider
+* reverse-geocoding provider
+* provider endpoint
+* request timeout
+* fallback provider
+* routing profile
+* location update intervals
+* accuracy thresholds
+* stale-location threshold
+* driver movement threshold
+* route cache TTL
+* geocoding cache TTL
+* default map center by service market
+* default zoom
+* maximum permitted route distance where applicable
+* feature flags
+* provider enabled/disabled
+
+Secrets must not be exposed through public admin APIs unnecessarily.
+
+Sensitive keys belong in secure server/environment secret storage.
+
+The admin dashboard can reference/configure providers without exposing credentials.
+
+---
+
+# 29. Provider fallback
+
+Create graceful provider fallback.
+
+Example:
+
+Primary route provider fails
+→ retry according to policy
+→ optional fallback provider
+→ otherwise return controlled routing-unavailable state.
+
+Do not let an external map service failure crash LPG ordering.
+
+Map rendering failure, geocoding failure and route failure are different failure types and should be handled independently.
+
+---
+
+# 30. Caching
+
+Add sensible caching to reduce free API/provider usage.
+
+Cache where legally/technically permitted:
+
+* geocoding results
+* reverse-geocoding results
+* static station addresses
+* repeated routes where appropriate
+* map configuration
+
+But do not cache live driver position as if it were permanent current truth.
+
+Use proper TTL/invalidation.
+
+Provider terms must be respected.
+
+---
+
+# 31. Offline and poor-network behavior
+
+SKIMA is being built for real Nigerian network conditions.
+
+Do not assume perfect network.
+
+MapLibre has offline-map capability, so preserve a path to controlled offline regions where licensing/provider terms permit it.
+
+For the LPG workflow, at minimum:
+
+* preserve current order state
+* preserve selected pickup coordinates
+* preserve customer confirmation progress
+* preserve driver active-job state
+* queue permitted location/operational events appropriately
+* show cached map resources when available
+* resume sync correctly
+* do not duplicate updates when connection returns
+
+We already require SKIMA screens to survive app minimization/closure and restore user progress. Map-based workflows are included.
+
+---
+
+# 32. Do not allow offline state to compromise cylinder security
+
+The existing cylinder identity/scanning flow remains authoritative.
+
+Mapping/offline work must not weaken:
+
+* customer-cylinder ownership
+* QR/NFC mapping
+* pickup scans
+* station scans
+* delivery scans
+* audit logs
+* immutable financial/order events
+
+Maps support operations; they do not replace verified workflow transitions.
+
+---
+
+# 33. Persistent map/order progress
+
+If a customer is selecting a pickup point or has progressed into an LPG refill order and the app closes/minimizes, reopening the app should restore the relevant state.
+
+If a driver is actively executing a job, reopening the app should restore:
+
+* current job
+* workflow stage
+* destination
+* latest valid route
+* tracking state
+* navigation/map context where appropriate
+
+Do not restart the user at the home screen and discard progress.
+
+---
+
+# 34. Database
+
+Audit existing database tables before creating duplicates.
+
+Reuse valid shared location/geography infrastructure.
+
+Where gaps exist, model the required data properly.
+
+Potential concepts include:
+
+* locations
+* saved addresses
+* station locations
+* driver latest location
+* driver location history
+* service areas
+* route cache
+* geocode cache
+* map provider configuration
+* tracking sessions
+
+But do **not** create these blindly if equivalent structures already exist.
+
+Inspect first and extend the existing platform architecture.
+
+---
+
+# 35. Latest location versus location history
+
+Do not force every live-map request to scan a massive history table.
+
+Maintain an efficient concept of a driver's latest trusted location.
+
+Historical tracking can be stored separately/partitioned/retained according to policy.
+
+Design for scale.
+
+---
+
+# 36. Realtime architecture
+
+Use the existing backend/realtime capabilities where appropriate.
+
+Customer subscription should receive only the relevant active driver's authorized location updates.
+
+Avoid architecture where every connected customer subscribes to all drivers.
+
+Scope realtime channels/topics securely by order/job/authorization.
+
+---
+
+# 37. Security
+
+Add authorization/RLS/server checks for map/location data.
+
+Test specifically:
+
+* customer cannot read unrelated driver's live location
+* driver cannot update another driver's location
+* driver cannot track customer outside active assignment
+* station cannot access unrelated customer location
+* completed orders stop unauthorized tracking
+* admin access follows existing RBAC
+* provider secrets never leak into responses/bundles unless they are explicitly public client keys
+
+---
+
+# 38. Location spoofing/fraud readiness
+
+Do not pretend phone GPS is automatically trustworthy.
+
+Preserve architecture for fraud checks such as:
+
+* impossible jumps
+* impossible speed
+* stale timestamps
+* mock-location indicators where platform APIs allow
+* driver supposedly at station while coordinates show otherwise
+* scan/location mismatch
+* repeated suspicious routes
+
+Do not block the migration trying to build a perfect fraud engine, but produce trusted audit events/hooks so the Fraud/Decision Engine can use this later.
+
+---
+
+# 39. Audit/event integration
+
+Important location events should flow into our existing audit/event infrastructure.
+
+Examples:
+
+* location permission changed
+* pickup location confirmed
+* station location verified
+* driver tracking started
+* driver tracking stopped
+* route calculated
+* provider failed
+* fallback provider used
+* driver arrival detected
+* suspicious location discrepancy
+* service-area mismatch
+
+Do not log raw sensitive tracking data carelessly into generic application logs.
+
+Use appropriate structured storage/audit policies.
+
+---
+
+# 40. Arrival/proximity
+
+Create reusable backend proximity/geofence logic where appropriate.
+
+Examples:
+
+* driver approaching customer
+* driver arrived at pickup
+* driver arrived at station
+* driver returned to customer
+
+These signals can assist the workflow but should not automatically replace required scans/confirmation unless business rules explicitly permit it.
+
+---
+
+# 41. Navigation
+
+Do not confuse map display with full turn-by-turn navigation.
+
+For this migration:
+
+At minimum provide:
+
+* route visualization
+* destination
+* ETA
+* distance
+* driver tracking
+* camera following
+
+Keep the architecture capable of adding turn-by-turn navigation later.
+
+If implementing navigation now is low-cost and supported reliably by the selected open routing stack, build it behind its own capability rather than coupling it to MapLibre rendering.
+
+---
+
+# 42. Performance
+
+Maps are heavy.
+
+Optimize:
+
+* marker rendering
+* GeoJSON updates
+* route layers
+* camera updates
+* realtime subscriptions
+* rerenders
+* memory
+* location watchers
+* background tasks
+
+Do not rerender the entire map for every unrelated React state change.
+
+For large numbers of markers, use efficient source/layer rendering/clustering rather than hundreds/thousands of heavy React views.
+
+---
+
+# 43. Customer-facing states
+
+Every map screen must have proper states:
+
+* requesting location
+* permission denied
+* current position acquired
+* locating
+* searching address
+* route calculating
+* route available
+* no route
+* provider unavailable
+* offline
+* driver location stale
+* driver tracking live
+* station unavailable
+* outside service area
+
+Do not expose raw API errors to customers.
+
+---
+
+# 44. Attribution/licensing
+
+Respect required OpenStreetMap/provider attribution.
+
+Do not remove attribution merely because we want the map to look clean.
+
+Make attribution unobtrusive but compliant.
+
+Also document the licenses/providers we use so we do not create legal/operational debt later.
+
+---
+
+# 45. Testing
+
+Add real tests.
+
+At minimum cover:
+
+### Unit
+
+* coordinate normalization
+* lat/lng ordering
+* routing response normalization
+* geocode normalization
+* distance calculations
+* provider fallback
+* tracking policy
+* stale-location logic
+* service-area checks
+* map config resolution
+
+### Integration
+
+* current location → pickup confirmation
+* address search → coordinates
+* coordinates → reverse geocode
+* route request → normalized route
+* route → MapLibre layer
+* driver update → backend → customer subscription
+* provider failure → fallback/error state
+
+### Security
+
+* unauthorized location read
+* unauthorized location update
+* cross-order tracking
+* completed-order tracking access
+
+### Device
+
+Test Android physically/emulator with:
+
+* permission accepted
+* permission denied
+* GPS disabled
+* internet disconnected
+* app minimized
+* app restored
+* active driver job
+* low accuracy
+* route refresh
+
+Do not call it complete because the map merely appears once.
+
+---
+
+# 46. Development provider strategy
+
+For now I am deliberately trying to spend **₦0** on mapping.
+
+Use free/open/demo resources responsibly to get development working.
+
+But every external endpoint must sit behind our provider architecture.
+
+Do not architect production around an assumption that community-hosted OSM infrastructure gives us unlimited free commercial traffic.
+
+Later we can:
+
+* purchase a provider
+* self-host selected OSM infrastructure
+* use another provider's commercial tier
+* mix providers
+
+without rewriting SKIMA.
+
+---
+
+# 47. Recommended initial stack
+
+Unless the existing repository audit shows a better compatible implementation, target approximately:
+
+### Mobile renderer
+
+**MapLibre React Native**
+
+### Web/admin renderer
+
+**MapLibre GL JS**
+
+### Geographic data
+
+**OpenStreetMap-based data**
+
+### Device GPS
+
+**Expo Location / existing SKIMA location layer**
+
+### Routing
+
+**OSRM or Valhalla adapter**
+
+I lean toward preserving support for both and allowing configuration/fallback.
+
+### Geocoding
+
+Use an appropriate free/development geocoder adapter initially.
+
+Public Nominatim can be used only within its usage policy; do not make SKIMA permanently dependent on the public instance.
+
+### Live tracking
+
+**SKIMA backend + realtime**
+
+### Dispatch
+
+**SKIMA Decision/Dispatch Engine**
+
+---
+
+# 48. First real end-to-end proof
+
+Do not spend all the work producing abstractions without proving them.
+
+Before calling the migration successful, give me a functioning LPG flow demonstrating:
+
+1. Open customer LPG refill journey.
+2. Request/use customer location.
+3. MapLibre map loads.
+4. Customer's position appears.
+5. Customer can confirm/change pickup point.
+6. Selected coordinate reverse-geocodes to an understandable address.
+7. Backend receives/stores the confirmed location correctly.
+8. Eligible station/route information can be obtained.
+9. Route is returned by the routing abstraction.
+10. Route line is rendered on MapLibre.
+11. Distance and ETA appear.
+12. Assigned driver's location can enter SKIMA backend.
+13. Customer receives authorized realtime update.
+14. Driver marker moves on the customer map.
+15. App can minimize/reopen without losing active-order map state.
+
+That is the minimum proof that we migrated a **real product**, not just changed map libraries.
+
+---
+
+# 49. Remove obsolete Google dependency carefully
+
+Once MapLibre and the provider abstraction are confirmed working:
+
+* remove unused Google Maps SDK dependencies
+* remove obsolete Google Maps configuration
+* remove unused Google API environment variables
+* remove dead Google-specific components
+* remove dead `react-native-maps` dependencies if they are no longer required anywhere
+* clean native config
+* clean build files
+* regenerate/rebuild as appropriate
+
+But do not remove another Google service simply because it contains the word Google.
+
+Audit usage first.
+
+For example, authentication/analytics/etc. are separate concerns.
+
+---
+
+# 50. Documentation
+
+Update the architecture/project documentation with:
+
+* MapLibre decision
+* Maps/Location domain
+* rendering provider
+* routing provider abstraction
+* geocoding abstraction
+* tracking architecture
+* provider configuration
+* environment variables
+* native build requirements
+* offline strategy
+* permissions
+* security rules
+* attribution/license requirements
+* migration notes
+* how to change providers
+* development setup
+
+Also document that MapLibre React Native requires a native Expo development/production build and should not be expected to function in Expo Go.
+
+---
+
+# 51. Do not over-plan this
+
+I do not want a huge new planning phase that consumes development credits.
+
+Perform the audit quickly and then **move directly into implementation**.
+
+Use the existing architecture where valid.
+
+Do not rewrite unrelated working systems.
+
+Do not create placeholder APIs just so files exist.
+
+Do not mark features complete because interfaces exist.
+
+Build and verify real runtime behavior.
+
+---
+
+# 52. Definition of done
+
+This migration is only complete when:
+
+* Google Maps is no longer required for our core map experience.
+* MapLibre renders successfully in the actual Expo native build.
+* Customer current location works.
+* Pickup location selection works.
+* Address/geocoding abstraction works.
+* Routing abstraction works.
+* Route polyline renders.
+* Distance and ETA work.
+* station coordinates work.
+* driver coordinates work.
+* realtime driver tracking works through SKIMA backend.
+* driver marker moves smoothly.
+* permissions/errors/offline states are handled.
+* map/order progress restores after app interruption.
+* provider configuration is centralized.
+* public OSM services are not treated as unlimited production infrastructure.
+* provider-specific models do not contaminate SKIMA's business domains.
+* security/RLS/access rules are tested.
+* documentation is updated.
+* Android build is tested.
+* no unnecessary Google mapping dependency remains.
+
+**Most importantly: build SKIMA so changing our map/routing/geocoding provider later becomes a configuration/adapter change, not another platform migration.**
+
+Start with the migration now and preserve the premium UI standard throughout.

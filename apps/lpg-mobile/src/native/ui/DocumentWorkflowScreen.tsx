@@ -1,6 +1,6 @@
 import * as DocumentPicker from "expo-document-picker";
 import { router } from "expo-router";
-import { FileCheck2, Upload } from "lucide-react-native";
+import { FileCheck2, Send, Upload } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -68,11 +68,48 @@ export function DocumentWorkflowScreen({
   const [uploading, setUploading] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
+  const [uploadedKeys, setUploadedKeys] = useState<ReadonlySet<string>>(new Set());
   const register = useGatewayMutation({
     path: "/runtime/documents",
     schema: ActionResponseSchema,
     invalidate: [["documents"]],
   });
+  const submit = useGatewayMutation({
+    path: "/runtime/applications/submit",
+    schema: ActionResponseSchema,
+    invalidate: [["applications"], ["documents"], ["messages"]],
+  });
+  const existingForRequirement = (requirement: PlatformRecord) => {
+    const requirementId = recordId(requirement);
+    const requirementKey = firstString(requirement, ["key"]);
+    return (documents.data ?? []).filter(
+      (document) =>
+        firstString(document, ["application_id", "applicationId"]) ===
+          applicationId &&
+        (firstString(document, ["requirement_id", "requirementId"]) ===
+          requirementId ||
+          firstString(document, [
+            "requirement_key",
+            "requirementKey",
+          ]) === requirementKey),
+    );
+  };
+  const requiredConfigured = configured.filter(
+    (requirement) => requirement.is_required === true,
+  );
+  const missingConfigured = requiredConfigured.filter((requirement) => {
+    const requirementKey = firstString(requirement, ["key"]) ?? recordId(requirement) ?? "";
+    const minCount = firstNumber(requirement, ["min_count", "minCount"]) ?? 1;
+    const existingCount = existingForRequirement(requirement).length;
+    const optimisticCount = uploadedKeys.has(requirementKey) ? 1 : 0;
+    return Math.max(existingCount, optimisticCount) < minCount;
+  });
+  const applicationStatus = firstString(application, ["status"]) ?? "draft";
+  const canSubmitApplication =
+    Boolean(applicationId) &&
+    requiredConfigured.length > 0 &&
+    missingConfigured.length === 0 &&
+    ["draft", "incomplete", "additional_info_required", "resubmitted"].includes(applicationStatus);
   const choose = async (requirement: PlatformRecord) => {
     const key = firstString(requirement, ["key"]);
     if (!key || !applicationId) {
@@ -119,11 +156,29 @@ export function DocumentWorkflowScreen({
       setMessage(
         `${firstString(requirement, ["display_name", "displayName"]) ?? key} uploaded.`,
       );
+      setUploadedKeys((current) => new Set([...current, key]));
     } catch (cause) {
       setMessage(friendlyError(cause, "The document could not be uploaded. Please try again."));
     } finally {
       setUploading(null);
       setUploadProgress(0);
+    }
+  };
+  const submitApplication = async () => {
+    if (!applicationId || !canSubmitApplication) return;
+    setMessage(null);
+    try {
+      await submit.mutateAsync({
+        applicationId,
+        idempotencyKey: idempotencyKey(
+          `${workspace}-application-submit-documents`,
+          applicationId,
+        ),
+      });
+      setMessage("Application submitted for review.");
+      router.replace(`/(customer)/${workspace}-application` as never);
+    } catch (cause) {
+      setMessage(friendlyError(cause, "The application could not be submitted. Please try again."));
     }
   };
   const loading =
@@ -176,18 +231,7 @@ export function DocumentWorkflowScreen({
             </View>
           </View>
           {configured.map((requirement, index) => {
-            const requirementId = recordId(requirement);
-            const existing = (documents.data ?? []).filter(
-              (document) =>
-                firstString(document, ["application_id", "applicationId"]) ===
-                  applicationId &&
-                (firstString(document, ["requirement_id", "requirementId"]) ===
-                  requirementId ||
-                  firstString(document, [
-                    "requirement_key",
-                    "requirementKey",
-                  ]) === firstString(requirement, ["key"])),
-            );
+            const existing = existingForRequirement(requirement);
             const key = firstString(requirement, ["key"]) ?? String(index);
             return (
               <Card key={key}>
@@ -249,6 +293,41 @@ export function DocumentWorkflowScreen({
               policy.
             </Text>
           ) : null}
+          {configured.length > 0 ? (
+            <Card>
+              <View style={styles.row}>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={styles.title}>
+                    {canSubmitApplication
+                      ? "Ready for admin review"
+                      : "Complete required documents"}
+                  </Text>
+                  <Text style={styles.body}>
+                    {canSubmitApplication
+                      ? "All required files are present. Submit now without leaving this screen."
+                      : `${missingConfigured.length} required item${missingConfigured.length === 1 ? "" : "s"} still needed before submission.`}
+                  </Text>
+                </View>
+                {canSubmitApplication ? <FileCheck2 color={colors.success} /> : null}
+              </View>
+              {canSubmitApplication ? (
+                <Pressable
+                  disabled={submit.isPending}
+                  onPress={() => void submitApplication()}
+                  style={styles.primary}
+                >
+                  {submit.isPending ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <>
+                      <Send color="white" size={18} />
+                      <Text style={styles.primaryText}>Submit application for review</Text>
+                    </>
+                  )}
+                </Pressable>
+              ) : null}
+            </Card>
+          ) : null}
         </>
       )}
       {message ? <Text style={styles.message}>{message}</Text> : null}
@@ -294,6 +373,8 @@ const styles = StyleSheet.create({
   },
   primary: {
     minHeight: 52,
+    flexDirection: "row",
+    gap: spacing.sm,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radii.md,

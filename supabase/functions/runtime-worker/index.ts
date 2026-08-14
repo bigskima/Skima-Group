@@ -311,7 +311,8 @@ async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): P
     const input = optionalRecord(task.input) ?? {};
     const subjectType = requireString(task.subject_type);
     const isPresentation = subjectType === "lpg_cylinder" && input.purpose === "public_presentation";
-    const imageProvider = isPresentation ? resolveImageProvider() : null;
+    const isDriverCardPhoto = subjectType === "driver_profile" && input.purpose === "public_driver_card_photo";
+    const imageProvider = isPresentation || isDriverCardPhoto ? resolveImageProvider() : null;
     const adapter = imageProvider?.adapter ?? "provider.ai.sandbox";
     const model = imageProvider?.model ?? "sandbox";
 
@@ -328,6 +329,8 @@ async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): P
 
       const output = isPresentation
         ? await generateCylinderPresentation(supabase, task, input, imageProvider)
+        : isDriverCardPhoto
+        ? await generateDriverCardPhoto(supabase, task, input, imageProvider)
         : {
           control: "assist_only",
           recommendation: "sandbox_assistive_output",
@@ -347,7 +350,7 @@ async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): P
       await requireRpc(supabase.rpc("record_provider_execution", {
         target_error_message: null,
         target_idempotency_key: `${idempotencyKey}:provider`,
-        target_operation_key: isPresentation ? "provider.ai.image.generate" : "provider.ai.assist",
+        target_operation_key: isPresentation || isDriverCardPhoto ? "provider.ai.image.generate" : "provider.ai.assist",
         target_provider_adapter_key: adapter,
         target_provider_kind: "ai",
         target_request_payload: { input: task.input, subjectType, taskRunId },
@@ -370,7 +373,7 @@ async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): P
       await requireRpc(supabase.rpc("record_provider_execution", {
         target_error_message: message,
         target_idempotency_key: `${idempotencyKey}:provider-failed`,
-        target_operation_key: isPresentation ? "provider.ai.image.generate" : "provider.ai.assist",
+        target_operation_key: isPresentation || isDriverCardPhoto ? "provider.ai.image.generate" : "provider.ai.assist",
         target_provider_adapter_key: adapter,
         target_provider_kind: "ai",
         target_request_payload: { subjectType, taskRunId },
@@ -381,6 +384,134 @@ async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): P
   }
 
   return processed;
+}
+
+async function generateDriverCardPhoto(
+  supabase: RuntimeSupabaseClient,
+  task: RuntimeRow,
+  input: Readonly<Record<string, unknown>>,
+  provider: ImageProviderConfig | null,
+): Promise<Readonly<Record<string, unknown>>> {
+  const resolvedProvider = provider ?? resolveImageProvider();
+  const taskRunId = requireString(task.id);
+  const driverProfileId = requireString(task.subject_id);
+  const ownerUserId = requireString(task.requested_by);
+  const sourceMediaAssetId = optionalString(input.sourceMediaAssetId) ?? optionalString(input.source_media_asset_id);
+  if (!sourceMediaAssetId) throw new Error("source driver photo is required");
+
+  const driverResult = await supabase
+    .from("driver_profiles")
+    .select("id,user_id,driver_display_name,verification_status,metadata,created_at")
+    .eq("id", driverProfileId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (driverResult.error) throw new Error(driverResult.error.message);
+
+  const driver = optionalRecord(driverResult.data?.[0]);
+  if (!driver || driver.user_id !== ownerUserId) {
+    throw new Error("owned driver profile was not found");
+  }
+
+  const sourceResult = await supabase
+    .from("media_assets")
+    .select("id,owner_user_id,storage_bucket,storage_path,content_type,status,created_at")
+    .eq("id", sourceMediaAssetId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (sourceResult.error) throw new Error(sourceResult.error.message);
+
+  const source = sourceResult.data?.[0];
+  if (!source || source.owner_user_id !== ownerUserId || source.status !== "active") {
+    throw new Error("owned active source driver photo was not found");
+  }
+
+  const contentType = optionalString(source.content_type) ?? "image/jpeg";
+  if (!contentType.startsWith("image/")) {
+    throw new Error("source driver photo must be an image");
+  }
+
+  const sourceDownload = await supabase.storage
+    .from(requireString(source.storage_bucket))
+    .download(requireString(source.storage_path));
+  if (sourceDownload.error || !sourceDownload.data) {
+    throw new Error(sourceDownload.error?.message ?? "source driver photo could not be downloaded");
+  }
+
+  const sourceBytes = new Uint8Array(await sourceDownload.data.arrayBuffer());
+  const stylePrompt = optionalString(input.stylePrompt) ?? optionalString(input.style_prompt);
+  const avoidPreviousResult = input.avoidPreviousResult === true || input.avoid_previous_result === true;
+  const prompt = buildDriverCardPhotoPrompt(driver, stylePrompt, avoidPreviousResult);
+  const generated = resolvedProvider.provider === "cloudflare"
+    ? await generateWithCloudflare(prompt, { bytes: sourceBytes, contentType }, resolvedProvider.model)
+    : await generateWithGemini(prompt, { bytes: sourceBytes, contentType }, resolvedProvider.model);
+  const bytes = base64ToBytes(generated.base64);
+  const generatedContentType = generated.contentType;
+  const extension = generatedContentType.includes("jpeg") || generatedContentType.includes("jpg") ? "jpg" : "png";
+  const storageBucket = "skima-platform-media";
+  const storagePath = `${ownerUserId}/ai-driver-card-photos/${taskRunId}.${extension}`;
+  const upload = await supabase.storage.from(storageBucket).upload(storagePath, bytes, {
+    contentType: generatedContentType,
+    upsert: false,
+  });
+  if (upload.error) throw new Error(upload.error.message);
+
+  const checksum = await sha256Hex(bytes);
+  const mediaResult = await supabase.rpc("register_media_asset", {
+    target_asset_type_key: "media.driver_card_photo.ai",
+    target_byte_size: bytes.byteLength,
+    target_checksum: checksum,
+    target_content_type: generatedContentType,
+    target_idempotency_key: `${taskRunId}:media`,
+    target_metadata: {
+      derivative: true,
+      generatedBy: resolvedProvider.adapter,
+      model: resolvedProvider.model,
+      provider: resolvedProvider.provider,
+      providerMetadata: generated.providerMetadata,
+      publicDriverCardPhoto: true,
+      sourceMediaAssetId,
+      subjectId: driverProfileId,
+      subjectType: "driver_profile",
+    },
+    target_organization_id: null,
+    target_owner_user_id: ownerUserId,
+    target_source: "platform.ai_engine",
+    target_status: "active",
+    target_storage_bucket: storageBucket,
+    target_storage_path: storagePath,
+  });
+  if (mediaResult.error) throw new Error(mediaResult.error.message);
+  const mediaAssetId = requireString(mediaResult.data);
+
+  const currentMetadata = optionalRecord(driver.metadata) ?? {};
+  const updateResult = await supabase
+    .from("driver_profiles")
+    .update({
+      metadata: {
+        ...currentMetadata,
+        driver_card_photo: {
+          aiTaskRunId: taskRunId,
+          generatedAt: new Date().toISOString(),
+          generatedMediaAssetId: mediaAssetId,
+          model: resolvedProvider.model,
+          provider: resolvedProvider.adapter,
+          sourceMediaAssetId,
+        },
+      },
+      profile_photo_asset_id: mediaAssetId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", driverProfileId);
+  if (updateResult.error) throw new Error(updateResult.error.message);
+
+  return {
+    generated: true,
+    mediaAssetId,
+    mediaRole: "driver-card-photo.ai",
+    model: resolvedProvider.model,
+    preserveOriginal: true,
+    provider: resolvedProvider.adapter,
+  };
 }
 
 async function generateCylinderPresentation(
@@ -556,6 +687,24 @@ function buildCylinderPresentationPrompt(
     avoidPreviousResult ? "This is a regeneration request. Produce a visibly different but still accurate composition, lighting mood, and camera angle." : null,
     "Do not add people, hands, kitchens, fire, smoke, extra accessories, fake certification marks, serial numbers, QR codes, hardcoded app logos, or readable text.",
     "This is only a visual presentation derivative; do not imply safety inspection or certification.",
+  ].filter(Boolean).join(" ").slice(0, 2048);
+}
+
+function buildDriverCardPhotoPrompt(
+  driver: Readonly<Record<string, unknown>>,
+  stylePrompt: string | null,
+  avoidPreviousResult: boolean,
+): string {
+  const displayName = optionalString(driver.driver_display_name ?? driver.driverDisplayName);
+  return [
+    "Enhance the supplied driver portrait for a public professional driver ID card.",
+    "Preserve the same person, face shape, age, skin tone, expression, and identity. Do not invent a different person.",
+    "Use a clean premium app-profile portrait style: sharp face, natural lighting, neat background, shoulders visible, realistic colours, no distortion.",
+    "Keep it suitable for public customer verification in a delivery app.",
+    displayName ? `Driver display name for context only, do not render text: ${displayName}.` : null,
+    stylePrompt ? `Preferred style direction: ${stylePrompt}.` : null,
+    avoidPreviousResult ? "This is a regeneration request. Produce a cleaner alternate crop or background while preserving the same identity." : null,
+    "Do not add logos, badges, QR codes, text, uniforms, extra people, ID numbers, watermarks, fake documents, or certification marks.",
   ].filter(Boolean).join(" ").slice(0, 2048);
 }
 
