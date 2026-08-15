@@ -1128,10 +1128,12 @@ function ReviewActionDialog(props: {
 }) {
   const [reason, setReason] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     setReason("");
     setInternalNotes("");
+    setSubmitError(null);
   }, [props.state]);
 
   const state = props.state;
@@ -1145,16 +1147,30 @@ function ReviewActionDialog(props: {
   const reasonLabel = state.type === "correction" || state.type === "document-correction"
     ? "Message to Applicant"
     : "Review Reason";
-  const canSubmit = state.type === "assign"
+
+  const applicationStatus = getRecordString(state.application, "status") ?? "unknown";
+  const reviewActionAllowedStatuses = ["submitted", "resubmitted", "under_review"];
+  const actionAllowed = (state.type === "assign" || state.type === "approve" || state.type === "reject")
+    ? reviewActionAllowedStatuses.includes(applicationStatus)
+    : true;
+
+  const canSubmit = actionAllowed && (state.type === "assign"
     ? Boolean(props.currentUserId)
-    : reason.trim().length > 0;
+    : reason.trim().length > 0);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!canSubmit) {
+      if (!actionAllowed) {
+        setSubmitError(
+          `This action is not allowed for the application status: ${applicationStatus}`,
+        );
+      }
       return;
     }
+
+    setSubmitError(null);
 
     const applicationId = requireRecordString(state.application, "id");
 
@@ -1260,6 +1276,9 @@ function ReviewActionDialog(props: {
           : null}
         {props.error
           ? <StatusBadge tone="danger">{readErrorMessage(props.error)}</StatusBadge>
+          : null}
+        {submitError
+          ? <StatusBadge tone="danger">{submitError}</StatusBadge>
           : null}
       </form>
     </Dialog>
