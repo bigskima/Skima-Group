@@ -184,12 +184,21 @@ export function DriverIdCardScreen() {
           <View style={styles.card}>
             <View style={styles.redOrb} />
             <View style={styles.greenOrb} />
-            <View style={styles.cardTop}>
-              <View>
-                <Text style={styles.brand}>SKIMA VERIFIED DRIVER</Text>
-                <Text style={styles.name}>{displayName}</Text>
+            <View style={styles.cardHeader}>
+              <View style={styles.brandMark}>
+                <Text style={styles.brandMarkText}>S</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.brand}>SKIMA DRIVER PASS</Text>
                 <Text style={styles.id}>{publicDriverId ?? "Pending ID"}</Text>
               </View>
+              <View style={styles.statusPill}>
+                <ShieldCheck color="#22C55E" size={15} />
+                <Text style={styles.statusPillText}>{status.replace(/[_-]/g, " ")}</Text>
+              </View>
+            </View>
+
+            <View style={styles.identityRow}>
               <View style={styles.photo}>
                 {photoUrl ? (
                   <Image source={{ uri: photoUrl }} style={styles.photoImage} />
@@ -197,13 +206,13 @@ export function DriverIdCardScreen() {
                   <Text style={styles.photoText}>SK</Text>
                 )}
               </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.name}>{displayName}</Text>
+                <Text style={styles.role}>Verified delivery partner</Text>
+              </View>
             </View>
 
             <View style={styles.cardBody}>
-              <View style={styles.verified}>
-                <ShieldCheck color={colors.success} size={20} />
-                <Text style={styles.verifiedText}>{status.replace(/[_-]/g, " ")}</Text>
-              </View>
               <Field label="Vehicle" value={vehicleType} />
               <Field label="Card status" value={cardStatus.replace(/[_-]/g, " ")} />
               <Field label="Issued" value={issuedAt ? new Date(issuedAt).toLocaleDateString() : "Pending"} />
@@ -298,18 +307,32 @@ function cardHtml(data: Record<string, unknown>) {
   const vehicleType = escapeHtml(firstString(data, ["vehicleType", "vehicle_type"]) ?? "Configured vehicle");
   const issuedAt = escapeHtml(firstString(data, ["issuedAt", "issued_at"]) ?? "Pending");
   const verificationUrl = escapeHtml(firstString(data, ["verificationUrl", "verification_url"]) ?? "");
+  const photoUrl = escapeHtml(firstString(data, ["photoUrl", "photo_url"]) ?? "");
 
   return `
     <html>
-      <body style="font-family:Arial,sans-serif;padding:32px;color:#17221b">
-        <section style="max-width:420px;border-radius:28px;background:#0b1b14;color:#fff;padding:28px;border:8px solid #ef233c">
-          <p style="letter-spacing:2px;font-size:11px;font-weight:800;color:#ffb4bd">SKIMA VERIFIED DRIVER</p>
-          <h1 style="margin:0 0 8px;font-size:32px">${displayName}</h1>
-          <h2 style="margin:0 0 24px;color:#ff4d5f">${publicDriverId}</h2>
-          <p><strong>Status:</strong> ${status}</p>
-          <p><strong>Vehicle:</strong> ${vehicleType}</p>
-          <p><strong>Issued:</strong> ${issuedAt}</p>
-          <p style="font-size:12px;color:#cbd8d0;margin-top:28px">Verify: ${verificationUrl}</p>
+      <body style="font-family:Arial,sans-serif;padding:32px;background:#eef3ef;color:#17221b">
+        <section style="max-width:430px;border-radius:30px;background:linear-gradient(145deg,#06120d,#10291c 60%,#162418);color:#fff;padding:26px;border:1px solid rgba(255,255,255,.16);box-shadow:0 22px 60px rgba(8,20,13,.32)">
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:24px">
+            <div style="width:42px;height:42px;border-radius:14px;background:#ef233c;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:22px">S</div>
+            <div style="flex:1">
+              <p style="margin:0;letter-spacing:2px;font-size:10px;font-weight:900;color:#ffb4bd">SKIMA DRIVER PASS</p>
+              <h2 style="margin:4px 0 0;color:#ff4d5f;font-size:19px">${publicDriverId}</h2>
+            </div>
+            <span style="border-radius:999px;background:rgba(34,197,94,.14);color:#22c55e;padding:8px 10px;font-size:12px;font-weight:900;text-transform:capitalize">${status}</span>
+          </div>
+          <div style="display:flex;gap:18px;align-items:center;margin-bottom:22px">
+            ${photoUrl ? `<img src="${photoUrl}" style="width:92px;height:112px;object-fit:cover;border-radius:22px;border:2px solid rgba(255,255,255,.24)" />` : `<div style="width:92px;height:112px;border-radius:22px;background:#20352a;display:flex;align-items:center;justify-content:center;font-weight:900">SK</div>`}
+            <div>
+              <h1 style="margin:0 0 6px;font-size:31px;line-height:1">${displayName}</h1>
+              <p style="margin:0;color:#cbd8d0;font-weight:700">Verified delivery partner</p>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px">
+            <p style="margin:0"><small style="display:block;color:#9cb4a7;font-weight:900;letter-spacing:1px">VEHICLE</small><strong>${vehicleType}</strong></p>
+            <p style="margin:0"><small style="display:block;color:#9cb4a7;font-weight:900;letter-spacing:1px">ISSUED</small><strong>${issuedAt}</strong></p>
+          </div>
+          <p style="font-size:12px;color:#cbd8d0;margin-top:26px;word-break:break-all">Verify live status: ${verificationUrl}</p>
         </section>
       </body>
     </html>`;
@@ -328,32 +351,40 @@ function escapeHtml(value: string) {
 const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: spacing.md },
   back: { color: colors.brand, fontWeight: "800" },
-  brand: { color: "#FFB4BD", fontSize: 10, fontWeight: "900", letterSpacing: 1.8 },
+  brand: { color: "#FFB4BD", fontSize: 10, fontWeight: "900", letterSpacing: 1.9 },
   aiButton: { alignItems: "center", backgroundColor: "#7C3AED", borderRadius: radii.md, flex: 1, flexDirection: "row", gap: 8, justifyContent: "center", minHeight: 54 },
   aiButtonText: { color: "white", fontWeight: "900" },
+  brandMark: { alignItems: "center", backgroundColor: colors.brand, borderRadius: 14, height: 42, justifyContent: "center", width: 42, zIndex: 2 },
+  brandMarkText: { color: "white", fontSize: 23, fontWeight: "900" },
   card: {
-    backgroundColor: "#0A1A13",
-    borderColor: colors.brand,
-    borderRadius: 28,
-    borderWidth: 4,
+    backgroundColor: "#07140F",
+    borderColor: "rgba(255,255,255,.13)",
+    borderRadius: 30,
+    borderWidth: 1,
+    elevation: 8,
     gap: spacing.lg,
     overflow: "hidden",
     padding: spacing.xl,
     position: "relative",
+    shadowColor: "#07140F",
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.25,
+    shadowRadius: 32,
   },
-  cardBody: { gap: spacing.sm, zIndex: 2 },
-  cardTop: { alignItems: "flex-start", flexDirection: "row", gap: spacing.md, justifyContent: "space-between" },
+  cardBody: { borderTopColor: "rgba(255,255,255,.1)", borderTopWidth: 1, flexDirection: "row", flexWrap: "wrap", gap: spacing.md, paddingTop: spacing.md, zIndex: 2 },
+  cardHeader: { alignItems: "center", flexDirection: "row", gap: spacing.md, justifyContent: "space-between", zIndex: 2 },
   disabled: { opacity: 0.55 },
   error: { color: colors.danger, fontWeight: "800" },
-  field: { gap: 2 },
+  field: { flexBasis: "30%", flexGrow: 1, gap: 2 },
   fieldLabel: { color: "#9CB4A7", fontSize: 10, fontWeight: "900", letterSpacing: 1, textTransform: "uppercase" },
   fieldValue: { color: "white", fontSize: 15, fontWeight: "800", textTransform: "capitalize" },
-  greenOrb: { backgroundColor: "rgba(34,197,94,.18)", borderRadius: 70, height: 140, left: -44, position: "absolute", top: 102, width: 140 },
+  greenOrb: { backgroundColor: "rgba(34,197,94,.18)", borderRadius: 84, height: 168, left: -56, position: "absolute", top: 116, width: 168 },
   id: { color: colors.brand, fontSize: 18, fontWeight: "900" },
+  identityRow: { alignItems: "center", flexDirection: "row", gap: spacing.md, zIndex: 2 },
   message: { color: colors.brandDark, fontWeight: "800", lineHeight: 20 },
-  name: { color: "white", fontSize: 27, fontWeight: "900", letterSpacing: -0.8, marginVertical: 5 },
+  name: { color: "white", fontSize: 30, fontWeight: "900", letterSpacing: -1, lineHeight: 33 },
   note: { color: colors.muted, lineHeight: 21 },
-  photo: { alignItems: "center", backgroundColor: "#20352A", borderColor: "rgba(255,255,255,.24)", borderRadius: 22, borderWidth: 2, height: 96, justifyContent: "center", overflow: "hidden", width: 82, zIndex: 2 },
+  photo: { alignItems: "center", backgroundColor: "#20352A", borderColor: "rgba(255,255,255,.24)", borderRadius: 24, borderWidth: 2, height: 112, justifyContent: "center", overflow: "hidden", width: 92, zIndex: 2 },
   photoImage: { height: "100%", width: "100%" },
   photoText: { color: "white", fontSize: 22, fontWeight: "900" },
   photoToolsHead: { flexDirection: "row", gap: spacing.md },
@@ -361,9 +392,12 @@ const styles = StyleSheet.create({
   primaryText: { color: "white", fontWeight: "900" },
   qrText: { color: "#CBD8D0", flex: 1, fontSize: 12, lineHeight: 18 },
   qrWrap: { alignItems: "center", backgroundColor: "#13271D", borderColor: "rgba(255,255,255,.08)", borderRadius: 18, borderWidth: 1, flexDirection: "row", gap: spacing.md, padding: spacing.md, zIndex: 2 },
-  redOrb: { backgroundColor: "rgba(239,35,60,.34)", borderRadius: 90, height: 180, position: "absolute", right: -64, top: -72, width: 180 },
+  redOrb: { backgroundColor: "rgba(239,35,60,.36)", borderRadius: 100, height: 200, position: "absolute", right: -70, top: -84, width: 200 },
+  role: { color: "#CBD8D0", fontSize: 13, fontWeight: "800", marginTop: 4 },
   secondary: { alignItems: "center", borderColor: colors.brand, borderRadius: radii.md, borderWidth: 1, flex: 1, flexDirection: "row", gap: 8, justifyContent: "center", minHeight: 54 },
   secondaryText: { color: colors.brand, fontWeight: "900" },
+  statusPill: { alignItems: "center", backgroundColor: "rgba(34,197,94,.14)", borderRadius: radii.pill, flexDirection: "row", gap: 5, paddingHorizontal: 10, paddingVertical: 7, zIndex: 2 },
+  statusPillText: { color: "#22C55E", fontSize: 11, fontWeight: "900", textTransform: "capitalize" },
   toolTitle: { color: colors.ink, fontSize: 17, fontWeight: "900" },
   verified: { alignItems: "center", flexDirection: "row", gap: 8 },
   verifiedText: { color: colors.success, fontWeight: "900", textTransform: "capitalize" },

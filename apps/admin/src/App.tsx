@@ -1441,6 +1441,12 @@ function FinanceWorkspace() {
         valueRenderer={(key, value, record) => {
           if (key === "balance" && typeof value === "number") {
             return (
+              <MoneyDisplay value={formatMajorMoney(value, String(record.currency_code ?? "NGN"))} />
+            );
+          }
+
+          if (key.endsWith("_balance_minor") && typeof value === "number") {
+            return (
               <MoneyDisplay value={formatMoney(value, String(record.currency_code ?? "NGN"))} />
             );
           }
@@ -1628,6 +1634,19 @@ function renderRecordValue(value: unknown): ReactNode {
   }
 
   return JSON.stringify(value);
+}
+
+function formatMajorMoney(
+  amount: number,
+  currencyCode: string,
+  locale = "en-NG",
+): string {
+  return new Intl.NumberFormat(locale, {
+    currency: currencyCode,
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+    style: "currency",
+  }).format(amount);
 }
 
 function getRecordString(record: PlatformRecord | null | undefined, key: string): string | null {

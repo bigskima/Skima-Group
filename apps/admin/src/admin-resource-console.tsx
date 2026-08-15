@@ -521,8 +521,12 @@ function renderRecordValue(
   }
 
   if (typeof value === "number") {
-    if (/amount|balance/i.exec(key)) {
+    if (/_minor$/i.test(key)) {
       return <MoneyDisplay value={formatMoney(value, String(record.currency_code ?? "NGN"))} />;
+    }
+
+    if (/amount|balance/i.exec(key)) {
+      return <MoneyDisplay value={formatMajorMoney(value, String(record.currency_code ?? "NGN"))} />;
     }
 
     return String(value);
@@ -537,6 +541,19 @@ function renderRecordValue(
   }
 
   return JSON.stringify(value);
+}
+
+function formatMajorMoney(
+  amount: number,
+  currencyCode: string,
+  locale = "en-NG",
+): string {
+  return new Intl.NumberFormat(locale, {
+    currency: currencyCode,
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+    style: "currency",
+  }).format(amount);
 }
 
 function formatDate(value: string): string {

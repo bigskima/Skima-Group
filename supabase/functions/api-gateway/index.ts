@@ -5696,9 +5696,10 @@ async function updateDriverCardPhotoResponse(
     return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
   }
 
-  const assetResult = await supabase
+  const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+  const assetResult = await serviceClient
     .from("media_assets")
-    .select("id,owner_user_id,content_type,status")
+    .select("id,owner_user_id,content_type,status,metadata")
     .eq("id", mediaAssetId)
     .maybeSingle();
 
@@ -5710,7 +5711,7 @@ async function updateDriverCardPhotoResponse(
     return jsonResponse({ ok: false, error: "driver_card_photo_asset_forbidden", requestId: id }, 403);
   }
 
-  const driverResult = await supabase
+  const driverResult = await serviceClient
     .from("driver_profiles")
     .select("id,user_id,metadata")
     .eq(requestedDriverProfileId ? "id" : "user_id", requestedDriverProfileId ?? user.id)
@@ -5723,7 +5724,6 @@ async function updateDriverCardPhotoResponse(
 
   const driverProfileId = requireUuid(getRecordValue(driverResult.data, "id"), "driverProfileId");
   const existingMetadata = optionalRecord(getRecordValue(driverResult.data, "metadata")) ?? {};
-  const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
   const updateResult = await serviceClient
     .from("driver_profiles")
     .update({
