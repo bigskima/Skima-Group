@@ -16,6 +16,7 @@ import { colors, radii, spacing } from "../theme/tokens";
 import { idempotencyKey } from "../utilities/idempotency";
 import { friendlyError } from "../utilities/friendlyError";
 import { PaystackPaymentModal } from "./PaystackPaymentModal";
+import { BankTransferModal } from "./BankTransferModal";
 import { Screen } from "./Screen";
 
 export function TopUpScreen() {
@@ -28,6 +29,7 @@ export function TopUpScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const [modalVisible, setModalVisible] = useState(false);
+  const [bankTransferModalVisible, setBankTransferModalVisible] = useState(false);
   const [pendingDeposit, setPendingDeposit] = useState<{
     checkoutUrl: string | null;
     depositId: string | null;
@@ -88,7 +90,12 @@ export function TopUpScreen() {
         depositId: depositId,
         amount: value,
       });
-      setModalVisible(true);
+
+      if (provider === "provider.payment.bank_transfer") {
+        setBankTransferModalVisible(true);
+      } else {
+        setModalVisible(true);
+      }
     } catch (cause) {
       setError(
         friendlyError(cause, "The top-up could not be started. Please try again."),
@@ -126,11 +133,19 @@ export function TopUpScreen() {
           onPress={() => setProvider("provider.payment.paystack")}
           style={[styles.provider, (provider === "provider.payment.paystack" || !provider) && styles.selected]}
         >
-          <Text style={styles.providerText}>Paystack (Cards, Transfer, USSD)</Text>
+          <Text style={styles.providerText}>Paystack Modal (Card, USSD, QR)</Text>
         </Pressable>
+
+        <Pressable
+          onPress={() => setProvider("provider.payment.bank_transfer")}
+          style={[styles.provider, provider === "provider.payment.bank_transfer" && styles.selected]}
+        >
+          <Text style={styles.providerText}>Direct Bank Transfer (Virtual Account)</Text>
+        </Pressable>
+
         {paymentProviders.map((item, index) => {
           const key = firstString(item, ["key"]) ?? "";
-          if (key === "provider.payment.paystack") return null;
+          if (key === "provider.payment.paystack" || key === "provider.payment.bank_transfer") return null;
           return (
             <Pressable
               key={key}
@@ -156,14 +171,19 @@ export function TopUpScreen() {
         {mutation.isPending ? (
           <ActivityIndicator color="white" />
         ) : (
-          <Text style={styles.primaryText}>Continue to Paystack Modal</Text>
+          <Text style={styles.primaryText}>
+            {provider === "provider.payment.bank_transfer"
+              ? "Get Transfer Account Number"
+              : "Continue to Paystack Modal"}
+          </Text>
         )}
       </Pressable>
 
       <Text style={styles.note}>
-        Paystack checkout opens instantly in an in-app secure modal. Your wallet balance is updated automatically upon payment confirmation.
+        Choose Paystack for Instant Cards/USSD or Direct Bank Transfer to copy a virtual account number and send money from your banking app.
       </Text>
 
+      {/* Paystack Checkout Modal */}
       <PaystackPaymentModal
         visible={modalVisible}
         checkoutUrl={pendingDeposit?.checkoutUrl ?? null}
@@ -173,6 +193,19 @@ export function TopUpScreen() {
         onClose={() => setModalVisible(false)}
         onSuccess={() => {
           setModalVisible(false);
+          router.replace("/(customer)/wallet");
+        }}
+      />
+
+      {/* Direct Bank Transfer Virtual Account Modal */}
+      <BankTransferModal
+        visible={bankTransferModalVisible}
+        depositId={pendingDeposit?.depositId ?? null}
+        amount={pendingDeposit?.amount ?? null}
+        currency={currency}
+        onClose={() => setBankTransferModalVisible(false)}
+        onSuccess={() => {
+          setBankTransferModalVisible(false);
           router.replace("/(customer)/wallet");
         }}
       />
