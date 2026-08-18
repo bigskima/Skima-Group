@@ -3001,8 +3001,10 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       const payload = body.value;
       const amount = requireNumber(payload.amount, "amount");
       const currencyCode = optionalString(payload.currencyCode) ?? "NGN";
-      const providerAdapterKey = optionalString(payload.providerAdapterKey) ??
-        "provider.payment.sandbox";
+      let providerAdapterKey = optionalString(payload.providerAdapterKey);
+      if (!providerAdapterKey) {
+        providerAdapterKey = await resolveActivePaymentProviderKey(supabase);
+      }
 
       if (providerAdapterKey === "provider.payment.paystack") {
         return initializePaystackDeposit({
@@ -3086,6 +3088,27 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }
 
       const payload = body.value;
+      let providerAdapterKey = optionalString(payload.providerAdapterKey);
+      if (!providerAdapterKey) {
+        providerAdapterKey = await resolveActivePaymentProviderKey(supabase);
+      }
+
+      if (providerAdapterKey === "provider.payment.paystack") {
+        return configurePaystackWithdrawalBeneficiary({
+          accountName: requireString(payload.accountName, "accountName"),
+          accountNumber: requireString(payload.accountNumber, "accountNumber"),
+          bankCode: optionalString(payload.bankCode) ?? "058",
+          beneficiaryType: optionalString(payload.beneficiaryType) ?? "bank_account",
+          id,
+          idempotencyKey: requireString(payload.idempotencyKey, "idempotencyKey"),
+          metadata: optionalRecord(payload.metadata) ?? {},
+          source: optionalString(payload.source) ?? "platform.withdrawal_engine",
+          supabase,
+          supabaseUrl,
+          walletId: requireUuid(payload.walletId, "walletId"),
+        });
+      }
+
       return rpcResponse(
         supabase.rpc("configure_withdrawal_beneficiary", {
           target_account_name: requireString(payload.accountName, "accountName"),
@@ -3094,8 +3117,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           target_beneficiary_type: optionalString(payload.beneficiaryType) ?? "bank_account",
           target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
           target_metadata: optionalRecord(payload.metadata) ?? {},
-          target_provider_adapter_key: optionalString(payload.providerAdapterKey) ??
-            "provider.payment.sandbox",
+          target_provider_adapter_key: providerAdapterKey,
           target_source: optionalString(payload.source) ?? "platform.withdrawal_engine",
           target_wallet_id: requireUuid(payload.walletId, "walletId"),
         }),
@@ -3169,20 +3191,82 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const payload = body.value;
-    return rpcResponseWithPublicReference(
-      supabase.rpc("approve_wallet_withdrawal", {
-        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-        target_metadata: optionalRecord(payload.metadata) ?? {},
-        target_source: optionalString(payload.source) ?? "platform.withdrawal_engine",
-        target_withdrawal_request_id: requireUuid(
-          payload.withdrawalRequestId,
-          "withdrawalRequestId",
-        ),
-      }),
-      id,
-      supabase,
-      "withdrawal_requests",
-    );
+    const withdrawalRequestId = requireUuid(payload.withdrawalRequestId, "withdrawalRequestId");
+    const approveResult = await supabase.rpc("approve_wallet_withdrawal", {
+      target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+      target_metadata: optionalRecord(payload.metadata) ?? {},
+      target_source: optionalString(payload.source) ?? "platform.withdrawal_engine",
+      target_withdrawal_request_id: withdrawalRequestId,
+    });
+
+    if (approveResult.error) {
+      return databaseError(approveResult.error, id);
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
+
+    if (serviceRoleKey && paystackSecretKey) {
+      const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+      const { data: withdrawalRecord } = await serviceClient
+        .from("withdrawal_requests")
+        .select("id,public_reference,total_debit_amount,currency_code,beneficiary_id,provider_adapter_id")
+        .eq("id", withdrawalRequestId)
+        .single();
+
+      if (withdrawalRecord) {
+        const { data: beneficiaryRecord } = await serviceClient
+          .from("withdrawal_beneficiaries")
+          .select("provider_recipient_code,metadata")
+          .eq("id", withdrawalRecord.beneficiary_id)
+          .single();
+
+        const recipientCode = beneficiaryRecord?.provider_recipient_code ??
+          optionalString(beneficiaryRecord?.metadata?.paystackRecipientCode);
+
+        if (recipientCode) {
+          try {
+            const transferResponse = await fetch("https://api.paystack.co/transfer", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${paystackSecretKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                source: "balance",
+                amount: Math.round(Number(withdrawalRecord.total_debit_amount) * 100),
+                recipient: recipientCode,
+                reason: "Wallet withdrawal",
+                reference: String(withdrawalRecord.public_reference ?? withdrawalRecord.id),
+              }),
+            });
+            const transferBody = await transferResponse.json();
+            const transferStatus = transferBody?.data?.status;
+            const providerStatus = transferStatus === "success" ? "succeeded" : "processing";
+
+            await supabase.rpc("process_wallet_withdrawal_transfer", {
+              target_idempotency_key: `${payload.idempotencyKey}:transfer`,
+              target_metadata: { paystackTransfer: transferBody?.data },
+              target_provider_reference: String(transferBody?.data?.reference ?? withdrawalRecord.public_reference),
+              target_provider_status: providerStatus,
+              target_response_payload: transferBody ?? {},
+              target_source: "platform.paystack_transfer_engine",
+              target_withdrawal_request_id: withdrawalRequestId,
+            });
+          } catch (_err) {
+            // Keep as approved; webhook or retry will finalize transfer status
+          }
+        }
+      }
+    }
+
+    const withdrawalId = requireString(approveResult.data, "withdrawal request id");
+    return jsonResponse({
+      data: withdrawalId,
+      id: withdrawalId,
+      ok: true,
+      requestId: id,
+    });
   }
 
   if (routePath === "/runtime/withdrawals/transfers") {
@@ -7948,3 +8032,110 @@ function databaseError(
     400,
   );
 }
+
+async function resolveActivePaymentProviderKey(supabase: SupabaseClient): Promise<string> {
+  try {
+    const { data } = await supabase
+      .from("configuration_entries")
+      .select("value")
+      .eq("namespace", "platform.payments")
+      .eq("key", "provider_selection")
+      .eq("scope_type", "global")
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (data?.value && typeof data.value === "object") {
+      const activeKey = (data.value as Record<string, unknown>).active_provider_key;
+      if (typeof activeKey === "string" && activeKey) {
+        return activeKey;
+      }
+    }
+  } catch (_err) {
+    // Fall back to default Paystack provider
+  }
+
+  return "provider.payment.paystack";
+}
+
+async function configurePaystackWithdrawalBeneficiary(params: {
+  readonly accountName: string;
+  readonly accountNumber: string;
+  readonly bankCode: string;
+  readonly beneficiaryType: string;
+  readonly id: string;
+  readonly idempotencyKey: string;
+  readonly metadata: Readonly<Record<string, unknown>>;
+  readonly source: string;
+  readonly supabase: SupabaseClient;
+  readonly supabaseUrl: string;
+  readonly walletId: string;
+}): Promise<Response> {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
+
+  const configureResult = await params.supabase.rpc("configure_withdrawal_beneficiary", {
+    target_account_name: params.accountName,
+    target_account_number: params.accountNumber,
+    target_bank_code: params.bankCode,
+    target_beneficiary_type: params.beneficiaryType,
+    target_idempotency_key: params.idempotencyKey,
+    target_metadata: params.metadata,
+    target_provider_adapter_key: "provider.payment.paystack",
+    target_source: params.source,
+    target_wallet_id: params.walletId,
+  });
+
+  if (configureResult.error) {
+    return databaseError(configureResult.error, params.id);
+  }
+
+  const beneficiaryId = requireString(configureResult.data, "beneficiary id");
+
+  if (serviceRoleKey && paystackSecretKey) {
+    try {
+      const recipientResponse = await fetch("https://api.paystack.co/transferrecipient", {
+        body: JSON.stringify({
+          account_number: params.accountNumber,
+          bank_code: params.bankCode,
+          currency: "NGN",
+          name: params.accountName,
+          type: "nuban",
+        }),
+        headers: {
+          Authorization: `Bearer ${paystackSecretKey}`,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+
+      const recipientBody = await recipientResponse.json();
+
+      if (recipientResponse.ok && recipientBody?.status === true && recipientBody?.data?.recipient_code) {
+        const recipientCode = String(recipientBody.data.recipient_code);
+        const serviceClient = createServiceClient(params.supabaseUrl, serviceRoleKey);
+        await serviceClient
+          .from("withdrawal_beneficiaries")
+          .update({
+            metadata: {
+              ...params.metadata,
+              paystackRecipientCode: recipientCode,
+              paystackRecipientId: recipientBody.data.id,
+            },
+            provider_recipient_code: recipientCode,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", beneficiaryId);
+      }
+    } catch (_err) {
+      // Local beneficiary record created successfully
+    }
+  }
+
+  return jsonResponse({
+    data: beneficiaryId,
+    id: beneficiaryId,
+    ok: true,
+    requestId: params.id,
+  });
+}
+

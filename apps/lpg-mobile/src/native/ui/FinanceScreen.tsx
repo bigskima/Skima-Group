@@ -117,10 +117,21 @@ export function FinanceScreen({
   );
 }
 
+const NIGERIAN_BANKS = [
+  { name: "GTBank", code: "058" },
+  { name: "Access Bank", code: "044" },
+  { name: "Zenith Bank", code: "057" },
+  { name: "First Bank", code: "011" },
+  { name: "UBA", code: "033" },
+  { name: "OPay", code: "999992" },
+  { name: "PalmPay", code: "999991" },
+  { name: "Kuda Bank", code: "50211" },
+];
+
 export function WithdrawalScreen({
   workspace,
 }: {
-  workspace: "driver" | "station";
+  workspace: "driver" | "station" | "customer";
 }) {
   const wallets = domainQueries.wallets();
   const beneficiaries = domainQueries.beneficiaries();
@@ -149,9 +160,12 @@ export function WithdrawalScreen({
   const [adding, setAdding] = useState(false);
   const [accountName, setAccountName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
-  const [bankCode, setBankCode] = useState("");
-  const [provider, setProvider] = useState("");
+  const [bankCode, setBankCode] = useState("058");
+  const [provider, setProvider] = useState("provider.payment.paystack");
   const [message, setMessage] = useState<string | null>(null);
+
+  const selectedProvider = provider || (paymentProviders.length > 0 ? (firstString(paymentProviders[0], ["key"]) ?? "provider.payment.paystack") : "provider.payment.paystack");
+
   const add = useGatewayMutation({
     path: "/runtime/withdrawal-beneficiaries",
     schema: ActionResponseSchema,
@@ -167,8 +181,7 @@ export function WithdrawalScreen({
     if (
       !walletId ||
       !accountName.trim() ||
-      !accountNumber.trim() ||
-      !provider
+      !accountNumber.trim()
     ) {
       setMessage("Complete the verified payout account details.");
       return;
@@ -178,12 +191,12 @@ export function WithdrawalScreen({
         walletId,
         accountName: accountName.trim(),
         accountNumber: accountNumber.trim(),
-        bankCode: bankCode.trim() || undefined,
-        providerAdapterKey: provider,
+        bankCode: bankCode.trim() || "058",
+        providerAdapterKey: selectedProvider,
         idempotencyKey: idempotencyKey(`${workspace}-beneficiary`, walletId),
       });
       setAdding(false);
-      setMessage("Your payout account is being checked. We’ll let you know when it is ready.");
+      setMessage("Payout account added for Paystack verification.");
     } catch (cause) {
       setMessage(
         friendlyError(cause, "The payout account could not be added."),
@@ -213,7 +226,7 @@ export function WithdrawalScreen({
         idempotencyKey: idempotencyKey(`${workspace}-withdrawal`, walletId),
       });
       setAmount("");
-      setMessage("Withdrawal request submitted securely.");
+      setMessage("Withdrawal request submitted securely via Paystack.");
     } catch (cause) {
       setMessage(
         friendlyError(cause, "The withdrawal could not be submitted."),
@@ -231,49 +244,45 @@ export function WithdrawalScreen({
       }
     >
       <View style={styles.hero}>
-        <Text style={styles.heroLabel}>AVAILABLE</Text>
+        <Text style={styles.heroLabel}>AVAILABLE BALANCE</Text>
         <Text style={styles.heroAmount}>{money(available, currency)}</Text>
       </View>
       {adding || active.length === 0 ? (
         <>
           <TextInput
             style={styles.input}
-            placeholder="Account name"
+            placeholder="Account holder name"
             placeholderTextColor={colors.muted}
             value={accountName}
             onChangeText={setAccountName}
           />
           <TextInput
             style={styles.input}
-            placeholder="Account number"
+            placeholder="10-digit account number"
             placeholderTextColor={colors.muted}
             keyboardType="number-pad"
             value={accountNumber}
             onChangeText={setAccountNumber}
           />
+          <Text style={{ color: colors.ink, fontWeight: "800", marginTop: 4 }}>Select bank</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            {NIGERIAN_BANKS.map((b) => (
+              <Pressable
+                key={b.code}
+                onPress={() => setBankCode(b.code)}
+                style={[styles.option, { paddingHorizontal: 12, paddingVertical: 8 }, bankCode === b.code && styles.selected]}
+              >
+                <Text style={styles.optionText}>{b.name}</Text>
+              </Pressable>
+            ))}
+          </View>
           <TextInput
             style={styles.input}
-            placeholder="Bank code (optional)"
+            placeholder="Bank code (CBN 3-digit)"
             placeholderTextColor={colors.muted}
             value={bankCode}
             onChangeText={setBankCode}
           />
-          <View style={styles.options}>
-            {paymentProviders.map((item) => {
-              const key = firstString(item, ["key"]) ?? "";
-              return (
-                <Pressable
-                  key={key}
-                  onPress={() => setProvider(key)}
-                  style={[styles.option, provider === key && styles.selected]}
-                >
-                  <Text style={styles.optionText}>
-                    {firstString(item, ["display_name", "displayName"]) ?? key}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
           <Pressable
             style={styles.primary}
             disabled={add.isPending}
@@ -282,7 +291,7 @@ export function WithdrawalScreen({
             {add.isPending ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.primaryText}>Add payout account</Text>
+              <Text style={styles.primaryText}>Add Paystack payout account</Text>
             )}
           </Pressable>
         </>
@@ -326,7 +335,7 @@ export function WithdrawalScreen({
             {withdraw.isPending ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.primaryText}>Request withdrawal</Text>
+              <Text style={styles.primaryText}>Request Paystack withdrawal</Text>
             )}
           </Pressable>
           <Pressable onPress={() => setAdding(true)}>
@@ -336,7 +345,7 @@ export function WithdrawalScreen({
       )}
       {message ? <Text style={styles.message}>{message}</Text> : null}
       <Text style={styles.note}>
-        Your request will be reviewed and sent to your selected payout account.
+        Paystack processes your payout to your verified bank account after backend confirmation.
       </Text>
     </Screen>
   );

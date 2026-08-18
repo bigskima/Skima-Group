@@ -22,7 +22,7 @@ export function TopUpScreen() {
   const currencies = domainQueries.currencies();
   const providers = domainQueries.providers();
   const [amount, setAmount] = useState("");
-  const [provider, setProvider] = useState("");
+  const [provider, setProvider] = useState("provider.payment.paystack");
   const [error, setError] = useState<string | null>(null);
   const mutation = useGatewayMutation({
     path: "/runtime/payments/deposits",
@@ -52,7 +52,7 @@ export function TopUpScreen() {
         amount: value,
         currencyCode: currency,
         walletId: walletId ?? undefined,
-        providerAdapterKey: provider || undefined,
+        providerAdapterKey: provider || "provider.payment.paystack",
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey("wallet-top-up", walletId ?? "wallet"),
         metadata: { returnUrl: Linking.createURL("payment-return") },
@@ -97,20 +97,21 @@ export function TopUpScreen() {
         value={amount}
         onChangeText={setAmount}
         keyboardType="decimal-pad"
-        placeholder="Enter amount"
+        placeholder="Enter amount (e.g. 5000)"
         placeholderTextColor={colors.muted}
         style={styles.input}
       />
-      <Text style={styles.fieldLabel}>Choose how to pay</Text>
+      <Text style={styles.fieldLabel}>Choose payment method</Text>
       <View style={styles.providers}>
         <Pressable
-          onPress={() => setProvider("")}
-          style={[styles.provider, !provider && styles.selected]}
+          onPress={() => setProvider("provider.payment.paystack")}
+          style={[styles.provider, (provider === "provider.payment.paystack" || !provider) && styles.selected]}
         >
-          <Text style={styles.providerText}>Recommended</Text>
+          <Text style={styles.providerText}>Paystack (Cards, Transfer, USSD)</Text>
         </Pressable>
         {paymentProviders.map((item, index) => {
           const key = firstString(item, ["key"]) ?? "";
+          if (key === "provider.payment.paystack") return null;
           return (
             <Pressable
               key={key}
@@ -134,12 +135,11 @@ export function TopUpScreen() {
         {mutation.isPending ? (
           <ActivityIndicator color="white" />
         ) : (
-          <Text style={styles.primaryText}>Continue securely</Text>
+          <Text style={styles.primaryText}>Continue to Paystack</Text>
         )}
       </Pressable>
       <Text style={styles.note}>
-        You'll review and approve the payment securely before your wallet is
-        updated.
+        You will complete payment securely via Paystack. Your wallet balance update is confirmed by secure backend verification.
       </Text>
     </Screen>
   );

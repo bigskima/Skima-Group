@@ -60,6 +60,53 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
   if (
     normalized.providerStatus &&
+    (normalized.eventTypeKey.includes("transfer") ||
+      String(normalized.metadata?.paystackEvent).startsWith("transfer."))
+  ) {
+    const { data: withdrawalRecord } = await supabase
+      .from("withdrawal_requests")
+      .select("id")
+      .or(
+        `provider_reference.eq.${normalized.providerReference},public_reference.eq.${normalized.providerReference}`,
+      )
+      .maybeSingle();
+
+    if (withdrawalRecord) {
+      const withdrawalResult = await supabase.rpc("process_wallet_withdrawal_transfer", {
+        target_idempotency_key: normalized.idempotencyKey,
+        target_metadata: {
+          ...normalized.metadata,
+          requestId: id,
+          source: "payment-webhook",
+        },
+        target_provider_reference: normalized.providerReference,
+        target_provider_status: normalized.providerStatus,
+        target_response_payload: payload,
+        target_source: normalized.source,
+        target_withdrawal_request_id: withdrawalRecord.id,
+      });
+
+      if (!withdrawalResult.error) {
+        await recordProviderExecution(
+          supabase,
+          normalized,
+          payload,
+          { withdrawalRequestId: withdrawalResult.data },
+          "succeeded",
+          id,
+        );
+
+        return jsonResponse({
+          ok: true,
+          requestId: id,
+          withdrawalRequestId: withdrawalResult.data,
+        });
+      }
+    }
+  }
+
+  if (
+    normalized.providerStatus &&
     (normalized.depositRequestId || normalized.providerReference)
   ) {
     const depositResult = await supabase.rpc("process_wallet_deposit_provider_event", {
@@ -93,9 +140,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
       return jsonResponse(
         {
-          ok: false,
           error: "database_error",
           message: depositResult.error.message,
+          ok: false,
           requestId: id,
         },
         400,
@@ -116,8 +163,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
     }
 
     return jsonResponse({
-      ok: true,
       depositRequestId: depositResult.data,
+      ok: true,
       requestId: id,
     });
   }
@@ -356,11 +403,26 @@ function normalizePaystackProviderStatus(
   eventName: string,
   status: string | null,
 ): "succeeded" | "failed" | "reversed" | null {
-  if (eventName === "charge.success" && status === "success") {
+  if (
+    (eventName === "charge.success" && status === "success") ||
+    eventName === "transfer.success" ||
+    (eventName.startsWith("transfer.") && status === "success")
+  ) {
     return "succeeded";
   }
 
-  if (eventName === "refund.processed" || status === "reversed") {
+  if (
+    eventName === "transfer.failed" ||
+    (eventName.startsWith("transfer.") && status && status !== "success")
+  ) {
+    return "failed";
+  }
+
+  if (
+    eventName === "transfer.reversed" ||
+    eventName === "refund.processed" ||
+    status === "reversed"
+  ) {
     return "reversed";
   }
 
