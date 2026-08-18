@@ -24,6 +24,7 @@ export default function Layout() {
           "payment-methods",
           "support",
           "wallet/top-up",
+          "wallet/withdraw",
           "driver-application",
           "station-application",
           "driver-documents",

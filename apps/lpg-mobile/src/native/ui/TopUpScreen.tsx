@@ -15,31 +15,44 @@ import { ActionResponseSchema, firstString } from "../api/records";
 import { colors, radii, spacing } from "../theme/tokens";
 import { idempotencyKey } from "../utilities/idempotency";
 import { friendlyError } from "../utilities/friendlyError";
+import { PaystackPaymentModal } from "./PaystackPaymentModal";
 import { Screen } from "./Screen";
+
 export function TopUpScreen() {
   const wallets = domainQueries.wallets();
-  const deposits = domainQueries.transactions();
   const currencies = domainQueries.currencies();
   const providers = domainQueries.providers();
+
   const [amount, setAmount] = useState("");
   const [provider, setProvider] = useState("provider.payment.paystack");
   const [error, setError] = useState<string | null>(null);
+
+  const [modalVisible, setModalVisible] = useState(false);
+  const [pendingDeposit, setPendingDeposit] = useState<{
+    checkoutUrl: string | null;
+    depositId: string | null;
+    amount: number;
+  } | null>(null);
+
   const mutation = useGatewayMutation({
     path: "/runtime/payments/deposits",
     schema: ActionResponseSchema,
     invalidate: [["deposits"], ["wallets"]],
   });
+
   const wallet = wallets.data?.[0];
   const walletId = firstString(wallet, ["id", "wallet_id", "walletId"]);
   const currency =
     firstString(wallet, ["currency_code", "currencyCode"]) ??
     firstString(currencies.data?.[0], ["code"]) ??
     "NGN";
+
   const paymentProviders = (providers.data ?? []).filter(
     (item) =>
       firstString(item, ["provider_kind", "providerKind"]) === "payment" &&
       firstString(item, ["status"]) === "active",
   );
+
   const submit = async () => {
     const value = Number(amount);
     setError(null);
@@ -47,6 +60,7 @@ export function TopUpScreen() {
       setError("Enter a valid amount.");
       return;
     }
+
     try {
       const result = await mutation.mutateAsync({
         amount: value,
@@ -57,28 +71,31 @@ export function TopUpScreen() {
         idempotencyKey: idempotencyKey("wallet-top-up", walletId ?? "wallet"),
         metadata: { returnUrl: Linking.createURL("payment-return") },
       });
-      const resultId =
-        typeof result === "string"
-          ? result
-          : result &&
-              typeof result === "object" &&
-              typeof result.id === "string"
-            ? result.id
-            : null;
-      const refreshed = await deposits.refetch();
-      const deposit = refreshed.data?.find(
-        (item) => firstString(item, ["id"]) === resultId,
-      );
-      const checkout = firstString(deposit, ["checkout_url", "checkoutUrl"]);
-      if (checkout && (await Linking.canOpenURL(checkout)))
-        await Linking.openURL(checkout);
-      else router.replace("/(customer)/wallet");
+
+      const resObj = typeof result === "object" && result !== null ? result : {};
+      const nestedData = (resObj as Record<string, unknown>).data as Record<string, unknown> | undefined;
+
+      const checkout =
+        firstString(resObj, ["checkout_url", "checkoutUrl", "authorization_url", "authorizationUrl", "url"]) ??
+        firstString(nestedData, ["checkout_url", "checkoutUrl", "authorization_url", "authorizationUrl", "url"]);
+
+      const depositId =
+        firstString(resObj, ["id", "deposit_id", "depositId"]) ??
+        firstString(nestedData, ["id", "deposit_id", "depositId"]);
+
+      setPendingDeposit({
+        checkoutUrl: checkout,
+        depositId: depositId,
+        amount: value,
+      });
+      setModalVisible(true);
     } catch (cause) {
       setError(
         friendlyError(cause, "The top-up could not be started. Please try again."),
       );
     }
   };
+
   return (
     <Screen
       eyebrow="Wallet"
@@ -93,6 +110,7 @@ export function TopUpScreen() {
         <Text style={styles.heroLabel}>Wallet currency</Text>
         <Text style={styles.heroValue}>{currency}</Text>
       </View>
+
       <TextInput
         value={amount}
         onChangeText={setAmount}
@@ -101,6 +119,7 @@ export function TopUpScreen() {
         placeholderTextColor={colors.muted}
         style={styles.input}
       />
+
       <Text style={styles.fieldLabel}>Choose payment method</Text>
       <View style={styles.providers}>
         <Pressable
@@ -126,7 +145,9 @@ export function TopUpScreen() {
           );
         })}
       </View>
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
+
       <Pressable
         disabled={mutation.isPending}
         onPress={() => void submit()}
@@ -135,12 +156,26 @@ export function TopUpScreen() {
         {mutation.isPending ? (
           <ActivityIndicator color="white" />
         ) : (
-          <Text style={styles.primaryText}>Continue to Paystack</Text>
+          <Text style={styles.primaryText}>Continue to Paystack Modal</Text>
         )}
       </Pressable>
+
       <Text style={styles.note}>
-        You will complete payment securely via Paystack. Your wallet balance update is confirmed by secure backend verification.
+        Paystack checkout opens instantly in an in-app secure modal. Your wallet balance is updated automatically upon payment confirmation.
       </Text>
+
+      <PaystackPaymentModal
+        visible={modalVisible}
+        checkoutUrl={pendingDeposit?.checkoutUrl ?? null}
+        depositId={pendingDeposit?.depositId ?? null}
+        amount={pendingDeposit?.amount ?? null}
+        currency={currency}
+        onClose={() => setModalVisible(false)}
+        onSuccess={() => {
+          setModalVisible(false);
+          router.replace("/(customer)/wallet");
+        }}
+      />
     </Screen>
   );
 }
