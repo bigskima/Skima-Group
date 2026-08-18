@@ -23,6 +23,7 @@ const ROUTES = new Set([
   "/admin/financial-policies/activate",
   "/admin/financial-policies/deactivate",
   "/admin/financial-policies/rollback",
+  "/admin/payments/bank-transfer-config",
   "/admin/system/overview",
   "/admin/system/health",
   "/admin/system/jobs",
@@ -3006,7 +3007,10 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         providerAdapterKey = await resolveActivePaymentProviderKey(supabase);
       }
 
-      if (providerAdapterKey === "provider.payment.paystack") {
+      if (
+        providerAdapterKey === "provider.payment.paystack" ||
+        providerAdapterKey === "provider.payment.bank_transfer"
+      ) {
         return initializePaystackDeposit({
           amount,
           currencyCode,
@@ -3053,6 +3057,59 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       supabase,
       "payment_deposit_requests",
     );
+  }
+
+  if (routePath === "/admin/payments/bank-transfer-config" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    const bankName = requireString(payload.bankName, "bankName");
+    const accountNumber = requireString(payload.accountNumber, "accountNumber");
+    const accountName = requireString(payload.accountName, "accountName");
+
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const { error: upsertErr } = await serviceClient
+      .from("provider_adapters")
+      .upsert(
+        {
+          provider_kind: "payment",
+          key: "provider.payment.bank_transfer",
+          display_name: "Direct Bank Transfer Adapter",
+          status: "active",
+          config: {
+            bank_name: bankName,
+            account_number: accountNumber,
+            account_name: accountName,
+            bankName,
+            accountNumber,
+            accountName,
+            updated_at: new Date().toISOString(),
+            updated_by: authResult.user.id,
+          },
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "provider_kind,key" },
+      );
+
+    if (upsertErr) {
+      return databaseError(upsertErr, id);
+    }
+
+    return jsonResponse({
+      ok: true,
+      data: {
+        accountName,
+        accountNumber,
+        bankName,
+        message: "Direct bank transfer details updated successfully.",
+      },
+      id: id,
+      requestId: id,
+    });
   }
 
   if (routePath === "/runtime/payment-webhook-events" && request.method === "GET") {
@@ -7403,8 +7460,26 @@ async function initializePaystackDeposit(
   const authorizationUrl = requireString(paystackData.authorization_url, "authorization_url");
   const providerReference = optionalString(paystackData.reference) ??
     String(depositRecord.provider_reference);
+  const { data: dbBankAdapter } = await serviceClient
+    .from("provider_adapters")
+    .select("config")
+    .eq("key", "provider.payment.bank_transfer")
+    .maybeSingle();
+
+  const dbConfig = dbBankAdapter?.config && typeof dbBankAdapter.config === "object" ? (dbBankAdapter.config as Record<string, unknown>) : {};
+  const dbBankName = stringOrNull(getRecordValue(dbConfig, "bank_name")) ?? stringOrNull(getRecordValue(dbConfig, "bankName"));
+  const dbAccountNumber = stringOrNull(getRecordValue(dbConfig, "account_number")) ?? stringOrNull(getRecordValue(dbConfig, "accountNumber"));
+  const dbAccountName = stringOrNull(getRecordValue(dbConfig, "account_name")) ?? stringOrNull(getRecordValue(dbConfig, "accountName"));
+
+  const serverBankName = dbBankName ?? Deno.env.get("SKIMA_DIRECT_BANK_NAME") ?? null;
+  const serverAccountNumber = dbAccountNumber ?? Deno.env.get("SKIMA_DIRECT_ACCOUNT_NUMBER") ?? null;
+  const serverAccountName = dbAccountName ?? Deno.env.get("SKIMA_DIRECT_ACCOUNT_NAME") ?? null;
+
   const mergedMetadata = {
     ...requireRecordOrEmpty(depositRecord.metadata),
+    ...(serverBankName ? { bank_name: serverBankName, bankName: serverBankName } : {}),
+    ...(serverAccountNumber ? { account_number: serverAccountNumber, accountNumber: serverAccountNumber } : {}),
+    ...(serverAccountName ? { account_name: serverAccountName, accountName: serverAccountName } : {}),
     paystack: {
       accessCode: optionalString(paystackData.access_code),
       initializedAt: new Date().toISOString(),
@@ -7441,6 +7516,9 @@ async function initializePaystackDeposit(
   return jsonResponse({
     ok: true,
     data: {
+      accountName: serverAccountName,
+      accountNumber: serverAccountNumber,
+      bankName: serverBankName,
       checkoutUrl: authorizationUrl,
       currencyCode: String(depositRecord.currency_code),
       depositRequestId: depositId,

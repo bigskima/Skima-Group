@@ -32,9 +32,9 @@ export function BankTransferModal({
   depositId,
   amount,
   currency,
-  bankName = "Wema Bank / Paystack",
-  accountNumber = "992" + Math.floor(1000000 + Math.random() * 9000000),
-  accountName = "Skima LPG Wallet Topup",
+  bankName = "Guaranty Trust Bank",
+  accountNumber = "0123456789",
+  accountName = "Skima LPG Operations",
   onClose,
   onSuccess,
 }: BankTransferModalProps) {

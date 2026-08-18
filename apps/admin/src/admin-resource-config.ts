@@ -1203,6 +1203,17 @@ export const financeConsoleConfig: AdminResourceConsoleConfig = {
           [requiredText("depositRequestId", "Deposit Request ID"), optionalJson()],
           "platform.financial.manage",
         ),
+        action(
+          "configure-bank-transfer",
+          "Configure Direct Bank Account",
+          "/admin/payments/bank-transfer-config",
+          [
+            requiredText("bankName", "Bank Name", "e.g. Guaranty Trust Bank"),
+            requiredText("accountNumber", "Account Number", "e.g. 0123456789"),
+            requiredText("accountName", "Account Name", "e.g. Your Registered Starter Business Name"),
+          ],
+          "platform.financial.manage",
+        ),
       ],
     },
     {
