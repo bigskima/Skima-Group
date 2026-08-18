@@ -201,6 +201,7 @@ export function TopUpScreen() {
       <BankTransferModal
         visible={bankTransferModalVisible}
         depositId={pendingDeposit?.depositId ?? null}
+        checkoutUrl={pendingDeposit?.checkoutUrl ?? null}
         amount={pendingDeposit?.amount ?? null}
         currency={currency}
         onClose={() => setBankTransferModalVisible(false)}

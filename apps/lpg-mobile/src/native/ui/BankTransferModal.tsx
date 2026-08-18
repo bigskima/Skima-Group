@@ -1,9 +1,11 @@
 import * as Clipboard from "expo-clipboard";
-import { CheckCircle2, ShieldCheck, X, Copy, Landmark, RefreshCw, Check } from "lucide-react-native";
+import * as Linking from "expo-linking";
+import { CheckCircle2, ShieldCheck, X, Copy, Landmark, RefreshCw, Check, ExternalLink } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -18,6 +20,7 @@ const SUCCESS_STATUSES = new Set(["completed", "confirmed", "credited", "succeed
 export interface BankTransferModalProps {
   visible: boolean;
   depositId: string | null;
+  checkoutUrl?: string | null;
   amount: number | null;
   currency: string;
   bankName?: string;
@@ -30,6 +33,7 @@ export interface BankTransferModalProps {
 export function BankTransferModal({
   visible,
   depositId,
+  checkoutUrl,
   amount,
   currency,
   bankName = "Guaranty Trust Bank",
@@ -94,6 +98,16 @@ export function BankTransferModal({
     setChecking(true);
     await deposits.refetch();
     setChecking(false);
+  };
+
+  const openExternalPaystack = async () => {
+    if (checkoutUrl) {
+      if (Platform.OS === "web") {
+        window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+      } else if (await Linking.canOpenURL(checkoutUrl)) {
+        await Linking.openURL(checkoutUrl);
+      }
+    }
   };
 
   return (
@@ -172,6 +186,16 @@ export function BankTransferModal({
                 </Text>
                 <Text style={styles.instructionStep}>3. Transfer is detected automatically in seconds.</Text>
               </View>
+
+              {/* Paystack Virtual Account Button */}
+              {checkoutUrl ? (
+                <Pressable onPress={() => void openExternalPaystack()} style={styles.portalLinkBtn}>
+                  <ExternalLink color="white" size={18} />
+                  <Text style={styles.portalLinkText}>
+                    {Platform.OS === "web" ? "Open Paystack Virtual Account Portal" : "Generate Paystack Virtual Account"}
+                  </Text>
+                </Pressable>
+              ) : null}
 
               {/* Live Polling Card */}
               <View style={styles.pollingCard}>
@@ -408,6 +432,22 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontWeight: "800",
     fontSize: 13,
+  },
+  portalLinkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: radii.md,
+    backgroundColor: colors.brand,
+    marginVertical: 4,
+  },
+  portalLinkText: {
+    color: "white",
+    fontWeight: "900",
+    fontSize: 14,
   },
   securityNote: {
     color: colors.muted,
