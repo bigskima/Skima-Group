@@ -1,39 +1,21 @@
 import { router, useLocalSearchParams } from "expo-router";
-import {
-  Download,
-  Edit3,
-  QrCode as QrCodeIcon,
-  RefreshCw,
-  Save,
-} from "lucide-react-native";
+import { Download, Edit3, QrCode as QrCodeIcon, RefreshCw, Save, ShieldCheck } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
-import {
-  ActionResponseSchema,
-  displayReference,
-  displayStatus,
-  firstNumber,
-  firstString,
-  recordId,
-} from "../api/records";
+import { ActionResponseSchema, displayReference, displayStatus, firstNumber, firstString, recordId } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { colors, radii, spacing } from "../theme/tokens";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { saveQrPng } from "../utilities/qrDownload";
-import { Card } from "./Card";
+import { AppButton } from "./AppButton";
+import { EmptyState } from "./EmptyState";
 import { PresentationMediaPanel } from "./PresentationMediaPanel";
 import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
+import { StatusPill } from "./StatusPill";
 
 type QrHandle = { toDataURL(callback: (base64: string) => void): void };
 
@@ -45,13 +27,14 @@ export function CylinderDetailScreen() {
   const [name, setName] = useState("");
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const cylinder = query.data?.find(
-    (item) => recordId(item) === id || displayReference(item) === id,
-  );
+  const [messageSuccess, setMessageSuccess] = useState(false);
+  const cylinder = query.data?.find((item) => recordId(item) === id || displayReference(item) === id);
   const cylinderReference = cylinder ? displayReference(cylinder) : null;
   const displayName = cylinder ? firstString(cylinder, ["display_name", "displayName"]) : null;
   const qrValue = cylinder ? firstString(cylinder, ["qr_payload", "qrPayload"]) : null;
   const cylinderId = cylinder ? recordId(cylinder) : null;
+  const status = cylinder ? displayStatus(cylinder) ?? "registered" : "";
+
   const nameMutation = useGatewayMutation({
     path: "/lpg/cylinders/name",
     schema: ActionResponseSchema,
@@ -64,13 +47,12 @@ export function CylinderDetailScreen() {
     if (!cylinderId || name.trim().length < 2) return;
     setMessage(null);
     try {
-      await nameMutation.mutateAsync({
-        cylinderId,
-        displayName: name.trim(),
-      });
+      await nameMutation.mutateAsync({ cylinderId, displayName: name.trim() });
       setEditing(false);
-      setMessage("Cylinder name saved.");
+      setMessageSuccess(true);
+      setMessage("Cylinder name updated.");
     } catch (cause) {
+      setMessageSuccess(false);
       setMessage(friendlyError(cause, "We couldn't save the new name. Please try again."));
     }
   };
@@ -78,10 +60,12 @@ export function CylinderDetailScreen() {
   const downloadQr = async () => {
     setMessage(null);
     if (!qrValue) {
-      setMessage("This cylinder does not have a scan code yet. Refresh the page in a moment.");
+      setMessageSuccess(false);
+      setMessage("This cylinder's scan code is not available yet. Refresh and try again shortly.");
       return;
     }
     if (!qrRef.current) {
+      setMessageSuccess(false);
       setMessage("The QR code is still preparing. Try again in a moment.");
       return;
     }
@@ -94,32 +78,49 @@ export function CylinderDetailScreen() {
           ).then(resolve, reject);
         });
       });
+      setMessageSuccess(true);
       setMessage("QR code is ready to save or share.");
     } catch (cause) {
+      setMessageSuccess(false);
       setMessage(friendlyError(cause, "We couldn't save the QR code. Please try again."));
     }
   };
 
   return (
     <Screen
-      eyebrow="Verified asset"
+      eyebrow="SKIMA cylinder identity"
       title={displayName ?? "Cylinder details"}
-      action={
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.back}>Back</Text>
-        </Pressable>
-      }
+      subtitle="Your permanent SKIMA identity, safety information and scan code for this cylinder."
+      action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {query.isPending ? (
         <ScreenSkeleton cards={3} />
       ) : query.error ? (
-        <Text style={styles.error}>We couldn't load this cylinder. Please try again.</Text>
+        <EmptyState
+          icon={<QrCodeIcon color={palette.brand} size={27} />}
+          title="Cylinder could not be loaded"
+          description="Check your connection and refresh this cylinder."
+          action={<AppButton label="Retry" onPress={() => void query.refetch()} />}
+        />
       ) : !cylinder ? (
-        <Text style={[styles.muted, { color: palette.muted }]}>
-          This cylinder is unavailable or you no longer have access.
-        </Text>
+        <EmptyState
+          icon={<QrCodeIcon color={palette.brand} size={27} />}
+          title="Cylinder unavailable"
+          description="This cylinder is unavailable or is no longer accessible from this account."
+          action={<AppButton label="Back to cylinders" onPress={() => router.replace("/(customer)/cylinders")} />}
+        />
       ) : (
         <>
+          <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
+            <View style={styles.heroIcon}><QrCodeIcon color="#FFFFFF" size={28} /></View>
+            <View style={styles.heroCopy}>
+              <Text style={styles.heroEyebrow}>PERMANENT SKIMA IDENTITY</Text>
+              <Text numberOfLines={1} style={styles.heroReference}>{cylinderReference ?? "Reference unavailable"}</Text>
+              <Text style={styles.heroBody}>{firstNumber(cylinder, ["size_kg", "sizeKg"]) ?? "Configured"} kg cylinder</Text>
+            </View>
+            <StatusPill label={friendlyCylinderStatus(status)} tone={cylinderTone(status)} />
+          </View>
+
           <PresentationMediaPanel
             colour={firstString(cylinder, ["colour", "color"])}
             originalAssetId={firstAssetId(cylinder.image_asset_ids ?? cylinder.imageAssetIds)}
@@ -127,95 +128,57 @@ export function CylinderDetailScreen() {
             subjectType="lpg_cylinder"
           />
 
-          <Card>
+          <View style={[styles.nameCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <View style={styles.nameHead}>
-              <View style={{ flex: 1, gap: 3 }}>
-                <Text style={[styles.label, { color: palette.muted }]}>
-                  YOUR CYLINDER NAME
-                </Text>
+              <View style={styles.nameCopy}>
+                <Text style={[styles.label, { color: palette.muted }]}>YOUR CYLINDER NAME</Text>
                 {editing ? (
                   <TextInput
                     autoFocus
                     onChangeText={setName}
                     placeholder="Name this cylinder"
                     placeholderTextColor={palette.muted}
-                    style={[
-                      styles.nameInput,
-                      {
-                        color: palette.ink,
-                        borderColor: palette.border,
-                        backgroundColor: palette.input,
-                      },
-                    ]}
+                    style={[styles.nameInput, { color: palette.ink, borderColor: palette.borderStrong, backgroundColor: palette.input }]}
                     value={name}
                   />
                 ) : (
-                  <Text style={[styles.nameValue, { color: palette.ink }]}>
-                    {displayName ?? "Add a name"}
-                  </Text>
+                  <Text style={[styles.nameValue, { color: palette.ink }]}>{displayName ?? "Add a name"}</Text>
                 )}
               </View>
-              <Pressable
+              <AppButton
+                accessibilityLabel={editing ? "Save cylinder name" : "Edit cylinder name"}
+                label={editing ? "Save" : "Edit"}
+                size="sm"
+                variant={editing ? "primary" : "secondary"}
+                loading={nameMutation.isPending}
+                icon={editing ? <Save color={editing ? "#FFFFFF" : palette.brand} size={16} /> : <Edit3 color={palette.brand} size={16} />}
                 onPress={() => editing ? void saveName() : setEditing(true)}
-                style={[styles.editButton, { backgroundColor: palette.brandSoft }]}
-              >
-                {nameMutation.isPending ? (
-                  <ActivityIndicator color={colors.brand} />
-                ) : editing ? (
-                  <Save color={colors.brand} size={19} />
-                ) : (
-                  <Edit3 color={colors.brand} size={19} />
-                )}
-              </Pressable>
+              />
             </View>
-            {message ? (
-              <Text
-                accessibilityRole="alert"
-                style={[
-                  styles.message,
-                  {
-                    color: message.includes("saved") || message.includes("ready")
-                      ? colors.success
-                      : colors.danger,
-                  },
-                ]}
-              >
-                {message}
-              </Text>
-            ) : null}
-          </Card>
+          </View>
 
-          <Card>
+          <View style={[styles.detailsCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <Field label="SKIMA reference" value={cylinderReference ?? "Unavailable"} />
+            <Divider />
             <Field label="Size" value={`${firstNumber(cylinder, ["size_kg", "sizeKg"]) ?? "Configured"} kg`} />
+            <Divider />
             <Field label="Brand" value={firstString(cylinder, ["brand", "manufacturer"]) ?? "Not recorded"} />
+            <Divider />
             <Field label="Serial number" value={firstString(cylinder, ["serial_number", "serialNumber"]) ?? "Not recorded"} />
+            <Divider />
             <Field label="Colour" value={firstString(cylinder, ["colour", "color"]) ?? "Not recorded"} />
-            <Field label="Condition" value={(firstString(cylinder, ["condition_status", "conditionStatus"]) ?? "Not recorded").replace(/[_-]/g, " ")} />
+            <Divider />
+            <Field label="Condition" value={friendly(firstString(cylinder, ["condition_status", "conditionStatus"]) ?? "Not recorded")} />
+            <Divider />
             <Field label="Next inspection" value={formatDate(firstString(cylinder, ["next_inspection_at", "nextInspectionAt"]))} />
-          </Card>
+          </View>
 
-          <View
-            style={[
-              styles.qrCard,
-              {
-                backgroundColor: palette.surface,
-                borderColor: palette.border,
-                shadowColor: palette.shadow,
-              },
-            ]}
-          >
+          <View style={[styles.qrCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <View style={styles.qrHeader}>
-              <View style={[styles.qrIcon, { backgroundColor: palette.brandSoft }]}>
-                <QrCodeIcon color={colors.brand} size={22} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.qrTitle, { color: palette.ink }]}>
-                  Private cylinder scan code
-                </Text>
-                <Text style={[styles.muted, { color: palette.muted }]}>
-                  Download saves only the QR code, not the full screen.
-                </Text>
+              <View style={[styles.qrIcon, { backgroundColor: palette.brandSoft }]}><QrCodeIcon color={palette.brand} size={22} /></View>
+              <View style={styles.qrHeaderCopy}>
+                <Text style={[styles.qrTitle, { color: palette.ink }]}>Cylinder scan code</Text>
+                <Text style={[styles.qrBody, { color: palette.muted }]}>Attach or keep this code with the correct cylinder so SKIMA can match it during pickup, station arrival and delivery.</Text>
               </View>
             </View>
 
@@ -224,57 +187,40 @@ export function CylinderDetailScreen() {
                 <View style={styles.qrFrame}>
                   <QRCode
                     backgroundColor="white"
-                    color={colors.ink}
-                    getRef={(ref) => {
-                      qrRef.current = ref as QrHandle | null;
-                    }}
+                    color="#151A17"
+                    getRef={(ref) => { qrRef.current = ref as QrHandle | null; }}
                     size={192}
                     value={qrValue}
                   />
                 </View>
-                <Text style={[styles.reference, { color: palette.ink }]}>
-                  {displayReference(cylinder)}
-                </Text>
-                <Text style={styles.status}>
-                  {(displayStatus(cylinder) ?? "registered").replace(/[_-]/g, " ")}
-                </Text>
-                <Pressable style={styles.primary} onPress={() => void downloadQr()}>
-                  <Download color="white" size={19} />
-                  <Text style={styles.primaryText}>Download QR code</Text>
-                </Pressable>
+                <Text style={[styles.reference, { color: palette.ink }]}>{cylinderReference}</Text>
+                <AppButton
+                  label="Save or share QR code"
+                  fullWidth
+                  icon={<Download color="#FFFFFF" size={18} />}
+                  onPress={() => void downloadQr()}
+                />
               </>
             ) : (
               <View style={styles.pendingIdentity}>
-                <View style={[styles.qrSkeleton, { borderColor: palette.border }]}>
-                  {Array.from({ length: 9 }).map((_, index) => (
-                    <View
-                      key={index}
-                      style={[
-                        styles.qrSkeletonBit,
-                        {
-                          opacity: index % 2 === 0 ? 1 : 0.45,
-                          backgroundColor: index % 3 === 0 ? colors.brand : palette.border,
-                        },
-                      ]}
-                    />
-                  ))}
-                </View>
-                <Text style={[styles.pendingTitle, { color: palette.ink }]}>
-                  Scan code repair in progress
-                </Text>
-                <Text style={[styles.pendingBody, { color: palette.muted }]}>
-                  Existing cylinders are being assigned permanent private scan codes. Refresh this view after the backend migration finishes.
-                </Text>
-                <Pressable
-                  onPress={() => void query.refetch()}
-                  style={[styles.secondary, { borderColor: palette.border }]}
-                >
-                  <RefreshCw color={colors.brand} size={17} />
-                  <Text style={styles.secondaryText}>Refresh identity</Text>
-                </Pressable>
+                <View style={[styles.pendingIcon, { backgroundColor: palette.brandSoft }]}><RefreshCw color={palette.brand} size={25} /></View>
+                <Text style={[styles.pendingTitle, { color: palette.ink }]}>Scan code is being prepared</Text>
+                <Text style={[styles.pendingBody, { color: palette.muted }]}>This cylinder is registered, but its downloadable scan code is not available on this screen yet.</Text>
+                <AppButton label="Refresh scan code" variant="secondary" icon={<RefreshCw color={palette.brand} size={17} />} onPress={() => void query.refetch()} />
               </View>
             )}
           </View>
+
+          <View style={[styles.security, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+            <ShieldCheck color={palette.mutedStrong} size={18} />
+            <Text style={[styles.securityText, { color: palette.muted }]}>A printed or saved QR identifies the cylinder, but SKIMA still checks the current order and backend cylinder record before any hand-off is accepted.</Text>
+          </View>
+
+          {message ? (
+            <View style={[styles.messageBox, { backgroundColor: messageSuccess ? palette.successSoft : palette.dangerSoft }]}>
+              <Text accessibilityRole="alert" style={[styles.messageText, { color: messageSuccess ? palette.success : palette.danger }]}>{message}</Text>
+            </View>
+          ) : null}
         </>
       )}
     </Screen>
@@ -285,10 +231,39 @@ function Field({ label, value }: { label: string; value: string }) {
   const { palette } = useAppTheme();
   return (
     <View style={styles.field}>
-      <Text style={[styles.label, { color: palette.muted }]}>{label}</Text>
-      <Text style={[styles.value, { color: palette.ink }]}>{value}</Text>
+      <Text style={[styles.fieldLabel, { color: palette.muted }]}>{label}</Text>
+      <Text style={[styles.fieldValue, { color: palette.ink }]}>{value}</Text>
     </View>
   );
+}
+
+function Divider() {
+  const { palette } = useAppTheme();
+  return <View style={[styles.divider, { backgroundColor: palette.border }]} />;
+}
+
+function friendly(value: string) {
+  return value.replace(/[_-]/g, " ").replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function friendlyCylinderStatus(value: string) {
+  const normalized = value.toLowerCase().replace(/[\s-]+/g, "_");
+  const labels: Record<string, string> = {
+    active: "Ready to refill",
+    registered: "Ready to refill",
+    damaged: "Needs attention",
+    unsafe: "Not safe to refill",
+    expired: "Inspection needed",
+  };
+  return labels[normalized] ?? friendly(value);
+}
+
+function cylinderTone(value: string): "neutral" | "brand" | "success" | "warning" | "danger" {
+  const normalized = value.toLowerCase();
+  if (["active", "registered"].includes(normalized)) return "success";
+  if (["unsafe", "damaged"].includes(normalized)) return "danger";
+  if (["expired", "inspection"].some((part) => normalized.includes(part))) return "warning";
+  return "brand";
 }
 
 function formatDate(value: string | null) {
@@ -298,117 +273,45 @@ function formatDate(value: string | null) {
 }
 
 function firstAssetId(value: unknown) {
-  return Array.isArray(value)
-    ? value.find((item): item is string => typeof item === "string") ?? null
-    : null;
+  return Array.isArray(value) ? value.find((item): item is string => typeof item === "string") ?? null : null;
 }
 
 function safeFileName(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 48) || "skima-cylinder";
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "skima-cylinder";
 }
 
 const styles = StyleSheet.create({
-  back: { color: colors.brand, fontWeight: "800" },
-  error: { color: colors.danger },
-  muted: { lineHeight: 20 },
+  hero: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
+  heroIcon: { width: 54, height: 54, borderRadius: 19, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
+  heroCopy: { flex: 1, minWidth: 0, gap: 3 },
+  heroEyebrow: { color: "rgba(255,255,255,.72)", ...typography.eyebrow, fontSize: 8 },
+  heroReference: { color: "#FFFFFF", ...typography.heading, fontSize: 19 },
+  heroBody: { color: "rgba(255,255,255,.82)", ...typography.caption },
+  nameCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
   nameHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  nameValue: { fontSize: 22, fontWeight: "900" },
-  nameInput: {
-    minHeight: 48,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    fontSize: 17,
-    fontWeight: "800",
-  },
-  editButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  message: { fontWeight: "700" },
-  field: { gap: 3 },
-  label: {
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  value: { fontSize: 16, fontWeight: "700", textTransform: "capitalize" },
-  qrCard: {
-    alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radii.lg,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.08,
-    shadowRadius: 24,
-  },
-  qrHeader: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  qrIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  qrTitle: { fontSize: 17, fontWeight: "900" },
-  qrFrame: {
-    padding: spacing.md,
-    backgroundColor: "white",
-    borderRadius: 22,
-  },
-  reference: { fontSize: 17, fontWeight: "900" },
-  status: { color: colors.success, fontWeight: "800", textTransform: "uppercase" },
-  primary: {
-    width: "100%",
-    minHeight: 54,
-    flexDirection: "row",
-    gap: spacing.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radii.md,
-    backgroundColor: colors.brand,
-    marginTop: spacing.sm,
-  },
-  primaryText: { color: "white", fontWeight: "900" },
-  pendingIdentity: { width: "100%", alignItems: "center", gap: spacing.sm },
-  qrSkeleton: {
-    width: 164,
-    height: 164,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    justifyContent: "center",
-    alignContent: "center",
-    padding: 18,
-    borderWidth: 1,
-    borderRadius: 24,
-  },
-  qrSkeletonBit: { width: 32, height: 32, borderRadius: 8 },
-  pendingTitle: { fontSize: 17, fontWeight: "900", textAlign: "center" },
-  pendingBody: { maxWidth: 420, lineHeight: 20, textAlign: "center" },
-  secondary: {
-    minHeight: 46,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: spacing.lg,
-    borderWidth: 1,
-    borderRadius: radii.pill,
-  },
-  secondaryText: { color: colors.brand, fontWeight: "900" },
+  nameCopy: { flex: 1, gap: 4 },
+  label: { ...typography.eyebrow, fontSize: 9 },
+  nameValue: { ...typography.heading, fontSize: 20 },
+  nameInput: { minHeight: 48, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: 16, fontWeight: "800" },
+  detailsCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  field: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md },
+  fieldLabel: { ...typography.caption, flex: 0.42 },
+  fieldValue: { ...typography.bodyStrong, fontSize: 14, flex: 0.58, textAlign: "right" },
+  divider: { height: StyleSheet.hairlineWidth },
+  qrCard: { alignItems: "center", gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  qrHeader: { width: "100%", flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
+  qrIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  qrHeaderCopy: { flex: 1, gap: 3 },
+  qrTitle: { ...typography.subheading, fontSize: 15 },
+  qrBody: { ...typography.caption, lineHeight: 18 },
+  qrFrame: { padding: spacing.md, backgroundColor: "#FFFFFF", borderRadius: 22 },
+  reference: { ...typography.bodyStrong, fontSize: 14 },
+  pendingIdentity: { width: "100%", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.md },
+  pendingIcon: { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  pendingTitle: { ...typography.subheading, textAlign: "center" },
+  pendingBody: { maxWidth: 420, ...typography.body, fontSize: 13, lineHeight: 19, textAlign: "center" },
+  security: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  securityText: { flex: 1, ...typography.caption, lineHeight: 18 },
+  messageBox: { borderRadius: radii.md, padding: spacing.md },
+  messageText: { ...typography.caption, fontWeight: "800", textAlign: "center" },
 });
