@@ -1,13 +1,31 @@
 import { router } from "expo-router";
-import { ArrowDownLeft, ArrowUpRight, History, Plus, ShieldCheck } from "lucide-react-native";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  History,
+  Plus,
+  ShieldCheck,
+} from "lucide-react-native";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
-import { displayReference, displayStatus, firstNumber, firstString, recordId } from "../api/records";
-import { colors, radii, spacing } from "../theme/tokens";
+import {
+  displayReference,
+  displayStatus,
+  firstNumber,
+  firstString,
+  recordId,
+} from "../api/records";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { colors, radii, shadows, spacing, typography } from "../theme/tokens";
+import { AppButton } from "./AppButton";
 import { Card } from "./Card";
+import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
+import { SectionHeader } from "./SectionHeader";
+import { StatusPill } from "./StatusPill";
 
 export function CustomerWalletScreen() {
+  const { palette } = useAppTheme();
   const wallets = domainQueries.wallets();
   const transactions = domainQueries.transactions();
   const wallet = wallets.data?.[0];
@@ -19,94 +37,143 @@ export function CustomerWalletScreen() {
     <Screen
       eyebrow="Your money"
       title="Wallet"
+      subtitle="One SKIMA balance for payments, refunds, and eligible withdrawals."
       action={
-        <View style={styles.headerActions}>
-          <Pressable onPress={() => router.push("/(customer)/wallet/top-up" as never)} style={styles.topup}>
-            <Plus color="white" size={16} />
-            <Text style={styles.topupText}>Top up</Text>
-          </Pressable>
-          <Pressable onPress={() => router.push("/(customer)/wallet/withdraw" as never)} style={styles.withdrawHeader}>
-            <ArrowUpRight color={colors.brand} size={16} />
-            <Text style={styles.withdrawHeaderText}>Withdraw</Text>
-          </Pressable>
-        </View>
+        <AppButton
+          label="Top up"
+          size="sm"
+          icon={<Plus color="#FFFFFF" size={16} />}
+          onPress={() => router.push("/(customer)/wallet/top-up" as never)}
+        />
       }
     >
       {wallets.isPending ? (
-        <ActivityIndicator color={colors.brand} />
+        <View style={styles.loading}>
+          <ActivityIndicator color={palette.brand} />
+        </View>
       ) : (
         <>
-          <View style={styles.hero}>
+          <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
             <View style={styles.heroHead}>
-              <View>
+              <View style={styles.heroCopy}>
                 <Text style={styles.heroLabel}>AVAILABLE BALANCE</Text>
-                <Text style={styles.heroValue}>{money(available, currency)}</Text>
+                <Text adjustsFontSizeToFit numberOfLines={1} style={styles.heroValue}>
+                  {money(available, currency)}
+                </Text>
               </View>
               <View style={styles.shield}>
-                <ShieldCheck color="white" size={25} />
+                <ShieldCheck color="#FFFFFF" size={24} />
               </View>
             </View>
             <View style={styles.heroFooter}>
-              <Text style={styles.heroMeta}>Pending or reserved</Text>
-              <Text style={styles.heroPending}>{money(pending, currency)}</Text>
+              <View>
+                <Text style={styles.heroMeta}>Pending or reserved</Text>
+                <Text style={styles.heroPending}>{money(pending, currency)}</Text>
+              </View>
+              <Text style={styles.heroTrust}>Protected by SKIMA payment controls</Text>
             </View>
           </View>
+
           <View style={styles.actions}>
-            <Action icon={Plus} label="Top up" onPress={() => router.push("/(customer)/wallet/top-up" as never)} />
-            <Action icon={ArrowUpRight} label="Withdraw" onPress={() => router.push("/(customer)/wallet/withdraw" as never)} />
-            <Action icon={History} label="History" onPress={() => router.push("/(customer)/transactions" as never)} />
+            <WalletAction
+              icon={<Plus color={palette.brand} size={20} />}
+              label="Top up"
+              onPress={() => router.push("/(customer)/wallet/top-up" as never)}
+            />
+            <WalletAction
+              icon={<ArrowUpRight color={palette.brand} size={20} />}
+              label="Withdraw"
+              onPress={() => router.push("/(customer)/wallet/withdraw" as never)}
+            />
+            <WalletAction
+              icon={<History color={palette.brand} size={20} />}
+              label="History"
+              onPress={() => router.push("/(customer)/transactions" as never)}
+            />
           </View>
-          <View style={styles.heading}>
-            <Text style={styles.section}>Recent activity</Text>
-            <Pressable onPress={() => router.push("/(customer)/transactions" as never)}>
-              <Text style={styles.link}>See all</Text>
-            </Pressable>
-          </View>
+
+          <SectionHeader
+            title="Recent activity"
+            description="Latest changes recorded against your wallet."
+            action={
+              <Pressable onPress={() => router.push("/(customer)/transactions" as never)}>
+                <Text style={[styles.link, { color: palette.brand }]}>See all</Text>
+              </Pressable>
+            }
+          />
+
           {transactions.isPending ? (
-            <ActivityIndicator color={colors.brand} />
-          ) : (
-            (transactions.data ?? []).slice(0, 5).map((item, index) => (
-              <Card key={recordId(item) ?? String(index)}>
-                <View style={styles.row}>
-                  <View style={styles.txIcon}>
-                    <ArrowDownLeft color={colors.success} size={21} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.title}>{displayReference(item) ?? "Wallet transaction"}</Text>
-                    <Text style={styles.meta}>
-                      {formatDate(firstString(item, ["created_at", "createdAt"]))} · {(displayStatus(item) ?? "recorded").replace(/[_-]/g, " ")}
-                    </Text>
-                  </View>
-                  <Text style={styles.amount}>
-                    {money(
-                      firstNumber(item, ["amount", "net_amount", "netAmount"]) ?? 0,
-                      firstString(item, ["currency_code", "currencyCode"]) ?? currency,
-                    )}
-                  </Text>
-                </View>
-              </Card>
-            ))
-          )}
-          {(transactions.data ?? []).length === 0 && !transactions.isPending ? (
-            <View style={styles.empty}>
-              <History color={colors.brand} size={30} />
-              <Text style={styles.title}>No wallet activity yet</Text>
-              <Text style={styles.meta}>Paystack deposits, withdrawals, and updates will appear here.</Text>
+            <View style={styles.loadingCompact}>
+              <ActivityIndicator color={palette.brand} />
             </View>
-          ) : null}
+          ) : (transactions.data ?? []).length > 0 ? (
+            <View style={styles.transactionList}>
+              {(transactions.data ?? []).slice(0, 5).map((item, index) => {
+                const status = displayStatus(item) ?? "recorded";
+                const amount = firstNumber(item, ["amount", "net_amount", "netAmount"]) ?? 0;
+                const kind = firstString(item, ["transaction_type", "transactionType", "type", "direction"]) ?? "";
+                const outgoing = amount < 0 || /withdraw|debit|payment|outgoing/i.test(kind);
+                return (
+                  <Card key={recordId(item) ?? String(index)} padding="sm">
+                    <View style={styles.row}>
+                      <View style={[styles.txIcon, { backgroundColor: outgoing ? palette.brandSoft : palette.successSoft }]}>
+                        {outgoing ? (
+                          <ArrowUpRight color={palette.brand} size={20} />
+                        ) : (
+                          <ArrowDownLeft color={palette.success} size={20} />
+                        )}
+                      </View>
+                      <View style={styles.txCopy}>
+                        <Text numberOfLines={1} style={[styles.txTitle, { color: palette.ink }]}>
+                          {displayReference(item) ?? friendlyTransactionName(kind)}
+                        </Text>
+                        <Text style={[styles.meta, { color: palette.muted }]}>
+                          {formatDate(firstString(item, ["created_at", "createdAt"]))}
+                        </Text>
+                      </View>
+                      <View style={styles.txRight}>
+                        <Text style={[styles.amount, { color: palette.ink }]}>
+                          {money(amount, firstString(item, ["currency_code", "currencyCode"]) ?? currency)}
+                        </Text>
+                        <StatusPill label={status} tone={statusTone(status)} />
+                      </View>
+                    </View>
+                  </Card>
+                );
+              })}
+            </View>
+          ) : (
+            <EmptyState
+              icon={<History color={palette.brand} size={25} />}
+              title="No wallet activity yet"
+              description="Deposits, withdrawals, refunds, and wallet updates will appear here when they happen."
+              action={
+                <AppButton
+                  label="Top up wallet"
+                  onPress={() => router.push("/(customer)/wallet/top-up" as never)}
+                />
+              }
+            />
+          )}
         </>
       )}
     </Screen>
   );
 }
 
-function Action({ icon: Icon, label, onPress }: { icon: typeof Plus; label: string; onPress(): void }) {
+function WalletAction({ icon, label, onPress }: { icon: React.ReactNode; label: string; onPress(): void }) {
+  const { palette } = useAppTheme();
   return (
-    <Pressable onPress={onPress} style={styles.action}>
-      <View style={styles.actionIcon}>
-        <Icon color={colors.brand} size={20} />
-      </View>
-      <Text style={styles.actionText}>{label}</Text>
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.action,
+        { backgroundColor: palette.surface, borderColor: palette.border, opacity: pressed ? 0.76 : 1 },
+      ]}
+    >
+      <View style={[styles.actionIcon, { backgroundColor: palette.brandSoft }]}>{icon}</View>
+      <Text style={[styles.actionText, { color: palette.ink }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -122,34 +189,49 @@ function money(value: number, currency: string) {
 function formatDate(value: string | null) {
   if (!value) return "Date unavailable";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
+function friendlyTransactionName(kind: string) {
+  if (/withdraw/i.test(kind)) return "Wallet withdrawal";
+  if (/deposit|top.?up|credit/i.test(kind)) return "Wallet top up";
+  if (/refund/i.test(kind)) return "Refund";
+  if (/payment|debit/i.test(kind)) return "Payment";
+  return "Wallet transaction";
+}
+
+function statusTone(status: string): "neutral" | "brand" | "success" | "warning" | "danger" {
+  if (/success|completed|settled|approved|credited/i.test(status)) return "success";
+  if (/fail|reject|cancel|revers/i.test(status)) return "danger";
+  if (/pending|processing|review|hold/i.test(status)) return "warning";
+  if (/active|recorded/i.test(status)) return "brand";
+  return "neutral";
 }
 
 const styles = StyleSheet.create({
-  headerActions: { flexDirection: "row", gap: 8 },
-  topup: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.brand, paddingHorizontal: 14, paddingVertical: 8, borderRadius: radii.pill },
-  topupText: { color: "white", fontWeight: "900", fontSize: 13 },
-  withdrawHeader: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.brand, paddingHorizontal: 14, paddingVertical: 8, borderRadius: radii.pill },
-  withdrawHeaderText: { color: colors.brand, fontWeight: "900", fontSize: 13 },
-  hero: { padding: spacing.xl, gap: spacing.xl, borderRadius: 24, backgroundColor: colors.brand },
-  heroHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  heroLabel: { color: "#FFDDE1", fontSize: 11, letterSpacing: 1.3, fontWeight: "900" },
-  heroValue: { color: "white", fontSize: 39, fontWeight: "900", marginTop: 7 },
-  shield: { width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,.16)" },
-  heroFooter: { flexDirection: "row", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: "rgba(255,255,255,.2)", paddingTop: spacing.md },
-  heroMeta: { color: "#FFF1F2" },
-  heroPending: { color: "white", fontWeight: "900" },
+  loading: { minHeight: 220, alignItems: "center", justifyContent: "center" },
+  loadingCompact: { minHeight: 90, alignItems: "center", justifyContent: "center" },
+  hero: { padding: spacing.lg, gap: spacing.lg, borderRadius: radii.xl },
+  heroHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md },
+  heroCopy: { flex: 1 },
+  heroLabel: { color: "#FFE4E8", fontSize: 10, letterSpacing: 1.35, fontWeight: "900" },
+  heroValue: { color: "#FFFFFF", fontSize: 38, lineHeight: 46, fontWeight: "900", letterSpacing: -1.25, marginTop: 7 },
+  shield: { width: 48, height: 48, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,.16)" },
+  heroFooter: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(255,255,255,.24)", paddingTop: spacing.md },
+  heroMeta: { color: "#FFE9EC", ...typography.caption },
+  heroPending: { color: "#FFFFFF", ...typography.bodyStrong, marginTop: 2 },
+  heroTrust: { color: "rgba(255,255,255,.78)", ...typography.caption, textAlign: "right", maxWidth: 170 },
   actions: { flexDirection: "row", gap: spacing.sm },
-  action: { flex: 1, alignItems: "center", gap: 6, paddingVertical: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radii.lg, backgroundColor: colors.surface },
-  actionIcon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF0F1" },
-  actionText: { color: colors.ink, fontWeight: "800", fontSize: 11 },
-  heading: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  section: { color: colors.ink, fontSize: 21, fontWeight: "900" },
-  link: { color: colors.brand, fontWeight: "900" },
+  action: { flex: 1, alignItems: "center", gap: 7, paddingVertical: 13, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg },
+  actionIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  actionText: { ...typography.caption, fontWeight: "800" },
+  link: { ...typography.caption, fontWeight: "900" },
+  transactionList: { gap: spacing.sm },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  txIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "#E9F7EE" },
-  title: { color: colors.ink, fontWeight: "900" },
-  meta: { color: colors.muted, lineHeight: 19, marginTop: 4, textTransform: "capitalize" },
-  amount: { color: colors.ink, fontWeight: "900" },
-  empty: { alignItems: "center", gap: spacing.sm, padding: spacing.xl, borderWidth: 1, borderColor: colors.border, borderRadius: radii.lg, backgroundColor: colors.surface },
+  txIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  txCopy: { flex: 1, minWidth: 0 },
+  txTitle: { ...typography.bodyStrong },
+  meta: { ...typography.caption, marginTop: 3 },
+  txRight: { alignItems: "flex-end", gap: 6 },
+  amount: { ...typography.bodyStrong },
 });
