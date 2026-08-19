@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
-import { colors, radii, spacing } from "../theme/tokens";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { radii, spacing, typography } from "../theme/tokens";
 
 export interface ApplicationProgressProps {
   currentStep: number;
@@ -12,61 +13,38 @@ export function ApplicationProgress({
   totalSteps,
   stepTitle,
 }: ApplicationProgressProps) {
+  const { palette } = useAppTheme();
   const progressPercent = Math.min(100, Math.max(0, Math.round((currentStep / totalSteps) * 100)));
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: palette.surface, borderColor: palette.border }]}>
       <View style={styles.topRow}>
-        <Text style={styles.stepCounter}>
-          Step {currentStep} of {totalSteps}
-        </Text>
-        <Text style={styles.percentText}>{progressPercent}% completed</Text>
+        <View style={[styles.stepBadge, { backgroundColor: palette.brandSoft }]}>
+          <Text style={[styles.stepCounter, { color: palette.brand }]}>Step {currentStep} of {totalSteps}</Text>
+        </View>
+        <Text style={[styles.percentText, { color: palette.muted }]}>{progressPercent}% complete</Text>
       </View>
-      <View style={styles.track}>
-        <View style={[styles.fill, { width: `${progressPercent}%` }]} />
+      <Text style={[styles.stepTitle, { color: palette.ink }]}>{stepTitle}</Text>
+      <View style={[styles.track, { backgroundColor: palette.soft }]}>
+        <View style={[styles.fill, { width: `${progressPercent}%`, backgroundColor: palette.brand }]} />
       </View>
-      <Text style={styles.stepTitle}>{stepTitle}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    gap: spacing.xs,
-    marginBottom: spacing.md,
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  topRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  stepCounter: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: colors.brand,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  percentText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.muted,
-  },
-  track: {
-    height: 6,
-    borderRadius: radii.pill,
-    backgroundColor: "#F3F4F6",
-    overflow: "hidden",
-  },
-  fill: {
-    height: "100%",
-    backgroundColor: colors.brand,
-    borderRadius: radii.pill,
-  },
-  stepTitle: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: colors.ink,
-    marginTop: 4,
-  },
+  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.sm },
+  stepBadge: { borderRadius: radii.pill, paddingHorizontal: 9, paddingVertical: 4 },
+  stepCounter: { ...typography.eyebrow, fontSize: 9, textTransform: "uppercase" },
+  percentText: { ...typography.caption, fontSize: 11 },
+  track: { height: 7, borderRadius: radii.pill, overflow: "hidden" },
+  fill: { height: "100%", borderRadius: radii.pill },
+  stepTitle: { ...typography.heading, fontSize: 19, lineHeight: 25 },
 });
