@@ -1,14 +1,18 @@
 import { useNetInfo } from "@react-native-community/netinfo";
-import { useLocalSearchParams, router } from "expo-router";
-import { useEffect, useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
 import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  Gauge,
+  MapPin,
+  Navigation,
+  PackageCheck,
+  ScanLine,
+  ShieldCheck,
+} from "lucide-react-native";
+import { useEffect, useState } from "react";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries, useJobDetails } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
@@ -27,237 +31,159 @@ import { OperationalMap, type MapPoint } from "../maps/OperationalMap";
 import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { colors, radii, spacing } from "../theme/tokens";
-import { operationIdempotencyKey } from "../utilities/idempotency";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
-import { Card } from "./Card";
+import { operationIdempotencyKey } from "../utilities/idempotency";
+import { AppButton } from "./AppButton";
+import { EmptyState } from "./EmptyState";
 import { EvidenceCapture } from "./EvidenceCapture";
 import { Screen } from "./Screen";
+import { ScreenSkeleton } from "./ScreenSkeleton";
+import { StatusPill } from "./StatusPill";
 
-export function JobDetailScreen({
-  workspace,
-}: {
-  workspace: "driver" | "station";
-}) {
+export function JobDetailScreen({ workspace }: { workspace: "driver" | "station" }) {
   const params = useLocalSearchParams<{ id?: string; scannedToken?: string }>();
   const id = params.id ?? null;
   const session = useSession();
   const network = useNetInfo();
   const { palette } = useAppTheme();
-  const draftOwner =
-    session.context?.profile?.id ?? session.context?.user.id ?? session.session?.user.id ?? "";
+  const draftOwner = session.context?.profile?.id ?? session.context?.user.id ?? session.session?.user.id ?? "";
   const detail = useJobDetails(id);
   const inspections = domainQueries.inspections();
   const [token, setToken] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [noticeSuccess, setNoticeSuccess] = useState(false);
+  const [actualKg, setActualKg] = useState("");
+  const [inspectionResult, setInspectionResult] = useState("");
+  const [inspectionNotes, setInspectionNotes] = useState("");
+
   useEffect(() => {
     if (params.scannedToken) setToken(params.scannedToken);
   }, [params.scannedToken]);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [actualKg, setActualKg] = useState("");
-  const [acceptedToken, setAcceptedToken] = useState("");
-  const [inspectionResult, setInspectionResult] = useState("");
-  const [inspectionNotes, setInspectionNotes] = useState("");
+
   useEffect(() => {
     if (!draftOwner || !id || workspace !== "station") return;
     void draftStore.load(draftOwner, `station-refill-${id}`).then((draft) => {
       setActualKg(String(draft?.values.actualKg ?? ""));
-      setAcceptedToken(String(draft?.values.acceptedToken ?? ""));
       setInspectionResult(String(draft?.values.inspectionResult ?? ""));
       setInspectionNotes(String(draft?.values.inspectionNotes ?? ""));
     });
   }, [draftOwner, id, workspace]);
+
   useEffect(() => {
-    if (
-      !draftOwner ||
-      !id ||
-      workspace !== "station" ||
-      (!actualKg && !acceptedToken && !inspectionResult && !inspectionNotes)
-    )
-      return;
+    if (!draftOwner || !id || workspace !== "station" || (!actualKg && !inspectionResult && !inspectionNotes)) return;
     const now = new Date().toISOString();
     void draftStore.save({
       version: 1,
       type: `station-refill-${id}`,
       ownerProfileId: draftOwner,
       step: actualKg ? "actual-kilograms" : "inspection",
-      values: { actualKg, acceptedToken, inspectionResult, inspectionNotes },
+      values: { actualKg, inspectionResult, inspectionNotes },
       pendingMedia: [],
       createdAt: now,
       updatedAt: now,
     });
-  }, [acceptedToken, actualKg, draftOwner, id, inspectionNotes, inspectionResult, workspace]);
+  }, [actualKg, draftOwner, id, inspectionNotes, inspectionResult, workspace]);
+
   const scan = useGatewayMutation({
     path: "/lpg/scans",
     schema: ActionResponseSchema,
-    invalidate: [["jobs"], ["orders"], ["scans"]],
+    invalidate: [["jobs"], ["orders"], ["scans"], ["station-runtime"]],
   });
   const inspection = useGatewayMutation({
     path: "/lpg/inspections",
     schema: ActionResponseSchema,
-    invalidate: [["jobs"], ["inspections"]],
+    invalidate: [["jobs"], ["inspections"], ["station-runtime"]],
   });
   const action = useGatewayMutation({
     path: "/lpg/orders/actions",
     schema: ActionResponseSchema,
-    invalidate: [["jobs"], ["orders"]],
-  });
-  const accept = useGatewayMutation({
-    path: "/lpg/orders/accept-assignment",
-    schema: ActionResponseSchema,
-    invalidate: [["jobs"], ["orders"]],
+    invalidate: [["jobs"], ["orders"], ["station-runtime"]],
   });
   const confirmRefill = useGatewayMutation({
     path: "/lpg/refills/confirm",
     schema: ActionResponseSchema,
-    invalidate: [["jobs"], ["orders"]],
+    invalidate: [["jobs"], ["orders"], ["station-runtime"], ["settlements"], ["wallets"]],
   });
-  const settleStation = useGatewayMutation({
-    path: "/lpg/orders/settle-station",
-    schema: ActionResponseSchema,
-    invalidate: [["jobs"], ["orders"], ["settlements"], ["wallets"]],
-  });
-  const executeCommission = useGatewayMutation({
-    path: "/lpg/orders/execute-driver-commission",
-    schema: ActionResponseSchema,
-    invalidate: [["jobs"], ["orders"], ["commissions"], ["wallets"]],
-  });
+
   const root = detail.data;
   const order = nestedRecord(root, "order") ?? root;
-  const cylinder = nestedRecord(root, "cylinder");
+  const cylinder = nestedRecord(root, "cylinder") ?? nestedRecord(order, "cylinder");
+  const driver = nestedRecord(root, "driver") ?? nestedRecord(order, "driver");
+  const station = nestedRecord(root, "station") ?? nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
+  const pickup = nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location");
+  const delivery = nestedRecord(order, "deliveryLocation") ?? nestedRecord(order, "delivery_location");
+  const latestDriver = nestedRecord(root, "latestDriverLocation") ?? nestedRecord(root, "driverLocation");
+
   const routePoints = [
-    locationPoint(
-      nestedRecord(order, "pickupLocation") ??
-        nestedRecord(order, "pickup_location"),
-      "Customer",
-    ),
-    locationPoint(
-      nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch"),
-      "Station",
-    ),
-    locationPoint(
-      nestedRecord(order, "deliveryLocation") ??
-        nestedRecord(order, "delivery_location"),
-      "Delivery",
-    ),
-    locationPoint(
-      nestedRecord(root, "latestDriverLocation") ??
-        nestedRecord(root, "driverLocation"),
-      "Driver",
-    ),
+    locationPoint(pickup, "Customer"),
+    locationPoint(station, "Station"),
+    locationPoint(delivery, "Delivery"),
+    locationPoint(latestDriver, "Driver"),
   ].filter((point): point is MapPoint => Boolean(point));
-  const routeDistance = firstNumber(root, [
-    "routeDistanceMeters",
-    "route_distance_meters",
-    "distanceMeters",
-  ]);
-  const routeDuration = firstNumber(root, [
-    "routeDurationSeconds",
-    "route_duration_seconds",
-    "durationSeconds",
-  ]);
+
+  const routeDistance = firstNumber(root, ["routeDistanceMeters", "route_distance_meters", "distanceMeters"]);
+  const routeDuration = firstNumber(root, ["routeDurationSeconds", "route_duration_seconds", "durationSeconds"]);
   const status = displayStatus(order ?? {}) ?? "unknown";
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
   const filledKg = firstNumber(order, ["actualKg", "actual_kg"]);
-  const navigationTarget =
-    status.includes("station") && !status.includes("released")
-      ? routePoints.find((point) => point.label === "Station")
-      : status.includes("return") ||
-          status.includes("delivery") ||
-          status === "station_released"
-        ? routePoints.find((point) => point.label === "Delivery")
-        : routePoints.find((point) => point.label === "Customer");
   const existingInspection = (inspections.data ?? []).find(
     (item) => firstString(item, ["lpg_order_id", "lpgOrderId"]) === id,
   );
   const existingInspectionResult = firstString(existingInspection, ["result"]);
   const safeInspection = existingInspectionResult === "safe";
+
   const permissions = new Set([
     ...(session.context?.permissions ?? []),
     ...(session.context?.roles.flatMap((role) => role.permissions) ?? []),
   ]);
-  const stationCanScan = Boolean(
-    session.context?.platformAdmin ||
-    permissions.has("lpg.stations.scan") ||
-    permissions.has("lpg.stations.pump"),
+  const stationCanInspect = Boolean(
+    session.context?.platformAdmin || permissions.has("lpg.stations.scan") || permissions.has("lpg.stations.pump"),
   );
-  const stationCanPump = Boolean(
-    session.context?.platformAdmin || permissions.has("lpg.stations.pump"),
-  );
-  const stationCanSettle = Boolean(
-    session.context?.platformAdmin ||
-      permissions.has("lpg.orders.finance"),
-  );
-  const scanType =
-    workspace === "driver"
-      ? status.includes("delivery") || status.includes("return")
-        ? "customer_delivery"
-        : "customer_pickup"
-      : ["refill_confirmed", "station_settled"].includes(status)
-        ? "station_release"
-        : "station_receipt";
-  const assignmentStatus = firstString(order, [
-    "assignmentStatus",
-    "assignment_status",
-  ]);
-  const canScanByState =
-    workspace === "driver"
-      ? [
-          "assigned",
-          "pickup_pending",
-          "pickup_arrived",
-          "pickup_en_route",
-          "delivery_verification_pending",
-          "return_en_route",
-        ].some((value) => status.includes(value))
-      : [
-          "pickup_verified",
-          "station_en_route",
-          "station_arrived",
-          "station_verified",
-          "refill_started",
-          "refill_in_progress",
-          "refill_confirmed",
-          "station_settled",
-        ].some((value) => status.includes(value));
-  const canScan = canScanByState && (workspace === "driver" || stationCanScan);
-  const submit = async () => {
-    if (!id || !token) return;
+  const stationCanPump = Boolean(session.context?.platformAdmin || permissions.has("lpg.stations.pump"));
+
+  const driverScanType = driverScanTypeForStatus(status);
+  const canDriverScan = workspace === "driver" && Boolean(driverScanType);
+  const driverAction = workspace === "driver" ? driverActionForStatus(status) : null;
+  const navigationTarget = workspace === "driver" ? navigationPointForStatus(status, routePoints) : null;
+  const stationWaitingForDriverScan = workspace === "station" && ["pickup_verified", "station_en_route"].includes(status);
+  const refillActive = ["station_verified", "refill_in_progress", "refill_started"].includes(status);
+  const releaseReady = ["refill_confirmed", "station_settled"].includes(status);
+
+  const submitDriverScan = async () => {
+    if (!id || !token || !driverScanType) return;
     if (network.isConnected === false) {
-      setNotice("Waiting for connection. The code is saved on this device and has not been confirmed by SKIMA yet.");
+      setNoticeSuccess(false);
+      setNotice("Waiting for connection. The scanned code is still on this device and has not been confirmed by SKIMA.");
       return;
     }
     setNotice(null);
     try {
-      const scannedToken = token;
       const location = await readOperationalLocation().catch(() => null);
       await scan.mutateAsync({
         ...(location ?? {}),
-        idempotencyKey: operationIdempotencyKey(`${workspace}-${scanType}`, id),
+        idempotencyKey: operationIdempotencyKey(`driver-${driverScanType}`, id),
         lpgOrderId: id,
-        scanType,
+        scanType: driverScanType,
         source: "skima.lpg.mobile",
         payload: {
           scannedCylinderId: recordId(cylinder ?? {}),
-          scannedToken,
+          scannedToken: token,
         },
       });
-      if (workspace === "station" && scanType === "station_receipt")
-        setAcceptedToken(scannedToken);
-      setNotice(
-        workspace === "station" && scanType === "station_receipt"
-          ? "Cylinder accepted by SKIMA. It can now move to filling."
-          : workspace === "station"
-            ? "Cylinder released to the assigned driver."
-            : "Cylinder confirmed by SKIMA.",
-      );
       setToken("");
+      setNoticeSuccess(true);
+      setNotice(driverScanSuccess(driverScanType));
     } catch (cause) {
-      setNotice(friendlyError(cause, "We couldn't confirm this cylinder. Scan the SKIMA code again."));
+      setNoticeSuccess(false);
+      setNotice(friendlyError(cause, "SKIMA could not verify this cylinder. Scan the code again."));
     }
   };
+
   const submitInspection = async (mediaAssetId?: string) => {
     if (!id) return;
     if (!inspectionResult) {
+      setNoticeSuccess(false);
       setNotice("Choose the cylinder condition before continuing.");
       return;
     }
@@ -273,17 +199,20 @@ export function JobDetailScreen({
         source: "skima.lpg.mobile",
         idempotencyKey: operationIdempotencyKey("station-inspection", id),
       });
+      setNoticeSuccess(inspectionResult === "safe");
       setNotice(
         inspectionResult === "safe"
-          ? "Safety check saved. Record the amount filled when the cylinder returns to reception."
-          : "Safety check saved. This cylinder is paused for review.",
+          ? "Safety check saved. The refill can continue."
+          : "Safety check saved. This cylinder is paused for review and must not be filled.",
       );
     } catch (cause) {
-      setNotice(friendlyError(cause, "We couldn't save the safety check. Please try again."));
+      setNoticeSuccess(false);
+      setNotice(friendlyError(cause, "The safety check could not be saved."));
       throw cause;
     }
   };
-  const runAction = async (actionKey: string) => {
+
+  const runDriverAction = async (actionKey: string) => {
     if (!id) return;
     setNotice(null);
     try {
@@ -293,323 +222,203 @@ export function JobDetailScreen({
         source: "skima.lpg.mobile",
         idempotencyKey: operationIdempotencyKey(actionKey, id),
       });
-      setNotice("Job updated.");
+      setNoticeSuccess(true);
+      setNotice(driverActionSuccess(actionKey));
     } catch (cause) {
-      setNotice(
-        friendlyError(cause, "The job could not be updated. Please try again."),
-      );
+      setNoticeSuccess(false);
+      setNotice(friendlyError(cause, "The job could not be updated. Please try again."));
     }
   };
-  const acceptAssignment = async () => {
-    if (!id) return;
-    try {
-      await accept.mutateAsync({
-        lpgOrderId: id,
-        source: "skima.lpg.mobile",
-        idempotencyKey: operationIdempotencyKey("driver-accept", id),
-      });
-      setNotice("Assignment accepted.");
-    } catch (cause) {
-      setNotice(
-        cause instanceof Error
-          ? cause.message
-          : "Assignment could not be accepted.",
-      );
-    }
-  };
-  const confirmAndRelease = async () => {
+
+  const confirmStationRefill = async () => {
     const kg = Number(actualKg);
-    const alreadyFilled = status === "refill_confirmed" || status === "station_settled";
-    if (!id || (!alreadyFilled && (!Number.isFinite(kg) || kg <= 0))) {
+    if (!id || !Number.isFinite(kg) || kg <= 0) {
+      setNoticeSuccess(false);
       setNotice("Enter the quantity actually filled, in kilograms.");
       return;
     }
-    if (!acceptedToken && !token) {
-      setNotice("Scan the SKIMA cylinder code again before releasing it to the driver.");
+    if (!safeInspection) {
+      setNoticeSuccess(false);
+      setNotice("A saved 'Safe to fill' inspection is required before refill confirmation.");
       return;
     }
     if (network.isConnected === false) {
-      setNotice("Waiting for connection. Your entered quantity is saved, but the refill is not confirmed yet.");
+      setNoticeSuccess(false);
+      setNotice("Waiting for connection. The entered quantity is saved locally, but the refill has not been confirmed.");
       return;
     }
-    const releaseToken = acceptedToken || token;
+
     try {
-      if (status === "station_verified")
+      if (status === "station_verified") {
         await action.mutateAsync({
           actionKey: "lpg.refill.start",
           lpgOrderId: id,
           source: "skima.lpg.mobile",
           idempotencyKey: operationIdempotencyKey("lpg.refill.start", id),
         });
-      if (!alreadyFilled) {
-        await confirmRefill.mutateAsync({
-          lpgOrderId: id,
-          actualKg: kg,
-          safetyObservations: { notes: inspectionNotes.trim() || undefined },
-          source: "skima.lpg.mobile",
-          idempotencyKey: operationIdempotencyKey("station-refill-confirm", id),
-        });
       }
-      if (stationCanSettle && status !== "station_settled")
-        await settleStation.mutateAsync({
-          lpgOrderId: id,
-          source: "skima.lpg.mobile",
-          idempotencyKey: operationIdempotencyKey("station-settlement", id),
-        });
-      const location = await readOperationalLocation().catch(() => null);
-      await scan.mutateAsync({
-        ...(location ?? {}),
-        idempotencyKey: operationIdempotencyKey("station-station_release", id),
+      await confirmRefill.mutateAsync({
         lpgOrderId: id,
-        scanType: "station_release",
-        source: "skima.lpg.mobile",
-        payload: {
-          scannedCylinderId: recordId(cylinder ?? {}),
-          scannedToken: releaseToken,
+        actualKg: kg,
+        safetyObservations: {
+          result: "safe",
+          notes: inspectionNotes.trim() || undefined,
         },
+        source: "skima.lpg.mobile",
+        idempotencyKey: operationIdempotencyKey("station-refill-confirm", id),
       });
       await draftStore.clear(draftOwner, `station-refill-${id}`);
-      setAcceptedToken("");
-      setToken("");
-      setNotice("Confirmed by SKIMA and released to the assigned driver.");
+      setNoticeSuccess(true);
+      setNotice("Refill confirmed. SKIMA has posted the station settlement automatically and the cylinder is ready for the assigned driver.");
     } catch (cause) {
-      setNotice(
-        friendlyError(cause, "We couldn't confirm and release this refill. Your entered quantity is still saved."),
-      );
+      setNoticeSuccess(false);
+      setNotice(friendlyError(cause, "The refill could not be confirmed. Your entered quantity remains saved on this device."));
     }
   };
-  const postCommission = async () => {
-    if (!id) return;
-    try {
-      await executeCommission.mutateAsync({
-        lpgOrderId: id,
-        source: "skima.lpg.mobile",
-        idempotencyKey: operationIdempotencyKey("driver-commission", id),
-      });
-      setNotice("Driver earnings recorded.");
-    } catch (cause) {
-      setNotice(
-        cause instanceof Error
-          ? cause.message
-          : "Driver earnings could not be posted.",
-      );
-    }
-  };
-  const driverAction =
-    assignmentStatus === "offered"
-      ? null
-      : status.includes("driver_accepted") || status.includes("assigned")
-        ? "lpg.pickup.start"
-        : status.includes("pickup_verified")
-          ? "lpg.station.start"
-          : status.includes("refill_confirmed") ||
-              status.includes("station_released")
-            ? "lpg.return.start"
-            : status.includes("return_en_route")
-              ? "lpg.delivery.pending"
-              : null;
-  const releaseReady = status === "refill_confirmed" || status === "station_settled";
-  const refillActive =
-    status === "station_verified" ||
-    status.includes("refill_started") ||
-    status.includes("refill_in_progress") ||
-    releaseReady;
-  const successNotice = Boolean(
-    notice && /confirmed|accepted|saved|updated|released|earnings/i.test(notice),
-  );
+
   return (
     <Screen
-      eyebrow={workspace === "station" ? "Station reception" : "Current delivery"}
+      eyebrow={workspace === "station" ? "Station fulfilment" : "Driver fulfilment"}
       title={order ? displayTitle(order) : "Job details"}
-      action={
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.back}>Back</Text>
-        </Pressable>
-      }
+      subtitle={workspace === "station" ? "Verify the matched arrival, complete safety checks and record the actual refill." : "Follow the assigned route, scan the SKIMA cylinder at required hand-offs and complete delivery."}
+      action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
-      {detail.isPending ||
-      (workspace === "station" && inspections.isPending) ? (
-        <ActivityIndicator color={colors.brand} />
-      ) : detail.error || (workspace === "station" && inspections.error) ? (
-        <Text style={styles.error}>
-          {friendlyError(
-            detail.error ?? inspections.error,
-            "This job could not be loaded. Please try again.",
-          )}
-        </Text>
+      {detail.isPending || (workspace === "station" && inspections.isPending) ? (
+        <ScreenSkeleton cards={4} />
+      ) : detail.error || (workspace === "station" && inspections.error) || !order ? (
+        <EmptyState
+          icon={<PackageCheck color={palette.brand} size={27} />}
+          title="Job could not be loaded"
+          description={friendlyError(detail.error ?? inspections.error, "This job is unavailable or could not be refreshed.")}
+          action={<AppButton label="Retry" onPress={() => void Promise.all([detail.refetch(), workspace === "station" ? inspections.refetch() : Promise.resolve()])} />}
+        />
       ) : (
         <>
-          {workspace === "driver" && routePoints.length ? (
-            <OperationalMap points={routePoints} height={380} />
-          ) : null}
-          {workspace === "station" ? (
-            <View style={styles.stationSteps}>
-              <StationStep number="1" label="Scan & accept" active={["pickup_verified", "station_en_route", "station_arrived"].some((value) => status.includes(value))} complete={!['pickup_verified', 'station_en_route', 'station_arrived'].some((value) => status.includes(value))} />
-              <View style={[styles.stepLine, { backgroundColor: palette.border }]} />
-              <StationStep number="2" label="Confirm & release" active={refillActive} complete={status.includes("return") || status.includes("delivered")} />
+          <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
+            <View style={styles.heroCopy}>
+              <Text style={styles.heroEyebrow}>CURRENT STAGE</Text>
+              <Text style={styles.heroTitle}>{friendlyJobStatus(status)}</Text>
+              <Text style={styles.heroBody}>{workspace === "driver" ? driverStageDescription(status) : stationStageDescription(status)}</Text>
             </View>
-          ) : null}
-          <View style={[styles.summary, { borderColor: palette.border }]}>
-            <Field
-              label="Now"
-              value={friendlyJobStatus(status)}
-            />
-            <Field
-              label="Cylinder"
-              value={cylinder ? displayTitle(cylinder) : "Not available"}
-            />
-            <Field
-              label="Reference"
-              value={
-                firstString(order, ["public_reference", "reference", "id"]) ??
-                "Not available"
-              }
-            />
-            {requestedKg !== null ? <Field label="Requested" value={`${requestedKg} kg`} /> : null}
-            {filledKg !== null ? <Field label="Filled" value={`${filledKg} kg`} /> : null}
+            <StatusPill label={friendlyJobStatus(status)} tone={statusTone(status)} />
           </View>
-          {routeDistance !== null || routeDuration !== null ? (
-            <View style={[styles.routeFacts, { borderColor: palette.border }]}>
-              <Field
-                label="Distance"
-                value={
-                  routeDistance !== null
-                    ? `${(routeDistance / 1000).toFixed(1)} km`
-                    : "Unavailable"
-                }
-              />
-              <Field
-                label="Estimated time"
-                value={
-                  routeDuration !== null
-                    ? `${Math.ceil(routeDuration / 60)} min`
-                    : "Unavailable"
-                }
-              />
+
+          {workspace === "driver" && routePoints.length ? (
+            <View style={[styles.mapShell, shadows.soft]}>
+              <OperationalMap points={routePoints} height={390} />
             </View>
           ) : null}
+
+          {workspace === "station" ? <StationProgress status={status} /> : null}
+
+          <View style={[styles.summaryCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <SummaryField label="Cylinder" value={cylinder ? displayTitle(cylinder) : "Not available"} />
+            <Divider />
+            <SummaryField label="Reference" value={firstString(order, ["public_reference", "reference", "id"]) ?? "Not available"} />
+            {requestedKg !== null ? <><Divider /><SummaryField label="Requested refill" value={`${requestedKg} kg`} /></> : null}
+            {filledKg !== null ? <><Divider /><SummaryField label="Actual refill" value={`${filledKg} kg`} /></> : null}
+            {workspace === "station" && driver ? <><Divider /><SummaryField label="Assigned driver" value={firstString(driver, ["displayName", "display_name", "name"]) ?? displayTitle(driver)} /></> : null}
+          </View>
+
+          {workspace === "driver" && (routeDistance !== null || routeDuration !== null) ? (
+            <View style={styles.metricGrid}>
+              <Metric icon={<MapPin color={palette.brand} size={19} />} label="Route distance" value={routeDistance !== null ? `${(routeDistance / 1000).toFixed(1)} km` : "Unavailable"} />
+              <Metric icon={<Clock3 color={palette.brand} size={19} />} label="Estimated time" value={routeDuration !== null ? `${Math.ceil(routeDuration / 60)} min` : "Unavailable"} />
+            </View>
+          ) : null}
+
           {workspace === "driver" && navigationTarget ? (
-            <ActionButton
-              pending={false}
+            <AppButton
               label={`Navigate to ${navigationTarget.label.toLowerCase()}`}
-              onPress={() =>
-                void openDeviceNavigation(navigationTarget).catch((cause) =>
-                  setNotice(
-                    cause instanceof Error
-                      ? cause.message
-                      : "Navigation could not be opened.",
-                  ),
-                )
-              }
+              fullWidth
+              size="lg"
+              icon={<Navigation color="#FFFFFF" size={18} />}
+              onPress={() => void openDeviceNavigation(navigationTarget).catch((cause) => {
+                setNoticeSuccess(false);
+                setNotice(friendlyError(cause, "Navigation could not be opened."));
+              })}
             />
           ) : null}
-          {workspace === "driver" && assignmentStatus === "offered" ? (
-            <ActionButton
-              pending={accept.isPending}
-              label="Accept assignment"
-              onPress={() => void acceptAssignment()}
-            />
-          ) : null}
+
           {workspace === "driver" && driverAction ? (
-            <ActionButton
-              pending={action.isPending}
+            <AppButton
               label={driverActionLabel(driverAction)}
-              onPress={() => void runAction(driverAction)}
+              fullWidth
+              size="lg"
+              loading={action.isPending}
+              onPress={() => void runDriverAction(driverAction)}
             />
           ) : null}
-          {workspace === "driver" && status === "delivered" ? (
-            <ActionButton
-              pending={executeCommission.isPending}
-              label="Complete delivery earnings"
-              onPress={() => void postCommission()}
-            />
-          ) : null}
-          {workspace === "station" &&
-          stationCanPump &&
-          refillActive &&
-          (safeInspection || releaseReady) ? (
-            <View style={[styles.refillForm, { backgroundColor: palette.surface }]}>
-              <View style={styles.formHeading}>
-                <Text style={[styles.formTitle, { color: palette.ink }]}>{releaseReady ? "Ready for driver" : "Record the actual fill"}</Text>
-                <Text style={[styles.formBody, { color: palette.muted }]}>{releaseReady ? "Confirm the SKIMA code and hand this cylinder back to the assigned driver." : `Requested ${requestedKg ?? "—"} kg. Enter what was actually filled.`}</Text>
+
+          {canDriverScan && driverScanType ? (
+            <View style={[styles.scanCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.sectionLead}>
+                <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
+                <View style={styles.sectionCopy}>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>{driverScanTitle(driverScanType)}</Text>
+                  <Text style={[styles.sectionBody, { color: palette.muted }]}>{driverScanDescription(driverScanType)}</Text>
+                </View>
               </View>
-              {!releaseReady ? <TextInput
-                accessibilityLabel="Actual quantity filled in kilograms"
-                value={actualKg}
-                onChangeText={setActualKg}
-                keyboardType="decimal-pad"
-                placeholder="Actual quantity (kg)"
-                placeholderTextColor={palette.muted}
-                style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
-              /> : null}
-              {!acceptedToken && !token ? <Text style={[styles.formBody, { color: palette.muted }]}>Scan the cylinder once more before release.</Text> : null}
-              <ActionButton
-                pending={confirmRefill.isPending || action.isPending || settleStation.isPending || scan.isPending}
-                label={releaseReady ? "Release to driver" : "Confirm & release"}
-                onPress={() => void confirmAndRelease()}
-              />
-            </View>
-          ) : null}
-          {canScan && !(workspace === "station" && acceptedToken && !releaseReady) ? (
-            <View style={styles.scanSection}>
-              <Text style={[styles.formTitle, { color: palette.ink }]}>{workspace === "station" && releaseReady ? "Scan before release" : workspace === "station" ? "Scan & accept" : "Confirm the cylinder"}</Text>
               <Scanner enabled onDetected={setToken} />
+              {token ? (
+                <AppButton
+                  label={driverScanButton(driverScanType)}
+                  fullWidth
+                  loading={scan.isPending}
+                  icon={<CheckCircle2 color="#FFFFFF" size={17} />}
+                  onPress={() => void submitDriverScan()}
+                />
+              ) : (
+                <Text style={[styles.scannerHint, { color: palette.muted }]}>Align the SKIMA cylinder code inside the scanner to continue.</Text>
+              )}
             </View>
           ) : null}
-          {token && (workspace === "driver" || ["pickup_verified", "station_en_route", "station_arrived"].some((value) => status.includes(value))) ? (
-            <Pressable
-              disabled={scan.isPending}
-              onPress={() => void submit()}
-              style={styles.submit}
-            >
-              {scan.isPending ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text style={styles.submitText}>{workspace === "station" && scanType === "station_receipt" ? "Accept this cylinder" : "Confirm cylinder"}</Text>
-              )}
-            </Pressable>
+
+          {workspace === "driver" && status === "driver_offered" ? (
+            <InfoNotice
+              icon={<ShieldCheck color={palette.brand} size={19} />}
+              text="SKIMA is finalising this automatic assignment. No driver acceptance action is required."
+            />
           ) : null}
-          {workspace === "station" &&
-          stationCanScan &&
-          status === "station_verified" &&
-          !existingInspection ? (
-            <View style={styles.inspectionForm}>
-              <Text style={[styles.formTitle, { color: palette.ink }]}>Quick safety check</Text>
-              <Text style={[styles.formBody, { color: palette.muted }]}>
-                Choose the condition observed at reception. Anything unsafe pauses the refill automatically.
-              </Text>
-              <View style={styles.resultOptions}>
-                {["safe", "unsafe", "manual_review", "rejected"].map(
-                  (result) => (
-                    <Pressable
-                      key={result}
-                      onPress={() => setInspectionResult(result)}
-                      style={[
-                        styles.resultOption,
-                        inspectionResult === result && styles.resultSelected,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.resultText,
-                          inspectionResult === result &&
-                            styles.resultTextSelected,
-                        ]}
-                      >
-                        {inspectionLabel(result)}
-                      </Text>
-                    </Pressable>
-                  ),
-                )}
+
+          {workspace === "station" && stationWaitingForDriverScan ? (
+            <InfoNotice
+              icon={<ScanLine color={palette.brand} size={19} />}
+              text="Waiting for the assigned driver to scan this cylinder at the station. Reception does not need to scan it. Once SKIMA verifies the match, the job moves to station verification."
+            />
+          ) : null}
+
+          {workspace === "station" && status === "station_verified" && !existingInspection && stationCanInspect ? (
+            <View style={[styles.operationCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.sectionLead}>
+                <View style={[styles.sectionIcon, { backgroundColor: palette.warningSoft }]}><ShieldCheck color={palette.warning} size={22} /></View>
+                <View style={styles.sectionCopy}>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>Cylinder safety check</Text>
+                  <Text style={[styles.sectionBody, { color: palette.muted }]}>Record the condition observed at reception before the cylinder is filled.</Text>
+                </View>
               </View>
+
+              <View style={styles.options}>
+                {["safe", "unsafe", "manual_review", "rejected"].map((result) => (
+                  <AppButton
+                    key={result}
+                    label={inspectionLabel(result)}
+                    size="sm"
+                    variant={inspectionResult === result ? "primary" : result === "unsafe" || result === "rejected" ? "danger" : "secondary"}
+                    onPress={() => setInspectionResult(result)}
+                  />
+                ))}
+              </View>
+
               <TextInput
                 value={inspectionNotes}
                 onChangeText={setInspectionNotes}
-                placeholder="Add a note if needed"
+                placeholder="Add a safety note if needed"
                 placeholderTextColor={palette.muted}
                 multiline
-                style={[styles.input, styles.notes, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
+                style={[styles.input, styles.notes, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
               />
+
               {inspectionResult ? (
                 <EvidenceCapture
                   assetTypeKey="media.lpg.inspection_evidence"
@@ -617,113 +426,271 @@ export function JobDetailScreen({
                   draftType={`station-inspection-${id ?? "unknown"}`}
                   onUploaded={(assetId) => submitInspection(assetId)}
                 />
-              ) : (
-                <Text style={styles.formBody}>
-                  Choose the cylinder condition to continue.
-                </Text>
-              )}
-              {inspectionResult ? <ActionButton pending={inspection.isPending} label="Save safety check" onPress={() => void submitInspection()} /> : null}
+              ) : null}
+
+              <AppButton
+                label="Save safety check"
+                fullWidth
+                loading={inspection.isPending}
+                disabled={!inspectionResult}
+                onPress={() => void submitInspection()}
+              />
             </View>
           ) : null}
-          {workspace === "station" && !stationCanScan ? (
-            <Card>
-              <Text style={styles.formTitle}>
-                Action unavailable
-              </Text>
-              <Text style={styles.formBody}>
-                Ask your station manager to enable reception access for your account.
-              </Text>
-            </Card>
-          ) : null}
+
           {workspace === "station" && existingInspection ? (
-            <Card>
-              <Field
-                label="Safety check"
-                value={inspectionLabel(existingInspectionResult ?? "recorded")}
-              />
-              {existingInspectionResult !== "safe" ? (
-                <Text style={styles.error}>
-                  This cylinder is paused. A station supervisor must review it before filling.
-                </Text>
-              ) : null}
-            </Card>
+            <View style={[styles.inspectionSummary, { backgroundColor: existingInspectionResult === "safe" ? palette.successSoft : palette.dangerSoft }]}>
+              {existingInspectionResult === "safe" ? <CheckCircle2 color={palette.success} size={21} /> : <AlertTriangle color={palette.danger} size={21} />}
+              <View style={styles.inspectionCopy}>
+                <Text style={[styles.inspectionTitle, { color: palette.ink }]}>Safety check: {inspectionLabel(existingInspectionResult ?? "recorded")}</Text>
+                <Text style={[styles.inspectionBody, { color: palette.muted }]}>{existingInspectionResult === "safe" ? "This cylinder can proceed to refill." : "This cylinder is paused and must not be filled until authorised review resolves it."}</Text>
+              </View>
+            </View>
           ) : null}
+
+          {workspace === "station" && stationCanPump && (refillActive || releaseReady) && safeInspection ? (
+            <View style={[styles.operationCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.sectionLead}>
+                <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><Gauge color={palette.brand} size={22} /></View>
+                <View style={styles.sectionCopy}>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>{releaseReady ? "Refill confirmed" : "Record actual refill"}</Text>
+                  <Text style={[styles.sectionBody, { color: palette.muted }]}>{releaseReady ? "SKIMA has the confirmed refill record and settlement state. The assigned driver can continue the return journey." : `Customer requested ${requestedKg ?? "—"} kg. Enter only what was actually filled.`}</Text>
+                </View>
+              </View>
+
+              {!releaseReady ? (
+                <>
+                  <View style={styles.fieldGroup}>
+                    <Text style={[styles.fieldLabel, { color: palette.ink }]}>Actual kilograms filled</Text>
+                    <TextInput
+                      value={actualKg}
+                      onChangeText={setActualKg}
+                      keyboardType="decimal-pad"
+                      placeholder="e.g. 6"
+                      placeholderTextColor={palette.muted}
+                      style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
+                    />
+                  </View>
+                  <AppButton
+                    label="Confirm refill"
+                    fullWidth
+                    size="lg"
+                    loading={confirmRefill.isPending || action.isPending}
+                    icon={<CheckCircle2 color="#FFFFFF" size={18} />}
+                    onPress={() => void confirmStationRefill()}
+                  />
+                </>
+              ) : (
+                <InfoNotice
+                  icon={<CheckCircle2 color={palette.success} size={19} />}
+                  text="No manual settlement action is needed. SKIMA posts the station settlement from the confirmed-refill event."
+                />
+              )}
+            </View>
+          ) : null}
+
+          {workspace === "station" && !stationCanInspect ? (
+            <InfoNotice
+              icon={<ShieldCheck color={palette.mutedStrong} size={19} />}
+              text="Your station role can view this job but cannot record reception safety checks or refill operations."
+            />
+          ) : null}
+
+          {workspace === "driver" && ["delivered", "completed"].includes(status) ? (
+            <InfoNotice
+              icon={<CheckCircle2 color={palette.success} size={19} />}
+              text="Delivery is verified. Driver payout is released automatically by the SKIMA financial workflow; there is no manual earnings-posting action."
+            />
+          ) : null}
+
           {notice ? (
-            <Text
-              accessibilityRole="alert"
-              style={successNotice ? styles.success : styles.error}
-            >
-              {notice}
-            </Text>
+            <View style={[styles.notice, { backgroundColor: noticeSuccess ? palette.successSoft : palette.dangerSoft }]}>
+              <Text accessibilityRole="alert" style={[styles.noticeText, { color: noticeSuccess ? palette.success : palette.danger }]}>{notice}</Text>
+            </View>
           ) : null}
         </>
       )}
     </Screen>
   );
 }
-function locationPoint(
-  record: ReturnType<typeof nestedRecord>,
-  label: string,
-): MapPoint | null {
+
+function StationProgress({ status }: { status: string }) {
+  const { palette } = useAppTheme();
+  const receiptComplete = ["station_verified", "refill_in_progress", "refill_confirmed", "station_settled", "return_en_route", "delivery_verification_pending", "delivered", "completed"].includes(status);
+  const refillComplete = ["refill_confirmed", "station_settled", "return_en_route", "delivery_verification_pending", "delivered", "completed"].includes(status);
+  const readyComplete = ["station_settled", "return_en_route", "delivery_verification_pending", "delivered", "completed"].includes(status);
+  return (
+    <View style={[styles.progressCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      <ProgressStep number="1" label="Driver scan verified" complete={receiptComplete} active={!receiptComplete} />
+      <View style={[styles.progressLine, { backgroundColor: palette.border }]} />
+      <ProgressStep number="2" label="Safety & refill" complete={refillComplete} active={receiptComplete && !refillComplete} />
+      <View style={[styles.progressLine, { backgroundColor: palette.border }]} />
+      <ProgressStep number="3" label="Ready for driver" complete={readyComplete} active={refillComplete && !readyComplete} />
+    </View>
+  );
+}
+
+function ProgressStep({ number, label, complete, active }: { number: string; label: string; complete: boolean; active: boolean }) {
+  const { palette } = useAppTheme();
+  return (
+    <View style={styles.progressStep}>
+      <View style={[styles.progressNode, { backgroundColor: complete ? palette.success : active ? palette.brand : palette.surfaceSubtle }]}>
+        {complete ? <CheckCircle2 color="#FFFFFF" size={16} /> : <Text style={[styles.progressNumber, { color: active ? "#FFFFFF" : palette.muted }]}>{number}</Text>}
+      </View>
+      <Text style={[styles.progressLabel, { color: active || complete ? palette.ink : palette.muted }]}>{label}</Text>
+    </View>
+  );
+}
+
+function SummaryField({ label, value }: { label: string; value: string }) {
+  const { palette } = useAppTheme();
+  return (
+    <View style={styles.summaryRow}>
+      <Text style={[styles.summaryLabel, { color: palette.muted }]}>{label}</Text>
+      <Text style={[styles.summaryValue, { color: palette.ink }]}>{value}</Text>
+    </View>
+  );
+}
+
+function Divider() {
+  const { palette } = useAppTheme();
+  return <View style={[styles.divider, { backgroundColor: palette.border }]} />;
+}
+
+function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  const { palette } = useAppTheme();
+  return (
+    <View style={[styles.metric, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      <View style={[styles.metricIcon, { backgroundColor: palette.brandSoft }]}>{icon}</View>
+      <Text style={[styles.metricValue, { color: palette.ink }]}>{value}</Text>
+      <Text style={[styles.metricLabel, { color: palette.muted }]}>{label}</Text>
+    </View>
+  );
+}
+
+function InfoNotice({ icon, text }: { icon: React.ReactNode; text: string }) {
+  const { palette } = useAppTheme();
+  return (
+    <View style={[styles.infoNotice, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+      {icon}
+      <Text style={[styles.infoNoticeText, { color: palette.muted }]}>{text}</Text>
+    </View>
+  );
+}
+
+function locationPoint(record: ReturnType<typeof nestedRecord>, label: string): MapPoint | null {
   const latitude = firstNumber(record, ["latitude", "lat"]);
   const longitude = firstNumber(record, ["longitude", "lng", "lon"]);
-  return latitude !== null && longitude !== null
-    ? { latitude, longitude, label }
-    : null;
+  return latitude !== null && longitude !== null ? { latitude, longitude, label } : null;
 }
-function Field({ label, value }: { label: string; value: string }) {
-  const { palette } = useAppTheme();
-  return (
-    <View style={styles.field}>
-      <Text style={[styles.label, { color: palette.muted }]}>{label}</Text>
-      <Text style={[styles.value, { color: palette.ink }]}>{value}</Text>
-    </View>
-  );
+
+function navigationPointForStatus(status: string, points: MapPoint[]) {
+  if (["pickup_verified", "station_en_route"].includes(status)) return points.find((point) => point.label === "Station") ?? null;
+  if (["refill_confirmed", "station_settled", "return_en_route", "delivery_verification_pending"].includes(status)) return points.find((point) => point.label === "Delivery") ?? null;
+  return points.find((point) => point.label === "Customer") ?? null;
 }
-function StationStep({ number, label, active, complete }: { number: string; label: string; active: boolean; complete: boolean }) {
-  const { palette } = useAppTheme();
-  return (
-    <View style={styles.stationStep}>
-      <View style={[styles.stepNumber, { backgroundColor: complete ? colors.success : active ? colors.brand : palette.soft }]}>
-        <Text style={[styles.stepNumberText, { color: complete || active ? "white" : palette.muted }]}>{complete ? "✓" : number}</Text>
-      </View>
-      <Text style={[styles.stepLabel, { color: active ? palette.ink : palette.muted }]}>{label}</Text>
-    </View>
-  );
+
+function driverScanTypeForStatus(status: string): "customer_pickup" | "station_receipt" | "customer_delivery" | null {
+  if (["driver_accepted", "pickup_en_route"].includes(status)) return "customer_pickup";
+  if (["pickup_verified", "station_en_route"].includes(status)) return "station_receipt";
+  if (["return_en_route", "delivery_verification_pending"].includes(status)) return "customer_delivery";
+  return null;
 }
+
+function driverActionForStatus(status: string) {
+  if (status === "driver_accepted") return "lpg.pickup.start";
+  if (status === "pickup_verified") return "lpg.station.start";
+  if (["refill_confirmed", "station_settled"].includes(status)) return "lpg.return.start";
+  if (status === "return_en_route") return "lpg.delivery.pending";
+  return null;
+}
+
+function driverScanTitle(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
+  if (type === "station_receipt") return "Verify cylinder at the station";
+  if (type === "customer_delivery") return "Verify the final hand-over";
+  return "Verify customer pickup";
+}
+
+function driverScanDescription(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
+  if (type === "station_receipt") return "Scan the SKIMA cylinder identity at station reception. This makes the matched order visible to station staff for verification and refill processing.";
+  if (type === "customer_delivery") return "After the customer has completed delivery verification, scan the same SKIMA cylinder identity to complete the hand-over.";
+  return "Scan the customer's SKIMA cylinder identity before taking it into your custody.";
+}
+
+function driverScanButton(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
+  if (type === "station_receipt") return "Confirm station arrival";
+  if (type === "customer_delivery") return "Complete hand-over";
+  return "Confirm cylinder pickup";
+}
+
+function driverScanSuccess(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
+  if (type === "station_receipt") return "Station arrival verified. Reception can now process the matched refill job.";
+  if (type === "customer_delivery") return "Delivery verified. SKIMA is completing the order and releasing your payout automatically.";
+  return "Cylinder pickup verified by SKIMA.";
+}
+
+function driverActionLabel(actionKey: string) {
+  const labels: Record<string, string> = {
+    "lpg.pickup.start": "Start pickup route",
+    "lpg.station.start": "Head to refill station",
+    "lpg.return.start": "Start return delivery",
+    "lpg.delivery.pending": "Arrived for hand-over",
+  };
+  return labels[actionKey] ?? "Continue job";
+}
+
+function driverActionSuccess(actionKey: string) {
+  const labels: Record<string, string> = {
+    "lpg.pickup.start": "Pickup journey started.",
+    "lpg.station.start": "Station journey started.",
+    "lpg.return.start": "Return journey started.",
+    "lpg.delivery.pending": "Arrival recorded. The customer can complete delivery verification.",
+  };
+  return labels[actionKey] ?? "Job updated.";
+}
+
 function friendlyJobStatus(value: string) {
   const normalized = value.toLowerCase().replace(/[\s-]+/g, "_");
   const labels: Record<string, string> = {
-    assigned: "Driver assigned",
-    driver_offered: "Waiting for driver",
-    driver_accepted: "Driver accepted",
+    driver_offered: "Assigning driver",
+    driver_accepted: "Driver assigned",
     pickup_en_route: "Heading to pickup",
     pickup_verified: "Cylinder collected",
     station_en_route: "Heading to station",
-    station_arrived: "At the station",
-    station_verified: "Accepted at reception",
-    refill_started: "Filling in progress",
-    refill_in_progress: "Filling in progress",
-    refill_confirmed: "Fill confirmed",
-    station_settled: "Ready for driver",
-    station_released: "Returning to customer",
+    station_verified: "Verified at station",
+    refill_started: "Refill started",
+    refill_in_progress: "Refill in progress",
+    refill_confirmed: "Refill confirmed",
+    station_settled: "Ready for return",
     return_en_route: "Returning to customer",
-    delivery_verification_pending: "Ready for handover",
+    delivery_verification_pending: "Ready for hand-over",
     delivered: "Delivered",
     completed: "Completed",
     cancelled: "Cancelled",
   };
-  return labels[normalized] ?? "In progress";
+  return labels[normalized] ?? normalized.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase());
 }
-function driverActionLabel(actionKey: string) {
-  const labels: Record<string, string> = {
-    "lpg.pickup.start": "Start pickup route",
-    "lpg.station.start": "Navigate to refill station",
-    "lpg.return.start": "Start return delivery",
-    "lpg.delivery.pending": "Arrived for handover",
-  };
-  return labels[actionKey] ?? "Continue delivery";
+
+function driverStageDescription(status: string) {
+  if (["driver_offered", "driver_accepted"].includes(status)) return "SKIMA has selected the eligible driver for this order.";
+  if (["pickup_en_route"].includes(status)) return "Navigate to the customer and verify the cylinder before taking custody.";
+  if (["pickup_verified", "station_en_route"].includes(status)) return "Take the verified cylinder to the assigned station and scan it at reception.";
+  if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is processing the verified refill.";
+  if (["refill_confirmed", "station_settled", "return_en_route"].includes(status)) return "The filled cylinder is ready to return to the customer.";
+  if (status === "delivery_verification_pending") return "The customer must complete delivery verification before the final cylinder scan.";
+  if (["delivered", "completed"].includes(status)) return "The hand-over is verified and the financial workflow completes automatically.";
+  return "Follow the next available action for this assigned job.";
 }
+
+function stationStageDescription(status: string) {
+  if (["pickup_verified", "station_en_route"].includes(status)) return "The assigned driver is bringing the verified cylinder to this station.";
+  if (status === "station_verified") return "The assigned driver scanned the cylinder at reception. Complete the safety check before filling.";
+  if (["refill_started", "refill_in_progress"].includes(status)) return "Record the actual kilograms filled after the safety-approved refill.";
+  if (["refill_confirmed", "station_settled"].includes(status)) return "The refill and station financial release are recorded. The driver can continue the return journey.";
+  if (["return_en_route", "delivery_verification_pending", "delivered", "completed"].includes(status)) return "This cylinder has left the station and is progressing through customer return.";
+  return "Review the matched order and current SKIMA fulfilment state.";
+}
+
 function inspectionLabel(value: string) {
   const labels: Record<string, string> = {
     safe: "Safe to fill",
@@ -732,96 +699,58 @@ function inspectionLabel(value: string) {
     rejected: "Reject cylinder",
     recorded: "Saved",
   };
-  return labels[value] ?? "Saved";
+  return labels[value] ?? value.replace(/_/g, " ");
 }
-function ActionButton({
-  label,
-  pending,
-  onPress,
-}: {
-  label: string;
-  pending: boolean;
-  onPress(): void;
-}) {
-  return (
-    <Pressable disabled={pending} onPress={onPress} style={styles.submit}>
-      {pending ? (
-        <ActivityIndicator color="white" />
-      ) : (
-        <Text style={styles.submitText}>{label}</Text>
-      )}
-    </Pressable>
-  );
+
+function statusTone(status: string): "neutral" | "brand" | "success" | "warning" | "danger" {
+  if (["completed", "delivered", "station_settled", "refill_confirmed"].includes(status)) return "success";
+  if (["cancelled", "disputed"].includes(status)) return "danger";
+  if (["driver_offered", "delivery_verification_pending"].includes(status)) return "warning";
+  return "brand";
 }
+
 const styles = StyleSheet.create({
-  back: { color: colors.brand, fontWeight: "800" },
-  field: { gap: 4 },
-  label: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  value: {
-    fontSize: 17,
-    fontWeight: "700",
-    textTransform: "capitalize",
-  },
-  submit: {
-    minHeight: 56,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.brand,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.lg,
-  },
-  submitText: { color: "white", fontWeight: "800" },
-  error: { color: colors.danger, padding: spacing.md },
-  success: {
-    color: colors.success,
-    backgroundColor: "#DDF3E5",
-    padding: spacing.md,
-    borderRadius: radii.md,
-    fontWeight: "700",
-  },
-  refillForm: { gap: spacing.md, padding: spacing.md, borderRadius: radii.lg },
-  inspectionForm: { gap: spacing.md, paddingVertical: spacing.sm },
-  formHeading: { gap: 4 },
-  formTitle: { fontSize: 19, fontWeight: "900" },
-  formBody: { lineHeight: 21 },
-  resultOptions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  resultOption: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-  },
-  resultSelected: { borderColor: colors.brand, backgroundColor: "#FFF0F1" },
-  resultText: {
-    color: colors.muted,
-    fontWeight: "800",
-    textTransform: "capitalize",
-  },
-  resultTextSelected: { color: colors.brandDark },
-  input: {
-    minHeight: 54,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.surface,
-    color: colors.ink,
-  },
-  notes: { minHeight: 90, paddingTop: spacing.md, textAlignVertical: "top" },
-  summary: { flexDirection: "row", flexWrap: "wrap", gap: spacing.lg, paddingVertical: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth },
-  routeFacts: { flexDirection: "row", gap: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
-  stationSteps: { minHeight: 70, flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.sm },
-  stationStep: { alignItems: "center", gap: 6 },
-  stepNumber: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 17 },
-  stepNumberText: { fontWeight: "900" },
-  stepLabel: { fontSize: 11, fontWeight: "800" },
-  stepLine: { flex: 1, height: 2, marginHorizontal: spacing.sm, marginBottom: 20 },
-  scanSection: { gap: spacing.sm },
+  hero: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
+  heroCopy: { flex: 1, gap: 3 },
+  heroEyebrow: { color: "rgba(255,255,255,.72)", ...typography.eyebrow, fontSize: 9 },
+  heroTitle: { color: "#FFFFFF", ...typography.heading, fontSize: 21 },
+  heroBody: { color: "rgba(255,255,255,.84)", ...typography.caption, lineHeight: 18 },
+  mapShell: { borderRadius: radii.xl, overflow: "hidden" },
+  progressCard: { minHeight: 88, flexDirection: "row", alignItems: "flex-start", borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
+  progressStep: { width: 92, alignItems: "center", gap: 7 },
+  progressNode: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  progressNumber: { ...typography.bodyStrong, fontSize: 12 },
+  progressLabel: { ...typography.caption, fontSize: 10, textAlign: "center", lineHeight: 14 },
+  progressLine: { flex: 1, height: 2, marginTop: 16 },
+  summaryCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  summaryRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md },
+  summaryLabel: { ...typography.caption, flex: 0.42 },
+  summaryValue: { ...typography.bodyStrong, fontSize: 14, flex: 0.58, textAlign: "right" },
+  divider: { height: StyleSheet.hairlineWidth },
+  metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  metric: { flex: 1, minWidth: 130, gap: 5, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  metricIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  metricValue: { ...typography.heading, fontSize: 19 },
+  metricLabel: { ...typography.caption },
+  scanCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
+  operationCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  sectionLead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
+  sectionIcon: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  sectionCopy: { flex: 1, gap: 3 },
+  sectionTitle: { ...typography.subheading, fontSize: 15 },
+  sectionBody: { ...typography.caption, lineHeight: 18 },
+  scannerHint: { ...typography.caption, textAlign: "center" },
+  options: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  input: { minHeight: 54, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: 15 },
+  notes: { minHeight: 92, paddingTop: spacing.md, textAlignVertical: "top" },
+  fieldGroup: { gap: spacing.sm },
+  fieldLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" },
+  inspectionSummary: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md, borderRadius: radii.lg, padding: spacing.md },
+  inspectionCopy: { flex: 1, gap: 3 },
+  inspectionTitle: { ...typography.bodyStrong, fontSize: 14 },
+  inspectionBody: { ...typography.caption, lineHeight: 18 },
+  infoNotice: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  infoNoticeText: { flex: 1, ...typography.caption, lineHeight: 18 },
+  notice: { borderRadius: radii.md, padding: spacing.md },
+  noticeText: { ...typography.caption, fontWeight: "800", textAlign: "center" },
 });
