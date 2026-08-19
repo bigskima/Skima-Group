@@ -1,15 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { Truck } from "lucide-react-native";
+import { CarFront, FileCheck2, Gauge, Plus, ShieldCheck, Truck } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
@@ -23,13 +16,21 @@ import {
 } from "../api/records";
 import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
-import { colors, radii, spacing } from "../theme/tokens";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
-import { Card } from "./Card";
+import { AppButton } from "./AppButton";
+import { EmptyState } from "./EmptyState";
 import { PresentationMediaPanel } from "./PresentationMediaPanel";
 import { Screen } from "./Screen";
+import { ScreenSkeleton } from "./ScreenSkeleton";
+import { SectionHeader } from "./SectionHeader";
+import { StatusPill } from "./StatusPill";
+
 export function VehicleWorkflowScreen() {
   const session = useSession();
+  const { palette } = useAppTheme();
   const owner = session.context?.profile?.id ?? session.context?.user.id ?? "";
   const draftCreatedAt = useRef(new Date().toISOString());
   const vehicles = domainQueries.vehicles();
@@ -40,34 +41,23 @@ export function VehicleWorkflowScreen() {
   const documents = domainQueries.documents();
   const drivers = domainQueries.drivers();
   const client = useQueryClient();
-  const driver = drivers.data?.find(
-    (item) =>
-      firstString(item, ["user_id", "userId"]) === session.context?.user.id,
-  );
+
+  const driver = drivers.data?.find((item) => firstString(item, ["user_id", "userId"]) === session.context?.user.id);
   const driverId = driver ? recordId(driver) : null;
   const applicationType = (applicationTypes.data ?? []).find(
-    (item) =>
-      firstString(item, ["application_category", "applicationCategory"]) ===
-        "vehicle" && firstString(item, ["status"]) === "active",
+    (item) => firstString(item, ["application_category", "applicationCategory"]) === "vehicle" && firstString(item, ["status"]) === "active",
   );
   const applicationTypeId = applicationType ? recordId(applicationType) : null;
   const current = (applications.data ?? []).find(
     (item) =>
-      firstString(item, ["application_type_id", "applicationTypeId"]) ===
-        applicationTypeId &&
-      !["approved", "rejected", "withdrawn", "expired"].includes(
-        firstString(item, ["status"]) ?? "",
-      ),
+      firstString(item, ["application_type_id", "applicationTypeId"]) === applicationTypeId &&
+      !["approved", "rejected", "withdrawn", "expired"].includes(firstString(item, ["status"]) ?? ""),
   );
   const currentId = current ? recordId(current) : null;
-  const requirementSetId = firstString(applicationType, [
-    "document_requirement_set_id",
-    "documentRequirementSetId",
-  ]);
+  const requirementSetId = firstString(applicationType, ["document_requirement_set_id", "documentRequirementSetId"]);
   const required = (requirements.data ?? []).filter(
     (item) =>
-      firstString(item, ["requirement_set_id", "requirementSetId"]) ===
-        requirementSetId &&
+      firstString(item, ["requirement_set_id", "requirementSetId"]) === requirementSetId &&
       item.is_required === true &&
       firstString(item, ["status"]) === "active",
   );
@@ -75,14 +65,12 @@ export function VehicleWorkflowScreen() {
     (requirement) =>
       !(documents.data ?? []).some(
         (document) =>
-          firstString(document, ["application_id", "applicationId"]) ===
-            currentId &&
-          (firstString(document, ["requirement_id", "requirementId"]) ===
-            recordId(requirement) ||
-            firstString(document, ["requirement_key", "requirementKey"]) ===
-              firstString(requirement, ["key"])),
+          firstString(document, ["application_id", "applicationId"]) === currentId &&
+          (firstString(document, ["requirement_id", "requirementId"]) === recordId(requirement) ||
+            firstString(document, ["requirement_key", "requirementKey"]) === firstString(requirement, ["key"])),
       ),
   );
+
   const [showForm, setShowForm] = useState(false);
   const [typeKey, setTypeKey] = useState("");
   const [manufacturer, setManufacturer] = useState("");
@@ -93,7 +81,9 @@ export function VehicleWorkflowScreen() {
   const [ownership, setOwnership] = useState("owned");
   const [capacity, setCapacity] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [messageSuccess, setMessageSuccess] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+
   useEffect(() => {
     if (!owner) return;
     void draftStore.load(owner, "driver-vehicle-registration").then((draft) => {
@@ -112,17 +102,10 @@ export function VehicleWorkflowScreen() {
       setHydrated(true);
     });
   }, [owner]);
+
   useEffect(() => {
     if (!owner || !hydrated) return;
-    const hasValues = [
-      typeKey,
-      manufacturer,
-      model,
-      year,
-      registration,
-      colour,
-      capacity,
-    ].some(Boolean);
+    const hasValues = [typeKey, manufacturer, model, year, registration, colour, capacity].some(Boolean);
     if (!hasValues) return;
     const now = new Date().toISOString();
     void draftStore.save({
@@ -130,45 +113,19 @@ export function VehicleWorkflowScreen() {
       type: "driver-vehicle-registration",
       ownerProfileId: owner,
       step: "vehicle-details",
-      values: {
-        typeKey,
-        manufacturer,
-        model,
-        year,
-        registration,
-        colour,
-        ownership,
-        capacity,
-      },
+      values: { typeKey, manufacturer, model, year, registration, colour, ownership, capacity },
       pendingMedia: [],
       createdAt: draftCreatedAt.current,
       updatedAt: now,
     });
-  }, [
-    capacity,
-    colour,
-    hydrated,
-    manufacturer,
-    model,
-    owner,
-    ownership,
-    registration,
-    typeKey,
-    year,
-  ]);
-  const create = useGatewayMutation({
-    path: "/runtime/applications",
-    schema: ActionResponseSchema,
-  });
-  const update = useGatewayMutation({
-    path: "/runtime/applications/payload",
-    schema: ActionResponseSchema,
-  });
-  const submit = useGatewayMutation({
-    path: "/runtime/applications/submit",
-    schema: ActionResponseSchema,
-  });
+  }, [capacity, colour, hydrated, manufacturer, model, owner, ownership, registration, typeKey, year]);
+
+  const create = useGatewayMutation({ path: "/runtime/applications", schema: ActionResponseSchema });
+  const update = useGatewayMutation({ path: "/runtime/applications/payload", schema: ActionResponseSchema });
+  const submit = useGatewayMutation({ path: "/runtime/applications/submit", schema: ActionResponseSchema });
+
   const send = async () => {
+    setMessage(null);
     const load = Number(capacity);
     if (
       !driverId ||
@@ -182,11 +139,11 @@ export function VehicleWorkflowScreen() {
       !Number.isFinite(load) ||
       load <= 0
     ) {
-      setMessage(
-        "Complete all vehicle and capacity fields. An approved driver profile is required.",
-      );
+      setMessageSuccess(false);
+      setMessage("Complete every required vehicle field. An approved driver profile is also required.");
       return;
     }
+
     const payload = {
       vehicle: {
         driverProfileId: driverId,
@@ -201,63 +158,47 @@ export function VehicleWorkflowScreen() {
         capacityProfile: { maxLoadKg: load },
       },
     };
+
     try {
       let applicationId = current ? recordId(current) : null;
-      if (applicationId)
+      if (applicationId) {
         await update.mutateAsync({
           applicationId,
           payload,
-          idempotencyKey: idempotencyKey(
-            "vehicle-application-payload",
-            applicationId,
-          ),
+          idempotencyKey: idempotencyKey("vehicle-application-payload", applicationId),
         });
-      else {
+      } else {
         const result = await create.mutateAsync({
           applicationTypeKey: firstString(applicationType, ["key"]),
           payload,
-          idempotencyKey: idempotencyKey(
-            "vehicle-application-create",
-            registration.trim().toUpperCase(),
-          ),
+          idempotencyKey: idempotencyKey("vehicle-application-create", registration.trim().toUpperCase()),
         });
         applicationId = resultId(result);
       }
-      if (!applicationId)
-        throw new Error(
-          "The approval service did not return an application identifier.",
-        );
+
+      if (!applicationId) throw new Error("The vehicle application could not be created. Please try again.");
       await draftStore.clear(owner, "driver-vehicle-registration");
-      await client.invalidateQueries({
-        queryKey: ["lpg-expo", "applications"],
-      });
-      if (
-        required.length > 0 &&
-        (!currentId || applicationId !== currentId || missing.length > 0)
-      ) {
+      await client.invalidateQueries({ queryKey: ["lpg-expo", "applications"] });
+
+      if (required.length > 0 && (!currentId || applicationId !== currentId || missing.length > 0)) {
         router.push("/(driver)/vehicle-documents");
         return;
       }
+
       await submit.mutateAsync({
         applicationId,
-        idempotencyKey: idempotencyKey(
-          "vehicle-application-submit",
-          applicationId,
-        ),
+        idempotencyKey: idempotencyKey("vehicle-application-submit", applicationId),
       });
-      await client.invalidateQueries({
-        queryKey: ["lpg-expo", "applications"],
-      });
+      await client.invalidateQueries({ queryKey: ["lpg-expo", "applications"] });
       setShowForm(false);
-      setMessage("Vehicle submitted for approval.");
+      setMessageSuccess(true);
+      setMessage("Vehicle submitted for SKIMA review.");
     } catch (cause) {
-      setMessage(
-        cause instanceof Error
-          ? cause.message
-          : "Vehicle application could not be submitted.",
-      );
+      setMessageSuccess(false);
+      setMessage(friendlyError(cause, "Vehicle application could not be submitted."));
     }
   };
+
   const loading =
     vehicles.isPending ||
     vehicleTypes.isPending ||
@@ -266,295 +207,322 @@ export function VehicleWorkflowScreen() {
     requirements.isPending ||
     documents.isPending ||
     drivers.isPending;
+  const failed =
+    vehicles.error || vehicleTypes.error || applicationTypes.error || applications.error || requirements.error || documents.error || drivers.error;
+
   return (
     <Screen
       eyebrow="Driver capability"
       title="Vehicles"
+      subtitle="Register and review the vehicles SKIMA can consider when matching you to eligible LPG work."
       action={
-        <Pressable
+        <AppButton
+          label={showForm ? "Close" : "Add vehicle"}
+          size="sm"
+          variant={showForm ? "ghost" : "primary"}
+          icon={!showForm ? <Plus color="#FFFFFF" size={16} /> : undefined}
           onPress={() => setShowForm((value) => !value)}
-          style={styles.action}
-        >
-          <Text style={styles.actionText}>
-            {showForm ? "Close" : "Add vehicle"}
-          </Text>
-        </Pressable>
+        />
       }
     >
       {loading ? (
-        <ActivityIndicator color={colors.brand} />
+        <ScreenSkeleton cards={4} />
+      ) : failed ? (
+        <EmptyState
+          icon={<Truck color={palette.brand} size={27} />}
+          title="Vehicles could not be loaded"
+          description="Check your connection and refresh your driver vehicle workspace."
+          action={<AppButton label="Retry" onPress={() => void Promise.all([vehicles.refetch(), vehicleTypes.refetch(), applications.refetch()])} />}
+        />
       ) : (
         <>
+          <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
+            <View style={styles.heroIcon}><Truck color="#FFFFFF" size={28} /></View>
+            <View style={styles.heroCopy}>
+              <Text style={styles.heroEyebrow}>APPROVED DRIVER CAPABILITY</Text>
+              <Text style={styles.heroTitle}>{vehicles.data?.length ?? 0} registered {vehicles.data?.length === 1 ? "vehicle" : "vehicles"}</Text>
+              <Text style={styles.heroBody}>Vehicle type, approval and load capacity are part of dispatch eligibility. SKIMA assigns jobs automatically; there is no manual job-accept step.</Text>
+            </View>
+          </View>
+
           {current ? (
-            <View style={styles.pending}>
-              <Truck color={colors.brand} size={24} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>Vehicle application in review</Text>
-                <Text style={styles.body}>
-                  {(displayStatus(current) ?? "submitted").replace(
-                    /[_-]/g,
-                    " ",
-                  )}
-                </Text>
+            <View style={[styles.reviewCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={[styles.reviewIcon, { backgroundColor: palette.warningSoft }]}><FileCheck2 color={palette.warning} size={22} /></View>
+              <View style={styles.reviewCopy}>
+                <Text style={[styles.reviewTitle, { color: palette.ink }]}>Vehicle application in review</Text>
+                <Text style={[styles.reviewBody, { color: palette.muted }]}>{friendly(displayStatus(current) ?? "submitted")}</Text>
               </View>
+              <StatusPill label={friendly(displayStatus(current) ?? "submitted")} tone="warning" />
             </View>
           ) : null}
+
           {current && missing.length > 0 ? (
-            <Pressable
-              style={styles.secondary}
+            <AppButton
+              label={`Add required vehicle documents (${missing.length})`}
+              fullWidth
+              variant="secondary"
+              icon={<FileCheck2 color={palette.brand} size={17} />}
               onPress={() => router.push("/(driver)/vehicle-documents")}
-            >
-              <Text style={styles.secondaryText}>
-                Add required vehicle documents ({missing.length})
-              </Text>
-            </Pressable>
+            />
           ) : null}
+
           {showForm ? (
-            <Card>
-              <Text style={styles.title}>Vehicle approval application</Text>
-              <Text style={styles.body}>
-                Choose the vehicle you will use for deliveries. It must be
-                approved before you can accept assignments.
-              </Text>
-              <View style={styles.options}>
-                {(vehicleTypes.data ?? [])
-                  .filter((item) => firstString(item, ["status"]) === "active")
-                  .map((item) => {
-                    const key = firstString(item, ["key"]) ?? "";
+            <View style={[styles.formCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.formHead}>
+                <View style={[styles.formIcon, { backgroundColor: palette.brandSoft }]}><CarFront color={palette.brand} size={22} /></View>
+                <View style={styles.formCopy}>
+                  <Text style={[styles.formTitle, { color: palette.ink }]}>Vehicle approval application</Text>
+                  <Text style={[styles.formBody, { color: palette.muted }]}>Add the vehicle you intend to use. SKIMA reviews it before that vehicle can be considered for dispatch.</Text>
+                </View>
+              </View>
+
+              <FieldSection label="Vehicle type">
+                <View style={styles.options}>
+                  {(vehicleTypes.data ?? [])
+                    .filter((item) => firstString(item, ["status"]) === "active")
+                    .map((item) => {
+                      const key = firstString(item, ["key"]) ?? "";
+                      const selected = typeKey === key;
+                      return (
+                        <Pressable
+                          key={key}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected }}
+                          onPress={() => setTypeKey(key)}
+                          style={({ pressed }) => [
+                            styles.option,
+                            {
+                              backgroundColor: selected ? palette.brand : palette.surfaceSubtle,
+                              borderColor: selected ? palette.brand : palette.border,
+                              opacity: pressed ? 0.82 : 1,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.optionText, { color: selected ? "#FFFFFF" : palette.ink }]}>{firstString(item, ["display_name", "displayName"]) ?? key}</Text>
+                          {selected ? <ShieldCheck color="#FFFFFF" size={16} /> : null}
+                        </Pressable>
+                      );
+                    })}
+                </View>
+              </FieldSection>
+
+              <View style={styles.twoColumn}>
+                <TextField label="Manufacturer" value={manufacturer} onChangeText={setManufacturer} placeholder="e.g. Toyota" />
+                <TextField label="Model" value={model} onChangeText={setModel} placeholder="e.g. Hiace" />
+              </View>
+              <View style={styles.twoColumn}>
+                <TextField label="Year" value={year} onChangeText={setYear} placeholder="2022" keyboardType="number-pad" />
+                <TextField label="Colour" value={colour} onChangeText={setColour} placeholder="White" />
+              </View>
+              <TextField label="Registration number" value={registration} onChangeText={setRegistration} placeholder="Vehicle plate number" autoCapitalize="characters" />
+
+              <FieldSection label="Ownership">
+                <View style={styles.options}>
+                  {["owned", "leased", "rented"].map((value) => {
+                    const selected = ownership === value;
                     return (
                       <Pressable
-                        key={key}
-                        onPress={() => setTypeKey(key)}
-                        style={[
+                        key={value}
+                        onPress={() => setOwnership(value)}
+                        style={({ pressed }) => [
                           styles.option,
-                          typeKey === key && styles.selected,
+                          {
+                            backgroundColor: selected ? palette.brand : palette.surfaceSubtle,
+                            borderColor: selected ? palette.brand : palette.border,
+                            opacity: pressed ? 0.82 : 1,
+                          },
                         ]}
                       >
-                        <Text style={styles.optionText}>
-                          {firstString(item, ["display_name", "displayName"]) ??
-                            key}
-                        </Text>
+                        <Text style={[styles.optionText, { color: selected ? "#FFFFFF" : palette.ink }]}>{friendly(value)}</Text>
                       </Pressable>
                     );
                   })}
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Manufacturer"
-                placeholderTextColor={colors.muted}
-                value={manufacturer}
-                onChangeText={setManufacturer}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Model"
-                placeholderTextColor={colors.muted}
-                value={model}
-                onChangeText={setModel}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Year"
-                keyboardType="number-pad"
-                placeholderTextColor={colors.muted}
-                value={year}
-                onChangeText={setYear}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Registration number"
-                autoCapitalize="characters"
-                placeholderTextColor={colors.muted}
-                value={registration}
-                onChangeText={setRegistration}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Colour"
-                placeholderTextColor={colors.muted}
-                value={colour}
-                onChangeText={setColour}
-              />
-              <View style={styles.options}>
-                {["owned", "leased", "rented"].map((value) => (
-                  <Pressable
-                    key={value}
-                    onPress={() => setOwnership(value)}
-                    style={[
-                      styles.option,
-                      ownership === value && styles.selected,
-                    ]}
-                  >
-                    <Text style={styles.optionText}>{value}</Text>
-                  </Pressable>
-                ))}
-              </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Verified maximum load (kg)"
-                keyboardType="decimal-pad"
-                placeholderTextColor={colors.muted}
+                </View>
+              </FieldSection>
+
+              <TextField
+                label="Verified maximum load (kg)"
                 value={capacity}
                 onChangeText={setCapacity}
+                placeholder="Enter safe load capacity"
+                keyboardType="decimal-pad"
+                hint="Use the supported vehicle load figure that should be reviewed for LPG dispatch eligibility."
               />
-              <Pressable
-                disabled={
-                  create.isPending || update.isPending || submit.isPending
-                }
+
+              <View style={[styles.policyNote, { backgroundColor: palette.surfaceSubtle }]}>
+                <Gauge color={palette.mutedStrong} size={18} />
+                <Text style={[styles.policyText, { color: palette.muted }]}>Vehicle approval does not guarantee every LPG assignment. Dispatch still checks current availability, service coverage, vehicle capability and order requirements.</Text>
+              </View>
+
+              <AppButton
+                label="Continue vehicle review"
+                fullWidth
+                size="lg"
+                loading={create.isPending || update.isPending || submit.isPending}
                 onPress={() => void send()}
-                style={styles.primary}
-              >
-                {create.isPending || update.isPending || submit.isPending ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text style={styles.primaryText}>
-                    Submit vehicle for approval
-                  </Text>
-                )}
-              </Pressable>
-            </Card>
+              />
+            </View>
           ) : null}
-          {(vehicles.data ?? []).map((vehicle, index) => {
-            const id = recordId(vehicle);
-            return (
-              <Card key={id ?? String(index)}>
-                <View style={styles.row}>
-                  <View style={styles.vehicleIcon}>
-                    <Truck color={colors.brand} size={24} />
+
+          <SectionHeader title="Your vehicles" description="Current vehicle records attached to this driver profile." />
+          <View style={styles.vehicleList}>
+            {(vehicles.data ?? []).length ? (
+              (vehicles.data ?? []).map((vehicle, index) => {
+                const id = recordId(vehicle);
+                const vehicleStatus =
+                  displayStatus(vehicle) ?? firstString(vehicle, ["verification_status", "verificationStatus"]) ?? "registered";
+                return (
+                  <View key={id ?? String(index)} style={[styles.vehicleCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                    <View style={styles.vehicleHead}>
+                      <View style={[styles.vehicleIcon, { backgroundColor: palette.brandSoft }]}><Truck color={palette.brand} size={23} /></View>
+                      <View style={styles.vehicleCopy}>
+                        <Text style={[styles.vehicleTitle, { color: palette.ink }]}>{firstString(vehicle, ["manufacturer"]) ?? "Vehicle"} {firstString(vehicle, ["model"]) ?? ""}</Text>
+                        <Text style={[styles.vehicleMeta, { color: palette.muted }]}>{firstString(vehicle, ["registration_number", "registrationNumber"]) ?? displayReference(vehicle) ?? "Registration unavailable"}</Text>
+                      </View>
+                      <StatusPill label={friendly(vehicleStatus)} tone={vehicleTone(vehicleStatus)} />
+                    </View>
+                    <View style={[styles.divider, { backgroundColor: palette.border }]} />
+                    <View style={styles.vehicleMetrics}>
+                      <VehicleMetric label="Max load" value={`${firstNumber(vehicle, ["max_load_kg", "maxLoadKg"]) ?? "—"} kg`} />
+                      <VehicleMetric label="Colour" value={firstString(vehicle, ["colour", "color"]) ?? "—"} />
+                    </View>
+                    {id ? <PresentationMediaPanel subjectId={id} subjectType="vehicle" colour={firstString(vehicle, ["colour", "color"])} /> : null}
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.title}>
-                      {firstString(vehicle, ["manufacturer"]) ?? "Vehicle"}{" "}
-                      {firstString(vehicle, ["model"]) ?? ""}
-                    </Text>
-                    <Text style={styles.body}>
-                      {firstString(vehicle, [
-                        "registration_number",
-                        "registrationNumber",
-                      ]) ?? displayReference(vehicle)}{" "}
-                      ·{" "}
-                      {firstNumber(vehicle, ["max_load_kg", "maxLoadKg"]) ??
-                        "Configured"}{" "}
-                      kg
-                    </Text>
-                    <Text style={styles.status}>
-                      {(
-                        displayStatus(vehicle) ??
-                        firstString(vehicle, [
-                          "verification_status",
-                          "verificationStatus",
-                        ]) ??
-                        "registered"
-                      ).replace(/[_-]/g, " ")}
-                    </Text>
-                  </View>
-                </View>
-                {id ? (
-                  <PresentationMediaPanel
-                    subjectId={id}
-                    subjectType="vehicle"
-                    colour={firstString(vehicle, ["colour", "color"])}
-                  />
-                ) : null}
-              </Card>
-            );
-          })}
-          {(vehicles.data ?? []).length === 0 && !showForm ? (
-            <Text style={styles.empty}>
-              No approved vehicle is attached to this driver profile.
-            </Text>
-          ) : null}
+                );
+              })
+            ) : (
+              <EmptyState
+                icon={<Truck color={palette.brand} size={27} />}
+                title="No approved vehicle yet"
+                description="Add the vehicle you intend to use so SKIMA can review its type, identity and capacity for dispatch eligibility."
+                action={<AppButton label="Add vehicle" onPress={() => setShowForm(true)} />}
+              />
+            )}
+          </View>
         </>
       )}
-      {message ? <Text style={styles.message}>{message}</Text> : null}
-      <Pressable onPress={() => router.back()}>
-        <Text style={styles.back}>Back to account</Text>
-      </Pressable>
+
+      {message ? (
+        <View style={[styles.message, { backgroundColor: messageSuccess ? palette.successSoft : palette.dangerSoft }]}>
+          <Text accessibilityRole="alert" style={[styles.messageText, { color: messageSuccess ? palette.success : palette.danger }]}>{message}</Text>
+        </View>
+      ) : null}
     </Screen>
   );
 }
-function resultId(result: string | PlatformRecord | null) {
-  return typeof result === "string"
-    ? result
-    : result
-      ? firstString(result, ["id", "applicationId", "application_id"])
-      : null;
+
+function FieldSection({ label, children }: { label: string; children: React.ReactNode }) {
+  const { palette } = useAppTheme();
+  return (
+    <View style={styles.fieldSection}>
+      <Text style={[styles.fieldLabel, { color: palette.ink }]}>{label}</Text>
+      {children}
+    </View>
+  );
 }
+
+function TextField({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  keyboardType,
+  autoCapitalize,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChangeText(value: string): void;
+  placeholder: string;
+  keyboardType?: "default" | "number-pad" | "decimal-pad";
+  autoCapitalize?: "none" | "sentences" | "words" | "characters";
+  hint?: string;
+}) {
+  const { palette } = useAppTheme();
+  return (
+    <View style={styles.textField}>
+      <Text style={[styles.fieldLabel, { color: palette.ink }]}>{label}</Text>
+      <TextInput
+        style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
+        placeholder={placeholder}
+        placeholderTextColor={palette.muted}
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={keyboardType}
+        autoCapitalize={autoCapitalize}
+      />
+      {hint ? <Text style={[styles.hint, { color: palette.muted }]}>{hint}</Text> : null}
+    </View>
+  );
+}
+
+function VehicleMetric({ label, value }: { label: string; value: string }) {
+  const { palette } = useAppTheme();
+  return (
+    <View style={styles.vehicleMetric}>
+      <Text style={[styles.metricLabel, { color: palette.muted }]}>{label}</Text>
+      <Text style={[styles.metricValue, { color: palette.ink }]}>{value}</Text>
+    </View>
+  );
+}
+
+function resultId(result: string | PlatformRecord | null) {
+  return typeof result === "string" ? result : result ? firstString(result, ["id", "applicationId", "application_id"]) : null;
+}
+
+function friendly(value: string) {
+  return value.replace(/[_-]/g, " ").replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function vehicleTone(value: string): "neutral" | "brand" | "success" | "warning" | "danger" {
+  const normalized = value.toLowerCase();
+  if (["approved", "verified", "active"].some((part) => normalized.includes(part))) return "success";
+  if (["rejected", "suspended", "deactivated"].some((part) => normalized.includes(part))) return "danger";
+  if (["pending", "review", "submitted"].some((part) => normalized.includes(part))) return "warning";
+  return "brand";
+}
+
 const styles = StyleSheet.create({
-  action: {
-    backgroundColor: colors.brand,
-    borderRadius: radii.pill,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  actionText: { color: "white", fontWeight: "900" },
-  pending: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    backgroundColor: "#FFF0F1",
-    borderWidth: 1,
-    borderColor: "#F2C4C9",
-  },
-  title: { color: colors.ink, fontSize: 17, fontWeight: "900" },
-  body: { color: colors.muted, lineHeight: 20 },
+  hero: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
+  heroIcon: { width: 54, height: 54, borderRadius: 19, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
+  heroCopy: { flex: 1, gap: 3 },
+  heroEyebrow: { color: "rgba(255,255,255,.72)", ...typography.eyebrow, fontSize: 8 },
+  heroTitle: { color: "#FFFFFF", ...typography.heading, fontSize: 21 },
+  heroBody: { color: "rgba(255,255,255,.84)", ...typography.caption, lineHeight: 18 },
+  reviewCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  reviewIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  reviewCopy: { flex: 1, minWidth: 0, gap: 2 },
+  reviewTitle: { ...typography.bodyStrong, fontSize: 14 },
+  reviewBody: { ...typography.caption },
+  formCard: { gap: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  formHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
+  formIcon: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  formCopy: { flex: 1, gap: 3 },
+  formTitle: { ...typography.subheading, fontSize: 16 },
+  formBody: { ...typography.caption, lineHeight: 18 },
+  fieldSection: { gap: spacing.sm },
+  fieldLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" },
   options: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  option: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.pill,
-  },
-  selected: { borderColor: colors.brand, backgroundColor: "#FFF0F1" },
-  optionText: {
-    color: colors.ink,
-    fontWeight: "800",
-    textTransform: "capitalize",
-  },
-  input: {
-    minHeight: 54,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    color: colors.ink,
-  },
-  primary: {
-    minHeight: 55,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radii.md,
-    backgroundColor: colors.brand,
-  },
-  primaryText: { color: "white", fontWeight: "900" },
-  secondary: {
-    minHeight: 52,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.brand,
-    borderRadius: radii.md,
-  },
-  secondaryText: { color: colors.brand, fontWeight: "900" },
-  row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  vehicleIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFF0F1",
-  },
-  status: {
-    color: colors.brandDark,
-    fontWeight: "800",
-    textTransform: "capitalize",
-    marginTop: 4,
-  },
-  empty: { color: colors.muted, textAlign: "center", padding: spacing.xl },
-  message: { color: colors.brandDark, fontWeight: "700" },
-  back: { color: colors.brand, fontWeight: "800" },
+  option: { minHeight: 46, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 14, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.pill },
+  optionText: { ...typography.caption, fontWeight: "900" },
+  twoColumn: { flexDirection: "row", flexWrap: "wrap", gap: spacing.md },
+  textField: { flex: 1, minWidth: 150, gap: spacing.sm },
+  input: { minHeight: 54, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: 15 },
+  hint: { ...typography.caption, lineHeight: 17 },
+  policyNote: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, borderRadius: radii.md, padding: spacing.md },
+  policyText: { flex: 1, ...typography.caption, lineHeight: 18 },
+  vehicleList: { gap: spacing.md },
+  vehicleCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  vehicleHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  vehicleIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  vehicleCopy: { flex: 1, minWidth: 0, gap: 2 },
+  vehicleTitle: { ...typography.bodyStrong, fontSize: 15 },
+  vehicleMeta: { ...typography.caption },
+  divider: { height: StyleSheet.hairlineWidth },
+  vehicleMetrics: { flexDirection: "row", gap: spacing.lg },
+  vehicleMetric: { flex: 1, gap: 3 },
+  metricLabel: { ...typography.caption, fontSize: 10 },
+  metricValue: { ...typography.bodyStrong, fontSize: 14 },
+  message: { borderRadius: radii.md, padding: spacing.md },
+  messageText: { ...typography.caption, fontWeight: "800", textAlign: "center" },
 });
