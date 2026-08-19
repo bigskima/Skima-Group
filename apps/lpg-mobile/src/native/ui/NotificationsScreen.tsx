@@ -1,43 +1,23 @@
 import * as Linking from "expo-linking";
 import { router } from "expo-router";
-import {
-  Bell,
-  BellRing,
-  CheckCircle2,
-  ChevronRight,
-  Flame,
-  Package,
-  ShieldCheck,
-  Truck,
-  UserCheck,
-  Wallet,
-} from "lucide-react-native";
+import { Bell, BellRing, ChevronRight, ShieldCheck, Truck, Wallet } from "lucide-react-native";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
-import {
-  displayStatus,
-  firstString,
-  nestedRecord,
-  recordId,
-  type PlatformRecord,
-} from "../api/records";
+import { firstString, nestedRecord, recordId, type PlatformRecord } from "../api/records";
 import { enableNotifications } from "../notifications/useNotificationLifecycle";
-import { colors, radii, spacing } from "../theme/tokens";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
+import { AppButton } from "./AppButton";
 import { Card } from "./Card";
+import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
 
 type NotificationCategory = "all" | "wallet" | "order" | "partner";
 
 export function NotificationsScreen() {
+  const { palette } = useAppTheme();
   const query = domainQueries.notifications();
   const [selectedCategory, setSelectedCategory] = useState<NotificationCategory>("all");
   const [notice, setNotice] = useState<string | null>(null);
@@ -45,7 +25,7 @@ export function NotificationsScreen() {
   const enable = async () => {
     try {
       await enableNotifications();
-      setNotice("Device notifications enabled successfully.");
+      setNotice("Device notifications are enabled.");
     } catch (cause) {
       setNotice(friendlyError(cause, "Notifications could not be enabled."));
     }
@@ -53,326 +33,207 @@ export function NotificationsScreen() {
 
   const openDeepLink = async (message: PlatformRecord) => {
     const payload = nestedRecord(message, "payload");
+    const metadata = nestedRecord(message, "metadata");
     const target =
-      firstString(payload, ["deepLink", "deep_link", "url", "route"]) ??
-      firstString(message, ["metadata", "deepLink"]);
+      firstString(payload, ["deepLink", "deep_link", "path", "url", "route"]) ??
+      firstString(metadata, ["deepLink", "deep_link", "path", "url", "route"]);
 
     if (!target) return;
-
     if (target.startsWith("/")) {
       router.push(target as never);
-    } else if (await Linking.canOpenURL(target)) {
-      await Linking.openURL(target);
+      return;
     }
+    if (await Linking.canOpenURL(target)) await Linking.openURL(target);
   };
 
   const allMessages = query.data ?? [];
-
-  const filteredMessages = allMessages.filter((msg) => {
-    if (selectedCategory === "all") return true;
-    const payload = nestedRecord(msg, "payload");
-    const purpose = firstString(msg, ["purpose"]) ?? "";
-    const category = (firstString(payload, ["category"]) ?? firstString(msg, ["metadata", "category"]) ?? "").toLowerCase();
-
-    if (selectedCategory === "wallet") {
-      return category === "wallet" || purpose.includes("wallet") || purpose.includes("deposit") || purpose.includes("withdrawal");
-    }
-    if (selectedCategory === "order") {
-      return category === "order" || purpose.includes("order") || purpose.includes("refill") || purpose.includes("delivery");
-    }
-    if (selectedCategory === "partner") {
-      return category === "partner" || purpose.includes("application") || purpose.includes("driver") || purpose.includes("station");
-    }
-    return true;
-  });
+  const filteredMessages = allMessages.filter((message) => messageMatchesCategory(message, selectedCategory));
 
   return (
     <Screen
-      eyebrow="Activity & Updates"
+      eyebrow="Activity & updates"
       title="Notifications"
+      subtitle="Payment, refill, delivery, and partner updates from SKIMA in one place."
       action={
-        <Pressable onPress={() => void enable()} style={styles.enable}>
-          <BellRing color="white" size={16} />
-          <Text style={styles.enableText}>Enable</Text>
-        </Pressable>
+        <AppButton
+          label="Enable"
+          size="sm"
+          icon={<BellRing color="#FFFFFF" size={15} />}
+          onPress={() => void enable()}
+        />
       }
       refreshControl={
         <RefreshControl
           refreshing={query.isRefetching}
           onRefresh={() => void query.refetch()}
-          tintColor={colors.brand}
+          tintColor={palette.brand}
         />
       }
     >
-      {/* Category Tabs */}
       <View style={styles.tabBar}>
-        <TabItem
-          label="All"
-          count={allMessages.length}
-          active={selectedCategory === "all"}
-          onPress={() => setSelectedCategory("all")}
-        />
-        <TabItem
-          label="Wallet"
-          active={selectedCategory === "wallet"}
-          onPress={() => setSelectedCategory("wallet")}
-        />
-        <TabItem
-          label="Orders"
-          active={selectedCategory === "order"}
-          onPress={() => setSelectedCategory("order")}
-        />
-        <TabItem
-          label="Partner"
-          active={selectedCategory === "partner"}
-          onPress={() => setSelectedCategory("partner")}
-        />
+        <TabItem label="All" count={allMessages.length} active={selectedCategory === "all"} onPress={() => setSelectedCategory("all")} />
+        <TabItem label="Wallet" active={selectedCategory === "wallet"} onPress={() => setSelectedCategory("wallet")} />
+        <TabItem label="Orders" active={selectedCategory === "order"} onPress={() => setSelectedCategory("order")} />
+        <TabItem label="Partner" active={selectedCategory === "partner"} onPress={() => setSelectedCategory("partner")} />
       </View>
 
+      {notice ? (
+        <View style={[styles.notice, { backgroundColor: palette.brandSofter, borderColor: palette.brandSoft }]}>
+          <BellRing color={palette.brand} size={16} />
+          <Text style={[styles.noticeText, { color: palette.ink }]}>{notice}</Text>
+        </View>
+      ) : null}
+
       {query.isPending ? (
-        <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.xl }} />
+        <View style={styles.loading}>
+          <ActivityIndicator color={palette.brand} />
+        </View>
       ) : query.error ? (
-        <Card>
-          <Text style={styles.error}>
-            {friendlyError(query.error, "Notifications could not be loaded.")}
-          </Text>
-          <Pressable onPress={() => void query.refetch()} style={{ marginTop: 8 }}>
-            <Text style={styles.link}>Try again</Text>
-          </Pressable>
+        <Card variant="outline">
+          <Text style={[styles.errorTitle, { color: palette.ink }]}>Couldn’t load notifications</Text>
+          <Text style={[styles.errorBody, { color: palette.muted }]}>{friendlyError(query.error, "Check your connection and try again.")}</Text>
+          <View style={styles.retryButton}>
+            <AppButton label="Try again" variant="secondary" onPress={() => void query.refetch()} />
+          </View>
         </Card>
-      ) : (
-        <>
+      ) : filteredMessages.length ? (
+        <View style={styles.list}>
           {filteredMessages.map((message, index) => {
             const payload = nestedRecord(message, "payload");
-            const status = displayStatus(message) ?? "delivered";
+            const metadata = nestedRecord(message, "metadata");
             const purpose = firstString(message, ["purpose"]) ?? "";
-            const category = (firstString(payload, ["category"]) ?? "").toLowerCase();
-
-            const title =
-              firstString(payload, ["title", "subject"]) ??
-              purpose.replace(/[_-]/g, " ");
-
-            const body =
-              firstString(payload, ["body", "message", "text"]) ??
-              "You have a new update from SKIMA.";
-
+            const category = notificationCategory(message);
+            const title = firstString(payload, ["title", "subject"]) ?? friendlyPurpose(purpose);
+            const body = firstString(payload, ["body", "message", "text"]) ?? "You have a new update from SKIMA.";
             const created = firstString(message, ["created_at", "createdAt"]);
             const target =
-              firstString(payload, ["deepLink", "deep_link", "url", "route"]);
-
-            const isWallet = category === "wallet" || purpose.includes("wallet");
-            const isOrder = category === "order" || purpose.includes("order");
-            const isPartner = category === "partner" || purpose.includes("application");
+              firstString(payload, ["deepLink", "deep_link", "path", "url", "route"]) ??
+              firstString(metadata, ["deepLink", "deep_link", "path", "url", "route"]);
+            const icon = categoryIcon(category, palette.brand, palette.success);
+            const iconBackground =
+              category === "wallet"
+                ? palette.brandSoft
+                : category === "order"
+                  ? palette.warningSoft
+                  : category === "partner"
+                    ? palette.successSoft
+                    : palette.soft;
 
             return (
               <Pressable
                 key={recordId(message) ?? String(index)}
+                accessibilityRole={target ? "button" : undefined}
                 disabled={!target}
                 onPress={() => void openDeepLink(message)}
-                style={styles.item}
+                style={({ pressed }) => [
+                  styles.item,
+                  shadows.soft,
+                  {
+                    backgroundColor: palette.surface,
+                    borderColor: palette.border,
+                    opacity: target && pressed ? 0.72 : 1,
+                  },
+                ]}
               >
-                <View
-                  style={[
-                    styles.iconBox,
-                    isWallet
-                      ? styles.iconWallet
-                      : isOrder
-                      ? styles.iconOrder
-                      : isPartner
-                      ? styles.iconPartner
-                      : styles.iconGeneral,
-                  ]}
-                >
-                  {isWallet ? (
-                    <Wallet color={colors.brand} size={20} />
-                  ) : isOrder ? (
-                    <Truck color="#0284C7" size={20} />
-                  ) : isPartner ? (
-                    <ShieldCheck color="#16A34A" size={20} />
-                  ) : (
-                    <Bell color={colors.ink} size={20} />
-                  )}
+                <View style={[styles.iconBox, { backgroundColor: iconBackground }]}>{icon}</View>
+                <View style={styles.itemCopy}>
+                  <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
+                  <Text style={[styles.body, { color: palette.mutedStrong }]}>{body}</Text>
+                  <Text style={[styles.time, { color: palette.muted }]}>{formatDate(created)}</Text>
                 </View>
-
-                <View style={{ flex: 1, gap: 4 }}>
-                  <View style={styles.row}>
-                    <Text style={styles.title}>{title}</Text>
-                  </View>
-                  <Text style={styles.body}>{body}</Text>
-                  <Text style={styles.time}>{formatDate(created)}</Text>
-                </View>
-
-                {target ? (
-                  <ChevronRight color={colors.muted} size={18} />
-                ) : null}
+                {target ? <ChevronRight color={palette.muted} size={18} /> : null}
               </Pressable>
             );
           })}
-
-          {filteredMessages.length === 0 ? (
-            <View style={styles.empty}>
-              <View style={styles.emptyIcon}>
-                <Bell color={colors.brand} size={32} />
-              </View>
-              <Text style={styles.emptyTitle}>No notifications in this category</Text>
-              <Text style={styles.emptyBody}>
-                Updates for wallet top-ups, cylinder refill orders, and partner milestones will appear here.
-              </Text>
-            </View>
-          ) : null}
-        </>
+        </View>
+      ) : (
+        <EmptyState
+          icon={<Bell color={palette.brand} size={26} />}
+          title={selectedCategory === "all" ? "No notifications yet" : `No ${selectedCategory} updates`}
+          description={
+            selectedCategory === "all"
+              ? "Important wallet, refill, delivery, and partner updates will appear here."
+              : "There are no notifications in this category right now."
+          }
+        />
       )}
-
-      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
     </Screen>
   );
 }
 
-function TabItem({
-  label,
-  count,
-  active,
-  onPress,
-}: {
-  label: string;
-  count?: number;
-  active: boolean;
-  onPress: () => void;
-}) {
+function TabItem({ label, count, active, onPress }: { label: string; count?: number; active: boolean; onPress(): void }) {
+  const { palette } = useAppTheme();
   return (
     <Pressable
+      accessibilityRole="button"
       onPress={onPress}
-      style={[styles.tab, active && styles.tabActive]}
+      style={({ pressed }) => [
+        styles.tab,
+        {
+          backgroundColor: active ? palette.brand : palette.surface,
+          borderColor: active ? palette.brand : palette.border,
+          opacity: pressed ? 0.75 : 1,
+        },
+      ]}
     >
-      <Text style={[styles.tabText, active && styles.tabTextActive]}>
-        {label} {count !== undefined && count > 0 ? `(${count})` : ""}
+      <Text style={[styles.tabText, { color: active ? "#FFFFFF" : palette.mutedStrong }]}>
+        {label}{count !== undefined && count > 0 ? ` ${count}` : ""}
       </Text>
     </Pressable>
   );
+}
+
+function notificationCategory(message: PlatformRecord): Exclude<NotificationCategory, "all"> | "general" {
+  const payload = nestedRecord(message, "payload");
+  const metadata = nestedRecord(message, "metadata");
+  const purpose = (firstString(message, ["purpose"]) ?? "").toLowerCase();
+  const category = (firstString(payload, ["category"]) ?? firstString(metadata, ["category"]) ?? "").toLowerCase();
+  if (category === "wallet" || /wallet|deposit|withdrawal|payment|refund/.test(purpose)) return "wallet";
+  if (category === "order" || /order|refill|delivery|pickup|dispatch/.test(purpose)) return "order";
+  if (category === "partner" || /application|driver|station|partner|activation/.test(purpose)) return "partner";
+  return "general";
+}
+
+function messageMatchesCategory(message: PlatformRecord, selected: NotificationCategory) {
+  if (selected === "all") return true;
+  return notificationCategory(message) === selected;
+}
+
+function categoryIcon(category: ReturnType<typeof notificationCategory>, brand: string, success: string) {
+  if (category === "wallet") return <Wallet color={brand} size={20} />;
+  if (category === "order") return <Truck color="#B76A00" size={20} />;
+  if (category === "partner") return <ShieldCheck color={success} size={20} />;
+  return <Bell color={brand} size={20} />;
+}
+
+function friendlyPurpose(value: string) {
+  const cleaned = value.replace(/[._-]+/g, " ").trim();
+  if (!cleaned) return "SKIMA update";
+  return cleaned.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function formatDate(value: string | null) {
   if (!value) return "Just now";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 const styles = StyleSheet.create({
-  enable: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: colors.brand,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radii.pill,
-  },
-  enableText: { color: "white", fontWeight: "900", fontSize: 12 },
-  tabBar: {
-    flexDirection: "row",
-    gap: spacing.xs,
-    marginBottom: spacing.md,
-  },
-  tab: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: radii.pill,
-    backgroundColor: "#F3F4F6",
-  },
-  tabActive: {
-    backgroundColor: colors.brand,
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.muted,
-  },
-  tabTextActive: {
-    color: "white",
-    fontWeight: "900",
-  },
-  item: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surface,
-    marginBottom: spacing.xs,
-  },
-  iconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconWallet: { backgroundColor: "#FFF0F1" },
-  iconOrder: { backgroundColor: "#F0F9FF" },
-  iconPartner: { backgroundColor: "#F0FDF4" },
-  iconGeneral: { backgroundColor: "#F9FAFB" },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: colors.ink,
-  },
-  body: {
-    fontSize: 13,
-    color: colors.ink,
-    lineHeight: 18,
-  },
-  time: {
-    fontSize: 11,
-    color: colors.muted,
-    fontWeight: "600",
-    marginTop: 2,
-  },
-  empty: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: spacing.xxl,
-    gap: spacing.sm,
-  },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#FFF0F1",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.xs,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: colors.ink,
-  },
-  emptyBody: {
-    fontSize: 13,
-    color: colors.muted,
-    textAlign: "center",
-    lineHeight: 19,
-    paddingHorizontal: spacing.lg,
-  },
-  error: { color: colors.danger, fontWeight: "800" },
-  link: { color: colors.brand, fontWeight: "900" },
-  notice: {
-    color: colors.brandDark,
-    fontWeight: "800",
-    textAlign: "center",
-    marginTop: spacing.md,
-  },
+  tabBar: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginBottom: spacing.xs },
+  tab: { minHeight: 38, justifyContent: "center", paddingHorizontal: 13, paddingVertical: 7, borderRadius: radii.pill, borderWidth: StyleSheet.hairlineWidth },
+  tabText: { ...typography.caption, fontSize: 12, fontWeight: "800" },
+  notice: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth },
+  noticeText: { ...typography.caption, flex: 1 },
+  loading: { minHeight: 160, alignItems: "center", justifyContent: "center" },
+  list: { gap: spacing.sm },
+  item: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg },
+  iconBox: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  itemCopy: { flex: 1, gap: 3 },
+  title: { ...typography.bodyStrong, fontSize: 14 },
+  body: { ...typography.caption, fontSize: 12, lineHeight: 18 },
+  time: { ...typography.caption, fontSize: 10, marginTop: 2 },
+  errorTitle: { ...typography.subheading, fontSize: 15 },
+  errorBody: { ...typography.caption, lineHeight: 18 },
+  retryButton: { alignSelf: "flex-start", minWidth: 130, marginTop: spacing.xs },
 });
