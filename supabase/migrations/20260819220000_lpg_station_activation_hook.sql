@@ -20,8 +20,7 @@ declare
   refill_capacity_value numeric;
   supported_sizes numeric[];
 begin
-  select *
-  into application_record
+  select * into application_record
   from public.application_records
   where id = target_application_id;
 
@@ -35,8 +34,7 @@ begin
     return null;
   end if;
 
-  select payload
-  into version_payload
+  select payload into version_payload
   from public.application_versions
   where application_id = target_application_id
     and version = application_record.active_version;
@@ -46,8 +44,7 @@ begin
     return null;
   end if;
 
-  select *
-  into organization_record
+  select * into organization_record
   from public.organizations
   where id = application_record.organization_id;
 
@@ -61,12 +58,18 @@ begin
     organization_record.display_name,
     organization_record.legal_name
   );
+
   formatted_address_value := coalesce(
-    nullif(station_payload ->> 'formattedAddress', ''),
-    nullif(station_payload ->> 'formatted_address', ''),
-    nullif(station_payload #>> '{location,formattedAddress}', ''),
-    nullif(station_payload #>> '{location,formatted_address}', '')
+    case when char_length(btrim(coalesce(station_payload ->> 'formattedAddress', ''))) >= 5
+      then btrim(station_payload ->> 'formattedAddress') end,
+    case when char_length(btrim(coalesce(station_payload ->> 'formatted_address', ''))) >= 5
+      then btrim(station_payload ->> 'formatted_address') end,
+    case when char_length(btrim(coalesce(station_payload #>> '{location,formattedAddress}', ''))) >= 5
+      then btrim(station_payload #>> '{location,formattedAddress}') end,
+    case when char_length(btrim(coalesce(station_payload #>> '{location,formatted_address}', ''))) >= 5
+      then btrim(station_payload #>> '{location,formatted_address}') end
   );
+
   latitude_value := coalesce(
     nullif(station_payload ->> 'latitude', '')::numeric,
     nullif(station_payload #>> '{location,latitude}', '')::numeric
@@ -101,16 +104,8 @@ begin
   ) as sizes(size_value);
 
   insert into public.organization_branches (
-    organization_id,
-    key,
-    display_name,
-    address,
-    geo_location,
-    status,
-    source,
-    idempotency_key,
-    metadata,
-    created_by
+    organization_id, key, display_name, address, geo_location, status,
+    source, idempotency_key, metadata, created_by
   )
   values (
     application_record.organization_id,
@@ -134,24 +129,11 @@ begin
   returning id into target_branch_id;
 
   insert into public.lpg_station_branches (
-    organization_id,
-    branch_id,
-    display_name,
-    formatted_address,
-    latitude,
-    longitude,
-    operating_hours,
-    supported_cylinder_sizes_kg,
-    refill_capacity_kg,
-    availability_status,
-    approval_status,
-    compliance_status,
-    metadata,
-    source,
-    idempotency_key,
-    business_legal_name,
-    public_display_name,
-    applicant_authority_profile
+    organization_id, branch_id, display_name, formatted_address, latitude, longitude,
+    operating_hours, supported_cylinder_sizes_kg, refill_capacity_kg,
+    availability_status, approval_status, compliance_status,
+    metadata, source, idempotency_key, business_legal_name,
+    public_display_name, applicant_authority_profile
   )
   values (
     application_record.organization_id,
