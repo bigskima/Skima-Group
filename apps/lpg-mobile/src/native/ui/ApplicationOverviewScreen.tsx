@@ -1,10 +1,24 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { LocateFixed, ShieldCheck } from "lucide-react-native";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Building2,
+  CheckCircle2,
+  FileCheck2,
+  LocateFixed,
+  MapPin,
+  ShieldCheck,
+  Truck,
+  Upload,
+  User,
+} from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -21,22 +35,46 @@ import {
   displayStatus,
   firstNumber,
   firstString,
-  nestedRecords,
   nestedRecord,
+  nestedRecords,
   recordId,
-  type PlatformRecord,
 } from "../api/records";
+import {
+  ApplicationProgress,
+} from "../application/ApplicationProgress";
+import {
+  ApplicationReviewSummary,
+  SummaryDocument,
+  SummarySection,
+} from "../application/ApplicationReviewSummary";
+import {
+  ApplicationStatusTimeline,
+} from "../application/ApplicationStatusTimeline";
+import {
+  MultiPhotoRequirement,
+  StationPhotoView,
+} from "../application/MultiPhotoRequirement";
+import { PhotoCaptureCard } from "../application/PhotoCaptureCard";
+import { RequirementCard } from "../application/RequirementCard";
 import {
   readOperationalLocation,
   type OperationalLocation,
 } from "../device/location";
+import { uploadMedia } from "../media/upload";
 import { useSession } from "../session/SessionProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { Card } from "./Card";
 import { Screen } from "./Screen";
-const editable = new Set(["draft", "incomplete", "additional_info_required"]);
+
+const STATION_ROLES = [
+  { key: "owner", label: "Station Owner" },
+  { key: "manager", label: "Station Manager" },
+  { key: "employee", label: "Authorized Employee" },
+  { key: "representative", label: "Legal Representative" },
+];
+
 export function ApplicationOverviewScreen({
   workspace,
 }: {
@@ -47,29 +85,30 @@ export function ApplicationOverviewScreen({
   const types = domainQueries.applicationTypes();
   const requirements = domainQueries.documentRequirements();
   const documents = domainQueries.documents();
-  const stations = domainQueries.stations();
   const config = useLpgConfig();
   const client = useQueryClient();
-  const [name, setName] = useState(
-    session.context?.profile?.display_name ?? "",
-  );
+
+  const [currentStep, setCurrentStep] = useState(1);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [detectingLocation, setDetectingLocation] = useState(false);
+
+  // Form Fields
+  const [name, setName] = useState(session.context?.profile?.display_name ?? "");
   const [driverDisplayName, setDriverDisplayName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [legalOrLicence, setLegalOrLicence] = useState("");
-  const [stationRole, setStationRole] = useState("");
-  const [authoritySummary, setAuthoritySummary] = useState("");
-  const [serviceZone, setServiceZone] = useState("");
+  const [stationRole, setStationRole] = useState("owner");
+  const [stationName, setStationName] = useState("");
   const [slug, setSlug] = useState("");
-  const [capacity, setCapacity] = useState("");
-  const [opens, setOpens] = useState("");
-  const [closes, setCloses] = useState("");
+  const [capacity, setCapacity] = useState("5000");
+  const [opens, setOpens] = useState("08:00");
+  const [closes, setCloses] = useState("18:00");
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [lastLocation, setLastLocation] = useState<OperationalLocation | null>(null);
-  const [sizes, setSizes] = useState<number[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [detectingLocation, setDetectingLocation] = useState(false);
+
   const category = workspace === "station" ? "business" : "driver";
   const type = useMemo(
     () =>
@@ -80,54 +119,68 @@ export function ApplicationOverviewScreen({
       ),
     [category, types.data],
   );
+
   const typeId = type ? recordId(type) : null;
   const current = (applications.data ?? []).find(
     (item) =>
-      firstString(item, ["application_type_id", "applicationTypeId"]) ===
-        typeId &&
-      !["rejected", "withdrawn", "expired"].includes(
-        firstString(item, ["status"]) ?? "",
-      ),
+      firstString(item, ["application_type_id", "applicationTypeId"]) === typeId &&
+      !["withdrawn", "expired"].includes(firstString(item, ["status"]) ?? ""),
   );
+
   const status = current ? (displayStatus(current) ?? "draft") : "draft";
+  const operationalStatus = firstString(current, ["operational_status", "operationalStatus"]);
   const currentId = current ? recordId(current) : null;
   const payloadVersions = useApplicationPayload(currentId);
+
   const requirementSetId = firstString(type, [
     "document_requirement_set_id",
     "documentRequirementSetId",
   ]);
-  const requiredRequirements = (requirements.data ?? []).filter(
-    (item) =>
-      firstString(item, ["requirement_set_id", "requirementSetId"]) ===
-        requirementSetId &&
-      item.is_required === true &&
-      firstString(item, ["status"]) === "active",
-  );
-  const requiredCount = requiredRequirements.length;
-  const missingRequirements = requiredRequirements.filter(
-    (requirement) =>
-      !(documents.data ?? []).some(
-        (document) =>
-          firstString(document, ["application_id", "applicationId"]) ===
-            currentId &&
-          (firstString(document, ["requirement_id", "requirementId"]) ===
-            recordId(requirement) ||
-            firstString(document, ["requirement_key", "requirementKey"]) ===
-              firstString(requirement, ["key"])),
+
+  const appRequirements = useMemo(
+    () =>
+      (requirements.data ?? []).filter(
+        (item) =>
+          firstString(item, ["requirement_set_id", "requirementSetId"]) ===
+            requirementSetId && firstString(item, ["status"]) === "active",
       ),
+    [requirements.data, requirementSetId],
   );
-  const profiles = nestedRecords(config.data, "cylinderTypeProfiles");
-  const organizationId = firstString(current, [
-    "organization_id",
-    "organizationId",
-  ]);
-  const stationActive = (stations.data ?? []).some(
-    (station) =>
-      firstString(station, ["organization_id", "organizationId"]) ===
-        organizationId &&
-      firstString(station, ["approval_status", "approvalStatus"]) ===
-        "approved",
+
+  const appSubmissions = useMemo(
+    () =>
+      (documents.data ?? []).filter(
+        (doc) => firstString(doc, ["application_id", "applicationId"]) === currentId,
+      ),
+    [documents.data, currentId],
   );
+
+  // Mutations
+  const createDraft = useGatewayMutation({
+    path: "/runtime/applications",
+    schema: ActionResponseSchema,
+    invalidate: [["applications"]],
+  });
+
+  const savePayload = useGatewayMutation({
+    path: "/runtime/applications/payload",
+    schema: ActionResponseSchema,
+    invalidate: [["applications"], ["application-payload", currentId ?? ""]],
+  });
+
+  const registerDoc = useGatewayMutation({
+    path: "/runtime/documents",
+    schema: ActionResponseSchema,
+    invalidate: [["documents"], ["applications"]],
+  });
+
+  const submitApp = useGatewayMutation({
+    path: "/runtime/applications/submit",
+    schema: ActionResponseSchema,
+    invalidate: [["applications"]],
+  });
+
+  // Hydrate from existing application payload
   const hydratedApplication = useRef<string | null>(null);
   useEffect(() => {
     if (!currentId || hydratedApplication.current === currentId) return;
@@ -137,949 +190,834 @@ export function ApplicationOverviewScreen({
     const contact = nestedRecord(payload, "contact");
     const identity = nestedRecord(payload, "identity");
     const licence = nestedRecord(payload, "licence");
-    const service = nestedRecord(payload, "service");
     const organization = nestedRecord(payload, "organization");
     const authority = nestedRecord(payload, "authority");
     const station = nestedRecord(payload, "station");
-    const storedLocation = nestedRecord(payload, "location") ??
-      nestedRecord(station, "location");
-    const hours =
-      nestedRecord(station, "operatingHours") ??
-      nestedRecord(station, "operating_hours");
-    setName(
-      firstString(identity, ["fullName", "full_name"]) ??
-        firstString(organization, ["displayName", "display_name"]) ??
-        name,
-    );
+    const storedLocation = nestedRecord(payload, "location") ?? nestedRecord(station, "location");
+
+    setName(firstString(identity, ["fullName", "full_name"]) ?? firstString(organization, ["displayName", "display_name"]) ?? name);
     setPhone(firstString(contact, ["phone"]) ?? phone);
-    setDriverDisplayName(
-      firstString(identity, ["driverDisplayName", "driver_display_name"]) ??
-        driverDisplayName,
-    );
-    setAddress(
-      firstString(identity, ["address"]) ??
-        firstString(station, ["formattedAddress", "formatted_address"]) ??
-        firstString(storedLocation, ["formattedAddress", "formatted_address"]) ??
-        address,
-    );
-    setLegalOrLicence(
-      firstString(licence, ["number"]) ??
-        firstString(organization, ["legalName", "legal_name"]) ??
-        legalOrLicence,
-    );
-    setServiceZone(firstString(service, ["zone"]) ?? serviceZone);
-    setStationRole(firstString(authority, ["role", "relationship"]) ?? stationRole);
-    setAuthoritySummary(
-      firstString(authority, ["summary", "evidenceSummary", "evidence_summary"]) ??
-        authoritySummary,
-    );
+    setDriverDisplayName(firstString(identity, ["driverDisplayName", "driver_display_name"]) ?? driverDisplayName);
+    setAddress(firstString(identity, ["address"]) ?? firstString(station, ["formattedAddress", "formatted_address"]) ?? address);
+    setLegalOrLicence(firstString(licence, ["number"]) ?? firstString(organization, ["legalName", "legal_name"]) ?? legalOrLicence);
+    setStationRole(firstString(authority, ["role"]) ?? stationRole);
+    setStationName(firstString(station, ["displayName", "display_name"]) ?? firstString(organization, ["displayName", "display_name"]) ?? stationName);
     setSlug(firstString(organization, ["slug"]) ?? slug);
-    const storedCapacity = firstNumber(station, [
-      "refillCapacityKg",
-      "refill_capacity_kg",
-    ]);
-    if (storedCapacity !== null) setCapacity(String(storedCapacity));
-    setOpens(firstString(hours, ["opensAt", "opens_at"]) ?? opens);
-    setCloses(firstString(hours, ["closesAt", "closes_at"]) ?? closes);
-    setLatitude(
-      firstNumber(station, ["latitude", "lat"]) ??
-        firstNumber(storedLocation, ["latitude", "lat"]),
-    );
-    setLongitude(
-      firstNumber(station, ["longitude", "lng", "lon"]) ??
-        firstNumber(storedLocation, ["longitude", "lng", "lon"]),
-    );
-    const storedSizes =
-      station?.supportedCylinderSizesKg ?? station?.supported_cylinder_sizes_kg;
-    if (Array.isArray(storedSizes))
-      setSizes(
-        storedSizes.filter(
-          (value): value is number => typeof value === "number",
-        ),
-      );
+    const storedLat = firstNumber(station, ["latitude", "lat"]) ?? firstNumber(storedLocation, ["latitude", "lat"]);
+    const storedLng = firstNumber(station, ["longitude", "lng", "lon"]) ?? firstNumber(storedLocation, ["longitude", "lng", "lon"]);
+    if (storedLat !== null) setLatitude(storedLat);
+    if (storedLng !== null) setLongitude(storedLng);
+
     hydratedApplication.current = currentId;
   }, [currentId, payloadVersions.data]);
-  const create = useGatewayMutation({
-    path: "/runtime/applications",
-    schema: ActionResponseSchema,
-  });
-  const update = useGatewayMutation({
-    path: "/runtime/applications/payload",
-    schema: ActionResponseSchema,
-  });
-  const submitMutation = useGatewayMutation({
-    path: "/runtime/applications/submit",
-    schema: ActionResponseSchema,
-  });
-  const activate = useGatewayMutation({
-    path: "/lpg/stations/activate",
-    schema: ActionResponseSchema,
-    invalidate: [["stations"], ["station-runtime"]],
-  });
-  const locate = async () => {
-    setError(null);
+
+  // Ensure application record exists before uploading
+  const ensureApplicationId = async (): Promise<string> => {
+    if (currentId) return currentId;
+    const typeKey = firstString(type, ["key"]) ?? (workspace === "station" ? "application.lpg.station" : "application.lpg.driver");
+    const result = await createDraft.mutateAsync({
+      applicationTypeKey: typeKey,
+      applicantUserId: session.context?.user.id,
+      payload: buildPayload(),
+      source: "skima.lpg.mobile",
+      idempotencyKey: idempotencyKey("app-draft-init", `${session.context?.user.id}:${workspace}`),
+    });
+    const resObj = typeof result === "object" && result !== null ? (result as Record<string, unknown>) : null;
+    const nestedData = typeof resObj?.data === "object" && resObj.data !== null ? (resObj.data as Record<string, unknown>) : null;
+    const resId = firstString(resObj, ["id", "application_id", "applicationId"]) ??
+      firstString(nestedData, ["id", "application_id", "applicationId"]);
+    await applications.refetch();
+    return resId ?? "";
+  };
+
+  const buildPayload = () => {
+    if (workspace === "driver") {
+      return {
+        identity: {
+          fullName: name.trim(),
+          driverDisplayName: driverDisplayName.trim() || name.trim(),
+          address: address.trim(),
+        },
+        contact: { phone: phone.trim() },
+        licence: { number: legalOrLicence.trim() },
+      };
+    }
+    return {
+      organization: {
+        displayName: stationName.trim() || name.trim(),
+        legalName: legalOrLicence.trim() || stationName.trim(),
+        slug: slug.trim() || stationName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+      },
+      authority: {
+        role: stationRole,
+        fullName: name.trim(),
+      },
+      contact: { phone: phone.trim() },
+      station: {
+        displayName: stationName.trim(),
+        formattedAddress: address.trim(),
+        latitude,
+        longitude,
+        refillCapacityKg: Number(capacity) || 5000,
+        operatingHours: { opensAt: opens, closesAt: closes },
+      },
+      location: lastLocation,
+    };
+  };
+
+  const handleUploadRequirement = async (
+    reqKey: string,
+    file: { uri: string; name: string; mimeType: string },
+  ) => {
+    if (!session.context?.user.id) return;
+    const appId = await ensureApplicationId();
+    const mediaAssetId = await uploadMedia({
+      api: session.api,
+      uri: file.uri,
+      fileName: file.name,
+      contentType: file.mimeType,
+      ownerUserId: session.context.user.id,
+      assetTypeKey: `media.${reqKey}`,
+    });
+
+    await registerDoc.mutateAsync({
+      applicationId: appId,
+      requirementKey: reqKey,
+      storageBucket: "applications",
+      storagePath: `docs/${appId}/${reqKey}/${Date.now()}`,
+      contentType: file.mimeType,
+      source: "skima.lpg.mobile",
+      metadata: { mediaAssetId },
+      idempotencyKey: idempotencyKey("doc-upload", `${appId}:${reqKey}:${Date.now()}`),
+    });
+
+    await documents.refetch();
+  };
+
+  const detectLocation = async () => {
     setDetectingLocation(true);
+    setError(null);
     try {
-      const point = await readOperationalLocation();
-      setLastLocation(point);
-      setLatitude(point.latitude);
-      setLongitude(point.longitude);
-      if (!address.trim() && point.formattedAddress) {
-        setAddress(point.formattedAddress);
-      }
-      if (workspace === "driver" && !serviceZone.trim()) {
-        const zone = point.address.city ?? point.address.district ?? point.address.region;
-        if (zone) setServiceZone(zone);
+      const loc = await readOperationalLocation();
+      setLastLocation(loc);
+      setLatitude(loc.latitude);
+      setLongitude(loc.longitude);
+      if (loc.formattedAddress && !address) {
+        setAddress(loc.formattedAddress);
       }
     } catch (cause) {
-      setError(friendlyError(cause, "We couldn't get your current location. Please try again."));
+      setError(friendlyError(cause, "Could not detect GPS location. Please enter your address."));
     } finally {
       setDetectingLocation(false);
     }
   };
-  const send = async () => {
-    setError(null);
-    if (
-      !name.trim() ||
-      !phone.trim() ||
-      !address.trim() ||
-      !legalOrLicence.trim() ||
-      (workspace === "driver" && !serviceZone.trim()) ||
-      (workspace === "station" && (!stationRole.trim() || !authoritySummary.trim()))
-    ) {
-      setError("Please complete all the required details.");
-      return;
-    }
-    if (!type) {
-      setError("Applications are unavailable right now. Please try again later.");
-      return;
-    }
-    const stationCapacity = Number(capacity);
-    if (
-      workspace === "station" &&
-      (!slug.trim() ||
-        !Number.isFinite(stationCapacity) ||
-        stationCapacity <= 0 ||
-        !opens ||
-        !closes ||
-        latitude === null ||
-        longitude === null ||
-        sizes.length === 0)
-    ) {
-      setError(
-        "Add your station short name, capacity, opening hours, cylinder sizes and location.",
-      );
-      return;
-    }
-    const structuredLocation =
-      latitude !== null && longitude !== null
-        ? {
-            accuracyMeters: lastLocation?.accuracyMeters ?? null,
-            address: lastLocation?.address ?? {},
-            formattedAddress: lastLocation?.formattedAddress ?? address.trim(),
-            latitude,
-            longitude,
-            providerPlaceId: lastLocation?.providerPlaceId ?? null,
-            providerSource: lastLocation?.providerSource ?? "manual_pin",
-            recordedAt: lastLocation?.recordedAt ?? new Date().toISOString(),
-          }
-        : null;
-    const payload =
-      workspace === "driver"
-        ? {
-            contact: {
-              email: session.context?.user.email,
-              phone: phone.trim(),
-            },
-            driver: {
-              displayName: driverDisplayName.trim() || name.trim(),
-            },
-            identity: {
-              address: address.trim(),
-              driverDisplayName: driverDisplayName.trim() || null,
-              fullName: name.trim(),
-            },
-            licence: { number: legalOrLicence.trim() },
-            location: structuredLocation,
-            service: { zone: serviceZone.trim() },
-            workingHours: {},
-            zones: [serviceZone.trim()],
-          }
-        : {
-            contact: {
-              email: session.context?.user.email,
-              phone: phone.trim(),
-            },
-            authority: {
-              evidenceSummary: authoritySummary.trim(),
-              role: stationRole.trim(),
-            },
-            organization: {
-              displayName: name.trim(),
-              legalName: legalOrLicence.trim(),
-              slug: slug.trim(),
-            },
-            ownership: { ownerUserId: session.context?.user.id },
-            station: {
-              formattedAddress: address.trim(),
-              latitude,
-              location: structuredLocation,
-              longitude,
-              operatingHours: { opensAt: opens, closesAt: closes },
-              refillCapacityKg: stationCapacity,
-              supportedCylinderSizesKg: sizes,
-            },
-          };
+
+  const persistDraft = async () => {
     try {
-      let applicationId = current ? recordId(current) : null;
-      if (applicationId)
-        await update.mutateAsync({
-          applicationId,
-          payload,
-          idempotencyKey: idempotencyKey(
-            `${workspace}-application-payload`,
-            applicationId,
-          ),
-        });
-      else {
-        const result = await create.mutateAsync({
-          applicationTypeKey: firstString(type, ["key"]),
-          payload,
-          idempotencyKey: idempotencyKey(
-            `${workspace}-application-create`,
-            typeId ?? category,
-          ),
-        });
-        applicationId = resultId(result);
-      }
-      if (!applicationId)
-        throw new Error(
-          "The application could not be saved.",
-        );
-      const hasMissingEvidence =
-        requiredCount > 0 &&
-        (!currentId ||
-          applicationId !== currentId ||
-          missingRequirements.length > 0);
-      await client.invalidateQueries({
-        queryKey: ["lpg-expo", "applications"],
-      });
-      if (hasMissingEvidence) {
-        router.push(`/(customer)/${workspace}-documents` as never);
-        return;
-      }
-      await submitMutation.mutateAsync({
-        applicationId,
-        idempotencyKey: idempotencyKey(
-          `${workspace}-application-submit`,
-          applicationId,
-        ),
-      });
-      await client.invalidateQueries({
-        queryKey: ["lpg-expo", "applications"],
+      const appId = await ensureApplicationId();
+      await savePayload.mutateAsync({
+        applicationId: appId,
+        payload: buildPayload(),
+        idempotencyKey: idempotencyKey("app-payload-save", `${appId}:${Date.now()}`),
       });
     } catch (cause) {
-      setError(friendlyError(cause, "We couldn't submit your application. Please try again."));
+      // Background save error
     }
   };
-  const activateStation = async () => {
-    const applicationId = current ? recordId(current) : null;
-    if (
-      !applicationId ||
-      !organizationId ||
-      latitude === null ||
-      longitude === null
-    ) {
-      setError(
-        "Your approval and station location are needed before activation.",
-      );
-      return;
-    }
+
+  const handleNextStep = async () => {
+    setError(null);
+    await persistDraft();
+    setCurrentStep((prev) => prev + 1);
+  };
+
+  const handlePrevStep = () => {
+    setError(null);
+    setCurrentStep((prev) => Math.max(1, prev - 1));
+  };
+
+  const handleSubmitApplication = async () => {
+    setError(null);
+    setSubmitting(true);
     try {
-      await activate.mutateAsync({
-        applicationId,
-        organizationId,
-        ownerUserId: session.context?.user.id,
-        branchKey: slug.trim(),
-        displayName: name.trim(),
-        formattedAddress: address.trim(),
-        latitude,
-        longitude,
-        operatingHours: { opensAt: opens, closesAt: closes },
-        refillCapacityKg: Number(capacity),
-        currentAvailableKg: Number(capacity),
-        supportedCylinderSizesKg: sizes,
-        metadata: {
-          authority: {
-            evidenceSummary: authoritySummary.trim(),
-            role: stationRole.trim(),
-          },
-          location: lastLocation,
-        },
-        idempotencyKey: idempotencyKey("station-activation", applicationId),
+      const appId = await ensureApplicationId();
+      await persistDraft();
+      await submitApp.mutateAsync({
+        applicationId: appId,
+        idempotencyKey: idempotencyKey("app-submit", appId),
       });
+      await applications.refetch();
       await session.refresh();
     } catch (cause) {
-      setError(friendlyError(cause, "We couldn't activate your station. Please try again."));
+      setError(friendlyError(cause, "Application could not be submitted. Please check missing items."));
+    } finally {
+      setSubmitting(false);
     }
   };
-  const loading =
-    applications.isPending ||
-    types.isPending ||
-    requirements.isPending ||
-    documents.isPending ||
-    (Boolean(currentId) && payloadVersions.isPending) ||
-    config.isPending;
-  if (loading)
+
+  // Helper to find submission for requirement
+  const getSubForReq = (reqKey: string) => {
+    return appSubmissions.find((sub) => {
+      const subKey = firstString(sub, ["requirement_key", "requirementKey"]);
+      const subReqId = firstString(sub, ["requirement_id", "requirementId"]);
+      const targetReq = appRequirements.find((r) => firstString(r, ["key"]) === reqKey);
+      return subKey === reqKey || (targetReq && subReqId === recordId(targetReq));
+    });
+  };
+
+  // Step definitions
+  const driverTotalSteps = 4;
+  const stationTotalSteps = 5;
+  const totalSteps = workspace === "driver" ? driverTotalSteps : stationTotalSteps;
+
+  // Review summaries
+  const missingRequiredDocs = appRequirements.filter((req) => {
+    if (!req.is_required) return false;
+    const key = firstString(req, ["key"]) ?? "";
+    const sub = getSubForReq(key);
+    return !sub || firstString(sub, ["status"]) === "rejected";
+  });
+
+  const canSubmit = missingRequiredDocs.length === 0;
+
+  // Post-submission view (Submitted, Under Review, Approved, Changes Requested, Rejected)
+  const isPostSubmission = current && ["submitted", "under_review", "approved", "changes_requested", "rejected"].includes(status);
+
+  if (applications.isPending || types.isPending) {
     return (
-      <Screen
-        eyebrow={workspace === "driver" ? "Driver application" : "Station application"}
-        title="Getting things ready"
-      >
+      <Screen eyebrow={`${workspace} application`} title="Application">
         <ActivityIndicator color={colors.brand} />
       </Screen>
     );
-  if (current && !editable.has(status))
+  }
+
+  if (isPostSubmission) {
     return (
       <Screen
-        eyebrow={`${workspace} application`}
-        title="Application status"
-        action={<Back />}
+        eyebrow={`${workspace} partner`}
+        title="Application Status"
+        action={
+          <Pressable onPress={() => router.back()}>
+            <Text style={styles.link}>Back</Text>
+          </Pressable>
+        }
       >
-        <View style={styles.hero}>
-          <Text style={styles.heroLabel}>APPLICATION STATUS</Text>
-          <Text style={styles.heroTitle}>{applicationStatusLabel(status)}</Text>
-          <Text style={styles.heroBody}>
-            {applicationStatusMessage(status)}
-          </Text>
-        </View>
-        <ApplicationProgress status={status} />
-        <Card>
-          <Field
-            label="Application reference"
-            value={
-              firstString(current, [
-                "public_reference",
-                "publicReference",
-                "id",
-              ]) ?? "Unavailable"
-            }
-          />
-          <Field
-            label="Documents requested"
-            value={String(requiredCount)}
-          />
-          <Field
-            label="Last updated"
-            value={
-              formatDate(firstString(current, ["updated_at", "created_at"]))
-            }
-          />
-        </Card>
-        <Pressable
-          style={styles.secondary}
-          onPress={() =>
-            router.push(`/(customer)/${workspace}-documents` as never)
-          }
-        >
-          <Text style={styles.secondaryText}>View submitted documents</Text>
-        </Pressable>
-        {workspace === "station" && status === "approved" && !stationActive ? (
-          <>
-            <StationFields
-              name={name}
-              setName={setName}
-              stationRole={stationRole}
-              setStationRole={setStationRole}
-              authoritySummary={authoritySummary}
-              setAuthoritySummary={setAuthoritySummary}
-              phone={phone}
-              setPhone={setPhone}
-              address={address}
-              setAddress={setAddress}
-              legal={legalOrLicence}
-              setLegal={setLegalOrLicence}
-              slug={slug}
-              setSlug={setSlug}
-              capacity={capacity}
-              setCapacity={setCapacity}
-              opens={opens}
-              setOpens={setOpens}
-              closes={closes}
-              setCloses={setCloses}
-              latitude={latitude}
-              longitude={longitude}
-              locate={locate}
-              locating={detectingLocation}
-              profiles={profiles}
-              sizes={sizes}
-              setSizes={setSizes}
-            />
-            <Pressable
-              disabled={activate.isPending}
-              style={styles.primary}
-              onPress={() => void activateStation()}
-            >
-              {activate.isPending ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text style={styles.primaryText}>
-                  Activate station
-                </Text>
-              )}
-            </Pressable>
-          </>
-        ) : null}
-        {stationActive ? (
-          <View style={styles.approved}>
-            <ShieldCheck color={colors.success} />
-            <Text style={styles.approvedText}>Your station is active.</Text>
-          </View>
-        ) : null}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <ApplicationStatusTimeline
+          applicationStatus={status}
+          operationalStatus={operationalStatus}
+          applicantMessage={firstString(current, ["decision_reason", "decisionReason", "applicant_message"])}
+          submittedAt={firstString(current, ["submitted_at", "submittedAt", "created_at"])}
+          decidedAt={firstString(current, ["decided_at", "decidedAt"])}
+          activatedAt={firstString(current, ["activated_at", "activatedAt"])}
+          onFixRequestedChanges={() => setCurrentStep(workspace === "driver" ? 3 : 3)}
+        />
       </Screen>
     );
+  }
+
+  // Multi-Step Onboarding Form
   return (
     <Screen
-      eyebrow={`${workspace} application`}
-      title={workspace === "driver" ? "Drive with SKIMA" : "Join as a station"}
-      action={<Back />}
+      eyebrow={`${workspace} onboarding`}
+      title={workspace === "driver" ? "Driver Application" : "Station Application"}
+      action={
+        <Pressable onPress={() => router.back()}>
+          <Text style={styles.link}>Save & Exit</Text>
+        </Pressable>
+      }
     >
-      <View style={styles.hero}>
-        <Text style={styles.heroLabel}>
-          {workspace === "driver" ? "DELIVER WITH SKIMA" : "PARTNER WITH SKIMA"}
-        </Text>
-        <Text style={styles.heroTitle}>
-          {workspace === "driver" ? "Start your application" : "Tell us about your station"}
-        </Text>
-        <Text style={styles.heroBody}>
-          {workspace === "driver"
-            ? "Share your details so we can review your application. Your progress is saved as you go."
-            : "Share your business and service details. Your progress is saved as you go."}
-        </Text>
-      </View>
-      {workspace === "driver" ? (
-        <DriverFields
-          name={name}
-          setName={setName}
-          driverDisplayName={driverDisplayName}
-          setDriverDisplayName={setDriverDisplayName}
-          phone={phone}
-          setPhone={setPhone}
-          address={address}
-          setAddress={setAddress}
-          licence={legalOrLicence}
-          setLicence={setLegalOrLicence}
-          zone={serviceZone}
-          setZone={setServiceZone}
-          latitude={latitude}
-          longitude={longitude}
-          locate={locate}
-          locating={detectingLocation}
-        />
-      ) : (
-        <StationFields
-          name={name}
-          setName={setName}
-          stationRole={stationRole}
-          setStationRole={setStationRole}
-          authoritySummary={authoritySummary}
-          setAuthoritySummary={setAuthoritySummary}
-          phone={phone}
-          setPhone={setPhone}
-          address={address}
-          setAddress={setAddress}
-          legal={legalOrLicence}
-          setLegal={setLegalOrLicence}
-          slug={slug}
-          setSlug={setSlug}
-          capacity={capacity}
-          setCapacity={setCapacity}
-          opens={opens}
-          setOpens={setOpens}
-          closes={closes}
-          setCloses={setCloses}
-          latitude={latitude}
-          longitude={longitude}
-          locate={locate}
-          locating={detectingLocation}
-          profiles={profiles}
-          sizes={sizes}
-          setSizes={setSizes}
-        />
-      )}
-      <Card>
-        <Field
-          label="Applying as"
-          value={workspace === "driver" ? "Delivery driver" : "Partner station"}
-        />
-        <Field
-          label="Required documents"
-          value={requiredCount === 1 ? "1 document" : `${requiredCount} documents`}
-        />
-      </Card>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Pressable
-        disabled={
-          create.isPending || update.isPending || submitMutation.isPending
+      <ApplicationProgress
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        stepTitle={
+          workspace === "driver"
+            ? currentStep === 1
+              ? "Personal Information"
+              : currentStep === 2
+              ? "Driver Photograph"
+              : currentStep === 3
+              ? "Driver Verification Documents"
+              : "Review & Submit"
+            : currentStep === 1
+            ? "Representative & Role"
+            : currentStep === 2
+            ? "Station & Location"
+            : currentStep === 3
+            ? "Statutory Certificates"
+            : currentStep === 4
+            ? "Station Premises Photos"
+            : "Review & Submit"
         }
-        style={styles.primary}
-        onPress={() => void send()}
-      >
-        {create.isPending || update.isPending || submitMutation.isPending ? (
-          <ActivityIndicator color="white" />
+      />
+
+      {/* DRIVER STAGES */}
+      {workspace === "driver" ? (
+        <>
+          {currentStep === 1 ? (
+            <Card>
+              <Text style={styles.sectionHeader}>Personal Details</Text>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Full Legal Name *</Text>
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="e.g. Samuel Adeleke"
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Driver Display Name</Text>
+                <TextInput
+                  value={driverDisplayName}
+                  onChangeText={setDriverDisplayName}
+                  placeholder="e.g. Sam A."
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Phone Number *</Text>
+                <TextInput
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  placeholder="e.g. 08012345678"
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Residential Address *</Text>
+                <TextInput
+                  value={address}
+                  onChangeText={setAddress}
+                  multiline
+                  placeholder="e.g. 14 Gas Way, Ikeja, Lagos"
+                  style={[styles.input, styles.textArea]}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Driver Licence Number *</Text>
+                <TextInput
+                  value={legalOrLicence}
+                  onChangeText={setLegalOrLicence}
+                  placeholder="e.g. ABC123456789"
+                  style={styles.input}
+                />
+              </View>
+            </Card>
+          ) : null}
+
+          {currentStep === 2 ? (
+            <View>
+              {(() => {
+                const sub = getSubForReq("driver.profile-photo");
+                const mediaUrl = firstString(sub, ["storage_path", "mediaUrl"]);
+                return (
+                  <PhotoCaptureCard
+                    title="Driver Photograph"
+                    subtitle="Take a clear portrait photo showing your full face."
+                    photoUrl={mediaUrl}
+                    guidanceText="Ensure your face is well-lit, looking directly at the camera with no sunglasses or face coverings."
+                    onPhotoSelected={(file) => handleUploadRequirement("driver.profile-photo", file)}
+                  />
+                );
+              })()}
+            </View>
+          ) : null}
+
+          {currentStep === 3 ? (
+            <View>
+              {["driver.licence", "driver.identity", "driver.address-evidence"].map((reqKey) => {
+                const req = appRequirements.find((r) => firstString(r, ["key"]) === reqKey);
+                const sub = getSubForReq(reqKey);
+                return (
+                  <RequirementCard
+                    key={reqKey}
+                    requirementKey={reqKey}
+                    title={firstString(req, ["display_name", "displayName"]) ?? reqKey}
+                    description={firstString(req, ["description"]) ?? "Upload valid evidence document."}
+                    isRequired={req?.is_required !== false}
+                    allowedContentTypes={Array.isArray(req?.allowed_content_types) ? (req.allowed_content_types as string[]) : undefined}
+                    uploadedDocument={
+                      sub
+                        ? {
+                            id: recordId(sub) ?? "",
+                            status: firstString(sub, ["status"]) ?? "submitted",
+                            replacementRequested: Boolean(sub.replacement_requested),
+                            replacementReason: firstString(sub, ["replacement_reason", "decision_reason"]),
+                          }
+                        : null
+                    }
+                    onUploadFile={(file) => handleUploadRequirement(reqKey, file)}
+                  />
+                );
+              })}
+            </View>
+          ) : null}
+
+          {currentStep === 4 ? (
+            <ApplicationReviewSummary
+              sections={[
+                {
+                  title: "Personal Information",
+                  stepIndex: 1,
+                  items: [
+                    { label: "Full Name", value: name },
+                    { label: "Phone", value: phone },
+                    { label: "Licence Number", value: legalOrLicence },
+                    { label: "Address", value: address },
+                  ],
+                },
+              ]}
+              documents={appRequirements.map((req) => {
+                const key = firstString(req, ["key"]) ?? "";
+                const sub = getSubForReq(key);
+                return {
+                  title: firstString(req, ["display_name", "displayName"]) ?? key,
+                  isRequired: req.is_required !== false,
+                  isUploaded: Boolean(sub && firstString(sub, ["status"]) !== "rejected"),
+                  status: firstString(sub, ["status"]) ?? "pending",
+                  stepIndex: key === "driver.profile-photo" ? 2 : 3,
+                };
+              })}
+              onGoToStep={(step) => setCurrentStep(step)}
+              canSubmit={canSubmit}
+              missingItemsCount={missingRequiredDocs.length}
+            />
+          ) : null}
+        </>
+      ) : (
+        /* STATION STAGES */
+        <>
+          {currentStep === 1 ? (
+            <Card>
+              <Text style={styles.sectionHeader}>Station Representative KYC</Text>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Representative Full Name *</Text>
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="e.g. Chief Ibrahim Danladi"
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Representative Role in Business *</Text>
+                <View style={styles.roleChips}>
+                  {STATION_ROLES.map((r) => (
+                    <Pressable
+                      key={r.key}
+                      onPress={() => setStationRole(r.key)}
+                      style={[styles.roleChip, stationRole === r.key && styles.roleChipActive]}
+                    >
+                      <Text style={[styles.roleChipText, stationRole === r.key && styles.roleChipTextActive]}>
+                        {r.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Phone Number *</Text>
+                <TextInput
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  placeholder="e.g. 08033334444"
+                  style={styles.input}
+                />
+              </View>
+
+              {(() => {
+                const sub = getSubForReq("station.representative-photo");
+                const mediaUrl = firstString(sub, ["storage_path", "mediaUrl"]);
+                return (
+                  <PhotoCaptureCard
+                    title="Representative Photograph (Private KYC)"
+                    subtitle="Take a clear face photo of the representative applying for this station."
+                    photoUrl={mediaUrl}
+                    guidanceText="Kept private for compliance and administrative identity verification."
+                    onPhotoSelected={(file) => handleUploadRequirement("station.representative-photo", file)}
+                  />
+                );
+              })()}
+            </Card>
+          ) : null}
+
+          {currentStep === 2 ? (
+            <Card>
+              <Text style={styles.sectionHeader}>Station Facility Details</Text>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>LPG Station Name *</Text>
+                <TextInput
+                  value={stationName}
+                  onChangeText={setStationName}
+                  placeholder="e.g. TotalEnergies LPG Plant Victoria Island"
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Physical Address *</Text>
+                <TextInput
+                  value={address}
+                  onChangeText={setAddress}
+                  multiline
+                  placeholder="e.g. Plot 104, Ozumba Mbadiwe Ave, Victoria Island, Lagos"
+                  style={[styles.input, styles.textArea]}
+                />
+              </View>
+
+              <Pressable
+                disabled={detectingLocation}
+                onPress={() => void detectLocation()}
+                style={styles.locationBtn}
+              >
+                {detectingLocation ? (
+                  <ActivityIndicator color={colors.brand} />
+                ) : (
+                  <>
+                    <LocateFixed color={colors.brand} size={18} />
+                    <Text style={styles.locationBtnText}>
+                      {latitude ? "Update Current GPS Coordinates" : "Capture Station GPS Coordinates"}
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+
+              {latitude && longitude ? (
+                <View style={styles.coordBox}>
+                  <MapPin color={colors.success} size={16} />
+                  <Text style={styles.coordText}>
+                    GPS: {latitude.toFixed(6)}, {longitude.toFixed(6)}
+                  </Text>
+                </View>
+              ) : null}
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Station Refill Storage Capacity (kg)</Text>
+                <TextInput
+                  value={capacity}
+                  onChangeText={setCapacity}
+                  keyboardType="numeric"
+                  placeholder="e.g. 5000"
+                  style={styles.input}
+                />
+              </View>
+            </Card>
+          ) : null}
+
+          {currentStep === 3 ? (
+            <View>
+              {["station.business-registration", "station.business-permit", "station.fire-safety-certificate", "station.settlement-evidence", "station.owner-identity"].map((reqKey) => {
+                const req = appRequirements.find((r) => firstString(r, ["key"]) === reqKey);
+                const sub = getSubForReq(reqKey);
+                return (
+                  <RequirementCard
+                    key={reqKey}
+                    requirementKey={reqKey}
+                    title={firstString(req, ["display_name", "displayName"]) ?? reqKey}
+                    description={firstString(req, ["description"]) ?? "Upload statutory certificate."}
+                    isRequired={req?.is_required !== false}
+                    allowedContentTypes={Array.isArray(req?.allowed_content_types) ? (req.allowed_content_types as string[]) : undefined}
+                    uploadedDocument={
+                      sub
+                        ? {
+                            id: recordId(sub) ?? "",
+                            status: firstString(sub, ["status"]) ?? "submitted",
+                            replacementRequested: Boolean(sub.replacement_requested),
+                            replacementReason: firstString(sub, ["replacement_reason", "decision_reason"]),
+                          }
+                        : null
+                    }
+                    onUploadFile={(file) => handleUploadRequirement(reqKey, file)}
+                  />
+                );
+              })}
+            </View>
+          ) : null}
+
+          {currentStep === 4 ? (
+            <View>
+              <MultiPhotoRequirement
+                views={[
+                  {
+                    key: "station.photo.front",
+                    title: "Front View",
+                    description: "Clear photo showing the front of the station from the road.",
+                    isRequired: true,
+                    uploadedUrl: firstString(getSubForReq("station.photo.front"), ["storage_path", "mediaUrl"]),
+                    replacementReason: firstString(getSubForReq("station.photo.front"), ["replacement_reason"]),
+                  },
+                  {
+                    key: "station.photo.entrance",
+                    title: "Main Entrance",
+                    description: "Main vehicular entry and safety gate area.",
+                    isRequired: true,
+                    uploadedUrl: firstString(getSubForReq("station.photo.entrance"), ["storage_path", "mediaUrl"]),
+                    replacementReason: firstString(getSubForReq("station.photo.entrance"), ["replacement_reason"]),
+                  },
+                  {
+                    key: "station.photo.pump",
+                    title: "LPG Refill & Dispensing Area",
+                    description: "Dispensing meters, nozzle area, and scale platforms.",
+                    isRequired: true,
+                    uploadedUrl: firstString(getSubForReq("station.photo.pump"), ["storage_path", "mediaUrl"]),
+                    replacementReason: firstString(getSubForReq("station.photo.pump"), ["replacement_reason"]),
+                  },
+                  {
+                    key: "station.photo.tank",
+                    title: "Bulk Storage Tanks & Infrastructure",
+                    description: "LPG storage bullets and safety shut-off infrastructure.",
+                    isRequired: true,
+                    uploadedUrl: firstString(getSubForReq("station.photo.tank"), ["storage_path", "mediaUrl"]),
+                    replacementReason: firstString(getSubForReq("station.photo.tank"), ["replacement_reason"]),
+                  },
+                  {
+                    key: "station.photo.compound",
+                    title: "Full Compound Yard View",
+                    description: "Wide-angle view of the compound and safety perimeter.",
+                    isRequired: true,
+                    uploadedUrl: firstString(getSubForReq("station.photo.compound"), ["storage_path", "mediaUrl"]),
+                    replacementReason: firstString(getSubForReq("station.photo.compound"), ["replacement_reason"]),
+                  },
+                  {
+                    key: "station.photo.signboard",
+                    title: "Station Name Signboard",
+                    description: "Official branded signage with the station name.",
+                    isRequired: true,
+                    uploadedUrl: firstString(getSubForReq("station.photo.signboard"), ["storage_path", "mediaUrl"]),
+                    replacementReason: firstString(getSubForReq("station.photo.signboard"), ["replacement_reason"]),
+                  },
+                  {
+                    key: "station.photo.drone",
+                    title: "Aerial / Drone View (Optional)",
+                    description: "Optional elevated bird's-eye view of the station layout.",
+                    isRequired: false,
+                    uploadedUrl: firstString(getSubForReq("station.photo.drone"), ["storage_path", "mediaUrl"]),
+                    replacementReason: firstString(getSubForReq("station.photo.drone"), ["replacement_reason"]),
+                  },
+                ]}
+                onUploadView={(viewKey, file) => handleUploadRequirement(viewKey, file)}
+              />
+            </View>
+          ) : null}
+
+          {currentStep === 5 ? (
+            <ApplicationReviewSummary
+              sections={[
+                {
+                  title: "Station & Representative",
+                  stepIndex: 1,
+                  items: [
+                    { label: "Station Name", value: stationName },
+                    { label: "Representative", value: name },
+                    { label: "Role", value: stationRole },
+                    { label: "Phone", value: phone },
+                    { label: "Address", value: address },
+                    { label: "Capacity", value: `${capacity} kg` },
+                  ],
+                },
+              ]}
+              documents={appRequirements.map((req) => {
+                const key = firstString(req, ["key"]) ?? "";
+                const sub = getSubForReq(key);
+                return {
+                  title: firstString(req, ["display_name", "displayName"]) ?? key,
+                  isRequired: req.is_required !== false,
+                  isUploaded: Boolean(sub && firstString(sub, ["status"]) !== "rejected"),
+                  status: firstString(sub, ["status"]) ?? "pending",
+                  stepIndex: key.startsWith("station.photo.") ? 4 : 3,
+                };
+              })}
+              onGoToStep={(step) => setCurrentStep(step)}
+              canSubmit={canSubmit}
+              missingItemsCount={missingRequiredDocs.length}
+            />
+          ) : null}
+        </>
+      )}
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      {/* Navigation Buttons */}
+      <View style={styles.footerRow}>
+        {currentStep > 1 ? (
+          <Pressable onPress={handlePrevStep} style={styles.prevBtn}>
+            <ArrowLeft color={colors.ink} size={16} />
+            <Text style={styles.prevBtnText}>Previous</Text>
+          </Pressable>
+        ) : <View style={{ flex: 1 }} />}
+
+        {currentStep < totalSteps ? (
+          <Pressable onPress={() => void handleNextStep()} style={styles.nextBtn}>
+            <Text style={styles.nextBtnText}>Save & Continue</Text>
+            <ArrowRight color="white" size={16} />
+          </Pressable>
         ) : (
-          <Text style={styles.primaryText}>
-            {requiredCount > 0 && missingRequirements.length > 0
-              ? "Save and add documents"
-              : "Submit application"}
-          </Text>
+          <Pressable
+            disabled={!canSubmit || submitting}
+            onPress={() => void handleSubmitApplication()}
+            style={[styles.submitBtn, (!canSubmit || submitting) && styles.btnDisabled]}
+          >
+            {submitting ? (
+              <ActivityIndicator color="white" size="small" />
+            ) : (
+              <>
+                <FileCheck2 color="white" size={18} />
+                <Text style={styles.submitBtnText}>Submit Application</Text>
+              </>
+            )}
+          </Pressable>
         )}
-      </Pressable>
-      <Text style={styles.note}>
-        {requiredCount > 0
-          ? "You'll add the requested documents before your application is submitted."
-          : "Review your details before submitting your application."}
-      </Text>
+      </View>
     </Screen>
   );
 }
-function DriverFields(p: {
-  name: string;
-  setName(v: string): void;
-  driverDisplayName: string;
-  setDriverDisplayName(v: string): void;
-  phone: string;
-  setPhone(v: string): void;
-  address: string;
-  setAddress(v: string): void;
-  licence: string;
-  setLicence(v: string): void;
-  zone: string;
-  setZone(v: string): void;
-  latitude: number | null;
-  longitude: number | null;
-  locate(): Promise<void>;
-  locating: boolean;
-}) {
-  return (
-    <>
-      <Input
-        placeholder="Full legal name"
-        value={p.name}
-        onChange={p.setName}
-      />
-      <Input
-        placeholder="Driver operational name (optional)"
-        value={p.driverDisplayName}
-        onChange={p.setDriverDisplayName}
-      />
-      <Input
-        placeholder="Phone number"
-        value={p.phone}
-        onChange={p.setPhone}
-        keyboard="phone-pad"
-      />
-      <Input
-        placeholder="Residential address"
-        value={p.address}
-        onChange={p.setAddress}
-        multiline
-      />
-      <Pressable
-        disabled={p.locating}
-        style={styles.location}
-        onPress={() => void p.locate()}
-      >
-        {p.locating ? (
-          <ActivityIndicator color={colors.brand} />
-        ) : (
-          <LocateFixed color={colors.brand} size={20} />
-        )}
-        <Text style={styles.locationText}>
-          {p.latitude !== null && p.longitude !== null
-            ? "Current location captured"
-            : "Use current location"}
-        </Text>
-      </Pressable>
-      <Input
-        placeholder="Driver licence number"
-        value={p.licence}
-        onChange={p.setLicence}
-      />
-      <Input
-        placeholder="Preferred service zone"
-        value={p.zone}
-        onChange={p.setZone}
-      />
-    </>
-  );
-}
-function StationFields(p: {
-  name: string;
-  setName(v: string): void;
-  stationRole: string;
-  setStationRole(v: string): void;
-  authoritySummary: string;
-  setAuthoritySummary(v: string): void;
-  phone: string;
-  setPhone(v: string): void;
-  address: string;
-  setAddress(v: string): void;
-  legal: string;
-  setLegal(v: string): void;
-  slug: string;
-  setSlug(v: string): void;
-  capacity: string;
-  setCapacity(v: string): void;
-  opens: string;
-  setOpens(v: string): void;
-  closes: string;
-  setCloses(v: string): void;
-  latitude: number | null;
-  longitude: number | null;
-  locate(): Promise<void>;
-  locating: boolean;
-  profiles: PlatformRecord[];
-  sizes: number[];
-  setSizes(v: number[]): void;
-}) {
-  return (
-    <>
-      <Input
-        placeholder="Station display name"
-        value={p.name}
-        onChange={p.setName}
-      />
-      <Input
-        placeholder="Registered legal name"
-        value={p.legal}
-        onChange={p.setLegal}
-      />
-      <Input
-        placeholder="Your role at this station (Owner, Director, Manager...)"
-        value={p.stationRole}
-        onChange={p.setStationRole}
-      />
-      <Input
-        placeholder="Authority summary (why you can represent this station)"
-        value={p.authoritySummary}
-        onChange={p.setAuthoritySummary}
-        multiline
-      />
-      <Input
-        placeholder="Station short name (for example, skima-awka)"
-        value={p.slug}
-        onChange={(value) => p.setSlug(toSlug(value))}
-      />
-      <Input
-        placeholder="Business phone"
-        value={p.phone}
-        onChange={p.setPhone}
-        keyboard="phone-pad"
-      />
-      <Input
-        placeholder="Station address"
-        value={p.address}
-        onChange={p.setAddress}
-        multiline
-      />
-      <Pressable disabled={p.locating} style={styles.location} onPress={() => void p.locate()}>
-        {p.locating ? (
-          <ActivityIndicator color={colors.brand} />
-        ) : (
-          <LocateFixed color={colors.brand} size={20} />
-        )}
-        <Text style={styles.locationText}>
-          {p.latitude !== null && p.longitude !== null
-            ? "Station location captured"
-            : "Use my station location"}
-        </Text>
-      </Pressable>
-      <Input
-        placeholder="Daily refill capacity (kg)"
-        value={p.capacity}
-        onChange={p.setCapacity}
-        keyboard="decimal-pad"
-      />
-      <View style={styles.two}>
-        <View style={{ flex: 1 }}>
-          <Input
-            placeholder="Opening time (08:00)"
-            value={p.opens}
-            onChange={p.setOpens}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Input
-            placeholder="Closing time (18:00)"
-            value={p.closes}
-            onChange={p.setCloses}
-          />
-        </View>
-      </View>
-      <Text style={styles.fieldTitle}>Supported cylinder sizes</Text>
-      <View style={styles.options}>
-        {p.profiles.map((item, index) => {
-          const size = firstNumber(item, ["sizeKg", "size_kg"]);
-          if (size === null) return null;
-          const selected = p.sizes.includes(size);
-          return (
-            <Pressable
-              key={recordId(item) ?? String(index)}
-              onPress={() =>
-                p.setSizes(
-                  selected
-                    ? p.sizes.filter((value) => value !== size)
-                    : [...p.sizes, size],
-                )
-              }
-              style={[styles.option, selected && styles.selected]}
-            >
-              <Text style={styles.optionText}>
-                {firstString(item, ["displayName", "display_name"]) ??
-                  `${size} kg`}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </>
-  );
-}
-function Input({
-  placeholder,
-  value,
-  onChange,
-  multiline,
-  keyboard,
-}: {
-  placeholder: string;
-  value: string;
-  onChange(v: string): void;
-  multiline?: boolean;
-  keyboard?: "phone-pad" | "decimal-pad";
-}) {
-  return (
-    <TextInput
-      style={[styles.input, multiline && styles.multiline]}
-      placeholder={placeholder}
-      placeholderTextColor={colors.muted}
-      value={value}
-      onChangeText={onChange}
-      multiline={multiline}
-      keyboardType={keyboard}
-    />
-  );
-}
-function Back() {
-  return (
-    <Pressable onPress={() => router.back()}>
-      <Text style={styles.link}>Back</Text>
-    </Pressable>
-  );
-}
-function resultId(result: string | PlatformRecord | null) {
-  return typeof result === "string"
-    ? result
-    : result
-      ? firstString(result, ["id", "applicationId", "application_id"])
-      : null;
-}
-function applicationStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    approved: "Approved",
-    expired: "Expired",
-    rejected: "Not approved",
-    submitted: "Submitted",
-    under_review: "Under review",
-    reviewing: "Under review",
-    withdrawn: "Withdrawn",
-  };
-  return labels[status] ?? "In progress";
-}
-function applicationStatusMessage(status: string) {
-  if (status === "approved")
-    return "Your application has been approved. Complete any remaining setup to begin.";
-  if (status === "rejected")
-    return "We couldn't approve this application. Review the decision and contact support if you need help.";
-  if (status === "submitted" || status === "under_review" || status === "reviewing")
-    return "We're reviewing your application and will let you know when a decision is ready.";
-  if (status === "withdrawn") return "This application has been withdrawn.";
-  if (status === "expired") return "This application has expired. Start a new application when you're ready.";
-  return "We'll let you know when there is an update to your application.";
-}
 
-function ApplicationProgress({ status }: { status: string }) {
-  const steps = [
-    { key: "submitted", label: "Submitted" },
-    { key: "under_review", label: "Review" },
-    { key: "approved", label: "Decision" },
-    { key: "active", label: "Activation" },
-  ];
-  const activeIndex = status === "approved"
-    ? 2
-    : status === "under_review" || status === "reviewing"
-    ? 1
-    : status === "rejected"
-    ? 2
-    : 0;
-
-  return (
-    <View style={styles.progressCard}>
-      {steps.map((step, index) => {
-        const active = index <= activeIndex;
-        const rejected = status === "rejected" && step.key === "approved";
-        return (
-          <View key={step.key} style={styles.progressStep}>
-            <View style={[
-              styles.progressDot,
-              active && styles.progressDotActive,
-              rejected && styles.progressDotRejected,
-            ]}>
-              <Text style={styles.progressNumber}>{index + 1}</Text>
-            </View>
-            <Text style={[styles.progressLabel, active && styles.progressLabelActive]}>
-              {step.label}
-            </Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function formatDate(value: string | null) {
-  if (!value) return "Not available";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Not available" : date.toLocaleString();
-}
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={{ gap: 3 }}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
-    </View>
-  );
-}
-function toSlug(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
 const styles = StyleSheet.create({
-  link: { color: colors.brand, fontWeight: "800" },
-  hero: {
-    gap: spacing.sm,
-    padding: spacing.xl,
-    borderRadius: radii.lg,
-    backgroundColor: colors.brand,
-  },
-  heroLabel: { color: "#FFDDE1", fontWeight: "900", fontSize: 11 },
-  heroTitle: {
-    color: "white",
-    fontSize: 28,
-    fontWeight: "900",
-    textTransform: "capitalize",
-  },
-  heroBody: { color: "#FFF1F2", lineHeight: 21 },
-  progressCard: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surface,
-  },
-  progressStep: { flex: 1, alignItems: "center", gap: 6 },
-  progressDot: {
-    width: 30,
-    height: 30,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 15,
-    backgroundColor: "#E7ECE9",
-  },
-  progressDotActive: { backgroundColor: colors.brand },
-  progressDotRejected: { backgroundColor: colors.danger },
-  progressNumber: { color: "white", fontSize: 11, fontWeight: "900" },
-  progressLabel: { color: colors.muted, fontSize: 10, fontWeight: "800", textAlign: "center" },
-  progressLabelActive: { color: colors.ink },
+  link: { color: colors.brand, fontWeight: "800", fontSize: 13 },
+  sectionHeader: { fontSize: 16, fontWeight: "900", color: colors.ink, marginBottom: spacing.xs },
+  fieldGroup: { gap: 6, marginBottom: spacing.md },
+  fieldLabel: { fontSize: 13, fontWeight: "800", color: colors.ink },
   input: {
-    minHeight: 56,
+    minHeight: 52,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
-    backgroundColor: colors.surface,
     paddingHorizontal: spacing.md,
+    fontSize: 15,
+    backgroundColor: colors.surface,
     color: colors.ink,
-    fontSize: 16,
   },
-  multiline: {
-    minHeight: 92,
-    paddingTop: spacing.md,
+  textArea: {
+    minHeight: 80,
+    paddingVertical: spacing.sm,
     textAlignVertical: "top",
   },
-  two: { flexDirection: "row", gap: spacing.md },
-  location: {
-    minHeight: 54,
+  roleChips: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.brand,
-    borderRadius: radii.md,
+    flexWrap: "wrap",
+    gap: spacing.xs,
   },
-  locationText: { color: colors.brand, fontWeight: "800" },
-  fieldTitle: { color: colors.ink, fontSize: 16, fontWeight: "900" },
-  options: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  option: {
-    paddingHorizontal: 13,
-    paddingVertical: 10,
+  roleChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
   },
-  selected: { borderColor: colors.brand, backgroundColor: "#FFF0F1" },
-  optionText: { color: colors.ink, fontWeight: "800" },
-  label: {
+  roleChipActive: {
+    borderColor: colors.brand,
+    backgroundColor: "#FFF0F1",
+  },
+  roleChipText: {
+    fontSize: 12,
+    fontWeight: "700",
     color: colors.muted,
+  },
+  roleChipTextActive: {
+    color: colors.brand,
     fontWeight: "800",
-    fontSize: 11,
-    textTransform: "uppercase",
   },
-  value: { color: colors.ink, fontWeight: "700" },
-  primary: {
-    minHeight: 56,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radii.md,
-    backgroundColor: colors.brand,
-  },
-  primaryText: { color: "white", fontWeight: "900" },
-  secondary: {
-    minHeight: 54,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radii.md,
+  locationBtn: {
+    minHeight: 46,
     borderWidth: 1,
     borderColor: colors.brand,
-  },
-  secondaryText: { color: colors.brand, fontWeight: "900" },
-  approved: {
+    borderRadius: radii.md,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    padding: spacing.md,
-    backgroundColor: "#E9F7EE",
-    borderRadius: radii.md,
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#FFF0F1",
+    marginBottom: spacing.md,
   },
-  approvedText: { color: colors.success, fontWeight: "900" },
-  error: { color: colors.danger },
-  note: { color: colors.muted, lineHeight: 20 },
+  locationBtnText: {
+    color: colors.brand,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  coordBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F0FDF4",
+    padding: spacing.sm,
+    borderRadius: radii.md,
+    marginBottom: spacing.md,
+  },
+  coordText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: colors.success,
+  },
+  footerRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+  prevBtn: {
+    flex: 1,
+    minHeight: 52,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: colors.surface,
+  },
+  prevBtnText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: colors.ink,
+  },
+  nextBtn: {
+    flex: 2,
+    minHeight: 52,
+    backgroundColor: colors.brand,
+    borderRadius: radii.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  nextBtnText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  submitBtn: {
+    flex: 2,
+    minHeight: 52,
+    backgroundColor: colors.success,
+    borderRadius: radii.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  submitBtnText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  btnDisabled: {
+    opacity: 0.5,
+  },
+  error: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: spacing.sm,
+  },
 });

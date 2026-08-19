@@ -758,7 +758,7 @@ async function generateWithCloudflare(
   };
 }
 
-async function postCloudflareMultipart(
+function postCloudflareMultipart(
   url: string,
   apiToken: string,
   prompt: string,

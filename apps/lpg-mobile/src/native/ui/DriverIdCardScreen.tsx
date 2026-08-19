@@ -2,7 +2,16 @@ import * as ImagePicker from "expo-image-picker";
 import * as Print from "expo-print";
 import { router } from "expo-router";
 import * as Sharing from "expo-sharing";
-import { Camera, Download, Printer, RefreshCw, ShieldCheck, Sparkles } from "lucide-react-native";
+import {
+  AlertCircle,
+  Camera,
+  Download,
+  Printer,
+  RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react-native";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -22,6 +31,7 @@ import { useSession } from "../session/SessionProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
+import { BrandMark } from "./BrandMark";
 import { Card } from "./Card";
 import { Screen } from "./Screen";
 
@@ -37,29 +47,45 @@ export function DriverIdCardScreen() {
     path: "/runtime/ai/queue",
     schema: ActionResponseSchema,
   });
+
   const data = card.data;
   const [pending, setPending] = useState<"upload" | "ai" | null>(null);
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [latestSourceAssetId, setLatestSourceAssetId] = useState<string | null>(null);
+
   const publicDriverId = firstString(data, ["publicDriverId", "public_driver_id"]);
   const displayName = firstString(data, ["displayName", "display_name"]) ?? "SKIMA Driver";
-  const status = firstString(data, ["status"]) ?? "pending";
-  const cardStatus = firstString(data, ["cardStatus", "card_status"]) ?? status;
+  const verificationStatus = (firstString(data, ["verificationStatus", "verification_status", "status"]) ?? "pending").toLowerCase();
+  const cardStatus = (firstString(data, ["cardStatus", "card_status"]) ?? verificationStatus).toLowerCase();
+  const operationalStatus = (firstString(data, ["operationalStatus", "operational_status"]) ?? "offline").toLowerCase();
   const verificationUrl = firstString(data, ["verificationUrl", "verification_url"]);
   const photoUrl = firstString(data, ["photoUrl", "photo_url"]);
   const photoAssetId = firstString(data, ["photoAssetId", "photo_asset_id"]);
   const driverProfileId = firstString(data, ["driverProfileId", "driver_profile_id"]);
-  const vehicleType = firstString(data, ["vehicleType", "vehicle_type"]) ?? "Configured vehicle";
-  const issuedAt = firstString(data, ["issuedAt", "issued_at"]);
+  const vehicleType = firstString(data, ["vehicleType", "vehicle_type"]) ?? "Standard LPG Delivery";
+  const serviceArea = firstString(data, ["serviceArea", "service_area", "serviceZone", "service_zone"]) ?? "Approved Zone";
+  const issuedAt = firstString(data, ["issuedAt", "issued_at", "cardIssuedAt", "driver_card_issued_at"]);
+
+  const isCardActive = cardStatus === "active" || (verificationStatus === "approved" && cardStatus !== "suspended" && cardStatus !== "revoked");
+  const isSuspended = cardStatus === "suspended" || verificationStatus === "suspended";
+  const isRevoked = cardStatus === "revoked" || verificationStatus === "rejected";
+
+  const statusLabel = isRevoked
+    ? "No Longer Authorised"
+    : isSuspended
+    ? "Suspended"
+    : isCardActive
+    ? "Approved & Active"
+    : "Approved (Inactive)";
 
   const download = async () => {
     if (!data) return;
-    const file = await Print.printToFileAsync({ html: cardHtml(data) });
+    const file = await Print.printToFileAsync({ html: cardHtml(data, statusLabel, isCardActive, isSuspended) });
     if (Platform.OS === "web") {
       const link = document.createElement("a");
       link.href = file.uri;
-      link.download = `${publicDriverId ?? "skima-driver-id"}.pdf`;
+      link.download = `${publicDriverId ?? "skima-driver-pass"}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -67,7 +93,7 @@ export function DriverIdCardScreen() {
     }
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(file.uri, {
-        dialogTitle: "Save SKIMA Driver ID",
+        dialogTitle: "Save SKIMA Driver Pass",
         mimeType: "application/pdf",
       });
     }
@@ -75,7 +101,7 @@ export function DriverIdCardScreen() {
 
   const print = async () => {
     if (!data) return;
-    await Print.printAsync({ html: cardHtml(data) });
+    await Print.printAsync({ html: cardHtml(data, statusLabel, isCardActive, isSuspended) });
   };
 
   const choosePhoto = async () => {
@@ -83,7 +109,7 @@ export function DriverIdCardScreen() {
     setMessage(null);
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      setMessage("Photo-library permission is required to choose a driver card photo.");
+      setMessage("Photo-library permission is required to choose a driver pass photo.");
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -114,9 +140,9 @@ export function DriverIdCardScreen() {
       });
       setLatestSourceAssetId(mediaAssetId);
       await card.refetch();
-      setMessage("Driver card photo updated.");
+      setMessage("Driver photograph updated successfully.");
     } catch (cause) {
-      setMessage(friendlyError(cause, "The driver card photo could not be updated."));
+      setMessage(friendlyError(cause, "The driver photograph could not be updated."));
     } finally {
       setPending(null);
       setProgress(0);
@@ -127,7 +153,7 @@ export function DriverIdCardScreen() {
     if (!driverProfileId) return;
     const sourceMediaAssetId = latestSourceAssetId ?? photoAssetId;
     if (!sourceMediaAssetId) {
-      setMessage("Upload a clear driver photo first, then use AI enhance.");
+      setMessage("Upload a clear driver photograph first, then enhance.");
       return;
     }
     setPending("ai");
@@ -153,9 +179,9 @@ export function DriverIdCardScreen() {
         timeoutMs: 60_000,
       });
       await card.refetch();
-      setMessage("AI enhanced driver card photo created.");
+      setMessage("Enhanced portrait ready.");
     } catch (cause) {
-      setMessage(friendlyError(cause, "AI could not enhance this photo right now. Try another clear photo or retry."));
+      setMessage(friendlyError(cause, "Photo enhancement could not complete right now. You may retry or keep original."));
     } finally {
       setPending(null);
     }
@@ -163,8 +189,8 @@ export function DriverIdCardScreen() {
 
   return (
     <Screen
-      eyebrow="Operational identity"
-      title="SKIMA Driver ID"
+      eyebrow="Identity & Trust"
+      title="Driver Pass"
       action={
         <Pressable onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
@@ -175,29 +201,57 @@ export function DriverIdCardScreen() {
         <ActivityIndicator color={colors.brand} />
       ) : card.error ? (
         <Text style={styles.error}>
-          {friendlyError(card.error, "Your Driver ID could not be loaded.")}
+          {friendlyError(card.error, "Your Driver Pass could not be loaded.")}
         </Text>
       ) : !data ? (
-        <Text style={styles.error}>No approved Driver ID is available for this account.</Text>
+        <Text style={styles.error}>No approved Driver Pass is available for this account.</Text>
       ) : (
         <>
           <View style={styles.card}>
             <View style={styles.redOrb} />
             <View style={styles.greenOrb} />
+
+            {/* Official Header */}
             <View style={styles.cardHeader}>
-              <View style={styles.brandMark}>
-                <Text style={styles.brandMarkText}>S</Text>
+              <View style={styles.brandRow}>
+                <BrandMark compact inverse />
+                <View>
+                  <Text style={styles.brandSubtitle}>OFFICIAL IDENTITY CREDENTIAL</Text>
+                  <Text style={styles.id}>{publicDriverId ?? "SKD-PENDING"}</Text>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.brand}>SKIMA DRIVER PASS</Text>
-                <Text style={styles.id}>{publicDriverId ?? "Pending ID"}</Text>
-              </View>
-              <View style={styles.statusPill}>
-                <ShieldCheck color="#22C55E" size={15} />
-                <Text style={styles.statusPillText}>{status.replace(/[_-]/g, " ")}</Text>
+
+              <View
+                style={[
+                  styles.statusPill,
+                  isRevoked || isSuspended
+                    ? styles.statusPillDanger
+                    : isCardActive
+                    ? styles.statusPillSuccess
+                    : styles.statusPillWarning,
+                ]}
+              >
+                {isRevoked || isSuspended ? (
+                  <ShieldAlert color="#EF4444" size={14} />
+                ) : (
+                  <ShieldCheck color={isCardActive ? "#22C55E" : "#F59E0B"} size={14} />
+                )}
+                <Text
+                  style={[
+                    styles.statusPillText,
+                    isRevoked || isSuspended
+                      ? styles.statusTextDanger
+                      : isCardActive
+                      ? styles.statusTextSuccess
+                      : styles.statusTextWarning,
+                  ]}
+                >
+                  {statusLabel}
+                </Text>
               </View>
             </View>
 
+            {/* Driver Identity */}
             <View style={styles.identityRow}>
               <View style={styles.photo}>
                 {photoUrl ? (
@@ -208,31 +262,45 @@ export function DriverIdCardScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{displayName}</Text>
-                <Text style={styles.role}>Verified delivery partner</Text>
+                <Text style={styles.role}>Verified Delivery Partner</Text>
+                <Text style={styles.area}>{serviceArea}</Text>
               </View>
             </View>
 
+            {/* Credential Attributes */}
             <View style={styles.cardBody}>
-              <Field label="Vehicle" value={vehicleType} />
-              <Field label="Card status" value={cardStatus.replace(/[_-]/g, " ")} />
-              <Field label="Issued" value={issuedAt ? new Date(issuedAt).toLocaleDateString() : "Pending"} />
+              <Field label="Vehicle Type" value={vehicleType} />
+              <Field label="Authorization" value={statusLabel} />
+              <Field
+                label="Issued Date"
+                value={issuedAt ? new Date(issuedAt).toLocaleDateString() : "Active"}
+              />
             </View>
 
+            {/* Live Verification QR */}
             {verificationUrl ? (
               <View style={styles.qrWrap}>
-                <QRCode value={verificationUrl} size={116} color={colors.ink} backgroundColor="white" />
-                <Text style={styles.qrText}>Scan to verify live driver status.</Text>
+                <View style={styles.qrBox}>
+                  <QRCode value={verificationUrl} size={90} color={colors.ink} backgroundColor="white" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.qrTitle}>Live Verification QR</Text>
+                  <Text style={styles.qrText}>
+                    Scan with any mobile camera to verify active authorization status with SKIMA platform.
+                  </Text>
+                </View>
               </View>
             ) : null}
           </View>
 
+          {/* Photo Management */}
           <Card>
             <View style={styles.photoToolsHead}>
-              <Sparkles color="#7C3AED" size={22} />
+              <Camera color={colors.brand} size={22} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.toolTitle}>Public driver photo</Text>
+                <Text style={styles.toolTitle}>Driver Photograph</Text>
                 <Text style={styles.note}>
-                  Upload a clear face photo. Use AI enhance only if the original needs cleaner lighting or background.
+                  Upload a clear, recent face photo. It appears on your Driver Pass and customer delivery confirmation.
                 </Text>
               </View>
             </View>
@@ -251,8 +319,8 @@ export function DriverIdCardScreen() {
                   {pending === "upload"
                     ? `Uploading ${Math.round(progress * 100)}%`
                     : photoUrl
-                    ? "Change photo"
-                    : "Upload photo"}
+                    ? "Change Photo"
+                    : "Upload Photo"}
                 </Text>
               </Pressable>
               <Pressable
@@ -262,27 +330,24 @@ export function DriverIdCardScreen() {
               >
                 {pending === "ai" ? (
                   <ActivityIndicator color="white" />
-                ) : photoAssetId ? (
-                  <RefreshCw color="white" size={18} />
                 ) : (
                   <Sparkles color="white" size={18} />
                 )}
-                <Text style={styles.aiButtonText}>
-                  {photoAssetId ? "AI enhance" : "AI after upload"}
-                </Text>
+                <Text style={styles.aiButtonText}>AI Enhance</Text>
               </Pressable>
             </View>
             {message ? <Text style={styles.message}>{message}</Text> : null}
           </Card>
 
+          {/* Actions */}
           <View style={styles.actions}>
             <Pressable style={styles.primary} onPress={() => void download()}>
               <Download color="white" size={18} />
-              <Text style={styles.primaryText}>Download ID</Text>
+              <Text style={styles.primaryText}>Download Pass</Text>
             </Pressable>
             <Pressable style={styles.secondary} onPress={() => void print()}>
               <Printer color={colors.brand} size={18} />
-              <Text style={styles.secondaryText}>Print ID</Text>
+              <Text style={styles.secondaryText}>Print Pass</Text>
             </Pressable>
           </View>
         </>
@@ -300,40 +365,71 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-function cardHtml(data: Record<string, unknown>) {
+function cardHtml(
+  data: Record<string, unknown>,
+  statusLabel: string,
+  isActive: boolean,
+  isSuspended: boolean,
+) {
+  const publicDriverId = escapeHtml(firstString(data, ["publicDriverId", "public_driver_id"]) ?? "SKD-PENDING");
   const displayName = escapeHtml(firstString(data, ["displayName", "display_name"]) ?? "SKIMA Driver");
-  const publicDriverId = escapeHtml(firstString(data, ["publicDriverId", "public_driver_id"]) ?? "Pending ID");
-  const status = escapeHtml((firstString(data, ["status"]) ?? "pending").replace(/[_-]/g, " "));
-  const vehicleType = escapeHtml(firstString(data, ["vehicleType", "vehicle_type"]) ?? "Configured vehicle");
-  const issuedAt = escapeHtml(firstString(data, ["issuedAt", "issued_at"]) ?? "Pending");
-  const verificationUrl = escapeHtml(firstString(data, ["verificationUrl", "verification_url"]) ?? "");
-  const photoUrl = escapeHtml(firstString(data, ["photoUrl", "photo_url"]) ?? "");
+  const vehicleType = escapeHtml(firstString(data, ["vehicleType", "vehicle_type"]) ?? "Standard LPG Delivery");
+  const serviceArea = escapeHtml(firstString(data, ["serviceArea", "service_area", "serviceZone"]) ?? "Approved Territory");
+  const issuedAt = escapeHtml(firstString(data, ["issuedAt", "issued_at"]) ?? new Date().toLocaleDateString());
+  const photoUrl = firstString(data, ["photoUrl", "photo_url"]);
+  const verificationUrl = escapeHtml(firstString(data, ["verificationUrl", "verification_url"]) ?? "https://skima.ng");
 
-  return `
+  const badgeBg = isSuspended ? "rgba(239,68,68,0.2)" : isActive ? "rgba(34,197,94,0.2)" : "rgba(245,158,11,0.2)";
+  const badgeColor = isSuspended ? "#EF4444" : isActive ? "#22C55E" : "#F59E0B";
+
+  return `<!doctype html>
     <html>
-      <body style="font-family:Arial,sans-serif;padding:32px;background:#eef3ef;color:#17221b">
-        <section style="max-width:430px;border-radius:30px;background:linear-gradient(145deg,#06120d,#10291c 60%,#162418);color:#fff;padding:26px;border:1px solid rgba(255,255,255,.16);box-shadow:0 22px 60px rgba(8,20,13,.32)">
-          <div style="display:flex;align-items:center;gap:14px;margin-bottom:24px">
-            <div style="width:42px;height:42px;border-radius:14px;background:#ef233c;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:22px">S</div>
-            <div style="flex:1">
-              <p style="margin:0;letter-spacing:2px;font-size:10px;font-weight:900;color:#ffb4bd">SKIMA DRIVER PASS</p>
-              <h2 style="margin:4px 0 0;color:#ff4d5f;font-size:19px">${publicDriverId}</h2>
-            </div>
-            <span style="border-radius:999px;background:rgba(34,197,94,.14);color:#22c55e;padding:8px 10px;font-size:12px;font-weight:900;text-transform:capitalize">${status}</span>
-          </div>
-          <div style="display:flex;gap:18px;align-items:center;margin-bottom:22px">
-            ${photoUrl ? `<img src="${photoUrl}" style="width:92px;height:112px;object-fit:cover;border-radius:22px;border:2px solid rgba(255,255,255,.24)" />` : `<div style="width:92px;height:112px;border-radius:22px;background:#20352a;display:flex;align-items:center;justify-content:center;font-weight:900">SK</div>`}
+      <head>
+        <meta charset="utf-8" />
+        <title>SKIMA Driver Pass - ${publicDriverId}</title>
+        <style>
+          body { margin: 0; padding: 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f4f6; }
+          .card { max-width: 480px; margin: 0 auto; background: #0A1410; color: white; border-radius: 28px; padding: 28px; box-sizing: border-box; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 18px; margin-bottom: 22px; }
+          .brand-title { color: #FF4D5F; font-size: 20px; font-weight: 900; letter-spacing: 1px; margin: 0; }
+          .badge { border-radius: 999px; background: ${badgeBg}; color: ${badgeColor}; padding: 6px 12px; font-size: 11px; font-weight: 900; }
+          .profile { display: flex; gap: 20px; align-items: center; margin-bottom: 24px; }
+          .photo { width: 90px; height: 110px; border-radius: 18px; object-fit: cover; border: 2px solid rgba(255,255,255,0.2); }
+          .name { margin: 0 0 4px; font-size: 26px; font-weight: 900; }
+          .role { margin: 0; color: #CBD8D0; font-size: 13px; font-weight: 700; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
+          .label { color: #9CB4A7; font-size: 10px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; margin: 0 0 2px; }
+          .val { margin: 0; font-size: 14px; font-weight: 800; }
+          .verify-footer { border-top: 1px solid rgba(255,255,255,0.12); padding-top: 16px; font-size: 11px; color: #CBD8D0; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="header">
             <div>
-              <h1 style="margin:0 0 6px;font-size:31px;line-height:1">${displayName}</h1>
-              <p style="margin:0;color:#cbd8d0;font-weight:700">Verified delivery partner</p>
+              <p class="brand-title">SKIMA DRIVER PASS</p>
+              <p style="margin:2px 0 0; color:#FFB4BD; font-size:13px; font-weight:800">${publicDriverId}</p>
+            </div>
+            <span class="badge">${statusLabel}</span>
+          </div>
+          <div class="profile">
+            ${photoUrl ? `<img src="${photoUrl}" class="photo" />` : `<div class="photo" style="background:#20352A;display:flex;align-items:center;justify-content:center;font-weight:900">SK</div>`}
+            <div>
+              <h1 class="name">${displayName}</h1>
+              <p class="role">Verified Delivery Partner</p>
+              <p style="margin:4px 0 0; color:#9CB4A7; font-size:12px">${serviceArea}</p>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px">
-            <p style="margin:0"><small style="display:block;color:#9cb4a7;font-weight:900;letter-spacing:1px">VEHICLE</small><strong>${vehicleType}</strong></p>
-            <p style="margin:0"><small style="display:block;color:#9cb4a7;font-weight:900;letter-spacing:1px">ISSUED</small><strong>${issuedAt}</strong></p>
+          <div class="grid">
+            <div><p class="label">Vehicle</p><p class="val">${vehicleType}</p></div>
+            <div><p class="label">Authorization</p><p class="val">${statusLabel}</p></div>
+            <div><p class="label">Issued Date</p><p class="val">${issuedAt}</p></div>
+            <div><p class="label">Driver ID</p><p class="val">${publicDriverId}</p></div>
           </div>
-          <p style="font-size:12px;color:#cbd8d0;margin-top:26px;word-break:break-all">Verify live status: ${verificationUrl}</p>
-        </section>
+          <div class="verify-footer">
+            Scan QR or verify live status at: ${verificationUrl}
+          </div>
+        </div>
       </body>
     </html>`;
 }
@@ -350,16 +446,25 @@ function escapeHtml(value: string) {
 
 const styles = StyleSheet.create({
   actions: { flexDirection: "row", gap: spacing.md },
-  back: { color: colors.brand, fontWeight: "800" },
-  brand: { color: "#FFB4BD", fontSize: 10, fontWeight: "900", letterSpacing: 1.9 },
-  aiButton: { alignItems: "center", backgroundColor: "#7C3AED", borderRadius: radii.md, flex: 1, flexDirection: "row", gap: 8, justifyContent: "center", minHeight: 54 },
-  aiButtonText: { color: "white", fontWeight: "900" },
-  brandMark: { alignItems: "center", backgroundColor: colors.brand, borderRadius: 14, height: 42, justifyContent: "center", width: 42, zIndex: 2 },
-  brandMarkText: { color: "white", fontSize: 23, fontWeight: "900" },
+  back: { color: colors.brand, fontWeight: "800", fontSize: 14 },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  brandSubtitle: { color: "#FFB4BD", fontSize: 9, fontWeight: "900", letterSpacing: 1.5 },
+  id: { color: colors.brand, fontSize: 16, fontWeight: "900", marginTop: 2 },
+  aiButton: {
+    alignItems: "center",
+    backgroundColor: "#7C3AED",
+    borderRadius: radii.md,
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    minHeight: 54,
+  },
+  aiButtonText: { color: "white", fontWeight: "900", fontSize: 14 },
   card: {
     backgroundColor: "#07140F",
     borderColor: "rgba(255,255,255,.13)",
-    borderRadius: 30,
+    borderRadius: 28,
     borderWidth: 1,
     elevation: 8,
     gap: spacing.lg,
@@ -371,34 +476,109 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 32,
   },
-  cardBody: { borderTopColor: "rgba(255,255,255,.1)", borderTopWidth: 1, flexDirection: "row", flexWrap: "wrap", gap: spacing.md, paddingTop: spacing.md, zIndex: 2 },
-  cardHeader: { alignItems: "center", flexDirection: "row", gap: spacing.md, justifyContent: "space-between", zIndex: 2 },
+  cardBody: {
+    borderTopColor: "rgba(255,255,255,.1)",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.md,
+    paddingTop: spacing.md,
+    zIndex: 2,
+  },
+  cardHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing.md,
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.1)",
+    paddingBottom: spacing.md,
+    zIndex: 2,
+  },
   disabled: { opacity: 0.55 },
-  error: { color: colors.danger, fontWeight: "800" },
+  error: { color: colors.danger, fontWeight: "800", textAlign: "center", padding: spacing.lg },
   field: { flexBasis: "30%", flexGrow: 1, gap: 2 },
   fieldLabel: { color: "#9CB4A7", fontSize: 10, fontWeight: "900", letterSpacing: 1, textTransform: "uppercase" },
-  fieldValue: { color: "white", fontSize: 15, fontWeight: "800", textTransform: "capitalize" },
+  fieldValue: { color: "white", fontSize: 14, fontWeight: "800", textTransform: "capitalize" },
   greenOrb: { backgroundColor: "rgba(34,197,94,.18)", borderRadius: 84, height: 168, left: -56, position: "absolute", top: 116, width: 168 },
-  id: { color: colors.brand, fontSize: 18, fontWeight: "900" },
+  redOrb: { backgroundColor: "rgba(239,35,60,.36)", borderRadius: 100, height: 200, position: "absolute", right: -70, top: -84, width: 200 },
   identityRow: { alignItems: "center", flexDirection: "row", gap: spacing.md, zIndex: 2 },
   message: { color: colors.brandDark, fontWeight: "800", lineHeight: 20 },
-  name: { color: "white", fontSize: 30, fontWeight: "900", letterSpacing: -1, lineHeight: 33 },
-  note: { color: colors.muted, lineHeight: 21 },
-  photo: { alignItems: "center", backgroundColor: "#20352A", borderColor: "rgba(255,255,255,.24)", borderRadius: 24, borderWidth: 2, height: 112, justifyContent: "center", overflow: "hidden", width: 92, zIndex: 2 },
+  name: { color: "white", fontSize: 26, fontWeight: "900", letterSpacing: -0.5, lineHeight: 30 },
+  role: { color: "#CBD8D0", fontSize: 13, fontWeight: "800", marginTop: 2 },
+  area: { color: "#9CB4A7", fontSize: 12, fontWeight: "700", marginTop: 2 },
+  note: { color: colors.muted, lineHeight: 20, fontSize: 13 },
+  photo: {
+    alignItems: "center",
+    backgroundColor: "#20352A",
+    borderColor: "rgba(255,255,255,.24)",
+    borderRadius: 20,
+    borderWidth: 2,
+    height: 105,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 85,
+    zIndex: 2,
+  },
   photoImage: { height: "100%", width: "100%" },
   photoText: { color: "white", fontSize: 22, fontWeight: "900" },
   photoToolsHead: { flexDirection: "row", gap: spacing.md },
-  primary: { alignItems: "center", backgroundColor: colors.brand, borderRadius: radii.md, flex: 1, flexDirection: "row", gap: 8, justifyContent: "center", minHeight: 54 },
-  primaryText: { color: "white", fontWeight: "900" },
-  qrText: { color: "#CBD8D0", flex: 1, fontSize: 12, lineHeight: 18 },
-  qrWrap: { alignItems: "center", backgroundColor: "#13271D", borderColor: "rgba(255,255,255,.08)", borderRadius: 18, borderWidth: 1, flexDirection: "row", gap: spacing.md, padding: spacing.md, zIndex: 2 },
-  redOrb: { backgroundColor: "rgba(239,35,60,.36)", borderRadius: 100, height: 200, position: "absolute", right: -70, top: -84, width: 200 },
-  role: { color: "#CBD8D0", fontSize: 13, fontWeight: "800", marginTop: 4 },
-  secondary: { alignItems: "center", borderColor: colors.brand, borderRadius: radii.md, borderWidth: 1, flex: 1, flexDirection: "row", gap: 8, justifyContent: "center", minHeight: 54 },
-  secondaryText: { color: colors.brand, fontWeight: "900" },
-  statusPill: { alignItems: "center", backgroundColor: "rgba(34,197,94,.14)", borderRadius: radii.pill, flexDirection: "row", gap: 5, paddingHorizontal: 10, paddingVertical: 7, zIndex: 2 },
-  statusPillText: { color: "#22C55E", fontSize: 11, fontWeight: "900", textTransform: "capitalize" },
-  toolTitle: { color: colors.ink, fontSize: 17, fontWeight: "900" },
-  verified: { alignItems: "center", flexDirection: "row", gap: 8 },
-  verifiedText: { color: colors.success, fontWeight: "900", textTransform: "capitalize" },
+  primary: {
+    alignItems: "center",
+    backgroundColor: colors.brand,
+    borderRadius: radii.md,
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    minHeight: 54,
+  },
+  primaryText: { color: "white", fontWeight: "900", fontSize: 15 },
+  qrBox: {
+    padding: 6,
+    backgroundColor: "white",
+    borderRadius: 12,
+  },
+  qrTitle: { color: "white", fontSize: 14, fontWeight: "900", marginBottom: 2 },
+  qrText: { color: "#CBD8D0", fontSize: 11, lineHeight: 16 },
+  qrWrap: {
+    alignItems: "center",
+    backgroundColor: "#13271D",
+    borderColor: "rgba(255,255,255,.08)",
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: spacing.md,
+    padding: spacing.md,
+    zIndex: 2,
+  },
+  secondary: {
+    alignItems: "center",
+    borderColor: colors.brand,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    minHeight: 54,
+  },
+  secondaryText: { color: colors.brand, fontWeight: "900", fontSize: 15 },
+  statusPill: {
+    alignItems: "center",
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    zIndex: 2,
+  },
+  statusPillSuccess: { backgroundColor: "rgba(34,197,94,.16)" },
+  statusPillWarning: { backgroundColor: "rgba(245,158,11,.16)" },
+  statusPillDanger: { backgroundColor: "rgba(239,68,68,.16)" },
+  statusPillText: { fontSize: 11, fontWeight: "900", textTransform: "capitalize" },
+  statusTextSuccess: { color: "#22C55E" },
+  statusTextWarning: { color: "#F59E0B" },
+  statusTextDanger: { color: "#EF4444" },
+  toolTitle: { color: colors.ink, fontSize: 16, fontWeight: "900" },
 });

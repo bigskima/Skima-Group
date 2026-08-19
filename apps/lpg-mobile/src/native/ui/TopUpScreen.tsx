@@ -1,5 +1,6 @@
 import * as Linking from "expo-linking";
 import { router } from "expo-router";
+import { ShieldCheck } from "lucide-react-native";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -13,23 +14,18 @@ import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import { ActionResponseSchema, firstString } from "../api/records";
 import { colors, radii, spacing } from "../theme/tokens";
-import { idempotencyKey } from "../utilities/idempotency";
 import { friendlyError } from "../utilities/friendlyError";
+import { idempotencyKey } from "../utilities/idempotency";
 import { PaystackPaymentModal } from "./PaystackPaymentModal";
-import { BankTransferModal } from "./BankTransferModal";
 import { Screen } from "./Screen";
 
 export function TopUpScreen() {
   const wallets = domainQueries.wallets();
   const currencies = domainQueries.currencies();
-  const providers = domainQueries.providers();
 
   const [amount, setAmount] = useState("");
-  const [provider, setProvider] = useState("provider.payment.paystack");
   const [error, setError] = useState<string | null>(null);
-
   const [modalVisible, setModalVisible] = useState(false);
-  const [bankTransferModalVisible, setBankTransferModalVisible] = useState(false);
   const [pendingDeposit, setPendingDeposit] = useState<{
     checkoutUrl: string | null;
     depositId: string | null;
@@ -49,17 +45,11 @@ export function TopUpScreen() {
     firstString(currencies.data?.[0], ["code"]) ??
     "NGN";
 
-  const paymentProviders = (providers.data ?? []).filter(
-    (item) =>
-      firstString(item, ["provider_kind", "providerKind"]) === "payment" &&
-      firstString(item, ["status"]) === "active",
-  );
-
   const submit = async () => {
     const value = Number(amount);
     setError(null);
     if (!Number.isFinite(value) || value <= 0) {
-      setError("Enter a valid amount.");
+      setError("Please enter a valid amount to add.");
       return;
     }
 
@@ -68,7 +58,7 @@ export function TopUpScreen() {
         amount: value,
         currencyCode: currency,
         walletId: walletId ?? undefined,
-        providerAdapterKey: provider || "provider.payment.paystack",
+        providerAdapterKey: "provider.payment.paystack",
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey("wallet-top-up", walletId ?? "wallet"),
         metadata: { returnUrl: Linking.createURL("payment-return") },
@@ -91,22 +81,18 @@ export function TopUpScreen() {
         amount: value,
       });
 
-      if (provider === "provider.payment.bank_transfer") {
-        setBankTransferModalVisible(true);
-      } else {
-        setModalVisible(true);
-      }
+      setModalVisible(true);
     } catch (cause) {
       setError(
-        friendlyError(cause, "The top-up could not be started. Please try again."),
+        friendlyError(cause, "The payment session could not be started. Please try again."),
       );
     }
   };
 
   return (
     <Screen
-      eyebrow="Wallet"
-      title="Add money"
+      eyebrow="SKIMA Wallet"
+      title="Add Money"
       action={
         <Pressable onPress={() => router.back()}>
           <Text style={styles.link}>Cancel</Text>
@@ -114,51 +100,36 @@ export function TopUpScreen() {
       }
     >
       <View style={styles.hero}>
-        <Text style={styles.heroLabel}>Wallet currency</Text>
+        <View style={styles.heroHeader}>
+          <Text style={styles.heroLabel}>ADD FUNDS TO WALLET</Text>
+          <ShieldCheck color="white" size={22} />
+        </View>
         <Text style={styles.heroValue}>{currency}</Text>
+        <Text style={styles.heroSub}>
+          Enter the amount you want to add to your SKIMA Wallet.
+        </Text>
       </View>
 
-      <TextInput
-        value={amount}
-        onChangeText={setAmount}
-        keyboardType="decimal-pad"
-        placeholder="Enter amount (e.g. 5000)"
-        placeholderTextColor={colors.muted}
-        style={styles.input}
-      />
+      <View style={styles.inputCard}>
+        <Text style={styles.fieldLabel}>Amount ({currency})</Text>
+        <TextInput
+          value={amount}
+          onChangeText={setAmount}
+          keyboardType="decimal-pad"
+          placeholder="e.g. 5,000"
+          placeholderTextColor={colors.muted}
+          style={styles.input}
+        />
+      </View>
 
-      <Text style={styles.fieldLabel}>Choose payment method</Text>
-      <View style={styles.providers}>
-        <Pressable
-          onPress={() => setProvider("provider.payment.paystack")}
-          style={[styles.provider, (provider === "provider.payment.paystack" || !provider) && styles.selected]}
-        >
-          <Text style={styles.providerText}>Paystack Modal (Card, USSD, QR)</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setProvider("provider.payment.bank_transfer")}
-          style={[styles.provider, provider === "provider.payment.bank_transfer" && styles.selected]}
-        >
-          <Text style={styles.providerText}>Direct Bank Transfer (Virtual Account)</Text>
-        </Pressable>
-
-        {paymentProviders.map((item, index) => {
-          const key = firstString(item, ["key"]) ?? "";
-          if (key === "provider.payment.paystack" || key === "provider.payment.bank_transfer") return null;
-          return (
-            <Pressable
-              key={key}
-              onPress={() => setProvider(key)}
-              style={[styles.provider, provider === key && styles.selected]}
-            >
-              <Text style={styles.providerText}>
-                {firstString(item, ["display_name", "displayName"]) ??
-                  `Payment option ${index + 1}`}
-              </Text>
-            </Pressable>
-          );
-        })}
+      <View style={styles.infoBox}>
+        <Text style={styles.infoTitle}>Payment method</Text>
+        <Text style={styles.infoBody}>
+          You will be shown available secure payment options (Bank Transfer, Card, USSD) during checkout.
+        </Text>
+        <Text style={styles.infoFooter}>
+          Your wallet will be updated once your payment has been successfully confirmed.
+        </Text>
       </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -171,19 +142,10 @@ export function TopUpScreen() {
         {mutation.isPending ? (
           <ActivityIndicator color="white" />
         ) : (
-          <Text style={styles.primaryText}>
-            {provider === "provider.payment.bank_transfer"
-              ? "Get Transfer Account Number"
-              : "Continue to Paystack Modal"}
-          </Text>
+          <Text style={styles.primaryText}>Continue to Payment</Text>
         )}
       </Pressable>
 
-      <Text style={styles.note}>
-        Choose Paystack for Instant Cards/USSD or Direct Bank Transfer to copy a virtual account number and send money from your banking app.
-      </Text>
-
-      {/* Paystack Checkout Modal */}
       <PaystackPaymentModal
         visible={modalVisible}
         checkoutUrl={pendingDeposit?.checkoutUrl ?? null}
@@ -196,60 +158,65 @@ export function TopUpScreen() {
           router.replace("/(customer)/wallet");
         }}
       />
-
-      {/* Direct Bank Transfer Virtual Account Modal */}
-      <BankTransferModal
-        visible={bankTransferModalVisible}
-        depositId={pendingDeposit?.depositId ?? null}
-        checkoutUrl={pendingDeposit?.checkoutUrl ?? null}
-        amount={pendingDeposit?.amount ?? null}
-        currency={currency}
-        onClose={() => setBankTransferModalVisible(false)}
-        onSuccess={() => {
-          setBankTransferModalVisible(false);
-          router.replace("/(customer)/wallet");
-        }}
-      />
     </Screen>
   );
 }
+
 const styles = StyleSheet.create({
-  link: { color: colors.brand, fontWeight: "800" },
+  link: { color: colors.brand, fontWeight: "800", fontSize: 14 },
   hero: {
     padding: spacing.xl,
     borderRadius: radii.lg,
     backgroundColor: colors.brand,
+    gap: spacing.xs,
   },
-  heroLabel: { color: "#FFE5E8", fontWeight: "700" },
-  heroValue: { color: "white", fontSize: 38, fontWeight: "900" },
+  heroHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  heroLabel: { color: "#FFE5E8", fontWeight: "900", fontSize: 11, letterSpacing: 1.2 },
+  heroValue: { color: "white", fontSize: 34, fontWeight: "900" },
+  heroSub: { color: "#FFF1F2", fontSize: 14, marginTop: 4, lineHeight: 20 },
+  inputCard: {
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: spacing.sm,
+  },
+  fieldLabel: { color: colors.ink, fontWeight: "800", fontSize: 13 },
   input: {
-    minHeight: 58,
+    minHeight: 56,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
-    fontSize: 18,
-    backgroundColor: colors.surface,
+    fontSize: 20,
+    fontWeight: "700",
+    backgroundColor: "#FAFAFA",
+    color: colors.ink,
   },
-  providers: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  fieldLabel: { color: colors.ink, fontWeight: "900" },
-  provider: {
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: radii.pill,
+  infoBox: {
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,
+    gap: 6,
   },
-  selected: { borderColor: colors.brand, backgroundColor: "#FFF0F1" },
-  providerText: { color: colors.ink, fontWeight: "700" },
+  infoTitle: { color: colors.ink, fontWeight: "900", fontSize: 15 },
+  infoBody: { color: colors.muted, lineHeight: 21, fontSize: 13 },
+  infoFooter: { color: colors.brandDark, fontWeight: "700", fontSize: 12, marginTop: 4 },
   primary: {
     minHeight: 56,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radii.md,
     backgroundColor: colors.brand,
+    marginTop: spacing.sm,
   },
-  primaryText: { color: "white", fontWeight: "900" },
-  error: { color: colors.danger },
-  note: { color: colors.muted, lineHeight: 20 },
+  primaryText: { color: "white", fontWeight: "900", fontSize: 16 },
+  error: { color: colors.danger, fontWeight: "700", textAlign: "center" },
 });

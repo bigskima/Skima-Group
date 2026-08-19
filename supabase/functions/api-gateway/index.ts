@@ -112,6 +112,9 @@ const ROUTES = new Set([
   "/runtime/applications/reviewer",
   "/runtime/applications/corrections",
   "/runtime/applications/decisions",
+  "/runtime/applications/activate-station",
+  "/runtime/applications/activate-driver",
+  "/runtime/applications/deactivate",
   "/runtime/applications/withdraw",
   "/runtime/driver-id-cards",
   "/runtime/driver-id-cards/photo",
@@ -119,6 +122,8 @@ const ROUTES = new Set([
   "/runtime/documents/requirements",
   "/runtime/documents",
   "/runtime/documents/review",
+  "/runtime/documents/request-replacement",
+  "/runtime/media/approve-public",
   "/runtime/drivers",
   "/runtime/vehicle-types",
   "/runtime/vehicles",
@@ -2540,6 +2545,78 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     );
   }
 
+  if (routePath === "/runtime/applications/activate-station" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("admin_activate_station", {
+        target_application_id: requireUuid(payload.applicationId, "applicationId"),
+        target_service_radius_meters: optionalInteger(payload.serviceRadiusMeters) ?? 8000,
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/applications/activate-driver" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("admin_activate_driver", {
+        target_application_id: requireUuid(payload.applicationId, "applicationId"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/applications/deactivate" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("admin_deactivate_partner", {
+        target_application_id: requireUuid(payload.applicationId, "applicationId"),
+        target_reason: optionalString(payload.reason) ?? "Administrative deactivation",
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/documents/request-replacement" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("request_document_requirement_replacement", {
+        target_document_submission_id: requireUuid(payload.documentSubmissionId, "documentSubmissionId"),
+        target_reason: requireString(payload.reason, "reason"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/media/approve-public" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("admin_approve_public_station_media", {
+        target_media_asset_id: requireUuid(payload.mediaAssetId, "mediaAssetId"),
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+        target_is_primary: optionalBoolean(payload.isPrimary) ?? false,
+        target_display_order: optionalInteger(payload.displayOrder) ?? 0,
+      }),
+      id,
+    );
+  }
+
   if (routePath === "/runtime/applications/withdraw" && request.method === "POST") {
     const body = await readJsonBody(request, id);
 
@@ -3070,8 +3147,8 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const bankName = requireString(payload.bankName, "bankName");
     const accountNumber = requireString(payload.accountNumber, "accountNumber");
     const accountName = requireString(payload.accountName, "accountName");
-
-    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey ?? "");
     const { error: upsertErr } = await serviceClient
       .from("provider_adapters")
       .upsert(
@@ -5823,7 +5900,7 @@ async function queueDocumentReviewNotice(input: {
 }
 
 async function updateDriverCardPhotoResponse(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   supabaseUrl: string,
   user: User,
   payload: Readonly<Record<string, unknown>>,

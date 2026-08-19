@@ -8,11 +8,14 @@ import {
   Eye,
   FileCheck2,
   FileText,
+  Image,
   LayoutDashboard,
   Megaphone,
   type LucideIcon,
   MessageSquareWarning,
+  Play,
   PlugZap,
+  PowerOff,
   RefreshCcw,
   ServerCog,
   Settings2,
@@ -21,6 +24,7 @@ import {
   UsersRound,
   WalletCards,
   XCircle,
+  Zap,
 } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -34,6 +38,8 @@ import {
   hasPermission,
   type NavigationItem,
   normalizeStatusLabel,
+  operatorOnboardingFlow,
+  resolveOnboardingFlow,
 } from "@skima/frontend-core";
 import {
   Button,
@@ -45,6 +51,7 @@ import {
   MetricTile,
   MoneyDisplay,
   type NavItem,
+  OnboardingChecklist,
   PageHeader,
   PageShell,
   PermissionProvider,
@@ -88,8 +95,11 @@ type ReviewDialogState =
   | { readonly type: "correction"; readonly application: PlatformRecord }
   | { readonly type: "approve"; readonly application: PlatformRecord }
   | { readonly type: "reject"; readonly application: PlatformRecord }
+  | { readonly type: "activate-station"; readonly application: PlatformRecord }
+  | { readonly type: "activate-driver"; readonly application: PlatformRecord }
+  | { readonly type: "deactivate-partner"; readonly application: PlatformRecord }
   | {
-    readonly type: "document-approve" | "document-correction" | "document-reject";
+    readonly type: "document-approve" | "document-correction" | "document-reject" | "document-replacement" | "approve-public-media";
     readonly application: PlatformRecord;
     readonly document: PlatformRecord;
   };
@@ -112,6 +122,31 @@ type ReviewCommand =
     readonly decision: "approved" | "rejected";
     readonly reason: string;
     readonly reviewerUserId: string | null;
+  }
+  | {
+    readonly type: "activate-station";
+    readonly applicationId: string;
+    readonly serviceRadiusMeters: number;
+  }
+  | {
+    readonly type: "activate-driver";
+    readonly applicationId: string;
+  }
+  | {
+    readonly type: "deactivate-partner";
+    readonly applicationId: string;
+    readonly reason: string;
+  }
+  | {
+    readonly type: "document-replacement";
+    readonly documentSubmissionId: string;
+    readonly reason: string;
+  }
+  | {
+    readonly type: "approve-public-media";
+    readonly mediaAssetId: string;
+    readonly stationBranchId: string;
+    readonly isPrimary: boolean;
   }
   | {
     readonly type: "document-review";
@@ -837,6 +872,12 @@ function ApplicationReviewPanel(props: {
   const canRequestCorrection = status === "under_review";
   const canDecide = Boolean(props.currentUserId) && ["submitted", "resubmitted", "under_review"].includes(status);
 
+  const isApproved = status === "approved";
+  const operationalStatus = getRecordString(application, "operational_status");
+  const isOperationalActive = operationalStatus === "active";
+  const isBusinessCategory = getRecordString(props.applicationType, "application_category") === "business";
+  const isDriverCategory = getRecordString(props.applicationType, "application_category") === "driver";
+
   return (
     <section className="sk-panel">
       <div className="sk-panel__header">
@@ -893,8 +934,8 @@ function ApplicationReviewPanel(props: {
             value: formatDate(getRecordString(application, "submitted_at")),
           },
           {
-            label: "Last Updated",
-            value: formatDate(getRecordString(application, "updated_at")),
+            label: "Operational Readiness",
+            value: isOperationalActive ? "Active on Live Platform" : isApproved ? "Approved (Pending Activation)" : "Pending Approval",
           },
           {
             label: "Category",
@@ -940,6 +981,37 @@ function ApplicationReviewPanel(props: {
         >
           Reject {applicationNoun}
         </Button>
+        {isApproved && !isOperationalActive && isBusinessCategory ? (
+          <Button
+            icon={Zap}
+            requiredPermission={APPLICATION_REVIEW_PERMISSION}
+            disabled={props.isSubmitting}
+            onClick={() => props.onOpenAction({ type: "activate-station", application })}
+          >
+            Activate Station Branch
+          </Button>
+        ) : null}
+        {isApproved && !isOperationalActive && isDriverCategory ? (
+          <Button
+            icon={Play}
+            requiredPermission={APPLICATION_REVIEW_PERMISSION}
+            disabled={props.isSubmitting}
+            onClick={() => props.onOpenAction({ type: "activate-driver", application })}
+          >
+            Activate Driver & Card
+          </Button>
+        ) : null}
+        {isOperationalActive ? (
+          <Button
+            icon={PowerOff}
+            variant="destructive"
+            requiredPermission={APPLICATION_REVIEW_PERMISSION}
+            disabled={props.isSubmitting}
+            onClick={() => props.onOpenAction({ type: "deactivate-partner", application })}
+          >
+            Deactivate Partner
+          </Button>
+        ) : null}
       </div>
       <DocumentReviewList
         application={application}
@@ -980,6 +1052,7 @@ function DocumentReviewList(props: {
                 getRecordString(document, "requirement_id"),
               );
               const title = getRecordString(requirement, "display_name") ?? "Document";
+              const reqKey = getRecordString(requirement, "key") ?? "";
               const fileName = getNestedRecordString(document, ["metadata", "originalFileName"]) ??
                 getNestedRecordString(document, ["media_assets", "metadata", "originalFileName"]) ??
                 getRecordString(document, "storage_path")?.split("/").at(-1) ??
@@ -1042,13 +1115,30 @@ function DocumentReviewList(props: {
                       disabled={props.isSubmitting}
                       onClick={() =>
                         props.onOpenAction({
-                          type: "document-correction",
+                          type: "document-replacement",
                           application: props.application,
                           document,
                         })}
                     >
-                      Request Update
+                      Request Replacement
                     </Button>
+                    {status === "approved" && reqKey.startsWith("station.photo.") ? (
+                      <Button
+                        icon={Image}
+                        variant="outline"
+                        size="sm"
+                        requiredPermission={APPLICATION_REVIEW_PERMISSION}
+                        disabled={props.isSubmitting}
+                        onClick={() =>
+                          props.onOpenAction({
+                            type: "approve-public-media",
+                            application: props.application,
+                            document,
+                          })}
+                      >
+                        Approve Public Photo
+                      </Button>
+                    ) : null}
                     <Button
                       icon={XCircle}
                       variant="destructive"
@@ -1204,6 +1294,55 @@ function ReviewActionDialog(props: {
       return;
     }
 
+    if (state.type === "activate-station") {
+      props.onSubmit({
+        type: "activate-station",
+        applicationId,
+        serviceRadiusMeters: Number(reason.trim()) || 8000,
+      });
+      return;
+    }
+
+    if (state.type === "activate-driver") {
+      props.onSubmit({
+        type: "activate-driver",
+        applicationId,
+      });
+      return;
+    }
+
+    if (state.type === "deactivate-partner") {
+      props.onSubmit({
+        type: "deactivate-partner",
+        applicationId,
+        reason: reason.trim() || "Administrative deactivation",
+      });
+      return;
+    }
+
+    if (state.type === "document-replacement") {
+      const documentSubmissionId = requireRecordString(state.document, "id");
+      props.onSubmit({
+        type: "document-replacement",
+        documentSubmissionId,
+        reason: reason.trim(),
+      });
+      return;
+    }
+
+    if (state.type === "approve-public-media") {
+      const mediaAssetId = requireRecordString(state.document, "media_asset_id");
+      const stationBranchId = getRecordString(state.application, "branch_id") ??
+        requireRecordString(state.application, "id");
+      props.onSubmit({
+        type: "approve-public-media",
+        mediaAssetId,
+        stationBranchId,
+        isPrimary: false,
+      });
+      return;
+    }
+
     const documentSubmissionId = requireRecordString(state.document, "id");
     const decision = state.type === "document-approve"
       ? "approved"
@@ -1237,10 +1376,10 @@ function ReviewActionDialog(props: {
             type="submit"
             form="review-action-form"
             isLoading={props.isSubmitting}
-            disabled={!canSubmit}
+            disabled={!canSubmit && state.type !== "activate-driver" && state.type !== "approve-public-media"}
             variant={reviewDialogVariant(state)}
           >
-            Save
+            Confirm
           </Button>
         </>
       }
@@ -1253,7 +1392,27 @@ function ReviewActionDialog(props: {
             </p>
           )
           : null}
-        {requiresReason
+        {state.type === "activate-station" ? (
+          <p className="skima-muted">
+            Activating this station branch provisions it on the platform, assigns operational roles, and marks it available for live customer orders and dispatch.
+          </p>
+        ) : null}
+        {state.type === "activate-driver" ? (
+          <p className="skima-muted">
+            Activating this driver provisions the driver profile, activates the digital ID pass, and marks the driver eligible for live order dispatch.
+          </p>
+        ) : null}
+        {state.type === "deactivate-partner" ? (
+          <p className="skima-muted">
+            Deactivating will suspend operational capabilities and revoke active card access until reviewed again.
+          </p>
+        ) : null}
+        {state.type === "approve-public-media" ? (
+          <p className="skima-muted">
+            This approves the selected station photo for public display on the customer app and station discovery card.
+          </p>
+        ) : null}
+        {requiresReason && state.type !== "activate-driver" && state.type !== "approve-public-media"
           ? (
             <TextAreaInput
               id="review-reason"
@@ -1317,6 +1476,86 @@ async function executeReviewCommand(
           command.applicationId,
         ),
         metadata: { source: "admin_review_console" },
+      },
+      MutationIdSchema,
+    );
+  }
+
+  if (command.type === "activate-station") {
+    return api.post(
+      "/runtime/applications/activate-station",
+      {
+        applicationId: command.applicationId,
+        serviceRadiusMeters: command.serviceRadiusMeters,
+        idempotencyKey: createClientIdempotencyKey(
+          "application-review.activate-station",
+          command.applicationId,
+        ),
+        metadata: { source: "admin_review_console" },
+      },
+      MutationIdSchema,
+    );
+  }
+
+  if (command.type === "activate-driver") {
+    return api.post(
+      "/runtime/applications/activate-driver",
+      {
+        applicationId: command.applicationId,
+        idempotencyKey: createClientIdempotencyKey(
+          "application-review.activate-driver",
+          command.applicationId,
+        ),
+        metadata: { source: "admin_review_console" },
+      },
+      MutationIdSchema,
+    );
+  }
+
+  if (command.type === "deactivate-partner") {
+    return api.post(
+      "/runtime/applications/deactivate",
+      {
+        applicationId: command.applicationId,
+        reason: command.reason,
+        idempotencyKey: createClientIdempotencyKey(
+          "application-review.deactivate",
+          command.applicationId,
+        ),
+        metadata: { source: "admin_review_console" },
+      },
+      MutationIdSchema,
+    );
+  }
+
+  if (command.type === "document-replacement") {
+    return api.post(
+      "/runtime/documents/request-replacement",
+      {
+        documentSubmissionId: command.documentSubmissionId,
+        reason: command.reason,
+        idempotencyKey: createClientIdempotencyKey(
+          "document-review.replacement",
+          command.documentSubmissionId,
+        ),
+        metadata: { source: "admin_review_console" },
+      },
+      MutationIdSchema,
+    );
+  }
+
+  if (command.type === "approve-public-media") {
+    return api.post(
+      "/runtime/media/approve-public",
+      {
+        mediaAssetId: command.mediaAssetId,
+        stationBranchId: command.stationBranchId,
+        isPrimary: command.isPrimary,
+        displayOrder: 0,
+        idempotencyKey: createClientIdempotencyKey(
+          "media.approve-public",
+          `${command.stationBranchId}:${command.mediaAssetId}`,
+        ),
       },
       MutationIdSchema,
     );
@@ -1547,6 +1786,38 @@ function ProvidersWorkspace() {
         title="Integration Connections"
         query={providers}
         preferredKeys={["provider_kind", "key", "display_name", "status"]}
+      />
+    </>
+  );
+}
+
+function OnboardingWorkspace(props: { readonly onNavigate: (href: string) => void }) {
+  const sessionState = useSessionState();
+  const completedSteps = [
+    "session",
+    sessionState.context?.permissions.length ? "permissions" : "",
+    sessionState.context?.permissions.includes("platform.configuration.read") ? "governance" : "",
+    sessionState.context?.permissions.includes("platform.applications.read") ? "applications" : "",
+    sessionState.context?.permissions.includes("platform.organizations.read") ? "organizations" : "",
+    sessionState.context?.permissions.includes("platform.financial.read") ? "finance" : "",
+  ].filter(Boolean);
+  const steps = resolveOnboardingFlow(
+    operatorOnboardingFlow,
+    completedSteps,
+    { permissions: sessionState.context?.permissions ?? [] },
+  );
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Guidance"
+        title="Onboarding"
+        description="Follow the core operating sequence for account access, permissions, reviews, organizations, finance, and integrations."
+      />
+      <OnboardingChecklist
+        title={operatorOnboardingFlow.title}
+        steps={steps}
+        onOpenStep={(step) => step.href && props.onNavigate(step.href)}
       />
     </>
   );
@@ -1890,12 +2161,32 @@ function reviewDialogTitle(state: ReviewDialogState): string {
     return "Reject Application";
   }
 
+  if (state.type === "activate-station") {
+    return "Activate Station Branch (Live)";
+  }
+
+  if (state.type === "activate-driver") {
+    return "Activate Driver & Pass (Live)";
+  }
+
+  if (state.type === "deactivate-partner") {
+    return "Deactivate / Suspend Partner";
+  }
+
   if (state.type === "document-approve") {
     return "Approve Document";
   }
 
   if (state.type === "document-reject") {
     return "Reject Document";
+  }
+
+  if (state.type === "document-replacement") {
+    return "Request Document Replacement";
+  }
+
+  if (state.type === "approve-public-media") {
+    return "Approve Station Photo for Public Profile";
   }
 
   return "Request Document Update";
@@ -1906,7 +2197,23 @@ function reviewDialogIcon(state: ReviewDialogState): LucideIcon {
     return UserCheck;
   }
 
-  if (state.type === "correction" || state.type === "document-correction") {
+  if (state.type === "activate-station") {
+    return Zap;
+  }
+
+  if (state.type === "activate-driver") {
+    return Play;
+  }
+
+  if (state.type === "deactivate-partner") {
+    return PowerOff;
+  }
+
+  if (state.type === "approve-public-media") {
+    return Image;
+  }
+
+  if (state.type === "correction" || state.type === "document-correction" || state.type === "document-replacement") {
     return MessageSquareWarning;
   }
 
@@ -1918,7 +2225,7 @@ function reviewDialogIcon(state: ReviewDialogState): LucideIcon {
 }
 
 function reviewDialogVariant(state: ReviewDialogState): "primary" | "destructive" {
-  return state.type === "reject" || state.type === "document-reject" ? "destructive" : "primary";
+  return state.type === "reject" || state.type === "document-reject" || state.type === "deactivate-partner" ? "destructive" : "primary";
 }
 
 function readErrorMessage(error: unknown): string {

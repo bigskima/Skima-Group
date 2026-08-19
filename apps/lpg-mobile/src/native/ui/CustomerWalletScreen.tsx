@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { ArrowDownLeft, ArrowUpRight, CreditCard, History, Plus, ShieldCheck } from "lucide-react-native";
+import { ArrowDownLeft, ArrowUpRight, History, Plus, ShieldCheck } from "lucide-react-native";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { displayReference, displayStatus, firstNumber, firstString, recordId } from "../api/records";
@@ -55,7 +55,6 @@ export function CustomerWalletScreen() {
             <Action icon={Plus} label="Top up" onPress={() => router.push("/(customer)/wallet/top-up" as never)} />
             <Action icon={ArrowUpRight} label="Withdraw" onPress={() => router.push("/(customer)/wallet/withdraw" as never)} />
             <Action icon={History} label="History" onPress={() => router.push("/(customer)/transactions" as never)} />
-            <Action icon={CreditCard} label="Providers" onPress={() => router.push("/(customer)/payment-methods" as never)} />
           </View>
           <View style={styles.heading}>
             <Text style={styles.section}>Recent activity</Text>

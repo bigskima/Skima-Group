@@ -111,6 +111,59 @@ export interface OnboardingFlowDefinition {
   readonly steps: readonly OnboardingStepDefinition[];
 }
 
+export const operatorOnboardingFlow: OnboardingFlowDefinition = {
+  key: "flow.operator.onboarding",
+  title: "Platform Operator Checklist",
+  audience: "admin",
+  steps: [
+    {
+      key: "session",
+      title: "Authenticated Session",
+      description: "Verify your administrative account credentials and context.",
+      href: "/access",
+    },
+    {
+      key: "permissions",
+      title: "Permissions Verified",
+      description: "Ensure administrative permissions are governed and active.",
+      dependsOn: ["session"],
+      href: "/access",
+    },
+    {
+      key: "governance",
+      title: "Configuration & Policies",
+      description: "Inspect active modules, financial rules, and policy versions.",
+      dependsOn: ["permissions"],
+      requiredPermissions: ["platform.configuration.read"],
+      href: "/governance",
+    },
+    {
+      key: "applications",
+      title: "Partner Verification Console",
+      description: "Review submitted driver and station branch onboarding records.",
+      dependsOn: ["permissions"],
+      requiredPermissions: ["platform.applications.read"],
+      href: "/applications",
+    },
+    {
+      key: "organizations",
+      title: "Organization Operations",
+      description: "Manage registered branches, staff memberships, and operating status.",
+      dependsOn: ["permissions"],
+      requiredPermissions: ["platform.organizations.read"],
+      href: "/company",
+    },
+    {
+      key: "finance",
+      title: "Financial Governance",
+      description: "Monitor ledger-backed wallets, deposits, escrow, and settlements.",
+      dependsOn: ["permissions"],
+      requiredPermissions: ["platform.financial.read"],
+      href: "/finance",
+    },
+  ],
+};
+
 export interface GatewayRequestOptions {
   readonly method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   readonly body?: unknown;
