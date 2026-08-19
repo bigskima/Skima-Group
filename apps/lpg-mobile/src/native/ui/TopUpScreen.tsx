@@ -1,7 +1,7 @@
 import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import { ShieldCheck, WalletCards } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
@@ -20,7 +20,6 @@ export function TopUpScreen() {
   const { palette } = useAppTheme();
   const wallets = domainQueries.wallets();
   const currencies = domainQueries.currencies();
-  const providers = domainQueries.providers();
 
   const [amount, setAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -44,26 +43,11 @@ export function TopUpScreen() {
     firstString(currencies.data?.[0], ["code"]) ??
     "NGN";
 
-  const paymentAdapter = useMemo(() => {
-    const active = (providers.data ?? []).filter(
-      (item) =>
-        firstString(item, ["provider_kind", "providerKind"]) === "payment" &&
-        firstString(item, ["status"]) === "active" &&
-        supportsOperation(item, "initialize_payment"),
-    );
-    return active.find((item) => !/sandbox/i.test(firstString(item, ["key"]) ?? "")) ?? active[0];
-  }, [providers.data]);
-  const paymentAdapterKey = firstString(paymentAdapter, ["key"]);
-
   const submit = async () => {
     const value = Number(amount);
     setError(null);
     if (!Number.isFinite(value) || value <= 0) {
       setError("Please enter a valid amount to add.");
-      return;
-    }
-    if (!paymentAdapterKey) {
-      setError("A secure payment rail is not currently available. Please try again later.");
       return;
     }
 
@@ -72,7 +56,6 @@ export function TopUpScreen() {
         amount: value,
         currencyCode: currency,
         walletId: walletId ?? undefined,
-        providerAdapterKey: paymentAdapterKey,
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey("wallet-top-up", walletId ?? "wallet"),
         metadata: { returnUrl: Linking.createURL("payment-return") },
@@ -131,7 +114,6 @@ export function TopUpScreen() {
           label="Continue to payment"
           fullWidth
           loading={mutation.isPending}
-          disabled={providers.isPending || !paymentAdapterKey}
           onPress={() => void submit()}
         />
       </Card>
@@ -160,12 +142,6 @@ export function TopUpScreen() {
       />
     </Screen>
   );
-}
-
-function supportsOperation(provider: PlatformRecord, operation: string) {
-  const config = nestedRecord(provider, "config");
-  const supports = config?.supports;
-  return Array.isArray(supports) && supports.some((item) => item === operation);
 }
 
 const styles = StyleSheet.create({
