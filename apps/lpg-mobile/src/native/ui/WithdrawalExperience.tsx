@@ -26,7 +26,6 @@ import { SectionHeader } from "./SectionHeader";
 import { WithdrawalModal } from "./WithdrawalModal";
 
 type Workspace = "customer" | "driver" | "station";
-
 type BankOption = { name: string; code: string };
 
 export function WithdrawalExperience({ workspace }: { workspace: Workspace }) {
@@ -44,30 +43,28 @@ export function WithdrawalExperience({ workspace }: { workspace: Workspace }) {
     (item) => firstString(item, ["status"]) === "active",
   );
 
-  const transferProvider = useMemo(() => {
-    const activePaymentProviders = (providers.data ?? []).filter(
-      (item) =>
-        firstString(item, ["provider_kind", "providerKind"]) === "payment" &&
-        firstString(item, ["status"]) === "active" &&
-        supportsOperation(item, "initiate_transfer"),
-    );
-    return (
-      activePaymentProviders.find((item) => !/sandbox/i.test(firstString(item, ["key"]) ?? "")) ??
-      activePaymentProviders[0]
-    );
+  // Public display data may come from any active payment adapter, but the mobile
+  // client never chooses which adapter executes a payout. The API gateway resolves
+  // the configured provider on the server when providerAdapterKey is omitted.
+  const bankDirectory = useMemo<BankOption[]>(() => {
+    const byCode = new Map<string, BankOption>();
+    for (const provider of providers.data ?? []) {
+      if (
+        firstString(provider, ["provider_kind", "providerKind"]) !== "payment" ||
+        firstString(provider, ["status"]) !== "active"
+      ) {
+        continue;
+      }
+      const config = nestedRecord(provider, "config");
+      for (const item of nestedRecords(config, "public_bank_directory")) {
+        const name = firstString(item, ["name", "display_name", "displayName"]) ?? "";
+        const code = firstString(item, ["code", "bank_code", "bankCode"]) ?? "";
+        if (name && code && !byCode.has(code)) byCode.set(code, { name, code });
+      }
+    }
+    return Array.from(byCode.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [providers.data]);
 
-  const bankDirectory = useMemo<BankOption[]>(() => {
-    const config = nestedRecord(transferProvider, "config");
-    return nestedRecords(config, "public_bank_directory")
-      .map((item) => ({
-        name: firstString(item, ["name", "display_name", "displayName"]) ?? "",
-        code: firstString(item, ["code", "bank_code", "bankCode"]) ?? "",
-      }))
-      .filter((item) => item.name && item.code);
-  }, [transferProvider]);
-
-  const providerKey = firstString(transferProvider, ["key"]);
   const bankNameByCode = useMemo(
     () => new Map(bankDirectory.map((bank) => [bank.code, bank.name])),
     [bankDirectory],
@@ -110,11 +107,11 @@ export function WithdrawalExperience({ workspace }: { workspace: Workspace }) {
   const selectedBeneficiaryName = firstString(selectedBeneficiary, ["account_name", "accountName"]) ?? "Payout account";
   const selectedBeneficiaryLast4 = firstString(selectedBeneficiary, ["account_number_last4", "accountNumberLast4"]) ?? "";
   const isValidNuban = /^\d{10}$/.test(accountNumber.trim());
-  const canAddAccount = Boolean(walletId && providerKey && bankCode && accountName.trim() && isValidNuban);
+  const canAddAccount = Boolean(walletId && bankCode && accountName.trim() && isValidNuban);
 
   const addAccount = async () => {
     setMessage(null);
-    if (!canAddAccount || !walletId || !providerKey) {
+    if (!canAddAccount || !walletId) {
       setMessage("Complete the account name, 10-digit account number, and bank selection.");
       return;
     }
@@ -124,7 +121,6 @@ export function WithdrawalExperience({ workspace }: { workspace: Workspace }) {
         accountName: accountName.trim(),
         accountNumber: accountNumber.trim(),
         bankCode,
-        providerAdapterKey: providerKey,
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey(`${workspace}-beneficiary`, walletId),
       });
@@ -243,7 +239,7 @@ export function WithdrawalExperience({ workspace }: { workspace: Workspace }) {
             </View>
           ) : (
             <View style={[styles.configurationNotice, { backgroundColor: palette.warningSoft }]}>
-              <Text style={[styles.configurationText, { color: palette.ink }]}>Adding a new payout account is temporarily unavailable because the active payment rail has no public bank directory configured. Existing verified payout accounts can still be used.</Text>
+              <Text style={[styles.configurationText, { color: palette.ink }]}>Adding a new payout account is temporarily unavailable because no public bank directory is configured. Existing verified payout accounts can still be used.</Text>
             </View>
           )}
 
@@ -336,12 +332,6 @@ export function WithdrawalExperience({ workspace }: { workspace: Workspace }) {
       />
     </Screen>
   );
-}
-
-function supportsOperation(provider: PlatformRecord, operation: string) {
-  const config = nestedRecord(provider, "config");
-  const supports = config?.supports;
-  return Array.isArray(supports) && supports.some((item) => item === operation);
 }
 
 function money(value: number, currency: string) {
