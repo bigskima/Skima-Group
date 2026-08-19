@@ -9,8 +9,10 @@ import {
   Moon,
   ReceiptText,
   Settings2,
+  ShieldCheck,
   Sun,
   Truck,
+  UserRound,
   WalletCards,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -18,7 +20,6 @@ import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { AppButton } from "./AppButton";
-import { Card } from "./Card";
 import { ProfilePhotoEditor } from "./ProfilePhotoEditor";
 import { Screen } from "./Screen";
 import { SectionHeader } from "./SectionHeader";
@@ -26,29 +27,29 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 const menus = {
   driver: [
-    { label: "SKIMA Driver Pass", href: "/(driver)/id-card", icon: FileCheck2 },
-    { label: "Driver profile", href: "/(driver)/profile", icon: Truck },
-    { label: "Service zones", href: "/(driver)/service-zone", icon: MapPin },
-    { label: "Application & approval", href: "/(driver)/application", icon: FileCheck2 },
-    { label: "Vehicles", href: "/(driver)/vehicles", icon: Truck },
-    { label: "Documents", href: "/(driver)/documents", icon: FileCheck2 },
+    { label: "SKIMA Driver Pass", detail: "Your current public driver identity", href: "/(driver)/id-card", icon: FileCheck2 },
+    { label: "Driver profile", detail: "Operational identity and approval", href: "/(driver)/profile", icon: UserRound },
+    { label: "Service areas", detail: "Approved dispatch coverage", href: "/(driver)/service-zone", icon: MapPin },
+    { label: "Vehicles", detail: "Vehicle approval and capability", href: "/(driver)/vehicles", icon: Truck },
+    { label: "Application status", detail: "Review your driver application", href: "/(driver)/application", icon: FileCheck2 },
+    { label: "Documents", detail: "Submitted driver evidence", href: "/(driver)/documents", icon: FileCheck2 },
   ],
   station: [
-    { label: "Branch profile", href: "/(station)/profile", icon: Building2 },
-    { label: "Inventory & capacity", href: "/(station)/inventory", icon: Settings2 },
-    { label: "Station reports", href: "/(station)/reports", icon: ReceiptText },
-    { label: "Station settings & pricing", href: "/(station)/settings", icon: Settings2 },
-    { label: "Staff & permissions", href: "/(station)/staff", icon: Building2 },
-    { label: "Roles & permission keys", href: "/(station)/roles", icon: Settings2 },
-    { label: "Application & approval", href: "/(station)/application", icon: FileCheck2 },
-    { label: "Documents", href: "/(station)/documents", icon: FileCheck2 },
+    { label: "Branch profile", detail: "Station identity and current status", href: "/(station)/profile", icon: Building2 },
+    { label: "Inventory & capacity", detail: "Refill stock and cylinder queue", href: "/(station)/inventory", icon: Settings2 },
+    { label: "Station reports", detail: "Completed operations and activity", href: "/(station)/reports", icon: ReceiptText },
+    { label: "Settings & pricing", detail: "Hours, availability and station price", href: "/(station)/settings", icon: Settings2 },
+    { label: "Staff & permissions", detail: "Station team access", href: "/(station)/staff", icon: Building2 },
+    { label: "Roles", detail: "Configured organisation roles", href: "/(station)/roles", icon: ShieldCheck },
+    { label: "Application status", detail: "Review station approval progress", href: "/(station)/application", icon: FileCheck2 },
+    { label: "Documents", detail: "Submitted station evidence", href: "/(station)/documents", icon: FileCheck2 },
   ],
   customer: [
-    { label: "Apply to drive", href: "/(customer)/driver-application", icon: Truck },
-    { label: "Apply as a station", href: "/(customer)/station-application", icon: Building2 },
-    { label: "Delivery addresses", href: "/(customer)/locations", icon: MapPin },
-    { label: "Stations near you", href: "/(customer)/stations", icon: Building2 },
-    { label: "Transactions", href: "/(customer)/transactions", icon: WalletCards },
+    { label: "Delivery locations", detail: "Pickup and return addresses", href: "/(customer)/locations", icon: MapPin },
+    { label: "Stations near you", detail: "Verified public station profiles", href: "/(customer)/stations", icon: Building2 },
+    { label: "Transactions", detail: "Wallet and payment activity", href: "/(customer)/transactions", icon: WalletCards },
+    { label: "Apply to drive", detail: "Become a SKIMA driver partner", href: "/(customer)/driver-application", icon: Truck },
+    { label: "Apply as a station", detail: "Register an LPG station partnership", href: "/(customer)/station-application", icon: Building2 },
   ],
 } as const;
 
@@ -57,37 +58,67 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
   const theme = useAppTheme();
   const group = workspace.toLowerCase() as keyof typeof menus;
   const operational = menus[group] ?? menus.customer;
-  const roles = session.context?.roles
-    .map((role) => role.displayName ?? role.key)
-    .filter(Boolean)
-    .join(" · ");
+  const roleNames = session.context?.roles.map((role) => role.displayName ?? role.key).filter(Boolean) ?? [];
+  const primaryRole = roleNames[0] ?? workspace;
+  const displayName = session.context?.profile?.display_name ?? "SKIMA member";
+  const email = session.context?.user.email ?? "";
 
   return (
     <Screen
-      eyebrow={workspace}
+      eyebrow={`${workspace} workspace`}
       title="Account"
-      subtitle="Profile, workspace access, preferences, and support."
+      subtitle="Manage your SKIMA identity, workspace tools, preferences and support."
     >
       <WorkspaceSwitcher current={group} />
 
-      <Card padding="lg">
-        <View style={styles.profileCard}>
-          <ProfilePhotoEditor />
-          <View style={styles.identity}>
-            <Text style={[styles.name, { color: theme.palette.ink }]}>
-              {session.context?.profile?.display_name ?? "SKIMA member"}
-            </Text>
-            <Text style={[styles.email, { color: theme.palette.muted }]}>
-              {session.context?.user.email ?? ""}
-            </Text>
-            <View style={[styles.roleBadge, { backgroundColor: theme.palette.brandSoft }]}>
-              <Text style={[styles.roleText, { color: theme.palette.brand }]}>{roles || workspace}</Text>
+      <View style={[styles.profileHero, shadows.raised, { backgroundColor: theme.palette.brand }]}>
+        <View style={styles.photoShell}><ProfilePhotoEditor /></View>
+        <View style={styles.identity}>
+          <Text numberOfLines={1} style={styles.name}>{displayName}</Text>
+          <Text numberOfLines={1} style={styles.email}>{email}</Text>
+          <View style={styles.roleRow}>
+            <View style={styles.roleBadge}>
+              <ShieldCheck color="#FFFFFF" size={13} />
+              <Text numberOfLines={1} style={styles.roleText}>{primaryRole}</Text>
             </View>
+            {roleNames.length > 1 ? <Text style={styles.roleMore}>+{roleNames.length - 1} more</Text> : null}
           </View>
         </View>
-      </Card>
+      </View>
 
-      <SectionHeader title="Preferences" description="Personal settings for this device." />
+      <View style={[styles.accountNote, { backgroundColor: theme.palette.surfaceSubtle, borderColor: theme.palette.border }]}>
+        <ShieldCheck color={theme.palette.mutedStrong} size={18} />
+        <Text style={[styles.accountNoteText, { color: theme.palette.muted }]}>
+          {group === "customer"
+            ? "Your customer account can also start Driver or Station applications without creating a separate login."
+            : `This ${group} workspace shows only the tools attached to your current SKIMA access and permissions.`}
+        </Text>
+      </View>
+
+      <SectionHeader
+        title={group === "customer" ? "Your SKIMA services" : `${workspace} workspace tools`}
+        description={group === "customer" ? "Service settings, transactions and partner applications." : "Operational identity, records and role-specific controls."}
+      />
+      <View style={[styles.menu, shadows.soft, { borderColor: theme.palette.border, backgroundColor: theme.palette.surface }]}>
+        <Menu
+          icon={Bell}
+          label="Notifications"
+          detail="Orders, approvals, money and account updates"
+          onPress={() => router.push(`/${`(${group})`}/notifications` as never)}
+        />
+        {operational.map((item) => (
+          <Menu key={item.label} icon={item.icon} label={item.label} detail={item.detail} onPress={() => router.push(item.href as never)} />
+        ))}
+        <Menu
+          icon={CircleHelp}
+          label="Safety & support"
+          detail="Report an LPG or fulfilment issue"
+          onPress={() => router.push(`/${`(${group})`}/support` as never)}
+          last
+        />
+      </View>
+
+      <SectionHeader title="Appearance" description="Choose how SKIMA looks on this device." />
       <Pressable
         accessibilityRole="button"
         onPress={() => void theme.toggle()}
@@ -102,34 +133,20 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
         ]}
       >
         <View style={[styles.themeIcon, { backgroundColor: theme.palette.brandSoft }]}>
-          {theme.scheme === "dark" ? (
-            <Sun color={theme.palette.warning} size={20} />
-          ) : (
-            <Moon color={theme.palette.brand} size={20} />
-          )}
+          {theme.scheme === "dark" ? <Sun color={theme.palette.warning} size={21} /> : <Moon color={theme.palette.brand} size={21} />}
         </View>
         <View style={styles.themeCopy}>
-          <Text style={[styles.menuText, { color: theme.palette.ink }]}>
-            {theme.scheme === "dark" ? "Use light appearance" : "Use dark appearance"}
-          </Text>
-          <Text style={[styles.meta, { color: theme.palette.muted }]}>Saved on this device.</Text>
+          <Text style={[styles.menuText, { color: theme.palette.ink }]}>{theme.scheme === "dark" ? "Use light appearance" : "Use dark appearance"}</Text>
+          <Text style={[styles.meta, { color: theme.palette.muted }]}>Current appearance: {theme.scheme === "dark" ? "Dark" : "Light"}</Text>
         </View>
         <ChevronRight color={theme.palette.muted} size={18} />
       </Pressable>
 
-      <SectionHeader
-        title={group === "customer" ? "Your SKIMA account" : `${workspace} tools`}
-        description={group === "customer" ? "Manage service details and partner applications." : "Manage operational access and records."}
-      />
-      <View style={[styles.menu, shadows.soft, { borderColor: theme.palette.border, backgroundColor: theme.palette.surface }]}>
-        <Menu icon={Bell} label="Notifications" onPress={() => router.push(`/${`(${group})`}/notifications` as never)} />
-        {operational.map((item) => (
-          <Menu key={item.label} icon={item.icon} label={item.label} onPress={() => router.push(item.href as never)} />
-        ))}
-        <Menu icon={CircleHelp} label="Support & safety" onPress={() => router.push(`/${`(${group})`}/support` as never)} last />
-      </View>
-
-      <View style={styles.signOutWrap}>
+      <View style={[styles.signOutCard, { backgroundColor: theme.palette.surface, borderColor: theme.palette.border }]}>
+        <View style={styles.signOutCopy}>
+          <Text style={[styles.signOutTitle, { color: theme.palette.ink }]}>Sign out of SKIMA</Text>
+          <Text style={[styles.signOutBody, { color: theme.palette.muted }]}>Your saved account data remains protected. Local unfinished drafts stay on this device where supported.</Text>
+        </View>
         <AppButton label="Sign out" variant="danger" fullWidth onPress={() => void session.signOut()} />
       </View>
     </Screen>
@@ -139,11 +156,13 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
 function Menu({
   icon: Icon,
   label,
+  detail,
   onPress,
   last = false,
 }: {
   icon: typeof Bell;
   label: string;
+  detail: string;
   onPress?: () => void;
   last?: boolean;
 }) {
@@ -158,37 +177,40 @@ function Menu({
         { opacity: pressed ? 0.7 : 1 },
       ]}
     >
-      <View style={[styles.menuIcon, { backgroundColor: palette.brandSoft }]}>
-        <Icon color={palette.brand} size={19} />
+      <View style={[styles.menuIcon, { backgroundColor: palette.brandSoft }]}><Icon color={palette.brand} size={20} /></View>
+      <View style={styles.menuCopy}>
+        <Text style={[styles.menuText, { color: palette.ink }]}>{label}</Text>
+        <Text numberOfLines={2} style={[styles.menuDetail, { color: palette.muted }]}>{detail}</Text>
       </View>
-      <Text style={[styles.menuText, { color: palette.ink }]}>{label}</Text>
       <ChevronRight color={palette.muted} size={18} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  profileCard: { alignItems: "center", gap: spacing.md },
-  identity: { alignItems: "center", gap: spacing.xs },
-  name: { ...typography.heading, textAlign: "center" },
-  email: { ...typography.caption, textAlign: "center" },
+  profileHero: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
+  photoShell: { alignItems: "center", justifyContent: "center" },
+  identity: { flex: 1, minWidth: 0, gap: 3 },
+  name: { color: "#FFFFFF", ...typography.heading, fontSize: 22 },
+  email: { color: "rgba(255,255,255,.78)", ...typography.caption },
+  roleRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing.sm, marginTop: 4 },
+  roleBadge: { maxWidth: "82%", flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 5, borderRadius: radii.pill, backgroundColor: "rgba(255,255,255,.14)" },
+  roleText: { flexShrink: 1, color: "#FFFFFF", ...typography.caption, fontSize: 10, fontWeight: "900" },
+  roleMore: { color: "rgba(255,255,255,.74)", ...typography.caption, fontSize: 10 },
+  accountNote: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  accountNoteText: { flex: 1, ...typography.caption, lineHeight: 18 },
+  menu: { borderRadius: radii.xl, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth },
+  menuRow: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  menuIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  menuCopy: { flex: 1, minWidth: 0, gap: 2 },
+  menuText: { ...typography.bodyStrong, fontSize: 14 },
+  menuDetail: { ...typography.caption, fontSize: 10, lineHeight: 14 },
   meta: { ...typography.caption },
-  roleBadge: { marginTop: 3, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radii.pill },
-  roleText: { ...typography.caption, fontSize: 11, fontWeight: "900", textAlign: "center" },
-  theme: {
-    minHeight: 76,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
+  theme: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth },
   themeIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   themeCopy: { flex: 1, gap: 3 },
-  menu: { borderRadius: radii.lg, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth },
-  menuRow: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.md },
-  menuIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  menuText: { ...typography.bodyStrong, flex: 1, fontSize: 14 },
-  signOutWrap: { marginTop: spacing.sm },
+  signOutCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  signOutCopy: { gap: 3 },
+  signOutTitle: { ...typography.subheading, fontSize: 15 },
+  signOutBody: { ...typography.caption, lineHeight: 18 },
 });
