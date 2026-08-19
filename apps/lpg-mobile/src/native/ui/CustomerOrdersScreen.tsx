@@ -1,18 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
-import {
-  ChevronRight,
-  ClipboardList,
-  MapPin,
-  PackageCheck,
-  Truck,
-} from "lucide-react-native";
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ChevronRight, ClipboardList, MapPin, PackageCheck, ShieldCheck, Truck } from "lucide-react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useJobDetails } from "../api/domains";
 import {
   displayReference,
@@ -22,349 +10,250 @@ import {
   nestedRecord,
   recordId,
 } from "../api/records";
-import { colors, radii, spacing } from "../theme/tokens";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { AppButton } from "./AppButton";
 import { Card } from "./Card";
+import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
+import { StatusPill } from "./StatusPill";
 
 export function CustomerOrdersScreen() {
+  const { palette } = useAppTheme();
   const orders = domainQueries.orders();
+
   return (
     <Screen
       eyebrow="Refills"
       title="My orders"
-      action={
-        <Pressable
-          onPress={() => router.push("/(customer)/orders/new")}
-          style={styles.primarySmall}
-        >
-          <Text style={styles.primaryText}>New refill</Text>
-        </Pressable>
-      }
+      subtitle="Track every refill from payment and pickup through station processing and return delivery."
+      action={<AppButton label="New refill" size="sm" onPress={() => router.push("/(customer)/orders/new")} />}
     >
       {orders.isPending ? (
-        <ActivityIndicator color={colors.brand} />
+        <View style={styles.loading}>
+          <ActivityIndicator color={palette.brand} />
+          <Text style={[styles.loadingText, { color: palette.muted }]}>Loading your refill history…</Text>
+        </View>
       ) : orders.error ? (
-        <ErrorState
-          message="Check your connection and try again."
-          retry={() => void orders.refetch()}
+        <EmptyState
+          title="Couldn't load your orders"
+          description="Check your connection and try again."
+          action={<AppButton label="Try again" variant="secondary" onPress={() => void orders.refetch()} />}
+        />
+      ) : (orders.data ?? []).length === 0 ? (
+        <EmptyState
+          icon={<PackageCheck color={palette.brand} size={27} />}
+          title="Ready for your first refill"
+          description="Choose a registered cylinder and pickup location. SKIMA shows the full price before you confirm."
+          action={<AppButton label="Request a refill" onPress={() => router.push("/(customer)/orders/new")} />}
         />
       ) : (
-        <>
+        <View style={styles.orderList}>
           {(orders.data ?? []).map((order, index) => {
             const id = recordId(order);
             const cylinder = nestedRecord(order, "cylinder");
-            const station =
-              nestedRecord(order, "station") ??
-              nestedRecord(order, "stationBranch");
+            const station = nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
             const status = displayStatus(order) ?? "created";
-            const currency =
-              firstString(order, ["currency_code", "currencyCode"]) ?? "NGN";
+            const currency = firstString(order, ["currency_code", "currencyCode"]) ?? "NGN";
+            const cylinderSize = cylinder ? firstNumber(cylinder, ["sizeKg", "size_kg"]) : null;
+            const cylinderReference = cylinder ? displayReference(cylinder) : null;
+            const stationText = station
+              ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned station")
+              : "Finding the best station";
+
             return (
               <Pressable
                 key={id ?? String(index)}
+                accessibilityRole="button"
                 disabled={!id}
                 onPress={() => router.push(`/(customer)/orders/${id}` as never)}
-                style={styles.order}
+                style={({ pressed }) => [
+                  styles.order,
+                  shadows.soft,
+                  { backgroundColor: palette.surface, borderColor: palette.border, opacity: pressed ? 0.76 : 1 },
+                ]}
               >
                 <View style={styles.orderHead}>
-                  <View style={styles.orderIcon}>
-                    <ClipboardList color={colors.brand} size={22} />
+                  <View style={[styles.orderIcon, { backgroundColor: palette.brandSoft }]}>
+                    <ClipboardList color={palette.brand} size={21} />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.orderRef}>
-                      {displayReference(order) ?? "Refill order"}
-                    </Text>
-                    <Text style={styles.date}>
-                      {formatDate(
-                        firstString(order, ["created_at", "createdAt"]),
-                      )}
-                    </Text>
+                  <View style={styles.orderHeadCopy}>
+                    <Text numberOfLines={1} style={[styles.orderRef, { color: palette.ink }]}>{displayReference(order) ?? "Refill order"}</Text>
+                    <Text style={[styles.date, { color: palette.muted }]}>{formatDate(firstString(order, ["created_at", "createdAt"]))}</Text>
                   </View>
-                  <Text style={styles.status}>
-                    {friendlyOrderStatus(status)}
-                  </Text>
+                  <StatusPill label={friendlyOrderStatus(status)} tone={orderStatusTone(status)} />
                 </View>
-                <View style={styles.divider} />
-                <View style={styles.row}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>CYLINDER</Text>
-                    <Text style={styles.value}>
+
+                <View style={[styles.divider, { backgroundColor: palette.border }]} />
+
+                <View style={styles.summaryRow}>
+                  <View style={styles.summaryCopy}>
+                    <Text style={[styles.label, { color: palette.muted }]}>CYLINDER</Text>
+                    <Text style={[styles.value, { color: palette.ink }]}>
                       {cylinder
-                        ? `${firstNumber(cylinder, ["sizeKg", "size_kg"]) ?? "Configured"} kg · ${displayReference(cylinder)}`
+                        ? `${cylinderSize ?? "Configured"} kg${cylinderReference ? ` · ${cylinderReference}` : ""}`
                         : "Cylinder details unavailable"}
                     </Text>
                   </View>
-                  <Text style={styles.amount}>
-                    {money(
-                      firstNumber(order, [
-                        "total_amount",
-                        "totalAmount",
-                        "quoted_total",
-                        "quotedTotal",
-                      ]) ?? 0,
-                      currency,
-                    )}
-                  </Text>
+                  <View style={styles.amountCopy}>
+                    <Text style={[styles.label, { color: palette.muted }]}>TOTAL</Text>
+                    <Text style={[styles.amount, { color: palette.ink }]}>
+                      {money(firstNumber(order, ["total_amount", "totalAmount", "quoted_total", "quotedTotal"]) ?? 0, currency)}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.station}>
-                  <MapPin color={colors.muted} size={17} />
-                  <Text numberOfLines={1} style={styles.stationText}>
-                    {station
-                      ? (firstString(station, [
-                          "displayName",
-                          "display_name",
-                          "formattedAddress",
-                          "formatted_address",
-                        ]) ?? "Assigned station")
-                      : "Finding the best station"}
-                  </Text>
-                  <ChevronRight color={colors.muted} size={18} />
+
+                <View style={[styles.station, { backgroundColor: palette.surfaceSubtle }]}>
+                  <MapPin color={palette.mutedStrong} size={16} />
+                  <Text numberOfLines={1} style={[styles.stationText, { color: palette.mutedStrong }]}>{stationText}</Text>
+                  <ChevronRight color={palette.muted} size={17} />
                 </View>
               </Pressable>
             );
           })}
-          {(orders.data ?? []).length === 0 ? (
-            <View style={styles.empty}>
-              <PackageCheck color={colors.brand} size={34} />
-              <Text style={styles.emptyTitle}>Ready for your first refill</Text>
-              <Text style={styles.body}>
-                Choose a cylinder and pickup place. We’ll show the full price before you confirm.
-              </Text>
-              <Pressable
-                onPress={() => router.push("/(customer)/orders/new")}
-                style={styles.primary}
-              >
-                <Text style={styles.primaryText}>Request a refill</Text>
-              </Pressable>
-            </View>
-          ) : null}
-        </>
+        </View>
       )}
     </Screen>
   );
 }
 
 export function CustomerOrderDetailScreen() {
+  const { palette } = useAppTheme();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const detail = useJobDetails(id ?? null);
   const root = detail.data;
   const order = nestedRecord(root, "order") ?? root;
-  const cylinder =
-    nestedRecord(root, "cylinder") ?? nestedRecord(order, "cylinder");
-  const station =
-    nestedRecord(root, "station") ??
-    nestedRecord(order, "station") ??
-    nestedRecord(order, "stationBranch");
-  const pickup =
-    nestedRecord(root, "pickupLocation") ??
-    nestedRecord(order, "pickupLocation") ??
-    nestedRecord(order, "pickup_location");
-  const delivery =
-    nestedRecord(root, "deliveryLocation") ??
-    nestedRecord(order, "deliveryLocation") ??
-    nestedRecord(order, "delivery_location");
+  const cylinder = nestedRecord(root, "cylinder") ?? nestedRecord(order, "cylinder");
+  const station = nestedRecord(root, "station") ?? nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
+  const pickup = nestedRecord(root, "pickupLocation") ?? nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location");
+  const delivery = nestedRecord(root, "deliveryLocation") ?? nestedRecord(order, "deliveryLocation") ?? nestedRecord(order, "delivery_location");
   const status = order ? (displayStatus(order) ?? "created") : "";
-  const currency =
-    firstString(order, ["currency_code", "currencyCode"]) ?? "NGN";
-  const trackable = [
-    "assigned",
-    "pickup",
-    "station",
-    "refill",
-    "return",
-    "delivery",
-  ].some((part) => status.includes(part));
+  const normalized = normalizeStatus(status);
+  const currency = firstString(order, ["currency_code", "currencyCode"]) ?? "NGN";
+  const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? "pending";
+  const trackable = ["assigned", "pickup", "station", "refill", "return", "delivery"].some((part) => normalized.includes(part));
+  const canVerifyDelivery = normalized.includes("delivery") || normalized.includes("return");
+  const canShowReceipt = ["completed", "delivered", "settled"].some((part) => normalized.includes(part)) || ["paid", "settled"].includes(normalizeStatus(paymentStatus));
+
   return (
     <Screen
       eyebrow="Order details"
-      title={
-        order ? (displayReference(order) ?? "Refill order") : "Refill order"
-      }
-      action={
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.link}>Back</Text>
-        </Pressable>
-      }
+      title={order ? (displayReference(order) ?? "Refill order") : "Refill order"}
+      subtitle="One trusted view of your cylinder, station, payment and current delivery stage."
+      action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {detail.isPending ? (
-        <ActivityIndicator color={colors.brand} />
+        <View style={styles.loading}>
+          <ActivityIndicator color={palette.brand} />
+          <Text style={[styles.loadingText, { color: palette.muted }]}>Loading order details…</Text>
+        </View>
       ) : !order ? (
-        <ErrorState
-          message="This order is unavailable or you no longer have access."
-          retry={() => void detail.refetch()}
+        <EmptyState
+          title="This order is unavailable"
+          description="The order may no longer be accessible from this account."
+          action={<AppButton label="Try again" variant="secondary" onPress={() => void detail.refetch()} />}
         />
       ) : (
         <>
-          <View style={styles.detailHero}>
-            <Truck color="white" size={29} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.heroLabel}>WHERE YOUR REFILL IS NOW</Text>
-              <Text style={styles.heroStatus}>
-                {friendlyOrderStatus(status)}
-              </Text>
-              <Text style={styles.heroBody}>
-                Updated{" "}
-                {formatDate(
-                  firstString(order, ["updated_at", "updatedAt", "created_at"]),
-                )}
-              </Text>
+          <View style={[styles.detailHero, shadows.raised, { backgroundColor: palette.brand }]}>
+            <View style={styles.heroIcon}>
+              <Truck color="#FFFFFF" size={25} />
+            </View>
+            <View style={styles.heroCopy}>
+              <Text style={styles.heroLabel}>CURRENT REFILL STAGE</Text>
+              <Text style={styles.heroStatus}>{friendlyOrderStatus(status)}</Text>
+              <Text style={styles.heroBody}>Updated {formatDate(firstString(order, ["updated_at", "updatedAt", "created_at"]))}</Text>
             </View>
           </View>
-          <Card>
-            <Field
-              label="Cylinder"
-              value={
-                cylinder
-                  ? `${firstNumber(cylinder, ["sizeKg", "size_kg"]) ?? "Configured"} kg · ${displayReference(cylinder)}`
-                  : "Cylinder details unavailable"
-              }
-            />
-            <Field
-              label="Station"
-              value={
-                station
-                  ? (firstString(station, [
-                      "displayName",
-                      "display_name",
-                      "formattedAddress",
-                      "formatted_address",
-                    ]) ?? "Assigned station")
-                  : "Finding the best station"
-              }
-            />
-            <Field
-              label="Pickup address"
-              value={
-                pickup
-                  ? (firstString(pickup, [
-                      "formattedAddress",
-                      "formatted_address",
-                      "label",
-                    ]) ?? "Saved location")
-                  : "Saved order location"
-              }
-            />
-            <Field
-              label="Delivery address"
-              value={
-                delivery
-                  ? (firstString(delivery, [
-                      "formattedAddress",
-                      "formatted_address",
-                      "label",
-                    ]) ?? "Saved location")
-                  : "Saved order location"
-              }
-            />
-            <Field
-              label="Requested refill"
-              value={`${firstNumber(order, ["requestedKg", "requested_kg"]) ?? "Configured"} kg`}
-            />
-            {firstNumber(order, ["actualKg", "actual_kg"]) !== null ? (
-              <Field
-                label="Actual refill"
-                value={`${firstNumber(order, ["actualKg", "actual_kg"])} kg`}
-              />
-            ) : null}
-            <Field
-              label="Order total"
-              value={money(
-                firstNumber(order, [
-                  "total_amount",
-                  "totalAmount",
-                  "quoted_total",
-                  "quotedTotal",
-                ]) ?? 0,
-                currency,
-              )}
-            />
-            <Field
-              label="Payment"
-              value={friendlyPaymentStatus(
-                firstString(order, ["payment_status", "paymentStatus"]) ??
-                "pending"
-              )}
-            />
+
+          <Card padding="lg">
+            <View style={styles.detailStatusRow}>
+              <Text style={[styles.detailSectionTitle, { color: palette.ink }]}>Order summary</Text>
+              <StatusPill label={friendlyOrderStatus(status)} tone={orderStatusTone(status)} />
+            </View>
+            <InfoField label="Cylinder" value={cylinder ? `${firstNumber(cylinder, ["sizeKg", "size_kg"]) ?? "Configured"} kg · ${displayReference(cylinder)}` : "Cylinder details unavailable"} />
+            <InfoField label="Station" value={station ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned station") : "Finding the best station"} />
+            <InfoField label="Pickup address" value={pickup ? (firstString(pickup, ["formattedAddress", "formatted_address", "label"]) ?? "Saved location") : "Saved order location"} />
+            <InfoField label="Delivery address" value={delivery ? (firstString(delivery, ["formattedAddress", "formatted_address", "label"]) ?? "Saved location") : "Saved order location"} />
           </Card>
-          {trackable && id ? (
-            <Pressable
-              style={styles.primary}
-              onPress={() =>
-                router.push(`/(customer)/orders/${id}/tracking` as never)
-              }
-            >
-              <Text style={styles.primaryText}>Open live tracking</Text>
-            </Pressable>
-          ) : null}
-          {id && (status.includes("delivery") || status.includes("return")) ? (
-            <Pressable
-              style={styles.secondary}
-              onPress={() =>
-                router.push(`/(customer)/orders/${id}/verify` as never)
-              }
-            >
-              <Text style={styles.secondaryText}>Confirm delivery</Text>
-            </Pressable>
-          ) : null}
-          {id &&
-          (["paid", "completed", "delivered", "settled"].some((part) =>
-            status.includes(part),
-          ) ||
-            ["paid", "settled"].includes(
-              firstString(order, ["payment_status", "paymentStatus"]) ?? "",
-            )) ? (
-            <Pressable
-              style={styles.secondary}
-              onPress={() =>
-                router.push(`/(customer)/orders/${id}/receipt` as never)
-              }
-            >
-              <Text style={styles.secondaryText}>View or share receipt</Text>
-            </Pressable>
-          ) : null}
-          <Text style={styles.safety}>Every update appears after SKIMA confirms the hand-off, payment or location change.</Text>
+
+          <Card padding="lg">
+            <Text style={[styles.detailSectionTitle, { color: palette.ink }]}>Refill & payment</Text>
+            <View style={styles.metricsRow}>
+              <Metric label="Requested" value={`${firstNumber(order, ["requestedKg", "requested_kg"]) ?? "Configured"} kg`} />
+              {firstNumber(order, ["actualKg", "actual_kg"]) !== null ? (
+                <Metric label="Actual" value={`${firstNumber(order, ["actualKg", "actual_kg"])} kg`} />
+              ) : null}
+              <Metric label="Total" value={money(firstNumber(order, ["total_amount", "totalAmount", "quoted_total", "quotedTotal"]) ?? 0, currency)} />
+            </View>
+            <View style={[styles.paymentRow, { backgroundColor: palette.surfaceSubtle }]}>
+              <View style={[styles.paymentIcon, { backgroundColor: palette.brandSoft }]}>
+                <ShieldCheck color={palette.brand} size={18} />
+              </View>
+              <View style={styles.paymentCopy}>
+                <Text style={[styles.label, { color: palette.muted }]}>PAYMENT</Text>
+                <Text style={[styles.value, { color: palette.ink }]}>{friendlyPaymentStatus(paymentStatus)}</Text>
+              </View>
+              <StatusPill label={friendlyPaymentStatus(paymentStatus)} tone={paymentStatusTone(paymentStatus)} />
+            </View>
+          </Card>
+
+          <View style={styles.actions}>
+            {trackable && id ? <AppButton label="Open live tracking" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/tracking` as never)} /> : null}
+            {id && canVerifyDelivery ? <AppButton label="Confirm delivery" variant="secondary" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/verify` as never)} /> : null}
+            {id && canShowReceipt ? <AppButton label="View or share receipt" variant="ghost" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/receipt` as never)} /> : null}
+          </View>
+
+          <View style={[styles.safetyBox, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+            <ShieldCheck color={palette.brand} size={17} />
+            <Text style={[styles.safety, { color: palette.mutedStrong }]}>Every status shown here follows a SKIMA-confirmed hand-off, payment, refill, or delivery event.</Text>
+          </View>
         </>
       )}
     </Screen>
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function InfoField({ label, value }: { label: string; value: string }) {
+  const { palette } = useAppTheme();
   return (
-    <View style={{ gap: 4 }}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.fieldValue}>{value}</Text>
+    <View style={styles.infoField}>
+      <Text style={[styles.label, { color: palette.muted }]}>{label.toUpperCase()}</Text>
+      <Text style={[styles.fieldValue, { color: palette.ink }]}>{value}</Text>
     </View>
   );
 }
-function ErrorState({ message, retry }: { message: string; retry(): void }) {
+
+function Metric({ label, value }: { label: string; value: string }) {
+  const { palette } = useAppTheme();
   return (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>Couldn’t load this order</Text>
-      <Text style={styles.body}>{message}</Text>
-      <Pressable onPress={retry}>
-        <Text style={styles.link}>Try again</Text>
-      </Pressable>
+    <View style={[styles.metric, { backgroundColor: palette.surfaceSubtle }]}>
+      <Text style={[styles.label, { color: palette.muted }]}>{label.toUpperCase()}</Text>
+      <Text adjustsFontSizeToFit numberOfLines={1} style={[styles.metricValue, { color: palette.ink }]}>{value}</Text>
     </View>
   );
 }
+
 function money(value: number, currency: string) {
   try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency,
-    }).format(value);
+    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(value);
   } catch {
     return `${currency} ${value.toFixed(2)}`;
   }
 }
+
 function formatDate(value: string | null) {
   if (!value) return "Time unavailable";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
+
+function normalizeStatus(value: string) {
+  return value.toLowerCase().replace(/[-\s]+/g, "_");
+}
+
 function friendlyOrderStatus(value: string) {
-  const normalized = value.toLowerCase().replace(/[-\s]+/g, "_");
+  const normalized = normalizeStatus(value);
   const labels: Record<string, string> = {
     created: "Order started",
     awaiting_payment: "Waiting for payment",
@@ -373,13 +262,16 @@ function friendlyOrderStatus(value: string) {
     matching_driver: "Finding your driver",
     driver_offered: "Driver notified",
     driver_accepted: "Driver assigned",
+    assigned: "Driver assigned",
     pickup_en_route: "Driver heading to pickup",
     pickup_verified: "Cylinder collected",
     station_en_route: "Heading to the station",
     station_verified: "Cylinder received at station",
     refill_in_progress: "Refill in progress",
     refill_confirmed: "Refill complete",
+    refill_completed: "Refill complete",
     return_en_route: "On the way back to you",
+    returning: "On the way back to you",
     delivery_verification_pending: "Ready for hand-over",
     delivered: "Delivered",
     completed: "Completed",
@@ -388,118 +280,76 @@ function friendlyOrderStatus(value: string) {
   };
   return labels[normalized] ?? normalized.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase());
 }
+
+function orderStatusTone(value: string): "neutral" | "brand" | "success" | "warning" | "danger" {
+  const normalized = normalizeStatus(value);
+  if (["delivered", "completed", "refill_confirmed", "refill_completed"].includes(normalized)) return "success";
+  if (["cancelled", "failed", "rejected"].includes(normalized)) return "danger";
+  if (["created", "awaiting_payment", "pending", "matching_station", "matching_driver", "driver_offered", "delivery_verification_pending"].includes(normalized)) return "warning";
+  if (["payment_reserved", "driver_accepted", "assigned", "pickup_en_route", "pickup_verified", "station_en_route", "station_verified", "refill_in_progress", "return_en_route", "returning"].includes(normalized)) return "brand";
+  return "neutral";
+}
+
 function friendlyPaymentStatus(value: string) {
-  const normalized = value.toLowerCase().replace(/[-\s]+/g, "_");
+  const normalized = normalizeStatus(value);
   const labels: Record<string, string> = {
     pending: "Waiting for confirmation",
     awaiting_payment: "Payment needed",
     reserved: "Payment confirmed",
     payment_reserved: "Payment confirmed",
     paid: "Paid",
+    settled: "Settled",
     failed: "Payment failed",
     refunded: "Refunded",
   };
   return labels[normalized] ?? "Payment update available";
 }
+
+function paymentStatusTone(value: string): "neutral" | "brand" | "success" | "warning" | "danger" {
+  const normalized = normalizeStatus(value);
+  if (["paid", "settled", "reserved", "payment_reserved"].includes(normalized)) return "success";
+  if (["failed", "rejected"].includes(normalized)) return "danger";
+  if (["pending", "awaiting_payment"].includes(normalized)) return "warning";
+  if (normalized === "refunded") return "brand";
+  return "neutral";
+}
+
 const styles = StyleSheet.create({
-  primarySmall: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: radii.pill,
-    backgroundColor: colors.brand,
-  },
-  primaryText: { color: "white", fontWeight: "900" },
-  order: {
-    gap: spacing.md,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surface,
-  },
+  loading: { minHeight: 180, alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  loadingText: { ...typography.caption },
+  orderList: { gap: spacing.md },
+  order: { gap: spacing.md, padding: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl },
   orderHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  orderIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFF0F1",
-  },
-  orderRef: { color: colors.ink, fontSize: 17, fontWeight: "900" },
-  date: { color: colors.muted, fontSize: 12, marginTop: 3 },
-  status: {
-    maxWidth: 120,
-    color: colors.brandDark,
-    backgroundColor: "#FFF0F1",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-    overflow: "hidden",
-    fontSize: 11,
-    fontWeight: "900",
-    textTransform: "capitalize",
-  },
-  divider: { height: 1, backgroundColor: colors.border },
-  row: { flexDirection: "row", alignItems: "flex-end", gap: spacing.md },
-  label: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-  },
-  value: { color: colors.ink, fontWeight: "800", marginTop: 4 },
-  amount: { color: colors.ink, fontSize: 18, fontWeight: "900" },
-  station: { flexDirection: "row", alignItems: "center", gap: 7 },
-  stationText: { flex: 1, color: colors.muted },
-  empty: {
-    minHeight: 280,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.md,
-    padding: spacing.xl,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surface,
-  },
-  emptyTitle: { color: colors.ink, fontSize: 21, fontWeight: "900" },
-  body: { color: colors.muted, lineHeight: 21, textAlign: "center" },
-  primary: {
-    minHeight: 56,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radii.md,
-    backgroundColor: colors.brand,
-    paddingHorizontal: spacing.lg,
-  },
-  link: { color: colors.brand, fontWeight: "900" },
-  detailHero: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.xl,
-    borderRadius: radii.lg,
-    backgroundColor: colors.brand,
-  },
-  heroLabel: { color: "#FFDDE1", fontSize: 11, fontWeight: "900" },
-  heroStatus: {
-    color: "white",
-    fontSize: 24,
-    fontWeight: "900",
-    textTransform: "capitalize",
-    marginTop: 4,
-  },
-  heroBody: { color: "#FFF1F2", marginTop: 4 },
-  fieldValue: { color: colors.ink, fontSize: 16, fontWeight: "800" },
-  secondary: {
-    minHeight: 54,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.brand,
-    borderRadius: radii.md,
-  },
-  secondaryText: { color: colors.brand, fontWeight: "900" },
-  safety: { color: colors.muted, lineHeight: 20 },
+  orderIcon: { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  orderHeadCopy: { flex: 1, minWidth: 0 },
+  orderRef: { ...typography.subheading, fontSize: 16 },
+  date: { ...typography.caption, fontSize: 11, marginTop: 3 },
+  divider: { height: StyleSheet.hairlineWidth },
+  summaryRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing.md },
+  summaryCopy: { flex: 1, minWidth: 0 },
+  amountCopy: { alignItems: "flex-end", maxWidth: "44%" },
+  label: { ...typography.eyebrow, fontSize: 8 },
+  value: { ...typography.bodyStrong, fontSize: 13, marginTop: 3 },
+  amount: { fontSize: 18, lineHeight: 23, fontWeight: "900", letterSpacing: -0.3, marginTop: 3 },
+  station: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.sm + 2, borderRadius: radii.md },
+  stationText: { flex: 1, ...typography.caption, fontSize: 12 },
+  detailHero: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
+  heroIcon: { width: 48, height: 48, borderRadius: 16, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
+  heroCopy: { flex: 1, minWidth: 0 },
+  heroLabel: { color: "rgba(255,255,255,.74)", ...typography.eyebrow, fontSize: 8 },
+  heroStatus: { color: "#FFFFFF", fontSize: 22, lineHeight: 28, fontWeight: "900", letterSpacing: -0.4, marginTop: 4 },
+  heroBody: { color: "rgba(255,255,255,.82)", ...typography.caption, fontSize: 11, marginTop: 3 },
+  detailStatusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.md, marginBottom: spacing.xs },
+  detailSectionTitle: { ...typography.subheading, fontSize: 16 },
+  infoField: { gap: 3, paddingVertical: spacing.xs },
+  fieldValue: { ...typography.bodyStrong, fontSize: 14, lineHeight: 20 },
+  metricsRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  metric: { flexGrow: 1, minWidth: 100, padding: spacing.md, borderRadius: radii.md },
+  metricValue: { fontSize: 16, lineHeight: 22, fontWeight: "900", marginTop: 4 },
+  paymentRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md },
+  paymentIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  paymentCopy: { flex: 1, minWidth: 0 },
+  actions: { gap: spacing.sm },
+  safetyBox: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth },
+  safety: { flex: 1, ...typography.caption, lineHeight: 18 },
 });
