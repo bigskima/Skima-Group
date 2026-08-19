@@ -1,75 +1,71 @@
 import { router } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { CircleOff, LocateFixed, Radio, ShieldCheck, Timer } from "lucide-react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import { ActionResponseSchema, firstString, recordId } from "../api/records";
-import {
-  isDriverTracking,
-  startDriverTracking,
-  stopDriverTracking,
-} from "../device/driverTracking";
+import { isDriverTracking, startDriverTracking, stopDriverTracking } from "../device/driverTracking";
 import { readOperationalLocation } from "../device/location";
 import { useSession } from "../session/SessionProvider";
-import { colors, radii, spacing } from "../theme/tokens";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
+import { AppButton } from "./AppButton";
 import { Screen } from "./Screen";
+import { StatusPill } from "./StatusPill";
+
 type OnlineStatus = "online" | "busy" | "offline";
+
 export function DriverAvailabilityScreen() {
   const session = useSession();
+  const { palette } = useAppTheme();
   const drivers = domainQueries.drivers();
   const locations = domainQueries.driverLocations();
   const driver = drivers.data?.find(
-    (item) =>
-      firstString(item, ["user_id", "userId"]) === session.context?.user.id,
+    (item) => firstString(item, ["user_id", "userId"]) === session.context?.user.id,
   );
   const driverId = driver ? recordId(driver) : null;
   const latest = locations.data?.find(
-    (item) =>
-      firstString(item, ["driver_profile_id", "driverProfileId"]) === driverId,
+    (item) => firstString(item, ["driver_profile_id", "driverProfileId"]) === driverId,
   );
   const [status, setStatus] = useState<OnlineStatus>(
-    (firstString(latest, ["online_status", "onlineStatus"]) as OnlineStatus) ||
-      "online",
+    (firstString(latest, ["online_status", "onlineStatus"]) as OnlineStatus) || "online",
   );
   const [tracking, setTracking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeSuccess, setNoticeSuccess] = useState(false);
   const hydratedLocationId = useRef<string | null>(null);
+
   const mutation = useGatewayMutation({
     path: "/lpg/driver-locations",
     schema: ActionResponseSchema,
     invalidate: [["driver-locations"], ["drivers"]],
   });
+
   useEffect(() => {
     void isDriverTracking().then(setTracking);
   }, []);
+
   useEffect(() => {
     const latestId = latest ? recordId(latest) : null;
     if (!latestId || hydratedLocationId.current === latestId) return;
-    const backendStatus = firstString(latest, [
-      "online_status",
-      "onlineStatus",
-    ]);
-    if (
-      backendStatus === "online" ||
-      backendStatus === "busy" ||
-      backendStatus === "offline"
-    ) {
+    const backendStatus = firstString(latest, ["online_status", "onlineStatus"]);
+    if (backendStatus === "online" || backendStatus === "busy" || backendStatus === "offline") {
       setStatus(backendStatus);
     }
     hydratedLocationId.current = latestId;
   }, [latest]);
+
   const submit = async () => {
+    setNotice(null);
     if (!driverId || !session.session?.access_token) {
-      setNotice("An approved driver profile and active session are required.");
+      setNoticeSuccess(false);
+      setNotice("An approved driver profile and active session are required before availability can be updated.");
       return;
     }
+
     try {
       const point = await readOperationalLocation();
       await mutation.mutateAsync({
@@ -80,10 +76,12 @@ export function DriverAvailabilityScreen() {
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey("driver-availability", driverId),
       });
+
       if (status === "offline") {
         await stopDriverTracking();
         setTracking(false);
-        setNotice("You are offline. Background dispatch tracking is stopped.");
+        setNoticeSuccess(true);
+        setNotice("You are now offline. Dispatch location sharing has stopped.");
       } else {
         await startDriverTracking({
           driverProfileId: driverId,
@@ -92,125 +90,170 @@ export function DriverAvailabilityScreen() {
           refreshToken: session.session.refresh_token,
         });
         setTracking(true);
-        setNotice(
-          "Availability updated. Authorised background dispatch tracking is active.",
-        );
+        setNoticeSuccess(true);
+        setNotice(status === "online" ? "You are online and ready for eligible assignments." : "You are marked busy. Active fulfilment tracking remains available.");
       }
     } catch (cause) {
-      setNotice(
-        cause instanceof Error
-          ? cause.message
-          : "Availability could not be updated.",
-      );
+      setNoticeSuccess(false);
+      setNotice(friendlyError(cause, "Availability could not be updated. Check location access and try again."));
     }
   };
+
+  const lastUpdated = firstString(latest, ["recorded_at", "recordedAt"]);
+
   return (
     <Screen
-      eyebrow="Dispatch presence"
+      eyebrow="Driver operations"
       title="Availability"
-      action={
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.back}>Back</Text>
-        </Pressable>
-      }
+      subtitle="Control whether SKIMA can consider you for eligible dispatch in your approved service area."
+      action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
-      <View style={styles.statuses}>
-        {(["online", "busy", "offline"] as const).map((value) => (
-          <Pressable
-            key={value}
-            onPress={() => setStatus(value)}
-            style={[styles.choice, status === value && styles.active]}
-          >
-            <Text
-              style={[styles.choiceText, status === value && styles.activeText]}
-            >
-              {value}
-            </Text>
-          </Pressable>
-        ))}
+      <View style={[styles.hero, shadows.raised, { backgroundColor: status === "offline" ? palette.ink : palette.brand }]}>
+        <View style={styles.heroTop}>
+          <View style={styles.heroCopy}>
+            <Text style={styles.heroEyebrow}>CURRENT DISPATCH STATUS</Text>
+            <Text style={styles.heroTitle}>{status === "online" ? "Ready for jobs" : status === "busy" ? "Busy with work" : "Offline"}</Text>
+          </View>
+          <View style={styles.heroIcon}>
+            {status === "online" ? <Radio color="#FFFFFF" size={26} /> : status === "busy" ? <Timer color="#FFFFFF" size={26} /> : <CircleOff color="#FFFFFF" size={26} />}
+          </View>
+        </View>
+        <Text style={styles.heroBody}>{statusDescription(status)}</Text>
       </View>
-      <View style={styles.card}>
-        <Text style={styles.label}>Background dispatch tracking</Text>
-        <Text
-          style={[
-            styles.value,
-            { color: tracking ? colors.success : colors.muted },
-          ]}
-        >
-          {tracking ? "Active" : "Stopped"}
-        </Text>
-        <Text style={styles.label}>Last updated</Text>
-        <Text style={styles.value}>
-          {firstString(latest, ["recorded_at", "recordedAt"])
-            ? new Date(
-                firstString(latest, ["recorded_at", "recordedAt"])!,
-              ).toLocaleString()
-            : "No location recorded"}
-        </Text>
+
+      <View style={styles.statusGrid}>
+        <AvailabilityChoice
+          value="online"
+          selected={status === "online"}
+          icon={<Radio color={status === "online" ? "#FFFFFF" : palette.success} size={21} />}
+          title="Online"
+          description="Ready for eligible assignments"
+          onPress={() => setStatus("online")}
+        />
+        <AvailabilityChoice
+          value="busy"
+          selected={status === "busy"}
+          icon={<Timer color={status === "busy" ? "#FFFFFF" : palette.warning} size={21} />}
+          title="Busy"
+          description="Working, but still track active fulfilment"
+          onPress={() => setStatus("busy")}
+        />
+        <AvailabilityChoice
+          value="offline"
+          selected={status === "offline"}
+          icon={<CircleOff color={status === "offline" ? "#FFFFFF" : palette.mutedStrong} size={21} />}
+          title="Offline"
+          description="Do not send new assignments"
+          onPress={() => setStatus("offline")}
+        />
       </View>
-      <Pressable
-        disabled={mutation.isPending}
+
+      <View style={[styles.trackingCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <View style={styles.trackingHead}>
+          <View style={[styles.trackingIcon, { backgroundColor: tracking ? palette.successSoft : palette.soft }]}>
+            <LocateFixed color={tracking ? palette.success : palette.mutedStrong} size={22} />
+          </View>
+          <View style={styles.trackingCopy}>
+            <Text style={[styles.trackingTitle, { color: palette.ink }]}>Dispatch location sharing</Text>
+            <Text style={[styles.trackingBody, { color: palette.muted }]}>Used for authorised driver matching and active LPG fulfilment only.</Text>
+          </View>
+          <StatusPill label={tracking ? "Active" : "Stopped"} tone={tracking ? "success" : "neutral"} />
+        </View>
+        <View style={[styles.divider, { backgroundColor: palette.border }]} />
+        <View style={styles.metaRow}>
+          <Text style={[styles.metaLabel, { color: palette.muted }]}>Last location update</Text>
+          <Text style={[styles.metaValue, { color: palette.ink }]}>{formatDate(lastUpdated)}</Text>
+        </View>
+      </View>
+
+      <AppButton
+        label={status === "offline" ? "Go offline" : status === "busy" ? "Set busy" : "Go online"}
+        fullWidth
+        size="lg"
+        loading={mutation.isPending}
         onPress={() => void submit()}
-        style={styles.primary}
-      >
-        {mutation.isPending ? (
-          <ActivityIndicator color="white" />
-        ) : (
-          <Text style={styles.primaryText}>Update availability</Text>
-        )}
-      </Pressable>
-      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-      <Text style={styles.note}>
-        When online or busy, location is shared only for authorised dispatch and
-        active fulfilment. Selecting offline stops the background service and
-        removes its secure credentials.
-      </Text>
+      />
+
+      {notice ? (
+        <View style={[styles.notice, { backgroundColor: noticeSuccess ? palette.successSoft : palette.dangerSoft }]}>
+          <Text style={[styles.noticeText, { color: noticeSuccess ? palette.success : palette.danger }]}>{notice}</Text>
+        </View>
+      ) : null}
+
+      <View style={[styles.policy, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+        <ShieldCheck color={palette.mutedStrong} size={18} />
+        <Text style={[styles.policyText, { color: palette.muted }]}>Going offline stops the background dispatch service and removes its stored tracking credentials. Location is never intended as a public driver-location feed.</Text>
+      </View>
     </Screen>
   );
 }
+
+function AvailabilityChoice({
+  value,
+  selected,
+  icon,
+  title,
+  description,
+  onPress,
+}: {
+  value: OnlineStatus;
+  selected: boolean;
+  icon: ReactNode;
+  title: string;
+  description: string;
+  onPress(): void;
+}) {
+  const { palette } = useAppTheme();
+  return (
+    <AppButton
+      accessibilityLabel={`Set availability ${value}`}
+      label={title}
+      variant={selected ? "primary" : "secondary"}
+      icon={icon}
+      fullWidth
+      onPress={onPress}
+      trailingIcon={
+        <Text style={{ color: selected ? "rgba(255,255,255,.82)" : palette.muted, ...typography.caption }}>
+          {description}
+        </Text>
+      }
+    />
+  );
+}
+
+function statusDescription(status: OnlineStatus) {
+  if (status === "online") return "SKIMA can consider you for new assignments that match your approval, vehicle and service coverage.";
+  if (status === "busy") return "You remain operational for active work, but should not be treated as freely available for a new assignment.";
+  return "New dispatch should not be assigned while you are offline, and background tracking is stopped.";
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "No location recorded yet";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
 const styles = StyleSheet.create({
-  back: { color: colors.brand, fontWeight: "800" },
-  statuses: { flexDirection: "row", gap: spacing.sm },
-  choice: {
-    flex: 1,
-    alignItems: "center",
-    padding: 14,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  active: { borderColor: colors.brand, backgroundColor: "#FFF0F1" },
-  choiceText: {
-    color: colors.muted,
-    textTransform: "capitalize",
-    fontWeight: "800",
-  },
-  activeText: { color: colors.brand },
-  card: {
-    padding: spacing.lg,
-    gap: 5,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  label: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    marginTop: 6,
-  },
-  value: { color: colors.ink, fontSize: 17, fontWeight: "800" },
-  primary: {
-    minHeight: 56,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.brand,
-    borderRadius: radii.md,
-  },
-  primaryText: { color: "white", fontWeight: "900" },
-  notice: { color: colors.success, fontWeight: "700" },
-  note: { color: colors.muted, lineHeight: 20 },
+  hero: { gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
+  heroTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md },
+  heroCopy: { flex: 1, gap: 3 },
+  heroEyebrow: { color: "rgba(255,255,255,.72)", ...typography.eyebrow, fontSize: 9 },
+  heroTitle: { color: "#FFFFFF", ...typography.title, fontSize: 27 },
+  heroIcon: { width: 50, height: 50, borderRadius: 17, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
+  heroBody: { color: "rgba(255,255,255,.84)", ...typography.caption, lineHeight: 18 },
+  statusGrid: { gap: spacing.sm },
+  trackingCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  trackingHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  trackingIcon: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  trackingCopy: { flex: 1, gap: 2 },
+  trackingTitle: { ...typography.bodyStrong, fontSize: 14 },
+  trackingBody: { ...typography.caption, lineHeight: 17 },
+  divider: { height: StyleSheet.hairlineWidth },
+  metaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
+  metaLabel: { ...typography.caption },
+  metaValue: { ...typography.caption, fontWeight: "800", flex: 1, textAlign: "right" },
+  notice: { padding: spacing.md, borderRadius: radii.md },
+  noticeText: { ...typography.caption, fontWeight: "800", textAlign: "center" },
+  policy: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  policyText: { flex: 1, ...typography.caption, lineHeight: 18 },
 });
