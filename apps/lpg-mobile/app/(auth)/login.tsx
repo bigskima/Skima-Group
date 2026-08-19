@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { Redirect, router } from "expo-router";
-import { LockKeyhole, Mail } from "lucide-react-native";
+import { LockKeyhole, Mail, ShieldCheck } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSession } from "../../src/native/session/SessionProvider";
@@ -40,12 +40,30 @@ export default function Login() {
       title="Sign in to SKIMA"
       body="Continue your refill, delivery, driver or station work from one secure account."
       footer={
-        <View style={styles.footerLinks}>
-          <Pressable onPress={() => router.push("/(auth)/register")}>
-            <Text style={styles.linkStrong}>Create account</Text>
-          </Pressable>
-          <Pressable onPress={() => router.push("/(auth)/forgot-password")}>
-            <Text style={[styles.linkMuted, { color: palette.muted }]}>Forgot password?</Text>
+        <View style={styles.footerArea}>
+          <View style={styles.footerLinks}>
+            <Pressable onPress={() => router.push("/(auth)/register")}>
+              <Text style={styles.linkStrong}>Create account</Text>
+            </Pressable>
+            <Pressable onPress={() => router.push("/(auth)/forgot-password")}>
+              <Text style={[styles.linkMuted, { color: palette.muted }]}>Forgot password?</Text>
+            </Pressable>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/verify-driver")}
+            style={({ pressed }) => [
+              styles.publicVerify,
+              { backgroundColor: palette.surfaceSubtle, borderColor: palette.border, opacity: pressed ? 0.74 : 1 },
+            ]}
+          >
+            <View style={[styles.publicVerifyIcon, { backgroundColor: palette.brandSoft }]}>
+              <ShieldCheck color={palette.brand} size={18} />
+            </View>
+            <View style={styles.publicVerifyCopy}>
+              <Text style={[styles.publicVerifyTitle, { color: palette.ink }]}>Verify a SKIMA driver</Text>
+              <Text style={[styles.publicVerifyBody, { color: palette.muted }]}>Public lookup · no sign-in required</Text>
+            </View>
           </Pressable>
         </View>
       }
@@ -116,9 +134,15 @@ const styles = StyleSheet.create({
   buttonFill: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.lg },
   buttonText: { color: "white", fontSize: 15, fontWeight: "900" },
   error: { color: colors.danger, fontSize: 12, lineHeight: 18, fontWeight: "800" },
+  footerArea: { gap: spacing.md },
   footerLinks: { flexDirection: "row", justifyContent: "space-between", gap: spacing.md },
   linkStrong: { color: colors.brand, fontSize: 13, fontWeight: "900" },
   linkMuted: { fontSize: 13, fontWeight: "900" },
+  publicVerify: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md },
+  publicVerifyIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  publicVerifyCopy: { flex: 1, gap: 2 },
+  publicVerifyTitle: { fontSize: 13, fontWeight: "900" },
+  publicVerifyBody: { fontSize: 10, fontWeight: "700" },
   disabled: { opacity: 0.52 },
   pressed: { opacity: 0.76 },
 });
