@@ -1,15 +1,10 @@
 import * as ImagePicker from "expo-image-picker";
-import { Camera, CheckCircle2, Image as ImageIcon, Sparkles } from "lucide-react-native";
+import { Camera, CheckCircle2, Images, Image as ImageIcon, LockKeyhole } from "lucide-react-native";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { colors, radii, spacing } from "../theme/tokens";
+import { Image, StyleSheet, Text, View } from "react-native";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { AppButton } from "../ui/AppButton";
 
 export interface StationPhotoView {
   key: string;
@@ -27,11 +22,8 @@ export interface MultiPhotoRequirementProps {
   onUploadView: (viewKey: string, file: { uri: string; name: string; mimeType: string }) => Promise<void>;
 }
 
-export function MultiPhotoRequirement({
-  views,
-  onUploadView,
-}: MultiPhotoRequirementProps) {
-  const [activeKey, setActiveKey] = useState<string | null>(null);
+export function MultiPhotoRequirement({ views, onUploadView }: MultiPhotoRequirementProps) {
+  const { palette } = useAppTheme();
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,17 +35,11 @@ export function MultiPhotoRequirement({
         setError("Camera permission is required.");
         return;
       }
-      const result = await ImagePicker.launchCameraAsync({
-        quality: 0.9,
-      });
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.9 });
       if (result.canceled) return;
       const asset = result.assets[0];
       setUploadingKey(viewKey);
-      await onUploadView(viewKey, {
-        uri: asset.uri,
-        name: `${viewKey}-${Date.now()}.jpg`,
-        mimeType: "image/jpeg",
-      });
+      await onUploadView(viewKey, { uri: asset.uri, name: `${viewKey}-${Date.now()}.jpg`, mimeType: "image/jpeg" });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Upload failed.");
     } finally {
@@ -69,18 +55,11 @@ export function MultiPhotoRequirement({
         setError("Photo library permission is required.");
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        quality: 0.9,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.9 });
       if (result.canceled) return;
       const asset = result.assets[0];
       setUploadingKey(viewKey);
-      await onUploadView(viewKey, {
-        uri: asset.uri,
-        name: `${viewKey}-${Date.now()}.jpg`,
-        mimeType: "image/jpeg",
-      });
+      await onUploadView(viewKey, { uri: asset.uri, name: `${viewKey}-${Date.now()}.jpg`, mimeType: "image/jpeg" });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Upload failed.");
     } finally {
@@ -89,80 +68,115 @@ export function MultiPhotoRequirement({
   };
 
   const requiredCount = views.filter((v) => v.isRequired).length;
-  const completedRequired = views.filter((v) => v.isRequired && v.uploadedUrl).length;
+  const completedRequired = views.filter((v) => v.isRequired && v.uploadedUrl && !v.replacementRequested).length;
+  const completedPercent = requiredCount ? Math.round((completedRequired / requiredCount) * 100) : 100;
 
   return (
     <View style={styles.container}>
-      <View style={styles.summaryBar}>
-        <Text style={styles.summaryTitle}>Premises Photographs</Text>
-        <Text style={styles.summaryCount}>
-          {completedRequired} of {requiredCount} required photos uploaded
-        </Text>
+      <View style={[styles.summaryBar, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <View style={styles.summaryCopy}>
+          <Text style={[styles.summaryTitle, { color: palette.ink }]}>Station premises photos</Text>
+          <Text style={[styles.summaryDescription, { color: palette.muted }]}>Capture each requested view so SKIMA can verify the physical facility.</Text>
+        </View>
+        <View style={[styles.countBadge, { backgroundColor: completedRequired === requiredCount ? palette.successSoft : palette.brandSoft }]}>
+          <Text style={[styles.summaryCount, { color: completedRequired === requiredCount ? palette.success : palette.brand }]}>
+            {completedRequired}/{requiredCount} required
+          </Text>
+        </View>
+        <View style={[styles.progressTrack, { backgroundColor: palette.soft }]}>
+          <View style={[styles.progressFill, { backgroundColor: palette.brand, width: `${completedPercent}%` }]} />
+        </View>
       </View>
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      <View style={[styles.privacyNote, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+        <LockKeyhole color={palette.mutedStrong} size={16} />
+        <Text style={[styles.privacyText, { color: palette.muted }]}>Verification photos stay private by default. Only photos separately approved by SKIMA for a station profile can become public.</Text>
+      </View>
+
+      {error ? <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
 
       <View style={styles.grid}>
-        {views.map((v) => {
-          const isUploaded = Boolean(v.uploadedUrl);
-          const isUploading = uploadingKey === v.key;
+        {views.map((view) => {
+          const isUploaded = Boolean(view.uploadedUrl);
+          const isUploading = uploadingKey === view.key;
+          const needsReplacement = Boolean(view.replacementRequested || view.replacementReason);
+          const internalOnly = view.key === "station.photo.tank";
 
           return (
-            <View key={v.key} style={styles.card}>
-              <View style={styles.cardMedia}>
-                {v.uploadedUrl ? (
-                  <Image source={{ uri: v.uploadedUrl }} style={styles.image} />
+            <View
+              key={view.key}
+              style={[
+                styles.card,
+                shadows.soft,
+                {
+                  backgroundColor: palette.surface,
+                  borderColor: needsReplacement ? palette.danger : palette.border,
+                },
+              ]}
+            >
+              <View style={[styles.cardMedia, { backgroundColor: palette.surfaceSubtle }]}>
+                {view.uploadedUrl ? (
+                  <Image source={{ uri: view.uploadedUrl }} resizeMode="cover" style={styles.image} />
                 ) : (
                   <View style={styles.placeholder}>
-                    <ImageIcon color={colors.muted} size={28} />
-                    <Text style={styles.placeholderText}>Not uploaded</Text>
+                    <View style={[styles.placeholderIcon, { backgroundColor: palette.brandSoft }]}>
+                      <ImageIcon color={palette.brand} size={25} />
+                    </View>
+                    <Text style={[styles.placeholderText, { color: palette.muted }]}>No photo uploaded</Text>
                   </View>
                 )}
 
-                <View style={[styles.tag, v.isRequired ? styles.tagRequired : styles.tagOptional]}>
-                  <Text style={[styles.tagText, v.isRequired ? styles.tagTextRequired : styles.tagTextOptional]}>
-                    {v.isRequired ? "Required" : "Optional Bonus"}
+                <View style={[styles.tag, { backgroundColor: view.isRequired ? palette.brandSoft : "rgba(20,20,22,.68)" }]}>
+                  <Text style={[styles.tagText, { color: view.isRequired ? palette.brand : "#FFFFFF" }]}>
+                    {view.isRequired ? "Required" : "Optional"}
                   </Text>
                 </View>
 
-                {isUploaded ? (
-                  <View style={styles.checkedBadge}>
-                    <CheckCircle2 color="white" size={14} />
+                {internalOnly ? (
+                  <View style={styles.internalTag}>
+                    <LockKeyhole color="#FFFFFF" size={11} />
+                    <Text style={styles.internalTagText}>Internal</Text>
+                  </View>
+                ) : null}
+
+                {isUploaded && !needsReplacement ? (
+                  <View style={[styles.checkedBadge, { backgroundColor: palette.success }]}>
+                    <CheckCircle2 color="#FFFFFF" size={14} />
                   </View>
                 ) : null}
               </View>
 
               <View style={styles.cardContent}>
-                <Text style={styles.viewTitle}>{v.title}</Text>
-                <Text style={styles.viewDesc}>{v.description}</Text>
+                <Text style={[styles.viewTitle, { color: palette.ink }]}>{view.title}</Text>
+                <Text style={[styles.viewDesc, { color: palette.muted }]}>{view.description}</Text>
 
-                {v.replacementReason ? (
-                  <Text style={styles.reasonText}>⚠️ {v.replacementReason}</Text>
+                {view.replacementReason ? (
+                  <View style={[styles.reasonBox, { backgroundColor: palette.dangerSoft }]}>
+                    <Text style={[styles.reasonText, { color: palette.danger }]}>{view.replacementReason}</Text>
+                  </View>
                 ) : null}
 
                 <View style={styles.actions}>
-                  <Pressable
-                    disabled={isUploading}
-                    onPress={() => void handleCapture(v.key)}
-                    style={styles.actionBtnPrimary}
-                  >
-                    {isUploading ? (
-                      <ActivityIndicator color="white" size="small" />
-                    ) : (
-                      <>
-                        <Camera color="white" size={14} />
-                        <Text style={styles.actionBtnTextPrimary}>Camera</Text>
-                      </>
-                    )}
-                  </Pressable>
-
-                  <Pressable
-                    disabled={isUploading}
-                    onPress={() => void handlePick(v.key)}
-                    style={styles.actionBtnSecondary}
-                  >
-                    <Text style={styles.actionBtnTextSecondary}>Gallery</Text>
-                  </Pressable>
+                  <View style={styles.actionSlot}>
+                    <AppButton
+                      label={isUploaded ? "Retake" : "Camera"}
+                      size="sm"
+                      loading={isUploading}
+                      disabled={isUploading}
+                      icon={<Camera color="#FFFFFF" size={14} />}
+                      onPress={() => void handleCapture(view.key)}
+                    />
+                  </View>
+                  <View style={styles.actionSlot}>
+                    <AppButton
+                      label="Gallery"
+                      size="sm"
+                      variant="secondary"
+                      disabled={isUploading}
+                      icon={<Images color={palette.ink} size={14} />}
+                      onPress={() => void handlePick(view.key)}
+                    />
+                  </View>
                 </View>
               </View>
             </View>
@@ -174,152 +188,35 @@ export function MultiPhotoRequirement({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: spacing.md,
-  },
-  summaryBar: {
-    backgroundColor: "#F3F4F6",
-    padding: spacing.md,
-    borderRadius: radii.md,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  summaryTitle: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: colors.ink,
-  },
-  summaryCount: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.brand,
-  },
-  errorText: {
-    color: colors.danger,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  grid: {
-    gap: spacing.md,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-  },
-  cardMedia: {
-    height: 140,
-    backgroundColor: "#FAFAFA",
-    position: "relative",
-  },
-  image: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-  },
-  placeholder: {
-    width: "100%",
-    height: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  placeholderText: {
-    fontSize: 11,
-    color: colors.muted,
-    fontWeight: "700",
-  },
-  tag: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
-  },
-  tagRequired: {
-    backgroundColor: "#FFF0F1",
-  },
-  tagOptional: {
-    backgroundColor: "rgba(0,0,0,0.6)",
-  },
-  tagText: {
-    fontSize: 10,
-    fontWeight: "900",
-  },
-  tagTextRequired: {
-    color: colors.brand,
-  },
-  tagTextOptional: {
-    color: "white",
-  },
-  checkedBadge: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: colors.success,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cardContent: {
-    padding: spacing.md,
-    gap: 6,
-  },
-  viewTitle: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: colors.ink,
-  },
-  viewDesc: {
-    fontSize: 12,
-    color: colors.muted,
-    lineHeight: 16,
-  },
-  reasonText: {
-    fontSize: 11,
-    color: colors.danger,
-    fontWeight: "700",
-  },
-  actions: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: 4,
-  },
-  actionBtnPrimary: {
-    flex: 1,
-    minHeight: 38,
-    backgroundColor: colors.brand,
-    borderRadius: radii.md,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  actionBtnTextPrimary: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  actionBtnSecondary: {
-    flex: 1,
-    minHeight: 38,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  actionBtnTextSecondary: {
-    color: colors.ink,
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  container: { gap: spacing.md },
+  summaryBar: { padding: spacing.md, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, gap: spacing.sm },
+  summaryCopy: { gap: 3 },
+  summaryTitle: { ...typography.subheading, fontSize: 15 },
+  summaryDescription: { ...typography.caption, lineHeight: 17 },
+  countBadge: { alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 5, borderRadius: radii.pill },
+  summaryCount: { ...typography.caption, fontSize: 11, fontWeight: "900" },
+  progressTrack: { height: 6, borderRadius: radii.pill, overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: radii.pill },
+  privacyNote: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth },
+  privacyText: { ...typography.caption, flex: 1, lineHeight: 17 },
+  errorText: { ...typography.caption, fontWeight: "700" },
+  grid: { gap: spacing.md },
+  card: { borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, overflow: "hidden" },
+  cardMedia: { height: 154, position: "relative" },
+  image: { width: "100%", height: "100%" },
+  placeholder: { width: "100%", height: "100%", alignItems: "center", justifyContent: "center", gap: 7 },
+  placeholderIcon: { width: 50, height: 50, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  placeholderText: { ...typography.caption },
+  tag: { position: "absolute", top: 9, left: 9, paddingHorizontal: 8, paddingVertical: 4, borderRadius: radii.pill },
+  tagText: { ...typography.caption, fontSize: 10, fontWeight: "900" },
+  internalTag: { position: "absolute", bottom: 9, left: 9, backgroundColor: "rgba(20,20,22,.72)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: radii.pill, flexDirection: "row", alignItems: "center", gap: 4 },
+  internalTagText: { color: "#FFFFFF", ...typography.caption, fontSize: 9, fontWeight: "900" },
+  checkedBadge: { position: "absolute", top: 9, right: 9, width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  cardContent: { padding: spacing.md, gap: 6 },
+  viewTitle: { ...typography.subheading, fontSize: 15 },
+  viewDesc: { ...typography.caption, lineHeight: 17 },
+  reasonBox: { padding: 9, borderRadius: radii.sm, marginTop: 2 },
+  reasonText: { ...typography.caption, fontWeight: "700" },
+  actions: { flexDirection: "row", gap: spacing.sm, marginTop: 4 },
+  actionSlot: { flex: 1 },
 });
