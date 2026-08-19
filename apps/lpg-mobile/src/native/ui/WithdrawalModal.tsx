@@ -1,13 +1,8 @@
-import { CheckCircle2, ShieldCheck, X, ArrowUpRight, Building2, AlertCircle } from "lucide-react-native";
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { colors, radii, spacing } from "../theme/tokens";
+import { AlertCircle, ArrowUpRight, Building2, CheckCircle2, ShieldCheck, X } from "lucide-react-native";
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { AppButton } from "./AppButton";
 
 export interface WithdrawalModalProps {
   visible: boolean;
@@ -36,138 +31,96 @@ export function WithdrawalModal({
   onConfirm,
   onClose,
 }: WithdrawalModalProps) {
+  const { palette } = useAppTheme();
   if (!visible) return null;
 
-  const formattedAmount = new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-  }).format(amount);
-
-  const maskedAccount = accountNumber.length >= 4
-    ? `•••• ${accountNumber.slice(-4)}`
-    : accountNumber;
-
+  const formattedAmount = new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount);
+  const maskedAccount = accountNumber.length >= 4 ? `•••• ${accountNumber.slice(-4)}` : accountNumber;
   const isSuccess = Boolean(submittedResult);
 
   return (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={visible}
-      onRequestClose={onClose}
-    >
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          {/* Header */}
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
+      <View style={[styles.overlay, { backgroundColor: palette.overlay }]}> 
+        <View style={[styles.container, shadows.raised, { backgroundColor: palette.surface, borderColor: palette.border }]}> 
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
-              <ArrowUpRight color={colors.brand} size={22} />
-              <Text style={styles.headerTitle}>
-                {isSuccess ? "Withdrawal Submitted" : "Confirm Payout"}
-              </Text>
+              <View style={[styles.headerIcon, { backgroundColor: palette.brandSoft }]}>
+                <ArrowUpRight color={palette.brand} size={20} />
+              </View>
+              <View>
+                <Text style={[styles.headerTitle, { color: palette.ink }]}>
+                  {isSuccess ? "Withdrawal submitted" : "Confirm withdrawal"}
+                </Text>
+                <Text style={[styles.headerSub, { color: palette.muted }]}>Secure SKIMA payout request</Text>
+              </View>
             </View>
-            <Pressable onPress={onClose} style={styles.closeBtn}>
-              <X color={colors.ink} size={20} />
+            <Pressable accessibilityRole="button" onPress={onClose} style={[styles.closeBtn, { backgroundColor: palette.soft }]}>
+              <X color={palette.ink} size={19} />
             </Pressable>
           </View>
 
           {isSuccess ? (
             <View style={styles.successContainer}>
-              <View style={styles.iconCircle}>
-                <CheckCircle2 color="white" size={48} />
+              <View style={[styles.iconCircle, { backgroundColor: palette.success }]}>
+                <CheckCircle2 color="#FFFFFF" size={42} />
               </View>
-              <Text style={styles.successTitle}>Transfer In Progress</Text>
-              <Text style={styles.successSub}>
-                Your withdrawal request of <Text style={{ fontWeight: "900" }}>{formattedAmount}</Text> has been submitted to Paystack for automated bank transfer.
+              <Text style={[styles.successTitle, { color: palette.ink }]}>Request received</Text>
+              <Text style={[styles.successSub, { color: palette.muted }]}> 
+                Your withdrawal request for <Text style={{ fontWeight: "900", color: palette.ink }}>{formattedAmount}</Text> is being processed. Status updates will appear in your wallet and notifications.
               </Text>
 
-              {/* Receipt Card */}
-              <View style={styles.receiptCard}>
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLabel}>Destination Account</Text>
-                  <Text style={styles.receiptValue}>{accountName}</Text>
-                </View>
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLabel}>Bank / Institution</Text>
-                  <Text style={styles.receiptValue}>{bankName}</Text>
-                </View>
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLabel}>Account Number</Text>
-                  <Text style={styles.receiptValue}>{maskedAccount}</Text>
-                </View>
-                <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLabel}>Transfer Channel</Text>
-                  <Text style={styles.receiptValue}>Paystack Transfer</Text>
-                </View>
-                {submittedResult?.id || submittedResult?.reference ? (
-                  <View style={styles.receiptRow}>
-                    <Text style={styles.receiptLabel}>Reference ID</Text>
-                    <Text style={[styles.receiptValue, { fontSize: 12 }]}>
-                      {submittedResult.reference ?? submittedResult.id}
-                    </Text>
-                  </View>
+              <View style={[styles.receiptCard, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}> 
+                <ReceiptRow label="Destination" value={accountName || "Payout account"} />
+                <ReceiptRow label="Institution" value={bankName || "Bank / institution"} />
+                <ReceiptRow label="Account" value={maskedAccount} />
+                {submittedResult?.reference || submittedResult?.id ? (
+                  <ReceiptRow label="Reference" value={submittedResult.reference ?? submittedResult.id ?? ""} />
                 ) : null}
               </View>
 
-              <Pressable onPress={onClose} style={styles.primaryBtn}>
-                <Text style={styles.primaryBtnText}>Done / Return to Wallet</Text>
-              </Pressable>
+              <AppButton label="Done" fullWidth onPress={onClose} />
             </View>
           ) : (
             <View style={styles.confirmContainer}>
-              <View style={styles.amountBox}>
-                <Text style={styles.amountLabel}>WITHDRAWAL AMOUNT</Text>
-                <Text style={styles.amountValue}>{formattedAmount}</Text>
+              <View style={[styles.amountBox, { backgroundColor: palette.brandSofter, borderColor: palette.brandSoft }]}> 
+                <Text style={[styles.amountLabel, { color: palette.muted }]}>WITHDRAWAL AMOUNT</Text>
+                <Text style={[styles.amountValue, { color: palette.brand }]}>{formattedAmount}</Text>
               </View>
 
-              {/* Account Details Box */}
-              <View style={styles.detailsBox}>
+              <View style={[styles.detailsBox, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}> 
                 <View style={styles.detailRow}>
-                  <Building2 color={colors.brand} size={20} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.detailTitle}>{accountName || "Bank Account"}</Text>
-                    <Text style={styles.detailSub}>
-                      {bankName} · {maskedAccount}
-                    </Text>
+                  <View style={[styles.bankIcon, { backgroundColor: palette.brandSoft }]}>
+                    <Building2 color={palette.brand} size={19} />
+                  </View>
+                  <View style={styles.bankCopy}>
+                    <Text style={[styles.detailTitle, { color: palette.ink }]}>{accountName || "Payout account"}</Text>
+                    <Text style={[styles.detailSub, { color: palette.muted }]}>{bankName || "Bank / institution"} · {maskedAccount}</Text>
                   </View>
                 </View>
-                <View style={styles.divider} />
-                <View style={styles.detailRowBetween}>
-                  <Text style={styles.metaLabel}>Payout Fee</Text>
-                  <Text style={styles.metaValueFree}>FREE (₦0.00)</Text>
-                </View>
-                <View style={styles.detailRowBetween}>
-                  <Text style={styles.metaLabel}>Processing Channel</Text>
-                  <Text style={styles.metaValue}>Paystack Automated Transfer</Text>
-                </View>
-                <View style={styles.detailRowBetween}>
-                  <Text style={styles.metaLabel}>Estimated Payout Speed</Text>
-                  <Text style={styles.metaValueSpeed}>Instant to 5 mins</Text>
+                <View style={[styles.securityRow, { borderTopColor: palette.border }]}> 
+                  <ShieldCheck color={palette.success} size={16} />
+                  <Text style={[styles.securityText, { color: palette.muted }]}>Fees, limits, and payout timing are determined by the active SKIMA financial policy and payment rail.</Text>
                 </View>
               </View>
 
               {error ? (
-                <View style={styles.errorBox}>
-                  <AlertCircle color={colors.danger} size={18} />
-                  <Text style={styles.errorText}>{error}</Text>
+                <View style={[styles.errorBox, { backgroundColor: palette.dangerSoft }]}>
+                  <AlertCircle color={palette.danger} size={18} />
+                  <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text>
                 </View>
               ) : null}
 
               <Pressable
+                accessibilityRole="button"
                 disabled={isSubmitting}
                 onPress={onConfirm}
-                style={styles.primaryBtn}
+                style={({ pressed }) => [
+                  styles.confirmButton,
+                  { backgroundColor: palette.brand, opacity: isSubmitting ? 0.5 : pressed ? 0.82 : 1 },
+                ]}
               >
-                {isSubmitting ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text style={styles.primaryBtnText}>Confirm Withdrawal</Text>
-                )}
+                {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.confirmButtonText}>Confirm withdrawal</Text>}
               </Pressable>
-
-              <Text style={styles.securityNote}>
-                <ShieldCheck color={colors.muted} size={14} /> Payouts are protected by end-to-end security policy verification.
-              </Text>
             </View>
           )}
         </View>
@@ -176,199 +129,47 @@ export function WithdrawalModal({
   );
 }
 
+function ReceiptRow({ label, value }: { label: string; value: string }) {
+  const { palette } = useAppTheme();
+  return (
+    <View style={styles.receiptRow}>
+      <Text style={[styles.receiptLabel, { color: palette.muted }]}>{label}</Text>
+      <Text numberOfLines={1} style={[styles.receiptValue, { color: palette.ink }]}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: spacing.md,
-  },
-  container: {
-    width: "100%",
-    maxWidth: 480,
-    backgroundColor: colors.surface,
-    borderRadius: 24,
-    padding: spacing.lg,
-    gap: spacing.md,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  headerTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  headerTitle: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  closeBtn: {
-    padding: 6,
-    borderRadius: radii.pill,
-    backgroundColor: "#F3F4F6",
-  },
-  confirmContainer: {
-    gap: spacing.md,
-  },
-  amountBox: {
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    backgroundColor: "#FFF0F1",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(225, 29, 72, 0.15)",
-  },
-  amountLabel: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  amountValue: {
-    color: colors.brand,
-    fontSize: 32,
-    fontWeight: "900",
-    marginTop: 4,
-  },
-  detailsBox: {
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: spacing.sm,
-  },
-  detailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  detailTitle: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  detailSub: {
-    color: colors.muted,
-    fontSize: 13,
-    marginTop: 2,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 4,
-  },
-  detailRowBetween: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  metaLabel: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-  metaValue: {
-    color: colors.ink,
-    fontWeight: "800",
-    fontSize: 13,
-  },
-  metaValueFree: {
-    color: colors.success,
-    fontWeight: "900",
-    fontSize: 13,
-  },
-  metaValueSpeed: {
-    color: colors.brand,
-    fontWeight: "900",
-    fontSize: 13,
-  },
-  errorBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    padding: spacing.sm,
-    borderRadius: radii.md,
-    backgroundColor: "#FEF2F2",
-  },
-  errorText: {
-    color: colors.danger,
-    fontSize: 13,
-    fontWeight: "700",
-    flex: 1,
-  },
-  primaryBtn: {
-    minHeight: 52,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radii.md,
-    backgroundColor: colors.brand,
-  },
-  primaryBtnText: {
-    color: "white",
-    fontWeight: "900",
-    fontSize: 15,
-  },
-  securityNote: {
-    color: colors.muted,
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: 4,
-  },
-  successContainer: {
-    alignItems: "center",
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  iconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.success,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  successTitle: {
-    color: colors.ink,
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  successSub: {
-    color: colors.muted,
-    textAlign: "center",
-    lineHeight: 20,
-    fontSize: 14,
-  },
-  receiptCard: {
-    width: "100%",
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: spacing.xs,
-  },
-  receiptRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 4,
-  },
-  receiptLabel: {
-    color: colors.muted,
-    fontSize: 13,
-  },
-  receiptValue: {
-    color: colors.ink,
-    fontWeight: "800",
-    fontSize: 13,
-  },
+  overlay: { flex: 1, justifyContent: "center", alignItems: "center", padding: spacing.md },
+  container: { width: "100%", maxWidth: 480, borderRadius: radii.xl, borderWidth: StyleSheet.hairlineWidth, padding: spacing.lg, gap: spacing.lg },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.md },
+  headerTitleRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm + 2, flex: 1 },
+  headerIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  headerTitle: { ...typography.subheading, fontSize: 16 },
+  headerSub: { ...typography.caption, fontSize: 11, marginTop: 2 },
+  closeBtn: { width: 36, height: 36, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  confirmContainer: { gap: spacing.md },
+  amountBox: { padding: spacing.lg, borderRadius: radii.lg, alignItems: "center", borderWidth: StyleSheet.hairlineWidth },
+  amountLabel: { ...typography.eyebrow, fontSize: 9 },
+  amountValue: { fontSize: 32, lineHeight: 39, fontWeight: "900", letterSpacing: -0.7, marginTop: 3 },
+  detailsBox: { padding: spacing.md, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, gap: spacing.md },
+  detailRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm + 2 },
+  bankIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  bankCopy: { flex: 1, gap: 2 },
+  detailTitle: { ...typography.bodyStrong, fontSize: 14 },
+  detailSub: { ...typography.caption },
+  securityRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: spacing.md },
+  securityText: { ...typography.caption, flex: 1, lineHeight: 17 },
+  errorBox: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md },
+  errorText: { ...typography.caption, fontWeight: "700", flex: 1, lineHeight: 17 },
+  confirmButton: { minHeight: 52, borderRadius: radii.md, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.md },
+  confirmButtonText: { color: "#FFFFFF", ...typography.bodyStrong, fontSize: 15 },
+  successContainer: { alignItems: "center", gap: spacing.md, paddingVertical: spacing.xs },
+  iconCircle: { width: 70, height: 70, borderRadius: 35, alignItems: "center", justifyContent: "center" },
+  successTitle: { ...typography.heading },
+  successSub: { ...typography.body, textAlign: "center", lineHeight: 21 },
+  receiptCard: { width: "100%", padding: spacing.md, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, gap: spacing.sm },
+  receiptRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md },
+  receiptLabel: { ...typography.caption, flex: 0.35 },
+  receiptValue: { ...typography.caption, fontWeight: "800", textAlign: "right", flex: 0.65 },
 });
