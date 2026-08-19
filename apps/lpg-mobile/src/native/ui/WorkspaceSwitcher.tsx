@@ -5,7 +5,7 @@ import { domainQueries } from "../api/domains";
 import { firstString, nestedRecords } from "../api/records";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { colors, radii } from "../theme/tokens";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
 
 type Workspace = "customer" | "driver" | "station";
 
@@ -16,20 +16,38 @@ export function WorkspaceSwitcher({ current }: { current: Workspace }) {
   const workspaces = nestedRecords(access.data, "workspaces")
     .filter((item) => firstString(item, ["status"]) === "active")
     .map((item) => firstString(item, ["key"]));
+
   const options = [
     { key: "customer" as const, label: "Customer", icon: UserRound },
     ...(workspaces.includes("driver") ? [{ key: "driver" as const, label: "Driver", icon: Truck }] : []),
     ...(workspaces.includes("station") ? [{ key: "station" as const, label: "Station", icon: Building2 }] : []),
   ];
+
   if (options.length < 2) return null;
+
   return (
-    <View accessibilityLabel="Switch workspace" style={[styles.wrap, { backgroundColor: palette.surface }]}> 
+    <View
+      accessibilityLabel="Switch workspace"
+      style={[styles.wrap, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}
+    >
       {options.map(({ key, label, icon: Icon }) => {
         const active = key === current;
         return (
-          <Pressable key={key} onPress={() => router.replace(`/${`(${key})`}` as never)} style={[styles.option, active && styles.active]}>
-            <Icon color={active ? "white" : palette.muted} size={15} />
-            <Text style={[styles.label, { color: active ? "white" : palette.ink }]}>{label}</Text>
+          <Pressable
+            key={key}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            onPress={() => router.replace(`/${`(${key})`}` as never)}
+            style={({ pressed }) => [
+              styles.option,
+              {
+                backgroundColor: active ? palette.brand : "transparent",
+                opacity: pressed ? 0.76 : 1,
+              },
+            ]}
+          >
+            <Icon color={active ? "#FFFFFF" : palette.mutedStrong} size={15} />
+            <Text style={[styles.label, { color: active ? "#FFFFFF" : palette.ink }]}>{label}</Text>
           </Pressable>
         );
       })}
@@ -38,8 +56,21 @@ export function WorkspaceSwitcher({ current }: { current: Workspace }) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignSelf: "flex-start", flexDirection: "row", gap: 3, padding: 4, borderRadius: 17, shadowColor: "#000", shadowOpacity: .12, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
-  option: { minHeight: 34, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 11, borderRadius: 13 },
-  active: { backgroundColor: colors.brand },
-  label: { fontSize: 11, fontWeight: "900" },
+  wrap: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 3,
+    padding: 4,
+    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  option: {
+    minHeight: 36,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs + 2,
+    paddingHorizontal: 11,
+    borderRadius: radii.md,
+  },
+  label: { ...typography.caption, fontSize: 11, fontWeight: "900" },
 });
