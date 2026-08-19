@@ -1,6 +1,6 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { CheckCircle2, Layers3, QrCode, ScanLine, ShieldCheck } from "lucide-react-native";
+import { CheckCircle2, QrCode, ScanLine, ShieldCheck } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
@@ -17,53 +17,39 @@ import { Screen } from "./Screen";
 import { StatusPill } from "./StatusPill";
 
 export function ScanWorkspaceScreen({
-  workspace,
   jobs,
 }: {
-  workspace: "Driver" | "Station";
   jobs: UseQueryResult<PlatformRecord[], Error>;
 }) {
   const { palette } = useAppTheme();
-  const actionable = (jobs.data ?? []).filter((job) => scanReady(workspace, displayStatus(job) ?? ""));
+  const actionable = (jobs.data ?? []).filter((job) => scanReady(displayStatus(job) ?? ""));
   const [selectedId, setSelectedId] = useState("");
   const jobId = selectedId || (actionable.length === 1 ? (recordId(actionable[0]) ?? "") : "");
 
   const detected = (value: string) => {
     if (!jobId) return;
-    const group = workspace === "Driver" ? "driver" : "station";
     router.push(
-      `/${`(${group})`}/job/${encodeURIComponent(jobId)}?scannedToken=${encodeURIComponent(value)}` as never,
+      `/(driver)/job/${encodeURIComponent(jobId)}?scannedToken=${encodeURIComponent(value)}` as never,
     );
   };
 
-  const isStation = workspace === "Station";
-
   return (
     <Screen
-      eyebrow={isStation ? "Station verification" : "Driver verification"}
-      title={isStation ? "Scan incoming cylinder" : "Scan SKIMA cylinder"}
-      subtitle={
-        isStation
-          ? "Select the refill job first, then verify the cylinder identity before operational processing."
-          : "Select the active job before scanning so SKIMA can match the cylinder to the correct fulfilment record."
-      }
+      eyebrow="Driver verification"
+      title="Scan SKIMA cylinder"
+      subtitle="Choose the assigned job first so every cylinder scan is matched to the correct fulfilment record."
+      action={<Pressable onPress={() => router.back()}><Text style={[styles.back, { color: palette.brand }]}>Back</Text></Pressable>}
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
-        <View style={styles.heroIcon}>
-          {isStation ? <Layers3 color="#FFFFFF" size={26} /> : <ScanLine color="#FFFFFF" size={26} />}
-        </View>
+        <View style={styles.heroIcon}><ScanLine color="#FFFFFF" size={26} /></View>
         <View style={styles.heroCopy}>
-          <Text style={styles.heroEyebrow}>READY TO VERIFY</Text>
+          <Text style={styles.heroEyebrow}>DRIVER HAND-OFF VERIFICATION</Text>
           <Text style={styles.heroTitle}>
             {actionable.length
-              ? `${actionable.length} ${actionable.length === 1 ? "job" : "jobs"} ready for scanning`
-              : "No eligible scan job right now"}
+              ? `${actionable.length} ${actionable.length === 1 ? "job" : "jobs"} ready for a cylinder scan`
+              : "No job needs a scan right now"}
           </Text>
-          <Text style={styles.heroBody}>
-            {isStation
-              ? "Use the SKIMA identity attached to the cylinder or presented by the driver for this order."
-              : "Only scan the cylinder connected to the job you are currently fulfilling."}
-          </Text>
+          <Text style={styles.heroBody}>Driver scans are used at customer pickup, station reception and final customer hand-over according to the current order stage.</Text>
         </View>
       </View>
 
@@ -79,6 +65,7 @@ export function ScanWorkspaceScreen({
                 <Pressable
                   key={id}
                   accessibilityRole="button"
+                  accessibilityState={{ selected }}
                   onPress={() => setSelectedId(id)}
                   style={({ pressed }) => [
                     styles.job,
@@ -90,13 +77,11 @@ export function ScanWorkspaceScreen({
                     },
                   ]}
                 >
-                  <View style={[styles.jobIcon, { backgroundColor: selected ? palette.brandSoft : palette.soft }]}>
+                  <View style={[styles.jobIcon, { backgroundColor: selected ? palette.brandSoft : palette.surfaceSubtle }]}>
                     <QrCode color={selected ? palette.brand : palette.mutedStrong} size={20} />
                   </View>
                   <View style={styles.jobCopy}>
-                    <Text numberOfLines={1} style={[styles.jobTitle, { color: palette.ink }]}>
-                      {displayReference(job) ?? "LPG fulfilment job"}
-                    </Text>
+                    <Text numberOfLines={1} style={[styles.jobTitle, { color: palette.ink }]}>{displayReference(job) ?? "LPG fulfilment job"}</Text>
                     <Text style={[styles.jobMeta, { color: palette.muted }]}>{scanStatus(status)}</Text>
                   </View>
                   {selected ? <CheckCircle2 color={palette.brand} size={21} /> : <StatusPill label="Select" tone="neutral" />}
@@ -118,11 +103,7 @@ export function ScanWorkspaceScreen({
         <EmptyState
           icon={<ScanLine color={palette.brand} size={27} />}
           title="Nothing to scan yet"
-          description={
-            isStation
-              ? "A cylinder becomes available here when its fulfilment record reaches a station scan stage."
-              : "An assigned job becomes available here when its current lifecycle stage requires a cylinder scan."
-          }
+          description="An assigned job appears here only when its current lifecycle stage requires the driver to verify the SKIMA cylinder."
         />
       )}
 
@@ -132,7 +113,7 @@ export function ScanWorkspaceScreen({
             <View style={[styles.scannerIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
             <View style={styles.scannerCopy}>
               <Text style={[styles.scannerTitle, { color: palette.ink }]}>Align the SKIMA code inside the scanner</Text>
-              <Text style={[styles.scannerBody, { color: palette.muted }]}>The scan is matched to the selected job before any operational action can continue.</Text>
+              <Text style={[styles.scannerBody, { color: palette.muted }]}>After detection, SKIMA opens the selected job and validates the scan against its current hand-off stage.</Text>
             </View>
           </View>
           <Scanner enabled onDetected={detected} />
@@ -141,43 +122,43 @@ export function ScanWorkspaceScreen({
 
       <View style={[styles.security, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <ShieldCheck color={palette.mutedStrong} size={18} />
-        <Text style={[styles.securityText, { color: palette.muted }]}>Unknown, reused or mismatched cylinder identities must not silently change the selected job. SKIMA verification remains the authority for the next workflow step.</Text>
+        <Text style={[styles.securityText, { color: palette.muted }]}>Station staff do not need a separate cylinder scanner. At station arrival, the assigned driver scans the cylinder and station reception verifies the matched job in its own workspace.</Text>
       </View>
     </Screen>
   );
 }
 
-function scanReady(workspace: "Driver" | "Station", status: string) {
-  return workspace === "Driver"
-    ? [
-        "assigned",
-        "pickup_pending",
-        "pickup_arrived",
-        "pickup_en_route",
-        "delivery_verification_pending",
-        "return_en_route",
-      ].some((value) => status.includes(value))
-    : ["pickup_verified", "station_en_route", "refill_confirmed", "station_settled"].some((value) => status.includes(value));
+function scanReady(status: string) {
+  const value = status.toLowerCase().replace(/[\s-]+/g, "_");
+  return [
+    "driver_accepted",
+    "pickup_pending",
+    "pickup_arrived",
+    "pickup_en_route",
+    "pickup_verified",
+    "station_en_route",
+    "delivery_verification_pending",
+    "return_en_route",
+  ].includes(value);
 }
 
 function scanStatus(value: string) {
   const normalized = value.replace(/[-\s]+/g, "_").toLowerCase();
   const labels: Record<string, string> = {
-    assigned: "Ready for pickup",
+    driver_accepted: "Ready to begin pickup",
     pickup_pending: "Pickup waiting",
-    pickup_arrived: "At pickup",
-    pickup_en_route: "Heading to pickup",
-    pickup_verified: "Cylinder collected",
+    pickup_arrived: "At customer pickup",
+    pickup_en_route: "Heading to customer",
+    pickup_verified: "Scan again at station reception",
     station_en_route: "Heading to station",
-    refill_confirmed: "Refill complete",
-    station_settled: "Ready to return",
-    delivery_verification_pending: "Ready for delivery",
+    delivery_verification_pending: "Ready for final hand-over",
     return_en_route: "Returning to customer",
   };
   return labels[normalized] ?? "Ready to scan";
 }
 
 const styles = StyleSheet.create({
+  back: { ...typography.caption, fontWeight: "900" },
   hero: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
   heroIcon: { width: 50, height: 50, borderRadius: 17, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
   heroCopy: { flex: 1, gap: 4 },
