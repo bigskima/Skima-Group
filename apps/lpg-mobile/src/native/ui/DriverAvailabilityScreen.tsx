@@ -1,7 +1,7 @@
 import { router } from "expo-router";
-import { CircleOff, LocateFixed, Radio, ShieldCheck, Timer } from "lucide-react-native";
+import { CheckCircle2, CircleOff, LocateFixed, Radio, ShieldCheck, Timer } from "lucide-react-native";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import { ActionResponseSchema, firstString, recordId } from "../api/records";
@@ -91,7 +91,11 @@ export function DriverAvailabilityScreen() {
         });
         setTracking(true);
         setNoticeSuccess(true);
-        setNotice(status === "online" ? "You are online and ready for eligible assignments." : "You are marked busy. Active fulfilment tracking remains available.");
+        setNotice(
+          status === "online"
+            ? "You are online and ready for eligible assignments."
+            : "You are marked busy. Active fulfilment tracking remains available.",
+        );
       }
     } catch (cause) {
       setNoticeSuccess(false);
@@ -135,7 +139,7 @@ export function DriverAvailabilityScreen() {
           selected={status === "busy"}
           icon={<Timer color={status === "busy" ? "#FFFFFF" : palette.warning} size={21} />}
           title="Busy"
-          description="Working, but still track active fulfilment"
+          description="Working now; avoid treating me as freely available"
           onPress={() => setStatus("busy")}
         />
         <AvailabilityChoice
@@ -150,7 +154,7 @@ export function DriverAvailabilityScreen() {
 
       <View style={[styles.trackingCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={styles.trackingHead}>
-          <View style={[styles.trackingIcon, { backgroundColor: tracking ? palette.successSoft : palette.soft }]}>
+          <View style={[styles.trackingIcon, { backgroundColor: tracking ? palette.successSoft : palette.surfaceSubtle }]}>
             <LocateFixed color={tracking ? palette.success : palette.mutedStrong} size={22} />
           </View>
           <View style={styles.trackingCopy}>
@@ -205,19 +209,27 @@ function AvailabilityChoice({
 }) {
   const { palette } = useAppTheme();
   return (
-    <AppButton
+    <Pressable
+      accessibilityRole="button"
       accessibilityLabel={`Set availability ${value}`}
-      label={title}
-      variant={selected ? "primary" : "secondary"}
-      icon={icon}
-      fullWidth
+      accessibilityState={{ selected }}
       onPress={onPress}
-      trailingIcon={
-        <Text style={{ color: selected ? "rgba(255,255,255,.82)" : palette.muted, ...typography.caption }}>
-          {description}
-        </Text>
-      }
-    />
+      style={({ pressed }) => [
+        styles.statusChoice,
+        {
+          backgroundColor: selected ? palette.brand : palette.surface,
+          borderColor: selected ? palette.brand : palette.border,
+          opacity: pressed ? 0.82 : 1,
+        },
+      ]}
+    >
+      <View style={[styles.statusIcon, { backgroundColor: selected ? "rgba(255,255,255,.14)" : palette.surfaceSubtle }]}>{icon}</View>
+      <View style={styles.statusCopy}>
+        <Text style={[styles.statusTitle, { color: selected ? "#FFFFFF" : palette.ink }]}>{title}</Text>
+        <Text style={[styles.statusDescription, { color: selected ? "rgba(255,255,255,.78)" : palette.muted }]}>{description}</Text>
+      </View>
+      {selected ? <CheckCircle2 color="#FFFFFF" size={20} /> : null}
+    </Pressable>
   );
 }
 
@@ -242,6 +254,11 @@ const styles = StyleSheet.create({
   heroIcon: { width: 50, height: 50, borderRadius: 17, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
   heroBody: { color: "rgba(255,255,255,.84)", ...typography.caption, lineHeight: 18 },
   statusGrid: { gap: spacing.sm },
+  statusChoice: { minHeight: 74, flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  statusIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  statusCopy: { flex: 1, gap: 2 },
+  statusTitle: { ...typography.bodyStrong, fontSize: 14 },
+  statusDescription: { ...typography.caption, lineHeight: 17 },
   trackingCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
   trackingHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   trackingIcon: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center" },
