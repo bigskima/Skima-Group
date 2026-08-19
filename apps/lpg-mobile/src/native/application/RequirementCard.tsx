@@ -10,15 +10,11 @@ import {
   Upload,
 } from "lucide-react-native";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { colors, radii, spacing } from "../theme/tokens";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { AppButton } from "../ui/AppButton";
+import { StatusPill } from "../ui/StatusPill";
 
 export interface RequirementCardProps {
   requirementKey: string;
@@ -47,10 +43,11 @@ export function RequirementCard({
   uploadedDocument,
   onUploadFile,
 }: RequirementCardProps) {
+  const { palette } = useAppTheme();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isImageOnly = allowedContentTypes.every((t) => t.startsWith("image/"));
+  const isImageOnly = allowedContentTypes.length > 0 && allowedContentTypes.every((t) => t.startsWith("image/"));
   const isApproved = uploadedDocument?.status === "approved";
   const isReplacementRequested =
     uploadedDocument?.replacementRequested ||
@@ -67,12 +64,13 @@ export function RequirementCard({
           setError("Photo library permission is required.");
           return;
         }
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ["images"],
-          quality: 0.9,
-        });
+        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.9 });
         if (result.canceled) return;
         const asset = result.assets[0];
+        if (asset.fileSize && asset.fileSize > maxByteSize) {
+          setError(`File exceeds the ${Math.round(maxByteSize / 1024 / 1024)}MB limit.`);
+          return;
+        }
         setUploading(true);
         await onUploadFile({
           uri: asset.uri,
@@ -88,7 +86,7 @@ export function RequirementCard({
         if (result.canceled) return;
         const asset = result.assets[0];
         if (asset.size && asset.size > maxByteSize) {
-          setError(`File exceeds max size limit (${Math.round(maxByteSize / 1024 / 1024)}MB).`);
+          setError(`File exceeds the ${Math.round(maxByteSize / 1024 / 1024)}MB limit.`);
           return;
         }
         setUploading(true);
@@ -114,11 +112,13 @@ export function RequirementCard({
         setError("Camera permission is required to capture photos.");
         return;
       }
-      const result = await ImagePicker.launchCameraAsync({
-        quality: 0.9,
-      });
+      const result = await ImagePicker.launchCameraAsync({ quality: 0.9 });
       if (result.canceled) return;
       const asset = result.assets[0];
+      if (asset.fileSize && asset.fileSize > maxByteSize) {
+        setError(`Photo exceeds the ${Math.round(maxByteSize / 1024 / 1024)}MB limit.`);
+        return;
+      }
       setUploading(true);
       await onUploadFile({
         uri: asset.uri,
@@ -133,100 +133,117 @@ export function RequirementCard({
     }
   };
 
+  const status = isApproved
+    ? "approved"
+    : isReplacementRequested
+      ? "correction required"
+      : isUploaded
+        ? uploadedDocument?.status ?? "uploaded"
+        : "not uploaded";
+
   return (
     <View
       style={[
         styles.card,
-        isReplacementRequested && styles.cardWarning,
-        isApproved && styles.cardSuccess,
+        shadows.soft,
+        {
+          backgroundColor: isReplacementRequested ? palette.dangerSoft : palette.surface,
+          borderColor: isReplacementRequested
+            ? palette.danger
+            : isApproved
+              ? palette.success
+              : palette.border,
+        },
       ]}
     >
       <View style={styles.header}>
-        <View style={{ flex: 1 }}>
+        <View style={[styles.fileIcon, { backgroundColor: isApproved ? palette.successSoft : palette.brandSoft }]}>
+          {isApproved ? (
+            <CheckCircle2 color={palette.success} size={21} />
+          ) : isReplacementRequested ? (
+            <AlertCircle color={palette.danger} size={21} />
+          ) : isUploaded ? (
+            <FileCheck2 color={palette.brand} size={21} />
+          ) : (
+            <FileText color={palette.mutedStrong} size={21} />
+          )}
+        </View>
+        <View style={styles.headerCopy}>
           <View style={styles.titleRow}>
-            <Text style={styles.title}>{title}</Text>
-            <View style={[styles.badge, isRequired ? styles.badgeRequired : styles.badgeOptional]}>
-              <Text style={[styles.badgeText, isRequired ? styles.badgeTextRequired : styles.badgeTextOptional]}>
+            <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
+            <View style={[styles.badge, { backgroundColor: isRequired ? palette.brandSoft : palette.soft }]}>
+              <Text style={[styles.badgeText, { color: isRequired ? palette.brand : palette.mutedStrong }]}>
                 {isRequired ? "Required" : "Optional"}
               </Text>
             </View>
           </View>
-          <Text style={styles.description}>{description}</Text>
-        </View>
-
-        <View style={styles.statusIconWrap}>
-          {isApproved ? (
-            <CheckCircle2 color={colors.success} size={24} />
-          ) : isReplacementRequested ? (
-            <AlertCircle color={colors.danger} size={24} />
-          ) : isUploaded ? (
-            <FileCheck2 color={colors.brand} size={24} />
-          ) : (
-            <FileText color={colors.muted} size={24} />
-          )}
+          <Text style={[styles.description, { color: palette.muted }]}>{description}</Text>
+          <View style={styles.statusRow}>
+            <StatusPill
+              label={status}
+              tone={isApproved ? "success" : isReplacementRequested ? "danger" : isUploaded ? "warning" : "neutral"}
+            />
+          </View>
         </View>
       </View>
 
-      {/* Admin Replacement Notice */}
       {isReplacementRequested && uploadedDocument?.replacementReason ? (
-        <View style={styles.feedbackBox}>
-          <AlertCircle color={colors.danger} size={18} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.feedbackTitle}>Correction Requested by Admin</Text>
-            <Text style={styles.feedbackText}>{uploadedDocument.replacementReason}</Text>
+        <View style={[styles.feedbackBox, { backgroundColor: palette.dangerSoft, borderColor: palette.danger }]}>
+          <AlertCircle color={palette.danger} size={18} />
+          <View style={styles.feedbackCopy}>
+            <Text style={[styles.feedbackTitle, { color: palette.danger }]}>Reviewer requested a replacement</Text>
+            <Text style={[styles.feedbackText, { color: palette.ink }]}>{uploadedDocument.replacementReason}</Text>
           </View>
         </View>
       ) : null}
 
-      {/* Uploaded Media Preview */}
       {uploadedDocument?.mediaUrl ? (
-        <View style={styles.previewContainer}>
-          <Image source={{ uri: uploadedDocument.mediaUrl }} style={styles.previewImage} />
+        <View style={[styles.previewContainer, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
+          <Image source={{ uri: uploadedDocument.mediaUrl }} resizeMode="cover" style={styles.previewImage} />
           <View style={styles.previewMeta}>
             <Text style={styles.previewStatus}>
-              {isApproved ? "Verified by Admin" : isReplacementRequested ? "Replacement Required" : "Uploaded & Under Review"}
+              {isApproved ? "Verified by SKIMA" : isReplacementRequested ? "Replacement required" : "Uploaded for review"}
             </Text>
           </View>
         </View>
       ) : null}
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
 
-      {/* Action Buttons */}
       <View style={styles.actionsRow}>
-        <Pressable
-          disabled={uploading}
-          onPress={() => void handlePickDocument()}
-          style={[styles.actionBtn, isUploaded && !isReplacementRequested && styles.actionBtnSecondary]}
-        >
-          {uploading ? (
-            <ActivityIndicator size="small" color={isUploaded ? colors.brand : "white"} />
-          ) : (
-            <>
-              {isUploaded && !isReplacementRequested ? (
-                <RefreshCw color={colors.brand} size={16} />
+        <View style={styles.primaryAction}>
+          <AppButton
+            disabled={uploading}
+            loading={uploading}
+            label={isReplacementRequested ? "Upload replacement" : isUploaded ? "Replace file" : "Choose file"}
+            variant={isUploaded && !isReplacementRequested ? "secondary" : "primary"}
+            icon={
+              isUploaded && !isReplacementRequested ? (
+                <RefreshCw color={palette.ink} size={16} />
               ) : (
-                <Upload color="white" size={16} />
-              )}
-              <Text
-                style={[
-                  styles.actionBtnText,
-                  isUploaded && !isReplacementRequested && styles.actionBtnTextSecondary,
-                ]}
-              >
-                {isReplacementRequested ? "Upload Replacement" : isUploaded ? "Replace File" : "Choose File"}
-              </Text>
-            </>
-          )}
-        </Pressable>
+                <Upload color="#FFFFFF" size={16} />
+              )
+            }
+            onPress={() => void handlePickDocument()}
+          />
+        </View>
 
         {isImageOnly ? (
           <Pressable
+            accessibilityLabel="Take photo"
+            accessibilityRole="button"
             disabled={uploading}
             onPress={() => void handleTakePhoto()}
-            style={styles.cameraBtn}
+            style={({ pressed }) => [
+              styles.cameraBtn,
+              {
+                borderColor: palette.borderStrong,
+                backgroundColor: palette.brandSoft,
+                opacity: uploading ? 0.45 : pressed ? 0.75 : 1,
+              },
+            ]}
           >
-            <Camera color={colors.brand} size={18} />
+            <Camera color={palette.brand} size={19} />
           </Pressable>
         ) : null}
       </View>
@@ -235,158 +252,26 @@ export function RequirementCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  cardWarning: {
-    borderColor: "#FCA5A5",
-    backgroundColor: "#FFFBFB",
-  },
-  cardSuccess: {
-    borderColor: "#86EFAC",
-    backgroundColor: "#F8FFF9",
-  },
-  header: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    alignItems: "flex-start",
-  },
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: colors.ink,
-  },
-  description: {
-    fontSize: 13,
-    color: colors.muted,
-    lineHeight: 18,
-  },
-  statusIconWrap: {
-    paddingTop: 2,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
-  },
-  badgeRequired: {
-    backgroundColor: "#FFF0F1",
-  },
-  badgeOptional: {
-    backgroundColor: "#F3F4F6",
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: "900",
-  },
-  badgeTextRequired: {
-    color: colors.brand,
-  },
-  badgeTextOptional: {
-    color: colors.muted,
-  },
-  feedbackBox: {
-    flexDirection: "row",
-    gap: 10,
-    backgroundColor: "#FEF2F2",
-    padding: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: "#FEE2E2",
-    alignItems: "flex-start",
-  },
-  feedbackTitle: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: colors.danger,
-    marginBottom: 2,
-  },
-  feedbackText: {
-    fontSize: 12,
-    color: "#7F1D1D",
-    lineHeight: 16,
-  },
-  previewContainer: {
-    borderRadius: radii.md,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: "#FAFAFA",
-  },
-  previewImage: {
-    width: "100%",
-    height: 160,
-    objectFit: "cover",
-  },
-  previewMeta: {
-    padding: 8,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  previewStatus: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  actionsRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    alignItems: "center",
-  },
-  actionBtn: {
-    flex: 1,
-    minHeight: 46,
-    backgroundColor: colors.brand,
-    borderRadius: radii.md,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: spacing.md,
-  },
-  actionBtnSecondary: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.brand,
-  },
-  actionBtnText: {
-    color: "white",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  actionBtnTextSecondary: {
-    color: colors.brand,
-  },
-  cameraBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.brand,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFF0F1",
-  },
-  errorText: {
-    color: colors.danger,
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  card: { borderRadius: radii.lg, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, gap: spacing.md, marginBottom: spacing.sm },
+  header: { flexDirection: "row", gap: spacing.md, alignItems: "flex-start" },
+  fileIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  headerCopy: { flex: 1, gap: 4 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  title: { ...typography.subheading, fontSize: 15, flexShrink: 1 },
+  description: { ...typography.caption, fontSize: 12, lineHeight: 18 },
+  statusRow: { marginTop: 3 },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radii.pill },
+  badgeText: { ...typography.caption, fontSize: 10, fontWeight: "900" },
+  feedbackBox: { flexDirection: "row", gap: 10, padding: spacing.md, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth, alignItems: "flex-start" },
+  feedbackCopy: { flex: 1, gap: 2 },
+  feedbackTitle: { ...typography.caption, fontSize: 12, fontWeight: "900" },
+  feedbackText: { ...typography.caption, lineHeight: 17 },
+  previewContainer: { borderRadius: radii.md, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth },
+  previewImage: { width: "100%", height: 168 },
+  previewMeta: { padding: 8, backgroundColor: "rgba(0,0,0,.62)", position: "absolute", bottom: 0, left: 0, right: 0 },
+  previewStatus: { color: "#FFFFFF", ...typography.caption, textAlign: "center", fontWeight: "800" },
+  actionsRow: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
+  primaryAction: { flex: 1 },
+  cameraBtn: { width: 48, height: 48, borderRadius: radii.md, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  errorText: { ...typography.caption, fontWeight: "700" },
 });
