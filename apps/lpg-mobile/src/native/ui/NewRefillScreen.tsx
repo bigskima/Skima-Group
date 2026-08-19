@@ -1,13 +1,7 @@
 import { router } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { CheckCircle2, MapPin, Scale, ShieldCheck, Store, WalletCards } from "lucide-react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
@@ -20,11 +14,15 @@ import {
 } from "../api/records";
 import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
-import { colors, radii, spacing } from "../theme/tokens";
-import { idempotencyKey } from "../utilities/idempotency";
-import { Screen } from "./Screen";
 import { useAppTheme } from "../theme/ThemeProvider";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
+import { idempotencyKey } from "../utilities/idempotency";
+import { AppButton } from "./AppButton";
+import { Screen } from "./Screen";
+
 const TYPE = "customer-refill-request";
+
 export function NewRefillScreen() {
   const session = useSession();
   const owner = session.context?.profile?.id ?? session.context?.user.id ?? "";
@@ -46,6 +44,7 @@ export function NewRefillScreen() {
   const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const draftCreatedAt = useRef(new Date().toISOString());
+
   const quote = useGatewayMutation({
     path: "/lpg/quotes",
     schema: ActionResponseSchema,
@@ -61,6 +60,7 @@ export function NewRefillScreen() {
     schema: ActionResponseSchema,
     invalidate: [["orders"], ["orders", "active"], ["wallets"]],
   });
+
   useEffect(() => {
     if (!owner) return;
     void draftStore.load(owner, TYPE).then((draft) => {
@@ -72,16 +72,9 @@ export function NewRefillScreen() {
         setStationId(String(draft.values.stationId ?? ""));
         setRequestedKg(String(draft.values.requestedKg ?? ""));
         setInstructions(String(draft.values.instructions ?? ""));
-        setOrderId(
-          typeof draft.values.orderId === "string"
-            ? draft.values.orderId
-            : null,
-        );
+        setOrderId(typeof draft.values.orderId === "string" ? draft.values.orderId : null);
         const savedQuote = asRecord(draft.values.quoteRecord);
-        const savedQuoteId =
-          typeof draft.values.quoteId === "string"
-            ? draft.values.quoteId
-            : null;
+        const savedQuoteId = typeof draft.values.quoteId === "string" ? draft.values.quoteId : null;
         if (savedQuoteId && savedQuote && !quoteExpired(savedQuote)) {
           setQuoteId(savedQuoteId);
           setQuoteRecord(savedQuote);
@@ -90,6 +83,7 @@ export function NewRefillScreen() {
       setHydrated(true);
     });
   }, [owner]);
+
   useEffect(() => {
     if (!hydrated) return;
     if (!cylinderId && cylinders.data?.[0]) setCylinderId(recordId(cylinders.data[0]) ?? "");
@@ -97,6 +91,7 @@ export function NewRefillScreen() {
     if (!pickupLocationId && firstLocationId) setPickupLocationId(firstLocationId);
     if (!deliveryLocationId && firstLocationId) setDeliveryLocationId(firstLocationId);
   }, [cylinderId, cylinders.data, deliveryLocationId, hydrated, locations.data, pickupLocationId]);
+
   useEffect(() => {
     if (!owner || !hydrated) return;
     const now = new Date().toISOString();
@@ -104,11 +99,7 @@ export function NewRefillScreen() {
       version: 1,
       type: TYPE,
       ownerProfileId: owner,
-      step: orderId
-        ? "payment-reservation"
-        : quoteId
-          ? "quote-review"
-          : "selection",
+      step: orderId ? "payment-reservation" : quoteId ? "quote-review" : "selection",
       workflowId: orderId ?? quoteId ?? undefined,
       values: {
         cylinderId,
@@ -138,35 +129,36 @@ export function NewRefillScreen() {
     requestedKg,
     stationId,
   ]);
+
   const requestQuote = async () => {
     setError(null);
     const kilograms = Number(requestedKg);
     if (!cylinderId || !pickupLocationId || !deliveryLocationId) {
-      setError("Select a cylinder, pickup location, and delivery location.");
+      setError("Choose a cylinder, pickup location and delivery location.");
       return;
     }
     if (!stationId) {
-      setError("Choose the approved station that will refill your cylinder.");
+      setError("Choose an available SKIMA station for this refill.");
       return;
     }
     if (!Number.isFinite(kilograms) || kilograms <= 0) {
-      setError("Enter the kilograms to refill.");
+      setError("Enter the amount of gas you want in kilograms.");
       return;
     }
+
     try {
       const result = await quote.mutateAsync({
         cylinderId,
         pickupLocationId,
         deliveryLocationId,
-        stationBranchId: stationId || undefined,
+        stationBranchId: stationId,
         requestedKg: kilograms,
         deliveryInstructions: instructions.trim() || undefined,
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey("create-quote", cylinderId),
       });
       const id = resultId(result);
-      if (!id)
-        throw new Error("The quote service did not return a quote identifier.");
+      if (!id) throw new Error("Your quote could not be prepared. Please try again.");
       const refreshed = await quotes.refetch();
       setQuoteRecord(
         refreshed.data?.find((item) => recordId(item) === id) ??
@@ -174,13 +166,10 @@ export function NewRefillScreen() {
       );
       setQuoteId(id);
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "The quote could not be created.",
-      );
+      setError(friendlyError(cause, "Your quote could not be prepared. Please try again."));
     }
   };
+
   const createOrder = async () => {
     if (!quoteId) return;
     setError(null);
@@ -193,16 +182,11 @@ export function NewRefillScreen() {
           idempotencyKey: idempotencyKey("create-order", quoteId),
         });
         nextOrderId = resultId(result);
-        if (!nextOrderId)
-          throw new Error(
-            "The order service did not return an order identifier.",
-          );
+        if (!nextOrderId) throw new Error("Your order could not be created. Please try again.");
         setOrderId(nextOrderId);
       }
-      const walletId = firstString(wallets.data?.[0], [
-        "wallet_id",
-        "walletId",
-      ]);
+
+      const walletId = firstString(wallets.data?.[0], ["wallet_id", "walletId", "id"]);
       await reserve.mutateAsync({
         lpgOrderId: nextOrderId,
         customerWalletId: walletId ?? undefined,
@@ -212,302 +196,303 @@ export function NewRefillScreen() {
       await draftStore.clear(owner, TYPE);
       router.replace("/(customer)/orders");
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "The order could not be created.",
-      );
+      setError(friendlyError(cause, "Your order could not be completed. Check your wallet and try again."));
     }
   };
+
+  const currency = firstString(quoteRecord, ["currencyCode", "currency_code"]) ?? "NGN";
+  const total = firstNumber(quoteRecord, ["totalAmount", "total_amount", "quotedTotal"]);
+
   return (
     <Screen
-      eyebrow="New refill"
-      title={quoteId ? "Quote ready" : "Choose refill details"}
-      action={
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.link}>Cancel</Text>
-        </Pressable>
+      eyebrow="LPG refill"
+      title={quoteId ? "Review your quote" : "Request a refill"}
+      subtitle={
+        quoteId
+          ? "Check the full price before confirming the order."
+          : "Choose the cylinder, locations, refill amount and station for this trip."
       }
+      action={<AppButton label={quoteId ? "Edit" : "Cancel"} variant="ghost" size="sm" onPress={() => quoteId ? setQuoteId(null) : router.back()} />}
     >
       {quoteId ? (
-        <View
-          style={[
-            styles.quote,
-            { backgroundColor: palette.surface },
-          ]}
-        >
-          <Text
-            style={[
-              styles.quoteTitle,
-              { color: palette.ink },
-            ]}
-          >
-            Backend quote received
-          </Text>
-          <QuoteLine
-            label="Refill"
-            value={money(
-              firstNumber(quoteRecord, [
-                "refillAmount",
-                "refill_amount",
-                "lpg_amount",
-                "lpgAmount",
-              ]),
-              firstString(quoteRecord, ["currencyCode", "currency_code"]),
-            )}
-          />
-          <QuoteLine
-            label="Delivery"
-            value={money(
-              firstNumber(quoteRecord, [
-                "deliveryAmount",
-                "delivery_amount",
-                "delivery_fee_amount",
-                "deliveryFeeAmount",
-              ]),
-              firstString(quoteRecord, ["currencyCode", "currency_code"]),
-            )}
-          />
-          <QuoteLine
-            label="Total"
-            value={money(
-              firstNumber(quoteRecord, [
-                "totalAmount",
-                "total_amount",
-                "quotedTotal",
-                "total_amount",
-              ]),
-              firstString(quoteRecord, ["currencyCode", "currency_code"]),
-            )}
-          />
-          <Text style={styles.muted}>
-            Valid until{" "}
-            {formatDate(firstString(quoteRecord, ["expiresAt", "expires_at"]))}.
-            Your quote is calculated from the selected cylinder, station and trip.
-          </Text>
-          <Pressable
-            disabled={order.isPending || reserve.isPending}
+        <>
+          <View style={[styles.quoteHero, shadows.raised, { backgroundColor: palette.brand }]}>
+            <View style={styles.quoteHeroTop}>
+              <View>
+                <Text style={styles.quoteEyebrow}>YOUR REFILL TOTAL</Text>
+                <Text adjustsFontSizeToFit numberOfLines={1} style={styles.quoteTotal}>{money(total, currency)}</Text>
+              </View>
+              <View style={styles.quoteHeroIcon}><WalletCards color="#FFFFFF" size={25} /></View>
+            </View>
+            <Text style={styles.quoteHeroBody}>This quote is based on the selected cylinder, station, refill amount and fulfilment trip.</Text>
+          </View>
+
+          <View style={[styles.quoteCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <View style={styles.quoteHeader}>
+              <View style={[styles.confirmIcon, { backgroundColor: palette.successSoft }]}><CheckCircle2 color={palette.success} size={21} /></View>
+              <View style={styles.quoteHeaderCopy}>
+                <Text style={[styles.quoteTitle, { color: palette.ink }]}>Price breakdown</Text>
+                <Text style={[styles.quoteSub, { color: palette.muted }]}>Review what makes up this refill before confirming.</Text>
+              </View>
+            </View>
+            <QuoteLine label="Gas refill" value={money(firstNumber(quoteRecord, ["refillAmount", "refill_amount", "lpg_amount", "lpgAmount"]), currency)} />
+            <QuoteLine label="Delivery" value={money(firstNumber(quoteRecord, ["deliveryAmount", "delivery_amount", "delivery_fee_amount", "deliveryFeeAmount"]), currency)} />
+            <View style={[styles.quoteDivider, { backgroundColor: palette.border }]} />
+            <QuoteLine label="Total" value={money(total, currency)} strong />
+          </View>
+
+          <View style={[styles.validity, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+            <ShieldCheck color={palette.mutedStrong} size={18} />
+            <Text style={[styles.validityText, { color: palette.muted }]}>Quote valid until {formatDate(firstString(quoteRecord, ["expiresAt", "expires_at"]))}. Payment is reserved through your SKIMA wallet only after you confirm.</Text>
+          </View>
+
+          <AppButton
+            label={orderId ? "Retry payment confirmation" : "Confirm and place order"}
+            fullWidth
+            size="lg"
+            loading={order.isPending || reserve.isPending}
             onPress={() => void createOrder()}
-            style={styles.primary}
-          >
-            {order.isPending || reserve.isPending ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={styles.primaryText}>
-                {orderId
-                  ? "Retry payment reservation"
-                  : "Place order and reserve payment"}
-              </Text>
-            )}
-          </Pressable>
-        </View>
+          />
+        </>
       ) : (
         <>
           {!locations.isPending && (locations.data ?? []).length === 0 ? (
-            <View style={[styles.locationRequired, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              <Text style={[styles.groupTitle, { color: palette.ink }]}>Detect your delivery location first</Text>
-              <Text style={[styles.muted, { color: palette.muted }]}>Add a precise pickup and delivery location before requesting your quote.</Text>
-              <Pressable onPress={() => router.push("/(customer)/locations")} style={styles.locationButton}><Text style={styles.primaryText}>Detect location</Text></Pressable>
+            <View style={[styles.requirement, { backgroundColor: palette.warningSoft }]}> 
+              <MapPin color={palette.warning} size={22} />
+              <View style={styles.requirementCopy}>
+                <Text style={[styles.requirementTitle, { color: palette.ink }]}>Add a pickup location first</Text>
+                <Text style={[styles.requirementBody, { color: palette.muted }]}>SKIMA needs a precise pickup and return point before it can calculate the trip.</Text>
+              </View>
+              <AppButton label="Add location" size="sm" onPress={() => router.push("/(customer)/locations")} />
             </View>
           ) : null}
-          <Choice
-            title="Cylinder"
+
+          <SelectionSection
+            step="1"
+            icon={<Scale color={palette.brand} size={20} />}
+            title="Choose your cylinder"
+            description="Select the SKIMA cylinder identity for this refill."
             records={cylinders.data ?? []}
             selected={cylinderId}
             onSelect={setCylinderId}
+            emptyText="No cylinder is registered yet."
           />
-          <Choice
+
+          <SelectionSection
+            step="2"
+            icon={<MapPin color={palette.brand} size={20} />}
             title="Pickup location"
+            description="Where should the driver collect the cylinder?"
             records={locations.data ?? []}
             selected={pickupLocationId}
             onSelect={setPickupLocationId}
+            emptyText="Add a saved location to continue."
           />
-          <Choice
-            title="Delivery location"
+
+          <SelectionSection
+            step="3"
+            icon={<MapPin color={palette.brand} size={20} />}
+            title="Return location"
+            description="Choose where the filled cylinder should be delivered."
             records={locations.data ?? []}
             selected={deliveryLocationId}
             onSelect={setDeliveryLocationId}
+            emptyText="Add a saved location to continue."
           />
-          <TextInput
-            value={requestedKg}
-            onChangeText={setRequestedKg}
-            keyboardType="decimal-pad"
-            placeholder="Kilograms to refill"
-            placeholderTextColor={colors.muted}
-            style={styles.input}
-          />
-          <TextInput
-            value={instructions}
-            onChangeText={setInstructions}
-            placeholder="Delivery instructions (optional)"
-            placeholderTextColor={colors.muted}
-            multiline
-            style={[styles.input, styles.multiline]}
-          />
-          <Choice
-            title="Station"
+
+          <View style={[styles.formCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <SectionLead step="4" icon={<Scale color={palette.brand} size={20} />} title="Refill amount" description="Enter the kilograms you want added to the selected cylinder." />
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, { color: palette.ink }]}>Kilograms to refill</Text>
+              <TextInput
+                value={requestedKg}
+                onChangeText={setRequestedKg}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 6"
+                placeholderTextColor={palette.muted}
+                style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
+              />
+            </View>
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, { color: palette.ink }]}>Driver note <Text style={{ color: palette.muted, fontWeight: "600" }}>(optional)</Text></Text>
+              <TextInput
+                value={instructions}
+                onChangeText={setInstructions}
+                placeholder="Gate colour, building note or pickup instruction"
+                placeholderTextColor={palette.muted}
+                multiline
+                style={[styles.input, styles.multiline, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
+              />
+            </View>
+          </View>
+
+          <SelectionSection
+            step="5"
+            icon={<Store color={palette.brand} size={20} />}
+            title="Choose a station"
+            description="Select an available SKIMA station for the refill."
             records={stations.data ?? []}
             selected={stationId}
             onSelect={setStationId}
+            emptyText="No station is currently available for this location."
           />
-          <Pressable onPress={() => void requestQuote()} style={styles.primary}>
-            {quote.isPending ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={styles.primaryText}>Get my quote</Text>
-            )}
-          </Pressable>
+
+          <AppButton label="See my price" fullWidth size="lg" loading={quote.isPending} onPress={() => void requestQuote()} />
         </>
       )}
+
       {error ? (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {error}
-        </Text>
+        <View style={[styles.errorBox, { backgroundColor: palette.dangerSoft }]}>
+          <Text accessibilityRole="alert" style={[styles.errorText, { color: palette.danger }]}>{error}</Text>
+        </View>
       ) : null}
-      <Text style={styles.muted}>
-        Selections are saved to this profile on this device until the request
-        succeeds.
-      </Text>
+
+      {!quoteId ? <Text style={[styles.draftNote, { color: palette.muted }]}>Your selections are saved on this device so you can continue if you leave this screen before placing the order.</Text> : null}
     </Screen>
   );
 }
-function Choice({
+
+function SelectionSection({
+  step,
+  icon,
   title,
+  description,
   records,
   selected,
   onSelect,
+  emptyText,
 }: {
+  step: string;
+  icon: ReactNode;
   title: string;
+  description: string;
   records: PlatformRecord[];
   selected: string;
   onSelect(id: string): void;
+  emptyText: string;
 }) {
+  const { palette } = useAppTheme();
   return (
-    <View style={styles.group}>
-      <Text style={styles.groupTitle}>{title}</Text>
+    <View style={[styles.selectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      <SectionLead step={step} icon={icon} title={title} description={description} />
       {records.length ? (
         <View style={styles.choices}>
           {records.map((item, index) => {
             const id = recordId(item) ?? String(index);
             const active = id === selected;
             return (
-              <Pressable
+              <AppButton
                 key={id}
+                label={displayTitle(item)}
+                variant={active ? "primary" : "secondary"}
+                size="sm"
                 onPress={() => onSelect(id)}
-                style={[styles.choice, active && styles.choiceActive]}
-              >
-                <Text
-                  style={[styles.choiceText, active && styles.choiceTextActive]}
-                >
-                  {displayTitle(item)}
-                </Text>
-              </Pressable>
+              />
             );
           })}
         </View>
       ) : (
-        <Text style={styles.muted}>No available records returned.</Text>
+        <Text style={[styles.emptyText, { color: palette.muted }]}>{emptyText}</Text>
       )}
     </View>
   );
 }
-function QuoteLine({ label, value }: { label: string; value: string }) {
+
+function SectionLead({ step, icon, title, description }: { step: string; icon: ReactNode; title: string; description: string }) {
+  const { palette } = useAppTheme();
   return (
-    <View style={quoteStyles.line}>
-      <Text style={styles.muted}>{label}</Text>
-      <Text style={quoteStyles.amount}>{value}</Text>
+    <View style={styles.sectionLead}>
+      <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}>{icon}</View>
+      <View style={styles.sectionCopy}>
+        <Text style={[styles.sectionStep, { color: palette.brand }]}>STEP {step}</Text>
+        <Text style={[styles.sectionTitle, { color: palette.ink }]}>{title}</Text>
+        <Text style={[styles.sectionDescription, { color: palette.muted }]}>{description}</Text>
+      </View>
     </View>
   );
 }
+
+function QuoteLine({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+  const { palette } = useAppTheme();
+  return (
+    <View style={styles.quoteLine}>
+      <Text style={[strong ? styles.quoteStrongLabel : styles.quoteLabel, { color: strong ? palette.ink : palette.muted }]}>{label}</Text>
+      <Text style={[strong ? styles.quoteStrongAmount : styles.quoteAmount, { color: palette.ink }]}>{value}</Text>
+    </View>
+  );
+}
+
 function money(value: number | null, currency: string | null) {
-  if (value === null) return "Backend calculated";
+  if (value === null) return "—";
   try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: currency ?? "NGN",
-    }).format(value);
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: currency ?? "NGN" }).format(value);
   } catch {
     return `${currency ?? ""} ${value.toFixed(2)}`.trim();
   }
 }
+
 function formatDate(value: string | null) {
-  if (!value) return "the quoted time";
+  if (!value) return "the displayed expiry time";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
+
 function resultId(result: string | PlatformRecord | null): string | null {
   if (typeof result === "string") return result;
-  return firstString(result, [
-    "id",
-    "lpgOrderId",
-    "lpg_order_id",
-    "lpgRefillQuoteId",
-    "lpg_refill_quote_id",
-  ]);
+  return firstString(result, ["id", "lpgOrderId", "lpg_order_id", "lpgRefillQuoteId", "lpg_refill_quote_id"]);
 }
+
 function asRecord(value: unknown): PlatformRecord | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as PlatformRecord)
-    : null;
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as PlatformRecord) : null;
 }
+
 function quoteExpired(quote: PlatformRecord) {
   const value = firstString(quote, ["expiresAt", "expires_at"]);
   if (!value) return false;
   const timestamp = new Date(value).getTime();
   return Number.isFinite(timestamp) && timestamp <= Date.now();
 }
-const quoteStyles = StyleSheet.create({
-  line: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
-  amount: { color: colors.ink, fontSize: 17, fontWeight: "900" },
-});
+
 const styles = StyleSheet.create({
-  link: { color: colors.brand, fontWeight: "800" },
-  group: { gap: spacing.sm },
-  groupTitle: { color: colors.ink, fontSize: 17, fontWeight: "800" },
+  quoteHero: { gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
+  quoteHeroTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md },
+  quoteEyebrow: { color: "rgba(255,255,255,.76)", ...typography.eyebrow, fontSize: 9 },
+  quoteTotal: { color: "#FFFFFF", fontSize: 36, lineHeight: 43, fontWeight: "900", letterSpacing: -1, marginTop: 4 },
+  quoteHeroIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
+  quoteHeroBody: { color: "rgba(255,255,255,.84)", ...typography.caption, lineHeight: 18 },
+  quoteCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  quoteHeader: { flexDirection: "row", gap: spacing.md, alignItems: "flex-start" },
+  confirmIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  quoteHeaderCopy: { flex: 1, gap: 3 },
+  quoteTitle: { ...typography.subheading },
+  quoteSub: { ...typography.caption },
+  quoteLine: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
+  quoteLabel: { ...typography.body },
+  quoteAmount: { ...typography.bodyStrong },
+  quoteStrongLabel: { ...typography.bodyStrong, fontSize: 16 },
+  quoteStrongAmount: { ...typography.heading, fontSize: 20 },
+  quoteDivider: { height: StyleSheet.hairlineWidth },
+  validity: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  validityText: { flex: 1, ...typography.caption, lineHeight: 18 },
+  requirement: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderRadius: radii.lg, padding: spacing.md },
+  requirementCopy: { flex: 1, gap: 2 },
+  requirementTitle: { ...typography.bodyStrong, fontSize: 14 },
+  requirementBody: { ...typography.caption, lineHeight: 17 },
+  selectionCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  formCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  sectionLead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
+  sectionIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  sectionCopy: { flex: 1, gap: 2 },
+  sectionStep: { ...typography.eyebrow, fontSize: 8 },
+  sectionTitle: { ...typography.subheading, fontSize: 15 },
+  sectionDescription: { ...typography.caption, lineHeight: 17 },
   choices: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  choice: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  choiceActive: { borderColor: colors.brand, backgroundColor: "#DDF3E5" },
-  choiceText: { color: colors.muted, fontWeight: "700" },
-  choiceTextActive: { color: colors.brandDark },
-  primary: {
-    minHeight: 56,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radii.md,
-    backgroundColor: colors.brand,
-    paddingHorizontal: spacing.lg,
-  },
-  primaryText: { color: "white", fontWeight: "800" },
-  quote: { padding: spacing.lg, gap: spacing.md, borderRadius: radii.lg },
-  quoteTitle: { fontSize: 20, fontWeight: "800" },
-  error: { color: colors.danger },
-  muted: { color: colors.muted, lineHeight: 21 },
-  input: {
-    minHeight: 56,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    color: colors.ink,
-    fontSize: 16,
-  },
-  multiline: {
-    minHeight: 90,
-    paddingTop: spacing.md,
-    textAlignVertical: "top",
-  },
-  locationRequired: { gap: spacing.sm, padding: spacing.lg, borderWidth: 1, borderRadius: radii.lg },
-  locationButton: { minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: radii.md, backgroundColor: colors.brand },
+  emptyText: { ...typography.caption, paddingVertical: spacing.xs },
+  fieldGroup: { gap: spacing.sm },
+  fieldLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" },
+  input: { minHeight: 54, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: 16 },
+  multiline: { minHeight: 92, paddingTop: spacing.md, textAlignVertical: "top" },
+  errorBox: { borderRadius: radii.md, padding: spacing.md },
+  errorText: { ...typography.caption, fontWeight: "800", textAlign: "center" },
+  draftNote: { ...typography.caption, lineHeight: 18 },
 });
