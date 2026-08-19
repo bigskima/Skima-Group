@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { useLpgConfig } from "../../api/domains";
 import { useGatewayMutation } from "../../api/gateway";
+import { firstString, nestedRecord } from "../../api/records";
 
 export const AddressSchema = z.object({
   name: z.string().nullable().optional(),
@@ -34,20 +36,59 @@ export const AutocompleteSchema = z.object({
 
 export type AddressPayload = z.infer<typeof AddressSchema>;
 export type MapLookup = z.infer<typeof MapLookupSchema>;
+type AutocompleteResult = z.infer<typeof AutocompleteSchema>;
+type AutocompleteInput = {
+  input: string;
+  countryComponent?: string;
+  idempotencyKey: string;
+};
+type GeocodeInput = { address: string; idempotencyKey: string };
+type ReverseGeocodeInput = { latitude: number; longitude: number; idempotencyKey: string };
 
 export function useMapsGatewayAdapter() {
+  const runtimeConfig = useLpgConfig();
+  const geography = nestedRecord(runtimeConfig.data, "geography");
+  const configuredCountryComponent = countryComponentFromGeography(geography);
+
+  const autocompleteMutation = useGatewayMutation<AutocompleteResult, AutocompleteInput>({
+    path: "/lpg/maps/autocomplete",
+    schema: AutocompleteSchema,
+  });
+  const geocode = useGatewayMutation<MapLookup, GeocodeInput>({
+    path: "/lpg/maps/geocode",
+    schema: MapLookupSchema,
+  });
+  const reverseGeocode = useGatewayMutation<MapLookup, ReverseGeocodeInput>({
+    path: "/lpg/maps/reverse-geocode",
+    schema: MapLookupSchema,
+  });
+
   return {
-    autocomplete: useGatewayMutation({
-      path: "/lpg/maps/autocomplete",
-      schema: AutocompleteSchema,
-    }),
-    geocode: useGatewayMutation({
-      path: "/lpg/maps/geocode",
-      schema: MapLookupSchema,
-    }),
-    reverseGeocode: useGatewayMutation({
-      path: "/lpg/maps/reverse-geocode",
-      schema: MapLookupSchema,
-    }),
+    autocomplete: {
+      ...autocompleteMutation,
+      mutateAsync: (input: AutocompleteInput) =>
+        autocompleteMutation.mutateAsync({
+          ...input,
+          // Geography policy is backend-configured. Screen-level values are never
+          // authoritative, which keeps expansion out of client code.
+          countryComponent: configuredCountryComponent,
+        }),
+    },
+    geocode,
+    reverseGeocode,
   };
+}
+
+function countryComponentFromGeography(
+  geography: ReturnType<typeof nestedRecord>,
+): string | undefined {
+  const configuredCodes = geography?.search_country_codes;
+  const firstConfiguredCode = Array.isArray(configuredCodes)
+    ? configuredCodes.find((item): item is string => typeof item === "string" && item.trim().length === 2)
+    : null;
+  const countryCode =
+    firstConfiguredCode ??
+    firstString(geography, ["default_country_code", "defaultCountryCode"]);
+
+  return countryCode ? `country:${countryCode.trim().toLowerCase()}` : undefined;
 }
