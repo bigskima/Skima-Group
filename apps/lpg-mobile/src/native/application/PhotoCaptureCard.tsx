@@ -1,15 +1,10 @@
 import * as ImagePicker from "expo-image-picker";
-import { Camera, CheckCircle2, RefreshCw, UserCheck } from "lucide-react-native";
+import { Camera, CheckCircle2, Images, UserCheck } from "lucide-react-native";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { colors, radii, spacing } from "../theme/tokens";
+import { Image, StyleSheet, Text, View } from "react-native";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { AppButton } from "../ui/AppButton";
 
 export interface PhotoCaptureCardProps {
   title: string;
@@ -26,6 +21,7 @@ export function PhotoCaptureCard({
   guidanceText = "Face must be clearly visible, centered, with no sunglasses or face coverings.",
   onPhotoSelected,
 }: PhotoCaptureCardProps) {
+  const { palette } = useAppTheme();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,19 +33,11 @@ export function PhotoCaptureCard({
         setError("Camera permission is required to capture your photo.");
         return;
       }
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [4, 5],
-        quality: 0.9,
-      });
+      const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [4, 5], quality: 0.9 });
       if (result.canceled) return;
       const asset = result.assets[0];
       setLoading(true);
-      await onPhotoSelected({
-        uri: asset.uri,
-        name: `profile-photo-${Date.now()}.jpg`,
-        mimeType: "image/jpeg",
-      });
+      await onPhotoSelected({ uri: asset.uri, name: `profile-photo-${Date.now()}.jpg`, mimeType: "image/jpeg" });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not capture photo.");
     } finally {
@@ -65,19 +53,11 @@ export function PhotoCaptureCard({
         setError("Photo library permission is required.");
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        allowsEditing: true,
-        aspect: [4, 5],
-        quality: 0.9,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [4, 5], quality: 0.9 });
       if (result.canceled) return;
       const asset = result.assets[0];
       setLoading(true);
-      await onPhotoSelected({
-        uri: asset.uri,
-        name: `profile-photo-${Date.now()}.jpg`,
-        mimeType: "image/jpeg",
-      });
+      await onPhotoSelected({ uri: asset.uri, name: `profile-photo-${Date.now()}.jpg`, mimeType: "image/jpeg" });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not select photo.");
     } finally {
@@ -86,208 +66,88 @@ export function PhotoCaptureCard({
   };
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
       <View style={styles.head}>
-        <View style={styles.headIcon}>
-          <UserCheck color={colors.brand} size={22} />
+        <View style={[styles.headIcon, { backgroundColor: palette.brandSoft }]}>
+          <UserCheck color={palette.brand} size={21} />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+        <View style={styles.headCopy}>
+          <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
+          <Text style={[styles.subtitle, { color: palette.muted }]}>{subtitle}</Text>
         </View>
       </View>
 
       <View style={styles.frameContainer}>
         {photoUrl ? (
-          <View style={styles.photoWrap}>
-            <Image source={{ uri: photoUrl }} style={styles.photo} />
+          <View style={[styles.photoWrap, { borderColor: palette.brand }]}>
+            <Image source={{ uri: photoUrl }} resizeMode="cover" style={styles.photo} />
             <View style={styles.photoBadge}>
-              <CheckCircle2 color="white" size={14} />
-              <Text style={styles.photoBadgeText}>Photo Captured</Text>
+              <CheckCircle2 color="#FFFFFF" size={14} />
+              <Text style={styles.photoBadgeText}>Photo ready</Text>
             </View>
           </View>
         ) : (
-          <View style={styles.emptyFrame}>
-            <Camera color={colors.muted} size={40} />
-            <Text style={styles.emptyFrameText}>Center face within frame</Text>
+          <View style={[styles.emptyFrame, { borderColor: palette.borderStrong, backgroundColor: palette.surfaceSubtle }]}>
+            <View style={[styles.cameraBubble, { backgroundColor: palette.brandSoft }]}>
+              <Camera color={palette.brand} size={30} />
+            </View>
+            <Text style={[styles.emptyFrameTitle, { color: palette.ink }]}>Center your face in frame</Text>
+            <Text style={[styles.emptyFrameText, { color: palette.muted }]}>Use a bright, clear background and look directly at the camera.</Text>
           </View>
         )}
       </View>
 
-      <View style={styles.guidanceBox}>
-        <Text style={styles.guidanceText}>{guidanceText}</Text>
+      <View style={[styles.guidanceBox, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+        <Text style={[styles.guidanceLabel, { color: palette.mutedStrong }]}>PHOTO GUIDANCE</Text>
+        <Text style={[styles.guidanceText, { color: palette.muted }]}>{guidanceText}</Text>
       </View>
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
 
       <View style={styles.btnRow}>
-        <Pressable
-          disabled={loading}
-          onPress={() => void capturePhoto()}
-          style={styles.primaryBtn}
-        >
-          {loading ? (
-            <ActivityIndicator color="white" size="small" />
-          ) : (
-            <>
-              <Camera color="white" size={16} />
-              <Text style={styles.primaryBtnText}>
-                {photoUrl ? "Retake Photo" : "Take Photo"}
-              </Text>
-            </>
-          )}
-        </Pressable>
-
-        <Pressable
-          disabled={loading}
-          onPress={() => void pickLibraryPhoto()}
-          style={styles.secondaryBtn}
-        >
-          <RefreshCw color={colors.brand} size={15} />
-          <Text style={styles.secondaryBtnText}>Choose from Gallery</Text>
-        </Pressable>
+        <View style={styles.buttonSlot}>
+          <AppButton
+            label={photoUrl ? "Retake photo" : "Take photo"}
+            loading={loading}
+            disabled={loading}
+            icon={<Camera color="#FFFFFF" size={16} />}
+            onPress={() => void capturePhoto()}
+          />
+        </View>
+        <View style={styles.buttonSlot}>
+          <AppButton
+            label="Choose photo"
+            variant="secondary"
+            disabled={loading}
+            icon={<Images color={palette.ink} size={16} />}
+            onPress={() => void pickLibraryPhoto()}
+          />
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  head: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    alignItems: "center",
-  },
-  headIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#FFF0F1",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: colors.ink,
-  },
-  subtitle: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 2,
-  },
-  frameContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: spacing.sm,
-  },
-  photoWrap: {
-    width: 140,
-    height: 175,
-    borderRadius: 20,
-    overflow: "hidden",
-    borderWidth: 2,
-    borderColor: colors.brand,
-    position: "relative",
-  },
-  photo: {
-    width: "100%",
-    height: "100%",
-  },
-  photoBadge: {
-    position: "absolute",
-    bottom: 6,
-    alignSelf: "center",
-    backgroundColor: "rgba(0,0,0,0.75)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
-    flexDirection: "row",
-    gap: 4,
-    alignItems: "center",
-  },
-  photoBadgeText: {
-    color: "white",
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  emptyFrame: {
-    width: 140,
-    height: 175,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderStyle: "dashed",
-    borderColor: colors.border,
-    backgroundColor: "#FAFAFA",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    padding: 8,
-  },
-  emptyFrameText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: colors.muted,
-    textAlign: "center",
-  },
-  guidanceBox: {
-    backgroundColor: "#F9FAFB",
-    padding: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  guidanceText: {
-    fontSize: 12,
-    color: colors.muted,
-    lineHeight: 17,
-  },
-  btnRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  primaryBtn: {
-    flex: 1,
-    minHeight: 46,
-    backgroundColor: colors.brand,
-    borderRadius: radii.md,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  primaryBtnText: {
-    color: "white",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  secondaryBtn: {
-    flex: 1,
-    minHeight: 46,
-    borderWidth: 1,
-    borderColor: colors.brand,
-    borderRadius: radii.md,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  secondaryBtnText: {
-    color: colors.brand,
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  errorText: {
-    color: colors.danger,
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  card: { borderRadius: radii.lg, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, gap: spacing.md, marginBottom: spacing.sm },
+  head: { flexDirection: "row", gap: spacing.sm + 2, alignItems: "center" },
+  headIcon: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  headCopy: { flex: 1, gap: 2 },
+  title: { ...typography.subheading, fontSize: 15 },
+  subtitle: { ...typography.caption, lineHeight: 17 },
+  frameContainer: { alignItems: "center", justifyContent: "center", paddingVertical: spacing.xs },
+  photoWrap: { width: 154, height: 192, borderRadius: radii.lg, overflow: "hidden", borderWidth: 2, position: "relative" },
+  photo: { width: "100%", height: "100%" },
+  photoBadge: { position: "absolute", bottom: 8, alignSelf: "center", backgroundColor: "rgba(20,20,22,.78)", paddingHorizontal: 9, paddingVertical: 5, borderRadius: radii.pill, flexDirection: "row", gap: 5, alignItems: "center" },
+  photoBadgeText: { color: "#FFFFFF", ...typography.caption, fontSize: 10, fontWeight: "800" },
+  emptyFrame: { width: "100%", minHeight: 190, borderRadius: radii.lg, borderWidth: 1, borderStyle: "dashed", alignItems: "center", justifyContent: "center", gap: 7, padding: spacing.lg },
+  cameraBubble: { width: 64, height: 64, borderRadius: 24, alignItems: "center", justifyContent: "center", marginBottom: 2 },
+  emptyFrameTitle: { ...typography.bodyStrong, textAlign: "center" },
+  emptyFrameText: { ...typography.caption, textAlign: "center", maxWidth: 300 },
+  guidanceBox: { padding: spacing.md, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth, gap: 4 },
+  guidanceLabel: { ...typography.eyebrow, fontSize: 9 },
+  guidanceText: { ...typography.caption, lineHeight: 17 },
+  btnRow: { flexDirection: "row", gap: spacing.sm },
+  buttonSlot: { flex: 1 },
+  errorText: { ...typography.caption, fontWeight: "700" },
 });
