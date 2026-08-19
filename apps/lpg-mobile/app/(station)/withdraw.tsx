@@ -1,2 +1,4 @@
-import { WithdrawalScreen } from "../../src/native/ui/FinanceScreen";
-export default function Withdraw() { return <WithdrawalScreen workspace="station" />; }
+import { WithdrawalExperience } from "../../src/native/ui/WithdrawalExperience";
+export default function Withdraw() {
+  return <WithdrawalExperience workspace="station" />;
+}
