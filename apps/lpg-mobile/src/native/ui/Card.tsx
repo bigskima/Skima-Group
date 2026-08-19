@@ -1,18 +1,54 @@
 import type { PropsWithChildren } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, type ViewStyle } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { radii, spacing } from "../theme/tokens";
+import { radii, shadows, spacing } from "../theme/tokens";
 
-export function Card({ children }: PropsWithChildren) {
+export function Card({
+  children,
+  variant = "default",
+  padding = "md",
+}: PropsWithChildren<{
+  variant?: "default" | "subtle" | "outline" | "brandSoft";
+  padding?: "sm" | "md" | "lg";
+}>) {
   const { palette } = useAppTheme();
-  return <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>{children}</View>;
+
+  const backgroundColor =
+    variant === "subtle"
+      ? palette.surfaceSubtle
+      : variant === "brandSoft"
+        ? palette.brandSofter
+        : palette.surface;
+
+  const cardStyle: ViewStyle = {
+    backgroundColor,
+    borderColor: variant === "brandSoft" ? palette.brandSoft : palette.border,
+  };
+
+  return (
+    <View
+      style={[
+        styles.card,
+        variant !== "outline" && styles.shadow,
+        padding === "sm" && styles.paddingSm,
+        padding === "md" && styles.paddingMd,
+        padding === "lg" && styles.paddingLg,
+        cardStyle,
+      ]}
+    >
+      {children}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   card: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radii.md,
-    padding: spacing.md,
+    borderRadius: radii.lg,
     gap: 12,
   },
+  shadow: shadows.soft,
+  paddingSm: { padding: spacing.sm + 4 },
+  paddingMd: { padding: spacing.md },
+  paddingLg: { padding: spacing.lg },
 });
