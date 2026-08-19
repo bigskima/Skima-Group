@@ -1,50 +1,29 @@
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import {
-  Camera,
-  Check,
-  ChevronDown,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react-native";
+import { Camera, Check, ChevronDown, ImagePlus, ShieldCheck, Sparkles } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useLpgConfig } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
-import {
-  ActionResponseSchema,
-  firstNumber,
-  firstString,
-  nestedRecords,
-  type PlatformRecord,
-} from "../api/records";
+import { ActionResponseSchema, firstNumber, firstString, nestedRecords, type PlatformRecord } from "../api/records";
 import { uploadMedia } from "../media/upload";
 import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { colors, radii, spacing } from "../theme/tokens";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
+import { AppButton } from "./AppButton";
 import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 
 const DRAFT = "customer-cylinder-registration";
 
+type CylinderPhoto = { uri: string; fileName: string; mimeType: string };
+
 export function CylinderRegistrationScreen() {
   const session = useSession();
-  const owner =
-    session.context?.profile?.id ??
-    session.context?.user.id ??
-    session.session?.user.id ??
-    "";
+  const owner = session.context?.profile?.id ?? session.context?.user.id ?? session.session?.user.id ?? "";
   const { palette } = useAppTheme();
   const config = useLpgConfig();
   const [name, setName] = useState("");
@@ -52,16 +31,13 @@ export function CylinderRegistrationScreen() {
   const [colour, setColour] = useState("");
   const [brand, setBrand] = useState("");
   const [showOptional, setShowOptional] = useState(false);
-  const [photo, setPhoto] = useState<{
-    uri: string;
-    fileName: string;
-    mimeType: string;
-  } | null>(null);
+  const [photo, setPhoto] = useState<CylinderPhoto | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitLabel, setSubmitLabel] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const mutation = useGatewayMutation({
     path: "/lpg/cylinders",
     schema: ActionResponseSchema,
@@ -84,11 +60,7 @@ export function CylinderRegistrationScreen() {
         setShowOptional(Boolean(draft.values.colour || draft.values.brand));
         const pending = draft.pendingMedia[0];
         if (pending) {
-          setPhoto({
-            uri: pending.uri,
-            fileName: "cylinder.jpg",
-            mimeType: "image/jpeg",
-          });
+          setPhoto({ uri: pending.uri, fileName: "cylinder.jpg", mimeType: "image/jpeg" });
         }
       }
       setHydrated(true);
@@ -110,10 +82,33 @@ export function CylinderRegistrationScreen() {
     });
   }, [brand, colour, hydrated, name, owner, photo, size]);
 
+  const applyPickedPhoto = (asset: ImagePicker.ImagePickerAsset) => {
+    setPhoto({
+      uri: asset.uri,
+      fileName: asset.fileName ?? `cylinder-${Date.now()}.jpg`,
+      mimeType: asset.mimeType ?? "image/jpeg",
+    });
+    setError(null);
+  };
+
+  const takePhoto = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      setError("Camera access is needed to take a cylinder photo. You can choose an existing photo instead.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.9,
+    });
+    if (!result.canceled) applyPickedPhoto(result.assets[0]);
+  };
+
   const choosePhoto = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      setError("Allow photo access to choose a cylinder picture. You can continue without one and add it later.");
+      setError("Photo access is needed to choose a cylinder picture. You can take a new photo instead.");
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -121,26 +116,14 @@ export function CylinderRegistrationScreen() {
       allowsEditing: true,
       quality: 0.9,
     });
-    if (!result.canceled) {
-      const asset = result.assets[0];
-      setPhoto({
-        uri: asset.uri,
-        fileName: asset.fileName ?? `cylinder-${Date.now()}.jpg`,
-        mimeType: asset.mimeType ?? "image/jpeg",
-      });
-      setError(null);
-    }
+    if (!result.canceled) applyPickedPhoto(result.assets[0]);
   };
 
   const submit = async () => {
     setError(null);
     const kg = Number(size);
-    const profile = sizeOptions.find(
-      (option) => firstNumber(option, ["sizeKg", "size_kg"]) === kg,
-    );
-    const maxCapacityKg = profile
-      ? firstNumber(profile, ["maxCapacityKg", "max_capacity_kg"]) ?? kg
-      : kg;
+    const profile = sizeOptions.find((option) => firstNumber(option, ["sizeKg", "size_kg"]) === kg);
+    const maxCapacityKg = profile ? firstNumber(profile, ["maxCapacityKg", "max_capacity_kg"]) ?? kg : kg;
 
     if (name.trim().length < 2 || !Number.isFinite(kg) || kg <= 0) {
       setError("Give your cylinder a name and choose its size.");
@@ -175,17 +158,15 @@ export function CylinderRegistrationScreen() {
         imageAssetIds: assetId ? [assetId] : [],
         conditionStatus: "unknown",
         idempotencyKey: idempotencyKey("register-cylinder", `${owner}:${name.trim()}:${kg}`),
-        metadata: { registrationExperience: "guided_v2" },
+        metadata: { registrationExperience: "guided_v3" },
       });
 
       const createdRecord = actionRecord(response);
       const cylinderId = firstString(createdRecord, ["id"]);
-      const cylinderReference =
-        firstString(createdRecord, ["publicReference", "public_reference"]) ??
-        cylinderId;
+      const cylinderReference = firstString(createdRecord, ["publicReference", "public_reference"]) ?? cylinderId;
 
       if (assetId && cylinderId) {
-        setSubmitLabel("Preparing studio cylinder image");
+        setSubmitLabel("Preparing cylinder image");
         try {
           await presentationMutation.mutateAsync({
             taskKey: "ai.lpg.cylinder.presentation",
@@ -206,7 +187,7 @@ export function CylinderRegistrationScreen() {
             timeoutMs: 60_000,
           });
         } catch {
-          // Do not block cylinder registration when optional AI presentation is delayed.
+          // Presentation media is optional and must never block cylinder registration.
         }
       }
 
@@ -223,7 +204,7 @@ export function CylinderRegistrationScreen() {
 
   if (config.isPending) {
     return (
-      <Screen eyebrow="Add a cylinder" title="Let's identify yours">
+      <Screen eyebrow="Cylinder identity" title="Add a cylinder">
         <ScreenSkeleton cards={3} />
       </Screen>
     );
@@ -231,58 +212,27 @@ export function CylinderRegistrationScreen() {
 
   const inputStyle = [
     styles.input,
-    {
-      backgroundColor: palette.input,
-      borderColor: palette.border,
-      color: palette.ink,
-    },
+    { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink },
   ];
+  const ready = name.trim().length >= 2 && Boolean(size);
 
   return (
     <Screen
-      eyebrow="Add a cylinder"
-      title="Let's identify yours"
-      action={
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.link}>Cancel</Text>
-        </Pressable>
-      }
+      eyebrow="Cylinder identity"
+      title="Add a cylinder"
+      subtitle="Create the SKIMA identity that will follow this cylinder through pickup, refill and delivery."
+      action={<AppButton label="Cancel" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
-      <View
-        style={[
-          styles.identityNote,
-          {
-            backgroundColor: palette.elevated,
-            borderColor: palette.border,
-            shadowColor: palette.shadow,
-          },
-        ]}
-      >
-        <View style={styles.identityIcon}>
-          <ShieldCheck color="white" size={24} />
-        </View>
-        <View style={{ flex: 1, gap: 3 }}>
-          <Text style={[styles.identityTitle, { color: palette.ink }]}>
-            SKIMA creates the identity
-          </Text>
-          <Text style={[styles.identityBody, { color: palette.muted }]}>
-            We'll issue the permanent SKIMA reference and private scan code after registration.
-          </Text>
+      <View style={[styles.identityNote, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <View style={[styles.identityIcon, { backgroundColor: palette.brand }]}><ShieldCheck color="#FFFFFF" size={24} /></View>
+        <View style={styles.identityCopy}>
+          <Text style={[styles.identityTitle, { color: palette.ink }]}>SKIMA creates the permanent identity</Text>
+          <Text style={[styles.identityBody, { color: palette.muted }]}>After registration, this cylinder receives its SKIMA reference and scan code. Keep that identity with the correct physical cylinder.</Text>
         </View>
       </View>
 
-      <View style={styles.form}>
-        <View style={styles.stepHeading}>
-          <Text style={styles.stepNumber}>1</Text>
-          <View>
-            <Text style={[styles.stepTitle, { color: palette.ink }]}>
-              Name your cylinder
-            </Text>
-            <Text style={[styles.hint, { color: palette.muted }]}>
-              Choose any name that makes sense to you.
-            </Text>
-          </View>
-        </View>
+      <View style={[styles.stepCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <StepHeader number="1" title="Name your cylinder" description="Choose a familiar name so you can recognise it in your account." />
         <TextInput
           onChangeText={setName}
           placeholder="Kitchen cylinder"
@@ -290,18 +240,10 @@ export function CylinderRegistrationScreen() {
           style={inputStyle}
           value={name}
         />
+      </View>
 
-        <View style={styles.stepHeading}>
-          <Text style={styles.stepNumber}>2</Text>
-          <View>
-            <Text style={[styles.stepTitle, { color: palette.ink }]}>
-              Choose the size
-            </Text>
-            <Text style={[styles.hint, { color: palette.muted }]}>
-              Look for the kilogram marking on the cylinder.
-            </Text>
-          </View>
-        </View>
+      <View style={[styles.stepCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <StepHeader number="2" title="Choose the cylinder size" description="Use the kilogram marking printed or stamped on the physical cylinder." />
         <View style={styles.sizes}>
           {sizeOptions.map((option, index) => {
             const kg = firstNumber(option, ["sizeKg", "size_kg"]);
@@ -311,257 +253,165 @@ export function CylinderRegistrationScreen() {
             return (
               <Pressable
                 key={firstString(option, ["id", "key"]) ?? String(index)}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
                 onPress={() => setSize(value)}
-                style={[
+                style={({ pressed }) => [
                   styles.sizeOption,
                   {
-                    backgroundColor: selected ? colors.brand : palette.surface,
-                    borderColor: selected ? colors.brand : palette.border,
+                    backgroundColor: selected ? palette.brand : palette.surfaceSubtle,
+                    borderColor: selected ? palette.brand : palette.border,
+                    opacity: pressed ? 0.82 : 1,
                   },
                 ]}
               >
-                <Text style={[styles.sizeValue, { color: selected ? "white" : palette.ink }]}>
-                  {kg} kg
-                </Text>
-                <Text style={[styles.sizeLabel, { color: selected ? "rgba(255,255,255,.78)" : palette.muted }]}>
-                  {firstString(option, ["displayName", "display_name"]) ?? "Cylinder"}
-                </Text>
-                {selected ? <Check color="white" size={18} /> : null}
+                <View style={styles.sizeCopy}>
+                  <Text style={[styles.sizeValue, { color: selected ? "#FFFFFF" : palette.ink }]}>{kg} kg</Text>
+                  <Text style={[styles.sizeLabel, { color: selected ? "rgba(255,255,255,.78)" : palette.muted }]}>{firstString(option, ["displayName", "display_name"]) ?? "Cylinder"}</Text>
+                </View>
+                {selected ? <Check color="#FFFFFF" size={19} /> : null}
               </Pressable>
             );
           })}
         </View>
-        {!sizeOptions.length ? (
-          <Text style={styles.error}>
-            Cylinder sizes are unavailable right now. Please try again shortly.
-          </Text>
-        ) : null}
+        {!sizeOptions.length ? <Text style={[styles.errorText, { color: palette.danger }]}>Cylinder sizes are unavailable right now. Please try again shortly.</Text> : null}
+      </View>
 
-        <View style={styles.stepHeading}>
-          <Text style={styles.stepNumber}>3</Text>
-          <View>
-            <Text style={[styles.stepTitle, { color: palette.ink }]}>
-              Add a clear photo
-            </Text>
-            <Text style={[styles.hint, { color: palette.muted }]}>
-              Recommended for recognition and a polished cylinder image.
-            </Text>
-          </View>
-        </View>
-        <Pressable
-          onPress={() => void choosePhoto()}
-          style={[styles.photoPicker, { backgroundColor: palette.soft, borderColor: palette.border }]}
-        >
-          {photo ? (
+      <View style={[styles.stepCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <StepHeader number="3" title="Add a clear cylinder photo" description="A photo helps you, drivers and SKIMA recognise the correct physical cylinder. You can also add one later." />
+        {photo ? (
+          <View style={[styles.photoPreview, { borderColor: palette.border }]}>
             <Image source={{ uri: photo.uri }} resizeMode="cover" style={styles.photo} />
-          ) : (
-            <>
-              <View style={[styles.cameraIcon, { backgroundColor: palette.surface }]}>
-                <Camera color={colors.brand} size={26} />
-              </View>
-              <Text style={[styles.photoTitle, { color: palette.ink }]}>
-                Choose cylinder photo
-              </Text>
-              <Text style={[styles.photoHint, { color: palette.muted }]}>
-                Use a bright, full view of the cylinder.
-              </Text>
-            </>
-          )}
-          {photo ? (
-            <View style={styles.changePhoto}>
-              <Camera color="white" size={17} />
-              <Text style={styles.changePhotoText}>Change photo</Text>
+            <View style={styles.photoOverlay}>
+              <AppButton label="Take new" size="sm" variant="secondary" icon={<Camera color={palette.brand} size={16} />} onPress={() => void takePhoto()} />
+              <AppButton label="Choose another" size="sm" variant="secondary" icon={<ImagePlus color={palette.brand} size={16} />} onPress={() => void choosePhoto()} />
             </View>
-          ) : null}
-        </Pressable>
+          </View>
+        ) : (
+          <View style={[styles.photoPicker, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}> 
+            <View style={[styles.cameraIcon, { backgroundColor: palette.brandSoft }]}><Camera color={palette.brand} size={27} /></View>
+            <Text style={[styles.photoTitle, { color: palette.ink }]}>Photograph the full cylinder</Text>
+            <Text style={[styles.photoHint, { color: palette.muted }]}>Use a bright view where the body, colour and general condition are easy to see.</Text>
+            <View style={styles.photoActions}>
+              <AppButton label="Take photo" icon={<Camera color="#FFFFFF" size={17} />} onPress={() => void takePhoto()} />
+              <AppButton label="Choose from device" variant="secondary" icon={<ImagePlus color={palette.brand} size={17} />} onPress={() => void choosePhoto()} />
+            </View>
+          </View>
+        )}
+      </View>
 
-        <Pressable
-          onPress={() => setShowOptional((value) => !value)}
-          style={styles.optionalToggle}
-        >
-          <Text style={[styles.optionalText, { color: palette.ink }]}>
-            Optional details
-          </Text>
-          <ChevronDown color={palette.muted} size={20} />
+      <View style={[styles.stepCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <Pressable onPress={() => setShowOptional((value) => !value)} style={styles.optionalToggle}>
+          <View style={styles.optionalCopy}>
+            <Text style={[styles.optionalTitle, { color: palette.ink }]}>Optional details</Text>
+            <Text style={[styles.optionalBody, { color: palette.muted }]}>Colour and manufacturer can help with recognition.</Text>
+          </View>
+          <ChevronDown color={palette.muted} size={20} style={{ transform: [{ rotate: showOptional ? "180deg" : "0deg" }] }} />
         </Pressable>
         {showOptional ? (
           <View style={styles.optionalFields}>
-            <TextInput
-              onChangeText={setColour}
-              placeholder="Colour (optional)"
-              placeholderTextColor={palette.muted}
-              style={inputStyle}
-              value={colour}
-            />
-            <TextInput
-              onChangeText={setBrand}
-              placeholder="Brand or maker (optional)"
-              placeholderTextColor={palette.muted}
-              style={inputStyle}
-              value={brand}
-            />
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, { color: palette.ink }]}>Colour</Text>
+              <TextInput onChangeText={setColour} placeholder="e.g. Grey" placeholderTextColor={palette.muted} style={inputStyle} value={colour} />
+            </View>
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, { color: palette.ink }]}>Brand or maker</Text>
+              <TextInput onChangeText={setBrand} placeholder="Optional" placeholderTextColor={palette.muted} style={inputStyle} value={brand} />
+            </View>
           </View>
         ) : null}
-
-        {error ? (
-          <Text accessibilityRole="alert" style={styles.error}>
-            {error}
-          </Text>
-        ) : null}
-        <Pressable
-          disabled={mutation.isPending || submitting || !name.trim() || !size}
-          onPress={() => void submit()}
-          style={[styles.submit, (!name.trim() || !size) && styles.disabled]}
-        >
-          {mutation.isPending || submitting ? (
-            <View style={styles.pendingRow}>
-              <ActivityIndicator color="white" />
-              <Text style={styles.submitText}>
-                {uploadProgress === null
-                  ? submitLabel ?? "Creating your cylinder"
-                  : `Uploading photo ${Math.round(uploadProgress * 100)}%`}
-              </Text>
-            </View>
-          ) : (
-            <>
-              <Sparkles color="white" size={19} />
-              <Text style={styles.submitText}>Create SKIMA cylinder</Text>
-            </>
-          )}
-        </Pressable>
-        <Text style={[styles.note, { color: palette.muted }]}>
-          You can leave and come back. Your progress stays on this device until registration is complete.
-        </Text>
       </View>
+
+      <View style={[styles.review, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+        <View style={styles.reviewHead}>
+          <Sparkles color={palette.brand} size={20} />
+          <Text style={[styles.reviewTitle, { color: palette.ink }]}>Ready to create the identity?</Text>
+        </View>
+        <Text style={[styles.reviewBody, { color: palette.muted }]}>{ready ? `${name.trim()} · ${size} kg${photo ? " · photo added" : " · no photo yet"}` : "Complete the cylinder name and size before continuing."}</Text>
+      </View>
+
+      {error ? (
+        <View style={[styles.errorBox, { backgroundColor: palette.dangerSoft }]}>
+          <Text accessibilityRole="alert" style={[styles.errorText, { color: palette.danger }]}>{error}</Text>
+        </View>
+      ) : null}
+
+      <AppButton
+        label={submitting ? submitLabel ?? "Creating your cylinder" : "Create SKIMA cylinder"}
+        fullWidth
+        size="lg"
+        loading={mutation.isPending || submitting}
+        disabled={!ready}
+        icon={<Sparkles color="#FFFFFF" size={18} />}
+        onPress={() => void submit()}
+      />
+
+      {submitting && uploadProgress !== null ? (
+        <Text style={[styles.progress, { color: palette.muted }]}>Photo upload {Math.round(uploadProgress * 100)}%</Text>
+      ) : null}
+
+      <Text style={[styles.note, { color: palette.muted }]}>Your progress is saved on this device until registration is completed.</Text>
     </Screen>
   );
 }
 
+function StepHeader({ number, title, description }: { number: string; title: string; description: string }) {
+  const { palette } = useAppTheme();
+  return (
+    <View style={styles.stepHeading}>
+      <View style={[styles.stepNumber, { backgroundColor: palette.brand }]}><Text style={styles.stepNumberText}>{number}</Text></View>
+      <View style={styles.stepCopy}>
+        <Text style={[styles.stepTitle, { color: palette.ink }]}>{title}</Text>
+        <Text style={[styles.hint, { color: palette.muted }]}>{description}</Text>
+      </View>
+    </View>
+  );
+}
+
 function actionRecord(value: unknown): PlatformRecord | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as PlatformRecord
-    : null;
+  return value && typeof value === "object" && !Array.isArray(value) ? value as PlatformRecord : null;
 }
 
 const styles = StyleSheet.create({
-  identityNote: {
-    maxWidth: 720,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 28,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 22,
-  },
-  identityIcon: {
-    width: 48,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 24,
-    backgroundColor: colors.brand,
-  },
-  identityTitle: { fontSize: 17, fontWeight: "900" },
-  identityBody: { lineHeight: 20 },
-  form: { width: "100%", maxWidth: 720, gap: spacing.md },
-  stepHeading: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    marginTop: spacing.xs,
-  },
-  stepNumber: {
-    width: 32,
-    height: 32,
-    color: "white",
-    lineHeight: 32,
-    textAlign: "center",
-    borderRadius: 16,
-    overflow: "hidden",
-    backgroundColor: colors.brand,
-    fontWeight: "900",
-  },
-  stepTitle: { fontSize: 17, fontWeight: "900" },
-  hint: { fontSize: 13, lineHeight: 18, marginTop: 2 },
-  input: {
-    minHeight: 54,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    fontSize: 16,
-  },
+  identityNote: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl },
+  identityIcon: { width: 50, height: 50, alignItems: "center", justifyContent: "center", borderRadius: 17 },
+  identityCopy: { flex: 1, gap: 3 },
+  identityTitle: { ...typography.subheading, fontSize: 15 },
+  identityBody: { ...typography.caption, lineHeight: 18 },
+  stepCard: { gap: spacing.md, padding: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl },
+  stepHeading: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
+  stepNumber: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  stepNumberText: { color: "#FFFFFF", ...typography.bodyStrong, fontSize: 13 },
+  stepCopy: { flex: 1, gap: 3 },
+  stepTitle: { ...typography.subheading, fontSize: 15 },
+  hint: { ...typography.caption, lineHeight: 17 },
+  input: { minHeight: 54, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: 16 },
   sizes: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  sizeOption: {
-    minWidth: 132,
-    flex: 1,
-    minHeight: 82,
-    justifyContent: "center",
-    gap: 3,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-  },
-  sizeValue: { fontSize: 20, fontWeight: "900" },
-  sizeLabel: { fontSize: 11, fontWeight: "700" },
-  photoPicker: {
-    minHeight: 184,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderRadius: 28,
-  },
-  cameraIcon: {
-    width: 58,
-    height: 58,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 29,
-  },
-  photoTitle: { fontSize: 17, fontWeight: "900" },
-  photoHint: { fontSize: 13 },
-  photo: { width: "100%", height: 260 },
-  changePhoto: {
-    position: "absolute",
-    right: spacing.md,
-    bottom: spacing.md,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: radii.pill,
-    backgroundColor: "rgba(23,33,27,.82)",
-  },
-  changePhotoText: { color: "white", fontWeight: "900" },
-  optionalToggle: {
-    minHeight: 50,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  optionalText: { fontWeight: "900" },
-  optionalFields: { gap: spacing.sm },
-  submit: {
-    minHeight: 56,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.brand,
-    borderRadius: radii.md,
-  },
-  disabled: { opacity: 0.45 },
-  submitText: { color: "white", fontSize: 16, fontWeight: "900" },
-  pendingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  link: { color: colors.brand, fontWeight: "900" },
-  error: { color: colors.danger, fontWeight: "700", lineHeight: 20 },
-  note: { fontSize: 13, lineHeight: 19, textAlign: "center" },
+  sizeOption: { minWidth: 138, flex: 1, minHeight: 76, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg },
+  sizeCopy: { gap: 2 },
+  sizeValue: { ...typography.heading, fontSize: 19 },
+  sizeLabel: { ...typography.caption, fontSize: 10 },
+  photoPicker: { minHeight: 220, alignItems: "center", justifyContent: "center", gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderStyle: "dashed", borderRadius: radii.xl, padding: spacing.lg },
+  cameraIcon: { width: 60, height: 60, alignItems: "center", justifyContent: "center", borderRadius: 20 },
+  photoTitle: { ...typography.subheading, fontSize: 16, textAlign: "center" },
+  photoHint: { maxWidth: 420, ...typography.caption, lineHeight: 18, textAlign: "center" },
+  photoActions: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: spacing.sm, marginTop: spacing.sm },
+  photoPreview: { overflow: "hidden", borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl },
+  photo: { width: "100%", height: 300 },
+  photoOverlay: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, padding: spacing.md },
+  optionalToggle: { minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
+  optionalCopy: { flex: 1, gap: 2 },
+  optionalTitle: { ...typography.bodyStrong, fontSize: 14 },
+  optionalBody: { ...typography.caption },
+  optionalFields: { gap: spacing.md, paddingTop: spacing.sm },
+  fieldGroup: { gap: spacing.sm },
+  fieldLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" },
+  review: { gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  reviewHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  reviewTitle: { ...typography.bodyStrong, fontSize: 14 },
+  reviewBody: { ...typography.caption, lineHeight: 18 },
+  errorBox: { borderRadius: radii.md, padding: spacing.md },
+  errorText: { ...typography.caption, fontWeight: "800", lineHeight: 18 },
+  progress: { ...typography.caption, textAlign: "center" },
+  note: { ...typography.caption, lineHeight: 18, textAlign: "center" },
 });
