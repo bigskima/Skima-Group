@@ -2,7 +2,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { CheckCircle2, QrCode, ScanLine, ShieldCheck } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   displayReference,
   displayStatus,
@@ -12,6 +12,7 @@ import {
 import { Scanner } from "../device/Scanner";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
 import { StatusPill } from "./StatusPill";
@@ -24,6 +25,7 @@ export function ScanWorkspaceScreen({
   const { palette } = useAppTheme();
   const actionable = (jobs.data ?? []).filter((job) => scanReady(displayStatus(job) ?? ""));
   const [selectedId, setSelectedId] = useState("");
+  const [manualCylinderId, setManualCylinderId] = useState("");
   const jobId = selectedId || (actionable.length === 1 ? (recordId(actionable[0]) ?? "") : "");
 
   const detected = (value: string) => {
@@ -33,11 +35,17 @@ export function ScanWorkspaceScreen({
     );
   };
 
+  const useManualCylinderId = () => {
+    const value = manualCylinderId.trim().toUpperCase();
+    if (!jobId || !value) return;
+    detected(value);
+  };
+
   return (
     <Screen
       eyebrow="Driver verification"
-      title="Scan SKIMA cylinder"
-      subtitle="Choose the assigned job first so every cylinder scan is matched to the correct fulfilment record."
+      title="Verify SKIMA cylinder"
+      subtitle="Choose the assigned job first. Scan the cylinder when possible, or use its permanent SKIMA Cylinder ID when the physical code cannot be read."
       action={<Pressable onPress={() => router.back()}><Text style={[styles.back, { color: palette.brand }]}>Back</Text></Pressable>}
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
@@ -46,10 +54,10 @@ export function ScanWorkspaceScreen({
           <Text style={styles.heroEyebrow}>DRIVER HAND-OFF VERIFICATION</Text>
           <Text style={styles.heroTitle}>
             {actionable.length
-              ? `${actionable.length} ${actionable.length === 1 ? "job" : "jobs"} ready for a cylinder scan`
-              : "No job needs a scan right now"}
+              ? `${actionable.length} ${actionable.length === 1 ? "job" : "jobs"} ready for cylinder verification`
+              : "No job needs verification right now"}
           </Text>
-          <Text style={styles.heroBody}>Driver scans are used at customer pickup, station reception and final customer hand-over according to the current order stage.</Text>
+          <Text style={styles.heroBody}>SKIMA keeps the job, cylinder and verification method together at customer pickup, station reception and final customer hand-over.</Text>
         </View>
       </View>
 
@@ -66,7 +74,10 @@ export function ScanWorkspaceScreen({
                   key={id}
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
-                  onPress={() => setSelectedId(id)}
+                  onPress={() => {
+                    setSelectedId(id);
+                    setManualCylinderId("");
+                  }}
                   style={({ pressed }) => [
                     styles.job,
                     shadows.soft,
@@ -102,7 +113,7 @@ export function ScanWorkspaceScreen({
       ) : (
         <EmptyState
           icon={<ScanLine color={palette.brand} size={27} />}
-          title="Nothing to scan yet"
+          title="Nothing to verify yet"
           description="An assigned job appears here only when its current lifecycle stage requires the driver to verify the SKIMA cylinder."
         />
       )}
@@ -112,17 +123,46 @@ export function ScanWorkspaceScreen({
           <View style={styles.scannerHead}>
             <View style={[styles.scannerIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
             <View style={styles.scannerCopy}>
-              <Text style={[styles.scannerTitle, { color: palette.ink }]}>Align the SKIMA code inside the scanner</Text>
-              <Text style={[styles.scannerBody, { color: palette.muted }]}>After detection, SKIMA opens the selected job and validates the scan against its current hand-off stage.</Text>
+              <Text style={[styles.scannerTitle, { color: palette.ink }]}>Scan the SKIMA cylinder code</Text>
+              <Text style={[styles.scannerBody, { color: palette.muted }]}>After detection, SKIMA opens the selected job and validates the cylinder against its current hand-off stage.</Text>
             </View>
           </View>
           <Scanner enabled onDetected={detected} />
+
+          <View style={[styles.fallbackDivider, { backgroundColor: palette.border }]} />
+          <View style={styles.fallbackCopy}>
+            <Text style={[styles.fallbackEyebrow, { color: palette.muted }]}>CAN'T SCAN?</Text>
+            <Text style={[styles.fallbackTitle, { color: palette.ink }]}>Enter the permanent Cylinder ID</Text>
+            <Text style={[styles.fallbackBody, { color: palette.muted }]}>Use the human-readable SKIMA reference printed on the tag or shown in the assigned job. SKIMA records this as a manual verification method; it does not bypass order or assignment checks.</Text>
+          </View>
+          <TextInput
+            autoCapitalize="characters"
+            autoCorrect={false}
+            accessibilityLabel="SKIMA Cylinder ID"
+            onChangeText={setManualCylinderId}
+            onSubmitEditing={useManualCylinderId}
+            placeholder="Example: CYL-00000001"
+            placeholderTextColor={palette.muted}
+            returnKeyType="go"
+            style={[
+              styles.manualInput,
+              { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink },
+            ]}
+            value={manualCylinderId}
+          />
+          <AppButton
+            label="Verify with Cylinder ID"
+            fullWidth
+            variant="secondary"
+            disabled={!manualCylinderId.trim()}
+            onPress={useManualCylinderId}
+          />
         </View>
       ) : null}
 
       <View style={[styles.security, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <ShieldCheck color={palette.mutedStrong} size={18} />
-        <Text style={[styles.securityText, { color: palette.muted }]}>Station staff do not need a separate cylinder scanner. At station arrival, the assigned driver scans the cylinder and station reception verifies the matched job in its own workspace.</Text>
+        <Text style={[styles.securityText, { color: palette.muted }]}>QR is the fastest method, not the only method. Station staff do not need a separate cylinder scanner: reception verifies the assigned job and driver in the station workspace while SKIMA keeps the backend order state authoritative.</Text>
       </View>
     </Screen>
   );
@@ -149,12 +189,12 @@ function scanStatus(value: string) {
     pickup_pending: "Pickup waiting",
     pickup_arrived: "At customer pickup",
     pickup_en_route: "Heading to customer",
-    pickup_verified: "Scan again at station reception",
+    pickup_verified: "Verify again at station reception",
     station_en_route: "Heading to station",
     delivery_verification_pending: "Ready for final hand-over",
     return_en_route: "Returning to customer",
   };
-  return labels[normalized] ?? "Ready to scan";
+  return labels[normalized] ?? "Ready to verify";
 }
 
 const styles = StyleSheet.create({
@@ -183,6 +223,12 @@ const styles = StyleSheet.create({
   scannerCopy: { flex: 1, gap: 3 },
   scannerTitle: { ...typography.subheading, fontSize: 15 },
   scannerBody: { ...typography.caption, lineHeight: 18 },
+  fallbackDivider: { height: StyleSheet.hairlineWidth, width: "100%" },
+  fallbackCopy: { gap: 4 },
+  fallbackEyebrow: { ...typography.eyebrow, fontSize: 9 },
+  fallbackTitle: { ...typography.subheading, fontSize: 15 },
+  fallbackBody: { ...typography.caption, lineHeight: 18 },
+  manualInput: { minHeight: 50, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, ...typography.bodyStrong, fontSize: 15, letterSpacing: 0.4 },
   security: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
   securityText: { flex: 1, ...typography.caption, lineHeight: 18 },
 });
