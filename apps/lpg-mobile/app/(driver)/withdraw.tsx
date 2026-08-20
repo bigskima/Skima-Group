@@ -1,4 +1,4 @@
-import { WithdrawalExperience } from "../../src/native/ui/WithdrawalExperience";
+import { FinanceWithdrawalExperience } from "../../src/native/ui/FinanceWithdrawalExperience";
 export default function Withdraw() {
-  return <WithdrawalExperience workspace="driver" />;
+  return <FinanceWithdrawalExperience workspace="driver" />;
 }
