@@ -45,9 +45,6 @@ set permission_keys = (
     updated_at = timezone('utc', now())
 where key in ('platform.super_admin', 'platform.finance_admin');
 
--- Platform financial wallets need distinct wallet types. Keeping the old generic
--- `platform` type available preserves backward compatibility while new runtime
--- code uses explicit purpose types.
 alter table public.wallet_accounts
   drop constraint if exists wallet_accounts_wallet_type_check;
 
@@ -70,8 +67,6 @@ alter table public.wallet_accounts
     'generic'::text
   ]));
 
--- The existing platform wallet was already being used as settlement clearing.
--- Reclassify it without changing its identity or ledger history.
 update public.wallet_accounts
 set wallet_type = 'platform_clearing',
     metadata = metadata || jsonb_build_object(
@@ -124,7 +119,8 @@ begin
     raise exception 'target_currency_code must reference an enabled currency';
   end if;
 
-  if auth.role() <> 'service_role' then
+  if auth.role() <> 'service_role'
+    and current_user not in ('postgres', 'supabase_admin') then
     if target_wallet_type = 'platform_revenue' then
       if not public.has_permission('platform.revenue.manage', null) then
         raise exception 'platform revenue management permission is required';
@@ -359,8 +355,6 @@ create trigger protect_platform_revenue_ledger_write
 before insert on public.wallet_ledger_entries
 for each row execute function public.protect_platform_revenue_ledger_entry();
 
--- Revenue wallets and revenue-bearing transactions are deliberately excluded
--- from generic wallet/financial visibility unless the caller has revenue authority.
 drop policy if exists wallet_accounts_select_owner_or_privileged on public.wallet_accounts;
 create policy wallet_accounts_select_owner_or_privileged
 on public.wallet_accounts
@@ -488,19 +482,12 @@ begin
     'reversalsAndDebits', coalesce((select sum(amount) from revenue_entries where direction = 'debit'), 0),
     'entryCount', (select count(*) from revenue_entries),
     'byStream', coalesce((
-      select jsonb_agg(
-        jsonb_build_object('key', revenue_stream, 'amount', amount)
-        order by revenue_stream
-      )
+      select jsonb_agg(jsonb_build_object('key', revenue_stream, 'amount', amount) order by revenue_stream)
       from stream_totals
     ), '[]'::jsonb),
     'byComponent', coalesce((
       select jsonb_agg(
-        jsonb_build_object(
-          'stream', revenue_stream,
-          'component', revenue_component,
-          'amount', amount
-        )
+        jsonb_build_object('stream', revenue_stream, 'component', revenue_component, 'amount', amount)
         order by revenue_stream, revenue_component
       )
       from component_totals
@@ -514,9 +501,6 @@ $$;
 revoke all on function public.platform_revenue_summary(text, timestamptz, timestamptz) from public;
 grant execute on function public.platform_revenue_summary(text, timestamptz, timestamptz) to authenticated, service_role;
 
--- ---------------------------------------------------------------------------
--- Canonical LPG refill catalog provisioning
--- ---------------------------------------------------------------------------
 create or replace function public.ensure_lpg_station_refill_catalog_item(
   target_station_branch_id uuid
 )
@@ -664,11 +648,6 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------------
--- Safe runtime payout directory. Ordinary users never need provider_adapters.
--- Only the provider's explicitly public bank directory is projected into the
--- already public currency metadata returned by /engines/currencies.
--- ---------------------------------------------------------------------------
 create or replace function public.sync_public_payout_directory()
 returns void
 language plpgsql
@@ -735,7 +714,7 @@ set search_path = public
 as $$
 begin
   perform public.sync_public_payout_directory();
-  return coalesce(new, old);
+  return null;
 end;
 $$;
 
@@ -746,11 +725,6 @@ for each statement execute function public.sync_public_payout_directory_trigger(
 
 select public.sync_public_payout_directory();
 
--- ---------------------------------------------------------------------------
--- Governed wallet-deposit fee policy. The initial active configuration is
--- intentionally zero so existing top-ups do not suddenly become more expensive.
--- Finance can create/approve/activate a non-zero version later.
--- ---------------------------------------------------------------------------
 insert into public.financial_policy_definitions (
   key,
   display_name,
@@ -835,16 +809,5 @@ where definition.key = 'fees.deposit.default'
     from public.financial_policy_versions version
     where version.policy_definition_id = definition.id
   );
-
--- Ensure the four internal platform money buckets exist without posting any
--- balance. Provisioning wallets does not create revenue or move customer money.
-do $$
-begin
-  perform public.ensure_platform_clearing_wallet('NGN', 'platform.financial_migration', 'financial-revenue-foundation:clearing');
-  perform public.ensure_platform_revenue_wallet('NGN', 'platform.financial_migration', 'financial-revenue-foundation:revenue');
-  perform public.ensure_platform_liability_wallet('NGN', 'platform.financial_migration', 'financial-revenue-foundation:liability');
-  perform public.ensure_platform_provider_wallet('NGN', 'platform.financial_migration', 'financial-revenue-foundation:provider');
-end;
-$$;
 
 commit;
