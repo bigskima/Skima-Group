@@ -13,7 +13,31 @@ interface AdminShellProps {
   readonly children: ReactNode;
 }
 
-const mobilePriorityKeys = ["overview", "applications", "operations", "finance", "company", "access"] as const;
+interface NavigationGroupDefinition {
+  readonly label: string;
+  readonly keys: readonly string[];
+}
+
+interface NavigationGroup extends NavigationGroupDefinition {
+  readonly items: readonly NavItem[];
+}
+
+const mobilePriorityKeys = ["overview", "applications", "operations", "finance"] as const;
+
+const navigationGroupDefinitions: readonly NavigationGroupDefinition[] = [
+  {
+    label: "Daily work",
+    keys: ["overview", "applications", "operations", "finance"],
+  },
+  {
+    label: "Company management",
+    keys: ["company", "access", "content", "catalog"],
+  },
+  {
+    label: "Platform controls",
+    keys: ["governance", "providers", "system"],
+  },
+];
 
 export function AdminShell(props: AdminShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -21,8 +45,7 @@ export function AdminShell(props: AdminShellProps) {
     () => props.navItems.find((item) => item.href === props.activeHref) ?? props.navItems[0],
     [props.activeHref, props.navItems],
   );
-  const primaryItems = props.navItems.slice(0, 5);
-  const managementItems = props.navItems.slice(5);
+  const navigationGroups = useMemo(() => groupNavigationItems(props.navItems), [props.navItems]);
   const mobileItems = useMemo(() => {
     const prioritized = mobilePriorityKeys
       .map((key) => props.navItems.find((item) => item.key === key))
@@ -47,25 +70,20 @@ export function AdminShell(props: AdminShellProps) {
           <span className="admin-shell__brand-mark" aria-hidden="true">S</span>
           <div>
             <strong>{props.brand}</strong>
-            <small>Administration</small>
+            <small>Company administration</small>
           </div>
         </div>
 
         <nav className="admin-shell__nav">
-          <AdminNavGroup
-            label="Company"
-            items={primaryItems}
-            activeHref={props.activeHref}
-            onNavigate={navigate}
-          />
-          {managementItems.length ? (
+          {navigationGroups.map((group) => (
             <AdminNavGroup
-              label="Management & settings"
-              items={managementItems}
+              key={group.label}
+              label={group.label}
+              items={group.items}
               activeHref={props.activeHref}
               onNavigate={navigate}
             />
-          ) : null}
+          ))}
         </nav>
 
         <div className="admin-shell__sidebar-account">
@@ -86,7 +104,7 @@ export function AdminShell(props: AdminShellProps) {
             type="button"
             className="admin-shell__menu-button"
             onClick={() => setMobileMenuOpen(true)}
-            aria-label="Open navigation"
+            aria-label="Open administration menu"
             aria-expanded={mobileMenuOpen}
             aria-controls="admin-mobile-menu"
           >
@@ -94,7 +112,7 @@ export function AdminShell(props: AdminShellProps) {
           </button>
 
           <div className="admin-shell__page-context">
-            <small>SKIMA administration</small>
+            <small>SKIMA company administration</small>
             <strong>{activeItem?.label ?? "Overview"}</strong>
           </div>
 
@@ -112,7 +130,7 @@ export function AdminShell(props: AdminShellProps) {
 
         <main className="admin-shell__content">{props.children}</main>
 
-        <nav className="admin-shell__bottom-nav" aria-label="Quick navigation">
+        <nav className="admin-shell__bottom-nav" aria-label="Quick administration navigation">
           {mobileItems.map((item) => (
             <AdminBottomNavItem
               key={item.key}
@@ -138,7 +156,7 @@ export function AdminShell(props: AdminShellProps) {
           <button
             type="button"
             className="admin-mobile-nav__backdrop"
-            aria-label="Close navigation"
+            aria-label="Close administration menu"
             onClick={() => setMobileMenuOpen(false)}
           />
           <aside id="admin-mobile-menu" className="admin-mobile-nav__drawer" aria-label="Administration menu">
@@ -147,10 +165,10 @@ export function AdminShell(props: AdminShellProps) {
                 <span className="admin-shell__brand-mark" aria-hidden="true">S</span>
                 <div>
                   <strong>{props.brand}</strong>
-                  <small>Administration</small>
+                  <small>Company administration</small>
                 </div>
               </div>
-              <button type="button" onClick={() => setMobileMenuOpen(false)} aria-label="Close navigation">
+              <button type="button" onClick={() => setMobileMenuOpen(false)} aria-label="Close administration menu">
                 <X aria-hidden="true" />
               </button>
             </div>
@@ -163,23 +181,15 @@ export function AdminShell(props: AdminShellProps) {
               </div>
             </div>
 
-            <nav className="admin-mobile-nav__links">
-              {props.navItems.map((item) => {
-                const Icon = item.icon ?? Circle;
-                const active = item.href === props.activeHref;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    className={active ? "is-active" : undefined}
-                    onClick={() => navigate(item.href)}
-                  >
-                    <Icon aria-hidden="true" />
-                    <span>{item.label}</span>
-                    <ChevronRight aria-hidden="true" />
-                  </button>
-                );
-              })}
+            <nav className="admin-mobile-nav__links" aria-label="All administration areas">
+              {navigationGroups.map((group) => (
+                <AdminMobileNavGroup
+                  key={group.label}
+                  group={group}
+                  activeHref={props.activeHref}
+                  onNavigate={navigate}
+                />
+              ))}
             </nav>
 
             <button type="button" className="admin-mobile-nav__signout" onClick={props.onSignOut}>
@@ -191,6 +201,24 @@ export function AdminShell(props: AdminShellProps) {
       ) : null}
     </div>
   );
+}
+
+function groupNavigationItems(items: readonly NavItem[]): readonly NavigationGroup[] {
+  const assignedKeys = new Set<string>();
+  const groups = navigationGroupDefinitions
+    .map((definition) => {
+      const groupItems = definition.keys
+        .map((key) => items.find((item) => item.key === key))
+        .filter((item): item is NavItem => Boolean(item));
+      groupItems.forEach((item) => assignedKeys.add(item.key));
+      return { ...definition, items: groupItems };
+    })
+    .filter((group) => group.items.length > 0);
+  const remaining = items.filter((item) => !assignedKeys.has(item.key));
+
+  return remaining.length > 0
+    ? [...groups, { label: "Other", keys: remaining.map((item) => item.key), items: remaining }]
+    : groups;
 }
 
 function AdminNavGroup(props: {
@@ -210,11 +238,41 @@ function AdminNavGroup(props: {
             key={item.key}
             type="button"
             className={active ? "is-active" : undefined}
+            aria-current={active ? "page" : undefined}
             onClick={() => props.onNavigate(item.href)}
           >
             <Icon aria-hidden="true" />
             <span>{item.label}</span>
             {item.badge !== undefined ? <small>{item.badge}</small> : null}
+          </button>
+        );
+      })}
+    </section>
+  );
+}
+
+function AdminMobileNavGroup(props: {
+  readonly group: NavigationGroup;
+  readonly activeHref: string;
+  readonly onNavigate: (href: string) => void;
+}) {
+  return (
+    <section className="admin-mobile-nav__group">
+      <p>{props.group.label}</p>
+      {props.group.items.map((item) => {
+        const Icon = item.icon ?? Circle;
+        const active = item.href === props.activeHref;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            className={active ? "is-active" : undefined}
+            aria-current={active ? "page" : undefined}
+            onClick={() => props.onNavigate(item.href)}
+          >
+            <Icon aria-hidden="true" />
+            <span>{item.label}</span>
+            <ChevronRight aria-hidden="true" />
           </button>
         );
       })}
@@ -232,6 +290,7 @@ function AdminBottomNavItem(props: {
     <button
       type="button"
       className={`admin-shell__bottom-item ${props.active ? "is-active" : ""}`}
+      aria-current={props.active ? "page" : undefined}
       onClick={props.onClick}
     >
       <Icon aria-hidden="true" />
@@ -243,6 +302,6 @@ function AdminBottomNavItem(props: {
 function shortMobileLabel(label: string) {
   if (label === "People & Access") return "People";
   if (label === "Applications") return "Approvals";
-  if (label === "Companies") return "Companies";
+  if (label === "Systems & Audit") return "Systems";
   return label;
 }
