@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import "@skima/ui/styles.css";
 import "./styles.css";
+import "./production-ui.css";
 
 import { App } from "./App";
 import { SessionProvider } from "./session";
