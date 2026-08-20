@@ -6,12 +6,16 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   displayReference,
   displayStatus,
+  firstString,
   recordId,
   type PlatformRecord,
 } from "../api/records";
 import { Scanner } from "../device/Scanner";
+import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
+import { idempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
@@ -23,10 +27,22 @@ export function ScanWorkspaceScreen({
   jobs: UseQueryResult<PlatformRecord[], Error>;
 }) {
   const { palette } = useAppTheme();
+  const session = useSession();
   const actionable = (jobs.data ?? []).filter((job) => scanReady(displayStatus(job) ?? ""));
   const [selectedId, setSelectedId] = useState("");
   const [manualCylinderId, setManualCylinderId] = useState("");
+  const [physicalTagReference, setPhysicalTagReference] = useState("");
+  const [tagNotice, setTagNotice] = useState<string | null>(null);
+  const [bindingTag, setBindingTag] = useState(false);
   const jobId = selectedId || (actionable.length === 1 ? (recordId(actionable[0]) ?? "") : "");
+  const selectedJob = actionable.find((job) => recordId(job) === jobId) ?? (actionable.length === 1 ? actionable[0] : null);
+  const cylinderId = firstString(selectedJob, ["cylinderId", "cylinder_id"]);
+  const cylinderReference = firstString(selectedJob, ["cylinderReference", "cylinderIdentifier", "cylinder_reference", "cylinder_identifier"]);
+  const cylinderTagStatus = firstString(selectedJob, ["cylinderTagStatus", "tagStatus", "cylinder_tag_status", "tag_status"]) ?? "unknown";
+  const activeTagReference = firstString(selectedJob, ["activeTagReference", "active_tag_reference"]);
+  const canBindFirstTag = Boolean(
+    jobId && cylinderId && ["untagged", "tag_pending"].includes(cylinderTagStatus.toLowerCase()),
+  );
 
   const detected = (value: string) => {
     if (!jobId) return;
@@ -39,6 +55,30 @@ export function ScanWorkspaceScreen({
     const value = manualCylinderId.trim().toUpperCase();
     if (!jobId || !value) return;
     detected(value);
+  };
+
+  const bindFirstPhysicalTag = async () => {
+    const reference = physicalTagReference.trim().toUpperCase();
+    if (!jobId || !cylinderId || !reference || !canBindFirstTag || bindingTag) return;
+    setBindingTag(true);
+    setTagNotice(null);
+    try {
+      const { error } = await session.supabase.rpc("bind_lpg_cylinder_tag", {
+        target_public_tag_reference: reference,
+        target_cylinder_id: cylinderId,
+        target_idempotency_key: idempotencyKey("driver-bind-first-cylinder-tag", `${jobId}:${reference}`),
+        target_lpg_order_id: jobId,
+        target_metadata: { source: "skima.lpg.mobile", operation: "first_service_tag_binding" },
+      });
+      if (error) throw error;
+      setPhysicalTagReference("");
+      setTagNotice(`Physical tag ${reference} is now bound to ${cylinderReference ?? "this cylinder"}. The permanent Cylinder ID did not change.`);
+      await jobs.refetch();
+    } catch (cause) {
+      setTagNotice(friendlyError(cause, "SKIMA could not bind this physical tag. Confirm that the tag is unused and assigned to you."));
+    } finally {
+      setBindingTag(false);
+    }
   };
 
   return (
@@ -69,6 +109,7 @@ export function ScanWorkspaceScreen({
               const id = recordId(job) ?? String(index);
               const selected = id === jobId;
               const status = displayStatus(job) ?? "active";
+              const tagStatus = firstString(job, ["cylinderTagStatus", "tagStatus", "tag_status"]);
               return (
                 <Pressable
                   key={id}
@@ -77,6 +118,8 @@ export function ScanWorkspaceScreen({
                   onPress={() => {
                     setSelectedId(id);
                     setManualCylinderId("");
+                    setPhysicalTagReference("");
+                    setTagNotice(null);
                   }}
                   style={({ pressed }) => [
                     styles.job,
@@ -94,6 +137,7 @@ export function ScanWorkspaceScreen({
                   <View style={styles.jobCopy}>
                     <Text numberOfLines={1} style={[styles.jobTitle, { color: palette.ink }]}>{displayReference(job) ?? "LPG fulfilment job"}</Text>
                     <Text style={[styles.jobMeta, { color: palette.muted }]}>{scanStatus(status)}</Text>
+                    {tagStatus ? <Text style={[styles.jobMeta, { color: palette.muted }]}>Physical tag: {tagStatusLabel(tagStatus)}</Text> : null}
                   </View>
                   {selected ? <CheckCircle2 color={palette.brand} size={21} /> : <StatusPill label="Select" tone="neutral" />}
                 </Pressable>
@@ -107,6 +151,7 @@ export function ScanWorkspaceScreen({
           <View style={styles.singleJobCopy}>
             <Text style={[styles.singleJobTitle, { color: palette.ink }]}>{displayReference(actionable[0]) ?? "LPG fulfilment job"}</Text>
             <Text style={[styles.singleJobMeta, { color: palette.muted }]}>{scanStatus(displayStatus(actionable[0]) ?? "active")}</Text>
+            <Text style={[styles.singleJobMeta, { color: palette.muted }]}>Physical tag: {tagStatusLabel(cylinderTagStatus)}</Text>
           </View>
           <StatusPill label="Selected" tone="success" />
         </View>
@@ -117,6 +162,54 @@ export function ScanWorkspaceScreen({
           description="An assigned job appears here only when its current lifecycle stage requires the driver to verify the SKIMA cylinder."
         />
       )}
+
+      {jobId && selectedJob ? (
+        <View style={[styles.identityCard, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+          <View style={styles.identityHeader}>
+            <ShieldCheck color={palette.brand} size={20} />
+            <View style={styles.identityCopy}>
+              <Text style={[styles.identityTitle, { color: palette.ink }]}>Permanent cylinder identity</Text>
+              <Text style={[styles.identityBody, { color: palette.muted }]}>
+                {cylinderReference ?? "SKIMA cylinder"} · {tagStatusLabel(cylinderTagStatus)}
+              </Text>
+            </View>
+            <StatusPill
+              label={activeTagReference ? "Tagged" : canBindFirstTag ? "Untagged" : tagStatusLabel(cylinderTagStatus)}
+              tone={activeTagReference ? "success" : canBindFirstTag ? "warning" : "neutral"}
+            />
+          </View>
+
+          {activeTagReference ? (
+            <Text style={[styles.identityNote, { color: palette.muted }]}>Active physical tag: {activeTagReference}</Text>
+          ) : canBindFirstTag ? (
+            <>
+              <Text style={[styles.identityNote, { color: palette.muted }]}>This customer does not need to print anything. At the verified first pickup, attach one unused SKIMA-issued physical tag and bind its reference here.</Text>
+              <TextInput
+                autoCapitalize="characters"
+                autoCorrect={false}
+                accessibilityLabel="SKIMA physical tag reference"
+                onChangeText={setPhysicalTagReference}
+                onSubmitEditing={() => void bindFirstPhysicalTag()}
+                placeholder="SKTAG-..."
+                placeholderTextColor={palette.muted}
+                returnKeyType="go"
+                style={[styles.manualInput, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
+                value={physicalTagReference}
+              />
+              <AppButton
+                label="Bind first physical tag"
+                fullWidth
+                variant="secondary"
+                loading={bindingTag}
+                disabled={!physicalTagReference.trim()}
+                onPress={() => void bindFirstPhysicalTag()}
+              />
+            </>
+          ) : null}
+
+          {tagNotice ? <Text style={[styles.tagNotice, { color: palette.mutedStrong }]}>{tagNotice}</Text> : null}
+        </View>
+      ) : null}
 
       {jobId ? (
         <View style={[styles.scannerCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -197,6 +290,21 @@ function scanStatus(value: string) {
   return labels[normalized] ?? "Ready to verify";
 }
 
+function tagStatusLabel(value: string) {
+  const normalized = value.replace(/[-\s]+/g, "_").toLowerCase();
+  const labels: Record<string, string> = {
+    untagged: "Not physically tagged yet",
+    tag_pending: "Tag pending",
+    tagged: "Physical tag active",
+    tag_damaged: "Tag damaged",
+    tag_lost: "Tag lost",
+    replacement_pending: "Replacement pending",
+    retired: "Retired",
+    unknown: "Tag status unavailable",
+  };
+  return labels[normalized] ?? normalized.replace(/_/g, " ");
+}
+
 const styles = StyleSheet.create({
   back: { ...typography.caption, fontWeight: "900" },
   hero: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
@@ -217,6 +325,13 @@ const styles = StyleSheet.create({
   singleJobCopy: { flex: 1, minWidth: 0 },
   singleJobTitle: { ...typography.bodyStrong, fontSize: 14 },
   singleJobMeta: { ...typography.caption, marginTop: 3 },
+  identityCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
+  identityHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
+  identityCopy: { flex: 1, gap: 2 },
+  identityTitle: { ...typography.bodyStrong, fontSize: 14 },
+  identityBody: { ...typography.caption, lineHeight: 18 },
+  identityNote: { ...typography.caption, lineHeight: 18 },
+  tagNotice: { ...typography.caption, lineHeight: 18, fontWeight: "700" },
   scannerCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
   scannerHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
   scannerIcon: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center" },
