@@ -10,7 +10,7 @@ import {
   Users,
   WalletCards,
 } from "lucide-react-native";
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { domainQueries, useStationRuntime } from "../api/domains";
 import {
@@ -26,6 +26,7 @@ import {
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { AppButton } from "./AppButton";
 import { BrandMark } from "./BrandMark";
 import { EmptyState } from "./EmptyState";
 import { ScreenSkeleton } from "./ScreenSkeleton";
@@ -43,30 +44,45 @@ export function StationDashboardScreen() {
 
   const branch = nestedRecord(runtime.data, "branch");
   const records = jobs.data ?? [];
-  const current =
-    records.find((item) => isStationProcessing(displayStatus(item))) ??
-    records.find((item) => !["completed", "cancelled"].includes(normalized(displayStatus(item) ?? "")));
+  const activeRecords = records.filter((item) => isStationQueueState(displayStatus(item)));
+  const processingRecord = activeRecords.find((item) => isStationProcessing(displayStatus(item)));
+  const current = processingRecord ?? activeRecords[0];
   const currentId = current ? recordId(current) : null;
-  const waitingForDriver = records.filter((item) => isDriverApproaching(displayStatus(item))).length;
-  const readyForStation = records.filter((item) => normalized(displayStatus(item) ?? "") === "station_verified").length;
-  const processing = records.filter((item) => ["refill_started", "refill_in_progress"].includes(normalized(displayStatus(item) ?? ""))).length;
+  const processingId = processingRecord ? recordId(processingRecord) : null;
+  const waitingForDriver = activeRecords.filter((item) => isDriverApproaching(displayStatus(item))).length;
+  const readyForStation = activeRecords.filter((item) => normalized(displayStatus(item) ?? "") === "station_verified").length;
+  const processing = activeRecords.filter((item) => ["refill_started", "refill_in_progress"].includes(normalized(displayStatus(item) ?? ""))).length;
   const availableKg = firstNumber(branch, ["currentAvailableKg", "current_available_kg"]);
   const capacityKg = firstNumber(branch, ["refillCapacityKg", "refill_capacity_kg"]);
   const availability = firstString(branch, ["availabilityStatus", "availability_status"]) ?? "unavailable";
+  const normalizedAvailability = normalized(availability);
   const settled = (settlements.data ?? []).reduce(
     (sum, item) => sum + (firstNumber(item, ["net_amount", "netAmount", "amount"]) ?? 0),
     0,
   );
   const currency = firstString(settlements.data?.[0], ["currency_code", "currencyCode"]) ?? "NGN";
+  const settlementSummary = settlements.error ? "Temporarily unavailable" : money(settled, currency);
   const firstName = session.context?.profile?.display_name?.trim().split(/\s+/)[0];
-  const loading = runtime.isPending || jobs.isPending || settlements.isPending;
-  const failed = runtime.error || jobs.error || settlements.error;
+  const loading = runtime.isPending || jobs.isPending;
+  const failed = runtime.error || jobs.error;
+  const refreshing = runtime.isRefetching || jobs.isRefetching || settlements.isRefetching;
+
+  const refresh = async () => {
+    await Promise.allSettled([runtime.refetch(), jobs.refetch(), settlements.refetch()]);
+  };
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: palette.canvas }}
       contentContainerStyle={[styles.page, { paddingTop: Math.max(insets.top, 12) }]}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void refresh()}
+          tintColor={palette.brand}
+        />
+      }
     >
       <View style={[styles.frame, { maxWidth: width >= 900 ? 760 : 640 }]}>
         <View style={styles.header}>
@@ -85,7 +101,6 @@ export function StationDashboardScreen() {
             style={[styles.notification, { backgroundColor: palette.surface, borderColor: palette.border }]}
           >
             <Bell color={palette.ink} size={19} />
-            <View style={[styles.notificationDot, { backgroundColor: palette.brand }]} />
           </Pressable>
         </View>
 
@@ -98,7 +113,8 @@ export function StationDashboardScreen() {
             <EmptyState
               icon={<PackageCheck color={palette.brand} size={27} />}
               title="Station workspace could not be refreshed"
-              description="Check your connection and try again."
+              description="We couldn't load the live branch and reception queue. Check your connection and try again."
+              action={<AppButton label="Try again" variant="secondary" onPress={() => void refresh()} />}
             />
           </View>
         ) : !branch ? (
@@ -131,14 +147,14 @@ export function StationDashboardScreen() {
                 </View>
                 <StatusPill
                   label={friendlyStatus(availability)}
-                  tone={availability === "available" ? "success" : availability === "paused" ? "warning" : "neutral"}
+                  tone={normalizedAvailability === "available" ? "success" : normalizedAvailability === "paused" ? "warning" : "neutral"}
                 />
               </View>
 
               <View style={styles.heroMetrics}>
-                <HeroMetric label="Available stock" value={availableKg === null ? "—" : `${availableKg} kg`} />
+                <HeroMetric label="Available stock" value={availableKg === null ? "Not reported" : `${availableKg} kg`} />
                 <View style={styles.heroDivider} />
-                <HeroMetric label="In reception queue" value={String(records.length)} />
+                <HeroMetric label="In reception queue" value={String(activeRecords.length)} />
               </View>
             </View>
 
@@ -160,8 +176,8 @@ export function StationDashboardScreen() {
               <OperationAction
                 icon={<CircleCheck color={palette.brand} size={24} />}
                 title="Safety & refill"
-                description="Record the safety result and actual kilograms filled."
-                onPress={() => router.push((currentId ? `/(station)/job/${currentId}` : "/(station)/jobs") as never)}
+                description="Record the safety result and actual kilograms filled only after station reception verification."
+                onPress={() => router.push((processingId ? `/(station)/job/${processingId}` : "/(station)/jobs") as never)}
               />
             </View>
 
@@ -173,8 +189,8 @@ export function StationDashboardScreen() {
 
             <SectionTitle title="Reception queue" action="Open all" onPress={() => router.push("/(station)/jobs")} />
             <View style={[styles.queue, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              {records.length ? (
-                records.slice(0, 5).map((record, index) => (
+              {activeRecords.length ? (
+                activeRecords.slice(0, 5).map((record, index) => (
                   <QueueRow key={recordId(record) ?? String(index)} record={record} index={index} />
                 ))
               ) : (
@@ -195,13 +211,13 @@ export function StationDashboardScreen() {
               <UtilityRow
                 icon={<Gauge color={palette.brand} size={20} />}
                 label="Inventory & capacity"
-                value={capacityKg === null ? "Manage stock" : `${availableKg ?? 0} / ${capacityKg} kg available`}
+                value={capacityKg === null ? "Capacity not reported" : `${availableKg === null ? "—" : availableKg} / ${capacityKg} kg available`}
                 onPress={() => router.push("/(station)/inventory")}
               />
               <UtilityRow
                 icon={<WalletCards color={palette.brand} size={20} />}
                 label="Settlements"
-                value={money(settled, currency)}
+                value={settlementSummary}
                 onPress={() => router.push("/(station)/settlements")}
               />
               <UtilityRow
@@ -358,6 +374,20 @@ function isStationProcessing(value?: string | null) {
   return ["station_verified", "refill_started", "refill_in_progress", "refill_confirmed", "station_settled"].includes(normalized(value ?? ""));
 }
 
+function isStationQueueState(value?: string | null) {
+  return [
+    "driver_accepted",
+    "pickup_en_route",
+    "pickup_verified",
+    "station_en_route",
+    "station_verified",
+    "refill_started",
+    "refill_in_progress",
+    "refill_confirmed",
+    "station_settled",
+  ].includes(normalized(value ?? ""));
+}
+
 function normalized(value: string) {
   return value.toLowerCase().replace(/[\s-]+/g, "_");
 }
@@ -411,7 +441,6 @@ const styles = StyleSheet.create({
   context: { ...typography.eyebrow, fontSize: 8 },
   greeting: { fontSize: 18, lineHeight: 22, fontWeight: "900", letterSpacing: -0.35 },
   notification: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, borderWidth: StyleSheet.hairlineWidth },
-  notificationDot: { position: "absolute", top: 9, right: 9, width: 6, height: 6, borderRadius: 3 },
   switcher: { minHeight: 8, marginTop: 9 },
   content: { gap: spacing.lg, paddingTop: 18 },
   primaryLink: { minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.md, paddingHorizontal: spacing.lg },
