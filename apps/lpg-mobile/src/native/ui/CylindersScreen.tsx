@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { ChevronRight, Plus, QrCode, Sparkles } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useEntityMediaLinks } from "../api/domains";
 import { displayReference, displayStatus, displayTitle, firstNumber, firstString, recordId, type PlatformRecord } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -22,6 +22,13 @@ export function CylindersScreen() {
       title="Your cylinders"
       subtitle="Each cylinder has a SKIMA-managed identity used for refill requests, scanning, hand-offs and anti-switching checks."
       action={<AppButton label="Add cylinder" size="sm" icon={<Plus color="#FFFFFF" size={16} />} onPress={() => router.push("/(customer)/cylinder/register")} />}
+      refreshControl={
+        <RefreshControl
+          refreshing={cylinders.isRefetching}
+          onRefresh={() => void cylinders.refetch()}
+          tintColor={palette.brand}
+        />
+      }
     >
       {cylinders.isPending ? (
         <ScreenSkeleton cards={3} />
@@ -88,7 +95,7 @@ function CylinderRow({ cylinder }: { cylinder: PlatformRecord }) {
             </View>
           ) : null}
         </View>
-        <Text style={[styles.body, { color: palette.muted }]}>{size ?? "Configured"} kg · {reference}</Text>
+        <Text style={[styles.body, { color: palette.muted }]}>{cylinderIdentityLine(size, reference)}</Text>
         <StatusPill label={friendlyCylinderStatus(status)} tone={cylinderStatusTone(status)} />
       </View>
 
@@ -99,6 +106,10 @@ function CylinderRow({ cylinder }: { cylinder: PlatformRecord }) {
 
 function firstAssetId(value: unknown) {
   return Array.isArray(value) ? value.find((item): item is string => typeof item === "string") ?? null : null;
+}
+
+function cylinderIdentityLine(size: number | null, reference: string) {
+  return size === null ? reference : `${size} kg · ${reference}`;
 }
 
 function normalizeStatus(value: string) {
@@ -114,15 +125,22 @@ function friendlyCylinderStatus(value: string) {
     unsafe: "Not safe to refill",
     expired: "Inspection needed",
     suspended: "Temporarily unavailable",
+    retired: "Retired",
+    lost: "Reported missing",
   };
-  return labels[normalized] ?? "Cylinder saved";
+  return labels[normalized] ?? humanizeStatus(normalized);
+}
+
+function humanizeStatus(value: string) {
+  const cleaned = value.replace(/_/g, " ").trim();
+  return cleaned ? cleaned.replace(/^./, (letter) => letter.toUpperCase()) : "Status unavailable";
 }
 
 function cylinderStatusTone(value: string): "neutral" | "brand" | "success" | "warning" | "danger" {
   const normalized = normalizeStatus(value);
   if (["active", "registered"].includes(normalized)) return "success";
   if (["damaged", "expired", "suspended"].includes(normalized)) return "warning";
-  if (normalized === "unsafe") return "danger";
+  if (["unsafe", "lost"].includes(normalized)) return "danger";
   return "neutral";
 }
 
