@@ -92,7 +92,7 @@ export function AdminCylinderIdentityWorkspace() {
   const drivers = useIdentityRecords("drivers", async () => {
     const { data, error } = await supabase
       .from("driver_profiles")
-      .select("id,user_id,public_reference,status,approval_status,created_at")
+      .select("id,user_id,public_driver_id,driver_display_name,operational_status,verification_status,created_at")
       .order("created_at", { ascending: false })
       .limit(250);
     if (error) throw error;
@@ -207,9 +207,12 @@ export function AdminCylinderIdentityWorkspace() {
     { label: "Unassigned", value: "" },
     ...(drivers.data ?? []).map((driver) => ({
       value: recordString(driver, "id") ?? "",
-      label: [recordString(driver, "public_reference"), recordString(driver, "approval_status")]
-        .filter(Boolean)
-        .join(" · ") || recordString(driver, "id") || "Driver",
+      label: [
+        recordString(driver, "driver_display_name"),
+        recordString(driver, "public_driver_id"),
+        recordString(driver, "verification_status"),
+        recordString(driver, "operational_status"),
+      ].filter(Boolean).join(" · ") || recordString(driver, "id") || "Driver",
     })).filter((option) => option.value),
   ];
 
