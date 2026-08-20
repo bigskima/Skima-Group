@@ -1,6 +1,7 @@
 import { router } from "expo-router";
-import { Clock3, MapPin, PackageCheck, Route, ScanLine } from "lucide-react-native";
-import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Clock3, MapPin, PackageCheck, Route, ScanLine, Search, UserCheck } from "lucide-react-native";
+import { useState } from "react";
+import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import {
   displayReference,
@@ -9,6 +10,7 @@ import {
   firstString,
   nestedRecord,
   recordId,
+  type PlatformRecord,
 } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -21,16 +23,48 @@ import { StatusPill } from "./StatusPill";
 export function JobListScreen({ workspace }: { workspace: "driver" | "station" }) {
   const { palette } = useAppTheme();
   const jobs = workspace === "driver" ? domainQueries.driverJobs() : domainQueries.stationJobs();
+  const [searchQuery, setSearchQuery] = useState("");
+  const allJobs = jobs.data ?? [];
+  const visibleJobs = workspace === "station" && searchQuery.trim()
+    ? allJobs.filter((job) => matchesStationVerificationSearch(job, searchQuery))
+    : allJobs;
 
   return (
     <Screen
-      eyebrow={workspace === "driver" ? "Driver operations" : "Station operations"}
-      title={workspace === "driver" ? "Deliveries" : "Refill queue"}
-      subtitle={workspace === "driver" ? "Your assigned cylinder pickups, station hand-offs and returns." : "Cylinders assigned to this station and their current processing state."}
+      eyebrow={workspace === "driver" ? "Driver operations" : "Station verification"}
+      title={workspace === "driver" ? "Deliveries" : "Expected arrivals"}
+      subtitle={workspace === "driver"
+        ? "Your assigned cylinder pickups, station hand-offs and returns."
+        : "These jobs are already assigned to this station. Verify the order, cylinder and assigned driver here; a separate station QR scanner is not required."}
       refreshControl={
         <RefreshControl refreshing={jobs.isRefetching} onRefresh={() => void jobs.refetch()} tintColor={palette.brand} />
       }
     >
+      {workspace === "station" ? (
+        <View style={[styles.searchCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <View style={styles.searchHead}>
+            <View style={[styles.detailIcon, { backgroundColor: palette.brandSoft }]}>
+              <Search color={palette.brand} size={16} />
+            </View>
+            <View style={styles.searchCopy}>
+              <Text style={[styles.searchTitle, { color: palette.ink }]}>Verify LPG service</Text>
+              <Text style={[styles.searchBody, { color: palette.muted }]}>Find an assigned arrival by its SKIMA order reference, permanent Cylinder ID or assigned driver identity.</Text>
+            </View>
+          </View>
+          <TextInput
+            accessibilityLabel="Find assigned LPG service"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            onChangeText={setSearchQuery}
+            placeholder="Order, Cylinder ID or Driver ID"
+            placeholderTextColor={palette.muted}
+            style={[styles.searchInput, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
+            value={searchQuery}
+          />
+          <Text style={[styles.searchHint, { color: palette.muted }]}>Search is limited to jobs already returned for this authenticated station. It does not expose unrelated customer or station records.</Text>
+        </View>
+      ) : null}
+
       {jobs.isPending ? (
         <View style={styles.loading}>
           <ActivityIndicator color={palette.brand} />
@@ -42,25 +76,36 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
           description={friendlyError(jobs.error, "Jobs could not be loaded. Please try again.")}
           action={<AppButton label="Retry" variant="secondary" onPress={() => void jobs.refetch()} />}
         />
-      ) : (jobs.data ?? []).length === 0 ? (
+      ) : allJobs.length === 0 ? (
         <EmptyState
           icon={<PackageCheck color={palette.brand} size={26} />}
-          title={workspace === "driver" ? "No active deliveries" : "No cylinders waiting"}
-          description={workspace === "driver" ? "New assignments appear here automatically when SKIMA dispatches a job to you." : "New refill jobs appear here when a verified cylinder is routed to your station."}
+          title={workspace === "driver" ? "No active deliveries" : "No expected arrivals"}
+          description={workspace === "driver" ? "New assignments appear here automatically when SKIMA dispatches a job to you." : "New refill jobs appear here automatically when SKIMA assigns an eligible order to this station."}
+        />
+      ) : visibleJobs.length === 0 ? (
+        <EmptyState
+          icon={<Search color={palette.brand} size={26} />}
+          title="No assigned arrival matches"
+          description="Check the order reference, Cylinder ID or Driver ID. This station can only search within its own assigned LPG jobs."
+          action={<AppButton label="Clear search" variant="secondary" onPress={() => setSearchQuery("")} />}
         />
       ) : (
         <View style={styles.list}>
-          {(jobs.data ?? []).map((job, index) => {
+          {visibleJobs.map((job, index) => {
             const id = recordId(job);
             const order = nestedRecord(job, "order") ?? job;
-            const cylinder = nestedRecord(order, "cylinder");
+            const cylinder = nestedRecord(job, "cylinder") ?? nestedRecord(order, "cylinder");
+            const driver = nestedRecord(job, "driver") ?? nestedRecord(order, "driver");
             const location = workspace === "driver"
               ? (nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location"))
-              : (nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch"));
+              : (nestedRecord(job, "station") ?? nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch"));
             const status = displayStatus(job) ?? displayStatus(order) ?? "queued";
             const tone = jobStatusTone(status);
             const reference = displayReference(order) ?? displayReference(job) ?? "Refill order";
+            const cylinderReference = cylinder ? displayReference(cylinder) : null;
             const size = cylinder ? firstNumber(cylinder, ["sizeKg", "size_kg"]) : null;
+            const driverName = driver ? firstString(driver, ["displayName", "display_name", "name"]) : null;
+            const driverReference = driver ? firstString(driver, ["publicReference", "public_reference", "driverId", "driver_id"]) : null;
             const locationText = location
               ? (firstString(location, ["formattedAddress", "formatted_address", "displayName", "display_name"]) ?? "Location details available in the job")
               : "Location details available in the job";
@@ -93,6 +138,30 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
 
                 <View style={[styles.divider, { backgroundColor: palette.border }]} />
 
+                {cylinderReference ? (
+                  <View style={styles.detail}>
+                    <View style={[styles.detailIcon, { backgroundColor: palette.soft }]}>
+                      <PackageCheck color={palette.mutedStrong} size={15} />
+                    </View>
+                    <View style={styles.detailCopy}>
+                      <Text style={[styles.detailLabel, { color: palette.muted }]}>CYLINDER ID</Text>
+                      <Text style={[styles.body, { color: palette.ink }]}>{cylinderReference}</Text>
+                    </View>
+                  </View>
+                ) : null}
+
+                {workspace === "station" && driver ? (
+                  <View style={styles.detail}>
+                    <View style={[styles.detailIcon, { backgroundColor: palette.soft }]}>
+                      <UserCheck color={palette.mutedStrong} size={15} />
+                    </View>
+                    <View style={styles.detailCopy}>
+                      <Text style={[styles.detailLabel, { color: palette.muted }]}>ASSIGNED DRIVER</Text>
+                      <Text style={[styles.body, { color: palette.ink }]}>{[driverName, driverReference].filter(Boolean).join(" · ") || "Driver details available in the job"}</Text>
+                    </View>
+                  </View>
+                ) : null}
+
                 <View style={styles.detail}>
                   <View style={[styles.detailIcon, { backgroundColor: palette.soft }]}>
                     <MapPin color={palette.mutedStrong} size={15} />
@@ -119,6 +188,23 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
       )}
     </Screen>
   );
+}
+
+function matchesStationVerificationSearch(job: PlatformRecord, rawQuery: string) {
+  const query = rawQuery.trim().toLowerCase();
+  if (!query) return true;
+  const order = nestedRecord(job, "order") ?? job;
+  const cylinder = nestedRecord(job, "cylinder") ?? nestedRecord(order, "cylinder");
+  const driver = nestedRecord(job, "driver") ?? nestedRecord(order, "driver");
+  const candidates = [
+    displayReference(job),
+    displayReference(order),
+    cylinder ? displayReference(cylinder) : null,
+    cylinder ? firstString(cylinder, ["cylinderIdentifier", "cylinder_identifier"]) : null,
+    driver ? displayReference(driver) : null,
+    driver ? firstString(driver, ["driverId", "driver_id", "publicReference", "public_reference"]) : null,
+  ];
+  return candidates.some((candidate) => candidate?.toLowerCase().includes(query));
 }
 
 function formatDate(value: string | null) {
@@ -167,6 +253,13 @@ function jobStatusTone(status: string): "neutral" | "brand" | "success" | "warni
 }
 
 const styles = StyleSheet.create({
+  searchCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
+  searchHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
+  searchCopy: { flex: 1, gap: 3 },
+  searchTitle: { ...typography.subheading, fontSize: 15 },
+  searchBody: { ...typography.caption, lineHeight: 18 },
+  searchHint: { ...typography.caption, fontSize: 10, lineHeight: 15 },
+  searchInput: { minHeight: 48, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, ...typography.bodyStrong, fontSize: 14 },
   loading: { minHeight: 180, alignItems: "center", justifyContent: "center", gap: spacing.sm },
   loadingText: { ...typography.caption },
   list: { gap: spacing.md },
