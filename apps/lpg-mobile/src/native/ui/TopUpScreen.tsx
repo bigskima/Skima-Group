@@ -64,7 +64,8 @@ export function TopUpScreen() {
     invalidate: [["deposits"], ["wallets"]],
   });
 
-  const walletCreditAmount = firstNumber(feePreview, ["walletCreditAmount", "wallet_credit_amount"]) ?? Number(amount) || 0;
+  const enteredAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
+  const walletCreditAmount = firstNumber(feePreview, ["walletCreditAmount", "wallet_credit_amount"]) ?? enteredAmount;
   const feeAmount = firstNumber(feePreview, ["calculatedFeeAmount", "calculated_fee_amount"]) ?? 0;
   const totalCharge = firstNumber(feePreview, ["totalChargeAmount", "total_charge_amount"]) ?? walletCreditAmount + feeAmount;
 
@@ -202,7 +203,7 @@ function MoneyRow({ label, value, strong = false }: { label: string; value: stri
   return (
     <View style={styles.moneyRow}>
       <Text style={[strong ? styles.totalLabel : styles.moneyLabel, { color: strong ? palette.ink : palette.muted }]}>{label}</Text>
-      <Text style={[strong ? styles.totalValue : styles.moneyValue, { color: strong ? palette.ink : palette.ink }]}>{value}</Text>
+      <Text style={[strong ? styles.totalValue : styles.moneyValue, { color: palette.ink }]}>{value}</Text>
     </View>
   );
 }
