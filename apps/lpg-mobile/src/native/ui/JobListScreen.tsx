@@ -102,12 +102,24 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
             const status = displayStatus(job) ?? displayStatus(order) ?? "queued";
             const tone = jobStatusTone(status);
             const reference = displayReference(order) ?? displayReference(job) ?? "Refill order";
-            const cylinderReference = cylinder ? displayReference(cylinder) : null;
-            const size = cylinder ? firstNumber(cylinder, ["sizeKg", "size_kg"]) : null;
-            const driverName = driver ? firstString(driver, ["displayName", "display_name", "name"]) : null;
-            const driverReference = driver ? firstString(driver, ["publicReference", "public_reference", "driverId", "driver_id"]) : null;
+            const cylinderReference = cylinder
+              ? displayReference(cylinder)
+              : firstString(job, ["cylinderReference", "cylinderIdentifier", "cylinder_reference", "cylinder_identifier"]);
+            const size = cylinder
+              ? firstNumber(cylinder, ["sizeKg", "size_kg"])
+              : firstNumber(job, ["cylinderSizeKg", "cylinder_size_kg"]);
+            const cylinderTagStatus = firstString(job, ["cylinderTagStatus", "tagStatus", "cylinder_tag_status", "tag_status"]);
+            const driverName = driver
+              ? firstString(driver, ["displayName", "display_name", "name"])
+              : firstString(job, ["driverDisplayName", "driver_display_name"]);
+            const driverReference = driver
+              ? firstString(driver, ["publicReference", "public_reference", "driverId", "driver_id"])
+              : firstString(job, ["driverReference", "driver_reference"]);
+            const driverVerificationStatus = firstString(job, ["driverVerificationStatus", "driver_verification_status"]);
             const locationText = location
               ? (firstString(location, ["formattedAddress", "formatted_address", "displayName", "display_name"]) ?? "Location details available in the job")
+              : workspace === "station"
+              ? (firstString(job, ["stationAddress", "stationDisplayName", "station_address", "station_display_name"]) ?? "This station")
               : "Location details available in the job";
 
             return (
@@ -145,19 +157,23 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
                     </View>
                     <View style={styles.detailCopy}>
                       <Text style={[styles.detailLabel, { color: palette.muted }]}>CYLINDER ID</Text>
-                      <Text style={[styles.body, { color: palette.ink }]}>{cylinderReference}</Text>
+                      <Text style={[styles.body, { color: palette.ink }]}>
+                        {cylinderReference}{cylinderTagStatus ? ` · ${tagStatusLabel(cylinderTagStatus)}` : ""}
+                      </Text>
                     </View>
                   </View>
                 ) : null}
 
-                {workspace === "station" && driver ? (
+                {workspace === "station" && (driver || driverName || driverReference) ? (
                   <View style={styles.detail}>
                     <View style={[styles.detailIcon, { backgroundColor: palette.soft }]}>
                       <UserCheck color={palette.mutedStrong} size={15} />
                     </View>
                     <View style={styles.detailCopy}>
                       <Text style={[styles.detailLabel, { color: palette.muted }]}>ASSIGNED DRIVER</Text>
-                      <Text style={[styles.body, { color: palette.ink }]}>{[driverName, driverReference].filter(Boolean).join(" · ") || "Driver details available in the job"}</Text>
+                      <Text style={[styles.body, { color: palette.ink }]}>
+                        {[driverName, driverReference, driverVerificationStatus ? driverStatusLabel(driverVerificationStatus) : null].filter(Boolean).join(" · ") || "Driver details available in the job"}
+                      </Text>
                     </View>
                   </View>
                 ) : null}
@@ -199,8 +215,11 @@ function matchesStationVerificationSearch(job: PlatformRecord, rawQuery: string)
   const candidates = [
     displayReference(job),
     displayReference(order),
+    firstString(job, ["cylinderReference", "cylinderIdentifier", "cylinder_reference", "cylinder_identifier"]),
     cylinder ? displayReference(cylinder) : null,
     cylinder ? firstString(cylinder, ["cylinderIdentifier", "cylinder_identifier"]) : null,
+    firstString(job, ["driverReference", "driver_reference"]),
+    firstString(job, ["driverDisplayName", "driver_display_name"]),
     driver ? displayReference(driver) : null,
     driver ? firstString(driver, ["driverId", "driver_id", "publicReference", "public_reference"]) : null,
   ];
@@ -215,6 +234,27 @@ function formatDate(value: string | null) {
 
 function normalizedStatus(status: string) {
   return status.toLowerCase().replace(/[-\s]+/g, "_");
+}
+
+function tagStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    untagged: "Not physically tagged yet",
+    tag_pending: "Tag pending",
+    tagged: "Physical tag active",
+    tag_damaged: "Tag damaged",
+    tag_lost: "Tag lost",
+    replacement_pending: "Replacement pending",
+    retired: "Retired",
+  };
+  const key = normalizedStatus(status);
+  return labels[key] ?? key.replace(/_/g, " ");
+}
+
+function driverStatusLabel(status: string) {
+  const key = normalizedStatus(status);
+  if (["verified", "approved", "active"].includes(key)) return "Verified driver";
+  if (["rejected", "blocked", "suspended"].includes(key)) return "Driver not eligible";
+  return key.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
 function jobStatusLabel(status: string) {
