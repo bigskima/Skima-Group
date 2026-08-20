@@ -23,6 +23,7 @@ import {
   type TableColumn,
 } from "@skima/ui";
 
+import { AdminCylinderIdentityWorkspace } from "./admin-cylinder-identity-workspace";
 import { useSessionState } from "./session";
 
 const RecordSchema = z.record(z.unknown());
@@ -88,6 +89,7 @@ export function AdminSystemWorkspace() {
   const refreshAll = () => {
     setNotice(null);
     void queryClient.invalidateQueries({ queryKey: ["admin-system"] });
+    void queryClient.invalidateQueries({ queryKey: ["admin-cylinder-identity"] });
   };
 
   return (
@@ -95,7 +97,7 @@ export function AdminSystemWorkspace() {
       <PageHeader
         eyebrow="Platform control"
         title="Systems & audit"
-        description="Monitor platform health, govern background work, investigate incidents, and review every sensitive change."
+        description="Monitor platform health, govern background work, investigate incidents, review sensitive changes, and control LPG cylinder identity."
         actions={<Button icon={RefreshCcw} variant="outline" onClick={refreshAll}>Refresh all</Button>}
       />
 
@@ -108,7 +110,7 @@ export function AdminSystemWorkspace() {
           <p>
             {unhealthy + openErrors > 0
               ? `${unhealthy} health checks and ${openErrors} incidents need review.`
-              : "Health, queue, and incident signals are available from this command center."}
+              : "Health, queue, incident, audit, and cylinder identity controls are available from this command center."}
           </p>
         </div>
         <StatusBadge tone={unhealthy + openErrors > 0 ? "warning" : "success"}>
@@ -169,6 +171,8 @@ export function AdminSystemWorkspace() {
             />
           )}
       </section>
+
+      <AdminCylinderIdentityWorkspace />
     </>
   );
 
