@@ -6,15 +6,25 @@ export interface ApplicationProgressProps {
   currentStep: number;
   totalSteps: number;
   stepTitle: string;
+  completionPercent?: number;
+  completionLabel?: string;
 }
 
 export function ApplicationProgress({
   currentStep,
   totalSteps,
   stepTitle,
+  completionPercent,
+  completionLabel,
 }: ApplicationProgressProps) {
   const { palette } = useAppTheme();
-  const progressPercent = Math.min(100, Math.max(0, Math.round((currentStep / totalSteps) * 100)));
+  const stepPercent = Math.min(100, Math.max(0, Math.round((currentStep / totalSteps) * 100)));
+  const progressPercent = completionPercent === undefined
+    ? stepPercent
+    : Math.min(100, Math.max(0, Math.round(completionPercent)));
+  const label = completionLabel ?? (completionPercent === undefined
+    ? `${progressPercent}% through steps`
+    : `${progressPercent}% complete`);
 
   return (
     <View style={[styles.container, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -22,7 +32,7 @@ export function ApplicationProgress({
         <View style={[styles.stepBadge, { backgroundColor: palette.brandSoft }]}>
           <Text style={[styles.stepCounter, { color: palette.brand }]}>Step {currentStep} of {totalSteps}</Text>
         </View>
-        <Text style={[styles.percentText, { color: palette.muted }]}>{progressPercent}% complete</Text>
+        <Text style={[styles.percentText, { color: palette.muted }]}>{label}</Text>
       </View>
       <Text style={[styles.stepTitle, { color: palette.ink }]}>{stepTitle}</Text>
       <View style={[styles.track, { backgroundColor: palette.soft }]}>
