@@ -1,0 +1,191 @@
+/* Operator-facing refinements layered over the shared production admin shell. */
+
+.admin-human-lookup {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-human-lookup > .skima-muted {
+  margin: -2px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.admin-human-lookup > .skima-muted svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.admin-dialog-advanced {
+  margin-top: 2px;
+  padding-top: 12px;
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--sk-color-border);
+}
+
+.admin-dialog-advanced > .sk-button {
+  justify-self: start;
+}
+
+.admin-dialog-advanced > .skima-muted {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admin-inline-warning {
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, #c78613 28%, var(--sk-color-border));
+  border-radius: 12px;
+  background: color-mix(in srgb, #fff6d9 62%, white);
+  color: #715117;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-company-record-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-company-record-section {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--sk-color-border);
+  border-radius: 14px;
+  background: var(--sk-color-surface);
+}
+
+.admin-company-record-section__header {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-company-record-section__header h3,
+.admin-company-record-section__header p {
+  margin: 0;
+}
+
+.admin-company-record-section__header h3 {
+  color: var(--sk-color-ink);
+  font-size: 15px;
+}
+
+.admin-company-record-section__header p {
+  margin-top: 3px;
+  color: var(--sk-color-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.admin-company-record-list {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-company-record-row {
+  min-width: 0;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid color-mix(in srgb, var(--sk-color-border) 72%, transparent);
+  border-radius: 11px;
+  background: var(--sk-color-surface-subtle);
+}
+
+.admin-company-record-row__icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--sk-color-primary-soft) 70%, white);
+  color: var(--sk-color-primary);
+  font-weight: 900;
+}
+
+.admin-company-record-row__icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.admin-company-record-row__icon--person {
+  border-radius: 50%;
+}
+
+.admin-company-record-row__copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.admin-company-record-row__copy strong,
+.admin-company-record-row__copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-company-record-row__copy strong {
+  color: var(--sk-color-ink);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.admin-company-record-row__copy small {
+  color: var(--sk-color-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.admin-company-record-empty {
+  margin: 0;
+  padding: 14px 10px;
+  border-radius: 10px;
+  background: var(--sk-color-surface-subtle);
+  color: var(--sk-color-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+@media (max-width: 1100px) {
+  .admin-company-record-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-company-record-grid {
+    margin-top: 14px;
+    gap: 10px;
+  }
+
+  .admin-company-record-section {
+    padding: 12px;
+  }
+
+  .admin-company-record-row {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .admin-company-record-row > .sk-badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .admin-dialog-advanced > .sk-button {
+    width: 100%;
+  }
+}

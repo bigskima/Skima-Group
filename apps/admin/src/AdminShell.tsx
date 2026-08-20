@@ -13,6 +13,8 @@ interface AdminShellProps {
   readonly children: ReactNode;
 }
 
+const mobilePriorityKeys = ["overview", "applications", "operations", "finance", "company", "access"] as const;
+
 export function AdminShell(props: AdminShellProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const activeItem = useMemo(
@@ -21,7 +23,16 @@ export function AdminShell(props: AdminShellProps) {
   );
   const primaryItems = props.navItems.slice(0, 5);
   const managementItems = props.navItems.slice(5);
-  const mobileItems = props.navItems.slice(0, 4);
+  const mobileItems = useMemo(() => {
+    const prioritized = mobilePriorityKeys
+      .map((key) => props.navItems.find((item) => item.key === key))
+      .filter((item): item is NavItem => Boolean(item));
+    const remaining = props.navItems.filter((item) =>
+      !prioritized.some((candidate) => candidate.key === item.key)
+    );
+
+    return [...prioritized, ...remaining].slice(0, 4);
+  }, [props.navItems]);
   const activeIsInMobileBar = mobileItems.some((item) => item.href === props.activeHref);
 
   const navigate = (href: string) => {

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, type LucideIcon, MapPinned, Plus, RefreshCcw, UsersRound } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { createClientIdempotencyKey, normalizeStatusLabel } from "@skima/frontend-core";
@@ -63,20 +63,38 @@ export function AdminCompanyWorkspace() {
     queryFn: () => api.get("/runtime/organization-memberships", RecordsSchema),
     enabled: status === "authenticated",
   });
+  const profiles = useQuery({
+    queryKey: ["admin-company", "profiles"],
+    queryFn: () => api.get("/admin/profiles", RecordsSchema),
+    enabled: status === "authenticated",
+    retry: false,
+  });
 
   const organizationRecords = organizations.data ?? [];
+  const branchRecords = branches.data ?? [];
+  const membershipRecords = memberships.data ?? [];
+  const profileRecords = profiles.data ?? [];
+  const profileById = useMemo(
+    () => new Map(profileRecords.flatMap((profile) => {
+      const id = recordString(profile, "id");
+      return id ? [[id, profile] as const] : [];
+    })),
+    [profileRecords],
+  );
   const selected = useMemo(
     () => organizationRecords.find((record) => recordString(record, "id") === selectedId) ??
       organizationRecords[0] ?? null,
     [organizationRecords, selectedId],
   );
   const selectedOrganizationId = recordString(selected, "id");
-  const selectedBranches = (branches.data ?? []).filter((record) =>
+  const selectedBranches = branchRecords.filter((record) =>
     recordString(record, "organization_id") === selectedOrganizationId
   );
-  const selectedMemberships = (memberships.data ?? []).filter((record) =>
+  const selectedMemberships = membershipRecords.filter((record) =>
     recordString(record, "organization_id") === selectedOrganizationId
   );
+  const detailsLoading = branches.isLoading || memberships.isLoading || profiles.isLoading;
+  const detailsError = branches.error ?? memberships.error ?? profiles.error;
 
   useEffect(() => {
     if (!selectedId && organizationRecords[0]) {
@@ -145,9 +163,9 @@ export function AdminCompanyWorkspace() {
   return (
     <>
       <PageHeader
-        eyebrow="Company control"
+        eyebrow="Company management"
         title="Companies & locations"
-        description="Manage every company, branch, operating status, and team from one governed directory."
+        description="Manage approved businesses, their locations, team access, and operating status from one place."
         actions={
           <>
             <Button icon={RefreshCcw} variant="outline" onClick={refreshAll}>Refresh</Button>
@@ -165,13 +183,13 @@ export function AdminCompanyWorkspace() {
       <section className="skima-grid skima-grid--compact">
         <MetricTile label="Companies" value={organizationRecords.length} icon={Building2} />
         <MetricTile
-          label="Active"
+          label="Active companies"
           value={organizationRecords.filter((record) => recordString(record, "status") === "active").length}
           icon={Building2}
           tone="success"
         />
-        <MetricTile label="Locations" value={(branches.data ?? []).length} icon={MapPinned} tone="info" />
-        <MetricTile label="Company users" value={(memberships.data ?? []).length} icon={UsersRound} tone="warning" />
+        <MetricTile label="Locations" value={branchRecords.length} icon={MapPinned} tone="info" />
+        <MetricTile label="Company users" value={membershipRecords.length} icon={UsersRound} tone="warning" />
       </section>
 
       <div className="admin-master-detail">
@@ -187,6 +205,10 @@ export function AdminCompanyWorkspace() {
             {organizationRecords.map((organization) => {
               const id = recordString(organization, "id");
               const isSelected = id === selectedOrganizationId;
+              const locationCount = id
+                ? branchRecords.filter((branch) => recordString(branch, "organization_id") === id).length
+                : 0;
+              const legalName = recordString(organization, "legal_name");
               return (
                 <button
                   className={`admin-directory-item${isSelected ? " is-active" : ""}`}
@@ -199,7 +221,7 @@ export function AdminCompanyWorkspace() {
                   </span>
                   <span>
                     <strong>{recordString(organization, "display_name") ?? "Unnamed company"}</strong>
-                    <small>{recordString(organization, "slug") ?? "No company key"}</small>
+                    <small>{legalName ?? `${locationCount} ${locationCount === 1 ? "location" : "locations"}`}</small>
                   </span>
                   <StatusBadge tone={statusTone(recordString(organization, "status"))}>
                     {normalizeStatusLabel(recordString(organization, "status") ?? "unknown")}
@@ -208,7 +230,7 @@ export function AdminCompanyWorkspace() {
               );
             })}
             {organizationRecords.length === 0
-              ? <div className="admin-empty-compact">No companies have been created yet.</div>
+              ? <div className="admin-empty-compact">No companies have been added yet.</div>
               : null}
           </div>
         </section>
@@ -232,9 +254,9 @@ export function AdminCompanyWorkspace() {
                 </div>
                 <DetailList items={[
                   { label: "Legal name", value: recordString(selected, "legal_name") ?? "Not set" },
-                  { label: "Company key", value: recordString(selected, "slug") ?? "Not set" },
+                  { label: "Short name", value: recordString(selected, "slug") ?? "Not set" },
                   {
-                    label: "Status",
+                    label: "Operating status",
                     value: (
                       <StatusBadge tone={statusTone(recordString(selected, "status"))}>
                         {normalizeStatusLabel(recordString(selected, "status") ?? "unknown")}
@@ -245,6 +267,14 @@ export function AdminCompanyWorkspace() {
                   { label: "Team members", value: selectedMemberships.length },
                   { label: "Created", value: formatDate(recordString(selected, "created_at")) },
                 ]} />
+
+                {detailsLoading ? <LoadingState label="Loading company locations and team" /> : null}
+                {detailsError ? (
+                  <div className="admin-inline-warning" role="status">
+                    Some company details could not be loaded. Refresh this page to try again.
+                  </div>
+                ) : null}
+
                 <div className="admin-company-summary-grid">
                   <CompanySummary
                     icon={MapPinned}
@@ -256,8 +286,65 @@ export function AdminCompanyWorkspace() {
                     icon={UsersRound}
                     label="Team"
                     value={String(selectedMemberships.length)}
-                    supporting="Active and invited company users"
+                    supporting="People with company access"
                   />
+                </div>
+
+                <div className="admin-company-record-grid">
+                  <CompanyRecordSection
+                    title="Locations"
+                    supporting="Places where this company operates"
+                    empty="No locations are connected to this company yet."
+                  >
+                    {selectedBranches.map((branch) => {
+                      const id = recordString(branch, "id") ?? JSON.stringify(branch);
+                      const name = branchName(branch);
+                      const address = branchAddress(branch);
+                      const branchStatus = recordString(branch, "status");
+                      return (
+                        <div className="admin-company-record-row" key={id}>
+                          <span className="admin-company-record-row__icon" aria-hidden="true"><MapPinned /></span>
+                          <span className="admin-company-record-row__copy">
+                            <strong>{name}</strong>
+                            <small>{address ?? "Address not yet recorded"}</small>
+                          </span>
+                          <StatusBadge tone={statusTone(branchStatus)}>
+                            {normalizeStatusLabel(branchStatus ?? "unknown")}
+                          </StatusBadge>
+                        </div>
+                      );
+                    })}
+                  </CompanyRecordSection>
+
+                  <CompanyRecordSection
+                    title="Company team"
+                    supporting="People who can work in this company workspace"
+                    empty="No team members are connected to this company yet."
+                  >
+                    {selectedMemberships.map((membership) => {
+                      const id = recordString(membership, "id") ?? JSON.stringify(membership);
+                      const userId = recordString(membership, "user_id");
+                      const profile = userId ? profileById.get(userId) : undefined;
+                      const name = recordString(profile, "display_name") ??
+                        recordString(membership, "invited_email") ?? "Company member";
+                      const membershipType = recordString(membership, "membership_type");
+                      const membershipStatus = recordString(membership, "status");
+                      return (
+                        <div className="admin-company-record-row" key={id}>
+                          <span className="admin-company-record-row__icon admin-company-record-row__icon--person" aria-hidden="true">
+                            {name.slice(0, 1).toUpperCase()}
+                          </span>
+                          <span className="admin-company-record-row__copy">
+                            <strong>{name}</strong>
+                            <small>{membershipType ? normalizeStatusLabel(membershipType) : "Company access"}</small>
+                          </span>
+                          <StatusBadge tone={statusTone(membershipStatus)}>
+                            {normalizeStatusLabel(membershipStatus ?? "unknown")}
+                          </StatusBadge>
+                        </div>
+                      );
+                    })}
+                  </CompanyRecordSection>
                 </div>
               </>
             )
@@ -289,7 +376,7 @@ export function AdminCompanyWorkspace() {
           onSubmit={(event: FormEvent<HTMLFormElement>) => {
             event.preventDefault();
             if (!form.displayName.trim() || !form.slug.trim()) {
-              setFormError("Company name and company key are required.");
+              setFormError("Company name and short name are required.");
               return;
             }
             setFormError(null);
@@ -305,9 +392,9 @@ export function AdminCompanyWorkspace() {
               required
             />
             <TextInput
-              label="Company key"
+              label="Short name"
               name="slug"
-              helperText="Lowercase letters, numbers, and hyphens."
+              helperText="A simple unique name used for company links and internal organization, for example emelie-gas."
               value={form.slug}
               onChange={(event) => setForm({ ...form, slug: event.currentTarget.value })}
               required
@@ -316,6 +403,7 @@ export function AdminCompanyWorkspace() {
           <TextInput
             label="Legal name"
             name="legalName"
+            helperText="Use the registered business name where one exists."
             value={form.legalName}
             onChange={(event) => setForm({ ...form, legalName: event.currentTarget.value })}
           />
@@ -357,6 +445,61 @@ function CompanySummary(props: {
   );
 }
 
+function CompanyRecordSection(props: {
+  readonly title: string;
+  readonly supporting: string;
+  readonly empty: string;
+  readonly children: ReactNode;
+}) {
+  const children = Array.isArray(props.children) ? props.children : [props.children];
+  const visibleChildren = children.filter(Boolean);
+
+  return (
+    <section className="admin-company-record-section">
+      <div className="admin-company-record-section__header">
+        <div>
+          <h3>{props.title}</h3>
+          <p>{props.supporting}</p>
+        </div>
+        <StatusBadge>{visibleChildren.length}</StatusBadge>
+      </div>
+      <div className="admin-company-record-list">
+        {visibleChildren.length ? visibleChildren : <p className="admin-company-record-empty">{props.empty}</p>}
+      </div>
+    </section>
+  );
+}
+
+function branchName(record: PlatformRecord): string {
+  return recordString(record, "display_name") ?? recordString(record, "name") ??
+    recordString(record, "key") ?? "Unnamed location";
+}
+
+function branchAddress(record: PlatformRecord): string | null {
+  const address = record.address;
+  if (typeof address === "string" && address.trim()) return address.trim();
+  if (!address || typeof address !== "object" || Array.isArray(address)) return null;
+
+  const values = address as Readonly<Record<string, unknown>>;
+  const orderedKeys = [
+    "house_number",
+    "street",
+    "street_name",
+    "address_line_1",
+    "city",
+    "town",
+    "lga",
+    "state",
+    "country",
+  ];
+  const parts = orderedKeys.flatMap((key) => {
+    const value = values[key];
+    return typeof value === "string" && value.trim() ? [value.trim()] : [];
+  });
+  const uniqueParts = parts.filter((part, index) => parts.indexOf(part) === index);
+  return uniqueParts.length ? uniqueParts.join(", ") : null;
+}
+
 function recordString(record: PlatformRecord | null | undefined, key: string): string | null {
   const value = record?.[key];
   return typeof value === "string" && value.trim() ? value : null;
@@ -376,12 +519,22 @@ function formatDate(value: string | null): string {
 }
 
 function statusTone(status: string | null): "neutral" | "success" | "warning" | "danger" {
-  if (status === "active") return "success";
-  if (status === "pending") return "warning";
-  if (status === "suspended") return "danger";
+  if (status === "active" || status === "approved") return "success";
+  if (status === "pending" || status === "invited") return "warning";
+  if (["suspended", "revoked", "disabled"].includes(status ?? "")) return "danger";
   return "neutral";
 }
 
 function readError(error: unknown): string {
-  return error instanceof Error ? error.message : "The request could not be completed.";
+  if (!(error instanceof Error)) return "The request could not be completed. Please try again.";
+  if (/route_not_found|requested resource was not found/i.test(error.message)) {
+    return "This company action is temporarily unavailable. Refresh the page and try again.";
+  }
+  if (/permission|forbidden|unauthorized/i.test(error.message)) {
+    return "Your administrator account does not have permission to complete this company action.";
+  }
+  if (/network|fetch|timeout|timed out/i.test(error.message)) {
+    return "Skima could not reach the service. Check your connection and try again.";
+  }
+  return error.message;
 }
