@@ -3,7 +3,6 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "re
 import { z } from "zod";
 
 import {
-  type ApiGatewayClient,
   createClientIdempotencyKey,
   formatMoney,
   normalizeStatusLabel,
@@ -15,7 +14,6 @@ import {
   Dialog,
   ErrorState,
   LoadingState,
-  MetricTile,
   MoneyDisplay,
   PageHeader,
   SelectInput,
@@ -24,7 +22,7 @@ import {
   TextAreaInput,
   TextInput,
 } from "@skima/ui";
-import { Activity, FileText, RefreshCcw, Settings2 } from "lucide-react";
+import { RefreshCcw } from "lucide-react";
 
 import { useSessionState } from "./session";
 
@@ -92,10 +90,24 @@ type PlatformRecord = Readonly<Record<string, unknown>>;
 export function AdminResourceConsole(props: { readonly config: AdminResourceConsoleConfig }) {
   const [activeGroupKey, setActiveGroupKey] = useState(props.config.groups[0]?.key ?? "");
   const [activeAction, setActiveAction] = useState<AdminActionDefinition | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const activeGroup = props.config.groups.find((group) => group.key === activeGroupKey) ??
     props.config.groups[0];
-  const refreshAll = () => void queryClient.invalidateQueries({ queryKey: ["admin-resource"] });
+
+  const refreshAll = () => {
+    setNotice(null);
+    void queryClient.invalidateQueries({ queryKey: ["admin-resource"] });
+  };
+
+  if (!activeGroup) {
+    return (
+      <ErrorState
+        title={`${props.config.title} unavailable`}
+        message="No management areas have been configured for this workspace yet."
+      />
+    );
+  }
 
   return (
     <>
@@ -105,14 +117,15 @@ export function AdminResourceConsole(props: { readonly config: AdminResourceCons
         description={props.config.description}
         actions={
           <Button icon={RefreshCcw} variant="outline" onClick={refreshAll}>
-            Refresh
+            Refresh data
           </Button>
         }
       />
+
       <div
-        className="skima-resource-tabs"
+        className="skima-resource-tabs admin-resource-tabs"
         role="tablist"
-        aria-label={`${props.config.title} areas`}
+        aria-label={`${props.config.title} sections`}
       >
         {props.config.groups.map((group) => (
           <button
@@ -121,59 +134,62 @@ export function AdminResourceConsole(props: { readonly config: AdminResourceCons
             role="tab"
             aria-selected={group.key === activeGroup.key}
             className={group.key === activeGroup.key ? "is-active" : undefined}
-            onClick={() => setActiveGroupKey(group.key)}
+            onClick={() => {
+              setNotice(null);
+              setActiveGroupKey(group.key);
+            }}
           >
             {group.label}
           </button>
         ))}
       </div>
-      <section className="skima-grid">
-        <MetricTile
-          label="Record Sets"
-          value={activeGroup.resources.length}
-          icon={FileText}
-        />
-        <MetricTile
-          label="Actions"
-          value={activeGroup.actions.length}
-          icon={Settings2}
-          tone="info"
-        />
-        <MetricTile
-          label="Current Area"
-          value={activeGroup.label}
-          icon={Activity}
-          tone="success"
-        />
-      </section>
-      <section className="sk-panel">
+
+      {notice ? <StatusBadge tone="success" className="skima-status-note">{notice}</StatusBadge> : null}
+
+      <section className="sk-panel admin-resource-summary">
         <div className="sk-panel__header">
           <div>
             <h2>{activeGroup.label}</h2>
             <p className="skima-muted">{activeGroup.description}</p>
           </div>
         </div>
-        <div className="skima-resource-actions">
-          {activeGroup.actions.map((action) => (
-            <Button
-              key={action.key}
-              variant={action.tone === "danger" ? "destructive" : "outline"}
-              requiredPermission={action.requiredPermission}
-              onClick={() => setActiveAction(action)}
-            >
-              {action.label}
-            </Button>
-          ))}
-        </div>
+        {activeGroup.actions.length ? (
+          <div className="admin-resource-action-block">
+            <p>Available actions</p>
+            <div className="skima-resource-actions">
+              {activeGroup.actions.map((action) => (
+                <Button
+                  key={action.key}
+                  variant={action.tone === "danger" ? "destructive" : "outline"}
+                  requiredPermission={action.requiredPermission}
+                  onClick={() => {
+                    setNotice(null);
+                    setActiveAction(action);
+                  }}
+                >
+                  {action.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="skima-muted">This section is read-only from the administration dashboard.</p>
+        )}
       </section>
-      <div className="skima-resource-grid">
+
+      <div className="skima-resource-grid admin-resource-grid">
         {activeGroup.resources.map((resource) => (
           <AdminResourcePanel key={resource.key} resource={resource} />
         ))}
       </div>
+
       <AdminActionDialog
         action={activeAction}
         onClose={() => setActiveAction(null)}
+        onComplete={(label) => {
+          setActiveAction(null);
+          setNotice(`${label} completed successfully.`);
+        }}
       />
     </>
   );
@@ -202,7 +218,7 @@ function AdminResourcePanel(props: { readonly resource: AdminResourceDefinition 
   }
 
   return (
-    <section className="sk-panel">
+    <section className="sk-panel admin-resource-panel">
       <div className="sk-panel__header">
         <div>
           <h2>{props.resource.title}</h2>
@@ -210,15 +226,15 @@ function AdminResourcePanel(props: { readonly resource: AdminResourceDefinition 
             ? <p className="skima-muted">{props.resource.description}</p>
             : null}
         </div>
-        <StatusBadge>{String(records.length)}</StatusBadge>
+        <StatusBadge>{records.length === 1 ? "1 item" : `${records.length} items`}</StatusBadge>
       </div>
       <DataTable
         caption={props.resource.title}
         columns={columns}
         records={records}
         getRowKey={(record) => String(record.id ?? record.key ?? JSON.stringify(record))}
-        emptyTitle={props.resource.title}
-        emptyMessage="No records are available for this view."
+        emptyTitle={`No ${props.resource.title.toLowerCase()} yet`}
+        emptyMessage="There is nothing to show in this section right now."
       />
     </section>
   );
@@ -227,6 +243,7 @@ function AdminResourcePanel(props: { readonly resource: AdminResourceDefinition 
 function AdminActionDialog(props: {
   readonly action: AdminActionDefinition | null;
   readonly onClose: () => void;
+  readonly onComplete: (label: string) => void;
 }) {
   const { api } = useSessionState();
   const queryClient = useQueryClient();
@@ -236,14 +253,14 @@ function AdminActionDialog(props: {
   const mutation = useMutation({
     mutationFn: (payload: Readonly<Record<string, unknown>>) => {
       if (!action) {
-        throw new Error("An action is required.");
+        throw new Error("Choose an action before submitting.");
       }
 
       return api.post(action.path, payload, MutationResponseSchema);
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["admin-resource"] });
-      props.onClose();
+      if (action) props.onComplete(action.label);
     },
   });
 
@@ -296,12 +313,15 @@ function AdminActionDialog(props: {
             isLoading={mutation.isPending}
             variant={action.tone === "danger" ? "destructive" : "primary"}
           >
-            {action.submitLabel ?? "Save"}
+            {action.submitLabel ?? action.label}
           </Button>
         </>
       }
     >
       <form id="admin-action-form" className="skima-form-grid" onSubmit={submit}>
+        <p className="admin-dialog-guidance">
+          Review the details below before continuing. Required fields are marked by your browser; optional technical fields can be left unchanged when they are not needed.
+        </p>
         {action.fields.map((field) => (
           <AdminActionFieldInput
             key={field.key}
@@ -444,7 +464,11 @@ function parseFieldValue(field: AdminActionField, rawValue: string): unknown {
   }
 
   if (fieldType === "json") {
-    return trimmed.length > 0 ? JSON.parse(trimmed) : {};
+    try {
+      return trimmed.length > 0 ? JSON.parse(trimmed) : {};
+    } catch {
+      throw new Error(`${field.label} contains invalid structured data. Check the formatting and try again.`);
+    }
   }
 
   if (fieldType === "stringArray") {
@@ -452,7 +476,7 @@ function parseFieldValue(field: AdminActionField, rawValue: string): unknown {
       const parsed = JSON.parse(trimmed);
 
       if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== "string")) {
-        throw new Error(`${field.label} must be a list of text values.`);
+        throw new Error(`${field.label} must contain a list of text values.`);
       }
 
       return parsed;
@@ -462,7 +486,9 @@ function parseFieldValue(field: AdminActionField, rawValue: string): unknown {
   }
 
   if (fieldType === "datetime") {
-    return new Date(trimmed).toISOString();
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) throw new Error(`${field.label} must be a valid date and time.`);
+    return parsed.toISOString();
   }
 
   return trimmed;
@@ -537,7 +563,7 @@ function renderRecordValue(
   }
 
   if (value === null || value === undefined) {
-    return "None";
+    return "Not set";
   }
 
   return JSON.stringify(value);
@@ -590,5 +616,12 @@ function toneFromValue(value: string): "neutral" | "success" | "warning" | "dang
 }
 
 function readErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "The action could not be completed.";
+  if (!(error instanceof Error)) return "The action could not be completed. Please try again.";
+  if (/requested resource was not found|route_not_found/i.test(error.message)) {
+    return "This action is temporarily unavailable. Refresh the page and try again.";
+  }
+  if (/permission|required/i.test(error.message) && /permission/i.test(error.message)) {
+    return "Your administrator account does not have permission to complete this action.";
+  }
+  return error.message;
 }
