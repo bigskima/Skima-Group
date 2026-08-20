@@ -7,6 +7,8 @@ import { AppButton } from "./AppButton";
 export interface WithdrawalModalProps {
   visible: boolean;
   amount: number;
+  feeAmount: number;
+  totalDebitAmount: number;
   currency: string;
   accountName: string;
   accountNumber: string;
@@ -21,6 +23,8 @@ export interface WithdrawalModalProps {
 export function WithdrawalModal({
   visible,
   amount,
+  feeAmount,
+  totalDebitAmount,
   currency,
   accountName,
   accountNumber,
@@ -34,14 +38,16 @@ export function WithdrawalModal({
   const { palette } = useAppTheme();
   if (!visible) return null;
 
-  const formattedAmount = new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount);
+  const formattedAmount = money(amount, currency);
+  const formattedFee = money(feeAmount, currency);
+  const formattedTotal = money(totalDebitAmount, currency);
   const maskedAccount = accountNumber.length >= 4 ? `•••• ${accountNumber.slice(-4)}` : accountNumber;
   const isSuccess = Boolean(submittedResult);
 
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
-      <View style={[styles.overlay, { backgroundColor: palette.overlay }]}> 
-        <View style={[styles.container, shadows.raised, { backgroundColor: palette.surface, borderColor: palette.border }]}> 
+      <View style={[styles.overlay, { backgroundColor: palette.overlay }]}>
+        <View style={[styles.container, shadows.raised, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
               <View style={[styles.headerIcon, { backgroundColor: palette.brandSoft }]}>
@@ -65,11 +71,14 @@ export function WithdrawalModal({
                 <CheckCircle2 color="#FFFFFF" size={42} />
               </View>
               <Text style={[styles.successTitle, { color: palette.ink }]}>Request received</Text>
-              <Text style={[styles.successSub, { color: palette.muted }]}> 
-                Your withdrawal request for <Text style={{ fontWeight: "900", color: palette.ink }}>{formattedAmount}</Text> is being processed. Status updates will appear in your wallet and notifications.
+              <Text style={[styles.successSub, { color: palette.muted }]}>
+                <Text style={{ fontWeight: "900", color: palette.ink }}>{formattedAmount}</Text> is being sent to your payout account. Your wallet was debited {formattedTotal}, including the {formattedFee} SKIMA fee shown before confirmation.
               </Text>
 
-              <View style={[styles.receiptCard, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}> 
+              <View style={[styles.receiptCard, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+                <ReceiptRow label="Amount to bank" value={formattedAmount} />
+                <ReceiptRow label="SKIMA fee" value={formattedFee} />
+                <ReceiptRow label="Wallet debit" value={formattedTotal} />
                 <ReceiptRow label="Destination" value={accountName || "Payout account"} />
                 <ReceiptRow label="Institution" value={bankName || "Bank / institution"} />
                 <ReceiptRow label="Account" value={maskedAccount} />
@@ -82,12 +91,19 @@ export function WithdrawalModal({
             </View>
           ) : (
             <View style={styles.confirmContainer}>
-              <View style={[styles.amountBox, { backgroundColor: palette.brandSofter, borderColor: palette.brandSoft }]}> 
-                <Text style={[styles.amountLabel, { color: palette.muted }]}>WITHDRAWAL AMOUNT</Text>
+              <View style={[styles.amountBox, { backgroundColor: palette.brandSofter, borderColor: palette.brandSoft }]}>
+                <Text style={[styles.amountLabel, { color: palette.muted }]}>AMOUNT SENT TO BANK</Text>
                 <Text style={[styles.amountValue, { color: palette.brand }]}>{formattedAmount}</Text>
               </View>
 
-              <View style={[styles.detailsBox, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}> 
+              <View style={[styles.breakdownBox, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+                <ReceiptRow label="Withdrawal amount" value={formattedAmount} />
+                <ReceiptRow label="SKIMA fee" value={formattedFee} />
+                <View style={[styles.divider, { borderTopColor: palette.border }]} />
+                <ReceiptRow label="Total wallet debit" value={formattedTotal} />
+              </View>
+
+              <View style={[styles.detailsBox, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
                 <View style={styles.detailRow}>
                   <View style={[styles.bankIcon, { backgroundColor: palette.brandSoft }]}>
                     <Building2 color={palette.brand} size={19} />
@@ -97,9 +113,9 @@ export function WithdrawalModal({
                     <Text style={[styles.detailSub, { color: palette.muted }]}>{bankName || "Bank / institution"} · {maskedAccount}</Text>
                   </View>
                 </View>
-                <View style={[styles.securityRow, { borderTopColor: palette.border }]}> 
+                <View style={[styles.securityRow, { borderTopColor: palette.border }]}>
                   <ShieldCheck color={palette.success} size={16} />
-                  <Text style={[styles.securityText, { color: palette.muted }]}>Fees, limits, and payout timing are determined by the active SKIMA financial policy and payment rail.</Text>
+                  <Text style={[styles.securityText, { color: palette.muted }]}>The amount sent to your bank never includes the SKIMA fee. The fee remains separate in the ledger and becomes SKIMA revenue only after the provider confirms payout success.</Text>
                 </View>
               </View>
 
@@ -139,6 +155,14 @@ function ReceiptRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function money(value: number, currency: string) {
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(2)}`;
+  }
+}
+
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: "center", alignItems: "center", padding: spacing.md },
   container: { width: "100%", maxWidth: 480, borderRadius: radii.xl, borderWidth: StyleSheet.hairlineWidth, padding: spacing.lg, gap: spacing.lg },
@@ -152,6 +176,8 @@ const styles = StyleSheet.create({
   amountBox: { padding: spacing.lg, borderRadius: radii.lg, alignItems: "center", borderWidth: StyleSheet.hairlineWidth },
   amountLabel: { ...typography.eyebrow, fontSize: 9 },
   amountValue: { fontSize: 32, lineHeight: 39, fontWeight: "900", letterSpacing: -0.7, marginTop: 3 },
+  breakdownBox: { padding: spacing.md, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, gap: spacing.sm },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, marginVertical: 2 },
   detailsBox: { padding: spacing.md, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, gap: spacing.md },
   detailRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm + 2 },
   bankIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" },
@@ -170,6 +196,6 @@ const styles = StyleSheet.create({
   successSub: { ...typography.body, textAlign: "center", lineHeight: 21 },
   receiptCard: { width: "100%", padding: spacing.md, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth, gap: spacing.sm },
   receiptRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md },
-  receiptLabel: { ...typography.caption, flex: 0.35 },
-  receiptValue: { ...typography.caption, fontWeight: "800", textAlign: "right", flex: 0.65 },
+  receiptLabel: { ...typography.caption, flex: 0.42 },
+  receiptValue: { ...typography.caption, fontWeight: "800", textAlign: "right", flex: 0.58 },
 });
