@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { ChevronRight, ClipboardList, MapPin, PackageCheck, ShieldCheck, Truck } from "lucide-react-native";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useJobDetails } from "../api/domains";
 import {
   displayReference,
@@ -9,6 +9,7 @@ import {
   firstString,
   nestedRecord,
   recordId,
+  type PlatformRecord,
 } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -17,6 +18,33 @@ import { Card } from "./Card";
 import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
 import { StatusPill } from "./StatusPill";
+
+const TRACKABLE_ORDER_STATES = new Set([
+  "driver_accepted",
+  "assigned",
+  "pickup_en_route",
+  "pickup_verified",
+  "station_en_route",
+  "station_verified",
+  "refill_started",
+  "refill_in_progress",
+  "refill_confirmed",
+  "refill_completed",
+  "station_settled",
+  "return_en_route",
+  "returning",
+  "delivery_verification_pending",
+]);
+
+// Delivery confirmation is deliberately narrow. A customer must never be offered
+// the final hand-over action merely because the driver has started the return trip.
+const DELIVERY_CONFIRMATION_STATES = new Set([
+  "delivery_verification_pending",
+  "delivery_arrived",
+  "customer_confirmation_pending",
+]);
+
+const FINAL_ORDER_STATES = new Set(["delivered", "completed"]);
 
 export function CustomerOrdersScreen() {
   const { palette } = useAppTheme();
@@ -28,6 +56,13 @@ export function CustomerOrdersScreen() {
       title="My orders"
       subtitle="Track every refill from payment and pickup through station processing and return delivery."
       action={<AppButton label="New refill" size="sm" onPress={() => router.push("/(customer)/orders/new")} />}
+      refreshControl={
+        <RefreshControl
+          refreshing={orders.isRefetching}
+          onRefresh={() => void orders.refetch()}
+          tintColor={palette.brand}
+        />
+      }
     >
       {orders.isPending ? (
         <View style={styles.loading}>
@@ -36,7 +71,7 @@ export function CustomerOrdersScreen() {
         </View>
       ) : orders.error ? (
         <EmptyState
-          title="Couldn't load your orders"
+          title="We couldn't load your orders"
           description="Check your connection and try again."
           action={<AppButton label="Try again" variant="secondary" onPress={() => void orders.refetch()} />}
         />
@@ -55,8 +90,7 @@ export function CustomerOrdersScreen() {
             const station = nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
             const status = displayStatus(order) ?? "created";
             const currency = firstString(order, ["currency_code", "currencyCode"]) ?? "NGN";
-            const cylinderSize = cylinder ? firstNumber(cylinder, ["sizeKg", "size_kg"]) : null;
-            const cylinderReference = cylinder ? displayReference(cylinder) : null;
+            const total = firstNumber(order, ["total_amount", "totalAmount", "quoted_total", "quotedTotal"]);
             const stationText = station
               ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned station")
               : "Finding the best station";
@@ -89,16 +123,12 @@ export function CustomerOrdersScreen() {
                 <View style={styles.summaryRow}>
                   <View style={styles.summaryCopy}>
                     <Text style={[styles.label, { color: palette.muted }]}>CYLINDER</Text>
-                    <Text style={[styles.value, { color: palette.ink }]}>
-                      {cylinder
-                        ? `${cylinderSize ?? "Configured"} kg${cylinderReference ? ` · ${cylinderReference}` : ""}`
-                        : "Cylinder details unavailable"}
-                    </Text>
+                    <Text style={[styles.value, { color: palette.ink }]}>{cylinderSummary(cylinder)}</Text>
                   </View>
                   <View style={styles.amountCopy}>
                     <Text style={[styles.label, { color: palette.muted }]}>TOTAL</Text>
                     <Text style={[styles.amount, { color: palette.ink }]}>
-                      {money(firstNumber(order, ["total_amount", "totalAmount", "quoted_total", "quotedTotal"]) ?? 0, currency)}
+                      {total === null ? "Pending" : money(total, currency)}
                     </Text>
                   </View>
                 </View>
@@ -131,9 +161,12 @@ export function CustomerOrderDetailScreen() {
   const normalized = normalizeStatus(status);
   const currency = firstString(order, ["currency_code", "currencyCode"]) ?? "NGN";
   const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? "pending";
-  const trackable = ["assigned", "pickup", "station", "refill", "return", "delivery"].some((part) => normalized.includes(part));
-  const canVerifyDelivery = normalized.includes("delivery") || normalized.includes("return");
-  const canShowReceipt = ["completed", "delivered", "settled"].some((part) => normalized.includes(part)) || ["paid", "settled"].includes(normalizeStatus(paymentStatus));
+  const total = firstNumber(order, ["total_amount", "totalAmount", "quoted_total", "quotedTotal"]);
+  const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
+  const actualKg = firstNumber(order, ["actualKg", "actual_kg"]);
+  const trackable = TRACKABLE_ORDER_STATES.has(normalized);
+  const canVerifyDelivery = DELIVERY_CONFIRMATION_STATES.has(normalized);
+  const canShowReceipt = FINAL_ORDER_STATES.has(normalized) || ["paid", "settled"].includes(normalizeStatus(paymentStatus));
 
   return (
     <Screen
@@ -141,17 +174,30 @@ export function CustomerOrderDetailScreen() {
       title={order ? (displayReference(order) ?? "Refill order") : "Refill order"}
       subtitle="One trusted view of your cylinder, station, payment and current delivery stage."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
+      refreshControl={
+        <RefreshControl
+          refreshing={detail.isRefetching}
+          onRefresh={() => void detail.refetch()}
+          tintColor={palette.brand}
+        />
+      }
     >
       {detail.isPending ? (
         <View style={styles.loading}>
           <ActivityIndicator color={palette.brand} />
           <Text style={[styles.loadingText, { color: palette.muted }]}>Loading order details…</Text>
         </View>
+      ) : detail.error ? (
+        <EmptyState
+          title="Couldn't load this order"
+          description="We couldn't refresh the latest order state. Check your connection and try again."
+          action={<AppButton label="Try again" variant="secondary" onPress={() => void detail.refetch()} />}
+        />
       ) : !order ? (
         <EmptyState
           title="This order is unavailable"
           description="The order may no longer be accessible from this account."
-          action={<AppButton label="Try again" variant="secondary" onPress={() => void detail.refetch()} />}
+          action={<AppButton label="Back to orders" variant="secondary" onPress={() => router.back()} />}
         />
       ) : (
         <>
@@ -171,7 +217,7 @@ export function CustomerOrderDetailScreen() {
               <Text style={[styles.detailSectionTitle, { color: palette.ink }]}>Order summary</Text>
               <StatusPill label={friendlyOrderStatus(status)} tone={orderStatusTone(status)} />
             </View>
-            <InfoField label="Cylinder" value={cylinder ? `${firstNumber(cylinder, ["sizeKg", "size_kg"]) ?? "Configured"} kg · ${displayReference(cylinder)}` : "Cylinder details unavailable"} />
+            <InfoField label="Cylinder" value={cylinderSummary(cylinder)} />
             <InfoField label="Station" value={station ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned station") : "Finding the best station"} />
             <InfoField label="Pickup address" value={pickup ? (firstString(pickup, ["formattedAddress", "formatted_address", "label"]) ?? "Saved location") : "Saved order location"} />
             <InfoField label="Delivery address" value={delivery ? (firstString(delivery, ["formattedAddress", "formatted_address", "label"]) ?? "Saved location") : "Saved order location"} />
@@ -180,11 +226,9 @@ export function CustomerOrderDetailScreen() {
           <Card padding="lg">
             <Text style={[styles.detailSectionTitle, { color: palette.ink }]}>Refill & payment</Text>
             <View style={styles.metricsRow}>
-              <Metric label="Requested" value={`${firstNumber(order, ["requestedKg", "requested_kg"]) ?? "Configured"} kg`} />
-              {firstNumber(order, ["actualKg", "actual_kg"]) !== null ? (
-                <Metric label="Actual" value={`${firstNumber(order, ["actualKg", "actual_kg"])} kg`} />
-              ) : null}
-              <Metric label="Total" value={money(firstNumber(order, ["total_amount", "totalAmount", "quoted_total", "quotedTotal"]) ?? 0, currency)} />
+              <Metric label="Requested" value={requestedKg === null ? "Not recorded" : `${requestedKg} kg`} />
+              {actualKg !== null ? <Metric label="Actual" value={`${actualKg} kg`} /> : null}
+              <Metric label="Total" value={total === null ? "Pending" : money(total, currency)} />
             </View>
             <View style={[styles.paymentRow, { backgroundColor: palette.surfaceSubtle }]}>
               <View style={[styles.paymentIcon, { backgroundColor: palette.brandSoft }]}>
@@ -206,12 +250,22 @@ export function CustomerOrderDetailScreen() {
 
           <View style={[styles.safetyBox, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.brand} size={17} />
-            <Text style={[styles.safety, { color: palette.mutedStrong }]}>Every status shown here follows a SKIMA-confirmed hand-off, payment, refill, or delivery event.</Text>
+            <Text style={[styles.safety, { color: palette.mutedStrong }]}>Operational actions are only shown for the current backend-confirmed order state. Final delivery confirmation is not enabled while the cylinder is merely in transit.</Text>
           </View>
         </>
       )}
     </Screen>
   );
+}
+
+function cylinderSummary(cylinder: PlatformRecord | null) {
+  if (!cylinder) return "Cylinder details unavailable";
+  const size = firstNumber(cylinder, ["sizeKg", "size_kg"]);
+  const reference = displayReference(cylinder);
+  if (size !== null && reference) return `${size} kg · ${reference}`;
+  if (size !== null) return `${size} kg`;
+  if (reference) return reference;
+  return "Cylinder details unavailable";
 }
 
 function InfoField({ label, value }: { label: string; value: string }) {
@@ -267,12 +321,16 @@ function friendlyOrderStatus(value: string) {
     pickup_verified: "Cylinder collected",
     station_en_route: "Heading to the station",
     station_verified: "Cylinder received at station",
+    refill_started: "Refill started",
     refill_in_progress: "Refill in progress",
     refill_confirmed: "Refill complete",
     refill_completed: "Refill complete",
+    station_settled: "Ready to return",
     return_en_route: "On the way back to you",
     returning: "On the way back to you",
+    delivery_arrived: "Driver has arrived",
     delivery_verification_pending: "Ready for hand-over",
+    customer_confirmation_pending: "Waiting for your confirmation",
     delivered: "Delivered",
     completed: "Completed",
     cancelled: "Cancelled",
@@ -285,8 +343,8 @@ function orderStatusTone(value: string): "neutral" | "brand" | "success" | "warn
   const normalized = normalizeStatus(value);
   if (["delivered", "completed", "refill_confirmed", "refill_completed"].includes(normalized)) return "success";
   if (["cancelled", "failed", "rejected"].includes(normalized)) return "danger";
-  if (["created", "awaiting_payment", "pending", "matching_station", "matching_driver", "driver_offered", "delivery_verification_pending"].includes(normalized)) return "warning";
-  if (["payment_reserved", "driver_accepted", "assigned", "pickup_en_route", "pickup_verified", "station_en_route", "station_verified", "refill_in_progress", "return_en_route", "returning"].includes(normalized)) return "brand";
+  if (["created", "awaiting_payment", "pending", "matching_station", "matching_driver", "driver_offered", "delivery_verification_pending", "customer_confirmation_pending"].includes(normalized)) return "warning";
+  if (["payment_reserved", "driver_accepted", "assigned", "pickup_en_route", "pickup_verified", "station_en_route", "station_verified", "refill_started", "refill_in_progress", "station_settled", "return_en_route", "returning", "delivery_arrived"].includes(normalized)) return "brand";
   return "neutral";
 }
 
