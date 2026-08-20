@@ -15,7 +15,7 @@ import {
   UserRound,
   WalletCards,
 } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -56,8 +56,6 @@ const menus = {
 export function WorkspaceAccount({ workspace }: { workspace: string }) {
   const session = useSession();
   const theme = useAppTheme();
-  const { width } = useWindowDimensions();
-  const compactProfile = width < 600;
   const group = workspace.toLowerCase() as keyof typeof menus;
   const operational = menus[group] ?? menus.customer;
   const roleNames = session.context?.roles.map((role) => role.displayName ?? role.key).filter(Boolean) ?? [];
@@ -73,34 +71,13 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
     >
       <WorkspaceSwitcher current={group} />
 
-      <View
-        style={[
-          styles.profileHero,
-          compactProfile && styles.profileHeroCompact,
-          shadows.raised,
-          { backgroundColor: theme.palette.brand },
-        ]}
-      >
-        <View style={[styles.photoShell, compactProfile && styles.photoShellCompact]}>
-          <ProfilePhotoEditor variant="onBrand" />
-        </View>
-        <View style={[styles.identity, compactProfile && styles.identityCompact]}>
-          <Text
-            numberOfLines={compactProfile ? 2 : 1}
-            style={[styles.name, compactProfile && styles.nameCompact]}
-          >
-            {displayName}
-          </Text>
-          {email ? (
-            <Text
-              numberOfLines={compactProfile ? 2 : 1}
-              style={[styles.email, compactProfile && styles.emailCompact]}
-            >
-              {email}
-            </Text>
-          ) : null}
-          <View style={[styles.roleRow, compactProfile && styles.roleRowCompact]}>
-            <View style={[styles.roleBadge, compactProfile && styles.roleBadgeCompact]}>
+      <View style={[styles.profileHero, shadows.raised, { backgroundColor: theme.palette.brand }]}>
+        <ProfilePhotoEditor variant="onBrand" />
+        <View style={styles.identity}>
+          <Text style={styles.name}>{displayName}</Text>
+          {email ? <Text style={styles.email}>{email}</Text> : null}
+          <View style={styles.roleRow}>
+            <View style={styles.roleBadge}>
               <ShieldCheck color="#FFFFFF" size={13} />
               <Text numberOfLines={1} style={styles.roleText}>{primaryRole}</Text>
             </View>
@@ -211,20 +188,19 @@ function Menu({
 }
 
 const styles = StyleSheet.create({
-  profileHero: { flexDirection: "row", alignItems: "center", gap: spacing.lg, padding: spacing.lg, borderRadius: radii.xl, overflow: "hidden" },
-  profileHeroCompact: { flexDirection: "column", alignItems: "center", gap: spacing.lg, paddingHorizontal: spacing.md, paddingVertical: spacing.lg },
-  photoShell: { flexShrink: 0, alignItems: "center", justifyContent: "center" },
-  photoShellCompact: { width: "100%" },
-  identity: { flex: 1, minWidth: 0, gap: 4 },
-  identityCompact: { width: "100%", alignItems: "center" },
-  name: { color: "#FFFFFF", ...typography.heading, fontSize: 22 },
-  nameCompact: { maxWidth: "100%", textAlign: "center", fontSize: 20, lineHeight: 25 },
-  email: { color: "rgba(255,255,255,.82)", ...typography.caption, lineHeight: 18 },
-  emailCompact: { maxWidth: "100%", textAlign: "center" },
-  roleRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing.sm, marginTop: 5 },
-  roleRowCompact: { justifyContent: "center" },
-  roleBadge: { maxWidth: "82%", flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 5, borderRadius: radii.pill, backgroundColor: "rgba(255,255,255,.14)" },
-  roleBadgeCompact: { maxWidth: "100%" },
+  profileHero: {
+    alignItems: "center",
+    gap: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
+    borderRadius: radii.xl,
+    overflow: "hidden",
+  },
+  identity: { width: "100%", minWidth: 0, alignItems: "center", gap: 4 },
+  name: { maxWidth: "100%", color: "#FFFFFF", ...typography.heading, fontSize: 20, lineHeight: 25, textAlign: "center" },
+  email: { maxWidth: "100%", color: "rgba(255,255,255,.82)", ...typography.caption, lineHeight: 18, textAlign: "center" },
+  roleRow: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap", gap: spacing.sm, marginTop: 5 },
+  roleBadge: { maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 5, borderRadius: radii.pill, backgroundColor: "rgba(255,255,255,.14)" },
   roleText: { flexShrink: 1, color: "#FFFFFF", ...typography.caption, fontSize: 10, fontWeight: "900" },
   roleMore: { color: "rgba(255,255,255,.76)", ...typography.caption, fontSize: 10 },
   accountNote: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
