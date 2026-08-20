@@ -1,9 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run frontend:build",
-  "installCommand": "npm ci",
+  "installCommand": "npm install --no-audit --no-fund",
   "outputDirectory": "apps/admin/dist",
-  "ignoreCommand": "git diff --quiet \"${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}\" \"${VERCEL_GIT_COMMIT_SHA:-HEAD}\" -- apps/admin packages scripts package.json package-lock.json vercel.admin.json",
+  "ignoreCommand": "node scripts/vercel-ignore.mjs admin",
   "cleanUrls": true,
   "rewrites": [
     {
