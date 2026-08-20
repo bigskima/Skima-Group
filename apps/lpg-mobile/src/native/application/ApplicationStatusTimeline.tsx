@@ -5,6 +5,7 @@ import {
   FileEdit,
   ShieldCheck,
 } from "lucide-react-native";
+import { router, usePathname } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -37,12 +38,27 @@ export function ApplicationStatusTimeline({
   onFixRequestedChanges,
 }: ApplicationStatusTimelineProps) {
   const { palette } = useAppTheme();
+  const pathname = usePathname();
   const isChangesRequested = ["changes_requested", "additional_info_required", "incomplete"].includes(applicationStatus);
   const isApproved = applicationStatus === "approved";
   const isRejected = applicationStatus === "rejected";
   const isSuspended = applicationStatus === "suspended" || operationalStatus === "suspended" || operationalStatus === "deactivated";
   const isActivated = operationalStatus === "active";
   const isUnderReview = ["under_review", "submitted", "resubmitted"].includes(applicationStatus);
+  const correctionWorkspace = pathname.includes("station")
+    ? "station"
+    : pathname.includes("driver")
+      ? "driver"
+      : null;
+
+  const openRequestedChanges = () => {
+    if (correctionWorkspace) {
+      router.push(`/(customer)/${correctionWorkspace}-documents` as never);
+      return;
+    }
+
+    onFixRequestedChanges?.();
+  };
 
   const milestones: TimelineMilestone[] = [
     {
@@ -128,10 +144,12 @@ export function ApplicationStatusTimeline({
         </View>
       ) : null}
 
-      {isChangesRequested && onFixRequestedChanges ? (
+      {isChangesRequested && (correctionWorkspace || onFixRequestedChanges) ? (
         <Pressable
           accessibilityRole="button"
-          onPress={onFixRequestedChanges}
+          accessibilityLabel="Open requested application updates"
+          accessibilityHint="Shows the exact documents that need to be replaced before review can continue"
+          onPress={openRequestedChanges}
           style={({ pressed }) => [styles.actionBanner, { backgroundColor: palette.brand, opacity: pressed ? 0.84 : 1 }]}
         >
           <View style={styles.actionIcon}>
@@ -139,7 +157,7 @@ export function ApplicationStatusTimeline({
           </View>
           <View style={styles.actionCopy}>
             <Text style={styles.actionBannerTitle}>Fix requested items</Text>
-            <Text style={styles.actionBannerSub}>Replace evidence or update the details highlighted by the reviewer.</Text>
+            <Text style={styles.actionBannerSub}>Open the requested documents and replace the exact item highlighted by the reviewer.</Text>
           </View>
         </Pressable>
       ) : null}
