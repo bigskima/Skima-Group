@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowUpRight, ReceiptText, WalletCards } from "lucide-react-native";
+import { ArrowDownLeft, ReceiptText, WalletCards } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import {
@@ -20,14 +20,14 @@ export function TransactionsScreen() {
   const { palette } = useAppTheme();
   const transactions = domainQueries.transactions();
   const rows = transactions.data ?? [];
-  const creditCount = rows.filter((item) => direction(item) === "credit").length;
-  const debitCount = rows.filter((item) => direction(item) === "debit").length;
+  const succeededCount = rows.filter((item) => isSucceeded(displayStatus(item))).length;
+  const pendingCount = rows.filter((item) => isPending(displayStatus(item))).length;
 
   return (
     <Screen
       eyebrow="SKIMA Wallet"
       title="Transactions"
-      subtitle="Review money added to your wallet, order payments, refunds and other confirmed wallet activity."
+      subtitle="Review your wallet top-ups and their current payment status."
     >
       {transactions.isPending ? (
         <ScreenSkeleton cards={4} />
@@ -43,9 +43,9 @@ export function TransactionsScreen() {
           <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
             <View style={styles.heroIcon}><WalletCards color="#FFFFFF" size={27} /></View>
             <View style={styles.heroCopy}>
-              <Text style={styles.heroEyebrow}>WALLET ACTIVITY</Text>
-              <Text style={styles.heroTitle}>{rows.length} {rows.length === 1 ? "transaction" : "transactions"}</Text>
-              <Text style={styles.heroBody}>{creditCount} incoming · {debitCount} outgoing</Text>
+              <Text style={styles.heroEyebrow}>TOP-UP ACTIVITY</Text>
+              <Text style={styles.heroTitle}>{rows.length} {rows.length === 1 ? "top-up" : "top-ups"}</Text>
+              <Text style={styles.heroBody}>{succeededCount} succeeded · {pendingCount} pending</Text>
             </View>
           </View>
 
@@ -53,33 +53,25 @@ export function TransactionsScreen() {
             {rows.length ? (
               rows.map((item, index) => {
                 const id = recordId(item) ?? String(index);
-                const transactionDirection = direction(item);
                 const amount = transactionAmount(item);
                 const currency = firstString(item, ["currency_code", "currencyCode"]) ?? "NGN";
                 const status = displayStatus(item) ?? "recorded";
-                const timestamp = firstString(item, ["posted_at", "postedAt", "created_at", "createdAt"]);
-                const title = transactionTitle(item);
+                const timestamp = firstString(item, ["initialized_at", "initializedAt", "created_at", "createdAt"]);
                 return (
                   <View
                     key={id}
                     style={[styles.row, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}
                   >
-                    <View style={[styles.icon, { backgroundColor: transactionDirection === "credit" ? palette.successSoft : palette.brandSoft }]}>
-                      {transactionDirection === "credit" ? (
-                        <ArrowDownLeft color={palette.success} size={21} />
-                      ) : (
-                        <ArrowUpRight color={palette.brand} size={21} />
-                      )}
+                    <View style={[styles.icon, { backgroundColor: palette.successSoft }]}>
+                      <ArrowDownLeft color={palette.success} size={21} />
                     </View>
                     <View style={styles.copy}>
-                      <Text numberOfLines={1} style={[styles.title, { color: palette.ink }]}>{title}</Text>
-                      <Text numberOfLines={1} style={[styles.reference, { color: palette.muted }]}>{displayReference(item) ?? "SKIMA wallet activity"}</Text>
+                      <Text numberOfLines={1} style={[styles.title, { color: palette.ink }]}>Wallet top up</Text>
+                      <Text numberOfLines={1} style={[styles.reference, { color: palette.muted }]}>{displayReference(item) ?? "SKIMA top up"}</Text>
                       <Text style={[styles.time, { color: palette.muted }]}>{formatDate(timestamp)}</Text>
                     </View>
                     <View style={styles.right}>
-                      <Text style={[styles.amount, { color: transactionDirection === "credit" ? palette.success : palette.ink }]}>
-                        {transactionDirection === "credit" ? "+" : "−"}{money(amount, currency)}
-                      </Text>
+                      <Text style={[styles.amount, { color: palette.success }]}>+{money(amount, currency)}</Text>
                       <StatusPill label={friendly(status)} tone={transactionTone(status)} />
                     </View>
                   </View>
@@ -88,15 +80,15 @@ export function TransactionsScreen() {
             ) : (
               <EmptyState
                 icon={<ReceiptText color={palette.brand} size={27} />}
-                title="No wallet activity yet"
-                description="Top-ups, payments, refunds and other confirmed wallet movements will appear here."
+                title="No top-up activity yet"
+                description="Wallet top-ups will appear here after you start a payment."
               />
             )}
           </View>
 
           <View style={[styles.note, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <WalletCards color={palette.mutedStrong} size={18} />
-            <Text style={[styles.noteText, { color: palette.muted }]}>Payment providers are managed by SKIMA behind the scenes. Customers do not need to choose or configure a gateway in the app.</Text>
+            <Text style={[styles.noteText, { color: palette.muted }]}>Pending top-ups are not added to your available balance until payment is confirmed.</Text>
           </View>
         </>
       )}
@@ -104,30 +96,26 @@ export function TransactionsScreen() {
   );
 }
 
-function direction(item: Record<string, unknown>) {
-  const raw = firstString(item, ["direction", "entry_type", "entryType", "transaction_type", "transactionType", "type"])?.toLowerCase() ?? "";
-  if (["credit", "in", "deposit", "refund", "topup", "top_up", "incoming"].some((part) => raw.includes(part))) return "credit";
-  return "debit";
-}
-
 function transactionAmount(item: Record<string, unknown>) {
   return Math.abs(firstNumber(item, ["amount", "net_amount", "netAmount", "value"]) ?? 0);
-}
-
-function transactionTitle(item: Record<string, unknown>) {
-  const raw = firstString(item, ["purpose", "description", "transaction_type", "transactionType", "type"]);
-  if (!raw) return direction(item) === "credit" ? "Money received" : "Wallet payment";
-  return friendly(raw);
 }
 
 function friendly(value: string) {
   return value.replace(/[_-]/g, " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
+function isSucceeded(value: string | null) {
+  return Boolean(value && /success|succeeded|completed|confirmed|posted|paid|settled|credited/i.test(value));
+}
+
+function isPending(value: string | null) {
+  return Boolean(value && /pending|processing|reserved|review|hold/i.test(value));
+}
+
 function transactionTone(value: string): "neutral" | "brand" | "success" | "warning" | "danger" {
   const normalized = value.toLowerCase();
   if (["completed", "confirmed", "posted", "successful", "succeeded", "paid", "settled"].some((part) => normalized.includes(part))) return "success";
-  if (["failed", "rejected", "reversed", "cancelled"].some((part) => normalized.includes(part))) return "danger";
+  if (["failed", "rejected", "reversed", "cancelled", "canceled"].some((part) => normalized.includes(part))) return "danger";
   if (["pending", "processing", "reserved"].some((part) => normalized.includes(part))) return "warning";
   return "brand";
 }
