@@ -93,8 +93,8 @@ export function CustomerWalletScreen() {
           </View>
 
           <SectionHeader
-            title="Recent activity"
-            description="Latest changes recorded against your wallet."
+            title="Recent top-ups"
+            description="Latest wallet top-up attempts and their current status."
             action={
               <Pressable onPress={() => router.push("/(customer)/transactions" as never)}>
                 <Text style={[styles.link, { color: palette.brand }]}>See all</Text>
@@ -110,30 +110,22 @@ export function CustomerWalletScreen() {
             <View style={styles.transactionList}>
               {(transactions.data ?? []).slice(0, 5).map((item, index) => {
                 const status = displayStatus(item) ?? "recorded";
-                const amount = firstNumber(item, ["amount", "net_amount", "netAmount"]) ?? 0;
-                const kind = firstString(item, ["transaction_type", "transactionType", "type", "direction"]) ?? "";
-                const outgoing = amount < 0 || /withdraw|debit|payment|outgoing/i.test(kind);
+                const amount = Math.abs(firstNumber(item, ["amount", "net_amount", "netAmount"]) ?? 0);
+                const reference = displayReference(item) ?? "SKIMA top up";
+                const date = formatDate(firstString(item, ["initialized_at", "initializedAt", "created_at", "createdAt"]));
                 return (
                   <Card key={recordId(item) ?? String(index)} padding="sm">
                     <View style={styles.row}>
-                      <View style={[styles.txIcon, { backgroundColor: outgoing ? palette.brandSoft : palette.successSoft }]}>
-                        {outgoing ? (
-                          <ArrowUpRight color={palette.brand} size={20} />
-                        ) : (
-                          <ArrowDownLeft color={palette.success} size={20} />
-                        )}
+                      <View style={[styles.txIcon, { backgroundColor: palette.successSoft }]}>
+                        <ArrowDownLeft color={palette.success} size={20} />
                       </View>
                       <View style={styles.txCopy}>
-                        <Text numberOfLines={1} style={[styles.txTitle, { color: palette.ink }]}>
-                          {displayReference(item) ?? friendlyTransactionName(kind)}
-                        </Text>
-                        <Text style={[styles.meta, { color: palette.muted }]}>
-                          {formatDate(firstString(item, ["created_at", "createdAt"]))}
-                        </Text>
+                        <Text numberOfLines={1} style={[styles.txTitle, { color: palette.ink }]}>Wallet top up</Text>
+                        <Text numberOfLines={1} style={[styles.meta, { color: palette.muted }]}>{reference} · {date}</Text>
                       </View>
                       <View style={styles.txRight}>
-                        <Text style={[styles.amount, { color: palette.ink }]}>
-                          {money(amount, firstString(item, ["currency_code", "currencyCode"]) ?? currency)}
+                        <Text style={[styles.amount, { color: palette.success }]}>
+                          +{money(amount, firstString(item, ["currency_code", "currencyCode"]) ?? currency)}
                         </Text>
                         <StatusPill label={status} tone={statusTone(status)} />
                       </View>
@@ -145,8 +137,8 @@ export function CustomerWalletScreen() {
           ) : (
             <EmptyState
               icon={<History color={palette.brand} size={25} />}
-              title="No wallet activity yet"
-              description="Deposits, withdrawals, refunds, and wallet updates will appear here when they happen."
+              title="No top-up activity yet"
+              description="Wallet top-ups will appear here after you start a payment."
               action={
                 <AppButton
                   label="Top up wallet"
@@ -190,14 +182,6 @@ function formatDate(value: string | null) {
   if (!value) return "Date unavailable";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-}
-
-function friendlyTransactionName(kind: string) {
-  if (/withdraw/i.test(kind)) return "Wallet withdrawal";
-  if (/deposit|top.?up|credit/i.test(kind)) return "Wallet top up";
-  if (/refund/i.test(kind)) return "Refund";
-  if (/payment|debit/i.test(kind)) return "Payment";
-  return "Wallet transaction";
 }
 
 function statusTone(status: string): "neutral" | "brand" | "success" | "warning" | "danger" {
