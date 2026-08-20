@@ -5,7 +5,7 @@ import { StyleSheet, Text, TextInput, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
-import { ActionResponseSchema, displayReference, displayStatus, firstNumber, firstString, recordId } from "../api/records";
+import { ActionResponseSchema, displayReference, displayStatus, firstNumber, firstString, recordId, type PlatformRecord } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
@@ -34,6 +34,7 @@ export function CylinderDetailScreen() {
   const qrValue = cylinder ? firstString(cylinder, ["qr_payload", "qrPayload"]) : null;
   const cylinderId = cylinder ? recordId(cylinder) : null;
   const status = cylinder ? displayStatus(cylinder) ?? "registered" : "";
+  const tagStatus = cylinder ? physicalTagStatus(cylinder) : "untagged";
 
   const nameMutation = useGatewayMutation({
     path: "/lpg/cylinders/name",
@@ -79,7 +80,7 @@ export function CylinderDetailScreen() {
         });
       });
       setMessageSuccess(true);
-      setMessage("QR code is ready to save or share.");
+      setMessage("Optional QR code is ready to save or share.");
     } catch (cause) {
       setMessageSuccess(false);
       setMessage(friendlyError(cause, "We couldn't save the QR code. Please try again."));
@@ -90,7 +91,7 @@ export function CylinderDetailScreen() {
     <Screen
       eyebrow="SKIMA cylinder identity"
       title={displayName ?? "Cylinder details"}
-      subtitle="Your permanent SKIMA identity, safety information and scan code for this cylinder."
+      subtitle="Your permanent SKIMA Cylinder ID stays with this cylinder across refill orders. The digital QR is a faster verification option, not a printing requirement."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {query.isPending ? (
@@ -114,7 +115,7 @@ export function CylinderDetailScreen() {
           <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
             <View style={styles.heroIcon}><QrCodeIcon color="#FFFFFF" size={28} /></View>
             <View style={styles.heroCopy}>
-              <Text style={styles.heroEyebrow}>PERMANENT SKIMA IDENTITY</Text>
+              <Text style={styles.heroEyebrow}>PERMANENT SKIMA CYLINDER ID</Text>
               <Text numberOfLines={1} style={styles.heroReference}>{cylinderReference ?? "Reference unavailable"}</Text>
               <Text style={styles.heroBody}>{firstNumber(cylinder, ["size_kg", "sizeKg"]) ?? "Configured"} kg cylinder</Text>
             </View>
@@ -158,7 +159,9 @@ export function CylinderDetailScreen() {
           </View>
 
           <View style={[styles.detailsCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <Field label="SKIMA reference" value={cylinderReference ?? "Unavailable"} />
+            <Field label="SKIMA Cylinder ID" value={cylinderReference ?? "Unavailable"} />
+            <Divider />
+            <Field label="Physical SKIMA tag" value={friendlyTagStatus(tagStatus)} />
             <Divider />
             <Field label="Size" value={`${firstNumber(cylinder, ["size_kg", "sizeKg"]) ?? "Configured"} kg`} />
             <Divider />
@@ -177,8 +180,8 @@ export function CylinderDetailScreen() {
             <View style={styles.qrHeader}>
               <View style={[styles.qrIcon, { backgroundColor: palette.brandSoft }]}><QrCodeIcon color={palette.brand} size={22} /></View>
               <View style={styles.qrHeaderCopy}>
-                <Text style={[styles.qrTitle, { color: palette.ink }]}>Cylinder scan code</Text>
-                <Text style={[styles.qrBody, { color: palette.muted }]}>Attach or keep this code with the correct cylinder so SKIMA can match it during pickup, station arrival and delivery.</Text>
+                <Text style={[styles.qrTitle, { color: palette.ink }]}>Optional digital scan code</Text>
+                <Text style={[styles.qrBody, { color: palette.muted }]}>Use this QR when convenient for faster verification. You do not need to print it to register this cylinder or place an eligible refill order; SKIMA can fall back to the permanent Cylinder ID and assigned-order checks.</Text>
               </View>
             </View>
 
@@ -195,7 +198,7 @@ export function CylinderDetailScreen() {
                 </View>
                 <Text style={[styles.reference, { color: palette.ink }]}>{cylinderReference}</Text>
                 <AppButton
-                  label="Save or share QR code"
+                  label="Save or share optional QR"
                   fullWidth
                   icon={<Download color="#FFFFFF" size={18} />}
                   onPress={() => void downloadQr()}
@@ -204,8 +207,8 @@ export function CylinderDetailScreen() {
             ) : (
               <View style={styles.pendingIdentity}>
                 <View style={[styles.pendingIcon, { backgroundColor: palette.brandSoft }]}><RefreshCw color={palette.brand} size={25} /></View>
-                <Text style={[styles.pendingTitle, { color: palette.ink }]}>Scan code is being prepared</Text>
-                <Text style={[styles.pendingBody, { color: palette.muted }]}>This cylinder is registered, but its downloadable scan code is not available on this screen yet.</Text>
+                <Text style={[styles.pendingTitle, { color: palette.ink }]}>Digital scan code is being prepared</Text>
+                <Text style={[styles.pendingBody, { color: palette.muted }]}>Your cylinder is already registered with its permanent SKIMA Cylinder ID. The optional downloadable QR is not available on this screen yet.</Text>
                 <AppButton label="Refresh scan code" variant="secondary" icon={<RefreshCw color={palette.brand} size={17} />} onPress={() => void query.refetch()} />
               </View>
             )}
@@ -213,7 +216,7 @@ export function CylinderDetailScreen() {
 
           <View style={[styles.security, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.mutedStrong} size={18} />
-            <Text style={[styles.securityText, { color: palette.muted }]}>A printed or saved QR identifies the cylinder, but SKIMA still checks the current order and backend cylinder record before any hand-off is accepted.</Text>
+            <Text style={[styles.securityText, { color: palette.muted }]}>The QR and written Cylinder ID are verification methods, not refill authorization by themselves. SKIMA still checks the current order, assigned driver or station, workflow state and backend cylinder record before a hand-off is accepted.</Text>
           </View>
 
           {message ? (
@@ -240,6 +243,26 @@ function Field({ label, value }: { label: string; value: string }) {
 function Divider() {
   const { palette } = useAppTheme();
   return <View style={[styles.divider, { backgroundColor: palette.border }]} />;
+}
+
+function physicalTagStatus(cylinder: PlatformRecord) {
+  const metadata = cylinder.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return "untagged";
+  return firstString(metadata as PlatformRecord, ["physicalTagStatus", "physical_tag_status"]) ?? "untagged";
+}
+
+function friendlyTagStatus(value: string) {
+  const normalized = value.toLowerCase().replace(/[\s-]+/g, "_");
+  const labels: Record<string, string> = {
+    untagged: "Not attached yet",
+    tag_pending: "Tag pending",
+    tagged: "Active",
+    tag_damaged: "Damaged — replacement needed",
+    tag_lost: "Reported lost",
+    replacement_pending: "Replacement pending",
+    retired: "Retired",
+  };
+  return labels[normalized] ?? friendly(value);
 }
 
 function friendly(value: string) {
