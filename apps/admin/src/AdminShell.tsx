@@ -1,6 +1,8 @@
-import { ChevronRight, Circle, LogOut, Menu, UserCircle, X } from "lucide-react";
+import { ChevronRight, Circle, LogOut, Menu, UserCircle, WalletCards, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import type { NavItem } from "@skima/ui";
+
+import { useSessionState } from "./session";
 
 interface AdminShellProps {
   readonly brand: string;
@@ -22,12 +24,12 @@ interface NavigationGroup extends NavigationGroupDefinition {
   readonly items: readonly NavItem[];
 }
 
-const mobilePriorityKeys = ["overview", "applications", "operations", "finance"] as const;
+const mobilePriorityKeys = ["overview", "applications", "operations", "revenue", "finance"] as const;
 
 const navigationGroupDefinitions: readonly NavigationGroupDefinition[] = [
   {
     label: "Daily work",
-    keys: ["overview", "applications", "operations", "finance"],
+    keys: ["overview", "applications", "operations", "revenue", "finance"],
   },
   {
     label: "Company management",
@@ -40,22 +42,45 @@ const navigationGroupDefinitions: readonly NavigationGroupDefinition[] = [
 ];
 
 export function AdminShell(props: AdminShellProps) {
+  const sessionState = useSessionState();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const canSeeRevenue = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
+    sessionState.context?.permissions.includes("platform.revenue.read") ||
+    sessionState.context?.permissions.includes("platform.revenue.manage") ||
+    false;
+
+  const navItems = useMemo<readonly NavItem[]>(() => {
+    if (!canSeeRevenue || props.navItems.some((item) => item.key === "revenue")) return props.navItems;
+    const revenueItem: NavItem = {
+      key: "revenue",
+      label: "Money & Revenue",
+      href: "/revenue",
+      icon: WalletCards,
+    };
+    const financeIndex = props.navItems.findIndex((item) => item.key === "finance");
+    if (financeIndex < 0) return [...props.navItems, revenueItem];
+    return [
+      ...props.navItems.slice(0, financeIndex),
+      revenueItem,
+      ...props.navItems.slice(financeIndex),
+    ];
+  }, [canSeeRevenue, props.navItems]);
+
   const activeItem = useMemo(
-    () => props.navItems.find((item) => item.href === props.activeHref) ?? props.navItems[0],
-    [props.activeHref, props.navItems],
+    () => navItems.find((item) => item.href === props.activeHref) ?? navItems[0],
+    [props.activeHref, navItems],
   );
-  const navigationGroups = useMemo(() => groupNavigationItems(props.navItems), [props.navItems]);
+  const navigationGroups = useMemo(() => groupNavigationItems(navItems), [navItems]);
   const mobileItems = useMemo(() => {
     const prioritized = mobilePriorityKeys
-      .map((key) => props.navItems.find((item) => item.key === key))
+      .map((key) => navItems.find((item) => item.key === key))
       .filter((item): item is NavItem => Boolean(item));
-    const remaining = props.navItems.filter((item) =>
+    const remaining = navItems.filter((item) =>
       !prioritized.some((candidate) => candidate.key === item.key)
     );
 
     return [...prioritized, ...remaining].slice(0, 4);
-  }, [props.navItems]);
+  }, [navItems]);
   const activeIsInMobileBar = mobileItems.some((item) => item.href === props.activeHref);
 
   const navigate = (href: string) => {
@@ -303,5 +328,6 @@ function shortMobileLabel(label: string) {
   if (label === "People & Access") return "People";
   if (label === "Applications") return "Approvals";
   if (label === "Systems & Audit") return "Systems";
+  if (label === "Money & Revenue") return "Revenue";
   return label;
 }
