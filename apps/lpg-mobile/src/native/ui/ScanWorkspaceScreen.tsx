@@ -127,7 +127,7 @@ export function ScanWorkspaceScreen({
               <Text style={[styles.scannerBody, { color: palette.muted }]}>After detection, SKIMA opens the selected job and validates the cylinder against its current hand-off stage.</Text>
             </View>
           </View>
-          <Scanner enabled onDetected={detected} />
+          <Scanner enabled onDetected={detected} allowManualEntry={false} />
 
           <View style={[styles.fallbackDivider, { backgroundColor: palette.border }]} />
           <View style={styles.fallbackCopy}>
