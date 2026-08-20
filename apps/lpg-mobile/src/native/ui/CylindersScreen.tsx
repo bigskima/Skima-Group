@@ -20,7 +20,7 @@ export function CylindersScreen() {
     <Screen
       eyebrow="Cylinder identity"
       title="Your cylinders"
-      subtitle="Each cylinder has a SKIMA-managed identity used for refill requests, scanning, hand-offs and anti-switching checks."
+      subtitle="Every cylinder keeps one permanent SKIMA identity across refill orders. A printed QR is optional; SKIMA can verify the cylinder through its assigned order and permanent Cylinder ID when scanning is unavailable."
       action={<AppButton label="Add cylinder" size="sm" icon={<Plus color="#FFFFFF" size={16} />} onPress={() => router.push("/(customer)/cylinder/register")} />}
       refreshControl={
         <RefreshControl
@@ -48,7 +48,7 @@ export function CylindersScreen() {
         <EmptyState
           icon={<QrCode color={palette.brand} size={28} />}
           title="Add your first cylinder"
-          description="Give it a name, choose its size and add a photo. SKIMA creates the permanent cylinder identity used throughout the refill journey."
+          description="Give it a name, choose its size and add a photo. SKIMA creates its permanent identity immediately. You do not need a printer or a physical QR label before placing your first eligible refill order."
           action={<AppButton label="Add a cylinder" icon={<Plus color="#FFFFFF" size={17} />} onPress={() => router.push("/(customer)/cylinder/register")} />}
         />
       )}
@@ -66,6 +66,7 @@ function CylinderRow({ cylinder }: { cylinder: PlatformRecord }) {
   const status = displayStatus(cylinder) ?? "registered";
   const size = firstNumber(cylinder, ["size_kg", "sizeKg"]);
   const reference = displayReference(cylinder) ?? "SKIMA cylinder";
+  const tagStatus = physicalTagStatus(cylinder);
 
   return (
     <Pressable
@@ -96,7 +97,10 @@ function CylinderRow({ cylinder }: { cylinder: PlatformRecord }) {
           ) : null}
         </View>
         <Text style={[styles.body, { color: palette.muted }]}>{cylinderIdentityLine(size, reference)}</Text>
-        <StatusPill label={friendlyCylinderStatus(status)} tone={cylinderStatusTone(status)} />
+        <View style={styles.statusRow}>
+          <StatusPill label={friendlyCylinderStatus(status)} tone={cylinderStatusTone(status)} />
+          <StatusPill label={friendlyTagStatus(tagStatus)} tone={tagStatusTone(tagStatus)} />
+        </View>
       </View>
 
       <ChevronRight color={palette.muted} size={20} />
@@ -110,6 +114,12 @@ function firstAssetId(value: unknown) {
 
 function cylinderIdentityLine(size: number | null, reference: string) {
   return size === null ? reference : `${size} kg · ${reference}`;
+}
+
+function physicalTagStatus(cylinder: PlatformRecord) {
+  const metadata = cylinder.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return "untagged";
+  return firstString(metadata as PlatformRecord, ["physicalTagStatus", "physical_tag_status"]) ?? "untagged";
 }
 
 function normalizeStatus(value: string) {
@@ -131,6 +141,20 @@ function friendlyCylinderStatus(value: string) {
   return labels[normalized] ?? humanizeStatus(normalized);
 }
 
+function friendlyTagStatus(value: string) {
+  const normalized = normalizeStatus(value);
+  const labels: Record<string, string> = {
+    untagged: "Physical tag not attached",
+    tag_pending: "Tag pending",
+    tagged: "Physical tag active",
+    tag_damaged: "Tag damaged",
+    tag_lost: "Tag reported lost",
+    replacement_pending: "Tag replacement pending",
+    retired: "Tag retired",
+  };
+  return labels[normalized] ?? humanizeStatus(normalized);
+}
+
 function humanizeStatus(value: string) {
   const cleaned = value.replace(/_/g, " ").trim();
   return cleaned ? cleaned.replace(/^./, (letter) => letter.toUpperCase()) : "Status unavailable";
@@ -144,6 +168,14 @@ function cylinderStatusTone(value: string): "neutral" | "brand" | "success" | "w
   return "neutral";
 }
 
+function tagStatusTone(value: string): "neutral" | "brand" | "success" | "warning" | "danger" {
+  const normalized = normalizeStatus(value);
+  if (normalized === "tagged") return "success";
+  if (["tag_pending", "replacement_pending", "tag_damaged"].includes(normalized)) return "warning";
+  if (normalized === "tag_lost") return "danger";
+  return "neutral";
+}
+
 const styles = StyleSheet.create({
   list: { gap: spacing.md },
   asset: { minHeight: 126, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.xl, borderWidth: StyleSheet.hairlineWidth },
@@ -153,6 +185,7 @@ const styles = StyleSheet.create({
   assetHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   title: { flexShrink: 1, ...typography.subheading, fontSize: 17 },
   body: { ...typography.caption, fontSize: 12, lineHeight: 18 },
+  statusRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing.xs },
   presentationBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 4, borderRadius: radii.pill },
   presentationText: { ...typography.caption, fontSize: 9, fontWeight: "900" },
 });
