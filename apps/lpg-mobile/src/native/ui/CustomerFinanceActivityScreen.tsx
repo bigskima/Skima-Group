@@ -18,7 +18,7 @@ import { StatusPill } from "./StatusPill";
 
 export function TransactionsScreen() {
   const { palette } = useAppTheme();
-  const transactions = domainQueries.walletTransactions();
+  const transactions = domainQueries.transactions();
   const rows = transactions.data ?? [];
   const creditCount = rows.filter((item) => direction(item) === "credit").length;
   const debitCount = rows.filter((item) => direction(item) === "debit").length;
