@@ -447,7 +447,17 @@ export class ApiGatewayClient {
         throw normalizeGatewayError(response, envelope);
       }
 
-      const parsedData = schema.safeParse(envelope.data ?? envelope.id ?? null);
+      let parsedData = schema.safeParse(envelope.data ?? envelope.id ?? null);
+
+      // Mutation responses may legitimately include both a detailed data object and a canonical
+      // record id. If a caller asks for the mutation id, fall back to the envelope id rather than
+      // reporting a false contract failure because the richer data object was preferred first.
+      if (!parsedData.success && envelope.data !== undefined && envelope.id !== undefined) {
+        const idFallback = schema.safeParse(envelope.id);
+        if (idFallback.success) {
+          parsedData = idFallback;
+        }
+      }
 
       if (!parsedData.success) {
         throw new ApiGatewayError({
