@@ -1,4 +1,4 @@
-import { WithdrawalExperience } from "../../../src/native/ui/WithdrawalExperience";
+import { FinanceWithdrawalExperience } from "../../../src/native/ui/FinanceWithdrawalExperience";
 export default function CustomerWithdraw() {
-  return <WithdrawalExperience workspace="customer" />;
+  return <FinanceWithdrawalExperience workspace="customer" />;
 }
