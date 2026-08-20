@@ -23,7 +23,9 @@ export function ApplicationProgress({
     ? stepPercent
     : Math.min(100, Math.max(0, Math.round(completionPercent)));
   const label = completionLabel ?? (completionPercent === undefined
-    ? `${progressPercent}% through steps`
+    ? currentStep >= totalSteps
+      ? "Final step"
+      : `${progressPercent}% through steps`
     : `${progressPercent}% complete`);
 
   return (
