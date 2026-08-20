@@ -1,0 +1,56 @@
+name: Production build gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/admin/**"
+      - "apps/lpg-mobile/**"
+      - "packages/frontend-core/**"
+      - "packages/ui/**"
+      - "package.json"
+      - "vercel.json"
+      - "vercel.admin.json"
+      - ".github/workflows/production-build-gate.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: production-build-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  admin-web:
+    name: Admin production build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install admin dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck and build admin
+        run: npm run deploy:check:admin
+
+  lpg-web:
+    name: LPG production build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/lpg-mobile/package-lock.json
+      - name: Install LPG dependencies exactly as Vercel
+        run: npm --prefix apps/lpg-mobile ci --no-audit --no-fund
+      - name: Typecheck and build LPG web
+        run: npm run deploy:check:lpg
