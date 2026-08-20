@@ -30,9 +30,13 @@ function textValue(value: unknown): string | null {
  * Requirements without a conditional rule always apply.
  */
 export function requirementAppliesToPayload(
-  requirement: UnknownRecord,
-  payload: UnknownRecord,
+  requirementValue: unknown,
+  payloadValue: unknown,
 ): boolean {
+  const requirement = asRecord(requirementValue);
+  const payload = asRecord(payloadValue);
+  if (!requirement || !payload) return true;
+
   const metadata = asRecord(requirement.metadata);
   const condition = asRecord(metadata?.required_when) ?? asRecord(metadata?.requiredWhen);
 
