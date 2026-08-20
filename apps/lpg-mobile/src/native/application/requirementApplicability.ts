@@ -1,5 +1,11 @@
 type UnknownRecord = Record<string, unknown>;
 
+export interface RequiredApplicationField {
+  path: string;
+  label: string;
+  stepIndex: number;
+}
+
 function asRecord(value: unknown): UnknownRecord | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as UnknownRecord)
@@ -74,4 +80,43 @@ export function requirementAppliesToPayload(
       // Unknown rules remain permissive, matching the backend helper.
       return true;
   }
+}
+
+export function requiredApplicationFields(applicationTypeValue: unknown): RequiredApplicationField[] {
+  const applicationType = asRecord(applicationTypeValue);
+  const metadata = asRecord(applicationType?.metadata);
+  const definitions = Array.isArray(metadata?.submission_required_fields)
+    ? metadata.submission_required_fields
+    : Array.isArray(metadata?.submissionRequiredFields)
+      ? metadata.submissionRequiredFields
+      : [];
+
+  return definitions.flatMap((definition) => {
+    const record = asRecord(definition);
+    const path = typeof record?.path === "string" ? record.path.trim() : "";
+    if (!path) return [];
+
+    const label =
+      typeof record?.label === "string" && record.label.trim()
+        ? record.label.trim()
+        : path;
+    const rawStep = record?.step ?? record?.stepIndex;
+    const stepIndex =
+      typeof rawStep === "number" && Number.isFinite(rawStep) && rawStep > 0
+        ? Math.floor(rawStep)
+        : 1;
+
+    return [{ path, label, stepIndex }];
+  });
+}
+
+export function applicationFieldIsComplete(payloadValue: unknown, path: string): boolean {
+  const payload = asRecord(payloadValue);
+  if (!payload) return false;
+  const value = valueAtPath(payload, path);
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "boolean") return true;
+  return false;
 }
