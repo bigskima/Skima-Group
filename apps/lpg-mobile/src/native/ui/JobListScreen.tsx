@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { Clock3, MapPin, PackageCheck, Route, ScanLine, Search, UserCheck } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
-import { domainQueries } from "../api/domains";
+import { domainQueries, useLpgConfig } from "../api/domains";
 import {
   displayReference,
   displayStatus,
@@ -23,23 +23,67 @@ import { StatusPill } from "./StatusPill";
 export function JobListScreen({ workspace }: { workspace: "driver" | "station" }) {
   const { palette } = useAppTheme();
   const jobs = workspace === "driver" ? domainQueries.driverJobs() : domainQueries.stationJobs();
+  const config = useLpgConfig();
   const [searchQuery, setSearchQuery] = useState("");
   const allJobs = jobs.data ?? [];
   const visibleJobs = workspace === "station" && searchQuery.trim()
     ? allJobs.filter((job) => matchesStationVerificationSearch(job, searchQuery))
     : allJobs;
+  const driverLimit = workspace === "driver" ? readDriverDispatchLimit(config.data) : null;
+  const remainingDriverSlots = driverLimit === null ? null : Math.max(driverLimit - allJobs.length, 0);
+
+  const refresh = () => {
+    if (workspace === "driver") {
+      void Promise.all([jobs.refetch(), config.refetch()]);
+      return;
+    }
+    void jobs.refetch();
+  };
 
   return (
     <Screen
       eyebrow={workspace === "driver" ? "Driver operations" : "Station verification"}
       title={workspace === "driver" ? "Deliveries" : "Expected arrivals"}
       subtitle={workspace === "driver"
-        ? "Your assigned cylinder pickups, station hand-offs and returns."
+        ? "Your assigned cylinder pickups, station hand-offs and returns. More than one compatible order can be active at the same time."
         : "These jobs are already assigned to this station. Verify the order, cylinder and assigned driver here; a separate station QR scanner is not required."}
       refreshControl={
-        <RefreshControl refreshing={jobs.isRefetching} onRefresh={() => void jobs.refetch()} tintColor={palette.brand} />
+        <RefreshControl
+          refreshing={jobs.isRefetching || (workspace === "driver" && config.isRefetching)}
+          onRefresh={refresh}
+          tintColor={palette.brand}
+        />
       }
     >
+      {workspace === "driver" ? (
+        <View style={[styles.workloadCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <View style={styles.workloadHead}>
+            <View style={[styles.workloadIcon, { backgroundColor: palette.brandSoft }]}>
+              <Route color={palette.brand} size={20} />
+            </View>
+            <View style={styles.workloadCopy}>
+              <Text style={[styles.workloadTitle, { color: palette.ink }]}>Active assignment capacity</Text>
+              <Text style={[styles.workloadBody, { color: palette.muted }]}>SKIMA can route another compatible nearby order to you while earlier orders are still active when your route, vehicle eligibility and configured workload allow it.</Text>
+            </View>
+          </View>
+          <View style={styles.workloadMetrics}>
+            <View style={[styles.workloadMetric, { backgroundColor: palette.surfaceSubtle }]}>
+              <Text style={[styles.workloadValue, { color: palette.ink }]}>{allJobs.length}</Text>
+              <Text style={[styles.workloadLabel, { color: palette.muted }]}>ACTIVE ORDERS</Text>
+            </View>
+            <View style={[styles.workloadMetric, { backgroundColor: palette.surfaceSubtle }]}>
+              <Text style={[styles.workloadValue, { color: palette.ink }]}>{driverLimit ?? "—"}</Text>
+              <Text style={[styles.workloadLabel, { color: palette.muted }]}>POLICY LIMIT</Text>
+            </View>
+            <View style={[styles.workloadMetric, { backgroundColor: palette.surfaceSubtle }]}>
+              <Text style={[styles.workloadValue, { color: remainingDriverSlots === 0 ? palette.warning : palette.ink }]}>{remainingDriverSlots ?? "—"}</Text>
+              <Text style={[styles.workloadLabel, { color: palette.muted }]}>ORDER SLOTS</Text>
+            </View>
+          </View>
+          <Text style={[styles.workloadHint, { color: palette.muted }]}>Order slots are a dispatch guard, not a promise of more work. Every cylinder remains its own paid order, and SKIMA still checks location, route, station, vehicle and safety eligibility before another assignment.</Text>
+        </View>
+      ) : null}
+
       {workspace === "station" ? (
         <View style={[styles.searchCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <View style={styles.searchHead}>
@@ -80,7 +124,7 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
         <EmptyState
           icon={<PackageCheck color={palette.brand} size={26} />}
           title={workspace === "driver" ? "No active deliveries" : "No expected arrivals"}
-          description={workspace === "driver" ? "New assignments appear here automatically when SKIMA dispatches a job to you." : "New refill jobs appear here automatically when SKIMA assigns an eligible order to this station."}
+          description={workspace === "driver" ? "New assignments appear here automatically when SKIMA dispatches a compatible job to you. You do not need to finish one order before another eligible order can be assigned." : "New refill jobs appear here automatically when SKIMA assigns an eligible order to this station."}
         />
       ) : visibleJobs.length === 0 ? (
         <EmptyState
@@ -226,6 +270,15 @@ function matchesStationVerificationSearch(job: PlatformRecord, rawQuery: string)
   return candidates.some((candidate) => candidate?.toLowerCase().includes(query));
 }
 
+function readDriverDispatchLimit(config: PlatformRecord | null | undefined): number | null {
+  const policies = nestedRecord(config, "policies");
+  const dispatchEnvelope = nestedRecord(policies, "lpg.dispatch.phase_one");
+  const dispatchPolicy = nestedRecord(dispatchEnvelope, "policy");
+  const configured = firstNumber(dispatchPolicy, ["max_concurrent_orders_per_driver", "maxConcurrentOrdersPerDriver"]);
+  if (configured === null || !Number.isFinite(configured) || configured <= 0) return null;
+  return Math.floor(configured);
+}
+
 function formatDate(value: string | null) {
   if (!value) return "Time not available";
   const date = new Date(value);
@@ -293,6 +346,17 @@ function jobStatusTone(status: string): "neutral" | "brand" | "success" | "warni
 }
 
 const styles = StyleSheet.create({
+  workloadCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  workloadHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
+  workloadIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  workloadCopy: { flex: 1, minWidth: 0, gap: 3 },
+  workloadTitle: { ...typography.subheading, fontSize: 15 },
+  workloadBody: { ...typography.caption, lineHeight: 18 },
+  workloadMetrics: { flexDirection: "row", gap: spacing.sm },
+  workloadMetric: { flex: 1, minHeight: 72, borderRadius: radii.md, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.xs },
+  workloadValue: { fontSize: 20, fontWeight: "900" },
+  workloadLabel: { ...typography.eyebrow, fontSize: 7, marginTop: 3, textAlign: "center" },
+  workloadHint: { ...typography.caption, fontSize: 10, lineHeight: 15 },
   searchCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
   searchHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   searchCopy: { flex: 1, gap: 3 },
