@@ -12,6 +12,7 @@ import {
   recordId,
   type PlatformRecord,
 } from "../api/records";
+import { useLpgServiceability } from "../api/serviceability";
 import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -46,6 +47,8 @@ export function NewRefillScreen() {
   const draftCreatedAt = useRef(new Date().toISOString());
 
   const selectedCylinder = (cylinders.data ?? []).find((item) => recordId(item) === cylinderId) ?? null;
+  const selectedPickupLocation = (locations.data ?? []).find((item) => recordId(item) === pickupLocationId) ?? null;
+  const selectedDeliveryLocation = (locations.data ?? []).find((item) => recordId(item) === deliveryLocationId) ?? null;
   const cylinderCapacityKg = firstNumber(selectedCylinder, ["max_capacity_kg", "maxCapacityKg"]);
   const requestedKgNumber = requestedKg.trim() ? Number(requestedKg) : null;
   const exceedsCylinderCapacity = Boolean(
@@ -53,6 +56,39 @@ export function NewRefillScreen() {
       requestedKgNumber !== null &&
       Number.isFinite(requestedKgNumber) &&
       requestedKgNumber > cylinderCapacityKg,
+  );
+
+  const pickupServiceability = useLpgServiceability(selectedPickupLocation);
+  const deliveryServiceability = useLpgServiceability(selectedDeliveryLocation);
+  const hasSelectedTrip = Boolean(selectedPickupLocation && selectedDeliveryLocation);
+  const pickupHasCoordinates = Boolean(
+    selectedPickupLocation &&
+      firstNumber(selectedPickupLocation, ["latitude", "lat"]) !== null &&
+      firstNumber(selectedPickupLocation, ["longitude", "lng", "lon"]) !== null,
+  );
+  const deliveryHasCoordinates = Boolean(
+    selectedDeliveryLocation &&
+      firstNumber(selectedDeliveryLocation, ["latitude", "lat"]) !== null &&
+      firstNumber(selectedDeliveryLocation, ["longitude", "lng", "lon"]) !== null,
+  );
+  const locationNeedsMapPosition = hasSelectedTrip && (!pickupHasCoordinates || !deliveryHasCoordinates);
+  const serviceabilityPending = Boolean(
+    hasSelectedTrip &&
+      !locationNeedsMapPosition &&
+      (pickupServiceability.isPending || deliveryServiceability.isPending),
+  );
+  const serviceabilityError = Boolean(
+    hasSelectedTrip &&
+      !locationNeedsMapPosition &&
+      (pickupServiceability.isError || deliveryServiceability.isError),
+  );
+  const pickupUnavailable = pickupServiceability.data?.serviceable === false;
+  const deliveryUnavailable = deliveryServiceability.data?.serviceable === false;
+  const serviceUnavailable = pickupUnavailable || deliveryUnavailable;
+  const tripServiceable = Boolean(
+    hasSelectedTrip &&
+      pickupServiceability.data?.serviceable === true &&
+      deliveryServiceability.data?.serviceable === true,
   );
 
   const quote = useGatewayMutation({
@@ -152,6 +188,18 @@ export function NewRefillScreen() {
       setError("Choose a cylinder, pickup location and delivery location.");
       return;
     }
+    if (locationNeedsMapPosition) {
+      setError("Update the selected location so SKIMA can verify its map position before continuing.");
+      return;
+    }
+    if (serviceabilityError || serviceabilityPending) {
+      setError("SKIMA couldn't confirm service availability for this trip yet. Check again and continue when the locations are verified.");
+      return;
+    }
+    if (!tripServiceable) {
+      setError("Sorry, SKIMA service is not yet available for the selected pickup and return trip. Choose another location or apply to become a SKIMA partner in this area.");
+      return;
+    }
     if (!stationId) {
       setError("Choose an available SKIMA station for this refill.");
       return;
@@ -221,8 +269,41 @@ export function NewRefillScreen() {
     }
   };
 
+  const retryServiceability = () => {
+    if (selectedPickupLocation) void pickupServiceability.refetch();
+    if (selectedDeliveryLocation) void deliveryServiceability.refetch();
+  };
+
+  const selectPickupLocation = (id: string) => {
+    setPickupLocationId(id);
+    setStationId("");
+    setQuoteId(null);
+    setQuoteRecord(null);
+    setError(null);
+  };
+
+  const selectDeliveryLocation = (id: string) => {
+    setDeliveryLocationId(id);
+    setQuoteId(null);
+    setQuoteRecord(null);
+    setError(null);
+  };
+
   const currency = firstString(quoteRecord, ["currencyCode", "currency_code"]) ?? "NGN";
   const total = firstNumber(quoteRecord, ["totalAmount", "total_amount", "quotedTotal"]);
+  const quoteButtonLabel = !hasSelectedTrip
+    ? "Choose locations to continue"
+    : locationNeedsMapPosition
+      ? "Update location map position"
+      : serviceabilityPending
+        ? "Checking service availability…"
+        : serviceabilityError
+          ? "Check availability to continue"
+          : serviceUnavailable
+            ? "Service not available for this trip"
+            : exceedsCylinderCapacity
+              ? "Correct refill amount to continue"
+              : "See my price";
 
   return (
     <Screen
@@ -306,7 +387,7 @@ export function NewRefillScreen() {
             description="Where should the driver collect the cylinder?"
             records={locations.data ?? []}
             selected={pickupLocationId}
-            onSelect={setPickupLocationId}
+            onSelect={selectPickupLocation}
             emptyText="Add a saved location to continue."
           />
 
@@ -317,9 +398,76 @@ export function NewRefillScreen() {
             description="Choose where the filled cylinder should be delivered."
             records={locations.data ?? []}
             selected={deliveryLocationId}
-            onSelect={setDeliveryLocationId}
+            onSelect={selectDeliveryLocation}
             emptyText="Add a saved location to continue."
           />
+
+          {hasSelectedTrip ? (
+            locationNeedsMapPosition ? (
+              <View style={[styles.availabilityCard, { backgroundColor: palette.warningSoft, borderColor: palette.warning }]}>
+                <View style={styles.availabilityLead}>
+                  <AlertTriangle color={palette.warning} size={22} />
+                  <View style={styles.requirementCopy}>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>Update the saved location</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>One of these locations does not have a usable map position, so SKIMA cannot verify service availability yet.</Text>
+                  </View>
+                </View>
+                <AppButton label="Update locations" variant="secondary" size="sm" onPress={() => router.push("/(customer)/locations")} />
+              </View>
+            ) : serviceabilityPending ? (
+              <View style={[styles.availabilityCard, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+                <View style={styles.availabilityLead}>
+                  <MapPin color={palette.brand} size={22} />
+                  <View style={styles.requirementCopy}>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>Checking service availability</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>We are checking both the pickup and return locations before showing stations and pricing.</Text>
+                  </View>
+                </View>
+              </View>
+            ) : serviceabilityError ? (
+              <View style={[styles.availabilityCard, { backgroundColor: palette.warningSoft, borderColor: palette.warning }]}>
+                <View style={styles.availabilityLead}>
+                  <AlertTriangle color={palette.warning} size={22} />
+                  <View style={styles.requirementCopy}>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>We couldn't check this location right now</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>Your saved locations are still here. Check your connection and try the availability check again.</Text>
+                  </View>
+                </View>
+                <AppButton label="Check again" variant="secondary" size="sm" onPress={retryServiceability} />
+              </View>
+            ) : serviceUnavailable ? (
+              <View style={[styles.availabilityCard, { backgroundColor: palette.brandSoft, borderColor: palette.brand }]}>
+                <View style={styles.availabilityLead}>
+                  <MapPin color={palette.brand} size={22} />
+                  <View style={styles.requirementCopy}>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>Sorry, SKIMA service is not yet available in your area</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>
+                      {pickupUnavailable && deliveryUnavailable
+                        ? "We haven't opened LPG pickup or return service for the selected locations yet."
+                        : pickupUnavailable
+                          ? "We haven't opened LPG pickup service for the selected pickup location yet."
+                          : "We haven't opened LPG return service for the selected return location yet."} Choose another location, or help bring SKIMA LPG to this area as an early partner.
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.availabilityActions}>
+                  <AppButton label="Choose another location" variant="secondary" size="sm" onPress={() => router.push("/(customer)/locations")} />
+                  <AppButton label="Become a Driver Partner" size="sm" onPress={() => router.push("/(customer)/driver-application" as never)} />
+                  <AppButton label="Become a Station Partner" variant="secondary" size="sm" onPress={() => router.push("/(customer)/station-application" as never)} />
+                </View>
+              </View>
+            ) : tripServiceable ? (
+              <View style={[styles.availabilityCard, { backgroundColor: palette.successSoft, borderColor: palette.success }]}>
+                <View style={styles.availabilityLead}>
+                  <ShieldCheck color={palette.success} size={22} />
+                  <View style={styles.requirementCopy}>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>SKIMA LPG is available for this trip</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>Both pickup and return locations are currently within SKIMA LPG service coverage.</Text>
+                  </View>
+                </View>
+              </View>
+            ) : null
+          ) : null}
 
           <View style={[styles.formCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <SectionLead step="4" icon={<Scale color={palette.brand} size={20} />} title="Refill amount" description="Enter the kilograms you want added to the selected cylinder." />
@@ -404,23 +552,25 @@ export function NewRefillScreen() {
             </View>
           </View>
 
-          <SelectionSection
-            step="5"
-            icon={<Store color={palette.brand} size={20} />}
-            title="Choose a station"
-            description="Select an available SKIMA station for the refill."
-            records={stations.data ?? []}
-            selected={stationId}
-            onSelect={setStationId}
-            emptyText="No station is currently available for this location."
-          />
+          {tripServiceable ? (
+            <SelectionSection
+              step="5"
+              icon={<Store color={palette.brand} size={20} />}
+              title="Choose a station"
+              description="Select an available SKIMA station for the refill."
+              records={stations.data ?? []}
+              selected={stationId}
+              onSelect={setStationId}
+              emptyText="No station is currently available for this location."
+            />
+          ) : null}
 
           <AppButton
-            label={exceedsCylinderCapacity ? "Correct refill amount to continue" : "See my price"}
+            label={quoteButtonLabel}
             fullWidth
             size="lg"
-            disabled={exceedsCylinderCapacity}
-            loading={quote.isPending}
+            disabled={!tripServiceable || serviceabilityError || locationNeedsMapPosition || exceedsCylinderCapacity}
+            loading={quote.isPending || serviceabilityPending}
             onPress={() => void requestQuote()}
           />
         </>
@@ -567,6 +717,9 @@ const styles = StyleSheet.create({
   requirementCopy: { flex: 1, gap: 2 },
   requirementTitle: { ...typography.bodyStrong, fontSize: 14 },
   requirementBody: { ...typography.caption, lineHeight: 17 },
+  availabilityCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  availabilityLead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
+  availabilityActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   selectionCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
   formCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
   sectionLead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
