@@ -59,6 +59,15 @@ export function friendlyError(
   )
     return "Address search is temporarily unavailable. You can still use your current location or place the pin manually.";
 
+  if (message.includes("pickup location is outside enabled lpg service coverage"))
+    return "Sorry, SKIMA service is not yet available at this pickup location. Choose another location or apply to become a SKIMA partner in this area.";
+  if (message.includes("return location is outside enabled lpg service coverage"))
+    return "Sorry, SKIMA service is not yet available at this return location. Choose another location or apply to become a SKIMA partner in this area.";
+  if (message.includes("lpg serviceability verification"))
+    return "We couldn't verify service availability for this location. Check the saved location and try again.";
+  if (message.includes("valid latitude and longitude are required"))
+    return "This saved location needs a valid map position before SKIMA can check service availability.";
+
   if (
     message.includes("verified cylinder capacity can only be changed") ||
     message.includes("capacity re-verification") ||
