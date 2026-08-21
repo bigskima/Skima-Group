@@ -34,7 +34,9 @@ export function StationSettingsScreen() {
         session.context?.roles.some((role) => role.permissions.includes(permission)),
     );
   const canManageOperations = hasPermission("lpg.stations.manage");
-  const canManagePrice = hasPermission("platform.partner_price.manage") || canManageOperations;
+  const canManagePrice = hasPermission("business.partner_price.manage") ||
+    hasPermission("platform.partner_price.manage") ||
+    canManageOperations;
   const canViewSettings = canManageOperations || canManagePrice;
 
   const runtime = useStationRuntime();

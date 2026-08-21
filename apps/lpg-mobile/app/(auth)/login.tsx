@@ -51,7 +51,7 @@ export default function Login() {
           </View>
           <Pressable
             accessibilityRole="button"
-            onPress={() => router.push("/verify-driver")}
+            onPress={() => router.push("../verify-driver")}
             style={({ pressed }) => [
               styles.publicVerify,
               { backgroundColor: palette.surfaceSubtle, borderColor: palette.border, opacity: pressed ? 0.74 : 1 },
