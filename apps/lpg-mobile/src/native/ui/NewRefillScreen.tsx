@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { CheckCircle2, MapPin, Scale, ShieldCheck, Store, WalletCards } from "lucide-react-native";
+import { AlertTriangle, CheckCircle2, MapPin, Scale, ShieldCheck, Store, WalletCards } from "lucide-react-native";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries } from "../api/domains";
@@ -44,6 +44,16 @@ export function NewRefillScreen() {
   const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const draftCreatedAt = useRef(new Date().toISOString());
+
+  const selectedCylinder = (cylinders.data ?? []).find((item) => recordId(item) === cylinderId) ?? null;
+  const cylinderCapacityKg = firstNumber(selectedCylinder, ["max_capacity_kg", "maxCapacityKg"]);
+  const requestedKgNumber = requestedKg.trim() ? Number(requestedKg) : null;
+  const exceedsCylinderCapacity = Boolean(
+    cylinderCapacityKg !== null &&
+      requestedKgNumber !== null &&
+      Number.isFinite(requestedKgNumber) &&
+      requestedKgNumber > cylinderCapacityKg,
+  );
 
   const quote = useGatewayMutation({
     path: "/lpg/quotes",
@@ -91,6 +101,11 @@ export function NewRefillScreen() {
     if (!pickupLocationId && firstLocationId) setPickupLocationId(firstLocationId);
     if (!deliveryLocationId && firstLocationId) setDeliveryLocationId(firstLocationId);
   }, [cylinderId, cylinders.data, deliveryLocationId, hydrated, locations.data, pickupLocationId]);
+
+  useEffect(() => {
+    if (!hydrated || !cylinderId || requestedKg.trim() || cylinderCapacityKg === null) return;
+    setRequestedKg(formatKg(cylinderCapacityKg));
+  }, [cylinderCapacityKg, cylinderId, hydrated, requestedKg]);
 
   useEffect(() => {
     if (!owner || !hydrated) return;
@@ -143,6 +158,12 @@ export function NewRefillScreen() {
     }
     if (!Number.isFinite(kilograms) || kilograms <= 0) {
       setError("Enter the amount of gas you want in kilograms.");
+      return;
+    }
+    if (cylinderCapacityKg !== null && kilograms > cylinderCapacityKg) {
+      setError(
+        `This cylinder can hold up to ${formatKg(cylinderCapacityKg)} kg. Choose ${formatKg(cylinderCapacityKg)} kg or less, or check the cylinder details before continuing.`,
+      );
       return;
     }
 
@@ -257,7 +278,7 @@ export function NewRefillScreen() {
       ) : (
         <>
           {!locations.isPending && (locations.data ?? []).length === 0 ? (
-            <View style={[styles.requirement, { backgroundColor: palette.warningSoft }]}> 
+            <View style={[styles.requirement, { backgroundColor: palette.warningSoft }]}>
               <MapPin color={palette.warning} size={22} />
               <View style={styles.requirementCopy}>
                 <Text style={[styles.requirementTitle, { color: palette.ink }]}>Add a pickup location first</Text>
@@ -302,17 +323,74 @@ export function NewRefillScreen() {
 
           <View style={[styles.formCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <SectionLead step="4" icon={<Scale color={palette.brand} size={20} />} title="Refill amount" description="Enter the kilograms you want added to the selected cylinder." />
+
+            {cylinderCapacityKg !== null ? (
+              <View
+                style={[
+                  styles.capacityNotice,
+                  {
+                    backgroundColor: exceedsCylinderCapacity ? palette.dangerSoft : palette.surfaceSubtle,
+                    borderColor: exceedsCylinderCapacity ? palette.danger : palette.border,
+                  },
+                ]}
+              >
+                {exceedsCylinderCapacity ? (
+                  <AlertTriangle color={palette.danger} size={20} />
+                ) : (
+                  <ShieldCheck color={palette.success} size={20} />
+                )}
+                <View style={styles.capacityCopy}>
+                  <Text style={[styles.capacityTitle, { color: palette.ink }]}>Cylinder capacity: {formatKg(cylinderCapacityKg)} kg</Text>
+                  <Text style={[styles.capacityBody, { color: exceedsCylinderCapacity ? palette.danger : palette.muted }]}>
+                    {exceedsCylinderCapacity
+                      ? `${requestedKg.trim()} kg is above this cylinder's verified maximum. SKIMA will not prepare or charge for an over-capacity refill.`
+                      : `This is the maximum quantity SKIMA will quote for this cylinder.`}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
             <View style={styles.fieldGroup}>
               <Text style={[styles.fieldLabel, { color: palette.ink }]}>Kilograms to refill</Text>
               <TextInput
                 value={requestedKg}
-                onChangeText={setRequestedKg}
+                onChangeText={(value) => {
+                  setRequestedKg(value);
+                  if (error) setError(null);
+                }}
                 keyboardType="decimal-pad"
                 placeholder="e.g. 6"
                 placeholderTextColor={palette.muted}
-                style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: palette.input,
+                    borderColor: exceedsCylinderCapacity ? palette.danger : palette.borderStrong,
+                    color: palette.ink,
+                  },
+                ]}
               />
             </View>
+
+            {exceedsCylinderCapacity && cylinderCapacityKg !== null ? (
+              <View style={styles.capacityActions}>
+                <AppButton
+                  label={`Use ${formatKg(cylinderCapacityKg)} kg`}
+                  size="sm"
+                  onPress={() => {
+                    setRequestedKg(formatKg(cylinderCapacityKg));
+                    setError(null);
+                  }}
+                />
+                <AppButton
+                  label="Check cylinder details"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => router.push(`/(customer)/cylinder/${cylinderId}` as never)}
+                />
+              </View>
+            ) : null}
+
             <View style={styles.fieldGroup}>
               <Text style={[styles.fieldLabel, { color: palette.ink }]}>Driver note <Text style={{ color: palette.muted, fontWeight: "600" }}>(optional)</Text></Text>
               <TextInput
@@ -337,7 +415,14 @@ export function NewRefillScreen() {
             emptyText="No station is currently available for this location."
           />
 
-          <AppButton label="See my price" fullWidth size="lg" loading={quote.isPending} onPress={() => void requestQuote()} />
+          <AppButton
+            label={exceedsCylinderCapacity ? "Correct refill amount to continue" : "See my price"}
+            fullWidth
+            size="lg"
+            disabled={exceedsCylinderCapacity}
+            loading={quote.isPending}
+            onPress={() => void requestQuote()}
+          />
         </>
       )}
 
@@ -431,6 +516,10 @@ function money(value: number | null, currency: string | null) {
   }
 }
 
+function formatKg(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+}
+
 function formatDate(value: string | null) {
   if (!value) return "the displayed expiry time";
   const date = new Date(value);
@@ -488,6 +577,11 @@ const styles = StyleSheet.create({
   sectionDescription: { ...typography.caption, lineHeight: 17 },
   choices: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   emptyText: { ...typography.caption, paddingVertical: spacing.xs },
+  capacityNotice: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.md },
+  capacityCopy: { flex: 1, gap: 3 },
+  capacityTitle: { ...typography.bodyStrong, fontSize: 13 },
+  capacityBody: { ...typography.caption, lineHeight: 17 },
+  capacityActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   fieldGroup: { gap: spacing.sm },
   fieldLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" },
   input: { minHeight: 54, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: 16 },
