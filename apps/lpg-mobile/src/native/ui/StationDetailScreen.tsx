@@ -38,7 +38,9 @@ export function StationDetailScreen({ id }: { id: string | null }) {
   );
   const assetId = firstString(presentation ?? approvedPublic, ["media_asset_id", "mediaAssetId"]);
   const stationName = firstString(station, ["display_name", "displayName", "name"]) ?? "SKIMA station";
-  const status = displayStatus(station) ?? firstString(station, ["availability_status", "availabilityStatus"]) ?? "approved";
+  const status = (station ? displayStatus(station) : null) ??
+    firstString(station, ["availability_status", "availabilityStatus"]) ??
+    "approved";
   const address = firstString(station, ["formatted_address", "formattedAddress", "address"]) ?? "Public address unavailable";
   const availableKg = firstNumber(station, ["currentAvailableKg", "current_available_kg"]);
 

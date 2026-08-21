@@ -22,6 +22,21 @@ async function readMigrations(): Promise<string> {
   )).join("\n");
 }
 
+async function readMigrationBySuffix(suffix: string): Promise<string> {
+  const migrationDirectory = new URL("supabase/migrations/", ROOT);
+  const matchingNames: string[] = [];
+
+  for await (const entry of Deno.readDir(migrationDirectory)) {
+    if (entry.isFile && entry.name.endsWith(suffix)) {
+      matchingNames.push(entry.name);
+    }
+  }
+
+  matchingNames.sort();
+  const migrationName = matchingNames.at(-1);
+  return migrationName ? await read(`supabase/migrations/${migrationName}`) : "";
+}
+
 type Check = {
   name: string;
   source: string;
@@ -50,6 +65,34 @@ function actionSection(adminConfig: string, actionKey: string): string {
 
   const nextAction = adminConfig.indexOf("\n        action(", start + marker.length);
   return adminConfig.slice(start, nextAction < 0 ? adminConfig.length : nextAction);
+}
+
+function sqlFunctionSection(source: string, functionName: string): string {
+  const escapedFunctionName = functionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const definition = new RegExp(
+    `create\\s+or\\s+replace\\s+function\\s+public\\.${escapedFunctionName}\\s*\\(`,
+    "i",
+  ).exec(source);
+
+  if (!definition) {
+    return "";
+  }
+
+  const bodyMarker = /\bas\s+(\$[A-Za-z0-9_]*\$)/gi;
+  bodyMarker.lastIndex = definition.index + definition[0].length;
+  const openingMarker = bodyMarker.exec(source);
+  if (!openingMarker) {
+    return "";
+  }
+
+  const delimiter = openingMarker[1];
+  const bodyStart = openingMarker.index + openingMarker[0].length;
+  const bodyEnd = source.indexOf(delimiter, bodyStart);
+  if (bodyEnd < 0) {
+    return "";
+  }
+
+  return source.slice(definition.index, bodyEnd + delimiter.length + 1);
 }
 
 function literalPattern(value: string): RegExp {
@@ -81,11 +124,34 @@ function evaluate(check: Check): string[] {
   return failures;
 }
 
-const [migrations, gateway, adminConfig] = await Promise.all([
+const [migrations, correctiveMigration, gateway, adminConfig] = await Promise.all([
   readMigrations(),
+  readMigrationBySuffix("_lpg_revenue_station_permission_security_repair.sql"),
   read("supabase/functions/api-gateway/index.ts"),
   read("apps/admin/src/admin-resource-config.ts"),
 ]);
+
+const correctedStationCatalogHelper = sqlFunctionSection(
+  correctiveMigration,
+  "ensure_lpg_station_refill_catalog_item",
+);
+const correctedRevenueConfiguration = sqlFunctionSection(
+  correctiveMigration,
+  "configure_lpg_platform_revenue_rate",
+);
+const rolePermissionRepairs = correctiveMigration
+  .split(";")
+  .filter((statement) => /insert\s+into\s+public\.role_permissions/i.test(statement))
+  .join(";\n");
+const stationCatalogHelperRevocations = correctiveMigration
+  .split(";")
+  .filter((statement) =>
+    /\brevoke\b/i.test(statement) &&
+    /on\s+function\s+public\.ensure_lpg_station_refill_catalog_item\s*\(\s*uuid\s*\)/i.test(
+      statement,
+    )
+  )
+  .join(";\n");
 
 const withdrawalRoute = routeSection(gateway, "/runtime/withdrawals");
 const commissionRoute = routeSection(gateway, "/runtime/commissions/execute");
@@ -229,10 +295,82 @@ const checks: Check[] = [
     name: "delegated station price boundary",
     source: migrations,
     required: [
-      /platform\.partner_price\.manage/i,
+      /business\.partner_price\.manage/i,
       /can_manage_delegated_lpg_station_price/i,
       /target_item_id must be an LPG catalog item owned by the delegated station branch/i,
       /station users may set only their LPG selling price/i,
+    ],
+  },
+  {
+    name: "corrective migration synchronizes live Super Admin permissions",
+    source: rolePermissionRepairs,
+    required: [
+      /insert\s+into\s+public\.role_permissions/i,
+      /platform\.super_admin/i,
+      /cross\s+join\s+public\.permissions/i,
+      /on\s+conflict[\s\S]*do\s+nothing/i,
+    ],
+  },
+  {
+    name: "corrective migration repairs live Finance Admin revenue permissions",
+    source: rolePermissionRepairs,
+    required: [
+      /insert\s+into\s+public\.role_permissions/i,
+      /platform\.finance_admin/i,
+      /platform\.revenue\.read/i,
+      /platform\.revenue\.manage/i,
+      /on\s+conflict[\s\S]*do\s+nothing/i,
+    ],
+  },
+  {
+    name: "corrective migration repairs live station price permission assignments",
+    source: rolePermissionRepairs,
+    required: [
+      /insert\s+into\s+public\.role_permissions/i,
+      /platform\.partner_price\.manage/i,
+      /business\.partner_price\.manage/i,
+      /on\s+conflict[\s\S]*do\s+nothing/i,
+    ],
+  },
+  {
+    name: "station catalog helper removes the unsafe definer-role bypass",
+    source: correctedStationCatalogHelper,
+    required: [
+      /auth\.role\(\)\s*(?:<>|!=)\s*'service_role'/i,
+      /public\.can_manage_lpg_operations\(\)/i,
+      /public\.can_operate_lpg_station_branch\(/i,
+    ],
+    forbidden: [/\bcurrent_user\b/i],
+  },
+  {
+    name: "station catalog helper cannot be executed directly by API roles",
+    source: stationCatalogHelperRevocations,
+    required: [
+      /revoke\s+(?:all|execute)/i,
+      /\bfrom\b[^;]*\bpublic\b/i,
+      /\bfrom\b[^;]*\banon\b/i,
+      /\bfrom\b[^;]*\bauthenticated\b/i,
+    ],
+  },
+  {
+    name: "duplicate LPG station catalog provisioning trigger is removed",
+    source: correctiveMigration,
+    required: [
+      /drop\s+trigger\s+if\s+exists\s+(?:ensure_lpg_station_refill_catalog_item_after_write|provision_lpg_station_catalog_after_approval)\s+on\s+public\.lpg_station_branches/i,
+    ],
+  },
+  {
+    name: "approval-required LPG revenue configuration stops after submission",
+    source: correctedRevenueConfiguration,
+    required: [
+      /target_approval_required\s*=>\s*true/i,
+      /public\.submit_financial_policy_version\s*\(/i,
+    ],
+    forbidden: [
+      /public\.review_financial_policy_version\s*\(/i,
+      /public\.activate_financial_policy_version\s*\(/i,
+      /update\s+public\.financial_policy_versions/i,
+      /approved_by\s*=\s*auth\.uid\(\)/i,
     ],
   },
   {

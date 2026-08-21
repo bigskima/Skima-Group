@@ -54,7 +54,10 @@ export function DriverVerificationScreen() {
         DriverVerificationSchema,
       );
       setDriverId(normalized);
-      setResult(response.data);
+      setResult({
+        ...response.data,
+        serviceZones: response.data.serviceZones ?? [],
+      });
     } catch (cause) {
       setError(friendlyError(cause, "We couldn't verify that SKIMA Driver ID. Check the number and try again."));
     } finally {
