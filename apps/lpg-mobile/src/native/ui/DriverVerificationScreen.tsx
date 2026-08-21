@@ -1,8 +1,10 @@
+import { CameraView, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
+import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
-import { BadgeCheck, CreditCard, MapPin, Search, ShieldAlert, ShieldCheck, Truck } from "lucide-react-native";
+import { BadgeCheck, Camera, CreditCard, Flashlight, MapPin, ScanLine, Search, ShieldAlert, ShieldCheck, Truck, X } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { z } from "zod";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -35,15 +37,19 @@ type VerificationRecord = z.infer<typeof DriverVerificationSchema>["data"];
 export function DriverVerificationScreen() {
   const session = useSession();
   const { palette } = useAppTheme();
-  const params = useLocalSearchParams<{ id?: string; publicDriverId?: string }>();
+  const params = useLocalSearchParams<{ id?: string; publicDriverId?: string; mode?: string }>();
   const initialId = (params.publicDriverId ?? params.id ?? "").trim();
   const [driverId, setDriverId] = useState(initialId);
   const [result, setResult] = useState<VerificationRecord | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(params.mode === "scan");
+  const [scanLocked, setScanLocked] = useState(false);
+  const [torch, setTorch] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
   const verify = async (value = driverId) => {
-    const normalized = value.trim().toUpperCase();
+    const normalized = normalizeDriverId(value);
     if (!normalized || pending) return;
     setPending(true);
     setError(null);
@@ -59,10 +65,40 @@ export function DriverVerificationScreen() {
         serviceZones: response.data.serviceZones ?? [],
       });
     } catch (cause) {
-      setError(friendlyError(cause, "We couldn't verify that SKIMA Driver ID. Check the number and try again."));
+      setError(friendlyError(cause, "We couldn't verify that SKIMA Driver ID. Check the ID and try again."));
     } finally {
       setPending(false);
     }
+  };
+
+  const openScanner = async () => {
+    setError(null);
+    if (!cameraPermission?.granted) {
+      const permission = await requestCameraPermission();
+      if (!permission.granted) {
+        setError("Camera access is needed to scan a Driver Pass. You can still enter the SKIMA Driver ID below.");
+        return;
+      }
+    }
+    setScanLocked(false);
+    setScannerOpen(true);
+  };
+
+  const handleScan = (scan: BarcodeScanningResult) => {
+    if (scanLocked || pending) return;
+    const reference = extractDriverId(scan.data);
+    if (!reference) {
+      setScanLocked(true);
+      setError("That code does not contain a valid SKIMA Driver ID. Check the Driver Pass and scan again.");
+      setTimeout(() => setScanLocked(false), 1200);
+      return;
+    }
+    setScanLocked(true);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setScannerOpen(false);
+    setTorch(false);
+    setDriverId(reference);
+    void verify(reference);
   };
 
   useEffect(() => {
@@ -71,6 +107,14 @@ export function DriverVerificationScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialId]);
 
+  useEffect(() => {
+    if (params.mode === "scan" && !scannerOpen && !result && !pending) {
+      void openScanner();
+    }
+    // This is intentionally keyed to the route mode only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.mode]);
+
   const verified = result?.verified === true && result?.status === "active";
   const suspended = ["suspended", "deactivated", "inactive", "revoked"].some((value) =>
     [result?.status, result?.cardStatus].some((status) => status?.toLowerCase().includes(value)),
@@ -78,17 +122,61 @@ export function DriverVerificationScreen() {
 
   return (
     <Screen
-      eyebrow="Public SKIMA verification"
+      eyebrow="SKIMA verification"
       title="Verify a driver"
-      subtitle="Enter the SKIMA Driver ID printed on the driver's pass to confirm their current public authorisation status."
+      subtitle="Scan the Driver Pass or enter the SKIMA Driver ID before handing over your cylinder."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.canGoBack() ? router.back() : router.replace("/")} />}
     >
+      {scannerOpen ? (
+        <View style={[styles.scannerCard, shadows.raised, { backgroundColor: palette.ink }]}>
+          {cameraPermission?.granted ? (
+            <View style={styles.cameraWrap}>
+              <CameraView
+                style={styles.camera}
+                facing="back"
+                enableTorch={torch}
+                barcodeScannerSettings={{ barcodeTypes: ["qr", "code128", "datamatrix"] }}
+                onBarcodeScanned={scanLocked ? undefined : handleScan}
+              />
+              <View pointerEvents="none" style={styles.scanCopy}>
+                <ScanLine color="#FFFFFF" size={23} />
+                <Text style={styles.scanTitle}>Scan the Driver Pass</Text>
+                <Text style={styles.scanBody}>Keep the SKIMA QR code inside the frame</Text>
+              </View>
+              <View pointerEvents="none" style={styles.scanFrame} />
+              <Pressable accessibilityLabel="Close scanner" onPress={() => { setScannerOpen(false); setTorch(false); }} style={styles.closeScanner}>
+                <X color="#FFFFFF" size={21} />
+              </Pressable>
+              <Pressable accessibilityLabel={torch ? "Turn flashlight off" : "Turn flashlight on"} onPress={() => setTorch((current) => !current)} style={[styles.torch, torch && { backgroundColor: palette.brand }]}>
+                <Flashlight color="#FFFFFF" size={21} />
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.permissionCard}>
+              <Camera color="#FFFFFF" size={28} />
+              <Text style={styles.scanTitle}>Camera access is off</Text>
+              <Text style={styles.scanBody}>Allow camera access to scan the Driver Pass, or close this scanner and enter the Driver ID.</Text>
+              <AppButton label="Allow camera" onPress={() => void openScanner()} />
+            </View>
+          )}
+        </View>
+      ) : (
+        <AppButton
+          label="Scan Driver ID QR"
+          fullWidth
+          size="lg"
+          variant="secondary"
+          icon={<ScanLine color={palette.brand} size={19} />}
+          onPress={() => void openScanner()}
+        />
+      )}
+
       <View style={[styles.searchCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={styles.searchLead}>
           <View style={[styles.searchIcon, { backgroundColor: palette.brandSoft }]}><Search color={palette.brand} size={22} /></View>
           <View style={styles.searchCopy}>
-            <Text style={[styles.searchTitle, { color: palette.ink }]}>SKIMA Driver ID</Text>
-            <Text style={[styles.searchBody, { color: palette.muted }]}>Use only the ID shown on the driver's current SKIMA pass.</Text>
+            <Text style={[styles.searchTitle, { color: palette.ink }]}>Enter Driver ID</Text>
+            <Text style={[styles.searchBody, { color: palette.muted }]}>Use the SKIMA Driver ID printed on the driver's current pass.</Text>
           </View>
         </View>
         <TextInput
@@ -98,7 +186,7 @@ export function DriverVerificationScreen() {
           value={driverId}
           onChangeText={setDriverId}
           onSubmitEditing={() => void verify()}
-          placeholder="Enter driver ID"
+          placeholder="Example: SKD-9D0DBEEA49D4"
           placeholderTextColor={palette.muted}
           returnKeyType="search"
           style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
@@ -138,7 +226,7 @@ export function DriverVerificationScreen() {
               )}
             </View>
             <View style={styles.resultCopy}>
-              <Text style={styles.resultEyebrow}>{verified ? "CURRENTLY AUTHORISED" : suspended ? "NOT CURRENTLY AUTHORISED" : "VERIFICATION RESULT"}</Text>
+              <Text style={styles.resultEyebrow}>{verified ? "APPROVED SKIMA DRIVER" : suspended ? "NOT CURRENTLY APPROVED" : "VERIFICATION RESULT"}</Text>
               <Text numberOfLines={1} style={styles.resultName}>{result.displayName ?? "SKIMA Driver"}</Text>
               <Text style={styles.resultId}>{result.publicDriverId ?? driverId}</Text>
               <View style={styles.resultPills}>
@@ -153,26 +241,26 @@ export function DriverVerificationScreen() {
             <Divider />
             <PublicField label="SKIMA Driver ID" value={result.publicDriverId ?? driverId} />
             <Divider />
-            <PublicField label="Authorisation" value={publicStatus(result)} />
+            <PublicField label="Approval" value={publicStatus(result)} />
             <Divider />
             <PublicField label="Vehicle type" value={friendly(result.vehicleType ?? "Not listed")} icon={<Truck color={palette.brand} size={17} />} />
             <Divider />
             <PublicField label="Vehicle status" value={friendly(result.vehicleStatus ?? "Not listed")} />
             <Divider />
-            <PublicField label="Approved service coverage" value={result.serviceZones?.length ? result.serviceZones.join(", ") : "Not publicly listed"} icon={<MapPin color={palette.brand} size={17} />} />
+            <PublicField label="Approved service area" value={result.serviceZones?.length ? result.serviceZones.join(", ") : "Not publicly listed"} icon={<MapPin color={palette.brand} size={17} />} />
           </View>
 
           <View style={[styles.trust, { backgroundColor: verified ? palette.successSoft : palette.warningSoft, borderColor: verified ? palette.success : palette.warning }]}>
             {verified ? <ShieldCheck color={palette.success} size={20} /> : <ShieldAlert color={palette.warning} size={20} />}
             <View style={styles.trustCopy}>
-              <Text style={[styles.trustTitle, { color: palette.ink }]}>{verified ? "Current SKIMA authorisation confirmed" : "Do not rely on a saved screenshot alone"}</Text>
-              <Text style={[styles.trustBody, { color: palette.muted }]}>{verified ? "This lookup checks the current SKIMA record for the Driver ID you entered." : "A printed pass or screenshot may be old. Only the current verification result on this screen should be used to confirm authorisation."}</Text>
+              <Text style={[styles.trustTitle, { color: palette.ink }]}>{verified ? "Current SKIMA approval confirmed" : "Do not hand over your cylinder yet"}</Text>
+              <Text style={[styles.trustBody, { color: palette.muted }]}>{verified ? "The Driver ID is currently approved by SKIMA. For an active order, also confirm that the driver shown in your order matches this person." : "A printed pass or saved screenshot may be old. Only a current approved result should be used for a SKIMA pickup."}</Text>
             </View>
           </View>
 
           <View style={[styles.privacy, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.mutedStrong} size={18} />
-            <Text style={[styles.privacyText, { color: palette.muted }]}>This public lookup intentionally excludes private KYC such as home address, NIN/BVN, private documents, internal review notes and other confidential identity evidence.</Text>
+            <Text style={[styles.privacyText, { color: palette.muted }]}>Private contact details, home address, identity documents and financial information are never shown in this public verification.</Text>
           </View>
         </>
       ) : null}
@@ -195,12 +283,52 @@ function Divider() {
   return <View style={[styles.divider, { backgroundColor: palette.border }]} />;
 }
 
+function normalizeDriverId(value: string) {
+  return value.trim().toUpperCase();
+}
+
+function extractDriverId(rawValue: string) {
+  const raw = rawValue.trim();
+  if (!raw) return null;
+
+  const direct = raw.match(/\bSKD-[A-Z0-9]{6,32}\b/i)?.[0];
+  if (direct) return normalizeDriverId(direct);
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    for (const key of ["publicDriverId", "public_driver_id", "driverId", "driver_id"]) {
+      const candidate = parsed[key];
+      if (typeof candidate === "string") {
+        const match = candidate.match(/\bSKD-[A-Z0-9]{6,32}\b/i)?.[0];
+        if (match) return normalizeDriverId(match);
+      }
+    }
+  } catch {
+    // Not a JSON payload; URL parsing below handles Driver Pass links.
+  }
+
+  try {
+    const url = new URL(raw);
+    for (const key of ["publicDriverId", "public_driver_id", "driverId", "driver_id", "id"]) {
+      const candidate = url.searchParams.get(key);
+      const match = candidate?.match(/\bSKD-[A-Z0-9]{6,32}\b/i)?.[0];
+      if (match) return normalizeDriverId(match);
+    }
+    const pathMatch = decodeURIComponent(url.pathname).match(/\bSKD-[A-Z0-9]{6,32}\b/i)?.[0];
+    if (pathMatch) return normalizeDriverId(pathMatch);
+  } catch {
+    // Plain text that was not a SKIMA Driver ID.
+  }
+
+  return null;
+}
+
 function publicStatus(record: VerificationRecord) {
   if (record.verified && record.status === "active") return "Approved & active";
   const raw = record.cardStatus ?? record.status ?? record.operationalStatus ?? "not active";
   const normalized = raw.toLowerCase();
-  if (normalized.includes("suspend")) return "Suspended";
-  if (normalized.includes("deactiv") || normalized.includes("revok")) return "No longer authorised";
+  if (normalized.includes("suspend")) return "Not currently approved";
+  if (normalized.includes("deactiv") || normalized.includes("revok")) return "Not currently approved";
   if (normalized.includes("inactive")) return "Approved but inactive";
   return friendly(raw);
 }
@@ -210,6 +338,16 @@ function friendly(value: string) {
 }
 
 const styles = StyleSheet.create({
+  scannerCard: { overflow: "hidden", borderRadius: radii.xl },
+  cameraWrap: { height: 430, overflow: "hidden", borderRadius: radii.xl },
+  camera: { flex: 1 },
+  scanCopy: { position: "absolute", top: spacing.xl, left: spacing.lg, right: spacing.lg, alignItems: "center", gap: 5 },
+  scanTitle: { color: "#FFFFFF", ...typography.heading, fontSize: 19, textAlign: "center" },
+  scanBody: { color: "rgba(255,255,255,.78)", ...typography.caption, lineHeight: 18, textAlign: "center" },
+  scanFrame: { position: "absolute", left: "15%", right: "15%", top: "29%", bottom: "26%", borderWidth: 3, borderColor: "#FFFFFF", borderRadius: radii.lg },
+  closeScanner: { position: "absolute", left: spacing.md, top: spacing.md, width: 46, height: 46, alignItems: "center", justifyContent: "center", borderRadius: 23, backgroundColor: "rgba(0,0,0,.48)" },
+  torch: { position: "absolute", right: spacing.md, bottom: spacing.md, width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: 24, backgroundColor: "rgba(0,0,0,.48)" },
+  permissionCard: { minHeight: 270, alignItems: "center", justifyContent: "center", gap: spacing.md, padding: spacing.xl },
   searchCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
   searchLead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
   searchIcon: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center" },
