@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { Download, Edit3, QrCode as QrCodeIcon, RefreshCw, Save, ShieldCheck } from "lucide-react-native";
+import { Download, Edit3, QrCode as QrCodeIcon, RefreshCw, Save, Scale, ShieldCheck } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
@@ -33,6 +33,8 @@ export function CylinderDetailScreen() {
   const displayName = cylinder ? firstString(cylinder, ["display_name", "displayName"]) : null;
   const qrValue = cylinder ? firstString(cylinder, ["qr_payload", "qrPayload"]) : null;
   const cylinderId = cylinder ? recordId(cylinder) : null;
+  const cylinderSizeKg = cylinder ? firstNumber(cylinder, ["size_kg", "sizeKg"]) : null;
+  const verifiedCapacityKg = cylinder ? firstNumber(cylinder, ["max_capacity_kg", "maxCapacityKg"]) : null;
   const status = cylinder ? displayStatus(cylinder) ?? "registered" : "";
   const tagStatus = cylinder ? physicalTagStatus(cylinder) : "untagged";
 
@@ -117,7 +119,7 @@ export function CylinderDetailScreen() {
             <View style={styles.heroCopy}>
               <Text style={styles.heroEyebrow}>PERMANENT SKIMA CYLINDER ID</Text>
               <Text numberOfLines={1} style={styles.heroReference}>{cylinderReference ?? "Reference unavailable"}</Text>
-              <Text style={styles.heroBody}>{firstNumber(cylinder, ["size_kg", "sizeKg"]) ?? "Configured"} kg cylinder</Text>
+              <Text style={styles.heroBody}>{cylinderSizeKg ?? "Configured"} kg cylinder</Text>
             </View>
             <StatusPill label={friendlyCylinderStatus(status)} tone={cylinderTone(status)} />
           </View>
@@ -152,7 +154,7 @@ export function CylinderDetailScreen() {
                 size="sm"
                 variant={editing ? "primary" : "secondary"}
                 loading={nameMutation.isPending}
-                icon={editing ? <Save color={editing ? "#FFFFFF" : palette.brand} size={16} /> : <Edit3 color={palette.brand} size={16} />}
+                icon={editing ? <Save color="#FFFFFF" size={16} /> : <Edit3 color={palette.brand} size={16} />}
                 onPress={() => editing ? void saveName() : setEditing(true)}
               />
             </View>
@@ -163,7 +165,9 @@ export function CylinderDetailScreen() {
             <Divider />
             <Field label="Physical SKIMA tag" value={friendlyTagStatus(tagStatus)} />
             <Divider />
-            <Field label="Size" value={`${firstNumber(cylinder, ["size_kg", "sizeKg"]) ?? "Configured"} kg`} />
+            <Field label="Registered size" value={formatKg(cylinderSizeKg)} />
+            <Divider />
+            <Field label="Verified refill limit" value={formatKg(verifiedCapacityKg ?? cylinderSizeKg)} />
             <Divider />
             <Field label="Brand" value={firstString(cylinder, ["brand", "manufacturer"]) ?? "Not recorded"} />
             <Divider />
@@ -175,6 +179,27 @@ export function CylinderDetailScreen() {
             <Divider />
             <Field label="Next inspection" value={formatDate(firstString(cylinder, ["next_inspection_at", "nextInspectionAt"]))} />
           </View>
+
+          {cylinderId ? (
+            <View style={[styles.capacityCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.capacityLead}>
+                <View style={[styles.capacityIcon, { backgroundColor: palette.brandSoft }]}>
+                  <Scale color={palette.brand} size={22} />
+                </View>
+                <View style={styles.capacityCopy}>
+                  <Text style={[styles.capacityTitle, { color: palette.ink }]}>Is the recorded size wrong?</Text>
+                  <Text style={[styles.capacityBody, { color: palette.muted }]}>Capacity cannot be edited directly. Submit clear cylinder evidence for SKIMA review; the current verified limit stays active until approval.</Text>
+                </View>
+              </View>
+              <AppButton
+                label="Review or correct capacity"
+                fullWidth
+                variant="secondary"
+                icon={<Scale color={palette.brand} size={17} />}
+                onPress={() => router.push(`/(customer)/cylinder-capacity/${cylinderId}` as never)}
+              />
+            </View>
+          ) : null}
 
           <View style={[styles.qrCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <View style={styles.qrHeader}>
@@ -295,6 +320,11 @@ function formatDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
 }
 
+function formatKg(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "Not recorded";
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)} kg`;
+}
+
 function firstAssetId(value: unknown) {
   return Array.isArray(value) ? value.find((item): item is string => typeof item === "string") ?? null : null;
 }
@@ -321,6 +351,12 @@ const styles = StyleSheet.create({
   fieldLabel: { ...typography.caption, flex: 0.42 },
   fieldValue: { ...typography.bodyStrong, fontSize: 14, flex: 0.58, textAlign: "right" },
   divider: { height: StyleSheet.hairlineWidth },
+  capacityCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  capacityLead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
+  capacityIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  capacityCopy: { flex: 1, gap: 4 },
+  capacityTitle: { ...typography.subheading, fontSize: 15 },
+  capacityBody: { ...typography.caption, lineHeight: 18 },
   qrCard: { alignItems: "center", gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
   qrHeader: { width: "100%", flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
   qrIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
