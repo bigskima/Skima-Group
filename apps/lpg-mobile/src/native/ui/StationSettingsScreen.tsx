@@ -80,7 +80,7 @@ export function StationSettingsScreen() {
     setNotice(null);
     if (!canManageOperations || !branchId) {
       setNoticeSuccess(false);
-      setNotice("Your current station role cannot change operating settings.");
+      setNotice("Your station access does not allow changes to operating settings.");
       return;
     }
     try {
@@ -95,7 +95,7 @@ export function StationSettingsScreen() {
       setNotice("Station operating settings updated successfully.");
     } catch (cause) {
       setNoticeSuccess(false);
-      setNotice(friendlyError(cause, "Station operating settings could not be saved."));
+      setNotice(friendlyError(cause, "We couldn't save your station operating settings. Please try again."));
     }
   };
 
@@ -104,17 +104,17 @@ export function StationSettingsScreen() {
     const amount = Number(price);
     if (!canManagePrice) {
       setNoticeSuccess(false);
-      setNotice("Your current station role cannot change the branch refill price.");
+      setNotice("Your station access does not allow changes to the LPG selling price.");
       return;
     }
     if (!branchId || !Number.isFinite(amount) || amount <= 0) {
       setNoticeSuccess(false);
-      setNotice("Enter a valid station selling price per kilogram.");
+      setNotice("Enter a valid LPG selling price per kilogram.");
       return;
     }
     if (!catalogItemId) {
       setNoticeSuccess(false);
-      setNotice("An active LPG refill catalog item is required before this station can set its price.");
+      setNotice("LPG refill pricing isn't ready for this station yet. Refresh the page or contact SKIMA support.");
       return;
     }
     try {
@@ -127,10 +127,10 @@ export function StationSettingsScreen() {
         idempotencyKey: idempotencyKey("station-price", branchId),
       });
       setNoticeSuccess(true);
-      setNotice("Station refill price updated successfully.");
+      setNotice("Station price updated successfully.");
     } catch (cause) {
       setNoticeSuccess(false);
-      setNotice(friendlyError(cause, "Station pricing could not be updated."));
+      setNotice(friendlyError(cause, "We couldn't save your station price. Please try again."));
     }
   };
 
@@ -139,12 +139,12 @@ export function StationSettingsScreen() {
       <Screen
         eyebrow="Station operations"
         title="Settings & pricing"
-        subtitle="Operational controls are available only to authorised station roles."
+        subtitle="These station controls are not available for your current access level."
       >
         <EmptyState
           icon={<ShieldCheck color={palette.brand} size={27} />}
-          title="Settings access restricted"
-          description="Your current station role does not include operating-settings or branch-pricing permissions."
+          title="Settings are not available"
+          description="Ask the station owner or manager if you need access to these settings."
           action={<AppButton label="Back" variant="secondary" onPress={() => router.back()} />}
         />
       </Screen>
@@ -155,7 +155,7 @@ export function StationSettingsScreen() {
     <Screen
       eyebrow="Station operations"
       title="Settings & pricing"
-      subtitle="Manage branch availability, operating hours and the station's own LPG selling price within your permissions."
+      subtitle="Manage your station availability, operating hours and LPG selling price."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {runtime.isPending || catalogPrices.isPending ? (
@@ -164,7 +164,7 @@ export function StationSettingsScreen() {
         <EmptyState
           icon={<Store color={palette.brand} size={27} />}
           title="Station settings could not be loaded"
-          description="Check your connection and refresh this station workspace."
+          description="Check your connection and try again."
           action={<AppButton label="Retry" onPress={() => void Promise.all([runtime.refetch(), catalogPrices.refetch()])} />}
         />
       ) : (
@@ -172,7 +172,7 @@ export function StationSettingsScreen() {
           <View style={[styles.hero, shadows.raised, { backgroundColor: availability === "available" ? palette.brand : palette.ink }]}>
             <View style={styles.heroTop}>
               <View style={styles.heroCopy}>
-                <Text style={styles.heroEyebrow}>BRANCH OPERATING STATUS</Text>
+                <Text style={styles.heroEyebrow}>STATION STATUS</Text>
                 <Text style={styles.heroTitle}>{availabilityLabel(availability)}</Text>
               </View>
               <View style={styles.heroIcon}><Power color="#FFFFFF" size={26} /></View>
@@ -189,15 +189,15 @@ export function StationSettingsScreen() {
 
           <SectionHeader
             title="Operating availability"
-            description="This controls whether the branch is operationally available to participate in eligible LPG fulfilment."
+            description="Choose whether your station is currently available to receive eligible SKIMA LPG orders."
           />
 
           <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <View style={styles.sectionLead}>
               <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><Power color={palette.brand} size={21} /></View>
               <View style={styles.sectionCopy}>
-                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Branch status</Text>
-                <Text style={[styles.sectionBody, { color: palette.muted }]}>{canManageOperations ? "Choose the current operating state for this branch." : "Your role can view this setting but cannot change it."}</Text>
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Station status</Text>
+                <Text style={[styles.sectionBody, { color: palette.muted }]}>{canManageOperations ? "Choose your station's current operating status." : "You can view this setting but cannot change it."}</Text>
               </View>
             </View>
 
@@ -254,21 +254,21 @@ export function StationSettingsScreen() {
             {canManageOperations ? (
               <AppButton label="Save operating settings" fullWidth loading={operations.isPending} onPress={() => void saveOperations()} />
             ) : (
-              <PermissionNotice text="Operating settings are read-only for your current station role." />
+              <PermissionNotice text="These operating settings are view-only for your account." />
             )}
           </View>
 
           <SectionHeader
-            title="Station refill price"
-            description="Set the branch's own LPG selling price per kilogram. SKIMA-controlled fees and other financial policy remain server-managed."
+            title="Station LPG selling price"
+            description="Set the price your station sells LPG for per kilogram. SKIMA service fees and delivery charges are calculated separately."
           />
 
           <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <View style={styles.sectionLead}>
               <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><BadgeDollarSign color={palette.brand} size={22} /></View>
               <View style={styles.sectionCopy}>
-                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Branch price per kg</Text>
-                <Text style={[styles.sectionBody, { color: palette.muted }]}>This is the amount the station itself is selling LPG for. Customer totals may include separate SKIMA-controlled charges calculated by backend policy.</Text>
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Your LPG selling price per kg</Text>
+                <Text style={[styles.sectionBody, { color: palette.muted }]}>Enter only the amount your station charges for one kilogram of LPG.</Text>
               </View>
             </View>
 
@@ -276,7 +276,7 @@ export function StationSettingsScreen() {
               <View style={[styles.catalogRow, { backgroundColor: palette.surfaceSubtle }]}>
                 <Store color={palette.mutedStrong} size={18} />
                 <View style={styles.catalogCopy}>
-                  <Text style={[styles.catalogLabel, { color: palette.muted }]}>ACTIVE CATALOG ITEM</Text>
+                  <Text style={[styles.catalogLabel, { color: palette.muted }]}>AVAILABLE SERVICE</Text>
                   <Text style={[styles.catalogValue, { color: palette.ink }]}>{firstString(pricing, ["displayName", "display_name", "itemKey"]) ?? "LPG refill"}</Text>
                 </View>
                 <StatusPill label="Active" tone="success" />
@@ -284,7 +284,7 @@ export function StationSettingsScreen() {
             ) : (
               <View style={[styles.warning, { backgroundColor: palette.warningSoft }]}>
                 <Store color={palette.warning} size={19} />
-                <Text style={[styles.warningText, { color: palette.ink }]}>No active LPG refill catalog item is configured for this branch, so pricing cannot be updated yet.</Text>
+                <Text style={[styles.warningText, { color: palette.ink }]}>LPG refill pricing isn't ready for this station yet. Refresh this page or contact SKIMA support.</Text>
               </View>
             )}
 
@@ -295,16 +295,16 @@ export function StationSettingsScreen() {
                 value={price}
                 onChangeText={setPrice}
                 keyboardType="decimal-pad"
-                placeholder="Enter station price per kg"
+                placeholder="Enter your price per kg"
                 placeholderTextColor={palette.muted}
                 style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink, opacity: canManagePrice && catalogItemId ? 1 : 0.65 }]}
               />
-              <Text style={[styles.fieldHint, { color: palette.muted }]}>Do not add platform, delivery, driver, tax or other policy-controlled amounts into this field.</Text>
+              <Text style={[styles.fieldHint, { color: palette.muted }]}>Other SKIMA charges are added separately according to the current service terms.</Text>
             </View>
 
             {canManagePrice ? (
               <AppButton
-                label="Update station price"
+                label="Save price"
                 fullWidth
                 variant="secondary"
                 loading={pricingMutation.isPending}
@@ -312,13 +312,13 @@ export function StationSettingsScreen() {
                 onPress={() => void savePrice()}
               />
             ) : (
-              <PermissionNotice text="Branch pricing is read-only for your current station role." />
+              <PermissionNotice text="The LPG selling price is view-only for your account." />
             )}
           </View>
 
           <View style={[styles.policyNote, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.mutedStrong} size={18} />
-            <Text style={[styles.policyText, { color: palette.muted }]}>Station settings change operational presentation and eligibility only through authorised backend actions. Financial fees outside the station's selling price remain controlled by SKIMA policy configuration.</Text>
+            <Text style={[styles.policyText, { color: palette.muted }]}>Your station price only affects your LPG selling price. SKIMA service charges and delivery fees are managed separately.</Text>
           </View>
 
           {notice ? (
@@ -353,10 +353,10 @@ function availabilityLabel(value: string) {
 }
 
 function availabilityDescription(value: string) {
-  if (value === "available") return "The branch is presented as operationally available for eligible SKIMA LPG fulfilment.";
-  if (value === "paused") return "The branch is temporarily paused and should not receive new eligible work until resumed.";
-  if (value === "closed") return "The branch is marked closed for the current operating period.";
-  return "The branch is unavailable for new eligible LPG fulfilment until its status changes.";
+  if (value === "available") return "Your station is available to receive eligible SKIMA LPG orders.";
+  if (value === "paused") return "Your station is temporarily paused and will not receive new orders until you resume service.";
+  if (value === "closed") return "Your station is marked closed for the current operating period.";
+  return "Your station is unavailable for new LPG orders until the status changes.";
 }
 
 const styles = StyleSheet.create({
