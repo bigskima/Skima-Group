@@ -6,7 +6,7 @@ interface MigrationHistoryPolicy {
   schemaVersion: number;
   remoteHeadVersion: string;
   requiredRestoredMigration: string;
-  pendingPermissionMigration: string;
+  pendingPermissionMigration: string | null;
   staleAliases: Record<string, string>;
   businessModuleMigrations: string[];
 }
@@ -51,7 +51,10 @@ const policy = await readPolicy();
 
 if (policy) {
   validatePolicyFileName(policy.requiredRestoredMigration, "requiredRestoredMigration");
-  validatePolicyFileName(policy.pendingPermissionMigration, "pendingPermissionMigration");
+
+  if (policy.pendingPermissionMigration) {
+    validatePolicyFileName(policy.pendingPermissionMigration, "pendingPermissionMigration");
+  }
 
   const canonicalTargets = Object.values(policy.staleAliases);
 
@@ -77,7 +80,10 @@ if (policy) {
   }
 
   requireMigration(policy.requiredRestoredMigration, "restored remote migration");
-  requireMigration(policy.pendingPermissionMigration, "pending permission migration");
+
+  if (policy.pendingPermissionMigration) {
+    requireMigration(policy.pendingPermissionMigration, "pending permission migration");
+  }
 
   for (const businessModuleMigration of policy.businessModuleMigrations) {
     validatePolicyFileName(businessModuleMigration, "businessModuleMigrations entry");
@@ -88,9 +94,19 @@ if (policy) {
     errors.push("remoteHeadVersion must be a 14-digit Supabase migration version.");
   }
 
-  const pendingPermissionVersion = migrationFilePattern.exec(
-    policy.pendingPermissionMigration,
-  )?.[1];
+  const remoteHeadMigration = migrationFiles.find((migrationFile) =>
+    migrationFile.startsWith(`${policy.remoteHeadVersion}_`)
+  );
+
+  if (/^\d{14}$/.test(policy.remoteHeadVersion) && !remoteHeadMigration) {
+    errors.push(
+      `Remote head ${policy.remoteHeadVersion} must exist in the repository migration history.`,
+    );
+  }
+
+  const pendingPermissionVersion = policy.pendingPermissionMigration
+    ? migrationFilePattern.exec(policy.pendingPermissionMigration)?.[1]
+    : undefined;
 
   if (
     pendingPermissionVersion &&
@@ -146,8 +162,8 @@ async function readPolicy(): Promise<MigrationHistoryPolicy | undefined> {
   if (typeof requiredRestoredMigration !== "string") {
     errors.push("Migration history policy requiredRestoredMigration must be a string.");
   }
-  if (typeof pendingPermissionMigration !== "string") {
-    errors.push("Migration history policy pendingPermissionMigration must be a string.");
+  if (pendingPermissionMigration !== null && typeof pendingPermissionMigration !== "string") {
+    errors.push("Migration history policy pendingPermissionMigration must be a string or null.");
   }
   if (!isStringRecord(staleAliases)) {
     errors.push("Migration history policy staleAliases must map filenames to filenames.");
@@ -160,7 +176,7 @@ async function readPolicy(): Promise<MigrationHistoryPolicy | undefined> {
     schemaVersion !== 1 ||
     typeof remoteHeadVersion !== "string" ||
     typeof requiredRestoredMigration !== "string" ||
-    typeof pendingPermissionMigration !== "string" ||
+    (pendingPermissionMigration !== null && typeof pendingPermissionMigration !== "string") ||
     !isStringRecord(staleAliases) ||
     !isStringArray(businessModuleMigrations)
   ) {

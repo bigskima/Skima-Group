@@ -360,8 +360,9 @@ declare
   lpg_module_id uuid;
   resolved_effective_from timestamptz;
 begin
-  if auth.role() <> 'service_role' and not public.is_platform_super_admin() then
-    raise exception 'only the platform Super Admin can submit an LPG revenue rate change';
+  if auth.role() <> 'service_role'
+    and not public.has_permission('platform.revenue.manage', null) then
+    raise exception 'SKIMA revenue management permission is required';
   end if;
 
   if target_amount_per_kg is null or target_amount_per_kg < 0 then
