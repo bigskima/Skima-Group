@@ -20,8 +20,9 @@ import {
   type PropsWithChildren,
 } from "react";
 import { AppState, Platform } from "react-native";
-import { secureSessionStorage } from "../storage/secureStorage";
 import { stopDriverTracking } from "../device/driverTracking";
+import { secureSessionStorage } from "../storage/secureStorage";
+import { friendlyError } from "../utilities/friendlyError";
 
 type Status = "loading" | "authenticated" | "unauthenticated" | "error";
 interface SessionValue {
@@ -102,6 +103,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         return true;
       } catch (cause) {
         if (applyVersion !== applyVersionRef.current) return false;
+        if (__DEV__) console.info("SKIMA session context refresh unavailable", cause);
         setContext(null);
         setStatus("authenticated");
         return true;
@@ -147,12 +149,17 @@ export function SessionProvider({ children }: PropsWithChildren) {
         const { data, error: authError } =
           await supabase.auth.signInWithPassword({ email, password });
         if (authError) {
-          setError(authError.message);
+          setError(
+            friendlyError(
+              authError,
+              "We couldn't sign you in. Check your details and try again.",
+            ),
+          );
           setStatus("unauthenticated");
           return false;
         }
         if (!data.session) {
-          setError("A sign-in session was not created.");
+          setError("We couldn't start your secure session. Please try again.");
           setStatus("unauthenticated");
           return false;
         }
