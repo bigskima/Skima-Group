@@ -1,6 +1,6 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCcw, RotateCcw, TrendingUp, WalletCards } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BadgeDollarSign, RefreshCcw, RotateCcw, TrendingUp, WalletCards } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   Button,
@@ -21,12 +21,23 @@ type RevenueSummary = {
   readonly currencyCode: string;
   readonly from: string | null;
   readonly until: string | null;
+  readonly currentRevenueBalance: number;
   readonly netRevenue: number;
   readonly grossCredits: number;
   readonly reversalsAndDebits: number;
   readonly entryCount: number;
   readonly byStream: readonly PlatformRecord[];
   readonly byComponent: readonly PlatformRecord[];
+};
+
+type RevenueConfiguration = {
+  readonly currencyCode: string;
+  readonly currentRevenueBalance: number;
+  readonly lpgPlatformRevenuePerKg: number;
+  readonly policyVersionId: string | null;
+  readonly policyVersion: number;
+  readonly effectiveFrom: string | null;
+  readonly effectiveUntil: string | null;
 };
 
 const activityColumns: readonly TableColumn<PlatformRecord>[] = [
@@ -74,11 +85,16 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
   const { context, status, supabase } = useSessionState();
   const queryClient = useQueryClient();
   const [windowDays, setWindowDays] = useState(30);
+  const [revenuePerKg, setRevenuePerKg] = useState("");
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [saveSucceeded, setSaveSucceeded] = useState(false);
 
-  const canReadRevenue = context?.platformAdmin?.admin_kind === "super_admin" ||
+  const isSuperAdmin = context?.platformAdmin?.admin_kind === "super_admin";
+  const canReadRevenue = isSuperAdmin ||
     context?.permissions.includes("platform.revenue.read") ||
     context?.permissions.includes("platform.revenue.manage") ||
     false;
+  const canDirectlyManageRevenue = Boolean(isSuperAdmin);
 
   const range = useMemo(() => {
     const until = new Date();
@@ -100,6 +116,18 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
     },
   });
 
+  const configuration = useQuery({
+    queryKey: ["admin-revenue", "configuration"],
+    enabled: status === "authenticated" && canReadRevenue,
+    queryFn: async (): Promise<RevenueConfiguration> => {
+      const result = await supabase.rpc("read_lpg_platform_revenue_configuration", {
+        target_currency_code: "NGN",
+      });
+      if (result.error) throw result.error;
+      return normalizeConfiguration(result.data);
+    },
+  });
+
   const activity = useQuery({
     queryKey: ["admin-revenue", "activity", windowDays],
     enabled: status === "authenticated" && canReadRevenue,
@@ -117,6 +145,46 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
     },
   });
 
+  useEffect(() => {
+    if (configuration.data) {
+      setRevenuePerKg(String(configuration.data.lpgPlatformRevenuePerKg));
+    }
+  }, [configuration.data]);
+
+  const updateRevenueRate = useMutation({
+    mutationFn: async (amount: number): Promise<RevenueConfiguration> => {
+      const result = await supabase.rpc("configure_lpg_platform_revenue_rate", {
+        target_amount_per_kg: amount,
+        target_reason: "Updated from Money & Revenue",
+        target_idempotency_key: revenueChangeKey(),
+        target_effective_from: new Date().toISOString(),
+      });
+      if (result.error) throw result.error;
+      return normalizeConfiguration(result.data);
+    },
+    onSuccess: async (next) => {
+      setRevenuePerKg(String(next.lpgPlatformRevenuePerKg));
+      setSaveSucceeded(true);
+      setSaveNotice(`SKIMA LPG revenue is now ${money(next.lpgPlatformRevenuePerKg, next.currencyCode)} per kg.`);
+      await queryClient.invalidateQueries({ queryKey: ["admin-revenue"] });
+    },
+    onError: (error) => {
+      setSaveSucceeded(false);
+      setSaveNotice(readError(error));
+    },
+  });
+
+  const saveRevenueRate = () => {
+    setSaveNotice(null);
+    const amount = Number(revenuePerKg);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setSaveSucceeded(false);
+      setSaveNotice("Enter a valid SKIMA revenue amount per kilogram. Zero is allowed.");
+      return;
+    }
+    updateRevenueRate.mutate(amount);
+  };
+
   if (!canReadRevenue) {
     return (
       <ErrorState
@@ -127,16 +195,17 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
   }
 
   const current = summary.data ?? emptySummary();
+  const liveRate = configuration.data?.lpgPlatformRevenuePerKg ?? 0;
 
   return (
     <>
       <PageHeader
         eyebrow="Company money"
         title="Money & Revenue"
-        description="Monitor SKIMA's own earned revenue separately from customer balances, station earnings, driver earnings, escrow, provider clearing, and liabilities. Values shown here come directly from the protected ledger-backed Revenue account."
+        description="See SKIMA's actual earned balance and set the LPG revenue amount without editing policy JSON. Customer money, station earnings, driver earnings, escrow and clearing remain separate."
         actions={(
           <div className="admin-inline-actions">
-            <Button variant="outline" onClick={props.onOpenFinance}>Financial policies</Button>
+            <Button variant="outline" onClick={props.onOpenFinance}>Advanced policies</Button>
             <Button
               icon={RefreshCcw}
               variant="outline"
@@ -147,6 +216,94 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
           </div>
         )}
       />
+
+      <section className="sk-panel">
+        <div className="sk-panel__header">
+          <div>
+            <p className="admin-section-kicker">Revenue pricing</p>
+            <h2>Set SKIMA LPG revenue per kg</h2>
+          </div>
+          <StatusBadge tone="success">{money(liveRate, configuration.data?.currencyCode ?? "NGN")} / kg</StatusBadge>
+        </div>
+
+        {configuration.isLoading ? <LoadingState label="Loading current revenue price" /> : null}
+        {configuration.error ? (
+          <ErrorState
+            title="Revenue price unavailable"
+            message={readError(configuration.error)}
+            onRetry={() => void configuration.refetch()}
+          />
+        ) : null}
+
+        {!configuration.isLoading && !configuration.error ? (
+          <div style={{ display: "grid", gap: "1rem", maxWidth: 620 }}>
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              <strong>Platform revenue per kilogram</strong>
+              <span style={{ color: "var(--sk-muted, #667085)" }}>
+                This amount is added by SKIMA on top of the station's own LPG selling price. Delivery pricing is managed separately.
+              </span>
+            </div>
+
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
+              <label style={{ display: "grid", gap: "0.4rem", minWidth: 220, flex: "1 1 260px" }}>
+                <span style={{ fontWeight: 700 }}>₦ per kg</span>
+                <input
+                  aria-label="SKIMA LPG revenue per kilogram"
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="decimal"
+                  value={revenuePerKg}
+                  disabled={!canDirectlyManageRevenue || updateRevenueRate.isPending}
+                  onChange={(event) => setRevenuePerKg(event.currentTarget.value)}
+                  style={{
+                    minHeight: 46,
+                    border: "1px solid var(--sk-border, #d0d5dd)",
+                    borderRadius: 12,
+                    padding: "0 0.85rem",
+                    font: "inherit",
+                    background: "var(--sk-surface, #fff)",
+                    color: "inherit",
+                  }}
+                />
+              </label>
+              <Button
+                icon={BadgeDollarSign}
+                disabled={!canDirectlyManageRevenue || updateRevenueRate.isPending}
+                onClick={saveRevenueRate}
+              >
+                {updateRevenueRate.isPending ? "Saving…" : "Save revenue price"}
+              </Button>
+            </div>
+
+            {!canDirectlyManageRevenue ? (
+              <p style={{ margin: 0 }}>
+                Direct price changes are reserved for Super Admin. Finance Admin can review governed versions under Advanced policies.
+              </p>
+            ) : null}
+
+            {configuration.data?.effectiveFrom ? (
+              <p style={{ margin: 0, color: "var(--sk-muted, #667085)" }}>
+                Active policy version {configuration.data.policyVersion || "—"} · effective {formatDate(configuration.data.effectiveFrom)}
+              </p>
+            ) : null}
+
+            {saveNotice ? (
+              <div
+                role="status"
+                style={{
+                  borderRadius: 12,
+                  padding: "0.8rem 0.9rem",
+                  background: saveSucceeded ? "rgba(16, 185, 129, 0.10)" : "rgba(239, 68, 68, 0.10)",
+                  fontWeight: 650,
+                }}
+              >
+                {saveNotice}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
 
       <section className="sk-panel">
         <div className="sk-panel__header">
@@ -180,7 +337,13 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
       {!summary.isLoading && !summary.error ? (
         <section className="skima-grid skima-grid--compact">
           <MetricTile
-            label="Net SKIMA revenue"
+            label="Current SKIMA Revenue balance"
+            value={money(current.currentRevenueBalance, current.currencyCode)}
+            icon={WalletCards}
+            tone="success"
+          />
+          <MetricTile
+            label={`Net revenue · ${windowDays} days`}
             value={money(current.netRevenue, current.currencyCode)}
             icon={TrendingUp}
             tone="success"
@@ -303,6 +466,7 @@ function normalizeSummary(value: unknown): RevenueSummary {
     currencyCode: recordString(record, "currencyCode") ?? "NGN",
     from: recordString(record, "from"),
     until: recordString(record, "until"),
+    currentRevenueBalance: recordNumber(record, "currentRevenueBalance"),
     netRevenue: recordNumber(record, "netRevenue"),
     grossCredits: recordNumber(record, "grossCredits"),
     reversalsAndDebits: recordNumber(record, "reversalsAndDebits"),
@@ -312,11 +476,25 @@ function normalizeSummary(value: unknown): RevenueSummary {
   };
 }
 
+function normalizeConfiguration(value: unknown): RevenueConfiguration {
+  const record = value && typeof value === "object" && !Array.isArray(value) ? value as PlatformRecord : {};
+  return {
+    currencyCode: recordString(record, "currencyCode") ?? "NGN",
+    currentRevenueBalance: recordNumber(record, "currentRevenueBalance"),
+    lpgPlatformRevenuePerKg: recordNumber(record, "lpgPlatformRevenuePerKg"),
+    policyVersionId: recordString(record, "policyVersionId") ?? recordString(record, "newPolicyVersionId"),
+    policyVersion: recordNumber(record, "policyVersion"),
+    effectiveFrom: recordString(record, "effectiveFrom"),
+    effectiveUntil: recordString(record, "effectiveUntil"),
+  };
+}
+
 function emptySummary(): RevenueSummary {
   return {
     currencyCode: "NGN",
     from: null,
     until: null,
+    currentRevenueBalance: 0,
     netRevenue: 0,
     grossCredits: 0,
     reversalsAndDebits: 0,
@@ -365,5 +543,15 @@ function label(value: string | null): string {
 }
 
 function readError(error: unknown): string {
-  return error instanceof Error ? error.message : "The protected Revenue data could not be loaded.";
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { readonly message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return "The protected Revenue data could not be loaded.";
+}
+
+function revenueChangeKey(): string {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  return `admin-revenue-rate:${uuid ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 }
