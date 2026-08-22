@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "remoteHeadVersion": "20260822100019",
+  "remoteHeadVersion": "20260822101545",
   "requiredRestoredMigration": "20260820013807_harden_document_correction_review_flow.sql",
   "pendingPermissionMigration": null,
   "staleAliases": {
@@ -58,6 +58,7 @@
     "20260822082600_partner_policy_application_acceptance_projection.sql",
     "20260822083011_partner_policy_submission_link_helper_reconciliation.sql",
     "20260822084207_lpg_ratings_reputation_complaints_runtime.sql",
-    "20260822100019_lpg_quality_admin_and_reputation_read_runtime.sql"
+    "20260822100019_lpg_quality_admin_and_reputation_read_runtime.sql",
+    "20260822101545_lpg_quality_summary_acl_hardening.sql"
   ]
 }
