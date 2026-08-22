@@ -166,7 +166,8 @@ export function CustomerOrderDetailScreen() {
   const actualKg = firstNumber(order, ["actualKg", "actual_kg"]);
   const trackable = TRACKABLE_ORDER_STATES.has(normalized);
   const canVerifyDelivery = DELIVERY_CONFIRMATION_STATES.has(normalized);
-  const canShowReceipt = FINAL_ORDER_STATES.has(normalized) || ["paid", "settled"].includes(normalizeStatus(paymentStatus));
+  const isFinal = FINAL_ORDER_STATES.has(normalized);
+  const canShowReceipt = isFinal || ["paid", "settled"].includes(normalizeStatus(paymentStatus));
 
   return (
     <Screen
@@ -247,6 +248,18 @@ export function CustomerOrderDetailScreen() {
             {id && canVerifyDelivery ? <AppButton label="Confirm delivery" variant="secondary" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/verify` as never)} /> : null}
             {id && canShowReceipt ? <AppButton label="View or share receipt" variant="ghost" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/receipt` as never)} /> : null}
           </View>
+
+          {id && isFinal ? (
+            <Card padding="lg">
+              <Text style={[styles.detailSectionTitle, { color: palette.ink }]}>How did this refill go?</Text>
+              <Text style={[styles.feedbackIntro, { color: palette.muted }]}>Rate the service relationships separately. Serious safety, quantity, custody, fraud or payment issues should be reported for investigation rather than left only as a star rating.</Text>
+              <View style={styles.actions}>
+                <AppButton label="Rate your driver" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/rate-driver` as never)} />
+                <AppButton label="Rate the station" variant="secondary" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/rate-station` as never)} />
+                <AppButton label="Report a serious issue" variant="ghost" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/report` as never)} />
+              </View>
+            </Card>
+          ) : null}
 
           <View style={[styles.safetyBox, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.brand} size={17} />
@@ -408,6 +421,7 @@ const styles = StyleSheet.create({
   paymentIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   paymentCopy: { flex: 1, minWidth: 0 },
   actions: { gap: spacing.sm },
+  feedbackIntro: { ...typography.caption, lineHeight: 18, marginVertical: spacing.sm },
   safetyBox: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth },
   safety: { flex: 1, ...typography.caption, lineHeight: 18 },
 });
