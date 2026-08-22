@@ -1,10 +1,10 @@
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
-import { BadgeCheck, CreditCard, MapPin, Search, ShieldAlert, ShieldCheck, Star, Truck } from "lucide-react-native";
+import { BadgeCheck, CreditCard, MapPin, Search, ShieldAlert, ShieldCheck, Star, Truck, Users } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { z } from "zod";
-import { useLpgPartnerReputation } from "../api/quality";
+import { useDriverPublicParticipation, useLpgPartnerReputation } from "../api/quality";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -44,6 +44,7 @@ export function DriverVerificationScreen() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reputation = useLpgPartnerReputation("driver", result?.driverProfileId ?? null);
+  const participation = useDriverPublicParticipation(result?.driverProfileId ?? null);
 
   const verify = async (value = driverId) => {
     const normalized = value.trim().toUpperCase();
@@ -146,6 +147,12 @@ export function DriverVerificationScreen() {
               <Text style={styles.resultId}>{result.publicDriverId ?? driverId}</Text>
               <View style={styles.resultPills}>
                 <StatusPill label={publicStatus(result)} tone={verified ? "success" : suspended ? "danger" : "warning"} />
+                {participation.data ? (
+                  <StatusPill
+                    label={participation.data.publicLabel}
+                    tone={participation.data.isSpecial ? "warning" : "neutral"}
+                  />
+                ) : null}
               </View>
             </View>
             {verified ? <BadgeCheck color="#FFFFFF" size={30} /> : <ShieldAlert color="#FFFFFF" size={30} />}
@@ -157,6 +164,12 @@ export function DriverVerificationScreen() {
             <PublicField label="SKIMA Driver ID" value={result.publicDriverId ?? driverId} />
             <Divider />
             <PublicField label="Authorisation" value={publicStatus(result)} />
+            <Divider />
+            <PublicField
+              label="Driver participation"
+              value={participationLabel(participation.data, participation.isPending, Boolean(participation.error))}
+              icon={<Users color={palette.brand} size={17} />}
+            />
             <Divider />
             <PublicField
               label="Customer rating"
@@ -181,7 +194,7 @@ export function DriverVerificationScreen() {
 
           <View style={[styles.privacy, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.mutedStrong} size={18} />
-            <Text style={[styles.privacyText, { color: palette.muted }]}>Public reputation shows aggregate service ratings only. Customer identities, written feedback, complaint details, KYC, private documents and internal review notes are not shown here.</Text>
+            <Text style={[styles.privacyText, { color: palette.muted }]}>Public verification may show the driver's current SKIMA participation class and aggregate service rating. Vehicle ownership, customer identities, written feedback, complaint details, KYC, private documents and internal review notes are not shown here.</Text>
           </View>
         </>
       ) : null}
@@ -212,6 +225,16 @@ function publicStatus(record: VerificationRecord) {
   if (normalized.includes("deactiv") || normalized.includes("revok")) return "No longer authorised";
   if (normalized.includes("inactive")) return "Approved but inactive";
   return friendly(raw);
+}
+
+function participationLabel(
+  participation: { readonly publicLabel: string } | undefined,
+  pending: boolean,
+  failed: boolean,
+) {
+  if (pending) return "Loading participation…";
+  if (failed) return "Participation unavailable";
+  return participation?.publicLabel ?? "Independent Driver Partner";
 }
 
 function reputationLabel(
@@ -248,7 +271,7 @@ const styles = StyleSheet.create({
   resultEyebrow: { color: "rgba(255,255,255,.72)", ...typography.eyebrow, fontSize: 8 },
   resultName: { color: "#FFFFFF", ...typography.heading, fontSize: 20 },
   resultId: { color: "rgba(255,255,255,.82)", ...typography.caption, fontWeight: "900" },
-  resultPills: { flexDirection: "row", marginTop: 5 },
+  resultPills: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 5 },
   detailCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
   field: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md },
   fieldLabelRow: { flex: 0.42, flexDirection: "row", alignItems: "center", gap: 6 },
