@@ -11,6 +11,7 @@ import "./admin-grade.css";
 import { ErrorState, type NavItem } from "@skima/ui";
 import { App } from "./App";
 import { AdminShell } from "./AdminShell";
+import { AdminPartnerLocationReviewWorkspace } from "./admin-partner-location-review-workspace";
 import { AdminRevenueWorkspace } from "./admin-revenue-workspace";
 import { AdminServiceCoverageWorkspace } from "./admin-service-coverage-workspace";
 import { SessionProvider, useSessionState } from "./session";
@@ -125,6 +126,38 @@ function AdminRoot() {
         onSignOut={sessionState.signOut}
       >
         <AdminServiceCoverageWorkspace />
+      </AdminShell>
+    );
+  }
+
+  const canReviewApplications = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
+    sessionState.context?.permissions.includes("platform.applications.review") ||
+    false;
+
+  if (
+    route === "/location-review" &&
+    sessionState.status === "authenticated" &&
+    sessionState.context &&
+    canReviewApplications
+  ) {
+    const reviewNavigation: readonly NavItem[] = [
+      { key: "overview", label: "Overview", href: "/", icon: LayoutDashboard },
+      { key: "applications", label: "Applications", href: "/applications", icon: Activity },
+      { key: "location-review", label: "Location Review", href: "/location-review", icon: MapPinned },
+      { key: "operations", label: "Operations", href: "/operations", icon: Activity },
+    ];
+
+    return (
+      <AdminShell
+        brand="Skima"
+        navItems={reviewNavigation}
+        activeHref="/location-review"
+        contextLabel={sessionState.context.platformAdmin?.title ?? "Platform administrator"}
+        userLabel={sessionState.context.profile?.display_name ?? sessionState.context.user.email ?? "Administrator"}
+        onNavigate={navigate}
+        onSignOut={sessionState.signOut}
+      >
+        <AdminPartnerLocationReviewWorkspace />
       </AdminShell>
     );
   }
