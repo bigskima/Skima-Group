@@ -8,6 +8,10 @@ on:
       - "apps/lpg-mobile/**"
       - "packages/frontend-core/**"
       - "packages/ui/**"
+      - "supabase/migrations/**"
+      - "supabase/migration-history-policy.json"
+      - "scripts/verify-migration-history.ts"
+      - "scripts/validate-foundation.ts"
       - "package.json"
       - "vercel.json"
       - "vercel.admin.json"
@@ -25,6 +29,25 @@ permissions:
   contents: read
 
 jobs:
+  migration-history:
+    name: Migration static checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Use Deno 2
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Verify migration history policy
+        run: npm run migration-history:verify
+      - name: Validate migration foundation
+        run: npm run validate
+
   admin-web:
     name: Admin production build
     runs-on: ubuntu-latest
@@ -35,7 +58,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
       - name: Install admin dependencies
         run: npm install --no-audit --no-fund
       - name: Typecheck and build admin
