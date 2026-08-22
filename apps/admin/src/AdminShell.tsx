@@ -1,4 +1,4 @@
-import { ChevronRight, Circle, LogOut, Menu, UserCircle, WalletCards, X } from "lucide-react";
+import { ChevronRight, Circle, LogOut, MapPinned, Menu, UserCircle, WalletCards, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import type { NavItem } from "@skima/ui";
 
@@ -37,7 +37,7 @@ const navigationGroupDefinitions: readonly NavigationGroupDefinition[] = [
   },
   {
     label: "Platform controls",
-    keys: ["governance", "providers", "system"],
+    keys: ["coverage", "governance", "providers", "system"],
   },
 ];
 
@@ -48,23 +48,49 @@ export function AdminShell(props: AdminShellProps) {
     sessionState.context?.permissions.includes("platform.revenue.read") ||
     sessionState.context?.permissions.includes("platform.revenue.manage") ||
     false;
+  const canManageCoverage = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
+    sessionState.context?.permissions.includes("lpg.config.manage") ||
+    false;
 
   const navItems = useMemo<readonly NavItem[]>(() => {
-    if (!canSeeRevenue || props.navItems.some((item) => item.key === "revenue")) return props.navItems;
-    const revenueItem: NavItem = {
-      key: "revenue",
-      label: "Money & Revenue",
-      href: "/revenue",
-      icon: WalletCards,
-    };
-    const financeIndex = props.navItems.findIndex((item) => item.key === "finance");
-    if (financeIndex < 0) return [...props.navItems, revenueItem];
-    return [
-      ...props.navItems.slice(0, financeIndex),
-      revenueItem,
-      ...props.navItems.slice(financeIndex),
-    ];
-  }, [canSeeRevenue, props.navItems]);
+    let resolved = [...props.navItems];
+
+    if (canSeeRevenue && !resolved.some((item) => item.key === "revenue")) {
+      const revenueItem: NavItem = {
+        key: "revenue",
+        label: "Money & Revenue",
+        href: "/revenue",
+        icon: WalletCards,
+      };
+      const financeIndex = resolved.findIndex((item) => item.key === "finance");
+      resolved = financeIndex < 0
+        ? [...resolved, revenueItem]
+        : [
+          ...resolved.slice(0, financeIndex),
+          revenueItem,
+          ...resolved.slice(financeIndex),
+        ];
+    }
+
+    if (canManageCoverage && !resolved.some((item) => item.key === "coverage")) {
+      const coverageItem: NavItem = {
+        key: "coverage",
+        label: "Service Coverage",
+        href: "/coverage",
+        icon: MapPinned,
+      };
+      const governanceIndex = resolved.findIndex((item) => item.key === "governance");
+      resolved = governanceIndex < 0
+        ? [...resolved, coverageItem]
+        : [
+          ...resolved.slice(0, governanceIndex),
+          coverageItem,
+          ...resolved.slice(governanceIndex),
+        ];
+    }
+
+    return resolved;
+  }, [canManageCoverage, canSeeRevenue, props.navItems]);
 
   const activeItem = useMemo(
     () => navItems.find((item) => item.href === props.activeHref) ?? navItems[0],
@@ -329,5 +355,6 @@ function shortMobileLabel(label: string) {
   if (label === "Applications") return "Approvals";
   if (label === "Systems & Audit") return "Systems";
   if (label === "Money & Revenue") return "Revenue";
+  if (label === "Service Coverage") return "Coverage";
   return label;
 }
