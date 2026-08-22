@@ -6769,7 +6769,25 @@ async function resolveLpgMapsProvider(
     };
   }
 
-  const adapterResult = await supabase
+  // Provider metadata is an internal platform concern and is intentionally
+  // hidden from ordinary authenticated users by RLS. Resolve it with the
+  // gateway's server identity after the caller-visible policy has been read.
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) {
+    return {
+      policy,
+      providerKey,
+      response: jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "The maps provider catalog cannot be resolved by the gateway.",
+        requestId: id,
+      }, 500),
+    };
+  }
+
+  const adapterResult = await createServiceClient(supabaseUrl, serviceRoleKey)
     .from("provider_adapters")
     .select("key,status,provider_kind")
     .eq("provider_kind", "maps")
