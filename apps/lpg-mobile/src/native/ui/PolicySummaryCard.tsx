@@ -33,6 +33,7 @@ export function PolicySummaryCard({
   const title = policy.data?.title ?? fallbackTitle;
   const summary = policy.data?.summary?.trim() || fallbackSummary;
   const accepted = acceptance.data === true;
+  const checkingAcceptance = Boolean(policy.data?.published && acceptance.isPending);
 
   const openPolicy = () => {
     if (href === "/policies/partner-participation" && (applicationId || roleKey)) {
@@ -70,6 +71,10 @@ export function PolicySummaryCard({
             <View style={[styles.statusPill, { backgroundColor: palette.successSoft }]}>
               <Text style={[styles.statusText, { color: palette.success }]}>Accepted</Text>
             </View>
+          ) : checkingAcceptance ? (
+            <View style={[styles.statusPill, { backgroundColor: palette.soft }]}>
+              <Text style={[styles.statusText, { color: palette.mutedStrong }]}>Checking acceptance…</Text>
+            </View>
           ) : requiredForNextAction && policy.data?.published ? (
             <View style={[styles.statusPill, { backgroundColor: palette.warningSoft }]}>
               <Text style={[styles.statusText, { color: palette.warning }]}>Acceptance required</Text>
@@ -78,7 +83,7 @@ export function PolicySummaryCard({
         </View>
         <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
         <Text style={[styles.summary, { color: palette.muted }]}>{summary}</Text>
-        {requiredForNextAction && policy.data?.published && !accepted ? (
+        {requiredForNextAction && policy.data?.published && !accepted && !checkingAcceptance ? (
           <Text style={[styles.requiredText, { color: palette.ink }]}>Read and accept the current version before continuing.</Text>
         ) : null}
         <Pressable
