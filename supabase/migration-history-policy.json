@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "remoteHeadVersion": "20260822034744",
+  "remoteHeadVersion": "20260822070659",
   "requiredRestoredMigration": "20260820013807_harden_document_correction_review_flow.sql",
   "pendingPermissionMigration": null,
   "staleAliases": {
@@ -48,6 +48,7 @@
     "20260821235350_lpg_customer_station_eligibility.sql",
     "20260822003053_lpg_service_coverage_admin_runtime.sql",
     "20260822032658_lpg_partner_application_geography_foundation.sql",
-    "20260822034744_lpg_partner_candidate_service_area.sql"
+    "20260822034744_lpg_partner_candidate_service_area.sql",
+    "20260822070659_policy_document_version_acceptance_runtime.sql"
   ]
 }
