@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "remoteHeadVersion": "20260822082537",
+  "remoteHeadVersion": "20260822084207",
   "requiredRestoredMigration": "20260820013807_harden_document_correction_review_flow.sql",
   "pendingPermissionMigration": null,
   "staleAliases": {
@@ -54,6 +54,9 @@
     "20260822072918_policy_public_summary_fallback.sql",
     "20260822080538_initial_policy_v1_publication.sql",
     "20260822080636_partner_policy_submission_gate.sql",
-    "20260822082537_policy_acceptance_context_and_customer_order_gate.sql"
+    "20260822082537_policy_acceptance_context_and_customer_order_gate.sql",
+    "20260822082600_partner_policy_application_acceptance_projection.sql",
+    "20260822083011_partner_policy_submission_link_helper_reconciliation.sql",
+    "20260822084207_lpg_ratings_reputation_complaints_runtime.sql"
   ]
 }
