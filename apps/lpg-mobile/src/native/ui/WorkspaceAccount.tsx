@@ -20,6 +20,7 @@ import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { AppButton } from "./AppButton";
+import { PolicySummaryCard } from "./PolicySummaryCard";
 import { ProfilePhotoEditor } from "./ProfilePhotoEditor";
 import { Screen } from "./Screen";
 import { SectionHeader } from "./SectionHeader";
@@ -117,6 +118,23 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
           last
         />
       </View>
+
+      <SectionHeader title="Terms & policy" description="See the key points here, then open the full policy inside SKIMA when you need more detail." />
+      {group === "customer" ? (
+        <PolicySummaryCard
+          policyKey="policy.customer.terms"
+          href="/policies/customer-terms"
+          fallbackTitle="SKIMA Customer Terms of Service & LPG Service Policy"
+          fallbackSummary="Covers account use, LPG cylinder registration, service availability, pricing, payment, pickup and return, refill quantity, safety, refunds, disputes and your rights when using SKIMA."
+        />
+      ) : (
+        <PolicySummaryCard
+          policyKey="policy.partner.participation"
+          href="/policies/partner-participation"
+          fallbackTitle="SKIMA Partner Participation Terms & Public Policy"
+          fallbackSummary="Covers partner approval, role responsibilities, service matching, ratings, safety, earnings, privacy, conduct, suspension and review rights."
+        />
+      )}
 
       <SectionHeader title="Appearance" description="Choose how SKIMA looks on this device." />
       <Pressable
