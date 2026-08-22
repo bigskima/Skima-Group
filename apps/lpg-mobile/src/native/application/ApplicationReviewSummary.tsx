@@ -25,6 +25,8 @@ export interface ApplicationReviewSummaryProps {
   onGoToStep: (stepIndex: number) => void;
   canSubmit: boolean;
   missingItemsCount: number;
+  applicationId?: string | null;
+  roleKey?: string | null;
 }
 
 export function ApplicationReviewSummary({
@@ -33,6 +35,8 @@ export function ApplicationReviewSummary({
   onGoToStep,
   canSubmit,
   missingItemsCount,
+  applicationId = null,
+  roleKey = null,
 }: ApplicationReviewSummaryProps) {
   const { palette } = useAppTheme();
   const requiredDocuments = documents.filter((document) => document.isRequired);
@@ -78,8 +82,8 @@ export function ApplicationReviewSummary({
           </Text>
           <Text style={[styles.readinessBody, { color: palette.ink }]}>
             {canSubmit
-              ? "All required items are present. Optional evidence can be left blank and will not block submission."
-              : `${missingItemsCount} required ${missingItemsCount === 1 ? "item is" : "items are"} still missing. Tap a missing item below to complete it.`}
+              ? "All required items are present and the current partner terms have been accepted. Optional evidence can be left blank."
+              : `${missingItemsCount} required ${missingItemsCount === 1 ? "item is" : "items are"} still missing. Complete the highlighted requirements below before submitting.`}
           </Text>
         </View>
       </View>
@@ -151,13 +155,13 @@ export function ApplicationReviewSummary({
           <View
             style={[
               styles.requiredCountBadge,
-              { backgroundColor: canSubmit ? palette.successSoft : palette.brandSoft },
+              { backgroundColor: completedRequiredDocuments.length === requiredDocuments.length ? palette.successSoft : palette.brandSoft },
             ]}
           >
             <Text
               style={[
                 styles.documentCount,
-                { color: canSubmit ? palette.success : palette.brand },
+                { color: completedRequiredDocuments.length === requiredDocuments.length ? palette.success : palette.brand },
               ]}
             >
               {completedRequiredDocuments.length}/{requiredDocuments.length} required
@@ -233,6 +237,9 @@ export function ApplicationReviewSummary({
       <PolicySummaryCard
         policyKey="policy.partner.participation"
         href="/policies/partner-participation"
+        applicationId={applicationId}
+        roleKey={roleKey}
+        requiredForNextAction
         fallbackTitle="SKIMA Partner Participation Terms & Public Policy"
         fallbackSummary="Review the key rules for partner approval, service matching, safety, earnings, privacy, conduct, suspension and your rights before submitting your application."
       />
