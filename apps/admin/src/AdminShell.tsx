@@ -1,4 +1,4 @@
-import { ChevronRight, Circle, FileText, LogOut, MapPinned, Menu, UserCircle, WalletCards, X } from "lucide-react";
+import { ChevronRight, Circle, FileText, LogOut, MapPinned, Menu, MessageSquareWarning, UserCircle, WalletCards, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import type { NavItem } from "@skima/ui";
 
@@ -24,12 +24,12 @@ interface NavigationGroup extends NavigationGroupDefinition {
   readonly items: readonly NavItem[];
 }
 
-const mobilePriorityKeys = ["overview", "applications", "location-review", "operations", "revenue", "finance"] as const;
+const mobilePriorityKeys = ["overview", "applications", "location-review", "operations", "quality", "revenue", "finance"] as const;
 
 const navigationGroupDefinitions: readonly NavigationGroupDefinition[] = [
   {
     label: "Daily work",
-    keys: ["overview", "applications", "location-review", "operations", "revenue", "finance"],
+    keys: ["overview", "applications", "location-review", "operations", "quality", "revenue", "finance"],
   },
   {
     label: "Company management",
@@ -56,6 +56,10 @@ export function AdminShell(props: AdminShellProps) {
     false;
   const canReadPolicies = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
     sessionState.context?.permissions.includes("platform.policy.read") ||
+    false;
+  const canReadQuality = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
+    sessionState.context?.permissions.includes("lpg.quality.read") ||
+    sessionState.context?.permissions.includes("lpg.quality.manage") ||
     false;
 
   const navItems = useMemo<readonly NavItem[]>(() => {
@@ -112,6 +116,23 @@ export function AdminShell(props: AdminShellProps) {
         ];
     }
 
+    if (canReadQuality && !resolved.some((item) => item.key === "quality")) {
+      const qualityItem: NavItem = {
+        key: "quality",
+        label: "Quality & Complaints",
+        href: "/quality",
+        icon: MessageSquareWarning,
+      };
+      const operationsIndex = resolved.findIndex((item) => item.key === "operations");
+      resolved = operationsIndex < 0
+        ? [...resolved, qualityItem]
+        : [
+          ...resolved.slice(0, operationsIndex + 1),
+          qualityItem,
+          ...resolved.slice(operationsIndex + 1),
+        ];
+    }
+
     if (canReadPolicies && !resolved.some((item) => item.key === "policies")) {
       const policyItem: NavItem = {
         key: "policies",
@@ -130,7 +151,7 @@ export function AdminShell(props: AdminShellProps) {
     }
 
     return resolved;
-  }, [canManageCoverage, canReadPolicies, canReviewApplications, canSeeRevenue, props.navItems]);
+  }, [canManageCoverage, canReadPolicies, canReadQuality, canReviewApplications, canSeeRevenue, props.navItems]);
 
   const activeItem = useMemo(
     () => navItems.find((item) => item.href === props.activeHref) ?? navItems[0],
@@ -398,5 +419,6 @@ function shortMobileLabel(label: string) {
   if (label === "Money & Revenue") return "Revenue";
   if (label === "Service Coverage") return "Coverage";
   if (label === "Terms & Policies") return "Policies";
+  if (label === "Quality & Complaints") return "Quality";
   return label;
 }
