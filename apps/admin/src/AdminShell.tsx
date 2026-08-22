@@ -24,12 +24,12 @@ interface NavigationGroup extends NavigationGroupDefinition {
   readonly items: readonly NavItem[];
 }
 
-const mobilePriorityKeys = ["overview", "applications", "operations", "revenue", "finance"] as const;
+const mobilePriorityKeys = ["overview", "applications", "location-review", "operations", "revenue", "finance"] as const;
 
 const navigationGroupDefinitions: readonly NavigationGroupDefinition[] = [
   {
     label: "Daily work",
-    keys: ["overview", "applications", "operations", "revenue", "finance"],
+    keys: ["overview", "applications", "location-review", "operations", "revenue", "finance"],
   },
   {
     label: "Company management",
@@ -50,6 +50,9 @@ export function AdminShell(props: AdminShellProps) {
     false;
   const canManageCoverage = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
     sessionState.context?.permissions.includes("lpg.config.manage") ||
+    false;
+  const canReviewApplications = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
+    sessionState.context?.permissions.includes("platform.applications.review") ||
     false;
 
   const navItems = useMemo<readonly NavItem[]>(() => {
@@ -89,8 +92,25 @@ export function AdminShell(props: AdminShellProps) {
         ];
     }
 
+    if (canReviewApplications && !resolved.some((item) => item.key === "location-review")) {
+      const locationReviewItem: NavItem = {
+        key: "location-review",
+        label: "Location Review",
+        href: "/location-review",
+        icon: MapPinned,
+      };
+      const applicationIndex = resolved.findIndex((item) => item.key === "applications");
+      resolved = applicationIndex < 0
+        ? [...resolved, locationReviewItem]
+        : [
+          ...resolved.slice(0, applicationIndex + 1),
+          locationReviewItem,
+          ...resolved.slice(applicationIndex + 1),
+        ];
+    }
+
     return resolved;
-  }, [canManageCoverage, canSeeRevenue, props.navItems]);
+  }, [canManageCoverage, canReviewApplications, canSeeRevenue, props.navItems]);
 
   const activeItem = useMemo(
     () => navItems.find((item) => item.href === props.activeHref) ?? navItems[0],
@@ -353,6 +373,7 @@ function AdminBottomNavItem(props: {
 function shortMobileLabel(label: string) {
   if (label === "People & Access") return "People";
   if (label === "Applications") return "Approvals";
+  if (label === "Location Review") return "Locations";
   if (label === "Systems & Audit") return "Systems";
   if (label === "Money & Revenue") return "Revenue";
   if (label === "Service Coverage") return "Coverage";
