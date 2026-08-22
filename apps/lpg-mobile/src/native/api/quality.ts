@@ -23,8 +23,14 @@ const PartnerReputationSchema = z.object({
   recentRatingCount: z.coerce.number().int().nonnegative(),
 });
 
+const DriverPublicParticipationSchema = z.object({
+  publicLabel: z.string(),
+  isSpecial: z.boolean(),
+});
+
 export type LpgOrderRatingState = z.infer<typeof RatingStateSchema>;
 export type LpgPartnerReputation = z.infer<typeof PartnerReputationSchema>;
+export type DriverPublicParticipation = z.infer<typeof DriverPublicParticipationSchema>;
 
 export function useLpgOrderRatingState(orderId: string | null) {
   const session = useSession();
@@ -58,6 +64,22 @@ export function useLpgPartnerReputation(
       });
       if (error) throw error;
       return PartnerReputationSchema.parse(data);
+    },
+  });
+}
+
+export function useDriverPublicParticipation(driverProfileId: string | null) {
+  const session = useSession();
+  return useQuery({
+    queryKey: ["driver-participation", "public", driverProfileId],
+    enabled: Boolean(driverProfileId),
+    retry: 1,
+    queryFn: async () => {
+      const { data, error } = await session.supabase.rpc("read_driver_public_participation", {
+        target_driver_profile_id: driverProfileId,
+      });
+      if (error) throw error;
+      return DriverPublicParticipationSchema.parse(data);
     },
   });
 }
