@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { MapPinned, Pause, Play, Plus, RefreshCcw, ShieldCheck } from "lucide-react";
 
 import { createClientIdempotencyKey, normalizeStatusLabel } from "@skima/frontend-core";
@@ -381,12 +381,11 @@ function CoverageDialog(props: {
   const [formError, setFormError] = useState<string | null>(null);
   const recordKey = props.record?.area_id ?? (props.record === null ? "new" : "closed");
 
-  useMemo(() => {
-    if (!open) return null;
+  useEffect(() => {
+    if (!open) return;
     setForm(props.record ? formFromRecord(props.record) : EMPTY_FORM);
     setFormError(null);
-    return null;
-  }, [recordKey]);
+  }, [recordKey, open, props.record]);
 
   if (!open) return null;
 
@@ -555,9 +554,8 @@ function CoverageStatusDialog(props: {
   const [reason, setReason] = useState("");
   const active = Boolean(props.record && props.record.area_status === "active" && props.record.rule_status === "active");
 
-  useMemo(() => {
+  useEffect(() => {
     setReason("");
-    return null;
   }, [props.record?.area_id]);
 
   if (!props.record) return null;
