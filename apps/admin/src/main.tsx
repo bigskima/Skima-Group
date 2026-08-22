@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { LayoutDashboard, WalletCards } from "lucide-react";
+import { Activity, LayoutDashboard, MapPinned, Settings2, WalletCards } from "lucide-react";
 
 import "@skima/ui/styles.css";
 import "./styles.css";
@@ -12,6 +12,7 @@ import { ErrorState, type NavItem } from "@skima/ui";
 import { App } from "./App";
 import { AdminShell } from "./AdminShell";
 import { AdminRevenueWorkspace } from "./admin-revenue-workspace";
+import { AdminServiceCoverageWorkspace } from "./admin-service-coverage-workspace";
 import { SessionProvider, useSessionState } from "./session";
 
 const queryClient = new QueryClient({
@@ -92,6 +93,38 @@ function AdminRoot() {
         onSignOut={sessionState.signOut}
       >
         <AdminRevenueWorkspace onOpenFinance={() => navigate("/finance")} />
+      </AdminShell>
+    );
+  }
+
+  const canManageCoverage = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
+    sessionState.context?.permissions.includes("lpg.config.manage") ||
+    false;
+
+  if (
+    route === "/coverage" &&
+    sessionState.status === "authenticated" &&
+    sessionState.context &&
+    canManageCoverage
+  ) {
+    const coverageNavigation: readonly NavItem[] = [
+      { key: "overview", label: "Overview", href: "/", icon: LayoutDashboard },
+      { key: "operations", label: "Operations", href: "/operations", icon: Activity },
+      { key: "coverage", label: "Service Coverage", href: "/coverage", icon: MapPinned },
+      { key: "governance", label: "Configuration", href: "/governance", icon: Settings2 },
+    ];
+
+    return (
+      <AdminShell
+        brand="Skima"
+        navItems={coverageNavigation}
+        activeHref="/coverage"
+        contextLabel={sessionState.context.platformAdmin?.title ?? "Platform administrator"}
+        userLabel={sessionState.context.profile?.display_name ?? sessionState.context.user.email ?? "Administrator"}
+        onNavigate={navigate}
+        onSignOut={sessionState.signOut}
+      >
+        <AdminServiceCoverageWorkspace />
       </AdminShell>
     );
   }
