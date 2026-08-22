@@ -141,7 +141,7 @@ export function PaymentReturnScreen() {
               label="Try adding money again"
               fullWidth
               variant="secondary"
-              onPress={() => router.replace("/(customer)/top-up")}
+              onPress={() => router.replace("/(customer)/wallet/top-up")}
             />
           ) : null}
 

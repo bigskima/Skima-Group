@@ -1,6 +1,6 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCcw, RotateCcw, TrendingUp, WalletCards } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BadgeDollarSign, RefreshCcw, RotateCcw, TrendingUp, WalletCards } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   Button,
@@ -21,12 +21,31 @@ type RevenueSummary = {
   readonly currencyCode: string;
   readonly from: string | null;
   readonly until: string | null;
+  readonly currentRevenueBalance: number;
   readonly netRevenue: number;
   readonly grossCredits: number;
   readonly reversalsAndDebits: number;
   readonly entryCount: number;
   readonly byStream: readonly PlatformRecord[];
   readonly byComponent: readonly PlatformRecord[];
+};
+
+type RevenueConfiguration = {
+  readonly currencyCode: string;
+  readonly currentRevenueBalance: number;
+  readonly lpgPlatformRevenuePerKg: number;
+  readonly policyVersionId: string | null;
+  readonly policyVersion: number;
+  readonly effectiveFrom: string | null;
+  readonly effectiveUntil: string | null;
+};
+
+type RevenueRateSubmission = RevenueConfiguration & {
+  readonly changed: boolean;
+  readonly pendingApproval: boolean;
+  readonly pendingActivation: boolean;
+  readonly requestStatus: string;
+  readonly requestedAmountPerKg: number | null;
 };
 
 const activityColumns: readonly TableColumn<PlatformRecord>[] = [
@@ -74,20 +93,26 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
   const { context, status, supabase } = useSessionState();
   const queryClient = useQueryClient();
   const [windowDays, setWindowDays] = useState(30);
+  const [rangeRevision, setRangeRevision] = useState(0);
+  const [revenuePerKg, setRevenuePerKg] = useState("");
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [saveSucceeded, setSaveSucceeded] = useState(false);
 
-  const canReadRevenue = context?.platformAdmin?.admin_kind === "super_admin" ||
+  const isSuperAdmin = context?.platformAdmin?.admin_kind === "super_admin";
+  const canReadRevenue = isSuperAdmin ||
     context?.permissions.includes("platform.revenue.read") ||
     context?.permissions.includes("platform.revenue.manage") ||
     false;
+  const canSubmitRevenueRate = Boolean(isSuperAdmin);
 
   const range = useMemo(() => {
     const until = new Date();
     const from = new Date(until.getTime() - windowDays * 24 * 60 * 60 * 1000);
     return { from: from.toISOString(), until: until.toISOString() };
-  }, [windowDays]);
+  }, [rangeRevision, windowDays]);
 
   const summary = useQuery({
-    queryKey: ["admin-revenue", "summary", windowDays],
+    queryKey: ["admin-revenue", "summary", windowDays, rangeRevision],
     enabled: status === "authenticated" && canReadRevenue,
     queryFn: async (): Promise<RevenueSummary> => {
       const result = await supabase.rpc("platform_revenue_summary", {
@@ -100,8 +125,20 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
     },
   });
 
+  const configuration = useQuery({
+    queryKey: ["admin-revenue", "configuration"],
+    enabled: status === "authenticated" && canReadRevenue,
+    queryFn: async (): Promise<RevenueConfiguration> => {
+      const result = await supabase.rpc("read_lpg_platform_revenue_configuration", {
+        target_currency_code: "NGN",
+      });
+      if (result.error) throw result.error;
+      return normalizeConfiguration(result.data);
+    },
+  });
+
   const activity = useQuery({
-    queryKey: ["admin-revenue", "activity", windowDays],
+    queryKey: ["admin-revenue", "activity", windowDays, rangeRevision],
     enabled: status === "authenticated" && canReadRevenue,
     queryFn: async (): Promise<readonly PlatformRecord[]> => {
       const result = await supabase.rpc("platform_revenue_activity", {
@@ -111,11 +148,84 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
         target_limit: 250,
       });
       if (result.error) throw result.error;
-      return Array.isArray(result.data)
-        ? result.data.filter((item): item is PlatformRecord => Boolean(item) && typeof item === "object" && !Array.isArray(item))
-        : [];
+      if (!Array.isArray(result.data)) {
+        throw new Error("Revenue activity returned an invalid response.");
+      }
+      const records = result.data.filter(
+        (item): item is PlatformRecord => Boolean(item) && typeof item === "object" && !Array.isArray(item),
+      );
+      if (records.length !== result.data.length) {
+        throw new Error("Revenue activity contained an invalid entry.");
+      }
+      return records;
     },
   });
+
+  useEffect(() => {
+    if (configuration.data) {
+      setRevenuePerKg(String(configuration.data.lpgPlatformRevenuePerKg));
+    }
+  }, [configuration.data]);
+
+  const updateRevenueRate = useMutation({
+    mutationFn: async (amount: number): Promise<RevenueRateSubmission> => {
+      const result = await supabase.rpc("configure_lpg_platform_revenue_rate", {
+        target_amount_per_kg: amount,
+        target_reason: "Submitted from Money & Revenue for governed approval",
+        target_idempotency_key: revenueChangeKey(),
+        target_effective_from: new Date().toISOString(),
+      });
+      if (result.error) throw result.error;
+      return normalizeRateSubmission(result.data);
+    },
+    onSuccess: async (next, requestedAmount) => {
+      setRevenuePerKg(String(next.lpgPlatformRevenuePerKg));
+      setSaveSucceeded(true);
+      const requestedRate = money(next.requestedAmountPerKg ?? requestedAmount, next.currencyCode);
+      const activeRate = money(next.lpgPlatformRevenuePerKg, next.currencyCode);
+      if (next.pendingApproval) {
+        setSaveNotice(
+          `Approval request submitted for ${requestedRate} per kg. The active rate remains ${activeRate} per kg until an authorized reviewer approves the new policy version and an authorized finance operator activates it.`,
+        );
+      } else if (next.pendingActivation) {
+        setSaveNotice(
+          `The ${requestedRate} per kg request is approved and awaiting activation. The active rate remains ${activeRate} per kg.`,
+        );
+      } else if (next.requestStatus === "scheduled") {
+        setSaveNotice(
+          `${requestedRate} per kg is already approved and scheduled. The active rate remains ${activeRate} per kg until its effective time.`,
+        );
+      } else if (!next.changed && next.requestStatus === "active") {
+        setSaveNotice(`The active rate is already ${activeRate} per kg. No new request was needed.`);
+      } else {
+        setSaveNotice(
+          `The request is ${label(next.requestStatus)}. The active rate remains ${activeRate} per kg.`,
+        );
+      }
+      setRangeRevision((revision) => revision + 1);
+      await queryClient.invalidateQueries({ queryKey: ["admin-revenue", "configuration"] });
+    },
+    onError: (error) => {
+      setSaveSucceeded(false);
+      setSaveNotice(readError(error));
+    },
+  });
+
+  const saveRevenueRate = () => {
+    setSaveNotice(null);
+    const amount = Number(revenuePerKg);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setSaveSucceeded(false);
+      setSaveNotice("Enter a valid SKIMA revenue amount per kilogram. Zero is allowed.");
+      return;
+    }
+    updateRevenueRate.mutate(amount);
+  };
+
+  const refreshRevenue = () => {
+    setRangeRevision((revision) => revision + 1);
+    void queryClient.invalidateQueries({ queryKey: ["admin-revenue", "configuration"] });
+  };
 
   if (!canReadRevenue) {
     return (
@@ -126,27 +236,127 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
     );
   }
 
-  const current = summary.data ?? emptySummary();
+  const current = summary.data;
 
   return (
     <>
       <PageHeader
         eyebrow="Company money"
         title="Money & Revenue"
-        description="Monitor SKIMA's own earned revenue separately from customer balances, station earnings, driver earnings, escrow, provider clearing, and liabilities. Values shown here come directly from the protected ledger-backed Revenue account."
+        description="See SKIMA's actual earned balance and submit LPG revenue-rate requests for governed approval without editing policy JSON. Customer money, station earnings, driver earnings, escrow and clearing remain separate."
         actions={(
           <div className="admin-inline-actions">
-            <Button variant="outline" onClick={props.onOpenFinance}>Financial policies</Button>
+            <Button variant="outline" onClick={props.onOpenFinance}>Advanced policies</Button>
             <Button
               icon={RefreshCcw}
               variant="outline"
-              onClick={() => void queryClient.invalidateQueries({ queryKey: ["admin-revenue"] })}
+              onClick={refreshRevenue}
             >
               Refresh
             </Button>
           </div>
         )}
       />
+
+      <section className="sk-panel">
+        <div className="sk-panel__header">
+          <div>
+            <p className="admin-section-kicker">Revenue pricing</p>
+            <h2>Request SKIMA LPG revenue per kg</h2>
+          </div>
+          {configuration.isLoading ? (
+            <StatusBadge>Loading…</StatusBadge>
+          ) : configuration.error ? (
+            <StatusBadge tone="warning">Unavailable</StatusBadge>
+          ) : configuration.data ? (
+            <StatusBadge tone="success">
+              Active {money(configuration.data.lpgPlatformRevenuePerKg, configuration.data.currencyCode)} / kg
+            </StatusBadge>
+          ) : null}
+        </div>
+
+        {configuration.isLoading ? <LoadingState label="Loading current revenue price" /> : null}
+        {configuration.error ? (
+          <ErrorState
+            title="Revenue price unavailable"
+            message={readError(configuration.error)}
+            onRetry={() => void configuration.refetch()}
+          />
+        ) : null}
+
+        {configuration.data && !configuration.error ? (
+          <div style={{ display: "grid", gap: "1rem", maxWidth: 620 }}>
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              <strong>Proposed platform revenue per kilogram</strong>
+              <span style={{ color: "var(--sk-muted, #667085)" }}>
+                Submit a proposed amount for governed approval and activation. The active rate stays unchanged while the request is pending.
+              </span>
+            </div>
+
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
+              <label style={{ display: "grid", gap: "0.4rem", minWidth: 220, flex: "1 1 260px" }}>
+                <span style={{ fontWeight: 700 }}>₦ per kg</span>
+                <input
+                  aria-label="Proposed SKIMA LPG revenue per kilogram"
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputMode="decimal"
+                  value={revenuePerKg}
+                  disabled={!canSubmitRevenueRate || updateRevenueRate.isPending}
+                  onChange={(event) => setRevenuePerKg(event.currentTarget.value)}
+                  style={{
+                    minHeight: 46,
+                    border: "1px solid var(--sk-border, #d0d5dd)",
+                    borderRadius: 12,
+                    padding: "0 0.85rem",
+                    font: "inherit",
+                    background: "var(--sk-surface, #fff)",
+                    color: "inherit",
+                  }}
+                />
+              </label>
+              <Button
+                icon={BadgeDollarSign}
+                disabled={!canSubmitRevenueRate || updateRevenueRate.isPending}
+                onClick={saveRevenueRate}
+              >
+                {updateRevenueRate.isPending ? "Submitting…" : "Submit for approval"}
+              </Button>
+            </div>
+
+            {!canSubmitRevenueRate ? (
+              <p style={{ margin: 0 }}>
+                Super Admin can submit rate requests. Finance Admin can review governed versions under Advanced policies.
+              </p>
+            ) : (
+              <p style={{ margin: 0 }}>
+                Submitting does not change the active rate. An authorized reviewer must approve the request before an authorized finance operator activates it.
+              </p>
+            )}
+
+            {configuration.data?.effectiveFrom ? (
+              <p style={{ margin: 0, color: "var(--sk-muted, #667085)" }}>
+                Active policy version {configuration.data.policyVersion || "—"} · effective {formatDate(configuration.data.effectiveFrom)}
+              </p>
+            ) : null}
+
+            {saveNotice ? (
+              <div
+                role={saveSucceeded ? "status" : "alert"}
+                style={{
+                  borderRadius: 12,
+                  padding: "0.8rem 0.9rem",
+                  background: saveSucceeded ? "rgba(16, 185, 129, 0.10)" : "rgba(239, 68, 68, 0.10)",
+                  fontWeight: 650,
+                }}
+              >
+                {saveNotice}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
 
       <section className="sk-panel">
         <div className="sk-panel__header">
@@ -177,10 +387,17 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
         />
       ) : null}
 
-      {!summary.isLoading && !summary.error ? (
-        <section className="skima-grid skima-grid--compact">
+      {summary.isSuccess && current ? (
+        <>
+          <section className="skima-grid skima-grid--compact">
           <MetricTile
-            label="Net SKIMA revenue"
+            label="Current SKIMA Revenue balance"
+            value={money(current.currentRevenueBalance, current.currencyCode)}
+            icon={WalletCards}
+            tone="success"
+          />
+          <MetricTile
+            label={`Net revenue · ${windowDays} days`}
             value={money(current.netRevenue, current.currencyCode)}
             icon={TrendingUp}
             tone="success"
@@ -202,10 +419,9 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
             value={current.entryCount}
             icon={WalletCards}
           />
-        </section>
-      ) : null}
+          </section>
 
-      <div className="admin-command-grid">
+          <div className="admin-command-grid">
         <section className="sk-panel">
           <div className="sk-panel__header">
             <div>
@@ -247,7 +463,9 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
             )}
           </div>
         </section>
-      </div>
+          </div>
+        </>
+      ) : null}
 
       <section className="sk-panel">
         <div className="sk-panel__header">
@@ -255,7 +473,9 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
             <p className="admin-section-kicker">Protected ledger activity</p>
             <h2>Revenue activity</h2>
           </div>
-          <StatusBadge>{String(activity.data?.length ?? 0)}</StatusBadge>
+          <StatusBadge>
+            {activity.isLoading ? "Loading…" : activity.error ? "Unavailable" : String(activity.data?.length ?? 0)}
+          </StatusBadge>
         </div>
         {activity.isLoading
           ? <LoadingState label="Loading Revenue activity" />
@@ -298,32 +518,63 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
 }
 
 function normalizeSummary(value: unknown): RevenueSummary {
-  const record = value && typeof value === "object" && !Array.isArray(value) ? value as PlatformRecord : {};
+  const record = requireRecord(value, "Revenue summary");
   return {
     currencyCode: recordString(record, "currencyCode") ?? "NGN",
     from: recordString(record, "from"),
     until: recordString(record, "until"),
-    netRevenue: recordNumber(record, "netRevenue"),
-    grossCredits: recordNumber(record, "grossCredits"),
-    reversalsAndDebits: recordNumber(record, "reversalsAndDebits"),
-    entryCount: recordNumber(record, "entryCount"),
-    byStream: recordArray(record, "byStream"),
-    byComponent: recordArray(record, "byComponent"),
+    currentRevenueBalance: requireRecordNumber(record, "currentRevenueBalance", "Revenue summary"),
+    netRevenue: requireRecordNumber(record, "netRevenue", "Revenue summary"),
+    grossCredits: requireRecordNumber(record, "grossCredits", "Revenue summary"),
+    reversalsAndDebits: requireRecordNumber(record, "reversalsAndDebits", "Revenue summary"),
+    entryCount: requireRecordNumber(record, "entryCount", "Revenue summary"),
+    byStream: requireRecordArray(record, "byStream", "Revenue summary"),
+    byComponent: requireRecordArray(record, "byComponent", "Revenue summary"),
   };
 }
 
-function emptySummary(): RevenueSummary {
+function normalizeConfiguration(value: unknown): RevenueConfiguration {
+  const record = requireRecord(value, "Revenue configuration");
   return {
-    currencyCode: "NGN",
-    from: null,
-    until: null,
-    netRevenue: 0,
-    grossCredits: 0,
-    reversalsAndDebits: 0,
-    entryCount: 0,
-    byStream: [],
-    byComponent: [],
+    currencyCode: recordString(record, "currencyCode") ?? "NGN",
+    currentRevenueBalance: recordNumber(record, "currentRevenueBalance"),
+    lpgPlatformRevenuePerKg: requireRecordNumber(record, "lpgPlatformRevenuePerKg", "Revenue configuration"),
+    policyVersionId: recordString(record, "policyVersionId"),
+    policyVersion: recordNumber(record, "policyVersion"),
+    effectiveFrom: recordString(record, "effectiveFrom"),
+    effectiveUntil: recordString(record, "effectiveUntil"),
   };
+}
+
+function normalizeRateSubmission(value: unknown): RevenueRateSubmission {
+  const record = requireRecord(value, "Revenue-rate submission");
+  const changed = recordBoolean(record, "changed");
+  const pendingApproval = recordBoolean(record, "pendingApproval");
+  const pendingActivation = recordBoolean(record, "pendingActivation");
+  const requestStatus = recordString(record, "requestStatus");
+
+  if (
+    changed === null ||
+    pendingApproval === null ||
+    pendingActivation === null ||
+    requestStatus === null
+  ) {
+    throw new Error("The revenue-rate submission did not include its governed request status.");
+  }
+
+  return {
+    ...normalizeConfiguration(record),
+    changed,
+    pendingApproval,
+    pendingActivation,
+    requestStatus,
+    requestedAmountPerKg: recordNumberOrNull(record, "requestedAmountPerKg"),
+  };
+}
+
+function requireRecord(value: unknown, label: string): PlatformRecord {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as PlatformRecord;
+  throw new Error(`${label} returned an invalid response.`);
 }
 
 function recordString(record: PlatformRecord | null | undefined, key: string): string | null {
@@ -332,10 +583,25 @@ function recordString(record: PlatformRecord | null | undefined, key: string): s
 }
 
 function recordNumber(record: PlatformRecord | null | undefined, key: string): number {
+  return recordNumberOrNull(record, key) ?? 0;
+}
+
+function recordNumberOrNull(record: PlatformRecord | null | undefined, key: string): number | null {
   const value = record?.[key];
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
-  return 0;
+  return null;
+}
+
+function requireRecordNumber(record: PlatformRecord, key: string, label: string): number {
+  const value = recordNumberOrNull(record, key);
+  if (value !== null) return value;
+  throw new Error(`${label} did not include ${key}.`);
+}
+
+function recordBoolean(record: PlatformRecord | null | undefined, key: string): boolean | null {
+  const value = record?.[key];
+  return typeof value === "boolean" ? value : null;
 }
 
 function recordArray(record: PlatformRecord | null | undefined, key: string): readonly PlatformRecord[] {
@@ -343,6 +609,11 @@ function recordArray(record: PlatformRecord | null | undefined, key: string): re
   return Array.isArray(value)
     ? value.filter((item): item is PlatformRecord => Boolean(item) && typeof item === "object" && !Array.isArray(item))
     : [];
+}
+
+function requireRecordArray(record: PlatformRecord, key: string, label: string): readonly PlatformRecord[] {
+  if (!Array.isArray(record[key])) throw new Error(`${label} did not include ${key}.`);
+  return recordArray(record, key);
 }
 
 function money(value: number, currency: string): string {
@@ -365,5 +636,15 @@ function label(value: string | null): string {
 }
 
 function readError(error: unknown): string {
-  return error instanceof Error ? error.message : "The protected Revenue data could not be loaded.";
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { readonly message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  return "The protected Revenue data could not be loaded.";
+}
+
+function revenueChangeKey(): string {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  return `admin-revenue-rate:${uuid ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 }

@@ -1,9 +1,24 @@
 const migrationsDirectory = "supabase/migrations";
+const migrationHistoryPolicyPath = "supabase/migration-history-policy.json";
 const requiredDocumentationPaths = [
   "SKIMA_PLATFORM_CONSTITUTION.md",
   "AGENTS.md",
   "README.md",
 ] as const;
+
+const migrationHistoryPolicy = JSON.parse(
+  await Deno.readTextFile(migrationHistoryPolicyPath),
+) as { businessModuleMigrations?: unknown };
+
+requireCondition(
+  Array.isArray(migrationHistoryPolicy.businessModuleMigrations) &&
+    migrationHistoryPolicy.businessModuleMigrations.every((entry) => typeof entry === "string"),
+  `${migrationHistoryPolicyPath} must configure businessModuleMigrations as a string array.`,
+);
+
+const configuredBusinessModuleMigrations = new Set(
+  migrationHistoryPolicy.businessModuleMigrations as string[],
+);
 
 for (const documentationPath of requiredDocumentationPaths) {
   try {
@@ -30,7 +45,11 @@ const migrationTexts = await Promise.all(
 const sql = migrationTexts.map((migration) => migration.contents).join("\n");
 const normalizedSql = sql.replace(/\s+/g, " ").toLowerCase();
 const platformMigrationSql = migrationTexts
-  .filter((migration) => !migration.path.includes("_lpg_"))
+  .filter((migration) => {
+    const migrationFile = migration.path.split("/").at(-1) ?? migration.path;
+    return !migrationFile.includes("_lpg_") &&
+      !configuredBusinessModuleMigrations.has(migrationFile);
+  })
   .map((migration) => migration.contents)
   .join("\n");
 const normalizedPlatformMigrationSql = platformMigrationSql.replace(/\s+/g, " ").toLowerCase();
