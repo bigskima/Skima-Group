@@ -185,6 +185,7 @@ requireCondition(mediaReplayBody.id === cylinderMediaAssetId, "media idempotency
 const cylinderPayload = {
   conditionStatus: "good",
   cylinderIdentifier: `lpg-lifecycle-${runKey}`,
+  displayName: `Lifecycle cylinder ${runKey}`,
   idempotencyKey: idempotency("cylinder"),
   imageAssetIds: [cylinderMediaAssetId],
   maxCapacityKg: 12.5,
@@ -208,6 +209,7 @@ requireCondition(cylinderReplayBody.id === cylinderId, "cylinder idempotency rep
 const unsafeCylinderBody = await postGateway(customer.accessToken, "/lpg/cylinders", {
   conditionStatus: "unsafe",
   cylinderIdentifier: `lpg-lifecycle-unsafe-${runKey}`,
+  displayName: `Unsafe lifecycle cylinder ${runKey}`,
   idempotencyKey: idempotency("unsafe-cylinder"),
   imageAssetIds: [cylinderMediaAssetId],
   maxCapacityKg: 12.5,

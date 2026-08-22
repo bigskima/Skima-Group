@@ -35,6 +35,7 @@ const outsider = await createGateUser("lpg-payment-outsider");
 const cylinderId = await postGatewayId(customer.accessToken, "/lpg/cylinders", {
   conditionStatus: "good",
   cylinderIdentifier: `lpg-payment-gate-${runKey}`,
+  displayName: `Payment gate cylinder ${runKey}`,
   idempotencyKey: idempotency("cylinder"),
   maxCapacityKg: 12.5,
   metadata: { gate: "lpg_payment_reservation", runId },
