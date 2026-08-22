@@ -1,9 +1,10 @@
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
-import { BadgeCheck, CreditCard, MapPin, Search, ShieldAlert, ShieldCheck, Truck } from "lucide-react-native";
+import { BadgeCheck, CreditCard, MapPin, Search, ShieldAlert, ShieldCheck, Star, Truck } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { z } from "zod";
+import { useLpgPartnerReputation } from "../api/quality";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -15,6 +16,7 @@ import { StatusPill } from "./StatusPill";
 const DriverVerificationSchema = z.object({
   data: z.object({
     verified: z.boolean(),
+    driverProfileId: z.string().uuid().nullable().optional(),
     publicDriverId: z.string().nullable().optional(),
     displayName: z.string().nullable().optional(),
     status: z.string().nullable().optional(),
@@ -41,6 +43,7 @@ export function DriverVerificationScreen() {
   const [result, setResult] = useState<VerificationRecord | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const reputation = useLpgPartnerReputation("driver", result?.driverProfileId ?? null);
 
   const verify = async (value = driverId) => {
     const normalized = value.trim().toUpperCase();
@@ -50,7 +53,7 @@ export function DriverVerificationScreen() {
     setResult(null);
     try {
       const response = await session.api.get(
-        `/runtime/driver-id-cards/verify?publicDriverId=${encodeURIComponent(normalized)}`,
+        `/runtime/driver-id-cards/verify?driverId=${encodeURIComponent(normalized)}`,
         DriverVerificationSchema,
       );
       setDriverId(normalized);
@@ -155,6 +158,12 @@ export function DriverVerificationScreen() {
             <Divider />
             <PublicField label="Authorisation" value={publicStatus(result)} />
             <Divider />
+            <PublicField
+              label="Customer rating"
+              value={reputationLabel(reputation.data, reputation.isPending, Boolean(reputation.error))}
+              icon={<Star color={palette.brand} size={17} />}
+            />
+            <Divider />
             <PublicField label="Vehicle type" value={friendly(result.vehicleType ?? "Not listed")} icon={<Truck color={palette.brand} size={17} />} />
             <Divider />
             <PublicField label="Vehicle status" value={friendly(result.vehicleStatus ?? "Not listed")} />
@@ -172,7 +181,7 @@ export function DriverVerificationScreen() {
 
           <View style={[styles.privacy, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.mutedStrong} size={18} />
-            <Text style={[styles.privacyText, { color: palette.muted }]}>This public lookup intentionally excludes private KYC such as home address, NIN/BVN, private documents, internal review notes and other confidential identity evidence.</Text>
+            <Text style={[styles.privacyText, { color: palette.muted }]}>Public reputation shows aggregate service ratings only. Customer identities, written feedback, complaint details, KYC, private documents and internal review notes are not shown here.</Text>
           </View>
         </>
       ) : null}
@@ -203,6 +212,18 @@ function publicStatus(record: VerificationRecord) {
   if (normalized.includes("deactiv") || normalized.includes("revok")) return "No longer authorised";
   if (normalized.includes("inactive")) return "Approved but inactive";
   return friendly(raw);
+}
+
+function reputationLabel(
+  reputation: { readonly averageRating: number | null; readonly relationshipCount: number } | undefined,
+  pending: boolean,
+  failed: boolean,
+) {
+  if (pending) return "Loading rating…";
+  if (failed) return "Rating unavailable";
+  if (!reputation || reputation.relationshipCount === 0 || reputation.averageRating === null) return "New • No ratings yet";
+  const customers = reputation.relationshipCount === 1 ? "customer" : "customers";
+  return `${reputation.averageRating.toFixed(1)}/5 • ${reputation.relationshipCount} ${customers}`;
 }
 
 function friendly(value: string) {
