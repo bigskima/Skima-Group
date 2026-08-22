@@ -1,2 +1,5 @@
-import { ApplicationOverviewScreen } from "../../src/native/ui/ApplicationOverviewScreen";
-export default function DriverApplication() { return <ApplicationOverviewScreen workspace="driver" />; }
+import { DriverApplicationEntryScreen } from "../../src/native/ui/DriverApplicationEntryScreen";
+
+export default function DriverApplication() {
+  return <DriverApplicationEntryScreen />;
+}
