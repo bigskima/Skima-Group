@@ -39,7 +39,7 @@ export function useLpgServiceability(location: PlatformRecord | null) {
   const latitude = firstNumber(location, ["latitude", "lat"]);
   const longitude = firstNumber(location, ["longitude", "lng", "lon"]);
   const geography = serviceabilityGeography(location);
-  const locationKey = recordId(location);
+  const locationKey = location ? recordId(location) : null;
   const enabled =
     session.status === "authenticated" &&
     location !== null &&
