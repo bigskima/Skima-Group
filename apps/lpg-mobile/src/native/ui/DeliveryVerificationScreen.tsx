@@ -108,7 +108,7 @@ export function DeliveryVerificationScreen() {
       await draftStore.clear(owner, draftType);
       setNoticeTone("success");
       setNotice("Delivery confirmed successfully.");
-      router.replace(`/(customer)/orders/${id}` as never);
+      router.replace(`/(customer)/orders/${id}/feedback` as never);
     } catch (cause) {
       setNoticeTone("error");
       setNotice(
