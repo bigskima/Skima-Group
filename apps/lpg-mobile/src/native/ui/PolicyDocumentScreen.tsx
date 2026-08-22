@@ -230,6 +230,7 @@ function parsePolicyBlocks(content: string): PolicyBlock[] {
 function cleanInlineMarkdown(value: string) {
   return value
     .replace(/<[^>]+>/g, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/\*\*(.*?)\*\*/g, "$1")
     .replace(/__(.*?)__/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
