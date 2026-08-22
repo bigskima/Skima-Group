@@ -138,7 +138,10 @@ export function AdminServiceCoverageWorkspace() {
   const records = coverageQuery.data ?? [];
   const activeIncluded = records.filter(isActiveIncluded).length;
   const activeExcluded = records.filter(isActiveExcluded).length;
-  const paused = records.filter((record) => record.area_status !== "active" || record.rule_status !== "active").length;
+  const candidateMarkets = records.filter(needsServiceDecision).length;
+  const paused = records.filter(
+    (record) => !needsServiceDecision(record) && (record.area_status !== "active" || record.rule_status !== "active"),
+  ).length;
   const precisionAreas = records.filter((record) => ["radius", "polygon"].includes(record.area_type)).length;
 
   const configureMutation = useMutation({
@@ -179,13 +182,22 @@ export function AdminServiceCoverageWorkspace() {
     },
     onSuccess: async (_data, variables) => {
       setEditing(undefined);
-      setNotice(variables.record ? "Coverage area updated." : "Coverage area added.");
+      setNotice(
+        variables.record && needsServiceDecision(variables.record)
+          ? "Service decision saved."
+          : variables.record
+            ? "Coverage area updated."
+            : "Coverage area added.",
+      );
       await queryClient.invalidateQueries({ queryKey: ["admin-service-coverage"] });
     },
   });
 
   const statusMutation = useMutation({
     mutationFn: async ({ record, reason }: { readonly record: CoverageRecord; readonly reason: string }) => {
+      if (needsServiceDecision(record)) {
+        throw new Error("Set an Available or Unavailable service decision before changing this area's status.");
+      }
       const nextStatus = record.area_status === "active" && record.rule_status === "active" ? "inactive" : "active";
       const { data, error } = await supabase.rpc("set_lpg_service_coverage_status", {
         target_area_id: record.area_id,
@@ -228,7 +240,11 @@ export function AdminServiceCoverageWorkspace() {
       header: "Service decision",
       render: (record) => (
         <StatusBadge tone={record.effect === "include" ? "success" : record.effect === "exclude" ? "danger" : "neutral"}>
-          {record.effect === "include" ? "Available" : record.effect === "exclude" ? "Unavailable" : "Not set"}
+          {record.effect === "include"
+            ? "Available"
+            : record.effect === "exclude"
+              ? "Unavailable"
+              : "Awaiting service decision"}
         </StatusBadge>
       ),
     },
@@ -236,15 +252,25 @@ export function AdminServiceCoverageWorkspace() {
       key: "area_status",
       header: "Status",
       render: (record) => (
-        <StatusBadge tone={record.area_status === "active" && record.rule_status === "active" ? "success" : "warning"}>
-          {record.area_status === "active" && record.rule_status === "active" ? "Active" : "Paused"}
+        <StatusBadge
+          tone={needsServiceDecision(record)
+            ? "info"
+            : record.area_status === "active" && record.rule_status === "active"
+              ? "success"
+              : "warning"}
+        >
+          {needsServiceDecision(record)
+            ? "Candidate market"
+            : record.area_status === "active" && record.rule_status === "active"
+              ? "Active"
+              : "Paused"}
         </StatusBadge>
       ),
     },
     {
       key: "effective_from",
       header: "Schedule",
-      render: (record) => coverageSchedule(record),
+      render: (record) => needsServiceDecision(record) ? "No service decision yet" : coverageSchedule(record),
     },
     {
       key: "actions",
@@ -252,16 +278,18 @@ export function AdminServiceCoverageWorkspace() {
       render: (record) => (
         <div className="skima-action-row">
           <Button size="sm" variant="outline" onClick={() => setEditing(record)}>
-            Edit
+            {needsServiceDecision(record) ? "Set service decision" : "Edit"}
           </Button>
-          <Button
-            size="sm"
-            variant={record.area_status === "active" && record.rule_status === "active" ? "destructive" : "outline"}
-            icon={record.area_status === "active" && record.rule_status === "active" ? Pause : Play}
-            onClick={() => setStatusTarget(record)}
-          >
-            {record.area_status === "active" && record.rule_status === "active" ? "Pause" : "Activate"}
-          </Button>
+          {!needsServiceDecision(record) ? (
+            <Button
+              size="sm"
+              variant={record.area_status === "active" && record.rule_status === "active" ? "destructive" : "outline"}
+              icon={record.area_status === "active" && record.rule_status === "active" ? Pause : Play}
+              onClick={() => setStatusTarget(record)}
+            >
+              {record.area_status === "active" && record.rule_status === "active" ? "Pause" : "Activate"}
+            </Button>
+          ) : null}
         </div>
       ),
     },
@@ -293,6 +321,7 @@ export function AdminServiceCoverageWorkspace() {
       <section className="skima-grid skima-grid--compact">
         <MetricTile label="Service available" value={activeIncluded} icon={MapPinned} tone="success" />
         <MetricTile label="Service exclusions" value={activeExcluded} icon={ShieldCheck} tone={activeExcluded ? "warning" : "info"} />
+        <MetricTile label="Candidate markets" value={candidateMarkets} icon={MapPinned} tone={candidateMarkets ? "info" : "success"} />
         <MetricTile label="Paused areas" value={paused} icon={Pause} tone={paused ? "warning" : "success"} />
         <MetricTile label="Radius / mapped zones" value={precisionAreas} icon={MapPinned} tone="info" />
       </section>
@@ -302,7 +331,7 @@ export function AdminServiceCoverageWorkspace() {
           <div>
             <h2>How coverage decisions work</h2>
             <p className="skima-muted">
-              More specific areas take priority over broader ones. For example, you can make Anambra State available and then mark one LGA unavailable. A town, radius or mapped polygon can override a broader state decision without changing the database structure.
+              More specific areas take priority over broader ones. For example, you can make Anambra State available and then mark one LGA unavailable. Candidate markets created from partner applications do not enable customer service until you explicitly set an Available or Unavailable decision here.
             </p>
           </div>
         </div>
@@ -321,7 +350,7 @@ export function AdminServiceCoverageWorkspace() {
           <div className="sk-panel__header">
             <div>
               <h2>Coverage areas</h2>
-              <p className="skima-muted">These rules are used by customer serviceability checks and refill quote validation.</p>
+              <p className="skima-muted">Active rules control customer serviceability and refill quote validation. Candidate markets stay off until a service decision is made.</p>
             </div>
             <StatusBadge>{records.length === 1 ? "1 area" : `${records.length} areas`}</StatusBadge>
           </div>
@@ -410,21 +439,31 @@ function CoverageDialog(props: {
 
   return (
     <Dialog
-      title={props.record ? "Edit coverage area" : "Add coverage area"}
+      title={props.record
+        ? needsServiceDecision(props.record)
+          ? "Set service decision"
+          : "Edit coverage area"
+        : "Add coverage area"}
       isOpen={open}
       onClose={props.onClose}
       footer={
         <>
           <Button variant="ghost" disabled={props.isSubmitting} onClick={props.onClose}>Cancel</Button>
           <Button type="submit" form="service-coverage-form" isLoading={props.isSubmitting}>
-            {props.record ? "Save coverage" : "Add coverage"}
+            {props.record && needsServiceDecision(props.record)
+              ? "Save service decision"
+              : props.record
+                ? "Save coverage"
+                : "Add coverage"}
           </Button>
         </>
       }
     >
       <form id="service-coverage-form" className="skima-form-grid" onSubmit={submit}>
         <p className="admin-dialog-guidance">
-          Choose the geographic level and whether SKIMA LPG should be available there. The stable internal reference is created automatically.
+          {props.record && needsServiceDecision(props.record)
+            ? "This area came from partner demand and does not currently enable customer LPG service. Choose whether service should be available or unavailable here."
+            : "Choose the geographic level and whether SKIMA LPG should be available there. The stable internal reference is created automatically."}
         </p>
         <TextInput
           label="Coverage area name"
@@ -709,6 +748,10 @@ function formFromRecord(record: CoverageRecord): CoverageFormState {
     effectiveFrom: dateTimeInput(record.effective_from),
     effectiveUntil: dateTimeInput(record.effective_until),
   };
+}
+
+function needsServiceDecision(record: CoverageRecord) {
+  return record.rule_id === null || record.effect === null || record.rule_status === null;
 }
 
 function isActiveIncluded(record: CoverageRecord) {
