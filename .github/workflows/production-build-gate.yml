@@ -3,7 +3,7 @@ name: Production build gate
 on:
   push:
     branches: [main, financial-core-revenue-payouts]
-    paths:
+    paths: &build_paths
       - "apps/admin/**"
       - "apps/lpg-mobile/**"
       - "packages/frontend-core/**"
@@ -12,6 +12,9 @@ on:
       - "vercel.json"
       - "vercel.admin.json"
       - ".github/workflows/production-build-gate.yml"
+  pull_request:
+    branches: [main]
+    paths: *build_paths
   workflow_dispatch:
 
 concurrency:
