@@ -13,7 +13,18 @@ const RatingStateSchema = z.object({
   stationRating: z.number().int().min(1).max(5).nullable(),
 });
 
+const PartnerReputationSchema = z.object({
+  subjectType: z.enum(["driver", "station"]),
+  subjectId: z.string().uuid(),
+  averageRating: z.coerce.number().min(1).max(5).nullable(),
+  relationshipCount: z.coerce.number().int().nonnegative(),
+  ratingEventCount: z.coerce.number().int().nonnegative(),
+  recentAverageRating: z.coerce.number().min(1).max(5).nullable(),
+  recentRatingCount: z.coerce.number().int().nonnegative(),
+});
+
 export type LpgOrderRatingState = z.infer<typeof RatingStateSchema>;
+export type LpgPartnerReputation = z.infer<typeof PartnerReputationSchema>;
 
 export function useLpgOrderRatingState(orderId: string | null) {
   const session = useSession();
@@ -27,6 +38,26 @@ export function useLpgOrderRatingState(orderId: string | null) {
       });
       if (error) throw error;
       return RatingStateSchema.parse(data);
+    },
+  });
+}
+
+export function useLpgPartnerReputation(
+  subjectType: "driver" | "station",
+  subjectId: string | null,
+) {
+  const session = useSession();
+  return useQuery({
+    queryKey: ["lpg-quality", "partner-reputation", subjectType, subjectId],
+    enabled: Boolean(subjectId),
+    retry: 1,
+    queryFn: async () => {
+      const { data, error } = await session.supabase.rpc("read_lpg_partner_reputation", {
+        target_subject_type: subjectType,
+        target_subject_id: subjectId,
+      });
+      if (error) throw error;
+      return PartnerReputationSchema.parse(data);
     },
   });
 }
