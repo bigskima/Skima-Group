@@ -182,7 +182,7 @@ export function DriverApplicationScreen() {
         }
         setServiceAreas(readServiceAreaOptions(data));
       })
-      .finally(() => {
+      .then(() => {
         if (active) setLoadingServiceAreas(false);
       });
     return () => {
