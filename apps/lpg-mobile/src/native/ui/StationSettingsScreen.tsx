@@ -40,9 +40,9 @@ export function StationSettingsScreen() {
   const canViewSettings = canManageOperations || canManagePrice;
 
   const runtime = useStationRuntime();
-  const catalogPrices = domainQueries.stationCatalogPrices();
   const branch = nestedRecord(runtime.data, "branch");
   const branchId = branch ? recordId(branch) : null;
+  const catalogPrices = domainQueries.stationCatalogPrices(branchId);
   const hours = nestedRecord(branch, "operatingHours") ?? nestedRecord(branch, "operating_hours");
   const pricing = catalogPrices.data?.[0] ?? nestedRecords(runtime.data, "pricing")[0];
   const catalogItemId = firstString(pricing, ["itemId", "item_id"]);

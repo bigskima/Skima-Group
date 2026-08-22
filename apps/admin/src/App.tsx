@@ -23,6 +23,7 @@ import {
   UserCheck,
   UsersRound,
   WalletCards,
+  Truck,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -66,6 +67,7 @@ import { AdminCompanyWorkspace } from "./admin-company-workspace";
 import { AdminSystemWorkspace } from "./admin-system-workspace";
 import { AdminAccessWorkspace } from "./admin-access-workspace";
 import { AdminContentWorkspace } from "./admin-content-workspace";
+import { AdminFleetWorkspace } from "./admin-fleet-workspace";
 import {
   catalogConsoleConfig,
   financeConsoleConfig,
@@ -164,6 +166,7 @@ const navIconMap = {
   applications: ClipboardList,
   organizations: Building2,
   operations: Activity,
+  fleet: Truck,
   finance: WalletCards,
   content: Megaphone,
   catalog: Boxes,
@@ -198,6 +201,13 @@ const foundationNavigation: readonly NavigationItem[] = [
     href: "/applications",
     icon: "applications",
     requiredPermissions: ["platform.applications.read"],
+  },
+  {
+    key: "fleet",
+    label: "Fleet & Vehicles",
+    href: "/fleet",
+    icon: "fleet",
+    requiredPermissions: ["platform.fleets.read"],
   },
   {
     key: "operations",
@@ -397,6 +407,10 @@ function Workspace(props: { readonly route: string; readonly onNavigate: (href: 
 
   if (props.route === "/applications") {
     return <ApplicationsWorkspace />;
+  }
+
+  if (props.route === "/fleet") {
+    return <AdminFleetWorkspace />;
   }
 
   if (props.route === "/operations") {

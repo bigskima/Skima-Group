@@ -15,6 +15,7 @@ export default function Layout() {
           "orders/[id]/tracking",
           "orders/[id]/verify",
           "orders/[id]/receipt",
+          "orders/[id]/feedback",
           "orders/new",
           "notifications",
           "stations",
@@ -29,6 +30,8 @@ export default function Layout() {
           "station-application",
           "driver-documents",
           "station-documents",
+          "fleet",
+          "cylinder-capacity/[id]",
         ]}
       />
     </WorkspaceGate>

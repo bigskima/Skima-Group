@@ -128,6 +128,17 @@ const ROUTES = new Set([
   "/runtime/vehicle-types",
   "/runtime/vehicles",
   "/runtime/driver-vehicle-links",
+  "/runtime/fleet-partners",
+  "/runtime/vehicle-assignments",
+  "/runtime/vehicle-assignments/end",
+  "/runtime/vehicle-assignment-compliance",
+  "/runtime/fleet-applications",
+  "/runtime/fleet-applications/review",
+  "/runtime/fleet-applications/resubmit",
+  "/runtime/fleet-applications/documents",
+  "/runtime/vehicles/lifecycle",
+  "/runtime/my-vehicle",
+  "/runtime/my-fleet",
   "/runtime/organization-branches",
   "/runtime/organization-roles",
   "/runtime/organization-memberships",
@@ -2680,11 +2691,74 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       supabase
         .from("vehicles")
         .select(
-          "id,organization_id,owner_user_id,vehicle_type_id,status,ownership_type,manufacturer,model,model_year,registration_number,vin,color,max_load_kg,cargo_volume_m3,passenger_capacity,fuel_type,insurance_expires_at,inspection_expires_at,roadworthiness_expires_at,capacity_profile,metadata,created_at,updated_at",
+          "id,organization_id,owner_user_id,fleet_partner_id,vehicle_type_id,status,ownership_type,ownership_relationship,manufacturer,model,model_year,registration_number,vin,color,max_load_kg,cargo_volume_m3,passenger_capacity,fuel_type,insurance_expires_at,inspection_expires_at,roadworthiness_expires_at,capacity_profile,metadata,created_at,updated_at",
         )
         .order("created_at", { ascending: false }),
       id,
     );
+  }
+
+  if (routePath === "/runtime/fleet-partners" && request.method === "GET") {
+    return selectRecords(supabase.from("fleet_partners").select("id,owner_user_id,organization_id,partner_kind,display_name,verification_status,operational_status,verified_by,verified_at,decision_reason,metadata,created_at,updated_at").order("created_at", { ascending: false }), id);
+  }
+
+  if (routePath === "/runtime/vehicle-assignment-compliance" && request.method === "GET") {
+    return selectRecords(supabase.from("vehicle_assignment_compliance").select("assignment_id,driver_profile_id,vehicle_id,driver_approved,vehicle_approved,assignment_active,vehicle_documents_valid,owner_approved,warnings"), id);
+  }
+
+  if (routePath === "/runtime/my-vehicle" && request.method === "GET") {
+    return rpcResponse(supabase.rpc("read_my_vehicle_workspace"), id);
+  }
+
+  if (routePath === "/runtime/my-fleet" && request.method === "GET") {
+    return rpcResponse(supabase.rpc("read_my_fleet_workspace"), id);
+  }
+
+  if (routePath === "/runtime/fleet-applications" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("submit_fleet_application", {
+      target_partner_kind: requireString(body.value.partnerKind, "partnerKind"),
+      target_legal_name: requireString(body.value.legalName, "legalName"),
+      target_registration_identifier: optionalString(body.value.registrationIdentifier),
+      target_payload: optionalRecord(body.value.applicationPayload) ?? {},
+      target_source: optionalString(body.value.source) ?? "skima.fleet.portal",
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-applications/resubmit" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("resubmit_fleet_application", { target_application_id: requireString(body.value.applicationId, "applicationId"), target_payload: optionalRecord(body.value.applicationPayload) ?? {}, target_reason: requireString(body.value.reason, "reason"), target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey") }), id);
+  }
+
+  if (routePath === "/runtime/fleet-applications/documents" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("link_fleet_application_document", {
+      target_application_id: requireString(body.value.applicationId, "applicationId"),
+      target_requirement_key: requireString(body.value.requirementKey, "requirementKey"),
+      target_document_submission_id: requireString(body.value.documentSubmissionId, "documentSubmissionId"),
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/fleet-applications/review" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("review_fleet_application", { target_application_id: requireString(body.value.applicationId, "applicationId"), target_decision: requireString(body.value.decision, "decision"), target_reason: requireString(body.value.reason, "reason"), target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey") }), id);
+  }
+
+  if (routePath === "/runtime/vehicles/lifecycle" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("decide_vehicle_lifecycle", { target_vehicle_id: requireString(body.value.vehicleId, "vehicleId"), target_decision: requireString(body.value.decision, "decision"), target_reason: requireString(body.value.reason, "reason"), target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey") }), id);
+  }
+
+  if (routePath === "/runtime/vehicle-assignments" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("assign_driver_vehicle", { target_driver_profile_id: requireString(body.value.driverProfileId, "driverProfileId"), target_vehicle_id: requireString(body.value.vehicleId, "vehicleId"), target_relationship: requireString(body.value.relationship, "relationship"), target_starts_at: optionalString(body.value.startsAt), target_metadata: optionalRecord(body.value.metadata) ?? {} }), id);
+  }
+
+  if (routePath === "/runtime/vehicle-assignments/end" && request.method === "POST") {
+    const body = await readJsonBody(request, id); if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("end_driver_vehicle_assignment", { target_assignment_id: requireString(body.value.assignmentId, "assignmentId"), target_reason: requireString(body.value.reason, "reason") }), id);
   }
 
   if (routePath === "/runtime/driver-vehicle-links" && request.method === "GET") {
@@ -8293,4 +8367,3 @@ async function configurePaystackWithdrawalBeneficiary(params: {
     requestId: params.id,
   });
 }
-

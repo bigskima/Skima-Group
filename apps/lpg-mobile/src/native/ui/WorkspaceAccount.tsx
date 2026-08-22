@@ -51,6 +51,7 @@ const menus = {
     { label: "Transactions", detail: "Wallet and payment activity", href: "/(customer)/transactions", icon: WalletCards },
     { label: "Apply to drive", detail: "Become a SKIMA driver partner", href: "/(customer)/driver-application", icon: Truck },
     { label: "Apply as a station", detail: "Register an LPG station partnership", href: "/(customer)/station-application", icon: Building2 },
+    { label: "Fleet owner portal", detail: "Register and govern vehicles as an owner or operator", href: "/(customer)/fleet", icon: Truck },
   ],
 } as const;
 

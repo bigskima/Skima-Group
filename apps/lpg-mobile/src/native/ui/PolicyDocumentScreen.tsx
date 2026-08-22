@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { CheckCircle2, ExternalLink, FileText, ShieldCheck } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
@@ -14,6 +14,7 @@ import { radii, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { AppButton } from "./AppButton";
 import { Card } from "./Card";
+import { paginatePolicyBlocks, type PolicyBlock } from "./policyPagination";
 import { Screen } from "./Screen";
 
 export function PolicyDocumentScreen({
@@ -38,11 +39,22 @@ export function PolicyDocumentScreen({
   );
   const accept = useAcceptPolicy(policyKey, applicationId);
   const [confirmedRead, setConfirmedRead] = useState(false);
+  const [page, setPage] = useState(0);
+  const [acceptanceError, setAcceptanceError] = useState<string | null>(null);
 
   const blocks = useMemo(
     () => parsePolicyBlocks(document?.content ?? ""),
     [document?.content],
   );
+  const pages = useMemo(() => paginatePolicyBlocks(blocks), [blocks]);
+  const currentPage = pages[Math.min(page, Math.max(pages.length - 1, 0))] ?? [];
+  const reachedFinalPage = pages.length > 0 && page === pages.length - 1;
+
+  useEffect(() => {
+    setPage(0);
+    setConfirmedRead(false);
+    setAcceptanceError(null);
+  }, [document?.versionId]);
   const canAccept = Boolean(
     allowAcceptance &&
     document?.published &&
@@ -58,11 +70,16 @@ export function PolicyDocumentScreen({
 
   const submitAcceptance = async () => {
     if (!document?.versionId || !document.acceptanceStatement) return;
-    await accept.mutateAsync({
-      versionId: document.versionId,
-      acceptanceStatement: document.acceptanceStatement,
-      roleKey,
-    });
+    setAcceptanceError(null);
+    try {
+      await accept.mutateAsync({
+        versionId: document.versionId,
+        acceptanceStatement: document.acceptanceStatement,
+        roleKey,
+      });
+    } catch (cause) {
+      setAcceptanceError(friendlyError(cause, "We couldn't record your acceptance. Please try again."));
+    }
   };
 
   return (
@@ -139,10 +156,21 @@ export function PolicyDocumentScreen({
           </Card>
 
           <Card>
+            <View style={styles.progressHeader}>
+              <Text style={[styles.metaTitle, { color: palette.ink }]}>Policy section {page + 1} of {pages.length}</Text>
+              <Text style={[styles.meta, { color: palette.muted }]}>{Math.round(((page + 1) / Math.max(pages.length, 1)) * 100)}% read</Text>
+            </View>
+            <View style={[styles.progressTrack, { backgroundColor: palette.border }]}>
+              <View style={[styles.progressFill, { backgroundColor: palette.brand, width: `${((page + 1) / Math.max(pages.length, 1)) * 100}%` }]} />
+            </View>
             <View style={styles.documentBody}>
-              {blocks.map((block, index) => (
+              {currentPage.map((block, index) => (
                 <PolicyBlock key={`${block.kind}-${index}`} block={block} />
               ))}
+            </View>
+            <View style={styles.pageActions}>
+              <AppButton label="Previous" variant="secondary" disabled={page === 0} onPress={() => setPage((value) => Math.max(value - 1, 0))} />
+              {!reachedFinalPage ? <AppButton label="Next section" onPress={() => setPage((value) => Math.min(value + 1, pages.length - 1))} /> : null}
             </View>
           </Card>
 
@@ -175,19 +203,20 @@ export function PolicyDocumentScreen({
                   <Pressable
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: confirmedRead }}
-                    onPress={() => setConfirmedRead((value) => !value)}
+                    onPress={() => reachedFinalPage && setConfirmedRead((value) => !value)}
                     style={styles.checkboxRow}
                   >
                     <View style={[
                       styles.checkbox,
-                      { borderColor: confirmedRead ? palette.brand : palette.borderStrong, backgroundColor: confirmedRead ? palette.brand : palette.surface },
+                      { borderColor: confirmedRead ? palette.brand : palette.borderStrong, backgroundColor: confirmedRead ? palette.brand : palette.surface, opacity: reachedFinalPage ? 1 : 0.5 },
                     ]}>
                       {confirmedRead ? <CheckCircle2 color="#FFFFFF" size={16} /> : null}
                     </View>
                     <Text style={[styles.acceptanceStatement, { color: palette.ink }]}>{document.acceptanceStatement}</Text>
                   </Pressable>
-                  {accept.error ? (
-                    <Text style={[styles.error, { color: palette.danger }]}>{friendlyError(accept.error, "We couldn't record your acceptance. Please try again.")}</Text>
+                  {!reachedFinalPage ? <Text style={[styles.notice, { color: palette.muted }]}>Read each section above before confirming acceptance.</Text> : null}
+                  {acceptanceError || accept.error ? (
+                    <Text style={[styles.error, { color: palette.danger }]}>{acceptanceError ?? friendlyError(accept.error, "We couldn't record your acceptance. Please try again.")}</Text>
                   ) : null}
                   <AppButton
                     label="Accept current terms"
@@ -205,11 +234,6 @@ export function PolicyDocumentScreen({
     </Screen>
   );
 }
-
-type PolicyBlock =
-  | { kind: "heading"; level: number; text: string }
-  | { kind: "bullet"; text: string }
-  | { kind: "paragraph"; text: string };
 
 function parsePolicyBlocks(content: string): PolicyBlock[] {
   return content
@@ -279,6 +303,10 @@ const styles = StyleSheet.create({
   meta: { ...typography.caption },
   hash: { ...typography.caption, fontSize: 9 },
   documentBody: { gap: spacing.sm },
+  progressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.sm },
+  progressTrack: { height: 6, borderRadius: radii.pill, overflow: "hidden", marginBottom: spacing.md },
+  progressFill: { height: 6, borderRadius: radii.pill },
+  pageActions: { flexDirection: "row", justifyContent: "space-between", gap: spacing.sm, marginTop: spacing.md },
   h1: { ...typography.heading, fontSize: 20, lineHeight: 26, marginTop: spacing.md },
   h2: { ...typography.subheading, fontSize: 16, lineHeight: 22, marginTop: spacing.sm },
   bulletRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingLeft: 2 },

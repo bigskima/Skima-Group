@@ -33,11 +33,12 @@ export const domainQueries = {
       path: "/lpg/stations",
       schema: RecordArraySchema,
     }),
-  stationCatalogPrices: () =>
+  stationCatalogPrices: (stationBranchId?: string | null) =>
     useGatewayQuery({
-      key: ["station-catalog-prices"],
-      path: "/lpg/stations/catalog-prices",
+      key: ["station-catalog-prices", stationBranchId ?? "current"],
+      path: `/lpg/stations/catalog-prices${stationBranchId ? `?stationBranchId=${encodeURIComponent(stationBranchId)}` : ""}`,
       schema: RecordArraySchema,
+      enabled: stationBranchId !== null,
     }),
   locations: () =>
     useGatewayQuery({
@@ -97,6 +98,24 @@ export const domainQueries = {
       key: ["vehicles"],
       path: "/runtime/vehicles",
       schema: RecordArraySchema,
+    }),
+  vehicleAssignmentCompliance: () =>
+    useGatewayQuery({
+      key: ["vehicle-assignment-compliance"],
+      path: "/runtime/vehicle-assignment-compliance",
+      schema: RecordArraySchema,
+    }),
+  myVehicle: () =>
+    useGatewayQuery({
+      key: ["my-vehicle"],
+      path: "/runtime/my-vehicle",
+      schema: RecordObjectSchema,
+    }),
+  myFleet: () =>
+    useGatewayQuery({
+      key: ["my-fleet"],
+      path: "/runtime/my-fleet",
+      schema: RecordObjectSchema,
     }),
   vehicleTypes: () =>
     useGatewayQuery({

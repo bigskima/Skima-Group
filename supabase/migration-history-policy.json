@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "remoteHeadVersion": "20260822102234",
+  "remoteHeadVersion": "20260822122000",
   "requiredRestoredMigration": "20260820013807_harden_document_correction_review_flow.sql",
   "pendingPermissionMigration": null,
   "staleAliases": {
@@ -62,6 +62,8 @@
     "20260822101545_lpg_quality_summary_acl_hardening.sql",
     "20260822102115_driver_participation_program_foundation.sql",
     "20260822102139_driver_participation_idempotency_fix.sql",
-    "20260822102234_lpg_special_driver_dispatch_priority.sql"
+    "20260822102234_lpg_special_driver_dispatch_priority.sql",
+    "20260822120100_lpg_fleet_pair_dispatch_selection.sql",
+    "20260822122000_customer_policy_acceptance_retry.sql"
   ]
 }

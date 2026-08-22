@@ -27,6 +27,7 @@ import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 import { SectionHeader } from "./SectionHeader";
 import { StatusPill } from "./StatusPill";
+import { presentVehicleEligibility } from "./vehicleEligibility";
 
 export function VehicleWorkflowScreen() {
   const session = useSession();
@@ -34,6 +35,8 @@ export function VehicleWorkflowScreen() {
   const owner = session.context?.profile?.id ?? session.context?.user.id ?? "";
   const draftCreatedAt = useRef(new Date().toISOString());
   const vehicles = domainQueries.vehicles();
+  const compliance = domainQueries.vehicleAssignmentCompliance();
+  const myVehicle = domainQueries.myVehicle();
   const vehicleTypes = domainQueries.vehicleTypes();
   const applicationTypes = domainQueries.applicationTypes();
   const applications = domainQueries.applications();
@@ -200,7 +203,7 @@ export function VehicleWorkflowScreen() {
   };
 
   const loading =
-    vehicles.isPending ||
+    vehicles.isPending || compliance.isPending || myVehicle.isPending ||
     vehicleTypes.isPending ||
     applicationTypes.isPending ||
     applications.isPending ||
@@ -208,7 +211,14 @@ export function VehicleWorkflowScreen() {
     documents.isPending ||
     drivers.isPending;
   const failed =
-    vehicles.error || vehicleTypes.error || applicationTypes.error || applications.error || requirements.error || documents.error || drivers.error;
+    vehicles.error || compliance.error || myVehicle.error || vehicleTypes.error || applicationTypes.error || applications.error || requirements.error || documents.error || drivers.error;
+  const assignedVehicle = myVehicle.data?.current && typeof myVehicle.data.current === "object"
+    ? myVehicle.data.current as PlatformRecord
+    : null;
+  const assignedEligibility = assignedVehicle?.eligibility && typeof assignedVehicle.eligibility === "object"
+    ? assignedVehicle.eligibility as PlatformRecord
+    : null;
+  const eligibilityPresentation = presentVehicleEligibility(assignedEligibility);
 
   return (
     <Screen
@@ -244,6 +254,31 @@ export function VehicleWorkflowScreen() {
               <Text style={styles.heroBody}>Vehicle type, approval and load capacity are part of dispatch eligibility. SKIMA assigns jobs automatically; there is no manual job-accept step.</Text>
             </View>
           </View>
+
+          <SectionHeader title="My vehicle" description="Your active driver and vehicle assignment, resolved from governed fleet records." />
+          {assignedVehicle ? (
+            <View style={[styles.vehicleCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.vehicleHead}>
+                <View style={[styles.vehicleIcon, { backgroundColor: palette.brandSoft }]}><Truck color={palette.brand} size={23} /></View>
+                <View style={styles.vehicleCopy}>
+                  <Text style={[styles.vehicleTitle, { color: palette.ink }]}>{firstString(assignedVehicle, ["manufacturer"]) ?? "Assigned vehicle"} {firstString(assignedVehicle, ["model"]) ?? ""}</Text>
+                  <Text style={[styles.vehicleMeta, { color: palette.muted }]}>{firstString(assignedVehicle, ["registration_number"]) ?? "Registration pending"}</Text>
+                </View>
+                <StatusPill label={eligibilityPresentation.ready ? "Dispatch ready" : "Action required"} tone={eligibilityPresentation.ready ? "success" : "warning"} />
+              </View>
+              <View style={[styles.divider, { backgroundColor: palette.border }]} />
+              <View style={styles.vehicleMetrics}>
+                <VehicleMetric label="Owner / fleet" value={firstString(assignedVehicle, ["owner_name"]) ?? "Owner details pending"} />
+                <VehicleMetric label="Relationship" value={friendly(firstString(assignedVehicle, ["relationship_type"]) ?? "pending")} />
+              </View>
+              <Text style={[styles.vehicleMeta, { color: palette.muted }]}>Assigned {firstString(assignedVehicle, ["starts_at"]) ? new Date(firstString(assignedVehicle, ["starts_at"])!).toLocaleDateString() : "date pending"}</Text>
+              <Text style={[styles.vehicleMeta, { color: eligibilityPresentation.ready ? palette.success : palette.danger }]}>
+                {eligibilityPresentation.message}
+              </Text>
+            </View>
+          ) : (
+            <EmptyState icon={<Truck color={palette.brand} size={27} />} title="No active vehicle assignment" description="A registered vehicle is not dispatch eligible until an approved assignment and all configured compliance evidence are present." />
+          )}
 
           {current ? (
             <View style={[styles.reviewCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -371,6 +406,10 @@ export function VehicleWorkflowScreen() {
                 const id = recordId(vehicle);
                 const vehicleStatus =
                   displayStatus(vehicle) ?? firstString(vehicle, ["verification_status", "verificationStatus"]) ?? "registered";
+                const ownership = firstString(vehicle, ["ownership_relationship", "ownership_type"]) ?? "driver_owned";
+                const complianceRecord = (compliance.data ?? []).find((item) => firstString(item, ["vehicle_id"]) === id);
+                const warnings = complianceRecord && Array.isArray(complianceRecord.warnings)
+                  ? complianceRecord.warnings.filter((item): item is string => typeof item === "string") : [];
                 return (
                   <View key={id ?? String(index)} style={[styles.vehicleCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
                     <View style={styles.vehicleHead}>
@@ -384,8 +423,11 @@ export function VehicleWorkflowScreen() {
                     <View style={[styles.divider, { backgroundColor: palette.border }]} />
                     <View style={styles.vehicleMetrics}>
                       <VehicleMetric label="Max load" value={`${firstNumber(vehicle, ["max_load_kg", "maxLoadKg"]) ?? "—"} kg`} />
-                      <VehicleMetric label="Colour" value={firstString(vehicle, ["colour", "color"]) ?? "—"} />
+                      <VehicleMetric label="Ownership" value={friendly(ownership)} />
                     </View>
+                    <Text style={[styles.vehicleMeta, { color: warnings.length ? palette.danger : palette.success }]}>
+                      {warnings.length ? `Compliance: ${warnings.map(friendly).join(", ")}` : "Assignment and compliance checks are current"}
+                    </Text>
                     {id ? <PresentationMediaPanel subjectId={id} subjectType="vehicle" colour={firstString(vehicle, ["colour", "color"])} /> : null}
                   </View>
                 );
