@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Activity, LayoutDashboard, MapPinned, Settings2, WalletCards } from "lucide-react";
+import { Activity, FileText, LayoutDashboard, MapPinned, Settings2, WalletCards } from "lucide-react";
 
 import "@skima/ui/styles.css";
 import "./styles.css";
@@ -12,6 +12,7 @@ import { ErrorState, type NavItem } from "@skima/ui";
 import { App } from "./App";
 import { AdminShell } from "./AdminShell";
 import { AdminPartnerLocationReviewWorkspace } from "./admin-partner-location-review-workspace";
+import { AdminPolicyWorkspace } from "./admin-policy-workspace";
 import { AdminRevenueWorkspace } from "./admin-revenue-workspace";
 import { AdminServiceCoverageWorkspace } from "./admin-service-coverage-workspace";
 import { SessionProvider, useSessionState } from "./session";
@@ -158,6 +159,38 @@ function AdminRoot() {
         onSignOut={sessionState.signOut}
       >
         <AdminPartnerLocationReviewWorkspace />
+      </AdminShell>
+    );
+  }
+
+  const canReadPolicies = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
+    sessionState.context?.permissions.includes("platform.policy.read") ||
+    false;
+
+  if (
+    route === "/policies" &&
+    sessionState.status === "authenticated" &&
+    sessionState.context &&
+    canReadPolicies
+  ) {
+    const policyNavigation: readonly NavItem[] = [
+      { key: "overview", label: "Overview", href: "/", icon: LayoutDashboard },
+      { key: "content", label: "Content", href: "/content", icon: FileText },
+      { key: "policies", label: "Terms & Policies", href: "/policies", icon: FileText },
+      { key: "governance", label: "Configuration", href: "/governance", icon: Settings2 },
+    ];
+
+    return (
+      <AdminShell
+        brand="Skima"
+        navItems={policyNavigation}
+        activeHref="/policies"
+        contextLabel={sessionState.context.platformAdmin?.title ?? "Platform administrator"}
+        userLabel={sessionState.context.profile?.display_name ?? sessionState.context.user.email ?? "Administrator"}
+        onNavigate={navigate}
+        onSignOut={sessionState.signOut}
+      >
+        <AdminPolicyWorkspace />
       </AdminShell>
     );
   }

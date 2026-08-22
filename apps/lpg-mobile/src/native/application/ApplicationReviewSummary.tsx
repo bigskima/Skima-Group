@@ -2,6 +2,7 @@ import { AlertCircle, CheckCircle2, ChevronRight, Edit3 } from "lucide-react-nat
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { PolicySummaryCard } from "../ui/PolicySummaryCard";
 import { StatusPill } from "../ui/StatusPill";
 
 export interface SummarySection {
@@ -228,6 +229,13 @@ export function ApplicationReviewSummary({
           })}
         </View>
       </View>
+
+      <PolicySummaryCard
+        policyKey="policy.partner.participation"
+        href="/policies/partner-participation"
+        fallbackTitle="SKIMA Partner Participation Terms & Public Policy"
+        fallbackSummary="Review the key rules for partner approval, service matching, safety, earnings, privacy, conduct, suspension and your rights before submitting your application."
+      />
     </View>
   );
 }
