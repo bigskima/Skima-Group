@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Activity, FileText, LayoutDashboard, MapPinned, Settings2, WalletCards } from "lucide-react";
+import { Activity, FileText, LayoutDashboard, MapPinned, Settings2, ShieldCheck, WalletCards } from "lucide-react";
 
 import "@skima/ui/styles.css";
 import "./styles.css";
@@ -13,6 +13,7 @@ import { App } from "./App";
 import { AdminShell } from "./AdminShell";
 import { AdminPartnerLocationReviewWorkspace } from "./admin-partner-location-review-workspace";
 import { AdminPolicyWorkspace } from "./admin-policy-workspace";
+import { AdminQualityWorkspace } from "./admin-quality-workspace";
 import { AdminRevenueWorkspace } from "./admin-revenue-workspace";
 import { AdminServiceCoverageWorkspace } from "./admin-service-coverage-workspace";
 import { SessionProvider, useSessionState } from "./session";
@@ -191,6 +192,40 @@ function AdminRoot() {
         onSignOut={sessionState.signOut}
       >
         <AdminPolicyWorkspace />
+      </AdminShell>
+    );
+  }
+
+  const canReadQuality = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
+    sessionState.context?.permissions.includes("lpg.quality.read") ||
+    sessionState.context?.permissions.includes("lpg.quality.manage") ||
+    sessionState.context?.permissions.includes("lpg.operations.manage") ||
+    false;
+
+  if (
+    route === "/quality" &&
+    sessionState.status === "authenticated" &&
+    sessionState.context &&
+    canReadQuality
+  ) {
+    const qualityNavigation: readonly NavItem[] = [
+      { key: "overview", label: "Overview", href: "/", icon: LayoutDashboard },
+      { key: "operations", label: "Operations", href: "/operations", icon: Activity },
+      { key: "quality", label: "Service Quality", href: "/quality", icon: ShieldCheck },
+      { key: "applications", label: "Applications", href: "/applications", icon: Activity },
+    ];
+
+    return (
+      <AdminShell
+        brand="Skima"
+        navItems={qualityNavigation}
+        activeHref="/quality"
+        contextLabel={sessionState.context.platformAdmin?.title ?? "Platform administrator"}
+        userLabel={sessionState.context.profile?.display_name ?? sessionState.context.user.email ?? "Administrator"}
+        onNavigate={navigate}
+        onSignOut={sessionState.signOut}
+      >
+        <AdminQualityWorkspace />
       </AdminShell>
     );
   }
