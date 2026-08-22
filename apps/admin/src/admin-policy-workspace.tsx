@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileCheck2, FileText, RefreshCcw, Send, ShieldCheck } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { z } from "zod";
 
 import { createClientIdempotencyKey, normalizeStatusLabel } from "@skima/frontend-core";
@@ -47,6 +47,7 @@ const DocumentSchema = z.object({
   title: z.string(),
   audience: z.enum(["customer", "partner", "public"]),
   serviceScope: z.string(),
+  summary: z.string(),
   sourceUrl: z.string().nullable(),
   sourceReference: z.string().nullable(),
   acceptanceStatement: z.string(),
@@ -200,7 +201,7 @@ export function AdminPolicyWorkspace() {
       <PageHeader
         eyebrow="Company policy"
         title="Terms & Policies"
-        description="Import complete policy text, create immutable versions, publish prospectively and preserve the exact version every customer or partner accepted."
+        description="Manage short policy summaries separately from the complete in-app terms. Published versions are immutable and each acceptance stays linked to the exact version shown."
         actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void query.refetch()}>Refresh policies</Button>}
       />
 
@@ -219,7 +220,7 @@ export function AdminPolicyWorkspace() {
       {!query.isLoading && !query.error ? (
         <section className="sk-panel">
           <div className="sk-panel__header">
-            <div><h2>Policy documents</h2><p className="skima-muted">The canonical source is recorded separately from the immutable text that is actually published in SKIMA.</p></div>
+            <div><h2>Policy documents</h2><p className="skima-muted">Users see a short summary first. “Learn more” opens SKIMA's in-app reader. The Notion source is retained only as a fallback/reference.</p></div>
           </div>
           <DataTable caption="SKIMA policy documents" columns={columns} records={documents} getRowKey={(record) => record.documentId} emptyTitle="No policy documents" emptyMessage="No policy document definitions are configured." />
         </section>
@@ -230,13 +231,14 @@ export function AdminPolicyWorkspace() {
           <div className="sk-panel__header">
             <div>
               <h2>{selected.title}</h2>
+              <p>{selected.summary}</p>
               <p className="skima-muted">Acceptance statement: “{selected.acceptanceStatement}”</p>
-              {selected.sourceUrl ? <p><a href={selected.sourceUrl} target="_blank" rel="noreferrer">Open canonical source</a></p> : null}
+              {selected.sourceUrl ? <p><a href={selected.sourceUrl} target="_blank" rel="noreferrer">Open fallback source</a></p> : null}
             </div>
             {canDraft ? <Button onClick={() => setDraftTarget({ document: selected, version: null })}>Create version</Button> : null}
           </div>
           <div className="skima-stack">
-            {selected.versions.length === 0 ? <p className="skima-muted">No in-app version has been created yet. Import the complete source text before publishing.</p> : null}
+            {selected.versions.length === 0 ? <p className="skima-muted">No complete in-app version has been published yet. The short summary remains available while the fallback source can still be opened.</p> : null}
             {selected.versions.map((version) => (
               <div className="skima-record-card" key={version.versionId}>
                 <div>
@@ -262,14 +264,17 @@ export function AdminPolicyWorkspace() {
 
 function DraftDialog({ target, isSubmitting, error, onClose, onSubmit }: { target: { document: PolicyDocument; version: PolicyVersion | null } | null; isSubmitting: boolean; error: unknown; onClose: () => void; onSubmit: (form: DraftForm) => void }) {
   const [form, setForm] = useState<DraftForm>(EMPTY_DRAFT);
-  const key = target ? `${target.document.documentId}:${target.version?.versionId ?? "new"}` : "closed";
+  const targetKey = target ? `${target.document.documentId}:${target.version?.versionId ?? "new"}` : "closed";
 
-  useMemo(() => {
-    if (!target) return null;
+  useEffect(() => {
+    if (!target) {
+      setForm(EMPTY_DRAFT);
+      return;
+    }
     const version = target.version;
     setForm(version ? {
       versionLabel: version.versionLabel,
-      summary: version.summary,
+      summary: version.summary || target.document.summary,
       content: version.content,
       contentFormat: version.contentFormat,
       sourceUrl: version.sourceUrl ?? target.document.sourceUrl ?? "",
@@ -279,11 +284,11 @@ function DraftDialog({ target, isSubmitting, error, onClose, onSubmit }: { targe
     } : {
       ...EMPTY_DRAFT,
       versionLabel: String(target.document.metadata.canonicalVersion ?? "1.0"),
+      summary: target.document.summary,
       sourceUrl: target.document.sourceUrl ?? "",
       sourceReference: target.document.sourceReference ?? "",
     });
-    return null;
-  }, [key]);
+  }, [targetKey, target]);
 
   if (!target) return null;
   const update = (patch: Partial<DraftForm>) => setForm((current) => ({ ...current, ...patch }));
@@ -296,12 +301,12 @@ function DraftDialog({ target, isSubmitting, error, onClose, onSubmit }: { targe
   return (
     <Dialog title={target.version ? `Edit version ${target.version.versionLabel}` : `Create ${target.document.title} version`} isOpen onClose={onClose} footer={<><Button variant="ghost" disabled={isSubmitting} onClick={onClose}>Cancel</Button><Button type="submit" form="policy-draft-form" isLoading={isSubmitting}>Save draft</Button></>}>
       <form id="policy-draft-form" className="skima-form-grid" onSubmit={submit}>
-        <p className="admin-dialog-guidance">Paste the complete canonical policy text. Drafts can be edited; published text cannot be changed.</p>
+        <p className="admin-dialog-guidance">Paste the complete policy text for the in-app reader. The Notion page is a fallback/reference, not embedded content. Drafts can be edited; published text cannot be changed.</p>
         <TextInput label="Version" value={form.versionLabel} disabled={Boolean(target.version)} onChange={(event) => update({ versionLabel: event.currentTarget.value })} required />
         <SelectInput label="Content format" value={form.contentFormat} options={[{ label: "Markdown", value: "markdown" }, { label: "Plain text", value: "plain_text" }, { label: "HTML", value: "html" }]} onChange={(event) => update({ contentFormat: event.currentTarget.value as DraftForm["contentFormat"] })} />
-        <TextAreaInput label="Quick summary" helperText="Shown before the full terms. It does not replace the complete policy." value={form.summary} onChange={(event) => update({ summary: event.currentTarget.value })} required />
-        <TextAreaInput label="Complete policy text" helperText="Publication is blocked until a substantial full document is present." value={form.content} onChange={(event) => update({ content: event.currentTarget.value })} required />
-        <TextInput label="Canonical source URL" value={form.sourceUrl} onChange={(event) => update({ sourceUrl: event.currentTarget.value })} />
+        <TextAreaInput label="Short summary" helperText="This is the short explanation shown before users tap Learn more." value={form.summary} onChange={(event) => update({ summary: event.currentTarget.value })} required />
+        <TextAreaInput label="Complete in-app policy text" helperText="This is rendered by SKIMA's in-app policy reader. Publication is blocked until a substantial full document is present." value={form.content} onChange={(event) => update({ content: event.currentTarget.value })} required />
+        <TextInput label="Fallback source URL" value={form.sourceUrl} onChange={(event) => update({ sourceUrl: event.currentTarget.value })} />
         <TextInput label="Source reference" value={form.sourceReference} onChange={(event) => update({ sourceReference: event.currentTarget.value })} />
         <TextInput label="Source updated at" type="datetime-local" value={form.sourceUpdatedAt} onChange={(event) => update({ sourceUpdatedAt: event.currentTarget.value })} />
         <label className="skima-checkbox-row"><input type="checkbox" checked={form.requiresReacceptance} onChange={(event) => update({ requiresReacceptance: event.currentTarget.checked })} /><span>Require users to accept this version when it becomes current</span></label>
@@ -315,11 +320,24 @@ function PublishDialog({ target, isSubmitting, error, onClose, onSubmit }: { tar
   const [effectiveFrom, setEffectiveFrom] = useState("");
   const [reason, setReason] = useState("");
   const [requiresReacceptance, setRequiresReacceptance] = useState(false);
+
+  useEffect(() => {
+    if (!target) {
+      setEffectiveFrom("");
+      setReason("");
+      setRequiresReacceptance(false);
+      return;
+    }
+    setEffectiveFrom("");
+    setReason("");
+    setRequiresReacceptance(target.version.requiresReacceptance);
+  }, [target]);
+
   if (!target) return null;
   return (
     <Dialog title={`Publish version ${target.version.versionLabel}`} isOpen onClose={onClose} footer={<><Button variant="ghost" disabled={isSubmitting} onClick={onClose}>Cancel</Button><Button type="submit" form="policy-publish-form" isLoading={isSubmitting}>Publish version</Button></>}>
       <form id="policy-publish-form" className="skima-form-grid" onSubmit={(event) => { event.preventDefault(); onSubmit({ effectiveFrom, reason, requiresReacceptance }); }}>
-        <p className="admin-dialog-guidance">Publishing makes this exact text the current in-app policy and preserves any previous published version as immutable history.</p>
+        <p className="admin-dialog-guidance">Publishing makes this exact text the current SKIMA in-app policy and preserves any previous published version as immutable history.</p>
         <TextInput label="Effective from" type="datetime-local" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.currentTarget.value)} />
         <TextAreaInput label="Publication reason" value={reason} onChange={(event) => setReason(event.currentTarget.value)} required />
         <label className="skima-checkbox-row"><input type="checkbox" checked={requiresReacceptance} onChange={(event) => setRequiresReacceptance(event.currentTarget.checked)} /><span>Require re-acceptance for this published version</span></label>
