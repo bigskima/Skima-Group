@@ -55,6 +55,7 @@ export const typography = {
   display: { fontSize: 36, lineHeight: 42, fontWeight: "900" as const, letterSpacing: -1.1 },
   title: { fontSize: 28, lineHeight: 34, fontWeight: "900" as const, letterSpacing: -0.7 },
   heading: { fontSize: 21, lineHeight: 27, fontWeight: "900" as const, letterSpacing: -0.25 },
+  sectionTitle: { fontSize: 16, lineHeight: 22, fontWeight: "800" as const },
   subheading: { fontSize: 16, lineHeight: 22, fontWeight: "800" as const },
   body: { fontSize: 15, lineHeight: 22, fontWeight: "500" as const },
   bodyStrong: { fontSize: 15, lineHeight: 22, fontWeight: "800" as const },

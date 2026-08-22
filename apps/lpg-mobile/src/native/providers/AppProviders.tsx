@@ -15,6 +15,7 @@ import { SessionProvider } from "../session/SessionProvider";
 import { useNotificationLifecycle } from "../notifications/useNotificationLifecycle";
 import { BackendNotificationBridge } from "../notifications/BackendNotificationBridge";
 import { AppErrorBoundary } from "./AppErrorBoundary";
+import { ConnectivityNotice } from "./ConnectivityNotice";
 import { GlobalQueryFailure } from "./GlobalQueryFailure";
 import { ThemeProvider } from "../theme/ThemeProvider";
 
@@ -35,7 +36,9 @@ export function AppProviders({ children }: PropsWithChildren) {
   useEffect(() => {
     onlineManager.setEventListener((setOnline) =>
       NetInfo.addEventListener((state) =>
-        setOnline(Boolean(state.isConnected)),
+        setOnline(
+          state.isConnected !== false && state.isInternetReachable !== false,
+        ),
       ),
     );
     if (Platform.OS !== "web")
@@ -58,6 +61,7 @@ export function AppProviders({ children }: PropsWithChildren) {
             }}
           >
             <GlobalQueryFailure />
+            <ConnectivityNotice />
             <SessionProvider>
               <BackendNotificationBridge />
               <AppErrorBoundary>{children}</AppErrorBoundary>

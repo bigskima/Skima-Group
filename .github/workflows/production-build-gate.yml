@@ -2,8 +2,8 @@ name: Production build gate
 
 on:
   push:
-    branches: [main]
-    paths:
+    branches: [main, financial-core-revenue-payouts]
+    paths: &build_paths
       - "apps/admin/**"
       - "apps/lpg-mobile/**"
       - "packages/frontend-core/**"
@@ -16,6 +16,9 @@ on:
       - "vercel.json"
       - "vercel.admin.json"
       - ".github/workflows/production-build-gate.yml"
+  pull_request:
+    branches: [main]
+    paths: *build_paths
   workflow_dispatch:
 
 concurrency:
@@ -36,7 +39,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
       - name: Use Deno 2
         uses: denoland/setup-deno@v2
         with:
@@ -56,7 +58,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
       - name: Install admin dependencies
         run: npm install --no-audit --no-fund
       - name: Typecheck and build admin

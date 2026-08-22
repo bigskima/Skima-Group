@@ -1,7 +1,7 @@
 import { router } from "expo-router";
-import { CheckCircle2, MapPin, Scale, ShieldCheck, Store, WalletCards } from "lucide-react-native";
+import { AlertTriangle, CheckCircle2, MapPin, Scale, ShieldCheck, Store, WalletCards } from "lucide-react-native";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
@@ -12,6 +12,8 @@ import {
   recordId,
   type PlatformRecord,
 } from "../api/records";
+import { useLpgServiceability } from "../api/serviceability";
+import { useEligibleLpgStations, type EligibleLpgStation } from "../api/stationEligibility";
 import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -29,7 +31,6 @@ export function NewRefillScreen() {
   const { palette } = useAppTheme();
   const cylinders = domainQueries.cylinders();
   const locations = domainQueries.locations();
-  const stations = domainQueries.stations();
   const wallets = domainQueries.wallets();
   const quotes = domainQueries.quotes();
   const [cylinderId, setCylinderId] = useState("");
@@ -44,6 +45,65 @@ export function NewRefillScreen() {
   const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const draftCreatedAt = useRef(new Date().toISOString());
+
+  const selectedCylinder = (cylinders.data ?? []).find((item) => recordId(item) === cylinderId) ?? null;
+  const selectedPickupLocation = (locations.data ?? []).find((item) => recordId(item) === pickupLocationId) ?? null;
+  const selectedDeliveryLocation = (locations.data ?? []).find((item) => recordId(item) === deliveryLocationId) ?? null;
+  const cylinderCapacityKg = firstNumber(selectedCylinder, ["max_capacity_kg", "maxCapacityKg"]);
+  const requestedKgNumber = requestedKg.trim() ? Number(requestedKg) : null;
+  const validRequestedKg = Boolean(
+    requestedKgNumber !== null && Number.isFinite(requestedKgNumber) && requestedKgNumber > 0,
+  );
+  const exceedsCylinderCapacity = Boolean(
+    cylinderCapacityKg !== null &&
+      requestedKgNumber !== null &&
+      Number.isFinite(requestedKgNumber) &&
+      requestedKgNumber > cylinderCapacityKg,
+  );
+
+  const pickupServiceability = useLpgServiceability(selectedPickupLocation);
+  const deliveryServiceability = useLpgServiceability(selectedDeliveryLocation);
+  const hasSelectedTrip = Boolean(selectedPickupLocation && selectedDeliveryLocation);
+  const pickupHasCoordinates = Boolean(
+    selectedPickupLocation &&
+      firstNumber(selectedPickupLocation, ["latitude", "lat"]) !== null &&
+      firstNumber(selectedPickupLocation, ["longitude", "lng", "lon"]) !== null,
+  );
+  const deliveryHasCoordinates = Boolean(
+    selectedDeliveryLocation &&
+      firstNumber(selectedDeliveryLocation, ["latitude", "lat"]) !== null &&
+      firstNumber(selectedDeliveryLocation, ["longitude", "lng", "lon"]) !== null,
+  );
+  const locationNeedsMapPosition = hasSelectedTrip && (!pickupHasCoordinates || !deliveryHasCoordinates);
+  const serviceabilityPending = Boolean(
+    hasSelectedTrip &&
+      !locationNeedsMapPosition &&
+      (pickupServiceability.isPending || deliveryServiceability.isPending),
+  );
+  const serviceabilityError = Boolean(
+    hasSelectedTrip &&
+      !locationNeedsMapPosition &&
+      (pickupServiceability.isError || deliveryServiceability.isError),
+  );
+  const pickupUnavailable = pickupServiceability.data?.serviceable === false;
+  const deliveryUnavailable = deliveryServiceability.data?.serviceable === false;
+  const serviceUnavailable = pickupUnavailable || deliveryUnavailable;
+  const tripServiceable = Boolean(
+    hasSelectedTrip &&
+      pickupServiceability.data?.serviceable === true &&
+      deliveryServiceability.data?.serviceable === true,
+  );
+  const stationEligibilityReady = Boolean(
+    tripServiceable && validRequestedKg && !exceedsCylinderCapacity && cylinderId,
+  );
+  const eligibleStations = useEligibleLpgStations({
+    pickupLocationId: pickupLocationId || null,
+    deliveryLocationId: deliveryLocationId || null,
+    cylinderId: cylinderId || null,
+    requestedKg: validRequestedKg ? requestedKgNumber : null,
+    enabled: stationEligibilityReady,
+    limit: 10,
+  });
 
   const quote = useGatewayMutation({
     path: "/lpg/quotes",
@@ -93,6 +153,18 @@ export function NewRefillScreen() {
   }, [cylinderId, cylinders.data, deliveryLocationId, hydrated, locations.data, pickupLocationId]);
 
   useEffect(() => {
+    if (!hydrated || !cylinderId || requestedKg.trim() || cylinderCapacityKg === null) return;
+    setRequestedKg(formatKg(cylinderCapacityKg));
+  }, [cylinderCapacityKg, cylinderId, hydrated, requestedKg]);
+
+  useEffect(() => {
+    const options = eligibleStations.data;
+    if (!options) return;
+    if (stationId && options.some((station) => station.station_branch_id === stationId)) return;
+    setStationId(options[0]?.station_branch_id ?? "");
+  }, [eligibleStations.data, stationId]);
+
+  useEffect(() => {
     if (!owner || !hydrated) return;
     const now = new Date().toISOString();
     void draftStore.save({
@@ -137,12 +209,38 @@ export function NewRefillScreen() {
       setError("Choose a cylinder, pickup location and delivery location.");
       return;
     }
-    if (!stationId) {
-      setError("Choose an available SKIMA station for this refill.");
+    if (locationNeedsMapPosition) {
+      setError("Update the selected location so SKIMA can verify its map position before continuing.");
+      return;
+    }
+    if (serviceabilityError || serviceabilityPending) {
+      setError("SKIMA couldn't confirm service availability for this trip yet. Check again and continue when the locations are verified.");
+      return;
+    }
+    if (!tripServiceable) {
+      setError("Sorry, SKIMA service is not yet available for the selected pickup and return trip. Choose another location or apply to become a SKIMA partner in this area.");
       return;
     }
     if (!Number.isFinite(kilograms) || kilograms <= 0) {
       setError("Enter the amount of gas you want in kilograms.");
+      return;
+    }
+    if (cylinderCapacityKg !== null && kilograms > cylinderCapacityKg) {
+      setError(
+        `This cylinder can hold up to ${formatKg(cylinderCapacityKg)} kg. Choose ${formatKg(cylinderCapacityKg)} kg or less, or check the cylinder details before continuing.`,
+      );
+      return;
+    }
+    if (eligibleStations.isPending) {
+      setError("SKIMA is still checking which stations can fulfil this refill. Please wait a moment.");
+      return;
+    }
+    if (eligibleStations.isError) {
+      setError("SKIMA couldn't check station availability right now. Try the station check again.");
+      return;
+    }
+    if (!stationId || !(eligibleStations.data ?? []).some((station) => station.station_branch_id === stationId)) {
+      setError("No eligible SKIMA station is selected for this refill. Check the station options and try again.");
       return;
     }
 
@@ -200,8 +298,59 @@ export function NewRefillScreen() {
     }
   };
 
+  const retryServiceability = () => {
+    if (selectedPickupLocation) void pickupServiceability.refetch();
+    if (selectedDeliveryLocation) void deliveryServiceability.refetch();
+  };
+
+  const selectPickupLocation = (id: string) => {
+    setPickupLocationId(id);
+    setStationId("");
+    setQuoteId(null);
+    setQuoteRecord(null);
+    setError(null);
+  };
+
+  const selectDeliveryLocation = (id: string) => {
+    setDeliveryLocationId(id);
+    setStationId("");
+    setQuoteId(null);
+    setQuoteRecord(null);
+    setError(null);
+  };
+
+  const selectCylinder = (id: string) => {
+    setCylinderId(id);
+    setStationId("");
+    setQuoteId(null);
+    setQuoteRecord(null);
+    setError(null);
+  };
+
   const currency = firstString(quoteRecord, ["currencyCode", "currency_code"]) ?? "NGN";
   const total = firstNumber(quoteRecord, ["totalAmount", "total_amount", "quotedTotal"]);
+  const stationUnavailable = stationEligibilityReady && !eligibleStations.isPending && !eligibleStations.isError && (eligibleStations.data ?? []).length === 0;
+  const quoteButtonLabel = !hasSelectedTrip
+    ? "Choose locations to continue"
+    : locationNeedsMapPosition
+      ? "Update location map position"
+      : serviceabilityPending
+        ? "Checking service availability…"
+        : serviceabilityError
+          ? "Check availability to continue"
+          : serviceUnavailable
+            ? "Service not available for this trip"
+            : !validRequestedKg
+              ? "Enter refill amount to continue"
+              : exceedsCylinderCapacity
+                ? "Correct refill amount to continue"
+                : eligibleStations.isPending
+                  ? "Finding eligible stations…"
+                  : eligibleStations.isError
+                    ? "Check stations to continue"
+                    : stationUnavailable
+                      ? "No station can fulfil this refill"
+                      : "See my price";
 
   return (
     <Screen
@@ -257,7 +406,7 @@ export function NewRefillScreen() {
       ) : (
         <>
           {!locations.isPending && (locations.data ?? []).length === 0 ? (
-            <View style={[styles.requirement, { backgroundColor: palette.warningSoft }]}> 
+            <View style={[styles.requirement, { backgroundColor: palette.warningSoft }]}>
               <MapPin color={palette.warning} size={22} />
               <View style={styles.requirementCopy}>
                 <Text style={[styles.requirementTitle, { color: palette.ink }]}>Add a pickup location first</Text>
@@ -274,7 +423,7 @@ export function NewRefillScreen() {
             description="Select the SKIMA cylinder identity for this refill."
             records={cylinders.data ?? []}
             selected={cylinderId}
-            onSelect={setCylinderId}
+            onSelect={selectCylinder}
             emptyText="No cylinder is registered yet."
           />
 
@@ -285,7 +434,7 @@ export function NewRefillScreen() {
             description="Where should the driver collect the cylinder?"
             records={locations.data ?? []}
             selected={pickupLocationId}
-            onSelect={setPickupLocationId}
+            onSelect={selectPickupLocation}
             emptyText="Add a saved location to continue."
           />
 
@@ -296,23 +445,151 @@ export function NewRefillScreen() {
             description="Choose where the filled cylinder should be delivered."
             records={locations.data ?? []}
             selected={deliveryLocationId}
-            onSelect={setDeliveryLocationId}
+            onSelect={selectDeliveryLocation}
             emptyText="Add a saved location to continue."
           />
 
+          {hasSelectedTrip ? (
+            locationNeedsMapPosition ? (
+              <View style={[styles.availabilityCard, { backgroundColor: palette.warningSoft, borderColor: palette.warning }]}>
+                <View style={styles.availabilityLead}>
+                  <AlertTriangle color={palette.warning} size={22} />
+                  <View style={styles.requirementCopy}>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>Update the saved location</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>One of these locations does not have a usable map position, so SKIMA cannot verify service availability yet.</Text>
+                  </View>
+                </View>
+                <AppButton label="Update locations" variant="secondary" size="sm" onPress={() => router.push("/(customer)/locations")} />
+              </View>
+            ) : serviceabilityPending ? (
+              <View style={[styles.availabilityCard, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+                <View style={styles.availabilityLead}>
+                  <MapPin color={palette.brand} size={22} />
+                  <View style={styles.requirementCopy}>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>Checking service availability</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>We are checking both the pickup and return locations before showing stations and pricing.</Text>
+                  </View>
+                </View>
+              </View>
+            ) : serviceabilityError ? (
+              <View style={[styles.availabilityCard, { backgroundColor: palette.warningSoft, borderColor: palette.warning }]}>
+                <View style={styles.availabilityLead}>
+                  <AlertTriangle color={palette.warning} size={22} />
+                  <View style={styles.requirementCopy}>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>We couldn't check this location right now</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>Your saved locations are still here. Check your connection and try the availability check again.</Text>
+                  </View>
+                </View>
+                <AppButton label="Check again" variant="secondary" size="sm" onPress={retryServiceability} />
+              </View>
+            ) : serviceUnavailable ? (
+              <View style={[styles.availabilityCard, { backgroundColor: palette.brandSoft, borderColor: palette.brand }]}>
+                <View style={styles.availabilityLead}>
+                  <MapPin color={palette.brand} size={22} />
+                  <View style={styles.requirementCopy}>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>Sorry, SKIMA service is not yet available in your area</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>
+                      {pickupUnavailable && deliveryUnavailable
+                        ? "We haven't opened LPG pickup or return service for the selected locations yet."
+                        : pickupUnavailable
+                          ? "We haven't opened LPG pickup service for the selected pickup location yet."
+                          : "We haven't opened LPG return service for the selected return location yet."} Choose another location, or help bring SKIMA LPG to this area as an early partner.
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.availabilityActions}>
+                  <AppButton label="Choose another location" variant="secondary" size="sm" onPress={() => router.push("/(customer)/locations")} />
+                  <AppButton label="Become a Driver Partner" size="sm" onPress={() => router.push("/(customer)/driver-application" as never)} />
+                  <AppButton label="Become a Station Partner" variant="secondary" size="sm" onPress={() => router.push("/(customer)/station-application" as never)} />
+                </View>
+              </View>
+            ) : tripServiceable ? (
+              <View style={[styles.availabilityCard, { backgroundColor: palette.successSoft, borderColor: palette.success }]}>
+                <View style={styles.availabilityLead}>
+                  <ShieldCheck color={palette.success} size={22} />
+                  <View style={styles.requirementCopy}>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>SKIMA LPG is available for this trip</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>Both pickup and return locations are currently within SKIMA LPG service coverage.</Text>
+                  </View>
+                </View>
+              </View>
+            ) : null
+          ) : null}
+
           <View style={[styles.formCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <SectionLead step="4" icon={<Scale color={palette.brand} size={20} />} title="Refill amount" description="Enter the kilograms you want added to the selected cylinder." />
+
+            {cylinderCapacityKg !== null ? (
+              <View
+                style={[
+                  styles.capacityNotice,
+                  {
+                    backgroundColor: exceedsCylinderCapacity ? palette.dangerSoft : palette.surfaceSubtle,
+                    borderColor: exceedsCylinderCapacity ? palette.danger : palette.border,
+                  },
+                ]}
+              >
+                {exceedsCylinderCapacity ? (
+                  <AlertTriangle color={palette.danger} size={20} />
+                ) : (
+                  <ShieldCheck color={palette.success} size={20} />
+                )}
+                <View style={styles.capacityCopy}>
+                  <Text style={[styles.capacityTitle, { color: palette.ink }]}>Cylinder capacity: {formatKg(cylinderCapacityKg)} kg</Text>
+                  <Text style={[styles.capacityBody, { color: exceedsCylinderCapacity ? palette.danger : palette.muted }]}>
+                    {exceedsCylinderCapacity
+                      ? `${requestedKg.trim()} kg is above this cylinder's verified maximum. SKIMA will not prepare or charge for an over-capacity refill.`
+                      : `This is the maximum quantity SKIMA will quote for this cylinder.`}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
             <View style={styles.fieldGroup}>
               <Text style={[styles.fieldLabel, { color: palette.ink }]}>Kilograms to refill</Text>
               <TextInput
                 value={requestedKg}
-                onChangeText={setRequestedKg}
+                onChangeText={(value) => {
+                  setRequestedKg(value);
+                  setStationId("");
+                  setQuoteId(null);
+                  setQuoteRecord(null);
+                  if (error) setError(null);
+                }}
                 keyboardType="decimal-pad"
                 placeholder="e.g. 6"
                 placeholderTextColor={palette.muted}
-                style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: palette.input,
+                    borderColor: exceedsCylinderCapacity ? palette.danger : palette.borderStrong,
+                    color: palette.ink,
+                  },
+                ]}
               />
             </View>
+
+            {exceedsCylinderCapacity && cylinderCapacityKg !== null ? (
+              <View style={styles.capacityActions}>
+                <AppButton
+                  label={`Use ${formatKg(cylinderCapacityKg)} kg`}
+                  size="sm"
+                  onPress={() => {
+                    setRequestedKg(formatKg(cylinderCapacityKg));
+                    setStationId("");
+                    setError(null);
+                  }}
+                />
+                <AppButton
+                  label="Check cylinder details"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => router.push(`/(customer)/cylinder/${cylinderId}` as never)}
+                />
+              </View>
+            ) : null}
+
             <View style={styles.fieldGroup}>
               <Text style={[styles.fieldLabel, { color: palette.ink }]}>Driver note <Text style={{ color: palette.muted, fontWeight: "600" }}>(optional)</Text></Text>
               <TextInput
@@ -326,18 +603,40 @@ export function NewRefillScreen() {
             </View>
           </View>
 
-          <SelectionSection
-            step="5"
-            icon={<Store color={palette.brand} size={20} />}
-            title="Choose a station"
-            description="Select an available SKIMA station for the refill."
-            records={stations.data ?? []}
-            selected={stationId}
-            onSelect={setStationId}
-            emptyText="No station is currently available for this location."
-          />
+          {tripServiceable ? (
+            <StationSelectionSection
+              stations={eligibleStations.data ?? []}
+              selected={stationId}
+              onSelect={(id) => {
+                setStationId(id);
+                setQuoteId(null);
+                setQuoteRecord(null);
+                setError(null);
+              }}
+              ready={stationEligibilityReady}
+              loading={eligibleStations.isPending}
+              failed={eligibleStations.isError}
+              onRetry={() => void eligibleStations.refetch()}
+            />
+          ) : null}
 
-          <AppButton label="See my price" fullWidth size="lg" loading={quote.isPending} onPress={() => void requestQuote()} />
+          <AppButton
+            label={quoteButtonLabel}
+            fullWidth
+            size="lg"
+            disabled={
+              !tripServiceable ||
+              serviceabilityError ||
+              locationNeedsMapPosition ||
+              !validRequestedKg ||
+              exceedsCylinderCapacity ||
+              eligibleStations.isError ||
+              stationUnavailable ||
+              !stationId
+            }
+            loading={quote.isPending || serviceabilityPending || eligibleStations.isPending}
+            onPress={() => void requestQuote()}
+          />
         </>
       )}
 
@@ -398,6 +697,92 @@ function SelectionSection({
   );
 }
 
+function StationSelectionSection({
+  stations,
+  selected,
+  onSelect,
+  ready,
+  loading,
+  failed,
+  onRetry,
+}: {
+  stations: EligibleLpgStation[];
+  selected: string;
+  onSelect(id: string): void;
+  ready: boolean;
+  loading: boolean;
+  failed: boolean;
+  onRetry(): void;
+}) {
+  const { palette } = useAppTheme();
+  return (
+    <View style={[styles.selectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      <SectionLead
+        step="5"
+        icon={<Store color={palette.brand} size={20} />}
+        title="Choose a station"
+        description="Only stations that can currently fulfil this cylinder and refill amount are shown. Closest options appear first."
+      />
+
+      {!ready ? (
+        <Text style={[styles.emptyText, { color: palette.muted }]}>Enter a valid refill amount to see available stations.</Text>
+      ) : loading ? (
+        <Text style={[styles.emptyText, { color: palette.muted }]}>Finding stations that can fulfil this refill…</Text>
+      ) : failed ? (
+        <View style={styles.stationQueryState}>
+          <Text style={[styles.emptyText, { color: palette.muted }]}>We couldn't refresh station availability right now.</Text>
+          <AppButton label="Check stations again" variant="secondary" size="sm" onPress={onRetry} />
+        </View>
+      ) : stations.length === 0 ? (
+        <View style={styles.stationQueryState}>
+          <Text style={[styles.stationEmptyTitle, { color: palette.ink }]}>No station can fulfil this refill right now</Text>
+          <Text style={[styles.emptyText, { color: palette.muted }]}>A station may be outside its service radius, unavailable, low on stock, missing a current price, or unable to handle this cylinder size. Try another location or check again later.</Text>
+        </View>
+      ) : (
+        <View style={styles.stationOptions}>
+          {stations.map((station, index) => {
+            const active = station.station_branch_id === selected;
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                key={station.station_branch_id}
+                onPress={() => onSelect(station.station_branch_id)}
+                style={({ pressed }) => [
+                  styles.stationOption,
+                  {
+                    backgroundColor: active ? palette.brandSoft : palette.surfaceSubtle,
+                    borderColor: active ? palette.brand : palette.border,
+                    opacity: pressed ? 0.78 : 1,
+                  },
+                ]}
+              >
+                <View style={styles.stationOptionTop}>
+                  <View style={styles.stationOptionCopy}>
+                    <View style={styles.stationNameRow}>
+                      <Text style={[styles.stationName, { color: palette.ink }]}>{station.display_name}</Text>
+                      {index === 0 ? <Text style={[styles.recommendedTag, { color: palette.brand }]}>CLOSEST</Text> : null}
+                    </View>
+                    <Text style={[styles.stationAddress, { color: palette.muted }]} numberOfLines={2}>{station.formatted_address}</Text>
+                  </View>
+                  {active ? <CheckCircle2 color={palette.brand} size={21} /> : null}
+                </View>
+                <View style={styles.stationFacts}>
+                  <Text style={[styles.stationFact, { color: palette.ink }]}>{money(station.price_per_kg, station.currency_code)}/kg</Text>
+                  <Text style={[styles.stationFactMuted, { color: palette.muted }]}>~{formatDistance(station.route_proxy_distance_meters)} trip</Text>
+                  <Text style={[styles.stationFactMuted, { color: palette.muted }]}>{formatKg(station.current_available_kg)} kg available</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      <Text style={[styles.stationFootnote, { color: palette.muted }]}>The final delivery route and full price are calculated when you request the quote.</Text>
+    </View>
+  );
+}
+
 function SectionLead({ step, icon, title, description }: { step: string; icon: ReactNode; title: string; description: string }) {
   const { palette } = useAppTheme();
   return (
@@ -429,6 +814,16 @@ function money(value: number | null, currency: string | null) {
   } catch {
     return `${currency ?? ""} ${value.toFixed(2)}`.trim();
   }
+}
+
+function formatKg(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function formatDistance(distanceMeters: number) {
+  if (!Number.isFinite(distanceMeters)) return "—";
+  if (distanceMeters < 1000) return `${Math.max(1, Math.round(distanceMeters))} m`;
+  return `${(distanceMeters / 1000).toFixed(distanceMeters < 10_000 ? 1 : 0)} km`;
 }
 
 function formatDate(value: string | null) {
@@ -478,6 +873,9 @@ const styles = StyleSheet.create({
   requirementCopy: { flex: 1, gap: 2 },
   requirementTitle: { ...typography.bodyStrong, fontSize: 14 },
   requirementBody: { ...typography.caption, lineHeight: 17 },
+  availabilityCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  availabilityLead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
+  availabilityActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   selectionCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
   formCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
   sectionLead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
@@ -488,6 +886,25 @@ const styles = StyleSheet.create({
   sectionDescription: { ...typography.caption, lineHeight: 17 },
   choices: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   emptyText: { ...typography.caption, paddingVertical: spacing.xs },
+  stationQueryState: { gap: spacing.sm },
+  stationEmptyTitle: { ...typography.bodyStrong, fontSize: 14 },
+  stationOptions: { gap: spacing.sm },
+  stationOption: { gap: spacing.sm, borderWidth: 1, borderRadius: radii.lg, padding: spacing.md },
+  stationOptionTop: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
+  stationOptionCopy: { flex: 1, gap: 3 },
+  stationNameRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing.sm },
+  stationName: { ...typography.bodyStrong, fontSize: 14 },
+  recommendedTag: { ...typography.eyebrow, fontSize: 8 },
+  stationAddress: { ...typography.caption, lineHeight: 17 },
+  stationFacts: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm + 2 },
+  stationFact: { ...typography.caption, fontWeight: "900" },
+  stationFactMuted: { ...typography.caption, fontWeight: "700" },
+  stationFootnote: { ...typography.caption, lineHeight: 17 },
+  capacityNotice: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.md },
+  capacityCopy: { flex: 1, gap: 3 },
+  capacityTitle: { ...typography.bodyStrong, fontSize: 13 },
+  capacityBody: { ...typography.caption, lineHeight: 17 },
+  capacityActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   fieldGroup: { gap: spacing.sm },
   fieldLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" },
   input: { minHeight: 54, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: 16 },

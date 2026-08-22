@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "remoteHeadVersion": "20260821205916",
+  "remoteHeadVersion": "20260822034744",
   "requiredRestoredMigration": "20260820013807_harden_document_correction_review_flow.sql",
   "pendingPermissionMigration": null,
   "staleAliases": {
@@ -41,6 +41,13 @@
     "20260820085101_separate_station_approval_from_operational_activation.sql",
     "20260820191805_financial_revenue_foundation.sql",
     "20260821093119_revenue_station_pricing_repair.sql",
-    "20260821205916_lpg_revenue_station_permission_security_repair.sql"
+    "20260821205916_lpg_revenue_station_permission_security_repair.sql",
+    "20260821211620_lpg_station_first_price_compatibility_repair.sql",
+    "20260821214651_lpg_cylinder_capacity_reverification.sql",
+    "20260821223359_lpg_hierarchical_service_area_runtime.sql",
+    "20260821235350_lpg_customer_station_eligibility.sql",
+    "20260822003053_lpg_service_coverage_admin_runtime.sql",
+    "20260822032658_lpg_partner_application_geography_foundation.sql",
+    "20260822034744_lpg_partner_candidate_service_area.sql"
   ]
 }
