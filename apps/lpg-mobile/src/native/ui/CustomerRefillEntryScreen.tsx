@@ -50,7 +50,7 @@ export function CustomerRefillEntryScreen() {
         <AppButton
           label="Check acceptance again"
           variant="secondary"
-          leadingIcon={<RefreshCcw color={palette.brand} size={17} />}
+          icon={<RefreshCcw color={palette.brand} size={17} />}
           onPress={() => {
             void policy.refetch();
             void acceptance.refetch();
