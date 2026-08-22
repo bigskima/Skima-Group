@@ -35,6 +35,7 @@ type ServiceArea = {
   city_name: string | null;
   town_name: string | null;
   locality_name: string | null;
+  candidate?: boolean;
 };
 
 const EDITABLE_APPLICATION_STATUSES = new Set([
@@ -223,9 +224,37 @@ function DriverGeographyStep(props: {
     setDetectingLocation(true);
     setError(null);
     try {
-      setLocation(await readOperationalLocation());
+      const nextLocation = await readOperationalLocation();
+      setLocation(nextLocation);
+
+      const { data, error: areaError } = await session.supabase.rpc(
+        "resolve_or_create_lpg_partner_candidate_area",
+        {
+          target_latitude: nextLocation.latitude,
+          target_longitude: nextLocation.longitude,
+          target_geography: nextLocation,
+          target_idempotency_key: idempotencyKey(
+            "driver-detected-service-area",
+            `${session.session?.user.id ?? "user"}:${Date.now()}`,
+          ),
+        },
+      );
+      if (areaError) throw areaError;
+
+      const resolved = readResolvedArea(data);
+      if (resolved) {
+        setAreas((current) =>
+          current.some((area) => area.area_id === resolved.area_id)
+            ? current
+            : [resolved, ...current],
+        );
+        setSelectedIds((current) =>
+          current.includes(resolved.area_id) ? current : [resolved.area_id, ...current],
+        );
+        setPrimaryId((current) => current ?? resolved.area_id);
+      }
     } catch (cause) {
-      setError(friendlyError(cause, "We could not detect your location. Please try again."));
+      setError(friendlyError(cause, "We could not prepare your operating area. Please try again."));
     } finally {
       setDetectingLocation(false);
     }
@@ -354,7 +383,7 @@ function DriverGeographyStep(props: {
             <Text style={[styles.helper, { color: palette.muted }]}>Loading available areas…</Text>
           </View>
         ) : areas.length === 0 ? (
-          <Text style={[styles.helper, { color: palette.muted }]}>No driver service areas are available for selection yet.</Text>
+          <Text style={[styles.helper, { color: palette.muted }]}>Detect your location to prepare your area for the application.</Text>
         ) : (
           <View style={styles.areaList}>
             {areas.map((area) => {
@@ -368,7 +397,9 @@ function DriverGeographyStep(props: {
                     </View>
                     <View style={styles.areaCopy}>
                       <Text style={[styles.areaTitle, { color: palette.ink }]}>{area.display_name}</Text>
-                      <Text style={[styles.helper, { color: palette.muted }]}>{serviceAreaSummary(area)}</Text>
+                      <Text style={[styles.helper, { color: palette.muted }]}>
+                        {area.candidate ? "Requested operating area · customer service remains off until SKIMA enables it" : serviceAreaSummary(area)}
+                      </Text>
                     </View>
                   </Pressable>
                   {selected ? (
@@ -399,7 +430,7 @@ function DriverGeographyStep(props: {
         label="Save and continue"
         fullWidth
         loading={saving}
-        disabled={loadingAreas || areas.length === 0}
+        disabled={loadingAreas || !location || selectedIds.length === 0}
         onPress={() => void save()}
       />
     </Screen>
@@ -439,6 +470,26 @@ function operationalLocationFromRecord(record: PlatformRecord | null): Operation
       country: firstString(address, ["country"]),
       countryCode: firstString(address, ["countryCode"]),
     },
+  };
+}
+
+function readResolvedArea(value: unknown): ServiceArea | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const id = typeof row.areaId === "string" ? row.areaId : null;
+  const name = typeof row.displayName === "string" ? row.displayName : null;
+  const type = typeof row.areaType === "string" ? row.areaType : null;
+  if (!id || !name || !type) return null;
+  return {
+    area_id: id,
+    display_name: name,
+    area_type: type,
+    state_name: null,
+    lga_name: null,
+    city_name: null,
+    town_name: null,
+    locality_name: null,
+    candidate: row.candidate === true,
   };
 }
 
