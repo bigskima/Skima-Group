@@ -71,7 +71,7 @@ export function PolicyDocumentScreen({
       title={document?.title ?? "Terms & policy"}
       subtitle={document?.published
         ? `Version ${document.versionLabel ?? "current"} • Read the full terms before accepting.`
-        : "The current full in-app version is being prepared from SKIMA's canonical policy source."}
+        : "Read the policy summary here. If the complete in-app version is not available yet, the official source remains available as a fallback."}
       action={
         <Pressable accessibilityRole="button" onPress={() => router.back()}>
           <Text style={[styles.back, { color: palette.brand }]}>Back</Text>
@@ -86,10 +86,18 @@ export function PolicyDocumentScreen({
 
       {policy.error ? (
         <Card>
-          <Text style={[styles.error, { color: palette.danger }]}> 
+          <Text style={[styles.error, { color: palette.danger }]}>
             {friendlyError(policy.error, "We couldn't load the current terms. Please try again.")}
           </Text>
           <AppButton label="Try again" variant="secondary" onPress={() => void policy.refetch()} />
+        </Card>
+      ) : null}
+
+      {document?.summary ? (
+        <Card>
+          <Text style={[styles.sectionTitle, { color: palette.ink }]}>Policy summary</Text>
+          <Text style={[styles.body, { color: palette.muted }]}>{cleanInlineMarkdown(document.summary)}</Text>
+          <Text style={[styles.notice, { color: palette.muted }]}>This summary is for convenience. The complete current terms control.</Text>
         </Card>
       ) : null}
 
@@ -100,15 +108,13 @@ export function PolicyDocumentScreen({
               <FileText color={palette.brand} size={22} />
             </View>
             <View style={styles.iconCopy}>
-              <Text style={[styles.sectionTitle, { color: palette.ink }]}>Canonical terms available</Text>
-              <Text style={[styles.body, { color: palette.muted }]}> 
-                SKIMA has recorded the official policy source, but the complete immutable in-app copy has not been published yet. We will not show or accept a partial copy.
-              </Text>
+              <Text style={[styles.sectionTitle, { color: palette.ink }]}>Full in-app version not published yet</Text>
+              <Text style={[styles.body, { color: palette.muted }]}>SKIMA will not show or accept an incomplete copy. You can use the official source below as a fallback until the complete in-app version is published.</Text>
             </View>
           </View>
           {document.sourceUrl ? (
             <AppButton
-              label="Read the official current policy"
+              label="Open fallback policy source"
               variant="secondary"
               trailingIcon={<ExternalLink color={palette.brand} size={17} />}
               onPress={() => void openSource()}
@@ -132,14 +138,6 @@ export function PolicyDocumentScreen({
             </View>
           </Card>
 
-          {document.summary ? (
-            <Card>
-              <Text style={[styles.sectionTitle, { color: palette.ink }]}>Quick summary</Text>
-              <Text style={[styles.body, { color: palette.muted }]}>{cleanInlineMarkdown(document.summary)}</Text>
-              <Text style={[styles.notice, { color: palette.muted }]}>The full terms below control. The summary is provided for convenience.</Text>
-            </Card>
-          ) : null}
-
           <Card>
             <View style={styles.documentBody}>
               {blocks.map((block, index) => (
@@ -150,7 +148,7 @@ export function PolicyDocumentScreen({
 
           {document.sourceUrl ? (
             <AppButton
-              label="Open canonical source"
+              label="Open fallback source"
               variant="ghost"
               trailingIcon={<ExternalLink color={palette.brand} size={16} />}
               onPress={() => void openSource()}
