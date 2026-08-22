@@ -1,4 +1,4 @@
-import { ChevronRight, Circle, LogOut, MapPinned, Menu, UserCircle, WalletCards, X } from "lucide-react";
+import { ChevronRight, Circle, FileText, LogOut, MapPinned, Menu, UserCircle, WalletCards, X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import type { NavItem } from "@skima/ui";
 
@@ -33,7 +33,7 @@ const navigationGroupDefinitions: readonly NavigationGroupDefinition[] = [
   },
   {
     label: "Company management",
-    keys: ["company", "access", "content", "catalog"],
+    keys: ["company", "access", "content", "policies", "catalog"],
   },
   {
     label: "Platform controls",
@@ -53,6 +53,9 @@ export function AdminShell(props: AdminShellProps) {
     false;
   const canReviewApplications = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
     sessionState.context?.permissions.includes("platform.applications.review") ||
+    false;
+  const canReadPolicies = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
+    sessionState.context?.permissions.includes("platform.policy.read") ||
     false;
 
   const navItems = useMemo<readonly NavItem[]>(() => {
@@ -109,8 +112,25 @@ export function AdminShell(props: AdminShellProps) {
         ];
     }
 
+    if (canReadPolicies && !resolved.some((item) => item.key === "policies")) {
+      const policyItem: NavItem = {
+        key: "policies",
+        label: "Terms & Policies",
+        href: "/policies",
+        icon: FileText,
+      };
+      const contentIndex = resolved.findIndex((item) => item.key === "content");
+      const catalogIndex = resolved.findIndex((item) => item.key === "catalog");
+      const insertAt = contentIndex >= 0 ? contentIndex + 1 : catalogIndex >= 0 ? catalogIndex : resolved.length;
+      resolved = [
+        ...resolved.slice(0, insertAt),
+        policyItem,
+        ...resolved.slice(insertAt),
+      ];
+    }
+
     return resolved;
-  }, [canManageCoverage, canReviewApplications, canSeeRevenue, props.navItems]);
+  }, [canManageCoverage, canReadPolicies, canReviewApplications, canSeeRevenue, props.navItems]);
 
   const activeItem = useMemo(
     () => navItems.find((item) => item.href === props.activeHref) ?? navItems[0],
@@ -377,5 +397,6 @@ function shortMobileLabel(label: string) {
   if (label === "Systems & Audit") return "Systems";
   if (label === "Money & Revenue") return "Revenue";
   if (label === "Service Coverage") return "Coverage";
+  if (label === "Terms & Policies") return "Policies";
   return label;
 }
