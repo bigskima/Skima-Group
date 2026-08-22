@@ -2,7 +2,7 @@ name: Production build gate
 
 on:
   push:
-    branches: [main]
+    branches: [main, financial-core-revenue-payouts]
     paths:
       - "apps/admin/**"
       - "apps/lpg-mobile/**"
