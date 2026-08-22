@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "reconciledAt": "2026-08-22",
+  "reconciledLiveHead": "20260822034744_lpg_partner_candidate_service_area.sql",
+  "expectedMigrationCount": 121,
+  "migrationTreeSha": "1ce0950c74fb4858828419fa07e73bcd2558388d",
+  "notes": "This policy was reconciled against the live SKIMA Supabase migration ledger before continuing the production build. Any migration addition, removal, rename, or historical SQL edit must deliberately update this policy after live/repository reconciliation."
+}
