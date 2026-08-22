@@ -1,7 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Activity, FileText, LayoutDashboard, MapPinned, Settings2, ShieldCheck, WalletCards } from "lucide-react";
+import { Activity, FileText, LayoutDashboard, MapPinned, Settings2, ShieldCheck, UsersRound, WalletCards } from "lucide-react";
 
 import "@skima/ui/styles.css";
 import "./styles.css";
@@ -11,6 +11,7 @@ import "./admin-grade.css";
 import { ErrorState, type NavItem } from "@skima/ui";
 import { App } from "./App";
 import { AdminShell } from "./AdminShell";
+import { AdminDriverParticipationWorkspace } from "./admin-driver-participation-workspace";
 import { AdminPartnerLocationReviewWorkspace } from "./admin-partner-location-review-workspace";
 import { AdminPolicyWorkspace } from "./admin-policy-workspace";
 import { AdminQualityWorkspace } from "./admin-quality-workspace";
@@ -114,6 +115,7 @@ function AdminRoot() {
       { key: "overview", label: "Overview", href: "/", icon: LayoutDashboard },
       { key: "operations", label: "Operations", href: "/operations", icon: Activity },
       { key: "coverage", label: "Service Coverage", href: "/coverage", icon: MapPinned },
+      { key: "drivers", label: "Drivers", href: "/drivers", icon: UsersRound },
       { key: "governance", label: "Configuration", href: "/governance", icon: Settings2 },
     ];
 
@@ -146,6 +148,7 @@ function AdminRoot() {
       { key: "overview", label: "Overview", href: "/", icon: LayoutDashboard },
       { key: "applications", label: "Applications", href: "/applications", icon: Activity },
       { key: "location-review", label: "Location Review", href: "/location-review", icon: MapPinned },
+      { key: "drivers", label: "Drivers", href: "/drivers", icon: UsersRound },
       { key: "operations", label: "Operations", href: "/operations", icon: Activity },
     ];
 
@@ -196,6 +199,41 @@ function AdminRoot() {
     );
   }
 
+  const canReadDrivers = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
+    sessionState.context?.permissions.includes("platform.drivers.read") ||
+    sessionState.context?.permissions.includes("platform.drivers.manage") ||
+    sessionState.context?.permissions.includes("platform.drivers.verify") ||
+    false;
+
+  if (
+    route === "/drivers" &&
+    sessionState.status === "authenticated" &&
+    sessionState.context &&
+    canReadDrivers
+  ) {
+    const driverNavigation: readonly NavItem[] = [
+      { key: "overview", label: "Overview", href: "/", icon: LayoutDashboard },
+      { key: "operations", label: "Operations", href: "/operations", icon: Activity },
+      { key: "drivers", label: "Driver Participation", href: "/drivers", icon: UsersRound },
+      { key: "quality", label: "Service Quality", href: "/quality", icon: ShieldCheck },
+      { key: "coverage", label: "Service Coverage", href: "/coverage", icon: MapPinned },
+    ];
+
+    return (
+      <AdminShell
+        brand="Skima"
+        navItems={driverNavigation}
+        activeHref="/drivers"
+        contextLabel={sessionState.context.platformAdmin?.title ?? "Platform administrator"}
+        userLabel={sessionState.context.profile?.display_name ?? sessionState.context.user.email ?? "Administrator"}
+        onNavigate={navigate}
+        onSignOut={sessionState.signOut}
+      >
+        <AdminDriverParticipationWorkspace />
+      </AdminShell>
+    );
+  }
+
   const canReadQuality = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
     sessionState.context?.permissions.includes("lpg.quality.read") ||
     sessionState.context?.permissions.includes("lpg.quality.manage") ||
@@ -211,6 +249,7 @@ function AdminRoot() {
     const qualityNavigation: readonly NavItem[] = [
       { key: "overview", label: "Overview", href: "/", icon: LayoutDashboard },
       { key: "operations", label: "Operations", href: "/operations", icon: Activity },
+      { key: "drivers", label: "Drivers", href: "/drivers", icon: UsersRound },
       { key: "quality", label: "Service Quality", href: "/quality", icon: ShieldCheck },
       { key: "applications", label: "Applications", href: "/applications", icon: Activity },
     ];
