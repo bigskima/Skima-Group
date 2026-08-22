@@ -10,6 +10,7 @@ import {
   firstString,
   nestedRecord,
   recordId,
+  type PlatformRecord,
 } from "../api/records";
 import {
   readOperationalLocation,
@@ -36,8 +37,14 @@ type ServiceArea = {
   locality_name: string | null;
 };
 
+const EDITABLE_APPLICATION_STATUSES = new Set([
+  "draft",
+  "incomplete",
+  "additional_info_required",
+  "resubmitted",
+]);
+
 export function DriverApplicationEntryScreen() {
-  const session = useSession();
   const { palette } = useAppTheme();
   const applications = domainQueries.applications();
   const types = domainQueries.applicationTypes();
@@ -63,13 +70,15 @@ export function DriverApplicationEntryScreen() {
         .sort((left, right) => dateValue(right) - dateValue(left))[0] ?? null,
     [applications.data, driverTypeId],
   );
+
   const currentId = current ? recordId(current) : null;
+  const applicationStatus = firstString(current, ["status"]) ?? "draft";
+  const canEditGeography = !currentId || EDITABLE_APPLICATION_STATUSES.has(applicationStatus);
   const payloadQuery = useApplicationPayload(currentId);
   const latestVersion = payloadQuery.data?.[0] ?? null;
   const latestPayload = nestedRecord(latestVersion, "payload") ?? latestVersion;
   const storedService = nestedRecord(latestPayload, "service");
   const storedLocation = nestedRecord(latestPayload, "location");
-
   const storedAreaIds = readStringArray(storedService?.serviceAreaIds);
   const storedPrimaryId = firstString(storedService, ["primaryServiceAreaId"]);
   const storedLatitude = firstNumber(storedLocation, ["latitude"]);
@@ -95,7 +104,28 @@ export function DriverApplicationEntryScreen() {
               </Text>
             </View>
           </View>
-          <AppButton label="Edit" size="sm" variant="ghost" onPress={() => setEditing(true)} />
+          {canEditGeography ? (
+            <AppButton label="Edit" size="sm" variant="ghost" onPress={() => setEditing(true)} />
+          ) : null}
+        </View>
+        <View style={styles.applicationBody}>
+          <ApplicationOverviewScreen workspace="driver" />
+        </View>
+      </View>
+    );
+  }
+
+  if (!geographyComplete && !canEditGeography) {
+    return (
+      <View style={styles.applicationShell}>
+        <View style={[styles.warningBar, { backgroundColor: palette.warningSoft, borderColor: palette.warning }]}> 
+          <MapPin size={18} color={palette.warning} />
+          <View style={styles.editBarText}>
+            <Text style={[styles.editBarTitle, { color: palette.ink }]}>Location update needed</Text>
+            <Text style={[styles.editBarSubtitle, { color: palette.muted }]}>
+              Your service location and operating areas still need to be confirmed. If SKIMA asks you to update the application, this step will become available again.
+            </Text>
+          </View>
         </View>
         <View style={styles.applicationBody}>
           <ApplicationOverviewScreen workspace="driver" />
@@ -125,7 +155,7 @@ export function DriverApplicationEntryScreen() {
 function DriverGeographyStep(props: {
   applicationId: string | null;
   applicationTypeKey: string;
-  existingPayload: Record<string, unknown> | null;
+  existingPayload: PlatformRecord | null;
   initialAreaIds: readonly string[];
   initialPrimaryAreaId: string | null;
   initialLocation: OperationalLocation | null;
@@ -156,21 +186,23 @@ function DriverGeographyStep(props: {
   useEffect(() => {
     let active = true;
     setLoadingAreas(true);
-    void session.supabase
-      .rpc("read_selectable_lpg_service_areas")
-      .then(({ data, error: queryError }) => {
+    setError(null);
+
+    void (async () => {
+      try {
+        const { data, error: queryError } = await session.supabase.rpc("read_selectable_lpg_service_areas");
         if (!active) return;
-        if (queryError) {
-          setError(friendlyError(queryError, "Service areas could not be loaded. Please try again."));
-          setAreas([]);
-          return;
-        }
-        const next = Array.isArray(data) ? data.flatMap(readServiceArea) : [];
-        setAreas(next);
-      })
-      .finally(() => {
+        if (queryError) throw queryError;
+        setAreas(Array.isArray(data) ? data.flatMap(readServiceArea) : []);
+      } catch (cause) {
+        if (!active) return;
+        setAreas([]);
+        setError(friendlyError(cause, "Service areas could not be loaded. Please try again."));
+      } finally {
         if (active) setLoadingAreas(false);
-      });
+      }
+    })();
+
     return () => {
       active = false;
     };
@@ -191,8 +223,7 @@ function DriverGeographyStep(props: {
     setDetectingLocation(true);
     setError(null);
     try {
-      const next = await readOperationalLocation();
-      setLocation(next);
+      setLocation(await readOperationalLocation());
     } catch (cause) {
       setError(friendlyError(cause, "We could not detect your location. Please try again."));
     } finally {
@@ -228,14 +259,13 @@ function DriverGeographyStep(props: {
       return;
     }
 
-    const service = {
-      serviceAreaIds: selectedIds,
-      primaryServiceAreaId: primaryId,
-    };
-    const mergedPayload = {
+    const mergedPayload: PlatformRecord = {
       ...(props.existingPayload ?? {}),
       location,
-      service,
+      service: {
+        serviceAreaIds: selectedIds,
+        primaryServiceAreaId: primaryId,
+      },
     };
 
     setSaving(true);
@@ -276,7 +306,7 @@ function DriverGeographyStep(props: {
     >
       <Card variant="brandSoft">
         <View style={styles.cardHeading}>
-          <View style={[styles.iconBubble, { backgroundColor: palette.brandSoft }]}> 
+          <View style={[styles.iconBubble, { backgroundColor: palette.brandSoft }]}>
             <LocateFixed size={20} color={palette.brand} />
           </View>
           <View style={styles.cardHeadingCopy}>
@@ -376,11 +406,21 @@ function DriverGeographyStep(props: {
   );
 }
 
-function operationalLocationFromRecord(record: Record<string, unknown> | null): OperationalLocation | null {
+function operationalLocationFromRecord(record: PlatformRecord | null): OperationalLocation | null {
   if (!record) return null;
   const latitude = firstNumber(record, ["latitude"]);
   const longitude = firstNumber(record, ["longitude"]);
   if (latitude === null || longitude === null) return null;
+  const address = nestedRecord(record, "address");
+  const storedSource = firstString(record, ["providerSource"]);
+  const providerSource: OperationalLocation["providerSource"] =
+    storedSource === "device_geocoder" ||
+    storedSource === "device_coordinates" ||
+    storedSource === "maps_adapter" ||
+    storedSource === "manual_pin"
+      ? storedSource
+      : "device_coordinates";
+
   return {
     latitude,
     longitude,
@@ -388,16 +428,16 @@ function operationalLocationFromRecord(record: Record<string, unknown> | null): 
     recordedAt: firstString(record, ["recordedAt"]) ?? new Date().toISOString(),
     formattedAddress: firstString(record, ["formattedAddress"]) ?? "Saved operating location",
     providerPlaceId: firstString(record, ["providerPlaceId"]),
-    providerSource: (firstString(record, ["providerSource"]) as OperationalLocation["providerSource"]) ?? "device_coordinates",
+    providerSource,
     address: {
-      name: firstString(nestedRecord(record, "address"), ["name"]),
-      street: firstString(nestedRecord(record, "address"), ["street"]),
-      district: firstString(nestedRecord(record, "address"), ["district"]),
-      city: firstString(nestedRecord(record, "address"), ["city"]),
-      region: firstString(nestedRecord(record, "address"), ["region"]),
-      postalCode: firstString(nestedRecord(record, "address"), ["postalCode"]),
-      country: firstString(nestedRecord(record, "address"), ["country"]),
-      countryCode: firstString(nestedRecord(record, "address"), ["countryCode"]),
+      name: firstString(address, ["name"]),
+      street: firstString(address, ["street"]),
+      district: firstString(address, ["district"]),
+      city: firstString(address, ["city"]),
+      region: firstString(address, ["region"]),
+      postalCode: firstString(address, ["postalCode"]),
+      country: firstString(address, ["country"]),
+      countryCode: firstString(address, ["countryCode"]),
     },
   };
 }
@@ -422,7 +462,9 @@ function readServiceArea(value: unknown): ServiceArea[] {
 }
 
 function readStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0) : [];
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0)
+    : [];
 }
 
 function stringOrNull(value: unknown): string | null {
@@ -437,7 +479,7 @@ function serviceAreaSummary(area: ServiceArea) {
   return location ? `${type} · ${location}` : type;
 }
 
-function dateValue(record: Record<string, unknown>) {
+function dateValue(record: PlatformRecord) {
   const value = firstString(record, ["updated_at", "updatedAt", "created_at", "createdAt"]);
   const parsed = value ? Date.parse(value) : 0;
   return Number.isFinite(parsed) ? parsed : 0;
@@ -454,6 +496,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  warningBar: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: spacing.sm,
   },
   editBarCopy: { flex: 1, flexDirection: "row", alignItems: "center", gap: spacing.sm },
