@@ -1,7 +1,5 @@
 begin;
 
--- Initial canonical policy publication. This migration is intentionally data-only:
--- future policy versions are created and published through the governed policy runtime.
 do $migration$
 declare
   customer_document public.policy_documents%rowtype;
@@ -1139,17 +1137,17 @@ SKIMA intends to operate in accordance with applicable Nigerian law and the requ
 - any other federal, state or local authority with lawful jurisdiction over a particular activity.
 
 Official reference pages used in preparing this policy include:
-- [NMDPRA Gazetted Regulations](https://www.nmdpra.gov.ng/regulations/)
-- [NMDPRA Licence and Permit Categories](https://www.nmdpra.gov.ng/LPCATEGORIES)
-- [NMDPRA MISTDO Safety Training](https://mistdo.nmdpra.gov.ng/)
-- [Nigeria Driver's Licence / FRSC](https://nigeriadriverslicence.frsc.gov.ng/)
-- [Nigeria Data Protection Commission](https://www.ndpc.gov.ng/)
-- [FCCPC Consumer Rights and Responsibilities](https://fccpc.gov.ng/consumers/consumer-rights-responsibilities/rights-responsibilities/)
-- [FCCPC Business Guidance on E-Commerce](https://fccpc.gov.ng/business-guidance-on-e-commerce-2/)
-- [Nigeria Revenue Service — Withholding Tax](https://www.nrs.gov.ng/tax-information/withholding-tax)
-- [NAICOM Insurance Policy Verification Portal](https://portal.naicom.gov.ng/)
-- [National Pension Commission](https://www.pencom.gov.ng/)
-- [Nigeria Social Insurance Trust Fund](https://nsitf.gov.ng/)
+- NMDPRA Gazetted Regulations
+- NMDPRA Licence and Permit Categories
+- NMDPRA MISTDO Safety Training
+- Nigeria Driver's Licence / FRSC
+- Nigeria Data Protection Commission
+- FCCPC Consumer Rights and Responsibilities
+- FCCPC Business Guidance on E-Commerce
+- Nigeria Revenue Service — Withholding Tax
+- NAICOM Insurance Policy Verification Portal
+- National Pension Commission
+- Nigeria Social Insurance Trust Fund
 
 # 43. Contact and support
 Questions about an application, approval, rating, payment, safety issue, data request or dispute should be submitted through the official SKIMA support channel made available in the app, website or partner interface.
@@ -1165,176 +1163,37 @@ begin
   where key = 'policy.customer.terms'
     and status = 'active'
   for update;
-
-  if not found then
-    raise exception 'policy.customer.terms document is missing';
-  end if;
+  if not found then raise exception 'policy.customer.terms document is missing'; end if;
 
   select * into partner_document
   from public.policy_documents
   where key = 'policy.partner.participation'
     and status = 'active'
   for update;
+  if not found then raise exception 'policy.partner.participation document is missing'; end if;
 
-  if not found then
-    raise exception 'policy.partner.participation document is missing';
-  end if;
-
-  if exists (
-    select 1 from public.policy_versions
-    where policy_document_id = customer_document.id
-  ) then
+  if exists (select 1 from public.policy_versions where policy_document_id = customer_document.id) then
     raise exception 'customer policy already has a version; reconcile before initial bootstrap';
   end if;
-
-  if exists (
-    select 1 from public.policy_versions
-    where policy_document_id = partner_document.id
-  ) then
+  if exists (select 1 from public.policy_versions where policy_document_id = partner_document.id) then
     raise exception 'partner policy already has a version; reconcile before initial bootstrap';
   end if;
 
-  insert into public.policy_versions (
-    policy_document_id,
-    version_label,
-    summary_content,
-    full_content,
-    content_format,
-    content_hash,
-    status,
-    effective_from,
-    published_at,
-    requires_reacceptance,
-    source_url,
-    source_reference,
-    source_updated_at,
-    metadata
-  )
-  values (
-    customer_document.id,
-    '1.0',
-    customer_document.summary_content,
-    customer_content,
-    'markdown',
-    encode(digest(convert_to(customer_content, 'UTF8'), 'sha256'), 'hex'),
-    'published',
-    published_at_value,
-    published_at_value,
-    false,
-    customer_document.source_url,
-    customer_document.source_reference,
-    published_at_value,
-    jsonb_build_object(
-      'bootstrap', true,
-      'canonicalVersion', '1.0',
-      'sourceSurface', 'public_notion_reference',
-      'sourceNormalizedForInAppReader', true
-    )
-  )
+  insert into public.policy_versions(policy_document_id,version_label,summary_content,full_content,content_format,content_hash,status,effective_from,published_at,requires_reacceptance,source_url,source_reference,source_updated_at,metadata)
+  values(customer_document.id,'1.0',customer_document.summary_content,customer_content,'markdown',encode(digest(convert_to(customer_content,'UTF8'),'sha256'),'hex'),'published',published_at_value,published_at_value,false,customer_document.source_url,customer_document.source_reference,published_at_value,jsonb_build_object('bootstrap',true,'canonicalVersion','1.0','sourceSurface','public_notion_reference','sourceNormalizedForInAppReader',true))
   returning id into customer_version_id;
 
-  insert into public.policy_events (
-    policy_document_id,
-    policy_version_id,
-    event_type,
-    actor_user_id,
-    source,
-    idempotency_key,
-    metadata
-  )
-  values
-    (
-      customer_document.id,
-      customer_version_id,
-      'policy.version_created',
-      null,
-      'skima.policy.bootstrap',
-      'policy.customer.terms:v1.0:created',
-      jsonb_build_object('createdVersionId', customer_version_id, 'versionLabel', '1.0')
-    ),
-    (
-      customer_document.id,
-      customer_version_id,
-      'policy.version_published',
-      null,
-      'skima.policy.bootstrap',
-      'policy.customer.terms:v1.0:published',
-      jsonb_build_object(
-        'reason', 'Initial canonical in-app publication',
-        'contentHash', encode(digest(convert_to(customer_content, 'UTF8'), 'sha256'), 'hex')
-      )
-    );
+  insert into public.policy_events(policy_document_id,policy_version_id,event_type,actor_user_id,source,idempotency_key,metadata)
+  values(customer_document.id,customer_version_id,'policy.version_created',null,'skima.policy.bootstrap','policy.customer.terms:v1.0:created',jsonb_build_object('createdVersionId',customer_version_id,'versionLabel','1.0')),
+        (customer_document.id,customer_version_id,'policy.version_published',null,'skima.policy.bootstrap','policy.customer.terms:v1.0:published',jsonb_build_object('reason','Initial canonical in-app publication','contentHash',encode(digest(convert_to(customer_content,'UTF8'),'sha256'),'hex')));
 
-  insert into public.policy_versions (
-    policy_document_id,
-    version_label,
-    summary_content,
-    full_content,
-    content_format,
-    content_hash,
-    status,
-    effective_from,
-    published_at,
-    requires_reacceptance,
-    source_url,
-    source_reference,
-    source_updated_at,
-    metadata
-  )
-  values (
-    partner_document.id,
-    '1.0',
-    partner_document.summary_content,
-    partner_content,
-    'markdown',
-    encode(digest(convert_to(partner_content, 'UTF8'), 'sha256'), 'hex'),
-    'published',
-    published_at_value,
-    published_at_value,
-    false,
-    partner_document.source_url,
-    partner_document.source_reference,
-    published_at_value,
-    jsonb_build_object(
-      'bootstrap', true,
-      'canonicalVersion', '1.0',
-      'sourceSurface', 'public_notion_reference',
-      'sourceNormalizedForInAppReader', true
-    )
-  )
+  insert into public.policy_versions(policy_document_id,version_label,summary_content,full_content,content_format,content_hash,status,effective_from,published_at,requires_reacceptance,source_url,source_reference,source_updated_at,metadata)
+  values(partner_document.id,'1.0',partner_document.summary_content,partner_content,'markdown',encode(digest(convert_to(partner_content,'UTF8'),'sha256'),'hex'),'published',published_at_value,published_at_value,false,partner_document.source_url,partner_document.source_reference,published_at_value,jsonb_build_object('bootstrap',true,'canonicalVersion','1.0','sourceSurface','public_notion_reference','sourceNormalizedForInAppReader',true))
   returning id into partner_version_id;
 
-  insert into public.policy_events (
-    policy_document_id,
-    policy_version_id,
-    event_type,
-    actor_user_id,
-    source,
-    idempotency_key,
-    metadata
-  )
-  values
-    (
-      partner_document.id,
-      partner_version_id,
-      'policy.version_created',
-      null,
-      'skima.policy.bootstrap',
-      'policy.partner.participation:v1.0:created',
-      jsonb_build_object('createdVersionId', partner_version_id, 'versionLabel', '1.0')
-    ),
-    (
-      partner_document.id,
-      partner_version_id,
-      'policy.version_published',
-      null,
-      'skima.policy.bootstrap',
-      'policy.partner.participation:v1.0:published',
-      jsonb_build_object(
-        'reason', 'Initial canonical in-app publication',
-        'contentHash', encode(digest(convert_to(partner_content, 'UTF8'), 'sha256'), 'hex')
-      )
-    );
+  insert into public.policy_events(policy_document_id,policy_version_id,event_type,actor_user_id,source,idempotency_key,metadata)
+  values(partner_document.id,partner_version_id,'policy.version_created',null,'skima.policy.bootstrap','policy.partner.participation:v1.0:created',jsonb_build_object('createdVersionId',partner_version_id,'versionLabel','1.0')),
+        (partner_document.id,partner_version_id,'policy.version_published',null,'skima.policy.bootstrap','policy.partner.participation:v1.0:published',jsonb_build_object('reason','Initial canonical in-app publication','contentHash',encode(digest(convert_to(partner_content,'UTF8'),'sha256'),'hex')));
 end;
 $migration$;
 
