@@ -63,6 +63,10 @@ export function friendlyError(
     return "Sorry, SKIMA service is not yet available at this pickup location. Choose another location or apply to become a SKIMA partner in this area.";
   if (message.includes("return location is outside enabled lpg service coverage"))
     return "Sorry, SKIMA service is not yet available at this return location. Choose another location or apply to become a SKIMA partner in this area.";
+  if (message.includes("selected lpg station cannot fulfil this refill for the chosen trip"))
+    return "That station can no longer fulfil this refill for the selected trip. Choose another available station and try again.";
+  if (message.includes("an eligible lpg station is required for this refill"))
+    return "Choose an available SKIMA station that can fulfil this refill before continuing.";
   if (message.includes("lpg serviceability verification"))
     return "We couldn't verify service availability for this location. Check the saved location and try again.";
   if (message.includes("valid latitude and longitude are required"))
