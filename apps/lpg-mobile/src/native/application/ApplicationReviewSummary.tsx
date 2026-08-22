@@ -235,6 +235,7 @@ export function ApplicationReviewSummary({
         href="/policies/partner-participation"
         fallbackTitle="SKIMA Partner Participation Terms & Public Policy"
         fallbackSummary="Review the key rules for partner approval, service matching, safety, earnings, privacy, conduct, suspension and your rights before submitting your application."
+        bindToCurrentPartnerApplication
       />
     </View>
   );
