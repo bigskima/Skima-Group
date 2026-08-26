@@ -63,7 +63,7 @@ with unmapped as (
     unmapped.metadata || jsonb_build_object(
       'legacySource', 'lpg_customer_locations',
       'legacyId', unmapped.id,
-      'quality', public.evaluate_location_quality('CUSTOMER_ADDRESS', unmapped.accuracy_meters, 'lpg', 'IMPORTED')
+      'quality', public.evaluate_location_quality('CUSTOMER_ADDRESS', unmapped.accuracy_meters::numeric, 'lpg', 'IMPORTED')
     )
   from unmapped
   returning id, metadata
@@ -91,7 +91,7 @@ on conflict do nothing;
 update public.lpg_customer_locations legacy
 set metadata = legacy.metadata || jsonb_build_object(
       'canonicalLocationId', mapping.location_id,
-      'locationQuality', public.evaluate_location_quality('CUSTOMER_ADDRESS', legacy.accuracy_meters, 'lpg', 'IMPORTED')
+      'locationQuality', public.evaluate_location_quality('CUSTOMER_ADDRESS', legacy.accuracy_meters::numeric, 'lpg', 'IMPORTED')
     ),
     updated_at = timezone('utc', now())
 from public.canonical_location_legacy_mappings mapping
@@ -145,7 +145,12 @@ with unmapped as (
       'applicationVersionId', unmapped.application_version_id,
       'relationshipPurpose', unmapped.relationship_purpose,
       'evidenceSnapshot', unmapped.evidence_snapshot,
-      'quality', public.evaluate_location_quality(unmapped.relationship_purpose, unmapped.accuracy_meters, null, unmapped.source_class)
+      'quality', public.evaluate_location_quality(
+        unmapped.relationship_purpose,
+        unmapped.accuracy_meters::numeric,
+        null::text,
+        unmapped.source_class
+      )
     )
   from unmapped
   returning id, metadata
@@ -225,7 +230,7 @@ join public.canonical_location_legacy_mappings mapping
   on mapping.legacy_source = 'lpg_customer_locations'
  and mapping.legacy_id = location.id
 cross join lateral (
-  select public.evaluate_location_quality('CUSTOMER_ADDRESS', location.accuracy_meters, 'lpg', 'IMPORTED') decision
+  select public.evaluate_location_quality('CUSTOMER_ADDRESS', location.accuracy_meters::numeric, 'lpg', 'IMPORTED') decision
 ) quality
 on conflict (order_type, order_id, purpose) do nothing;
 
