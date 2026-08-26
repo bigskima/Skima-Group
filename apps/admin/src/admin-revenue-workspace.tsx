@@ -191,7 +191,7 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
     const amount = Number(feeAmounts[feeKey]);
     if (!Number.isFinite(amount) || amount < 0) {
       setSaveSucceeded(false);
-      setSaveNotice("Enter a valid SKIMA revenue amount per kilogram. Zero is allowed.");
+      setSaveNotice("Enter a valid fee amount. Zero is allowed.");
       return;
     }
     updateRevenueRate.mutate({ feeKey, amount });
