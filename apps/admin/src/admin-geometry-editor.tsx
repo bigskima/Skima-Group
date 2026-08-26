@@ -1,5 +1,5 @@
 import { Crosshair, Minus, Plus, RotateCcw } from "lucide-react";
-import { useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { Button, StatusBadge } from "@skima/ui";
 
 type Coordinate = readonly [number, number];
@@ -8,6 +8,7 @@ const WIDTH = 800; const HEIGHT = 420; const TILE = 256;
 export function AdminGeometryEditor(props: { value?: string; onChange?: (geojson: string) => void; point?: Coordinate | null; onPointChange?: (point: Coordinate) => void; mode: "polygon" | "point" }) {
   const initial = useMemo(() => readPolygons(props.value), [props.value]);
   const [polygons,setPolygons]=useState<Coordinate[][]>(initial.length?initial:[[]]); const [active,setActive]=useState(Math.max(initial.length-1,0)); const [center,setCenter]=useState<Coordinate>(()=>average(initial.flat())??props.point??[0,0]); const [zoom,setZoom]=useState(initial.length?12:2);
+  useEffect(()=>{const next=initial.length?initial:[[]];setPolygons(next);setActive(Math.max(next.length-1,0));const nextCenter=average(initial.flat());if(nextCenter)setCenter(nextCenter);},[initial]);
   const tileTemplate=import.meta.env.VITE_MAP_TILE_URL_TEMPLATE as string|undefined; const attribution=(import.meta.env.VITE_MAP_ATTRIBUTION as string|undefined)??"Configured map provider";
   const layout=tiles(center,zoom,tileTemplate); const paths=polygons.map((polygon)=>polygonPath(polygon,center,zoom)); const pointPosition=props.point?screenPoint(props.point,center,zoom):null;
   const emit=(next:Coordinate[][])=>{setPolygons(next);const completed=next.filter((polygon)=>polygon.length>=3).map(closeRing);if(!props.onChange)return;if(completed.length===0)props.onChange("");else props.onChange(JSON.stringify(completed.length===1?{type:"Polygon",coordinates:[completed[0]]}:{type:"MultiPolygon",coordinates:completed.map((ring)=>[ring])},null,2));};

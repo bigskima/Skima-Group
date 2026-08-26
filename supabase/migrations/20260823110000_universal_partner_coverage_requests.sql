@@ -53,24 +53,37 @@ grant execute on function public.read_selectable_operational_geographies() to au
 
 create or replace function public.sync_universal_application_location_and_coverage()
 returns trigger language plpgsql security definer set search_path=public,extensions,pg_temp as $$
-declare app record; service jsonb; item jsonb; point extensions.geography(Point,4326); polygon extensions.geography(MultiPolygon,4326);
+declare app record; service jsonb; item jsonb; point extensions.geography(Point,4326); polygon extensions.geography(MultiPolygon,4326); coverage_config jsonb; configured_entity_type text; configured_service_key text;
 begin
-  select record.*,definition.key application_type_key into app from public.application_records record join public.application_type_definitions definition on definition.id=record.application_type_id where record.id=new.application_id;
+  select record.*,definition.key application_type_key,definition.metadata application_type_metadata into app from public.application_records record join public.application_type_definitions definition on definition.id=record.application_type_id where record.id=new.application_id;
   if not found then return new; end if;
   service:=coalesce(new.payload->'service','{}'::jsonb);
-  delete from public.application_operational_coverage_requests where application_version_id=new.id and status='REQUESTED';
   if jsonb_typeof(service->'coverageRequests')='array' then
+    coverage_config:=app.application_type_metadata->'operationalCoverage';
+    configured_entity_type:=nullif(coverage_config->>'entityType','');
+    configured_service_key:=nullif(coverage_config->>'serviceKey','');
+    if configured_entity_type is null or configured_service_key is null then
+      raise exception using errcode='23514',message='application type is not configured for operational coverage projection';
+    end if;
+    delete from public.application_operational_coverage_requests where application_id=new.application_id and status='REQUESTED';
     for item in select value from jsonb_array_elements(service->'coverageRequests') loop
       point:=null; polygon:=null;
       if item->>'type'='RADIUS' then point:=extensions.st_setsrid(extensions.st_makepoint((item->>'longitude')::numeric,(item->>'latitude')::numeric),4326)::extensions.geography; end if;
       if item->>'type'='CUSTOM_ZONE' then polygon:=extensions.st_multi(extensions.st_setsrid(extensions.st_geomfromgeojson((item->'geometry')::text),4326))::extensions.geography; end if;
       insert into public.application_operational_coverage_requests(application_id,application_version_id,applicant_user_id,entity_type,service_key,coverage_type,geography_id,center_point,radius_meters,coverage_geometry,request_snapshot)
-      values(new.application_id,new.id,app.applicant_user_id,case when app.application_type_key like '%station%' then 'STATION' else 'DRIVER' end,
-        coalesce(nullif(service->>'serviceKey',''),'lpg'),item->>'type',nullif(item->>'geographyId','')::uuid,point,nullif(item->>'radiusMeters','')::numeric,polygon,item);
+      values(new.application_id,new.id,app.applicant_user_id,configured_entity_type,
+        configured_service_key,item->>'type',nullif(item->>'geographyId','')::uuid,point,nullif(item->>'radiusMeters','')::numeric,polygon,item);
     end loop;
   end if;
   return new;
 end $$;
+
+update public.application_type_definitions
+set metadata=metadata||jsonb_build_object('operationalCoverage',jsonb_build_object(
+  'entityType',case when key='application.lpg.station.phase-one' then 'STATION' else 'DRIVER' end,
+  'serviceKey','lpg'
+))
+where key in('application.lpg.driver.phase-one','application.lpg.station.phase-one');
 create trigger sync_universal_application_geography after insert or update of payload on public.application_versions
 for each row execute function public.sync_universal_application_location_and_coverage();
 

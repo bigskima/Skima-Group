@@ -42,14 +42,14 @@ create or replace function public.record_operational_driver_location(
   target_speed_meters_per_second numeric default null,target_recorded_at timestamptz default timezone('utc',now()),
   target_metadata jsonb default '{}'::jsonb,target_source text default 'skima.driver_location_api',target_idempotency_key text default null
 ) returns uuid language plpgsql security definer set search_path=public,extensions,pg_temp as $$
-declare legacy_id uuid;
+declare legacy_id uuid; effective_recorded_at timestamptz:=coalesce(target_recorded_at,timezone('utc',now()));
 begin
   legacy_id:=public.record_lpg_driver_location(target_driver_profile_id,target_latitude,target_longitude,target_idempotency_key,
     target_lpg_order_id,target_accuracy_meters,target_heading_degrees,target_speed_meters_per_second,target_online_status,
-    target_recorded_at,target_metadata,target_source);
+    effective_recorded_at,target_metadata,target_source);
   insert into public.driver_location_state(driver_id,point,accuracy_meters,heading,speed,captured_at,received_at,status,metadata)
   values(target_driver_profile_id,extensions.st_setsrid(extensions.st_makepoint(target_longitude,target_latitude),4326)::extensions.geography,
-    target_accuracy_meters,target_heading_degrees,target_speed_meters_per_second,target_recorded_at,timezone('utc',now()),
+    target_accuracy_meters,target_heading_degrees,target_speed_meters_per_second,effective_recorded_at,timezone('utc',now()),
     case when target_online_status='online' then 'available' else 'unavailable' end,
     coalesce(target_metadata,'{}'::jsonb)||jsonb_build_object('source',target_source,'legacyLocationId',legacy_id))
   on conflict(driver_id) do update set point=excluded.point,accuracy_meters=excluded.accuracy_meters,heading=excluded.heading,

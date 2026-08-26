@@ -534,6 +534,9 @@ const styles = StyleSheet.create({
 
 function readCoverageGeographyIds(service: Record<string, unknown> | null): string[] {
   const requests = service?.coverageRequests;
-  if (!Array.isArray(requests)) return [];
-  return requests.flatMap((request) => request && typeof request === "object" && !Array.isArray(request) && typeof (request as Record<string, unknown>).geographyId === "string" ? [(request as Record<string, unknown>).geographyId as string] : []);
+  if (Array.isArray(requests)) {
+    return requests.flatMap((request) => request && typeof request === "object" && !Array.isArray(request) && typeof (request as Record<string, unknown>).geographyId === "string" ? [(request as Record<string, unknown>).geographyId as string] : []);
+  }
+  const legacyIds = service?.serviceAreaIds;
+  return Array.isArray(legacyIds) ? legacyIds.filter((id): id is string => typeof id === "string") : [];
 }
