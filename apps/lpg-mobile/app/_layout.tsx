@@ -2,6 +2,10 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { AppProviders } from "../src/native/providers/AppProviders";
 import { useAppTheme } from "../src/native/theme/ThemeProvider";
+import * as SplashScreen from "expo-splash-screen";
+
+void SplashScreen.preventAutoHideAsync();
+SplashScreen.setOptions({ duration: 250, fade: true });
 
 export default function RootLayout() {
   return <AppProviders><AppNavigator /></AppProviders>;

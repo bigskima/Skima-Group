@@ -18,6 +18,7 @@ import { AppErrorBoundary } from "./AppErrorBoundary";
 import { ConnectivityNotice } from "./ConnectivityNotice";
 import { GlobalQueryFailure } from "./GlobalQueryFailure";
 import { ThemeProvider } from "../theme/ThemeProvider";
+import { StartupBrandingGate } from "./StartupBrandingGate";
 
 export function AppProviders({ children }: PropsWithChildren) {
   useNotificationLifecycle();
@@ -64,7 +65,7 @@ export function AppProviders({ children }: PropsWithChildren) {
             <ConnectivityNotice />
             <SessionProvider>
               <BackendNotificationBridge />
-              <AppErrorBoundary>{children}</AppErrorBoundary>
+              <AppErrorBoundary><StartupBrandingGate>{children}</StartupBrandingGate></AppErrorBoundary>
             </SessionProvider>
           </PersistQueryClientProvider>
         </ThemeProvider>

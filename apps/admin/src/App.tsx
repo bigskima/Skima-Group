@@ -68,6 +68,7 @@ import { AdminSystemWorkspace } from "./admin-system-workspace";
 import { AdminAccessWorkspace } from "./admin-access-workspace";
 import { AdminContentWorkspace } from "./admin-content-workspace";
 import { AdminFleetWorkspace } from "./admin-fleet-workspace";
+import { AdminStartupBrandingWorkspace } from "./admin-startup-branding-workspace";
 import {
   catalogConsoleConfig,
   financeConsoleConfig,
@@ -169,6 +170,7 @@ const navIconMap = {
   fleet: Truck,
   finance: WalletCards,
   content: Megaphone,
+  branding: Image,
   catalog: Boxes,
   providers: PlugZap,
   system: ServerCog,
@@ -229,6 +231,13 @@ const foundationNavigation: readonly NavigationItem[] = [
     href: "/content",
     icon: "content",
     requiredPermissions: ["platform.content.read"],
+  },
+  {
+    key: "branding",
+    label: "App Branding",
+    href: "/branding",
+    icon: "branding",
+    requiredPermissions: ["platform.configuration.read"],
   },
   {
     key: "catalog",
@@ -400,6 +409,7 @@ function Workspace(props: { readonly route: string; readonly onNavigate: (href: 
   if (props.route === "/content") {
     return <AdminContentWorkspace />;
   }
+  if (props.route === "/branding") return <AdminStartupBrandingWorkspace />;
 
   if (props.route === "/governance") {
     return <AdminResourceConsole config={governanceConsoleConfig} />;

@@ -1,0 +1,22 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Image } from "expo-image";
+import * as SplashScreen from "expo-splash-screen";
+import { useEffect, useRef, useState, type PropsWithChildren } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { useSession } from "../session/SessionProvider";
+
+const CACHE_KEY="skima:startup-branding:v1";
+const bundledLogo=require("../../../assets/skima-splash-logo.png");
+type Branding={version:number;enabled:boolean;backgroundColor:string;logoLightUrl:string|null;logoDarkUrl:string|null;backgroundImageUrl:string|null;logoSize:number;logoPlacement:"top"|"center"|"bottom";tagline:string|null;displayDurationMs:number;updatedAt:string|null};
+const fallback:Branding={version:0,enabled:true,backgroundColor:"#0B1510",logoLightUrl:null,logoDarkUrl:null,backgroundImageUrl:null,logoSize:180,logoPlacement:"center",tagline:"Move with confidence.",displayDurationMs:900,updatedAt:null};
+
+export function StartupBrandingGate({children}:PropsWithChildren){
+  const session=useSession(); const[branding,setBranding]=useState<Branding|null>(null); const[finished,setFinished]=useState(false); const started=useRef(Date.now());
+  useEffect(()=>{let active=true;const finish=(config:Branding)=>{if(!active)return;setBranding(config);void SplashScreen.hideAsync().catch(()=>undefined);const elapsed=Date.now()-started.current;const remaining=config.enabled?Math.max(0,config.displayDurationMs-elapsed):0;setTimeout(()=>{if(active)setFinished(true)},Math.min(remaining,5000))};void(async()=>{let cached:Branding|null=null;try{const raw=await AsyncStorage.getItem(CACHE_KEY);if(raw)cached=normalize(JSON.parse(raw))}catch{}try{const remote=await Promise.race([session.supabase.rpc("read_active_startup_branding"),new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error("timeout")),1800))]);if(remote.error)throw remote.error;const next=normalize(remote.data);await AsyncStorage.setItem(CACHE_KEY,JSON.stringify(next));for(const uri of [next.logoLightUrl,next.logoDarkUrl,next.backgroundImageUrl])if(uri)void Image.prefetch(uri,"disk").catch(()=>undefined);finish(next)}catch{finish(cached??fallback)}})();const safety=setTimeout(()=>{if(active){void SplashScreen.hideAsync().catch(()=>undefined);setFinished(true)}},6500);return()=>{active=false;clearTimeout(safety)}},[session.supabase]);
+  if(finished||branding?.enabled===false)return children;
+  const config=branding??fallback;const justify=config.logoPlacement==="top"?"flex-start":config.logoPlacement==="bottom"?"flex-end":"center";const logo=config.logoDarkUrl??config.logoLightUrl;
+  return <View style={[styles.screen,{backgroundColor:config.backgroundColor,justifyContent:justify}]}>{config.backgroundImageUrl?<Image source={{uri:config.backgroundImageUrl}} contentFit="cover" cachePolicy="disk" style={StyleSheet.absoluteFill}/>:null}<Image source={logo?{uri:logo}:bundledLogo} contentFit="contain" cachePolicy="disk" style={{width:config.logoSize,height:config.logoSize}}/>{config.tagline?<Text style={styles.tagline}>{config.tagline}</Text>:null}</View>;
+}
+function normalize(value:unknown):Branding{const record=value&&typeof value==="object"?value as Record<string,unknown>:{};const placement=record.logoPlacement;return{version:number(record.version,0),enabled:record.enabled!==false,backgroundColor:color(record.backgroundColor),logoLightUrl:url(record.logoLightUrl),logoDarkUrl:url(record.logoDarkUrl),backgroundImageUrl:url(record.backgroundImageUrl),logoSize:clamp(number(record.logoSize,180),48,320),logoPlacement:placement==="top"||placement==="bottom"?placement:"center",tagline:typeof record.tagline==="string"?record.tagline.slice(0,120):null,displayDurationMs:clamp(number(record.displayDurationMs,900),250,5000),updatedAt:typeof record.updatedAt==="string"?record.updatedAt:null}}
+function number(value:unknown,otherwise:number){return typeof value==="number"&&Number.isFinite(value)?value:otherwise}function clamp(value:number,min:number,max:number){return Math.min(max,Math.max(min,value))}function color(value:unknown){return typeof value==="string"&&/^#[0-9a-f]{6}$/i.test(value)?value:fallback.backgroundColor}function url(value:unknown){return typeof value==="string"&&/^https:\/\//.test(value)?value:null}
+const styles=StyleSheet.create({screen:{flex:1,alignItems:"center",padding:48,gap:18},tagline:{color:"white",fontSize:16,fontWeight:"700",textAlign:"center",maxWidth:320}});

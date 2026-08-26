@@ -20,7 +20,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
   experiments: { typedRoutes: true },
-  web: { bundler: "metro", output: "static" },
+  web: { bundler: "metro", output: "static", splash: { image: "./assets/skima-splash-logo.png", backgroundColor: "#0B1510", resizeMode: "contain" } },
   android: {
     package: "com.skima.lpg",
     blockedPermissions: ["android.permission.RECORD_AUDIO"],
@@ -73,7 +73,19 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
     ["expo-notifications", { defaultChannel: "operations" }],
     "expo-sharing",
-    "expo-splash-screen",
+    [
+      "expo-splash-screen",
+      {
+        backgroundColor: "#0B1510",
+        image: "./assets/skima-splash-logo.png",
+        imageWidth: 220,
+        resizeMode: "contain",
+        dark: {
+          backgroundColor: "#0B1510",
+          image: "./assets/skima-splash-logo.png",
+        },
+      },
+    ],
     "expo-font",
   ],
   extra: {
