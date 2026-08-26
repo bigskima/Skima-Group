@@ -15,7 +15,11 @@ import {
   UserRound,
   WalletCards,
 } from "lucide-react-native";
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useOrganizationInvitations } from "../api/domains";
+import { useGatewayMutation } from "../api/gateway";
+import { ActionResponseSchema, firstString, recordId } from "../api/records";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -36,6 +40,7 @@ const menus = {
     { label: "Documents", detail: "Your submitted driver documents", href: "/(driver)/documents", icon: FileCheck2 },
   ],
   station: [
+    { label: "Verify a SKIMA driver", detail: "Public driver lookup and scan", href: "/driver-verification", icon: ShieldCheck },
     { label: "Branch profile", detail: "Station profile and current status", href: "/(station)/profile", icon: Building2 },
     { label: "LPG stock", detail: "Available LPG and incoming cylinders", href: "/(station)/inventory", icon: Settings2 },
     { label: "Station reports", detail: "Completed orders and earnings", href: "/(station)/reports", icon: ReceiptText },
@@ -46,6 +51,7 @@ const menus = {
     { label: "Documents", detail: "Your submitted station documents", href: "/(station)/documents", icon: FileCheck2 },
   ],
   customer: [
+    { label: "Verify a SKIMA driver", detail: "Public driver lookup and scan", href: "/driver-verification", icon: ShieldCheck },
     { label: "Delivery locations", detail: "Pickup and return addresses", href: "/(customer)/locations", icon: MapPin },
     { label: "Stations near you", detail: "Approved station details", href: "/(customer)/stations", icon: Building2 },
     { label: "Transactions", detail: "Wallet and payment activity", href: "/(customer)/transactions", icon: WalletCards },
@@ -64,6 +70,36 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
   const primaryRole = roleNames[0] ?? workspace;
   const displayName = session.context?.profile?.display_name ?? "SKIMA member";
   const email = session.context?.user.email ?? "";
+  const invitations = useOrganizationInvitations();
+  const [invitationNotice, setInvitationNotice] = useState<string | null>(null);
+  const pendingInvitations = (invitations.data ?? []).filter((invitation) =>
+    firstString(invitation, ["status"]) === "pending" &&
+    firstString(invitation, ["invited_email", "invitedEmail"])?.toLowerCase() === email.toLowerCase(),
+  );
+  const acceptInvitation = useGatewayMutation({
+    path: "/runtime/organization-invitations/accept",
+    schema: ActionResponseSchema,
+    invalidate: [["organization-invitations"], ["messages"]],
+  });
+  const declineInvitation = useGatewayMutation({
+    path: "/runtime/organization-invitations/decline",
+    schema: ActionResponseSchema,
+    invalidate: [["organization-invitations"], ["messages"]],
+  });
+  const respondToInvitation = async (invitationId: string, decision: "accept" | "decline") => {
+    setInvitationNotice(null);
+    try {
+      const mutation = decision === "accept" ? acceptInvitation : declineInvitation;
+      await mutation.mutateAsync({
+        invitationId,
+        idempotencyKey: `lpg-expo:organization-invitation:${decision}:${invitationId}`,
+        metadata: { sourceSurface: `${group}.account` },
+      });
+      setInvitationNotice(decision === "accept" ? "Station invitation accepted." : "Station invitation declined.");
+    } catch (cause) {
+      setInvitationNotice(cause instanceof Error ? cause.message : "The invitation response could not be saved.");
+    }
+  };
 
   return (
     <Screen
@@ -72,6 +108,21 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
       subtitle="Manage your account, preferences and support."
     >
       <WorkspaceSwitcher current={group} />
+
+      {pendingInvitations.length ? (
+        <View style={[styles.invitationPanel, { backgroundColor: theme.palette.surface, borderColor: theme.palette.border }]}>
+          <SectionHeader title="Station team invitation" description="Accept or decline inside SKIMA. You do not need to use an email link." />
+          {pendingInvitations.map((invitation) => {
+            const invitationId = recordId(invitation);
+            return invitationId ? <View key={invitationId} style={styles.invitationActions}>
+              <Text style={[styles.accountNoteText, { color: theme.palette.ink }]}>You have been invited to join a station team.</Text>
+              <AppButton label="Accept" onPress={() => void respondToInvitation(invitationId, "accept")} />
+              <AppButton label="Decline" variant="secondary" onPress={() => void respondToInvitation(invitationId, "decline")} />
+            </View> : null;
+          })}
+          {invitationNotice ? <Text style={[styles.accountNoteText, { color: theme.palette.muted }]}>{invitationNotice}</Text> : null}
+        </View>
+      ) : null}
 
       <View style={[styles.profileHero, shadows.raised, { backgroundColor: theme.palette.brand }]}>
         <ProfilePhotoEditor variant="onBrand" />
@@ -224,6 +275,8 @@ const styles = StyleSheet.create({
   roleMore: { color: "rgba(255,255,255,.76)", ...typography.caption, fontSize: 10 },
   accountNote: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
   accountNoteText: { flex: 1, ...typography.caption, lineHeight: 18 },
+  invitationPanel: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
+  invitationActions: { gap: spacing.sm },
   menu: { borderRadius: radii.xl, overflow: "hidden", borderWidth: StyleSheet.hairlineWidth },
   menuRow: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   menuIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },

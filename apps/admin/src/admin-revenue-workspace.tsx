@@ -83,7 +83,7 @@ const activityColumns: readonly TableColumn<PlatformRecord>[] = [
   },
 ];
 
-export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => void }) {
+export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => void }) {
   const { context, status, supabase } = useSessionState();
   const queryClient = useQueryClient();
   const [windowDays, setWindowDays] = useState(30);
@@ -97,7 +97,7 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
     context?.permissions.includes("platform.revenue.read") ||
     context?.permissions.includes("platform.revenue.manage") ||
     false;
-  const canSubmitRevenueRate = Boolean(isSuperAdmin);
+  const canSubmitRevenueRate = Boolean(isSuperAdmin || context?.permissions.includes("platform.revenue.manage"));
 
   const range = useMemo(() => {
     const until = new Date();
@@ -221,7 +221,6 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
         description="See SKIMA's earned balance and set the fees customers and partners pay. Super Admin changes take effect immediately without policy codes or a separate approval step."
         actions={(
           <div className="admin-inline-actions">
-            <Button variant="outline" onClick={props.onOpenFinance}>Advanced policies</Button>
             <Button
               icon={RefreshCcw}
               variant="outline"
@@ -297,7 +296,7 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
 
             {!canSubmitRevenueRate ? (
               <p style={{ margin: 0 }}>
-                Only Super Admin can change fees. Finance Admin can review the immutable version history under Advanced policies.
+                You need platform revenue management access to change fees.
               </p>
             ) : (
               <p style={{ margin: 0 }}>

@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { Redirect, router } from "expo-router";
-import { LockKeyhole, Mail, ShieldCheck } from "lucide-react-native";
+import { LockKeyhole, Mail } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSession } from "../../src/native/session/SessionProvider";
@@ -49,22 +49,6 @@ export default function Login() {
               <Text style={[styles.linkMuted, { color: palette.muted }]}>Forgot password?</Text>
             </Pressable>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push("../verify-driver")}
-            style={({ pressed }) => [
-              styles.publicVerify,
-              { backgroundColor: palette.surfaceSubtle, borderColor: palette.border, opacity: pressed ? 0.74 : 1 },
-            ]}
-          >
-            <View style={[styles.publicVerifyIcon, { backgroundColor: palette.brandSoft }]}>
-              <ShieldCheck color={palette.brand} size={18} />
-            </View>
-            <View style={styles.publicVerifyCopy}>
-              <Text style={[styles.publicVerifyTitle, { color: palette.ink }]}>Verify a SKIMA driver</Text>
-              <Text style={[styles.publicVerifyBody, { color: palette.muted }]}>Public lookup · no sign-in required</Text>
-            </View>
-          </Pressable>
         </View>
       }
     >

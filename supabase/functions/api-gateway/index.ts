@@ -145,6 +145,7 @@ const ROUTES = new Set([
   "/runtime/organization-user-roles",
   "/runtime/organization-invitations",
   "/runtime/organization-invitations/accept",
+  "/runtime/organization-invitations/decline",
   "/runtime/organization-staff/directory",
   "/runtime/organization-staff/status",
   "/runtime/organization-staff/ownership-transfer",
@@ -2949,6 +2950,20 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const payload = body.value;
     return rpcResponse(
       supabase.rpc("accept_organization_invitation", {
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_invitation_id: requireUuid(payload.invitationId, "invitationId"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/organization-invitations/decline" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("decline_organization_invitation", {
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_invitation_id: requireUuid(payload.invitationId, "invitationId"),
         target_metadata: optionalRecord(payload.metadata) ?? {},
