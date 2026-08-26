@@ -8,7 +8,7 @@ import { useSessionState } from "./session";
 
 const Row = z.record(z.unknown());
 const Workspace = z.object({
-  partners: z.array(Row), applications: z.array(Row), vehicles: z.array(Row), drivers: z.array(Row),
+  partners: z.array(Row), applications: z.array(Row), vehicles: z.array(Row), drivers: z.array(Row).default([]),
   assignments: z.array(Row), compliance: z.array(Row), ownership: z.array(Row), audit: z.array(Row),
 });
 type RowType = z.infer<typeof Row>;
@@ -18,6 +18,7 @@ type Assignment = { vehicleId: string; driverId: string; relationship: string; r
 const text = (row: RowType, key: string) => typeof row[key] === "string" ? row[key] as string : "";
 const tabs: readonly Tab[] = ["partners", "applications", "vehicles", "assignments", "compliance", "ownership", "audit"];
 const relationships = ["driver_owned", "business_owned", "fleet_owned", "leased", "rented", "third_party_authorized"];
+const emptyRows: readonly RowType[] = [];
 
 export function AdminFleetWorkspace() {
   const { supabase, status } = useSessionState();
@@ -59,16 +60,18 @@ export function AdminFleetWorkspace() {
     onSuccess: async () => { setAssignment(null); await queryClient.invalidateQueries({ queryKey: ["fleet-admin"] }); },
   });
 
-  if (data.isPending) return <LoadingState label="Loading fleet operations" />;
-  if (data.error) return <ErrorState title="Fleet workspace unavailable" message={data.error.message} onRetry={() => void data.refetch()} />;
-  const workspace = data.data;
-  const rows = workspace[tab];
+  const approvedDrivers = data.data?.drivers ?? emptyRows;
   const columns = useMemo<TableColumn<RowType>[]>(() => [
     { key: "identity", header: "Record", render: (row) => <><strong>{text(row, "display_name") || text(row, "legal_name") || text(row, "registration_number") || text(row, "subject_type") || text(row, "entity_id")}</strong><br /><small>{text(row, "partner_kind") || text(row, "vehicle_id") || text(row, "id")}</small></> },
     { key: "status", header: "Status", render: (row) => { const value = text(row, "verification_status") || text(row, "operational_status") || text(row, "status") || text(row, "to_status") || (row.compliant === true ? "compliant" : "attention_required"); return <StatusBadge tone={["approved", "active", "compliant"].includes(value) ? "success" : value === "suspended" ? "danger" : "neutral"}>{normalizeStatusLabel(value)}</StatusBadge>; } },
     { key: "detail", header: "Details", render: (row) => <span>{text(row, "reason") || text(row, "relationship_role") || `${text(row, "manufacturer")} ${text(row, "model")}`.trim() || "—"}</span> },
-    { key: "actions", header: "Actions", render: (row) => tab === "applications" ? <Button size="sm" onClick={() => setDecision({ kind: "fleet", id: text(row, "id"), action: "approved", label: "Review fleet" })}>Review</Button> : tab === "vehicles" ? <span className="sk-inline-actions"><Button size="sm" onClick={() => setDecision({ kind: "vehicle", id: text(row, "id"), action: "approved", label: "Review vehicle" })}>Review</Button><Button size="sm" variant="outline" onClick={() => setAssignment({ vehicleId: text(row, "id"), driverId: workspace.drivers[0] ? text(workspace.drivers[0], "id") : "", relationship: "fleet_owned", reason: "" })}>Assign driver</Button></span> : null },
-  ], [tab, workspace.drivers]);
+    { key: "actions", header: "Actions", render: (row) => tab === "applications" ? <Button size="sm" onClick={() => setDecision({ kind: "fleet", id: text(row, "id"), action: "approved", label: "Review fleet" })}>Review</Button> : tab === "vehicles" ? <span className="sk-inline-actions"><Button size="sm" onClick={() => setDecision({ kind: "vehicle", id: text(row, "id"), action: "approved", label: "Review vehicle" })}>Review</Button><Button size="sm" variant="outline" onClick={() => setAssignment({ vehicleId: text(row, "id"), driverId: approvedDrivers[0] ? text(approvedDrivers[0], "id") : "", relationship: "fleet_owned", reason: "" })}>Assign driver</Button></span> : null },
+  ], [approvedDrivers, tab]);
+
+  if (data.isPending) return <LoadingState label="Loading fleet operations" />;
+  if (data.error) return <ErrorState title="Fleet workspace unavailable" message={data.error.message} onRetry={() => void data.refetch()} />;
+  const workspace = data.data;
+  const rows = workspace[tab];
 
   return <section className="admin-workspace">
     <PageHeader eyebrow="Fleet operations" title="Fleet & Vehicles" description="Govern partners, canonical ownership, vehicles, assignments, configured compliance, and immutable history." />

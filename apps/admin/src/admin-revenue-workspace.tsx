@@ -30,22 +30,16 @@ type RevenueSummary = {
   readonly byComponent: readonly PlatformRecord[];
 };
 
-type RevenueConfiguration = {
+type FeeControl = {
+  readonly key: string;
+  readonly displayName: string;
+  readonly description: string;
+  readonly unitLabel: string;
   readonly currencyCode: string;
-  readonly currentRevenueBalance: number;
-  readonly lpgPlatformRevenuePerKg: number;
+  readonly amount: number;
   readonly policyVersionId: string | null;
   readonly policyVersion: number;
   readonly effectiveFrom: string | null;
-  readonly effectiveUntil: string | null;
-};
-
-type RevenueRateSubmission = RevenueConfiguration & {
-  readonly changed: boolean;
-  readonly pendingApproval: boolean;
-  readonly pendingActivation: boolean;
-  readonly requestStatus: string;
-  readonly requestedAmountPerKg: number | null;
 };
 
 const activityColumns: readonly TableColumn<PlatformRecord>[] = [
@@ -94,7 +88,7 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
   const queryClient = useQueryClient();
   const [windowDays, setWindowDays] = useState(30);
   const [rangeRevision, setRangeRevision] = useState(0);
-  const [revenuePerKg, setRevenuePerKg] = useState("");
+  const [feeAmounts, setFeeAmounts] = useState<Record<string, string>>({});
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [saveSucceeded, setSaveSucceeded] = useState(false);
 
@@ -128,12 +122,12 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
   const configuration = useQuery({
     queryKey: ["admin-revenue", "configuration"],
     enabled: status === "authenticated" && canReadRevenue,
-    queryFn: async (): Promise<RevenueConfiguration> => {
-      const result = await supabase.rpc("read_lpg_platform_revenue_configuration", {
+    queryFn: async (): Promise<readonly FeeControl[]> => {
+      const result = await supabase.rpc("read_platform_fee_controls", {
         target_currency_code: "NGN",
       });
       if (result.error) throw result.error;
-      return normalizeConfiguration(result.data);
+      return normalizeFeeControls(result.data);
     },
   });
 
@@ -163,45 +157,26 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
 
   useEffect(() => {
     if (configuration.data) {
-      setRevenuePerKg(String(configuration.data.lpgPlatformRevenuePerKg));
+      setFeeAmounts(Object.fromEntries(configuration.data.map((fee) => [fee.key, String(fee.amount)])));
     }
   }, [configuration.data]);
 
   const updateRevenueRate = useMutation({
-    mutationFn: async (amount: number): Promise<RevenueRateSubmission> => {
-      const result = await supabase.rpc("configure_lpg_platform_revenue_rate", {
-        target_amount_per_kg: amount,
-        target_reason: "Submitted from Money & Revenue for governed approval",
-        target_idempotency_key: revenueChangeKey(),
-        target_effective_from: new Date().toISOString(),
+    mutationFn: async ({ feeKey, amount }: { feeKey: string; amount: number }) => {
+      const result = await supabase.rpc("set_platform_fee_amount", {
+        target_fee_key: feeKey,
+        target_amount: amount,
+        target_reason: "Changed immediately by Super Admin in Money & Revenue",
+        target_idempotency_key: revenueChangeKey(feeKey),
+        target_currency_code: "NGN",
       });
       if (result.error) throw result.error;
-      return normalizeRateSubmission(result.data);
+      return requireRecord(result.data, "Platform fee update");
     },
-    onSuccess: async (next, requestedAmount) => {
-      setRevenuePerKg(String(next.lpgPlatformRevenuePerKg));
+    onSuccess: async (_next, requested) => {
       setSaveSucceeded(true);
-      const requestedRate = money(next.requestedAmountPerKg ?? requestedAmount, next.currencyCode);
-      const activeRate = money(next.lpgPlatformRevenuePerKg, next.currencyCode);
-      if (next.pendingApproval) {
-        setSaveNotice(
-          `Approval request submitted for ${requestedRate} per kg. The active rate remains ${activeRate} per kg until an authorized reviewer approves the new policy version and an authorized finance operator activates it.`,
-        );
-      } else if (next.pendingActivation) {
-        setSaveNotice(
-          `The ${requestedRate} per kg request is approved and awaiting activation. The active rate remains ${activeRate} per kg.`,
-        );
-      } else if (next.requestStatus === "scheduled") {
-        setSaveNotice(
-          `${requestedRate} per kg is already approved and scheduled. The active rate remains ${activeRate} per kg until its effective time.`,
-        );
-      } else if (!next.changed && next.requestStatus === "active") {
-        setSaveNotice(`The active rate is already ${activeRate} per kg. No new request was needed.`);
-      } else {
-        setSaveNotice(
-          `The request is ${label(next.requestStatus)}. The active rate remains ${activeRate} per kg.`,
-        );
-      }
+      const fee = configuration.data?.find((item) => item.key === requested.feeKey);
+      setSaveNotice(`${fee?.displayName ?? "Platform fee"} is now ${money(requested.amount, fee?.currencyCode ?? "NGN")}. The change is active immediately.`);
       setRangeRevision((revision) => revision + 1);
       await queryClient.invalidateQueries({ queryKey: ["admin-revenue", "configuration"] });
     },
@@ -211,15 +186,15 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
     },
   });
 
-  const saveRevenueRate = () => {
+  const saveRevenueRate = (feeKey: string) => {
     setSaveNotice(null);
-    const amount = Number(revenuePerKg);
+    const amount = Number(feeAmounts[feeKey]);
     if (!Number.isFinite(amount) || amount < 0) {
       setSaveSucceeded(false);
-      setSaveNotice("Enter a valid SKIMA revenue amount per kilogram. Zero is allowed.");
+      setSaveNotice("Enter a valid fee amount. Zero is allowed.");
       return;
     }
-    updateRevenueRate.mutate(amount);
+    updateRevenueRate.mutate({ feeKey, amount });
   };
 
   const refreshRevenue = () => {
@@ -243,7 +218,7 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
       <PageHeader
         eyebrow="Company money"
         title="Money & Revenue"
-        description="See SKIMA's actual earned balance and submit LPG revenue-rate requests for governed approval without editing policy JSON. Customer money, station earnings, driver earnings, escrow and clearing remain separate."
+        description="See SKIMA's earned balance and set the fees customers and partners pay. Super Admin changes take effect immediately without policy codes or a separate approval step."
         actions={(
           <div className="admin-inline-actions">
             <Button variant="outline" onClick={props.onOpenFinance}>Advanced policies</Button>
@@ -262,16 +237,14 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
         <div className="sk-panel__header">
           <div>
             <p className="admin-section-kicker">Revenue pricing</p>
-            <h2>Request SKIMA LPG revenue per kg</h2>
+            <h2>Platform fees</h2>
           </div>
           {configuration.isLoading ? (
             <StatusBadge>Loading…</StatusBadge>
           ) : configuration.error ? (
             <StatusBadge tone="warning">Unavailable</StatusBadge>
           ) : configuration.data ? (
-            <StatusBadge tone="success">
-              Active {money(configuration.data.lpgPlatformRevenuePerKg, configuration.data.currencyCode)} / kg
-            </StatusBadge>
+            <StatusBadge tone="success">{configuration.data.length} active fee controls</StatusBadge>
           ) : null}
         </div>
 
@@ -285,26 +258,21 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
         ) : null}
 
         {configuration.data && !configuration.error ? (
-          <div style={{ display: "grid", gap: "1rem", maxWidth: 620 }}>
-            <div style={{ display: "grid", gap: "0.35rem" }}>
-              <strong>Proposed platform revenue per kilogram</strong>
-              <span style={{ color: "var(--sk-muted, #667085)" }}>
-                Submit a proposed amount for governed approval and activation. The active rate stays unchanged while the request is pending.
-              </span>
-            </div>
-
-            <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: "1rem", maxWidth: 760 }}>
+            {configuration.data.map((fee) => <div key={fee.key} style={{display:"grid",gap:"0.75rem",padding:"1rem",border:"1px solid var(--sk-border, #d0d5dd)",borderRadius:14}}>
+              <div><strong>{fee.displayName}</strong><p style={{margin:"0.25rem 0 0",color:"var(--sk-muted, #667085)"}}>{fee.description}</p></div>
+              <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
               <label style={{ display: "grid", gap: "0.4rem", minWidth: 220, flex: "1 1 260px" }}>
-                <span style={{ fontWeight: 700 }}>₦ per kg</span>
+                <span style={{ fontWeight: 700 }}>Amount ({fee.unitLabel})</span>
                 <input
-                  aria-label="Proposed SKIMA LPG revenue per kilogram"
+                  aria-label={fee.displayName}
                   type="number"
                   min="0"
                   step="1"
                   inputMode="decimal"
-                  value={revenuePerKg}
+                  value={feeAmounts[fee.key] ?? ""}
                   disabled={!canSubmitRevenueRate || updateRevenueRate.isPending}
-                  onChange={(event) => setRevenuePerKg(event.currentTarget.value)}
+                  onChange={(event) => setFeeAmounts((current) => ({...current,[fee.key]:event.currentTarget.value}))}
                   style={{
                     minHeight: 46,
                     border: "1px solid var(--sk-border, #d0d5dd)",
@@ -319,27 +287,23 @@ export function AdminRevenueWorkspace(props: { readonly onOpenFinance: () => voi
               <Button
                 icon={BadgeDollarSign}
                 disabled={!canSubmitRevenueRate || updateRevenueRate.isPending}
-                onClick={saveRevenueRate}
+                onClick={() => saveRevenueRate(fee.key)}
               >
-                {updateRevenueRate.isPending ? "Submitting…" : "Submit for approval"}
+                {updateRevenueRate.isPending ? "Saving…" : "Save & apply now"}
               </Button>
-            </div>
+              </div>
+              <span style={{color:"var(--sk-muted, #667085)"}}>Currently active: {money(fee.amount,fee.currencyCode)} {fee.unitLabel}</span>
+            </div>)}
 
             {!canSubmitRevenueRate ? (
               <p style={{ margin: 0 }}>
-                Super Admin can submit rate requests. Finance Admin can review governed versions under Advanced policies.
+                Only Super Admin can change fees. Finance Admin can review the immutable version history under Advanced policies.
               </p>
             ) : (
               <p style={{ margin: 0 }}>
-                Submitting does not change the active rate. An authorized reviewer must approve the request before an authorized finance operator activates it.
+                Saving creates an audited financial-policy version and activates it immediately. No separate proposal or approval is required.
               </p>
             )}
-
-            {configuration.data?.effectiveFrom ? (
-              <p style={{ margin: 0, color: "var(--sk-muted, #667085)" }}>
-                Active policy version {configuration.data.policyVersion || "—"} · effective {formatDate(configuration.data.effectiveFrom)}
-              </p>
-            ) : null}
 
             {saveNotice ? (
               <div
@@ -533,43 +497,17 @@ function normalizeSummary(value: unknown): RevenueSummary {
   };
 }
 
-function normalizeConfiguration(value: unknown): RevenueConfiguration {
-  const record = requireRecord(value, "Revenue configuration");
-  return {
-    currencyCode: recordString(record, "currencyCode") ?? "NGN",
-    currentRevenueBalance: recordNumber(record, "currentRevenueBalance"),
-    lpgPlatformRevenuePerKg: requireRecordNumber(record, "lpgPlatformRevenuePerKg", "Revenue configuration"),
-    policyVersionId: recordString(record, "policyVersionId"),
-    policyVersion: recordNumber(record, "policyVersion"),
-    effectiveFrom: recordString(record, "effectiveFrom"),
-    effectiveUntil: recordString(record, "effectiveUntil"),
-  };
-}
-
-function normalizeRateSubmission(value: unknown): RevenueRateSubmission {
-  const record = requireRecord(value, "Revenue-rate submission");
-  const changed = recordBoolean(record, "changed");
-  const pendingApproval = recordBoolean(record, "pendingApproval");
-  const pendingActivation = recordBoolean(record, "pendingActivation");
-  const requestStatus = recordString(record, "requestStatus");
-
-  if (
-    changed === null ||
-    pendingApproval === null ||
-    pendingActivation === null ||
-    requestStatus === null
-  ) {
-    throw new Error("The revenue-rate submission did not include its governed request status.");
-  }
-
-  return {
-    ...normalizeConfiguration(record),
-    changed,
-    pendingApproval,
-    pendingActivation,
-    requestStatus,
-    requestedAmountPerKg: recordNumberOrNull(record, "requestedAmountPerKg"),
-  };
+function normalizeFeeControls(value: unknown): readonly FeeControl[] {
+  if (!Array.isArray(value)) throw new Error("Platform fee controls returned an invalid response.");
+  return value.map((item) => {
+    const record = requireRecord(item, "Platform fee control");
+    const key = recordString(record, "key");
+    const displayName = recordString(record, "displayName");
+    const description = recordString(record, "description");
+    const unitLabel = recordString(record, "unitLabel");
+    if (!key || !displayName || !description || !unitLabel) throw new Error("A platform fee control is incomplete.");
+    return { key, displayName, description, unitLabel, currencyCode: recordString(record,"currencyCode") ?? "NGN", amount: requireRecordNumber(record,"amount","Platform fee control"), policyVersionId: recordString(record,"policyVersionId"), policyVersion: recordNumber(record,"policyVersion"), effectiveFrom: recordString(record,"effectiveFrom") };
+  });
 }
 
 function requireRecord(value: unknown, label: string): PlatformRecord {
@@ -644,7 +582,7 @@ function readError(error: unknown): string {
   return "The protected Revenue data could not be loaded.";
 }
 
-function revenueChangeKey(): string {
+function revenueChangeKey(feeKey: string): string {
   const uuid = globalThis.crypto?.randomUUID?.();
-  return `admin-revenue-rate:${uuid ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+  return `admin-platform-fee:${feeKey}:${uuid ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 }
