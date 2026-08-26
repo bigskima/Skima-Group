@@ -26,9 +26,6 @@ export class AppErrorBoundary extends Component<PropsWithChildren, State> {
             Your information is safe. Try again, or close and reopen SKIMA if
             this keeps happening.
           </Text>
-          {__DEV__ ? (
-            <Text style={styles.detail}>{this.state.error.message}</Text>
-          ) : null}
           <Pressable
             accessibilityRole="button"
             onPress={() => this.setState({ error: null })}

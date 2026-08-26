@@ -250,7 +250,7 @@ export function CustomerOrderDetailScreen() {
 
           <View style={[styles.safetyBox, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.brand} size={17} />
-            <Text style={[styles.safety, { color: palette.mutedStrong }]}>Operational actions are only shown for the current backend-confirmed order state. Final delivery confirmation is not enabled while the cylinder is merely in transit.</Text>
+            <Text style={[styles.safety, { color: palette.mutedStrong }]}>Available actions change as your order progresses. You can confirm delivery only after the cylinder arrives.</Text>
           </View>
         </>
       )}

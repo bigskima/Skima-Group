@@ -48,7 +48,7 @@ export function ReceiptScreen() {
     <Screen
       eyebrow="Order payment"
       title="Receipt"
-      subtitle="A clean record of the payment currently confirmed for this SKIMA refill."
+      subtitle="View the payment details for this refill."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {orders.isPending ? (
@@ -57,7 +57,7 @@ export function ReceiptScreen() {
         <EmptyState
           icon={<ReceiptText color={palette.brand} size={27} />}
           title="Receipt not available yet"
-          description="A receipt becomes available after this order has a confirmed payment record."
+          description="Your receipt will appear after payment is confirmed."
           action={<AppButton label="Back to orders" onPress={() => router.replace("/(customer)/orders")} />}
         />
       ) : (
@@ -74,7 +74,7 @@ export function ReceiptScreen() {
           <View style={[styles.receiptCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <View style={styles.receiptHead}>
               <View>
-                <Text style={[styles.receiptTitle, { color: palette.ink }]}>Payment record</Text>
+                <Text style={[styles.receiptTitle, { color: palette.ink }]}>Payment details</Text>
                 <Text style={[styles.receiptSub, { color: palette.muted }]}>{formatDate(timestamp)}</Text>
               </View>
               <StatusPill label={friendly(paymentStatus)} tone={paymentTone(paymentStatus)} />
@@ -84,7 +84,7 @@ export function ReceiptScreen() {
             <Field label="Order status" value={friendly(status)} />
             <Field label="Payment status" value={friendly(paymentStatus)} />
             <View style={[styles.totalRow, { backgroundColor: palette.surfaceSubtle }]}>
-              <Text style={[styles.totalLabel, { color: palette.muted }]}>TOTAL PAID / RECORDED</Text>
+              <Text style={[styles.totalLabel, { color: palette.muted }]}>TOTAL PAID</Text>
               <Text style={[styles.totalValue, { color: palette.ink }]}>{money(total, currency)}</Text>
             </View>
           </View>
@@ -92,8 +92,8 @@ export function ReceiptScreen() {
           <View style={[styles.verified, { backgroundColor: palette.successSoft, borderColor: palette.success }]}>
             <CheckCircle2 color={palette.success} size={21} />
             <View style={styles.verifiedCopy}>
-              <Text style={[styles.verifiedTitle, { color: palette.ink }]}>SKIMA payment record</Text>
-              <Text style={[styles.verifiedBody, { color: palette.muted }]}>This receipt reflects the payment information currently confirmed for this order in SKIMA.</Text>
+              <Text style={[styles.verifiedTitle, { color: palette.ink }]}>Payment confirmed by SKIMA</Text>
+              <Text style={[styles.verifiedBody, { color: palette.muted }]}>This receipt shows the payment confirmed for this order.</Text>
             </View>
           </View>
 

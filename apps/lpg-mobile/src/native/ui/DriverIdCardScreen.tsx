@@ -189,7 +189,7 @@ export function DriverIdCardScreen() {
 
   return (
     <Screen
-      eyebrow="Identity & Trust"
+      eyebrow="Driver Pass"
       title="Driver Pass"
       action={
         <Pressable onPress={() => router.back()}>
@@ -216,7 +216,7 @@ export function DriverIdCardScreen() {
               <View style={styles.brandRow}>
                 <BrandMark compact inverse />
                 <View>
-                  <Text style={styles.brandSubtitle}>OFFICIAL IDENTITY CREDENTIAL</Text>
+                  <Text style={styles.brandSubtitle}>OFFICIAL SKIMA DRIVER PASS</Text>
                   <Text style={styles.id}>{publicDriverId ?? "SKD-PENDING"}</Text>
                 </View>
               </View>
@@ -277,14 +277,14 @@ export function DriverIdCardScreen() {
               />
             </View>
 
-            {/* Live Verification QR */}
+            {/* Driver Check QR */}
             {verificationUrl ? (
               <View style={styles.qrWrap}>
                 <View style={styles.qrBox}>
                   <QRCode value={verificationUrl} size={90} color={colors.ink} backgroundColor="white" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.qrTitle}>Live Verification QR</Text>
+                  <Text style={styles.qrTitle}>Driver Check QR</Text>
                   <Text style={styles.qrText}>
                     Scan with any mobile camera to verify active authorization status with SKIMA platform.
                   </Text>

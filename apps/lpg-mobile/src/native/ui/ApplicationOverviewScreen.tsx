@@ -627,14 +627,14 @@ export function ApplicationOverviewScreen({
               : currentStep === 2
                 ? "Driver Photograph"
                 : currentStep === 3
-                  ? "Driver Verification Documents"
+                  ? "Driver Documents"
                   : "Review & Submit"
             : currentStep === 1
               ? "Representative & Role"
               : currentStep === 2
                 ? "Station & Location"
                 : currentStep === 3
-                  ? "Statutory Certificates"
+                  ? "Required Certificates"
                   : currentStep === 4
                     ? "Station Premises Photos"
                     : "Review & Submit"
@@ -732,7 +732,7 @@ export function ApplicationOverviewScreen({
                     requirementKey={reqKey}
                     title={firstString(requirement, ["display_name", "displayName"]) ?? reqKey}
                     description={
-                      firstString(requirement, ["description"]) ?? "Upload valid evidence document."
+                      firstString(requirement, ["description"]) ?? "Upload a clear, valid document."
                     }
                     isRequired={requirement?.is_required !== false}
                     allowedContentTypes={
@@ -785,7 +785,7 @@ export function ApplicationOverviewScreen({
         <>
           {currentStep === 1 ? (
             <Card>
-              <Text style={styles.sectionHeader}>Station Representative KYC</Text>
+              <Text style={styles.sectionHeader}>Representative Details</Text>
 
               <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>Representative Full Name *</Text>
@@ -843,10 +843,10 @@ export function ApplicationOverviewScreen({
                 const mediaUrl = firstString(submission, ["storage_path", "mediaUrl"]);
                 return (
                   <PhotoCaptureCard
-                    title="Representative Photograph (Private KYC)"
+                    title="Representative Photo (Private)"
                     subtitle="Take a clear face photo of the representative applying for this station."
                     photoUrl={mediaUrl}
-                    guidanceText="Kept private for compliance and administrative identity verification."
+                    guidanceText="Kept private and used only to verify your identity."
                     onPhotoSelected={(file) =>
                       handleUploadRequirement("station.representative-photo", file)
                     }
@@ -944,7 +944,7 @@ export function ApplicationOverviewScreen({
                     requirementKey={reqKey}
                     title={firstString(requirement, ["display_name", "displayName"]) ?? reqKey}
                     description={
-                      firstString(requirement, ["description"]) ?? "Upload statutory evidence."
+                      firstString(requirement, ["description"]) ?? "Upload the required official document."
                     }
                     isRequired={requirement?.is_required !== false}
                     allowedContentTypes={

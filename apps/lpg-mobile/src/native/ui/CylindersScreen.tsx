@@ -18,9 +18,9 @@ export function CylindersScreen() {
 
   return (
     <Screen
-      eyebrow="Cylinder identity"
+      eyebrow="Your cylinders"
       title="Your cylinders"
-      subtitle="Every cylinder keeps one permanent SKIMA identity across refill orders. A printed QR is optional; SKIMA can verify the cylinder through its assigned order and permanent Cylinder ID when scanning is unavailable."
+      subtitle="Every cylinder keeps one permanent SKIMA Cylinder ID for all refill orders. A printed QR code is optional because the Cylinder ID can also be entered manually."
       action={<AppButton label="Add cylinder" size="sm" icon={<Plus color="#FFFFFF" size={16} />} onPress={() => router.push("/(customer)/cylinder/register")} />}
       refreshControl={
         <RefreshControl
@@ -48,7 +48,7 @@ export function CylindersScreen() {
         <EmptyState
           icon={<QrCode color={palette.brand} size={28} />}
           title="Add your first cylinder"
-          description="Give it a name, choose its size and add a photo. SKIMA creates its permanent identity immediately. You do not need a printer or a physical QR label before placing your first eligible refill order."
+          description="Give it a name, choose its size and add a photo. SKIMA creates its permanent Cylinder ID immediately, and you do not need a printer to place a refill order."
           action={<AppButton label="Add a cylinder" icon={<Plus color="#FFFFFF" size={17} />} onPress={() => router.push("/(customer)/cylinder/register")} />}
         />
       )}

@@ -115,7 +115,7 @@ export function WithdrawalModal({
                 </View>
                 <View style={[styles.securityRow, { borderTopColor: palette.border }]}>
                   <ShieldCheck color={palette.success} size={16} />
-                  <Text style={[styles.securityText, { color: palette.muted }]}>The amount sent to your bank never includes the SKIMA fee. The fee remains separate in the ledger and becomes SKIMA revenue only after the provider confirms payout success.</Text>
+                  <Text style={[styles.securityText, { color: palette.muted }]}>The amount shown for your bank excludes the SKIMA fee. You will be charged only after the transfer succeeds.</Text>
                 </View>
               </View>
 

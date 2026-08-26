@@ -38,7 +38,7 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
   return (
     <Screen
       eyebrow={workspace === "driver" ? "Driver finance" : "Station finance"}
-      title={workspace === "driver" ? "Earnings" : "Settlements"}
+      title={workspace === "driver" ? "Earnings" : "Earnings"}
       subtitle={
         workspace === "driver"
           ? "Track commission activity, available earnings and payout requests."
@@ -54,7 +54,7 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
           </View>
           <View style={styles.heroIcon}><WalletCards color="#FFFFFF" size={27} /></View>
         </View>
-        <Text style={styles.heroBody}>Funds shown here come from the SKIMA wallet and ledger. Withdrawal requests are processed through the active payout policy.</Text>
+        <Text style={styles.heroBody}>This is the amount currently available in your SKIMA wallet. Withdrawal requests are sent to your verified bank account.</Text>
       </View>
 
       {entries.isPending || wallets.isPending || withdrawals.isPending ? (
@@ -69,14 +69,14 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
       ) : (
         <>
           <View style={styles.metricGrid}>
-            <Metric icon={<ReceiptText color={palette.brand} size={19} />} label={workspace === "driver" ? "Commission entries" : "Settlement entries"} value={String(activity.length)} />
+            <Metric icon={<ReceiptText color={palette.brand} size={19} />} label={workspace === "driver" ? "Deliveries" : "Orders"} value={String(activity.length)} />
             <Metric icon={<Clock3 color={palette.warning} size={19} />} label="Pending activity" value={String(pendingCount)} />
             <Metric icon={<ArrowDownToLine color={palette.brand} size={19} />} label="Withdrawals" value={String(withdrawalRows.length)} />
           </View>
 
           <SectionHeader
             title="Recent activity"
-            description={workspace === "driver" ? "Your latest commission records from completed or progressing fulfilment." : "Your latest station settlement records from LPG fulfilment."}
+            description={workspace === "driver" ? "Your latest earnings from completed and active deliveries." : "Your latest station earnings from LPG orders."}
           />
 
           <View style={styles.activityList}>
@@ -95,7 +95,7 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
                       <Banknote color={palette.brand} size={21} />
                     </View>
                     <View style={styles.activityCopy}>
-                      <Text numberOfLines={1} style={[styles.activityTitle, { color: palette.ink }]}>{displayReference(item) ?? (workspace === "driver" ? "Driver commission" : "Station settlement")}</Text>
+                      <Text numberOfLines={1} style={[styles.activityTitle, { color: palette.ink }]}>{displayReference(item) ?? (workspace === "driver" ? "Delivery earnings" : "Station earnings")}</Text>
                       <Text style={[styles.activityMeta, { color: palette.muted }]}>{formatDate(timestamp)}</Text>
                     </View>
                     <View style={styles.activityRight}>
@@ -108,15 +108,15 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
             ) : (
               <EmptyState
                 icon={<ReceiptText color={palette.brand} size={26} />}
-                title={workspace === "driver" ? "No commission activity yet" : "No settlement activity yet"}
-                description={workspace === "driver" ? "Eligible commission records will appear here as fulfilment reaches the required release stage." : "Station settlement records will appear here as eligible LPG fulfilment is completed."}
+                title={workspace === "driver" ? "No earnings yet" : "No earnings yet"}
+                description={workspace === "driver" ? "Your earnings will appear here when completed deliveries reach the payment stage." : "Station earnings will appear here as completed LPG orders are completed."}
               />
             )}
           </View>
 
           <View style={[styles.ledgerNote, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <WalletCards color={palette.mutedStrong} size={18} />
-            <Text style={[styles.ledgerText, { color: palette.muted }]}>This screen is a presentation of SKIMA financial records. The wallet and immutable ledger remain the financial source of truth.</Text>
+            <Text style={[styles.ledgerText, { color: palette.muted }]}>Your balance and activity update automatically after each confirmed payment or withdrawal.</Text>
           </View>
         </>
       )}

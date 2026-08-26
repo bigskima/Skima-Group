@@ -269,7 +269,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
       });
       await draftStore.clear(draftOwner, `station-refill-${id}`);
       setNoticeSuccess(true);
-      setNotice("Refill confirmed. SKIMA has posted the station settlement automatically and the cylinder is ready for the assigned driver.");
+      setNotice("Refill confirmed. The cylinder is ready for the assigned driver, and station earnings will update automatically.");
     } catch (cause) {
       setNoticeSuccess(false);
       setNotice(friendlyError(cause, "The refill could not be confirmed. Your entered quantity remains saved on this device."));
@@ -278,7 +278,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
 
   return (
     <Screen
-      eyebrow={workspace === "station" ? "Station fulfilment" : "Driver fulfilment"}
+      eyebrow={workspace === "station" ? "Station order" : "Delivery job"}
       title={order ? displayTitle(order) : "Job details"}
       subtitle={workspace === "station" ? "Verify the matched arrival, complete safety checks and record the actual refill." : "Follow the assigned route, scan the SKIMA cylinder at required hand-offs and complete delivery."}
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
@@ -384,7 +384,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
           {workspace === "station" && stationWaitingForDriverScan ? (
             <InfoNotice
               icon={<ScanLine color={palette.brand} size={19} />}
-              text="Waiting for the assigned driver to scan this cylinder at the station. Reception does not need to scan it. Once SKIMA verifies the match, the job moves to station verification."
+              text="Waiting for the assigned driver to scan the cylinder at reception. After SKIMA confirms it, you can complete the safety check."
             />
           ) : null}
 
@@ -443,7 +443,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
               {existingInspectionResult === "safe" ? <CheckCircle2 color={palette.success} size={21} /> : <AlertTriangle color={palette.danger} size={21} />}
               <View style={styles.inspectionCopy}>
                 <Text style={[styles.inspectionTitle, { color: palette.ink }]}>Safety check: {inspectionLabel(existingInspectionResult ?? "recorded")}</Text>
-                <Text style={[styles.inspectionBody, { color: palette.muted }]}>{existingInspectionResult === "safe" ? "This cylinder can proceed to refill." : "This cylinder is paused and must not be filled until authorised review resolves it."}</Text>
+                <Text style={[styles.inspectionBody, { color: palette.muted }]}>{existingInspectionResult === "safe" ? "This cylinder can proceed to refill." : "Do not fill this cylinder. Contact SKIMA support for the next step."}</Text>
               </View>
             </View>
           ) : null}
@@ -454,7 +454,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
                 <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><Gauge color={palette.brand} size={22} /></View>
                 <View style={styles.sectionCopy}>
                   <Text style={[styles.sectionTitle, { color: palette.ink }]}>{releaseReady ? "Refill confirmed" : "Record actual refill"}</Text>
-                  <Text style={[styles.sectionBody, { color: palette.muted }]}>{releaseReady ? "SKIMA has the confirmed refill record and settlement state. The assigned driver can continue the return journey." : `Customer requested ${requestedKg ?? "—"} kg. Enter only what was actually filled.`}</Text>
+                  <Text style={[styles.sectionBody, { color: palette.muted }]}>{releaseReady ? "The refill is confirmed. The assigned driver can begin the return journey." : `Customer requested ${requestedKg ?? "—"} kg. Enter only what was actually filled.`}</Text>
                 </View>
               </View>
 
@@ -483,7 +483,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
               ) : (
                 <InfoNotice
                   icon={<CheckCircle2 color={palette.success} size={19} />}
-                  text="No manual settlement action is needed. SKIMA posts the station settlement from the confirmed-refill event."
+                  text="No payment action is needed. Station earnings update automatically after the refill is confirmed."
                 />
               )}
             </View>
@@ -492,14 +492,14 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
           {workspace === "station" && !stationCanInspect ? (
             <InfoNotice
               icon={<ShieldCheck color={palette.mutedStrong} size={19} />}
-              text="Your station role can view this job but cannot record reception safety checks or refill operations."
+              text="You can view this order, but your team role does not allow safety checks or refill updates."
             />
           ) : null}
 
           {workspace === "driver" && ["delivered", "completed"].includes(status) ? (
             <InfoNotice
               icon={<CheckCircle2 color={palette.success} size={19} />}
-              text="Delivery is verified. Driver payout is released automatically by the SKIMA financial workflow; there is no manual earnings-posting action."
+              text="Delivery is confirmed. Your earnings will be added automatically; no further action is needed."
             />
           ) : null}
 
@@ -521,7 +521,7 @@ function StationProgress({ status }: { status: string }) {
   const readyComplete = ["station_settled", "return_en_route", "delivery_verification_pending", "delivered", "completed"].includes(status);
   return (
     <View style={[styles.progressCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-      <ProgressStep number="1" label="Driver scan verified" complete={receiptComplete} active={!receiptComplete} />
+      <ProgressStep number="1" label="Driver checked in" complete={receiptComplete} active={!receiptComplete} />
       <View style={[styles.progressLine, { backgroundColor: palette.border }]} />
       <ProgressStep number="2" label="Safety & refill" complete={refillComplete} active={receiptComplete && !refillComplete} />
       <View style={[styles.progressLine, { backgroundColor: palette.border }]} />
@@ -612,9 +612,9 @@ function driverScanTitle(type: "customer_pickup" | "station_receipt" | "customer
 }
 
 function driverScanDescription(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
-  if (type === "station_receipt") return "Scan the SKIMA cylinder identity at station reception. This makes the matched order visible to station staff for verification and refill processing.";
-  if (type === "customer_delivery") return "After the customer has completed delivery verification, scan the same SKIMA cylinder identity to complete the hand-over.";
-  return "Scan the customer's SKIMA cylinder identity before taking it into your custody.";
+  if (type === "station_receipt") return "Scan the SKIMA cylinder code at reception so station staff can confirm the order and begin the refill.";
+  if (type === "customer_delivery") return "After the customer confirms delivery, scan the same cylinder code to complete the hand-over.";
+  return "Scan the customer's SKIMA cylinder code before collecting it.";
 }
 
 function driverScanButton(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
@@ -624,9 +624,9 @@ function driverScanButton(type: "customer_pickup" | "station_receipt" | "custome
 }
 
 function driverScanSuccess(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
-  if (type === "station_receipt") return "Station arrival verified. Reception can now process the matched refill job.";
+  if (type === "station_receipt") return "Station arrival confirmed. The station can now begin the refill.";
   if (type === "customer_delivery") return "Delivery verified. SKIMA is completing the order and releasing your payout automatically.";
-  return "Cylinder pickup verified by SKIMA.";
+  return "Cylinder pickup confirmed.";
 }
 
 function driverActionLabel(actionKey: string) {
@@ -672,13 +672,13 @@ function friendlyJobStatus(value: string) {
 }
 
 function driverStageDescription(status: string) {
-  if (["driver_offered", "driver_accepted"].includes(status)) return "SKIMA has selected the eligible driver for this order.";
+  if (["driver_offered", "driver_accepted"].includes(status)) return "This order has been assigned to you.";
   if (["pickup_en_route"].includes(status)) return "Navigate to the customer and verify the cylinder before taking custody.";
   if (["pickup_verified", "station_en_route"].includes(status)) return "Take the verified cylinder to the assigned station and scan it at reception.";
   if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is processing the verified refill.";
   if (["refill_confirmed", "station_settled", "return_en_route"].includes(status)) return "The filled cylinder is ready to return to the customer.";
   if (status === "delivery_verification_pending") return "The customer must complete delivery verification before the final cylinder scan.";
-  if (["delivered", "completed"].includes(status)) return "The hand-over is verified and the financial workflow completes automatically.";
+  if (["delivered", "completed"].includes(status)) return "The hand-over is confirmed and payment processing continues automatically.";
   return "Follow the next available action for this assigned job.";
 }
 
@@ -686,9 +686,9 @@ function stationStageDescription(status: string) {
   if (["pickup_verified", "station_en_route"].includes(status)) return "The assigned driver is bringing the verified cylinder to this station.";
   if (status === "station_verified") return "The assigned driver scanned the cylinder at reception. Complete the safety check before filling.";
   if (["refill_started", "refill_in_progress"].includes(status)) return "Record the actual kilograms filled after the safety-approved refill.";
-  if (["refill_confirmed", "station_settled"].includes(status)) return "The refill and station financial release are recorded. The driver can continue the return journey.";
+  if (["refill_confirmed", "station_settled"].includes(status)) return "The refill is confirmed. The driver can continue the return journey.";
   if (["return_en_route", "delivery_verification_pending", "delivered", "completed"].includes(status)) return "This cylinder has left the station and is progressing through customer return.";
-  return "Review the matched order and current SKIMA fulfilment state.";
+  return "Review the order and complete the next available step.";
 }
 
 function inspectionLabel(value: string) {

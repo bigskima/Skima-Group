@@ -82,7 +82,7 @@ export function DriverVerificationScreen() {
 
   return (
     <Screen
-      eyebrow="Public SKIMA verification"
+      eyebrow="Check a driver"
       title="Verify a driver"
       subtitle="Enter the SKIMA Driver ID printed on the driver's pass to confirm their current public authorisation status."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.canGoBack() ? router.back() : router.replace("/")} />}
@@ -142,7 +142,7 @@ export function DriverVerificationScreen() {
               )}
             </View>
             <View style={styles.resultCopy}>
-              <Text style={styles.resultEyebrow}>{verified ? "CURRENTLY AUTHORISED" : suspended ? "NOT CURRENTLY AUTHORISED" : "VERIFICATION RESULT"}</Text>
+              <Text style={styles.resultEyebrow}>{verified ? "APPROVED DRIVER" : suspended ? "NOT APPROVED DRIVER" : "DRIVER CHECK RESULT"}</Text>
               <Text numberOfLines={1} style={styles.resultName}>{result.displayName ?? "SKIMA Driver"}</Text>
               <Text style={styles.resultId}>{result.publicDriverId ?? driverId}</Text>
               <View style={styles.resultPills}>
@@ -181,20 +181,20 @@ export function DriverVerificationScreen() {
             <Divider />
             <PublicField label="Vehicle status" value={friendly(result.vehicleStatus ?? "Not listed")} />
             <Divider />
-            <PublicField label="Approved service coverage" value={result.serviceZones?.length ? result.serviceZones.join(", ") : "Not publicly listed"} icon={<MapPin color={palette.brand} size={17} />} />
+            <PublicField label="Approved service areas" value={result.serviceZones?.length ? result.serviceZones.join(", ") : "Not publicly listed"} icon={<MapPin color={palette.brand} size={17} />} />
           </View>
 
           <View style={[styles.trust, { backgroundColor: verified ? palette.successSoft : palette.warningSoft, borderColor: verified ? palette.success : palette.warning }]}>
             {verified ? <ShieldCheck color={palette.success} size={20} /> : <ShieldAlert color={palette.warning} size={20} />}
             <View style={styles.trustCopy}>
               <Text style={[styles.trustTitle, { color: palette.ink }]}>{verified ? "Current SKIMA authorisation confirmed" : "Do not rely on a saved screenshot alone"}</Text>
-              <Text style={[styles.trustBody, { color: palette.muted }]}>{verified ? "This lookup checks the current SKIMA record for the Driver ID you entered." : "A printed pass or screenshot may be old. Only the current verification result on this screen should be used to confirm authorisation."}</Text>
+              <Text style={[styles.trustBody, { color: palette.muted }]}>{verified ? "This result shows the current status of the SKIMA Driver ID you entered." : "A printed pass or screenshot may be old. Use the current result on this screen to confirm the driver."}</Text>
             </View>
           </View>
 
           <View style={[styles.privacy, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.mutedStrong} size={18} />
-            <Text style={[styles.privacyText, { color: palette.muted }]}>Public verification may show the driver's current SKIMA participation class and aggregate service rating. Vehicle ownership, customer identities, written feedback, complaint details, KYC, private documents and internal review notes are not shown here.</Text>
+            <Text style={[styles.privacyText, { color: palette.muted }]}>Public verification may show the driver's SKIMA category and overall rating. Customer information, private documents, complaints and review notes are never displayed.</Text>
           </View>
         </>
       ) : null}

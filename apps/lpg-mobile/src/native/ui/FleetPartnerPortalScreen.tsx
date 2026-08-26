@@ -7,6 +7,7 @@ import { useGatewayMutation } from "../api/gateway";
 import { firstString, type PlatformRecord } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
 import { AppField } from "./AppField";
@@ -54,21 +55,21 @@ export function FleetPartnerPortalScreen() {
         source: "skima.fleet.portal",
         idempotencyKey: idempotencyKey("fleet-application", `${kind}:${registration || name}`),
       });
-      setNotice("Fleet application submitted for governed review.");
+      setNotice("Fleet application submitted. SKIMA will notify you after review.");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Fleet application could not be submitted.");
+      setNotice(friendlyError(error, "The fleet application could not be submitted. Please try again."));
     }
   };
 
   if (fleet.isPending) return <ScreenSkeleton cards={4} />;
 
   return (
-    <Screen eyebrow="Fleet owner portal" title="Your fleet" subtitle="Register and govern vehicles independently from driver identity.">
+    <Screen eyebrow="Fleet owner portal" title="Your fleet" subtitle="Register vehicles and manage the people authorised to use them.">
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
         <Building2 color="#fff" size={28} />
         <View style={styles.copy}>
-          <Text style={styles.title}>Fleet ownership stays separate from drivers</Text>
-          <Text style={styles.body}>Legal owners, operators, leases, rentals and authorised users retain governed history.</Text>
+          <Text style={styles.title}>Keep fleet ownership and drivers organised</Text>
+          <Text style={styles.body}>Manage owners, operators, leased vehicles, rentals and authorised drivers in one place.</Text>
         </View>
       </View>
 
@@ -79,12 +80,12 @@ export function FleetPartnerPortalScreen() {
             <Metric icon={<Truck color={palette.brand} size={20} />} label="Vehicles" value={vehicles.length} />
             <Metric icon={<UsersRound color={palette.brand} size={20} />} label="Staff" value={staff.length} />
           </View>
-          <SectionHeader title="Approval status" description="Applications and correction requests from the governed review workflow." />
+          <SectionHeader title="Approval status" description="Track your application and any changes requested by SKIMA." />
           {applications.map((application) => (
             <View key={firstString(application, ["id"]) ?? JSON.stringify(application)} style={[styles.statusCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
               <View style={styles.copy}>
                 <Text style={[styles.cardTitle, { color: palette.ink }]}>{firstString(application, ["legal_name"]) ?? "Fleet application"}</Text>
-                <Text style={[styles.cardBody, { color: palette.muted }]}>Revision {String(application.revision ?? 1)}</Text>
+                <Text style={[styles.cardBody, { color: palette.muted }]}>Application update {String(application.revision ?? 1)}</Text>
               </View>
               <StatusPill label={(firstString(application, ["status"]) ?? "pending").replaceAll("_", " ")} tone={firstString(application, ["status"]) === "approved" ? "success" : "warning"} />
             </View>
@@ -99,7 +100,7 @@ export function FleetPartnerPortalScreen() {
               </View>
               <StatusPill label={firstString(assignment, ["status"]) ?? "pending"} tone={firstString(assignment, ["status"]) === "active" ? "success" : "neutral"} />
             </View>
-          )) : <EmptyState icon={<Truck color={palette.brand} size={26} />} title="No driver assignments" description="Approved vehicles and assignments will appear here without exposing another fleet's records." />}
+          )) : <EmptyState icon={<Truck color={palette.brand} size={26} />} title="No drivers linked yet" description="Approved vehicles and linked drivers will appear here. Other fleets remain private." />}
         </>
       ) : null}
 
@@ -116,7 +117,7 @@ export function FleetPartnerPortalScreen() {
             <AppField label="Registration identifier" value={registration} onChangeText={setRegistration} placeholder="Company or owner registration reference" hint="Used for duplicate detection." />
             <View style={[styles.note, { backgroundColor: palette.surfaceSubtle }]}>
               <ShieldCheck color={palette.brand} size={18} />
-              <Text style={[styles.noteText, { color: palette.muted }]}>Submission never self-approves. Configured documents must be approved before an authorised reviewer can approve the fleet.</Text>
+              <Text style={[styles.noteText, { color: palette.muted }]}>Submitting does not approve the application. SKIMA will review the required documents and notify you of the decision.</Text>
             </View>
             <AppButton fullWidth size="lg" label="Submit fleet application" loading={submit.isPending} disabled={name.trim().length < 2} onPress={() => void send()} />
             {notice ? <Text accessibilityRole="alert" style={[styles.notice, { color: submit.isError ? palette.danger : palette.success }]}>{notice}</Text> : null}

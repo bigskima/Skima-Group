@@ -89,7 +89,7 @@ export function StationDashboardScreen() {
           <View style={styles.identity}>
             <BrandMark compact />
             <View style={styles.identityCopy}>
-              <Text style={[styles.context, { color: palette.muted }]}>STATION OPERATIONS</Text>
+              <Text style={[styles.context, { color: palette.muted }]}>STATION</Text>
               <Text numberOfLines={1} style={[styles.greeting, { color: palette.ink }]}>
                 {firstName ? `Hello, ${firstName}` : "Welcome to SKIMA"}
               </Text>
@@ -112,8 +112,8 @@ export function StationDashboardScreen() {
           <View style={styles.content}>
             <EmptyState
               icon={<PackageCheck color={palette.brand} size={27} />}
-              title="Station workspace could not be refreshed"
-              description="We couldn't load the live branch and reception queue. Check your connection and try again."
+              title="Station information could not be refreshed"
+              description="We couldn't load the station and incoming orders. Check your connection and try again."
               action={<AppButton label="Try again" variant="secondary" onPress={() => void refresh()} />}
             />
           </View>
@@ -121,8 +121,8 @@ export function StationDashboardScreen() {
           <View style={styles.content}>
             <EmptyState
               icon={<ShieldCheck color={palette.brand} size={28} />}
-              title="Station is not operationally active yet"
-              description="An approved application still requires separate SKIMA activation before this branch can receive LPG operations."
+              title="Your station is not ready to receive orders yet"
+              description="SKIMA is completing setup for this approved station. We will notify you when it can receive orders."
             />
             <Pressable
               onPress={() => router.push("/(station)/application")}
@@ -154,7 +154,7 @@ export function StationDashboardScreen() {
               <View style={styles.heroMetrics}>
                 <HeroMetric label="Available stock" value={availableKg === null ? "Not reported" : `${availableKg} kg`} />
                 <View style={styles.heroDivider} />
-                <HeroMetric label="In reception queue" value={String(activeRecords.length)} />
+                <HeroMetric label="Incoming cylinders" value={String(activeRecords.length)} />
               </View>
             </View>
 
@@ -170,24 +170,24 @@ export function StationDashboardScreen() {
                 primary
                 icon={<ShieldCheck color="#FFFFFF" size={24} />}
                 title="Verify arrivals"
-                description="Review the matched driver and cylinder after the driver scans at reception."
+                description="Confirm the driver and cylinder after the driver scans at reception."
                 onPress={() => router.push((currentId ? `/(station)/job/${currentId}` : "/(station)/jobs") as never)}
               />
               <OperationAction
                 icon={<CircleCheck color={palette.brand} size={24} />}
                 title="Safety & refill"
-                description="Record the safety result and actual kilograms filled only after station reception verification."
+                description="Complete the safety check, then enter the kilograms filled."
                 onPress={() => router.push((processingId ? `/(station)/job/${processingId}` : "/(station)/jobs") as never)}
               />
             </View>
 
             <View style={styles.statusGrid}>
               <StatusMetric label="Driver approaching" value={waitingForDriver} />
-              <StatusMetric label="Ready for station" value={readyForStation} />
+              <StatusMetric label="Ready for reception" value={readyForStation} />
               <StatusMetric label="Being filled" value={processing} />
             </View>
 
-            <SectionTitle title="Reception queue" action="Open all" onPress={() => router.push("/(station)/jobs")} />
+            <SectionTitle title="Incoming cylinders" action="Open all" onPress={() => router.push("/(station)/jobs")} />
             <View style={[styles.queue, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               {activeRecords.length ? (
                 activeRecords.slice(0, 5).map((record, index) => (
@@ -200,13 +200,13 @@ export function StationDashboardScreen() {
                   </View>
                   <View style={styles.emptyQueueCopy}>
                     <Text style={[styles.emptyQueueTitle, { color: palette.ink }]}>Reception is clear</Text>
-                    <Text style={[styles.emptyQueueBody, { color: palette.muted }]}>New matched LPG arrivals will appear here automatically.</Text>
+                    <Text style={[styles.emptyQueueBody, { color: palette.muted }]}>New LPG arrivals will appear here automatically.</Text>
                   </View>
                 </View>
               )}
             </View>
 
-            <SectionTitle title="Operations" />
+            <SectionTitle title="Station tools" />
             <View style={styles.utilities}>
               <UtilityRow
                 icon={<Gauge color={palette.brand} size={20} />}
@@ -216,13 +216,13 @@ export function StationDashboardScreen() {
               />
               <UtilityRow
                 icon={<WalletCards color={palette.brand} size={20} />}
-                label="Settlements"
+                label="Earnings"
                 value={settlementSummary}
                 onPress={() => router.push("/(station)/settlements")}
               />
               <UtilityRow
                 icon={<Users color={palette.brand} size={20} />}
-                label="Staff & permissions"
+                label="Team and access"
                 value="Manage station access"
                 onPress={() => router.push("/(station)/staff")}
               />
@@ -237,7 +237,7 @@ export function StationDashboardScreen() {
 
             <View style={[styles.handoff, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
               <ShieldCheck color={palette.mutedStrong} size={19} />
-              <Text style={[styles.handoffText, { color: palette.muted }]}>The assigned driver scans the SKIMA cylinder at station reception. Station staff verify the matched job in this workspace; they do not need a separate cylinder-scanning action.</Text>
+              <Text style={[styles.handoffText, { color: palette.muted }]}>The driver scans the SKIMA cylinder at reception. Confirm the order here before starting the safety check.</Text>
             </View>
           </View>
         )}

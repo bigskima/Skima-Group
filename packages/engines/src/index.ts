@@ -49,6 +49,41 @@ export type DispatchRequestStatus = (typeof DISPATCH_REQUEST_STATUSES)[number];
 export const TRACKING_SESSION_STATUSES = ["active", "paused", "completed", "cancelled"] as const;
 export type TrackingSessionStatus = (typeof TRACKING_SESSION_STATUSES)[number];
 
+export const SERVICE_AVAILABILITY_REASONS = [
+  "AVAILABLE",
+  "SERVICE_NOT_LAUNCHED",
+  "AREA_EXCLUDED",
+  "SERVICE_PAUSED",
+  "LOCATION_REQUIRED",
+  "LOCATION_TOO_INACCURATE",
+  "POLICY_CONFIGURATION_CONFLICT",
+  "NO_ELIGIBLE_STATION",
+  "NO_ELIGIBLE_DRIVER",
+  "TEMPORARILY_UNAVAILABLE",
+] as const;
+export type ServiceAvailabilityReason = (typeof SERVICE_AVAILABILITY_REASONS)[number];
+
+export interface ServiceAvailabilityDecision {
+  readonly available: boolean;
+  readonly reason: ServiceAvailabilityReason;
+  readonly matchedGeographyId: string | null;
+  readonly matchedPolicyId: string | null;
+  readonly partnerOpportunities?: Readonly<{
+    driver: boolean;
+    station: boolean;
+  }>;
+}
+
+export interface OperationalCoverageMatch {
+  readonly id: string;
+  readonly type: "ADMIN_GEOGRAPHY" | "RADIUS" | "CUSTOM_ZONE";
+}
+
+export interface OperationalCoverageDecision {
+  readonly eligible: boolean;
+  readonly matchedCoverage: readonly OperationalCoverageMatch[];
+}
+
 export const NOTIFICATION_CHANNELS = [
   "push",
   "sms",

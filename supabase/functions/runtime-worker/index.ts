@@ -49,6 +49,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const webhooks = await processWebhooks(supabase, limit);
     const jobs = await processBackgroundJobs(supabase, limit);
     const expirations = await expireEscrowHolds(supabase, limit);
+    const locationReadiness = requireRecord(await requireRpcData(
+      supabase.rpc("read_location_platform_production_readiness"),
+    ));
 
     await supabase.rpc("record_health_check", {
       target_details: {
@@ -57,6 +60,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         expirations,
         jobs,
         lpgLifecycle,
+        locationReadiness,
         notifications,
         webhooks,
         requestId: id,
@@ -73,6 +77,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         expirations,
         jobs,
         lpgLifecycle,
+        locationReadiness,
         notifications,
         webhooks,
       },
@@ -997,7 +1002,8 @@ async function processBackgroundJobs(
     const jobId = requireString(job.id);
     const attempts = Number(job.attempts ?? 0) + 1;
     const maxAttempts = Number(job.max_attempts ?? 1);
-    const knownJobType = String(job.job_type_key).startsWith("platform.");
+    const jobType = String(job.job_type_key);
+    const knownJobType = jobType.startsWith("platform.");
 
     await requireUpdate(
       supabase.from("background_jobs").update({
@@ -1008,6 +1014,46 @@ async function processBackgroundJobs(
         updated_at: new Date().toISOString(),
       }).eq("id", jobId),
     );
+
+    if (jobType === "platform.location_retention.run") {
+      try {
+        const payload = requireRecord(job.payload);
+        const retentionLimit = boundedInteger(payload.limit, 5_000, 1, 50_000);
+        await requireRpc(supabase.rpc("run_location_retention", { p_limit: retentionLimit }));
+        const intervalHours = boundedInteger(payload.intervalHours, 24, 1, 24 * 30);
+        const nextRun = new Date(Date.now() + intervalHours * 3_600_000);
+        await requireRpc(supabase.rpc("enqueue_background_job", {
+          target_idempotency_key: `location-retention:${nextRun.toISOString().slice(0, 13)}`,
+          target_job_type_key: "platform.location_retention.run",
+          target_max_attempts: maxAttempts,
+          target_payload: { intervalHours, limit: retentionLimit },
+          target_queue_key: "platform.location_retention",
+          target_run_at: nextRun.toISOString(),
+          target_source: "platform.location_retention.scheduler",
+        }));
+        await requireUpdate(
+          supabase.from("background_jobs").update({ locked_by: null, locked_until: null, status: "completed", updated_at: new Date().toISOString() }).eq("id", jobId),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "location retention failed";
+        await requireUpdate(supabase.from("background_jobs").update({
+          last_error: message, locked_by: null, locked_until: null,
+          status: attempts >= maxAttempts ? "failed" : "queued",
+          updated_at: new Date().toISOString(),
+        }).eq("id", jobId));
+        if (attempts >= maxAttempts) {
+          await requireRpc(supabase.rpc("enqueue_background_job", {
+            target_idempotency_key: `${requireString(job.idempotency_key)}:dead-letter`,
+            target_job_type_key: "platform.dead_letter.record", target_max_attempts: 1,
+            target_payload: { failedJobId: jobId, reason: message },
+            target_queue_key: "platform.dead_letters", target_run_at: new Date().toISOString(),
+            target_source: "platform.runtime_worker",
+          }));
+        }
+      }
+      processed += 1;
+      continue;
+    }
 
     if (knownJobType) {
       await requireUpdate(
@@ -1072,6 +1118,12 @@ async function requireRpc(
   if (error) {
     throw new Error(error.message);
   }
+}
+
+async function requireRpcData(resultPromise: QueryResult<unknown>): Promise<unknown> {
+  const { data, error } = await resultPromise;
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 async function requireUpdate(
@@ -1309,6 +1361,15 @@ function requireNumber(value: unknown): number {
   }
 
   return value;
+}
+
+function boundedInteger(value: unknown, fallback: number, minimum: number, maximum: number): number {
+  if (value === undefined || value === null) return fallback;
+  const parsed = requireNumber(value);
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`expected integer between ${minimum} and ${maximum}`);
+  }
+  return parsed;
 }
 
 function requireString(value: unknown): string {

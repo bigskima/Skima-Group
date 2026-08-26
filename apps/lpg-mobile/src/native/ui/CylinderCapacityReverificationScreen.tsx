@@ -129,8 +129,8 @@ export function CylinderCapacityReverificationScreen() {
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       setError(source === "camera"
-        ? "Camera access is needed to photograph the cylinder evidence."
-        : "Photo access is needed to choose cylinder evidence from this device.");
+        ? "Allow camera access to photograph the cylinder."
+        : "Allow photo access to choose cylinder photos from this device.");
       return;
     }
 
@@ -233,11 +233,11 @@ export function CylinderCapacityReverificationScreen() {
       setMarkingPhoto(null);
       setFullViewPhoto(null);
       setSuccess(
-        `Review submitted. Your verified refill capacity remains ${kg(currentMaxCapacityKg)} until SKIMA approves the evidence.`,
+        `Review submitted. Your verified refill size remains ${kg(currentMaxCapacityKg)} until SKIMA completes the review.`,
       );
       await Promise.all([applications.refetch(), documents.refetch(), cylinders.refetch()]);
     } catch (cause) {
-      setError(friendlyError(cause, "We couldn't submit the capacity review. Check the evidence and try again."));
+      setError(friendlyError(cause, "We couldn't submit the size review. Check the photos and try again."));
     } finally {
       setSubmitting(false);
       setSubmitLabel(null);
@@ -283,7 +283,7 @@ export function CylinderCapacityReverificationScreen() {
     <Screen
       eyebrow="Cylinder safety"
       title="Review cylinder capacity"
-      subtitle="Correct a cylinder size only through evidence review. SKIMA keeps the current verified limit in force until approval."
+      subtitle="Send clear cylinder photos to request a size correction. The current verified size remains in use until the review is complete."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {loading ? (
@@ -299,7 +299,7 @@ export function CylinderCapacityReverificationScreen() {
         <EmptyState
           icon={<ShieldCheck color={palette.brand} size={27} />}
           title="Capacity review is unavailable"
-          description="The review workflow is not available right now. Your existing verified cylinder limit is unchanged."
+          description="Size review is temporarily unavailable. Your current verified cylinder size has not changed."
           action={<AppButton label="Back" onPress={() => router.back()} />}
         />
       ) : (
@@ -309,7 +309,7 @@ export function CylinderCapacityReverificationScreen() {
             <View style={styles.currentCopy}>
               <Text style={[styles.eyebrow, { color: palette.brand }]}>CURRENT VERIFIED LIMIT</Text>
               <Text style={[styles.currentValue, { color: palette.ink }]}>{kg(currentMaxCapacityKg)}</Text>
-              <Text style={[styles.body, { color: palette.muted }]}>Cylinder {displayReference(cylinder) ?? "identity"}. Orders and physical refill records cannot exceed this limit while a review is pending.</Text>
+              <Text style={[styles.body, { color: palette.muted }]}>Cylinder {displayReference(cylinder) ?? "details"}. Refill orders cannot exceed this size while a review is pending.</Text>
             </View>
           </View>
 
@@ -336,7 +336,7 @@ export function CylinderCapacityReverificationScreen() {
                   <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><Scale color={palette.brand} size={20} /></View>
                   <View style={styles.sectionCopy}>
                     <Text style={[styles.sectionTitle, { color: palette.ink }]}>What size is printed on the cylinder?</Text>
-                    <Text style={[styles.body, { color: palette.muted }]}>Only cylinder types already configured by SKIMA can be requested. Choosing a size does not change your cylinder yet.</Text>
+                    <Text style={[styles.body, { color: palette.muted }]}>Choose from the cylinder sizes currently supported by SKIMA. Your verified size will not change until the review is complete.</Text>
                   </View>
                 </View>
 
@@ -362,15 +362,15 @@ export function CylinderCapacityReverificationScreen() {
                         ]}
                       >
                         <Text style={[styles.profileValue, { color: selected ? "#FFFFFF" : palette.ink }]}>{kg(maxCapacity)}</Text>
-                        <Text style={[styles.profileLabel, { color: selected ? "rgba(255,255,255,.78)" : palette.muted }]}>{firstString(profile, ["displayName", "display_name"]) ?? "Configured cylinder"}</Text>
+                        <Text style={[styles.profileLabel, { color: selected ? "rgba(255,255,255,.78)" : palette.muted }]}>{firstString(profile, ["displayName", "display_name"]) ?? "Cylinder size"}</Text>
                       </Pressable>
                     );
                   })}
                 </View>
-                {!availableProfiles.length ? <Text style={[styles.body, { color: palette.muted }]}>No alternative cylinder sizes are configured right now.</Text> : null}
+                {!availableProfiles.length ? <Text style={[styles.body, { color: palette.muted }]}>No other cylinder sizes are available right now.</Text> : null}
 
                 <View style={styles.fieldGroup}>
-                  <Text style={[styles.fieldLabel, { color: palette.ink }]}>Why does the record need correction? <Text style={{ color: palette.muted, fontWeight: "600" }}>(optional)</Text></Text>
+                  <Text style={[styles.fieldLabel, { color: palette.ink }]}>Why does the size need correction? <Text style={{ color: palette.muted, fontWeight: "600" }}>(optional)</Text></Text>
                   <TextInput
                     value={reason}
                     onChangeText={setReason}
@@ -400,7 +400,7 @@ export function CylinderCapacityReverificationScreen() {
 
               <View style={[styles.safetyNote, { backgroundColor: palette.warningSoft, borderColor: palette.border }]}>
                 <AlertTriangle color={palette.warning} size={20} />
-                <Text style={[styles.safetyText, { color: palette.muted }]}>SKIMA never silently changes a cylinder capacity. The submitted size becomes effective only after the required evidence is approved; rejection or correction leaves the current capacity unchanged.</Text>
+                <Text style={[styles.safetyText, { color: palette.muted }]}>Your cylinder size changes only after SKIMA reviews the required photos. If more information is needed, the current verified size remains unchanged.</Text>
               </View>
 
               <AppButton
@@ -494,15 +494,15 @@ function ApplicationStatusCard({
     : rejected
       ? "Previous capacity review was not approved"
       : correction
-        ? "More evidence is needed"
+        ? "More information is needed"
         : "Capacity review submitted";
   const body = approved
     ? "The approved configured capacity has been applied to the cylinder record. If the physical marking still differs, you can submit another review."
     : rejected
-      ? `The cylinder stayed at ${kg(currentCapacity)}. You can submit a new request with clearer evidence.`
+      ? `The cylinder stayed at ${kg(currentCapacity)}. You can submit a new request with clearer photos.`
       : correction
-        ? `Upload fresh evidence and resubmit. The verified capacity remains ${kg(currentCapacity)} until approval.`
-        : `SKIMA is reviewing the evidence. The verified capacity remains ${kg(currentCapacity)} until approval.`;
+        ? `Upload new photos and submit again. The verified capacity remains ${kg(currentCapacity)} until approval.`
+        : `SKIMA is reviewing your request. The verified capacity remains ${kg(currentCapacity)} until approval.`;
   const background = approved ? palette.successSoft : rejected ? palette.dangerSoft : correction ? palette.warningSoft : palette.surfaceSubtle;
   const iconColor = approved ? palette.success : rejected ? palette.danger : correction ? palette.warning : palette.brand;
 

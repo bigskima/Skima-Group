@@ -905,8 +905,11 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
       const payload = body.value;
       return rpcResponse(
-        supabase.rpc("create_lpg_customer_location", {
+        supabase.rpc("create_canonical_customer_location", {
           target_accuracy_meters: optionalNumber(payload.accuracyMeters, "accuracyMeters"),
+          target_address: optionalRecord(payload.address) ?? {},
+          target_capture_source: optionalString(payload.captureSource) ?? "DEVICE_GPS",
+          target_captured_at: optionalString(payload.capturedAt),
           target_contact_name: optionalString(payload.contactName),
           target_contact_phone: optionalString(payload.contactPhone),
           target_delivery_instructions: optionalString(payload.deliveryInstructions),
@@ -1120,6 +1123,29 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         "lpg_refill_orders",
       );
     }
+  }
+
+  if (routePath === "/lpg/expansion-interest" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const locationIds = requireUuidArray(body.value.locationIds, "locationIds");
+    if (locationIds.length === 0 || locationIds.length > 10) {
+      return jsonResponse(
+        { ok: false, error: "locationIds must contain between one and ten locations", requestId: id },
+        400,
+      );
+    }
+
+    return rpcResponse(
+      supabase.rpc("record_lpg_customer_expansion_interest", {
+        p_location_ids: [...new Set(locationIds)],
+      }),
+      id,
+    );
   }
 
   if (routePath === "/lpg/orders/reserve-payment" && request.method === "POST") {
@@ -1544,7 +1570,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
       const payload = body.value;
       return rpcResponse(
-        supabase.rpc("record_lpg_driver_location", {
+        supabase.rpc("record_operational_driver_location", {
           target_accuracy_meters: optionalNumber(payload.accuracyMeters, "accuracyMeters"),
           target_driver_profile_id: requireUuid(payload.driverProfileId, "driverProfileId"),
           target_heading_degrees: optionalNumber(payload.headingDegrees, "headingDegrees"),
@@ -7953,6 +7979,14 @@ function optionalUuid(value: unknown, fieldName: string): string | null {
   }
 
   return requireUuid(value, fieldName);
+}
+
+function requireUuidArray(value: unknown, fieldName: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new RequestValidationError(`${fieldName} must be an array of UUIDs.`);
+  }
+
+  return value.map((item, index) => requireUuid(item, `${fieldName}[${index}]`));
 }
 
 function requireStringArray(value: unknown, fieldName: string): string[] {

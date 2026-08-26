@@ -142,7 +142,7 @@ export function TopUpScreen() {
             <WalletCards color="#FFFFFF" size={25} />
           </View>
         </View>
-        <Text style={styles.heroSub}>Your wallet receives the amount you choose. Any configured SKIMA funding fee is shown separately before you pay.</Text>
+        <Text style={styles.heroSub}>Your wallet receives the amount you choose. Any SKIMA fee is shown separately before you pay.</Text>
       </View>
 
       <Card padding="lg">
@@ -177,8 +177,8 @@ export function TopUpScreen() {
           <ShieldCheck color={palette.success} size={20} />
         </View>
         <View style={styles.infoCopy}>
-          <Text style={[styles.infoTitle, { color: palette.ink }]}>Ledger-backed funding</Text>
-          <Text style={[styles.infoBody, { color: palette.muted }]}>Payment confirmation credits only your wallet amount. A SKIMA funding fee, when configured, is recorded separately as company revenue and is reversed if the provider reverses the payment.</Text>
+          <Text style={[styles.infoTitle, { color: palette.ink }]}>Secure wallet funding</Text>
+          <Text style={[styles.infoBody, { color: palette.muted }]}>Your wallet is credited only after payment is confirmed. Any SKIMA fee is shown separately and is reversed automatically if the payment is reversed.</Text>
         </View>
       </View>
 

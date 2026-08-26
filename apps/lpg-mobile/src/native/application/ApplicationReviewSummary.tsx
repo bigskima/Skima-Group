@@ -74,11 +74,11 @@ export function ApplicationReviewSummary({
               { color: canSubmit ? palette.success : palette.danger },
             ]}
           >
-            {canSubmit ? "Ready for submission" : "Application incomplete"}
+            {canSubmit ? "Ready to submit" : "Application incomplete"}
           </Text>
           <Text style={[styles.readinessBody, { color: palette.ink }]}>
             {canSubmit
-              ? "All required items are present. Optional evidence can be left blank and will not block submission."
+              ? "All required information is complete. Optional items can be left blank."
               : `${missingItemsCount} required ${missingItemsCount === 1 ? "item is" : "items are"} still missing. Tap a missing item below to complete it.`}
           </Text>
         </View>
@@ -140,7 +140,7 @@ export function ApplicationReviewSummary({
       >
         <View style={[styles.sectionHeader, { borderBottomColor: palette.border }]}>
           <View style={styles.sectionHeaderCopy}>
-            <Text style={[styles.sectionEyebrow, { color: palette.brand }]}>EVIDENCE CHECK</Text>
+            <Text style={[styles.sectionEyebrow, { color: palette.brand }]}>DOCUMENT CHECK</Text>
             <Text style={[styles.sectionTitle, { color: palette.ink }]}>Documents & photos</Text>
             {optionalDocuments.length > 0 ? (
               <Text style={[styles.optionalCount, { color: palette.muted }]}>
@@ -233,7 +233,7 @@ export function ApplicationReviewSummary({
       <PolicySummaryCard
         policyKey="policy.partner.participation"
         href="/policies/partner-participation"
-        fallbackTitle="SKIMA Partner Participation Terms & Public Policy"
+        fallbackTitle="SKIMA Partner Terms"
         fallbackSummary="Review the key rules for partner approval, service matching, safety, earnings, privacy, conduct, suspension and your rights before submitting your application."
       />
     </View>

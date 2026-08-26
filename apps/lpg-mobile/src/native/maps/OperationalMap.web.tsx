@@ -90,7 +90,7 @@ export function OperationalMap({
 
   return (
     <Pressable
-      accessibilityLabel={onSelectPoint ? "Interactive map. Tap to move the location pin." : "Map showing operational locations"}
+      accessibilityLabel={onSelectPoint ? "Interactive map. Tap to move the location pin." : "Map showing relevant locations"}
       onLayout={onLayout}
       onPress={select}
       style={[styles.map, { height, borderColor: palette.border }]}

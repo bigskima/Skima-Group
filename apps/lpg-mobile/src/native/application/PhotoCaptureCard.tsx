@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
 import { AppButton } from "../ui/AppButton";
 
 export interface PhotoCaptureCardProps {
@@ -39,7 +40,7 @@ export function PhotoCaptureCard({
       setLoading(true);
       await onPhotoSelected({ uri: asset.uri, name: `profile-photo-${Date.now()}.jpg`, mimeType: "image/jpeg" });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not capture photo.");
+      setError(friendlyError(cause, "We couldn't take the photo. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -59,7 +60,7 @@ export function PhotoCaptureCard({
       setLoading(true);
       await onPhotoSelected({ uri: asset.uri, name: `profile-photo-${Date.now()}.jpg`, mimeType: "image/jpeg" });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not select photo.");
+      setError(friendlyError(cause, "We couldn't select the photo. Please try again."));
     } finally {
       setLoading(false);
     }

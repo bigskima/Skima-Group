@@ -87,7 +87,7 @@ export function OperationalMap({
   return (
     <View style={[styles.frame, { height }]}>
       <Map
-        accessibilityLabel={onSelectPoint ? "Interactive location map" : "Map showing operational locations"}
+        accessibilityLabel={onSelectPoint ? "Interactive location map" : "Map showing relevant locations"}
         attribution
         attributionPosition={{ bottom: 4, left: 8 }}
         compass

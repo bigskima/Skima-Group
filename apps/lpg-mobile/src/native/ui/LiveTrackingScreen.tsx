@@ -57,9 +57,9 @@ export function LiveTrackingScreen() {
 
   return (
     <Screen
-      eyebrow="Live fulfilment"
+      eyebrow="Live delivery"
       title="Track your refill"
-      subtitle="Follow the assigned driver as your cylinder moves through the SKIMA fulfilment journey."
+      subtitle="Follow your driver as your cylinder moves through pickup, refill and return."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {sessions.isPending || details.isPending || (Boolean(sessionId) && points.isPending) ? (
@@ -71,7 +71,7 @@ export function LiveTrackingScreen() {
               <SignalZero color={palette.danger} size={24} />
             </View>
             <Text style={[styles.errorTitle, { color: palette.ink }]}>Live map could not refresh</Text>
-            <Text style={[styles.errorBody, { color: palette.muted }]}>Check your connection and try again. Your order itself is still safe in the SKIMA workflow.</Text>
+            <Text style={[styles.errorBody, { color: palette.muted }]}>Check your connection and try again. Your order is still safe with SKIMA.</Text>
             <AppButton
               label="Retry tracking"
               fullWidth
@@ -135,7 +135,7 @@ export function LiveTrackingScreen() {
             </View>
           </View>
 
-          <Text style={[styles.privacy, { color: palette.muted }]}>Location shown here is limited to authorised fulfilment tracking for this order. Tracking is not a permanent public location feed.</Text>
+          <Text style={[styles.privacy, { color: palette.muted }]}>Driver location is shared only while this order is active and is not publicly available.</Text>
         </>
       )}
     </Screen>

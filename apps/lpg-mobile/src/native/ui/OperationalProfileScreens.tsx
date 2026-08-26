@@ -46,7 +46,7 @@ export function DriverProfileScreen() {
 
   if (drivers.isPending) {
     return (
-      <Screen eyebrow="Driver identity" title="Profile" action={<BackButton />}>
+      <Screen eyebrow="Driver profile" title="Profile" action={<BackButton />}>
         <ScreenSkeleton cards={3} />
       </Screen>
     );
@@ -55,9 +55,9 @@ export function DriverProfileScreen() {
   if (!driver) {
     return (
       <Screen
-        eyebrow="Driver identity"
+        eyebrow="Driver profile"
         title="Profile"
-        subtitle="Your approved operational driver identity appears here after SKIMA activates it."
+        subtitle="Your approved driver profile will appear here when your account is ready."
         action={<BackButton />}
       >
         <EmptyState
@@ -77,17 +77,17 @@ export function DriverProfileScreen() {
   const verification =
     firstString(driver, ["verification_status", "verificationStatus"]) ??
     displayStatus(driver) ??
-    "configured";
+    "pending";
   const availability =
     firstString(driver, ["online_status", "onlineStatus", "availability_status"]) ?? "offline";
   const approval =
-    firstString(driver, ["approval_status", "approvalStatus", "verification_status"]) ?? "configured";
+    firstString(driver, ["approval_status", "approvalStatus", "verification_status"]) ?? "pending";
 
   return (
     <Screen
-      eyebrow="Driver identity"
+      eyebrow="Driver profile"
       title="Profile"
-      subtitle="Your operational identity, approval and dispatch information."
+      subtitle="Your driver details, approval and job information."
       action={<BackButton />}
     >
       <View style={[styles.profileHero, shadows.raised, { backgroundColor: palette.brand }]}>
@@ -103,13 +103,13 @@ export function DriverProfileScreen() {
         </View>
       </View>
 
-      <SectionHeader title="Operational details" description="Information attached to your current driver profile." />
+      <SectionHeader title="Driver details" description="Information on your current driver profile." />
       <View style={[styles.detailCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <InfoField label="Phone" value={firstString(driver, ["phone", "phone_number", "phoneNumber"]) ?? "Not available"} />
         <Divider />
         <InfoField label="Driver licence" value={firstString(driver, ["licence_number", "licenceNumber", "licenseNumber"]) ?? "Protected or unavailable"} />
         <Divider />
-        <InfoField label="Dispatch availability" value={friendly(availability)} />
+        <InfoField label="Job availability" value={friendly(availability)} />
         <Divider />
         <InfoField label="Approval status" value={friendly(approval)} />
       </View>
@@ -124,7 +124,7 @@ export function DriverProfileScreen() {
 
       <View style={[styles.trustNote, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <ShieldCheck color={palette.mutedStrong} size={18} />
-        <Text style={[styles.trustText, { color: palette.muted }]}>Your Driver ID and public verification surface should show only SKIMA-approved public identity fields. Private KYC remains protected.</Text>
+        <Text style={[styles.trustText, { color: palette.muted }]}>Your Driver Pass shows only information approved for public verification. Your private identity documents remain protected.</Text>
       </View>
     </Screen>
   );
@@ -142,9 +142,9 @@ export function DriverServiceZoneScreen() {
 
   return (
     <Screen
-      eyebrow="Driver coverage"
+      eyebrow="Service areas"
       title="Service areas"
-      subtitle="These are the locations currently attached to your approved driver coverage."
+      subtitle="These are the places where you are approved to receive jobs."
       action={<BackButton />}
     >
       {drivers.isPending ? (
@@ -153,15 +153,15 @@ export function DriverServiceZoneScreen() {
         <EmptyState
           icon={<MapPin color={palette.brand} size={27} />}
           title="Driver profile unavailable"
-          description="Service coverage becomes visible after an approved driver profile is active."
+          description="Your service areas will appear when your approved driver account is ready."
         />
       ) : (
         <>
           <View style={[styles.infoHero, { backgroundColor: palette.brandSoft }]}>
             <MapPin color={palette.brand} size={26} />
             <View style={styles.infoCopy}>
-              <Text style={[styles.infoTitle, { color: palette.ink }]}>Approved dispatch coverage</Text>
-              <Text style={[styles.infoBody, { color: palette.muted }]}>Dispatch may consider more than one nearby locality when those areas are included in your backend-approved coverage.</Text>
+              <Text style={[styles.infoTitle, { color: palette.ink }]}>Approved service areas</Text>
+              <Text style={[styles.infoBody, { color: palette.muted }]}>You may receive jobs from more than one nearby area when SKIMA has approved those areas for you.</Text>
             </View>
           </View>
 
@@ -184,14 +184,14 @@ export function DriverServiceZoneScreen() {
               <EmptyState
                 icon={<MapPin color={palette.brand} size={27} />}
                 title="No service area listed"
-                description="Your approved service coverage has not been returned to this profile yet."
+                description="Your approved service areas are not available yet. Check again shortly."
               />
             )}
           </View>
 
           <View style={[styles.trustNote, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.mutedStrong} size={18} />
-            <Text style={[styles.trustText, { color: palette.muted }]}>Coverage shown here is informational. Dispatch eligibility remains determined by backend service-area, vehicle, availability and approval rules.</Text>
+            <Text style={[styles.trustText, { color: palette.muted }]}>Jobs are offered based on your approved service areas, vehicle, availability and account status.</Text>
           </View>
         </>
       )}
@@ -209,9 +209,9 @@ export function StationProfileScreen() {
 
   return (
     <Screen
-      eyebrow="Station identity"
+      eyebrow="Station profile"
       title="Branch profile"
-      subtitle="Your active SKIMA station identity and operational branch information."
+      subtitle="Your station profile and current branch information."
       action={<BackButton />}
     >
       {runtime.isPending ? (
@@ -235,7 +235,7 @@ export function StationProfileScreen() {
               <Text style={styles.heroBody}>{firstString(branch, ["formattedAddress", "formatted_address", "address"]) ?? "Address unavailable"}</Text>
               <View style={styles.heroPills}>
                 <StatusPill
-                  label={friendly(firstString(branch, ["complianceStatus", "compliance_status", "approvalStatus"]) ?? "configured")}
+                  label={friendly(firstString(branch, ["complianceStatus", "compliance_status", "approvalStatus"]) ?? "pending")}
                   tone="success"
                 />
                 <StatusPill
@@ -246,7 +246,7 @@ export function StationProfileScreen() {
             </View>
           </View>
 
-          <SectionHeader title="Branch operations" description="Current operational information returned for this activated station branch." />
+          <SectionHeader title="Branch details" description="Current information for this station branch." />
           <View style={styles.metricGrid}>
             <ProfileMetric icon={<Clock3 color={palette.brand} size={19} />} label="Hours" value={`${firstString(hours, ["opensAt", "opens_at"]) ?? "—"} – ${firstString(hours, ["closesAt", "closes_at"]) ?? "—"}`} />
             <ProfileMetric icon={<Gauge color={palette.brand} size={19} />} label="Service radius" value={formatRadius(firstNumber(branch, ["serviceRadiusMeters", "service_radius_meters"]))} />
@@ -255,7 +255,7 @@ export function StationProfileScreen() {
           <View style={[styles.detailCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <InfoField label="Availability" value={friendly(firstString(branch, ["availabilityStatus", "availability_status"]) ?? "unavailable")} />
             <Divider />
-            <InfoField label="Supported cylinders" value={sizes.length ? sizes.map((size) => `${size} kg`).join(", ") : "Not configured"} />
+            <InfoField label="Supported cylinders" value={sizes.length ? sizes.map((size) => `${size} kg`).join(", ") : "Not available"} />
           </View>
 
           {id ? <PresentationMediaPanel subjectId={id} subjectType="station" /> : null}
@@ -271,13 +271,13 @@ function StationAwaitingActivation() {
     <>
       <EmptyState
         icon={<Building2 color={palette.brand} size={28} />}
-        title="Station not operationally active yet"
-        description="A station application can be approved without the branch being operationally activated. Only authorised SKIMA administration can complete activation."
+        title="Your station is not ready to receive orders yet"
+        description="Your application is approved, but SKIMA is still completing your station setup. We will notify you when it can receive orders."
         action={<AppButton label="View application status" onPress={() => router.push("/(station)/application" as never)} />}
       />
       <View style={[styles.trustNote, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <ShieldCheck color={palette.mutedStrong} size={18} />
-        <Text style={[styles.trustText, { color: palette.muted }]}>There is no self-activation control in the station workspace. Once SKIMA activates the approved branch, this profile will populate from backend operational records.</Text>
+        <Text style={[styles.trustText, { color: palette.muted }]}>SKIMA will complete setup for the approved branch. This profile will update automatically when the station is ready.</Text>
       </View>
     </>
   );
@@ -306,7 +306,7 @@ export function StationReportsScreen() {
     <Screen
       eyebrow="Station activity"
       title="Reports"
-      subtitle="A concise view of fulfilment volume and settlement records for this station workspace."
+      subtitle="See completed orders and station earnings."
       action={<BackButton />}
     >
       {runtime.isPending || settlements.isPending ? (
@@ -329,12 +329,12 @@ export function StationReportsScreen() {
           <View style={[styles.reportHero, shadows.raised, { backgroundColor: palette.brand }]}>
             <BarChart3 color="#FFFFFF" size={27} />
             <View style={styles.reportCopy}>
-              <Text style={styles.reportEyebrow}>RECORDED SETTLEMENT TOTAL</Text>
+              <Text style={styles.reportEyebrow}>TOTAL EARNINGS</Text>
               <Text adjustsFontSizeToFit numberOfLines={1} style={styles.reportValue}>{money(net, currency)}</Text>
             </View>
           </View>
 
-          <SectionHeader title="Recent completed operations" description="Latest fulfilment records that reached a completed or station-settled state." />
+          <SectionHeader title="Recent completed orders" description="The latest LPG orders completed by this station." />
           <View style={styles.operationList}>
             {completed.length ? (
               completed.slice(0, 10).map((item, index) => (
@@ -351,7 +351,7 @@ export function StationReportsScreen() {
               <EmptyState
                 icon={<BarChart3 color={palette.brand} size={27} />}
                 title="No completed operations yet"
-                description="Completed station jobs will appear here as LPG fulfilment progresses."
+                description="Completed LPG orders will appear here."
               />
             )}
           </View>
@@ -374,7 +374,7 @@ export function StationRolesScreen() {
     <Screen
       eyebrow="Station access"
       title="Roles & permissions"
-      subtitle="Review the configured access roles available inside this station organisation."
+      subtitle="Review the team roles available for this station."
       action={<BackButton />}
     >
       {roles.isPending ? (
@@ -395,9 +395,9 @@ export function StationRolesScreen() {
                 <View style={[styles.roleIcon, { backgroundColor: palette.brandSoft }]}><ShieldCheck color={palette.brand} size={21} /></View>
                 <View style={styles.roleCopy}>
                   <Text style={[styles.roleTitle, { color: palette.ink }]}>{firstString(role, ["display_name", "displayName", "key"]) ?? "Station role"}</Text>
-                  <Text style={[styles.roleMeta, { color: palette.muted }]}>{permissions.length} configured access {permissions.length === 1 ? "area" : "areas"}</Text>
+                  <Text style={[styles.roleMeta, { color: palette.muted }]}>{permissions.length} access {permissions.length === 1 ? "area" : "areas"}</Text>
                 </View>
-                <StatusPill label="Configured" tone="brand" />
+                <StatusPill label="Available" tone="brand" />
               </View>
             );
           })}
@@ -460,7 +460,7 @@ function money(value: number, currency: string) {
 }
 
 function formatRadius(value: number | null) {
-  if (value === null) return "Not configured";
+  if (value === null) return "Not available";
   return value >= 1000 ? `${(value / 1000).toFixed(value % 1000 === 0 ? 0 : 1)} km` : `${value} m`;
 }
 

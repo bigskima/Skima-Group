@@ -90,7 +90,6 @@ export function DriverApplicationScreen() {
   const [licenceNumber, setLicenceNumber] = useState("");
   const [operatingLocation, setOperatingLocation] = useState<OperationalLocation | null>(null);
   const [selectedServiceAreaIds, setSelectedServiceAreaIds] = useState<readonly string[]>([]);
-  const [primaryServiceAreaId, setPrimaryServiceAreaId] = useState<string | null>(null);
 
   const draftAttemptKey = useRef(`${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
@@ -167,7 +166,7 @@ export function DriverApplicationScreen() {
     let active = true;
     setLoadingServiceAreas(true);
     void session.supabase
-      .rpc("read_selectable_lpg_service_areas")
+      .rpc("read_selectable_operational_geographies")
       .then(({ data, error: serviceAreaError }) => {
         if (!active) return;
         if (serviceAreaError) {
@@ -217,10 +216,8 @@ export function DriverApplicationScreen() {
       setOperatingLocation(storedLocation as unknown as OperationalLocation);
     }
 
-    const storedIds = readStringArray(service?.serviceAreaIds ?? service?.service_area_ids);
-    const storedPrimary = firstString(service, ["primaryServiceAreaId", "primary_service_area_id"]);
+    const storedIds = readCoverageGeographyIds(service);
     if (storedIds.length > 0) setSelectedServiceAreaIds(storedIds);
-    if (storedPrimary) setPrimaryServiceAreaId(storedPrimary);
 
     hydratedApplication.current = currentId;
   }, [currentId, payloadVersions.data]);
@@ -235,8 +232,7 @@ export function DriverApplicationScreen() {
     licence: { number: licenceNumber.trim() },
     location: operatingLocation,
     service: {
-      serviceAreaIds: selectedServiceAreaIds,
-      primaryServiceAreaId,
+      coverageRequests: selectedServiceAreaIds.map((geographyId) => ({ type: "ADMIN_GEOGRAPHY", geographyId })),
     },
   });
 
@@ -308,13 +304,9 @@ export function DriverApplicationScreen() {
     setSelectedServiceAreaIds((currentIds) => {
       if (currentIds.includes(areaId)) {
         const next = currentIds.filter((id) => id !== areaId);
-        setPrimaryServiceAreaId((currentPrimary) =>
-          currentPrimary === areaId ? next[0] ?? null : currentPrimary,
-        );
         return next;
       }
       const next = [...currentIds, areaId];
-      if (!primaryServiceAreaId) setPrimaryServiceAreaId(areaId);
       return next;
     });
   };
@@ -331,8 +323,8 @@ export function DriverApplicationScreen() {
         setError("Capture the location you normally operate from before continuing.");
         return false;
       }
-      if (selectedServiceAreaIds.length === 0 || !primaryServiceAreaId) {
-        setError("Choose at least one service area and mark one as your primary area.");
+      if (selectedServiceAreaIds.length === 0) {
+        setError("Choose at least one requested operating area.");
         return false;
       }
     }
@@ -424,8 +416,7 @@ export function DriverApplicationScreen() {
     address.trim() &&
     licenceNumber.trim() &&
     operatingLocation &&
-    selectedServiceAreaIds.length > 0 &&
-    primaryServiceAreaId,
+    selectedServiceAreaIds.length > 0,
   );
   const canSubmit = missingRequiredDocs.length === 0 && applicationFieldsReady;
 
@@ -452,7 +443,6 @@ export function DriverApplicationScreen() {
     };
   });
 
-  const primaryArea = serviceAreas.find((area) => area.areaId === primaryServiceAreaId) ?? null;
   const selectedAreaNames = selectedServiceAreaIds
     .map((id) => serviceAreas.find((area) => area.areaId === id)?.displayName)
     .filter((value): value is string => Boolean(value));
@@ -611,7 +601,7 @@ export function DriverApplicationScreen() {
           <Card>
             <Text style={styles.sectionHeader}>Where You Operate From</Text>
             <Text style={styles.helperText}>
-              Capture the location you normally start SKIMA work from. This helps us verify your service coverage; it is not shown as your live public location.
+              Choose where you normally start work. SKIMA uses this to review the areas you request, and it is never shown as your live public location.
             </Text>
             <Pressable
               disabled={detectingLocation}
@@ -649,7 +639,7 @@ export function DriverApplicationScreen() {
           <Card>
             <Text style={styles.sectionHeader}>Service Areas</Text>
             <Text style={styles.helperText}>
-              Choose every area you can reliably cover. Nearby towns can be selected together. One selected area must be your primary operating area.
+              Choose every area you can reliably serve. SKIMA will review your request before you can receive jobs there.
             </Text>
             {loadingServiceAreas ? (
               <View style={styles.loadingRow}>
@@ -660,14 +650,13 @@ export function DriverApplicationScreen() {
               <View style={styles.emptyAreaBox}>
                 <Text style={styles.emptyAreaTitle}>No service areas are available yet</Text>
                 <Text style={styles.helperText}>
-                  You can save this application and return later when SKIMA opens partner coverage for your area.
+                  You can save your application and return when driver applications open in your area.
                 </Text>
               </View>
             ) : (
               <View style={styles.areaList}>
                 {serviceAreas.map((area) => {
                   const selected = selectedServiceAreaIds.includes(area.areaId);
-                  const primary = primaryServiceAreaId === area.areaId;
                   return (
                     <View key={area.areaId} style={[styles.areaCard, selected && styles.areaCardSelected]}>
                       <Pressable
@@ -684,16 +673,7 @@ export function DriverApplicationScreen() {
                           <Text style={styles.areaMeta}>{serviceAreaSummary(area)}</Text>
                         </View>
                       </Pressable>
-                      {selected ? (
-                        <Pressable
-                          onPress={() => setPrimaryServiceAreaId(area.areaId)}
-                          style={[styles.primaryBtn, primary && styles.primaryBtnActive]}
-                        >
-                          <Text style={[styles.primaryBtnText, primary && styles.primaryBtnTextActive]}>
-                            {primary ? "Primary area" : "Make primary"}
-                          </Text>
-                        </Pressable>
-                      ) : null}
+
                     </View>
                   );
                 })}
@@ -733,7 +713,7 @@ export function DriverApplicationScreen() {
                 key={reqKey}
                 requirementKey={reqKey}
                 title={firstString(requirement, ["display_name", "displayName"]) ?? reqKey}
-                description={firstString(requirement, ["description"]) ?? "Upload valid evidence document."}
+                description={firstString(requirement, ["description"]) ?? "Upload a clear, valid document."}
                 isRequired={requirement?.is_required !== false}
                 allowedContentTypes={
                   Array.isArray(requirement?.allowed_content_types)
@@ -772,14 +752,14 @@ export function DriverApplicationScreen() {
               ],
             },
             {
-              title: "Operating Coverage",
+              title: "Requested service areas",
               stepIndex: 2,
               items: [
                 {
                   label: "Operating Location",
                   value: operatingLocation?.formattedAddress || (operatingLocation ? "Location captured" : "Not captured"),
                 },
-                { label: "Primary Service Area", value: primaryArea?.displayName ?? "Not selected" },
+                { label: "Requested Operating Areas", value: selectedAreaNames.join(", ") || "Not selected" },
                 {
                   label: "Service Areas",
                   value: selectedAreaNames.length > 0 ? selectedAreaNames.join(", ") : "None selected",
@@ -1037,3 +1017,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
 });
+function readCoverageGeographyIds(service: Record<string, unknown> | null): string[] {
+  const requests = service?.coverageRequests;
+  if (!Array.isArray(requests)) return [];
+  return requests.flatMap((request) => request && typeof request === "object" && !Array.isArray(request) && typeof (request as Record<string, unknown>).geographyId === "string" ? [(request as Record<string, unknown>).geographyId as string] : []);
+}

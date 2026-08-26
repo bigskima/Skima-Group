@@ -28,30 +28,30 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 const menus = {
   driver: [
-    { label: "SKIMA Driver Pass", detail: "Your current public driver identity", href: "/(driver)/id-card", icon: FileCheck2 },
-    { label: "Driver profile", detail: "Operational identity and approval", href: "/(driver)/profile", icon: UserRound },
-    { label: "Service areas", detail: "Approved dispatch coverage", href: "/(driver)/service-zone", icon: MapPin },
-    { label: "Vehicles", detail: "Vehicle approval and capability", href: "/(driver)/vehicles", icon: Truck },
+    { label: "SKIMA Driver Pass", detail: "Your public driver details", href: "/(driver)/id-card", icon: FileCheck2 },
+    { label: "Driver profile", detail: "Your driver profile and approval", href: "/(driver)/profile", icon: UserRound },
+    { label: "Service areas", detail: "Places where you can receive jobs", href: "/(driver)/service-zone", icon: MapPin },
+    { label: "Vehicles", detail: "Vehicle details and approval", href: "/(driver)/vehicles", icon: Truck },
     { label: "Application status", detail: "Review your driver application", href: "/(driver)/application", icon: FileCheck2 },
-    { label: "Documents", detail: "Submitted driver evidence", href: "/(driver)/documents", icon: FileCheck2 },
+    { label: "Documents", detail: "Your submitted driver documents", href: "/(driver)/documents", icon: FileCheck2 },
   ],
   station: [
-    { label: "Branch profile", detail: "Station identity and current status", href: "/(station)/profile", icon: Building2 },
-    { label: "Inventory & capacity", detail: "Refill stock and cylinder queue", href: "/(station)/inventory", icon: Settings2 },
-    { label: "Station reports", detail: "Completed operations and activity", href: "/(station)/reports", icon: ReceiptText },
+    { label: "Branch profile", detail: "Station profile and current status", href: "/(station)/profile", icon: Building2 },
+    { label: "LPG stock", detail: "Available LPG and incoming cylinders", href: "/(station)/inventory", icon: Settings2 },
+    { label: "Station reports", detail: "Completed orders and earnings", href: "/(station)/reports", icon: ReceiptText },
     { label: "Settings & pricing", detail: "Hours, availability and station price", href: "/(station)/settings", icon: Settings2 },
-    { label: "Staff & permissions", detail: "Station team access", href: "/(station)/staff", icon: Building2 },
-    { label: "Roles", detail: "Configured organisation roles", href: "/(station)/roles", icon: ShieldCheck },
+    { label: "Team and access", detail: "Station team access", href: "/(station)/staff", icon: Building2 },
+    { label: "Roles", detail: "Team roles and access", href: "/(station)/roles", icon: ShieldCheck },
     { label: "Application status", detail: "Review station approval progress", href: "/(station)/application", icon: FileCheck2 },
-    { label: "Documents", detail: "Submitted station evidence", href: "/(station)/documents", icon: FileCheck2 },
+    { label: "Documents", detail: "Your submitted station documents", href: "/(station)/documents", icon: FileCheck2 },
   ],
   customer: [
     { label: "Delivery locations", detail: "Pickup and return addresses", href: "/(customer)/locations", icon: MapPin },
-    { label: "Stations near you", detail: "Verified public station profiles", href: "/(customer)/stations", icon: Building2 },
+    { label: "Stations near you", detail: "Approved station details", href: "/(customer)/stations", icon: Building2 },
     { label: "Transactions", detail: "Wallet and payment activity", href: "/(customer)/transactions", icon: WalletCards },
     { label: "Apply to drive", detail: "Become a SKIMA driver partner", href: "/(customer)/driver-application", icon: Truck },
     { label: "Apply as a station", detail: "Register an LPG station partnership", href: "/(customer)/station-application", icon: Building2 },
-    { label: "Fleet owner portal", detail: "Register and govern vehicles as an owner or operator", href: "/(customer)/fleet", icon: Truck },
+    { label: "Fleet owner portal", detail: "Register and manage vehicles as an owner or operator", href: "/(customer)/fleet", icon: Truck },
   ],
 } as const;
 
@@ -67,9 +67,9 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
 
   return (
     <Screen
-      eyebrow={`${workspace} workspace`}
+      eyebrow={`${workspace} account`}
       title="Account"
-      subtitle="Manage your SKIMA identity, workspace tools, preferences and support."
+      subtitle="Manage your account, preferences and support."
     >
       <WorkspaceSwitcher current={group} />
 
@@ -93,13 +93,13 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
         <Text style={[styles.accountNoteText, { color: theme.palette.muted }]}>
           {group === "customer"
             ? "Your customer account can also start Driver or Station applications without creating a separate login."
-            : `This ${group} workspace shows only the tools attached to your current SKIMA access and permissions.`}
+            : `This ${group} account shows the tools available to you.`}
         </Text>
       </View>
 
       <SectionHeader
-        title={group === "customer" ? "Your SKIMA services" : `${workspace} workspace tools`}
-        description={group === "customer" ? "Service settings, transactions and partner applications." : "Operational identity, records and role-specific controls."}
+        title={group === "customer" ? "Your SKIMA services" : `${workspace} tools`}
+        description={group === "customer" ? "Service settings, transactions and partner applications." : "Your profile, activity and account settings."}
       />
       <View style={[styles.menu, shadows.soft, { borderColor: theme.palette.border, backgroundColor: theme.palette.surface }]}>
         <Menu
@@ -114,25 +114,25 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
         <Menu
           icon={CircleHelp}
           label="Safety & support"
-          detail="Report an LPG or fulfilment issue"
+          detail="Report an LPG or order issue"
           onPress={() => router.push(`/${`(${group})`}/support` as never)}
           last
         />
       </View>
 
-      <SectionHeader title="Terms & policy" description="See the key points here, then open the full policy inside SKIMA when you need more detail." />
+      <SectionHeader title="Terms and privacy" description="Review the key terms here or open the full document for more detail." />
       {group === "customer" ? (
         <PolicySummaryCard
           policyKey="policy.customer.terms"
           href="/policies/customer-terms"
-          fallbackTitle="SKIMA Customer Terms of Service & LPG Service Policy"
+          fallbackTitle="SKIMA Customer Terms of Service"
           fallbackSummary="Covers account use, LPG cylinder registration, service availability, pricing, payment, pickup and return, refill quantity, safety, refunds, disputes and your rights when using SKIMA."
         />
       ) : (
         <PolicySummaryCard
           policyKey="policy.partner.participation"
           href="/policies/partner-participation"
-          fallbackTitle="SKIMA Partner Participation Terms & Public Policy"
+          fallbackTitle="SKIMA Partner Terms"
           fallbackSummary="Covers partner approval, role responsibilities, service matching, ratings, safety, earnings, privacy, conduct, suspension and review rights."
         />
       )}

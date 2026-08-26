@@ -204,7 +204,7 @@ export function CylinderRegistrationScreen() {
 
   if (config.isPending) {
     return (
-      <Screen eyebrow="Cylinder identity" title="Add a cylinder">
+      <Screen eyebrow="Your cylinder" title="Add a cylinder">
         <ScreenSkeleton cards={3} />
       </Screen>
     );
@@ -218,16 +218,16 @@ export function CylinderRegistrationScreen() {
 
   return (
     <Screen
-      eyebrow="Cylinder identity"
+      eyebrow="Your cylinder"
       title="Add a cylinder"
-      subtitle="Create the SKIMA identity that will follow this cylinder through pickup, refill and delivery."
+      subtitle="Add this cylinder to SKIMA for pickup, refill and delivery."
       action={<AppButton label="Cancel" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       <View style={[styles.identityNote, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={[styles.identityIcon, { backgroundColor: palette.brand }]}><ShieldCheck color="#FFFFFF" size={24} /></View>
         <View style={styles.identityCopy}>
-          <Text style={[styles.identityTitle, { color: palette.ink }]}>SKIMA creates the permanent identity</Text>
-          <Text style={[styles.identityBody, { color: palette.muted }]}>After registration, this cylinder receives its SKIMA reference and scan code. Keep that identity with the correct physical cylinder.</Text>
+          <Text style={[styles.identityTitle, { color: palette.ink }]}>SKIMA creates a permanent Cylinder ID</Text>
+          <Text style={[styles.identityBody, { color: palette.muted }]}>After registration, this cylinder receives a SKIMA Cylinder ID and scan code. Keep them with the correct cylinder.</Text>
         </View>
       </View>
 
@@ -325,7 +325,7 @@ export function CylinderRegistrationScreen() {
       <View style={[styles.review, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <View style={styles.reviewHead}>
           <Sparkles color={palette.brand} size={20} />
-          <Text style={[styles.reviewTitle, { color: palette.ink }]}>Ready to create the identity?</Text>
+          <Text style={[styles.reviewTitle, { color: palette.ink }]}>Ready to add this cylinder?</Text>
         </View>
         <Text style={[styles.reviewBody, { color: palette.muted }]}>{ready ? `${name.trim()} · ${size} kg${photo ? " · photo added" : " · no photo yet"}` : "Complete the cylinder name and size before continuing."}</Text>
       </View>

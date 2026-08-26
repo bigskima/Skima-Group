@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
 import { AppButton } from "../ui/AppButton";
 
 export interface StationPhotoView {
@@ -41,7 +42,7 @@ export function MultiPhotoRequirement({ views, onUploadView }: MultiPhotoRequire
       setUploadingKey(viewKey);
       await onUploadView(viewKey, { uri: asset.uri, name: `${viewKey}-${Date.now()}.jpg`, mimeType: "image/jpeg" });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Upload failed.");
+      setError(friendlyError(cause, "The upload failed. Please try again."));
     } finally {
       setUploadingKey(null);
     }
@@ -61,7 +62,7 @@ export function MultiPhotoRequirement({ views, onUploadView }: MultiPhotoRequire
       setUploadingKey(viewKey);
       await onUploadView(viewKey, { uri: asset.uri, name: `${viewKey}-${Date.now()}.jpg`, mimeType: "image/jpeg" });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Upload failed.");
+      setError(friendlyError(cause, "The upload failed. Please try again."));
     } finally {
       setUploadingKey(null);
     }
@@ -90,7 +91,7 @@ export function MultiPhotoRequirement({ views, onUploadView }: MultiPhotoRequire
 
       <View style={[styles.privacyNote, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <LockKeyhole color={palette.mutedStrong} size={16} />
-        <Text style={[styles.privacyText, { color: palette.muted }]}>Verification photos stay private by default. Only photos separately approved by SKIMA for a station profile can become public.</Text>
+        <Text style={[styles.privacyText, { color: palette.muted }]}>Application photos are private. A photo appears on a public station profile only after separate approval from SKIMA.</Text>
       </View>
 
       {error ? <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
@@ -135,7 +136,7 @@ export function MultiPhotoRequirement({ views, onUploadView }: MultiPhotoRequire
                 {internalOnly ? (
                   <View style={styles.internalTag}>
                     <LockKeyhole color="#FFFFFF" size={11} />
-                    <Text style={styles.internalTagText}>Internal</Text>
+                    <Text style={styles.internalTagText}>Private</Text>
                   </View>
                 ) : null}
 

@@ -289,7 +289,7 @@ export function StationDashboard() {
 
           <UtilityLink
             icon={WalletCards}
-            label="Station settlements"
+            label="Station earnings"
             value={formatMoney(settled, currency)}
             href="/(station)/settlements"
           />

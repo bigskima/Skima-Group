@@ -5,7 +5,6 @@ import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import { ActionResponseSchema, displaySubtitle, displayTitle, recordId } from "../api/records";
 import {
-  emptyOperationalAddress,
   readOperationalLocation,
   resolveOperationalAddress,
   type OperationalAddress,
@@ -33,10 +32,7 @@ export function LocationsScreen() {
   const [predictions, setPredictions] = useState<Record<string, unknown>[]>([]);
   const [manualAddress, setManualAddress] = useState("");
   const [landmark, setLandmark] = useState("");
-  const [manualLatitude, setManualLatitude] = useState("");
-  const [manualLongitude, setManualLongitude] = useState("");
   const [showManual, setShowManual] = useState(false);
-  const [showCoordinates, setShowCoordinates] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeSuccess, setNoticeSuccess] = useState(false);
   const mutation = useGatewayMutation({ path: "/lpg/locations", schema: ActionResponseSchema, invalidate: [["locations"]] });
@@ -75,10 +71,7 @@ export function LocationsScreen() {
   const acceptPoint = (point: OperationalLocation) => {
     setSelected(point);
     setManualAddress(isGenericAddress(point.formattedAddress) ? "" : point.formattedAddress);
-    setManualLatitude(String(point.latitude));
-    setManualLongitude(String(point.longitude));
     setShowManual(isGenericAddress(point.formattedAddress));
-    setShowCoordinates(false);
   };
 
   const detect = async () => {
@@ -104,7 +97,6 @@ export function LocationsScreen() {
     const timer = setTimeout(() => {
       void autocomplete.mutateAsync({
         input: query,
-        countryComponent: "country:ng",
         idempotencyKey: idempotencyKey("location-search", query.toLowerCase()),
       }).then((result) => {
         if (active) setPredictions(result.predictions);
@@ -175,31 +167,12 @@ export function LocationsScreen() {
       });
       acceptPoint(locationFromLookup(result, address));
     } catch (cause) {
-      showNotice(friendlyError(cause, "We couldn't find that address. Add an area or landmark, or use coordinates."));
+      showNotice(friendlyError(cause, "We couldn't find that address. Add an area or nearby landmark, or choose the place on the map."));
     } finally {
       setResolving(false);
     }
   };
 
-  const applyCoordinates = () => {
-    const latitude = Number(manualLatitude);
-    const longitude = Number(manualLongitude);
-    if (!manualAddress.trim() || !validCoordinate(latitude, longitude)) {
-      showNotice("Enter an address and valid coordinates to place the pin.");
-      return;
-    }
-    acceptPoint({
-      latitude,
-      longitude,
-      accuracyMeters: null,
-      recordedAt: new Date().toISOString(),
-      formattedAddress: manualAddress.trim(),
-      providerPlaceId: null,
-      providerSource: "manual_pin",
-      address: emptyOperationalAddress(),
-    });
-    showNotice("");
-  };
 
   const save = async () => {
     if (!label.trim()) {
@@ -230,6 +203,9 @@ export function LocationsScreen() {
         latitude: selected.latitude,
         longitude: selected.longitude,
         accuracyMeters: selected.accuracyMeters ?? undefined,
+        address: selected.address,
+        captureSource: canonicalCaptureSource(selected.providerSource),
+        capturedAt: selected.recordedAt,
         providerSource: selected.providerSource,
         providerPlaceId: selected.providerPlaceId ?? undefined,
         metadata: {
@@ -387,17 +363,7 @@ export function LocationsScreen() {
               <Pressable disabled={resolving} onPress={() => void locateManualAddress()} style={[styles.manualButton, { borderColor: colors.brand }]}>
                 {resolving ? <ActivityIndicator color={colors.brand} size="small" /> : <><Search color={colors.brand} size={16} /><Text style={styles.compactActionText}>Find this address</Text></>}
               </Pressable>
-              {showCoordinates ? (
-                <>
-                  <Text style={[styles.coordinateNote, { color: palette.muted }]}>Advanced fallback: use coordinates only when an address cannot be found.</Text>
-                  <View style={styles.coordinateRow}>
-                    <TextInput value={manualLatitude} onChangeText={setManualLatitude} keyboardType="decimal-pad" placeholder="Latitude" placeholderTextColor={palette.muted} style={[styles.input, styles.coordinate, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]} />
-                    <TextInput value={manualLongitude} onChangeText={setManualLongitude} keyboardType="decimal-pad" placeholder="Longitude" placeholderTextColor={palette.muted} style={[styles.input, styles.coordinate, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]} />
-                  </View>
-                  <Pressable onPress={applyCoordinates} style={[styles.manualButton, { borderColor: palette.border }]}><Crosshair color={palette.ink} size={16} /><Text style={[styles.manualButtonText, { color: palette.ink }]}>Place coordinates on map</Text></Pressable>
-                </>
-              ) : <Pressable onPress={() => setShowCoordinates(true)}><Text style={[styles.coordinateLink, { color: palette.muted }]}>Use coordinates instead</Text></Pressable>}
-              <Pressable onPress={() => { setShowManual(false); setShowCoordinates(false); }}><Text style={styles.manualLink}>Close manual entry</Text></Pressable>
+              <Pressable onPress={() => { setShowManual(false); }}><Text style={styles.manualLink}>Close manual entry</Text></Pressable>
             </View>
           ) : <Pressable onPress={() => setShowManual(true)}><Text style={styles.manualLink}>Can't find it? Enter the address manually</Text></Pressable>}
 
@@ -607,10 +573,6 @@ const styles = StyleSheet.create({
   manualLink: { color: colors.brand, fontSize: 12, fontWeight: "800", textAlign: "center" },
   manualButton: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 13, borderWidth: 1 },
   manualButtonText: { fontSize: 12, fontWeight: "900" },
-  coordinateNote: { fontSize: 11, lineHeight: 16 },
-  coordinateLink: { fontSize: 11, fontWeight: "800", textAlign: "center" },
-  coordinateRow: { flexDirection: "row", gap: spacing.sm },
-  coordinate: { flex: 1 },
   primary: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: 14, backgroundColor: colors.brand },
   disabled: { opacity: .45 },
   primaryText: { color: "white", fontSize: 14, fontWeight: "900" },
@@ -623,3 +585,9 @@ const styles = StyleSheet.create({
   savedAddress: { marginTop: 2, fontSize: 12, lineHeight: 17 },
   savedEmpty: { paddingVertical: spacing.md, fontSize: 13 },
 });
+
+function canonicalCaptureSource(source: OperationalLocation["providerSource"]): "DEVICE_GPS" | "MAP_PIN" | "GEOCODED" {
+  if (source === "manual_pin") return "MAP_PIN";
+  if (source === "maps_adapter") return "GEOCODED";
+  return "DEVICE_GPS";
+}

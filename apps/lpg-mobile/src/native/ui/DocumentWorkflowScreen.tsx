@@ -239,7 +239,7 @@ export function DocumentWorkflowScreen({
 
   return (
     <Screen
-      eyebrow={isCorrectionFlow ? "Application update" : "Verification evidence"}
+      eyebrow={isCorrectionFlow ? "Application update" : "Required documents"}
       title={isCorrectionFlow ? "Requested Updates" : "Documents"}
       action={
         <Pressable onPress={() => router.back()}>

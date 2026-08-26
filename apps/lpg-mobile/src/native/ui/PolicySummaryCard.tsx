@@ -41,7 +41,7 @@ export function PolicySummaryCard({
         <BookOpen color={palette.brand} size={20} />
       </View>
       <View style={styles.copy}>
-        <Text style={[styles.eyebrow, { color: palette.brand }]}>TERMS & POLICY</Text>
+        <Text style={[styles.eyebrow, { color: palette.brand }]}>TERMS AND PRIVACY</Text>
         <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
         <Text style={[styles.summary, { color: palette.muted }]}>{summary}</Text>
 

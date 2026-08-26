@@ -92,7 +92,7 @@ export function Scanner({
             <View style={styles.manualIcon}><Keyboard color={colors.brand} size={18} /></View>
             <View style={styles.manualCopy}>
               <Text style={styles.manualTitle}>Can't scan? Enter Cylinder ID</Text>
-              <Text style={styles.manualBody}>Use the permanent human-readable SKIMA Cylinder ID. This is only an identity fallback; the backend still checks the assigned order and current hand-off stage.</Text>
+              <Text style={styles.manualBody}>Enter the SKIMA Cylinder ID printed with the cylinder details. SKIMA will confirm that it belongs to this order and is ready for the current hand-over.</Text>
             </View>
           </View>
           <TextInput

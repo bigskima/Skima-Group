@@ -9,27 +9,34 @@ import {
 } from "./records";
 import { useSession } from "../session/SessionProvider";
 
-const MatchedAreaSchema = z.object({
-  key: z.string(),
-  displayName: z.string(),
-  type: z.enum([
-    "country",
-    "state",
-    "lga",
-    "city",
-    "town",
-    "locality",
-    "radius",
-    "polygon",
-  ]),
+const UniversalMatchedAreaSchema = z.object({
+  id: z.string().uuid(),
+  policyId: z.string().uuid(),
 });
+
+export const ServiceabilityReasonSchema = z.enum([
+  "AVAILABLE",
+  "SERVICE_NOT_LAUNCHED",
+  "AREA_EXCLUDED",
+  "SERVICE_PAUSED",
+  "LOCATION_REQUIRED",
+  "LOCATION_TOO_INACCURATE",
+  "POLICY_CONFIGURATION_CONFLICT",
+  "NO_ELIGIBLE_STATION",
+  "NO_ELIGIBLE_DRIVER",
+  "TEMPORARILY_UNAVAILABLE",
+]);
 
 export const LpgServiceabilitySchema = z.object({
   serviceable: z.boolean(),
   status: z.enum(["available", "unavailable"]),
-  reason: z.enum(["included_area", "excluded_area", "outside_enabled_area"]),
-  matchedArea: MatchedAreaSchema.nullable(),
+  reason: ServiceabilityReasonSchema,
+  matchedArea: UniversalMatchedAreaSchema.nullable(),
   partnerOpportunity: z.boolean(),
+  partnerOpportunities: z.object({
+    driver: z.boolean(),
+    station: z.boolean(),
+  }).optional(),
 });
 
 export type LpgServiceability = z.infer<typeof LpgServiceabilitySchema>;

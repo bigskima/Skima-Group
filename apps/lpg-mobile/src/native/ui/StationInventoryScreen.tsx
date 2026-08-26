@@ -62,7 +62,7 @@ export function StationInventoryScreen() {
     setMessage(null);
     if (!branchId || !Number.isFinite(value) || value <= 0 || (remaining !== null && value > remaining)) {
       setMessageSuccess(false);
-      setMessage("Enter a replenishment amount within the station's remaining configured capacity.");
+      setMessage("Enter an amount that does not exceed the station's remaining capacity.");
       return;
     }
 
@@ -86,8 +86,8 @@ export function StationInventoryScreen() {
   return (
     <Screen
       eyebrow="Station operations"
-      title="Inventory & capacity"
-      subtitle="See current refill stock, cylinders at the station and authorised capacity adjustments."
+      title="LPG stock"
+      subtitle="See available LPG, cylinders at the station and record new stock."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {runtime.isPending ? (
@@ -96,7 +96,7 @@ export function StationInventoryScreen() {
         <EmptyState
           icon={<Database color={palette.brand} size={26} />}
           title="Inventory could not be loaded"
-          description="Check your connection and refresh the station workspace."
+          description="Check your connection and try again."
           action={<AppButton label="Retry" onPress={() => void runtime.refetch()} />}
         />
       ) : (
@@ -106,7 +106,7 @@ export function StationInventoryScreen() {
               <View style={styles.heroCopy}>
                 <Text style={styles.heroEyebrow}>AVAILABLE REFILL STOCK</Text>
                 <Text adjustsFontSizeToFit numberOfLines={1} style={styles.heroValue}>{available ?? "—"} kg</Text>
-                <Text style={styles.heroBody}>of {capacity ?? "unconfigured"} kg station capacity</Text>
+                <Text style={styles.heroBody}>of {capacity ?? "unset"} kg total capacity</Text>
               </View>
               <View style={styles.heroIcon}><Gauge color="#FFFFFF" size={27} /></View>
             </View>
@@ -114,7 +114,7 @@ export function StationInventoryScreen() {
               <View style={[styles.progressFill, { width: `${stockPercent}%` }]} />
             </View>
             <View style={styles.heroFooter}>
-              <Text style={styles.heroFooterText}>{capacity === null ? "Capacity has not been configured" : `${stockPercent.toFixed(0)}% currently available`}</Text>
+              <Text style={styles.heroFooterText}>{capacity === null ? "Total capacity has not been set" : `${stockPercent.toFixed(0)}% currently available`}</Text>
               {capacity !== null ? <View style={styles.heroBadge}><Text style={styles.heroBadgeText}>{remaining ?? 0} kg room</Text></View> : null}
             </View>
           </View>
@@ -124,7 +124,7 @@ export function StationInventoryScreen() {
               <Gauge color={palette.warning} size={20} />
               <View style={styles.warningCopy}>
                 <Text style={[styles.warningTitle, { color: palette.ink }]}>Stock is running low</Text>
-                <Text style={[styles.warningBody, { color: palette.muted }]}>Available refill stock is at or below 20% of configured station capacity.</Text>
+                <Text style={[styles.warningBody, { color: palette.muted }]}>Available LPG is at or below 20% of the station's total capacity.</Text>
               </View>
               <StatusPill label="Low stock" tone="warning" />
             </View>
@@ -138,7 +138,7 @@ export function StationInventoryScreen() {
 
           <SectionHeader
             title="Cylinders at station"
-            description="Only cylinders whose order lifecycle has reached the station are shown here."
+            description="Only cylinders that have arrived for an active order are shown here."
           />
 
           <View style={styles.list}>
@@ -170,7 +170,7 @@ export function StationInventoryScreen() {
               <EmptyState
                 icon={<PackageCheck color={palette.brand} size={26} />}
                 title="No cylinders at station"
-                description="Verified cylinders will appear here as their assigned orders reach this station."
+                description="Cylinders will appear here after their assigned driver arrives and checks in."
               />
             )}
           </View>
@@ -194,14 +194,14 @@ export function StationInventoryScreen() {
                   placeholder={`Up to ${remaining} kg`}
                   placeholderTextColor={palette.muted}
                 />
-                <Text style={[styles.fieldHint, { color: palette.muted }]}>Remaining configured capacity: {remaining} kg.</Text>
+                <Text style={[styles.fieldHint, { color: palette.muted }]}>Remaining capacity: {remaining} kg.</Text>
               </View>
               <AppButton label="Record replenishment" fullWidth loading={mutation.isPending} onPress={() => void submit()} />
             </View>
           ) : !canManage ? (
             <View style={[styles.readOnly, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
               <ShieldCheck color={palette.mutedStrong} size={18} />
-              <Text style={[styles.readOnlyText, { color: palette.muted }]}>Inventory is read-only for your current station role. Capacity changes require the station-management permission.</Text>
+              <Text style={[styles.readOnlyText, { color: palette.muted }]}>You can view stock, but your team role does not allow stock updates.</Text>
             </View>
           ) : null}
 

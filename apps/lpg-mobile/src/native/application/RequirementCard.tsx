@@ -13,6 +13,7 @@ import { useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
 import { AppButton } from "../ui/AppButton";
 import { StatusPill } from "../ui/StatusPill";
 
@@ -98,7 +99,7 @@ export function RequirementCard({
         });
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Upload failed. Please try again.");
+      setError(friendlyError(cause, "The upload failed. Please try again."));
     } finally {
       setUploading(false);
     }
@@ -127,7 +128,7 @@ export function RequirementCard({
         size: asset.fileSize,
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Camera capture failed. Please try again.");
+      setError(friendlyError(cause, "We couldn't take the photo. Please try again."));
     } finally {
       setUploading(false);
     }

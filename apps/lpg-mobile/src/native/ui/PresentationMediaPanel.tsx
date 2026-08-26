@@ -127,7 +127,7 @@ export function PresentationMediaPanel({
       {presentationId ? (
         <RuntimeMediaImage assetId={presentationId} label="Presentation image" />
       ) : originalId ? (
-        <RuntimeMediaImage assetId={originalId} label="Original evidence" />
+        <RuntimeMediaImage assetId={originalId} label="Original photo" />
       ) : null}
 
       <View style={styles.head}>
