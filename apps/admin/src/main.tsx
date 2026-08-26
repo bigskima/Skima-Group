@@ -102,6 +102,8 @@ function AdminRoot() {
   }
 
   const canManageCoverage = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
+    sessionState.context?.permissions.includes("platform.coverage.read") ||
+    sessionState.context?.permissions.includes("platform.coverage.manage") ||
     sessionState.context?.permissions.includes("lpg.config.manage") ||
     false;
 

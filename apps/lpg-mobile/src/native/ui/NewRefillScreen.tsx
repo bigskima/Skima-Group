@@ -87,6 +87,12 @@ export function NewRefillScreen() {
   );
   const pickupUnavailable = pickupServiceability.data?.serviceable === false;
   const deliveryUnavailable = deliveryServiceability.data?.serviceable === false;
+  const driverOnboardingAvailable = Boolean(
+    pickupServiceability.data?.partnerOpportunities?.driver || deliveryServiceability.data?.partnerOpportunities?.driver,
+  );
+  const stationOnboardingAvailable = Boolean(
+    pickupServiceability.data?.partnerOpportunities?.station || deliveryServiceability.data?.partnerOpportunities?.station,
+  );
   const serviceUnavailable = pickupUnavailable || deliveryUnavailable;
   const tripServiceable = Boolean(
     hasSelectedTrip &&
@@ -109,6 +115,10 @@ export function NewRefillScreen() {
     path: "/lpg/quotes",
     schema: ActionResponseSchema,
     invalidate: [["quotes"]],
+  });
+  const expansionInterest = useGatewayMutation({
+    path: "/lpg/expansion-interest",
+    schema: ActionResponseSchema,
   });
   const order = useGatewayMutation({
     path: "/lpg/orders",
@@ -351,6 +361,19 @@ export function NewRefillScreen() {
                     : stationUnavailable
                       ? "No station can fulfil this refill"
                       : "See my price";
+  const registerExpansionInterest = async () => {
+    const locationIds = [...new Set([
+      pickupUnavailable ? pickupLocationId : null,
+      deliveryUnavailable ? deliveryLocationId : null,
+    ].filter((value): value is string => Boolean(value)))];
+    if (locationIds.length === 0) return;
+    setError(null);
+    try {
+      await expansionInterest.mutateAsync({ locationIds });
+    } catch (cause) {
+      setError(friendlyError(cause, "We couldn't save your launch notification request. Please try again."));
+    }
+  };
 
   return (
     <Screen
@@ -373,7 +396,7 @@ export function NewRefillScreen() {
               </View>
               <View style={styles.quoteHeroIcon}><WalletCards color="#FFFFFF" size={25} /></View>
             </View>
-            <Text style={styles.quoteHeroBody}>This quote is based on the selected cylinder, station, refill amount and fulfilment trip.</Text>
+            <Text style={styles.quoteHeroBody}>This quote is based on your cylinder, station, refill amount, pickup and return locations.</Text>
           </View>
 
           <View style={[styles.quoteCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -420,7 +443,7 @@ export function NewRefillScreen() {
             step="1"
             icon={<Scale color={palette.brand} size={20} />}
             title="Choose your cylinder"
-            description="Select the SKIMA cylinder identity for this refill."
+            description="Choose the cylinder you want to refill."
             records={cylinders.data ?? []}
             selected={cylinderId}
             onSelect={selectCylinder}
@@ -499,8 +522,9 @@ export function NewRefillScreen() {
                 </View>
                 <View style={styles.availabilityActions}>
                   <AppButton label="Choose another location" variant="secondary" size="sm" onPress={() => router.push("/(customer)/locations")} />
-                  <AppButton label="Become a Driver Partner" size="sm" onPress={() => router.push("/(customer)/driver-application" as never)} />
-                  <AppButton label="Become a Station Partner" variant="secondary" size="sm" onPress={() => router.push("/(customer)/station-application" as never)} />
+                  <AppButton label={expansionInterest.isSuccess ? "Launch notification saved" : "Notify me when SKIMA launches here"} variant="secondary" size="sm" loading={expansionInterest.isPending} disabled={expansionInterest.isSuccess} onPress={() => void registerExpansionInterest()} />
+                  {driverOnboardingAvailable ? <AppButton label="Become a Driver Partner" size="sm" onPress={() => router.push("/(customer)/driver-application" as never)} /> : null}
+                  {stationOnboardingAvailable ? <AppButton label="Become a Station Partner" variant="secondary" size="sm" onPress={() => router.push("/(customer)/station-application" as never)} /> : null}
                 </View>
               </View>
             ) : tripServiceable ? (
@@ -509,7 +533,7 @@ export function NewRefillScreen() {
                   <ShieldCheck color={palette.success} size={22} />
                   <View style={styles.requirementCopy}>
                     <Text style={[styles.requirementTitle, { color: palette.ink }]}>SKIMA LPG is available for this trip</Text>
-                    <Text style={[styles.requirementBody, { color: palette.muted }]}>Both pickup and return locations are currently within SKIMA LPG service coverage.</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>SKIMA LPG is available at both your pickup and return locations.</Text>
                   </View>
                 </View>
               </View>
@@ -721,13 +745,13 @@ function StationSelectionSection({
         step="5"
         icon={<Store color={palette.brand} size={20} />}
         title="Choose a station"
-        description="Only stations that can currently fulfil this cylinder and refill amount are shown. Closest options appear first."
+        description="Only stations currently able to complete this refill are shown. The closest options appear first."
       />
 
       {!ready ? (
         <Text style={[styles.emptyText, { color: palette.muted }]}>Enter a valid refill amount to see available stations.</Text>
       ) : loading ? (
-        <Text style={[styles.emptyText, { color: palette.muted }]}>Finding stations that can fulfil this refill…</Text>
+        <Text style={[styles.emptyText, { color: palette.muted }]}>Finding stations for this refill…</Text>
       ) : failed ? (
         <View style={styles.stationQueryState}>
           <Text style={[styles.emptyText, { color: palette.muted }]}>We couldn't refresh station availability right now.</Text>
@@ -735,7 +759,7 @@ function StationSelectionSection({
         </View>
       ) : stations.length === 0 ? (
         <View style={styles.stationQueryState}>
-          <Text style={[styles.stationEmptyTitle, { color: palette.ink }]}>No station can fulfil this refill right now</Text>
+          <Text style={[styles.stationEmptyTitle, { color: palette.ink }]}>No station is available for this refill right now</Text>
           <Text style={[styles.emptyText, { color: palette.muted }]}>A station may be outside its service radius, unavailable, low on stock, missing a current price, or unable to handle this cylinder size. Try another location or check again later.</Text>
         </View>
       ) : (

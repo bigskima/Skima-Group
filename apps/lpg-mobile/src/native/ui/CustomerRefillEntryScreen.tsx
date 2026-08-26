@@ -35,7 +35,7 @@ export function CustomerRefillEntryScreen() {
       <PolicySummaryCard
         policyKey="policy.customer.terms"
         href="/policies/customer-terms"
-        fallbackTitle="SKIMA Customer Terms of Service & LPG Service Policy"
+        fallbackTitle="SKIMA Customer Terms of Service"
         fallbackSummary="Review the key rules for LPG orders, pricing, pickup and return, refill quantity, safety, refunds, disputes and your customer rights."
       />
 

@@ -64,6 +64,10 @@
     "20260822102139_driver_participation_idempotency_fix.sql",
     "20260822102234_lpg_special_driver_dispatch_priority.sql",
     "20260822120100_lpg_fleet_pair_dispatch_selection.sql",
-    "20260822122000_customer_policy_acceptance_retry.sql"
+    "20260822122000_customer_policy_acceptance_retry.sql",
+    "20260822143000_universal_location_geography_coverage_runtime.sql",
+    "20260823100000_universal_coverage_dispatch_cutover.sql",
+    "20260823120000_canonical_location_evidence_runtime.sql",
+    "20260823140000_expansion_interest_production_runtime.sql"
   ]
 }

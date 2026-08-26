@@ -110,7 +110,7 @@ export function StationDetailScreen({ id }: { id: string | null }) {
 
           <View style={[styles.trust, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.mutedStrong} size={18} />
-            <Text style={[styles.trustText, { color: palette.muted }]}>This profile shows only public operational station information approved for discovery. Applicant identity documents, representative photos, licences and private verification evidence are not shown here.</Text>
+            <Text style={[styles.trustText, { color: palette.muted }]}>This profile shows public station information only. Private application documents and verification details are never displayed.</Text>
           </View>
         </>
       )}

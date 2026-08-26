@@ -139,7 +139,7 @@ export function StationSettingsScreen() {
       <Screen
         eyebrow="Station operations"
         title="Settings & pricing"
-        subtitle="Operational controls are available only to authorised station roles."
+        subtitle="Only authorised station team members can manage these settings."
       >
         <EmptyState
           icon={<ShieldCheck color={palette.brand} size={27} />}
@@ -189,7 +189,7 @@ export function StationSettingsScreen() {
 
           <SectionHeader
             title="Operating availability"
-            description="This controls whether the branch is operationally available to participate in eligible LPG fulfilment."
+            description="Choose whether this branch is ready to receive LPG orders."
           />
 
           <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -260,7 +260,7 @@ export function StationSettingsScreen() {
 
           <SectionHeader
             title="Station refill price"
-            description="Set the branch's own LPG selling price per kilogram. SKIMA-controlled fees and other financial policy remain server-managed."
+            description="Set this branch's LPG selling price per kilogram. Any separate SKIMA charges are added automatically."
           />
 
           <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -268,7 +268,7 @@ export function StationSettingsScreen() {
               <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><BadgeDollarSign color={palette.brand} size={22} /></View>
               <View style={styles.sectionCopy}>
                 <Text style={[styles.sectionTitle, { color: palette.ink }]}>Branch price per kg</Text>
-                <Text style={[styles.sectionBody, { color: palette.muted }]}>This is the amount the station itself is selling LPG for. Customer totals may include separate SKIMA-controlled charges calculated by backend policy.</Text>
+                <Text style={[styles.sectionBody, { color: palette.muted }]}>This is the station's LPG selling price. The customer total may include separate SKIMA charges.</Text>
               </View>
             </View>
 
@@ -276,7 +276,7 @@ export function StationSettingsScreen() {
               <View style={[styles.catalogRow, { backgroundColor: palette.surfaceSubtle }]}>
                 <Store color={palette.mutedStrong} size={18} />
                 <View style={styles.catalogCopy}>
-                  <Text style={[styles.catalogLabel, { color: palette.muted }]}>ACTIVE CATALOG ITEM</Text>
+                  <Text style={[styles.catalogLabel, { color: palette.muted }]}>CURRENT LPG SERVICE</Text>
                   <Text style={[styles.catalogValue, { color: palette.ink }]}>{firstString(pricing, ["displayName", "display_name", "itemKey"]) ?? "LPG refill"}</Text>
                 </View>
                 <StatusPill label="Active" tone="success" />
@@ -284,7 +284,7 @@ export function StationSettingsScreen() {
             ) : (
               <View style={[styles.warning, { backgroundColor: palette.warningSoft }]}>
                 <Store color={palette.warning} size={19} />
-                <Text style={[styles.warningText, { color: palette.ink }]}>No active LPG refill catalog item is configured for this branch, so pricing cannot be updated yet.</Text>
+                <Text style={[styles.warningText, { color: palette.ink }]}>LPG refill pricing is not ready for this branch yet. Contact SKIMA support if this continues.</Text>
               </View>
             )}
 
@@ -299,7 +299,7 @@ export function StationSettingsScreen() {
                 placeholderTextColor={palette.muted}
                 style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink, opacity: canManagePrice && catalogItemId ? 1 : 0.65 }]}
               />
-              <Text style={[styles.fieldHint, { color: palette.muted }]}>Do not add platform, delivery, driver, tax or other policy-controlled amounts into this field.</Text>
+              <Text style={[styles.fieldHint, { color: palette.muted }]}>Enter only the station's LPG price. SKIMA will add any separate charges automatically.</Text>
             </View>
 
             {canManagePrice ? (
@@ -318,7 +318,7 @@ export function StationSettingsScreen() {
 
           <View style={[styles.policyNote, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.mutedStrong} size={18} />
-            <Text style={[styles.policyText, { color: palette.muted }]}>Station settings change operational presentation and eligibility only through authorised backend actions. Financial fees outside the station's selling price remain controlled by SKIMA policy configuration.</Text>
+            <Text style={[styles.policyText, { color: palette.muted }]}>Only authorised team members can change these settings. SKIMA manages any charges outside the station's selling price.</Text>
           </View>
 
           {notice ? (

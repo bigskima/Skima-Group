@@ -205,18 +205,18 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
             <ShieldCheck color="#FFFFFF" size={23} />
           </View>
         </View>
-        <Text style={styles.heroBody}>The amount you request is the amount sent to your bank. A SKIMA fee, when configured, is shown separately and never added to the provider transfer amount.</Text>
+        <Text style={styles.heroBody}>The amount you request is the amount sent to your bank. Any SKIMA fee is shown separately and is not added to the transfer amount.</Text>
       </View>
 
       {!walletId && !wallets.isLoading ? (
         <EmptyState
           icon={<ShieldCheck color={palette.brand} size={26} />}
           title="No payout wallet available"
-          description="This workspace does not yet have an active wallet eligible for withdrawal."
+          description="Withdrawals are not available for this account yet."
         />
       ) : adding ? (
         <Card padding="lg">
-          <SectionHeader title="Add payout account" description="Your account is verified with the active payout provider before it can receive funds." />
+          <SectionHeader title="Add payout account" description="We will confirm your bank details before you can receive funds." />
           <AppField label="Account holder name" value={accountName} onChangeText={setAccountName} placeholder="Full account name" autoCapitalize="words" />
           <AppField label="Account number" value={accountNumber} onChangeText={setAccountNumber} placeholder="10-digit NUBAN" keyboardType="number-pad" maxLength={10} error={accountNumber.length > 0 && !isValidNuban ? "Enter a valid 10-digit account number." : null} />
 

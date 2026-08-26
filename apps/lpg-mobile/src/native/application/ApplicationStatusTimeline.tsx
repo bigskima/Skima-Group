@@ -64,16 +64,16 @@ export function ApplicationStatusTimeline({
     {
       key: "submitted",
       title: applicationStatus === "resubmitted" ? "Application Resubmitted" : "Application Submitted",
-      description: "Your application and uploaded evidence were received by SKIMA.",
+      description: "We received your application and documents.",
       status: "completed",
       timestamp: submittedAt,
     },
     {
       key: "review",
-      title: "Administrative Review",
+      title: "Application Review",
       description: isUnderReview
-        ? "SKIMA is reviewing your identity, documents, and operational information."
-        : "Administrative and document review has been completed for this decision.",
+        ? "SKIMA is reviewing your details and documents."
+        : "SKIMA has completed the application and document review.",
       status: isChangesRequested ? "completed" : isUnderReview ? "current" : "completed",
     },
     {
@@ -88,14 +88,14 @@ export function ApplicationStatusTimeline({
               ? "Partner Access Suspended"
               : "Approval Decision",
       description: isChangesRequested
-        ? "A reviewer requested corrections or replacement evidence before review can continue."
+        ? "We need you to correct or replace some information before the review can continue."
         : isRejected
           ? "This application was not approved. Review the message from SKIMA below."
           : isApproved
-            ? "Your application is approved. Approval alone does not make the partner operational."
+            ? "Your application is approved. We will notify you when your partner account is ready to use."
             : isSuspended
-              ? "Operational access is currently unavailable until SKIMA restores it."
-              : "A decision will appear here after administrative review.",
+              ? "Your partner account is temporarily unavailable. We will notify you when access is restored."
+              : "A decision will appear here after SKIMA completes the review.",
       status: isChangesRequested
         ? "action_required"
         : isRejected || isSuspended
@@ -107,12 +107,12 @@ export function ApplicationStatusTimeline({
     },
     {
       key: "activation",
-      title: "Operational Activation",
+      title: "Account Setup",
       description: isActivated
-        ? "Your partner workspace is live on the SKIMA operational network."
+        ? "Your partner account is ready to use."
         : isApproved
-          ? "Waiting for the separate SKIMA operational activation step."
-          : "Operational activation happens only after application approval.",
+          ? "Your application is approved. SKIMA is completing your account setup."
+          : "Account setup begins after your application is approved.",
       status: isActivated ? "completed" : isApproved ? "current" : "upcoming",
       timestamp: activatedAt,
     },

@@ -47,7 +47,7 @@ export function StationsScreen() {
         <EmptyState
           icon={<ShieldCheck color={palette.brand} size={27} />}
           title="No public stations available"
-          description="Only SKIMA-approved stations that are currently eligible to serve customers appear here."
+          description="Only approved SKIMA stations that are currently available appear here."
         />
       ) : (
         <>

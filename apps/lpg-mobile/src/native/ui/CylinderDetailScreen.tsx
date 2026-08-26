@@ -91,9 +91,9 @@ export function CylinderDetailScreen() {
 
   return (
     <Screen
-      eyebrow="SKIMA cylinder identity"
+      eyebrow="Your cylinder"
       title={displayName ?? "Cylinder details"}
-      subtitle="Your permanent SKIMA Cylinder ID stays with this cylinder across refill orders. The digital QR is a faster verification option, not a printing requirement."
+      subtitle="Your SKIMA Cylinder ID stays with this cylinder for every refill. Use the QR code for faster scanning when available."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {query.isPending ? (
@@ -119,7 +119,7 @@ export function CylinderDetailScreen() {
             <View style={styles.heroCopy}>
               <Text style={styles.heroEyebrow}>PERMANENT SKIMA CYLINDER ID</Text>
               <Text numberOfLines={1} style={styles.heroReference}>{cylinderReference ?? "Reference unavailable"}</Text>
-              <Text style={styles.heroBody}>{cylinderSizeKg ?? "Configured"} kg cylinder</Text>
+              <Text style={styles.heroBody}>{cylinderSizeKg ?? "Unknown"} kg cylinder</Text>
             </View>
             <StatusPill label={friendlyCylinderStatus(status)} tone={cylinderTone(status)} />
           </View>
@@ -169,13 +169,13 @@ export function CylinderDetailScreen() {
             <Divider />
             <Field label="Verified refill limit" value={formatKg(verifiedCapacityKg ?? cylinderSizeKg)} />
             <Divider />
-            <Field label="Brand" value={firstString(cylinder, ["brand", "manufacturer"]) ?? "Not recorded"} />
+            <Field label="Brand" value={firstString(cylinder, ["brand", "manufacturer"]) ?? "Not added"} />
             <Divider />
-            <Field label="Serial number" value={firstString(cylinder, ["serial_number", "serialNumber"]) ?? "Not recorded"} />
+            <Field label="Serial number" value={firstString(cylinder, ["serial_number", "serialNumber"]) ?? "Not added"} />
             <Divider />
-            <Field label="Colour" value={firstString(cylinder, ["colour", "color"]) ?? "Not recorded"} />
+            <Field label="Colour" value={firstString(cylinder, ["colour", "color"]) ?? "Not added"} />
             <Divider />
-            <Field label="Condition" value={friendly(firstString(cylinder, ["condition_status", "conditionStatus"]) ?? "Not recorded")} />
+            <Field label="Condition" value={friendly(firstString(cylinder, ["condition_status", "conditionStatus"]) ?? "Not added")} />
             <Divider />
             <Field label="Next inspection" value={formatDate(firstString(cylinder, ["next_inspection_at", "nextInspectionAt"]))} />
           </View>
@@ -188,7 +188,7 @@ export function CylinderDetailScreen() {
                 </View>
                 <View style={styles.capacityCopy}>
                   <Text style={[styles.capacityTitle, { color: palette.ink }]}>Is the recorded size wrong?</Text>
-                  <Text style={[styles.capacityBody, { color: palette.muted }]}>Capacity cannot be edited directly. Submit clear cylinder evidence for SKIMA review; the current verified limit stays active until approval.</Text>
+                  <Text style={[styles.capacityBody, { color: palette.muted }]}>To change the verified cylinder size, send clear photos for SKIMA to review. The current size remains in use until the review is complete.</Text>
                 </View>
               </View>
               <AppButton
@@ -206,7 +206,7 @@ export function CylinderDetailScreen() {
               <View style={[styles.qrIcon, { backgroundColor: palette.brandSoft }]}><QrCodeIcon color={palette.brand} size={22} /></View>
               <View style={styles.qrHeaderCopy}>
                 <Text style={[styles.qrTitle, { color: palette.ink }]}>Optional digital scan code</Text>
-                <Text style={[styles.qrBody, { color: palette.muted }]}>Use this QR when convenient for faster verification. You do not need to print it to register this cylinder or place an eligible refill order; SKIMA can fall back to the permanent Cylinder ID and assigned-order checks.</Text>
+                <Text style={[styles.qrBody, { color: palette.muted }]}>Use this QR code for faster scanning. You can also use the permanent Cylinder ID if the QR code is unavailable.</Text>
               </View>
             </View>
 
@@ -241,7 +241,7 @@ export function CylinderDetailScreen() {
 
           <View style={[styles.security, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.mutedStrong} size={18} />
-            <Text style={[styles.securityText, { color: palette.muted }]}>The QR and written Cylinder ID are verification methods, not refill authorization by themselves. SKIMA still checks the current order, assigned driver or station, workflow state and backend cylinder record before a hand-off is accepted.</Text>
+            <Text style={[styles.securityText, { color: palette.muted }]}>The QR code and Cylinder ID help identify this cylinder. SKIMA also confirms the order and the assigned delivery partner before each hand-over.</Text>
           </View>
 
           {message ? (
@@ -315,13 +315,13 @@ function cylinderTone(value: string): "neutral" | "brand" | "success" | "warning
 }
 
 function formatDate(value: string | null) {
-  if (!value) return "Not recorded";
+  if (!value) return "Not added";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
 }
 
 function formatKg(value: number | null) {
-  if (value === null || !Number.isFinite(value)) return "Not recorded";
+  if (value === null || !Number.isFinite(value)) return "Not added";
   return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)} kg`;
 }
 

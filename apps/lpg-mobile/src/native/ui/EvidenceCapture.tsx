@@ -67,7 +67,7 @@ export function EvidenceCapture({
   const capture = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      setError("Camera permission is required for operational evidence.");
+      setError("Allow camera access to take this photo.");
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -122,7 +122,7 @@ export function EvidenceCapture({
       }
       if (!id)
         throw new Error(
-          "The secure evidence asset is unavailable. Select the evidence again.",
+          "That file is no longer available. Select it again.",
         );
       await onUploaded(id);
       await draftStore.clear(owner, draftType);
@@ -130,7 +130,7 @@ export function EvidenceCapture({
       setError(
         cause instanceof Error
           ? cause.message
-          : "Evidence upload failed. Retry before continuing.",
+          : "The upload failed. Try again before continuing.",
       );
     } finally {
       setPending(false);
@@ -157,7 +157,7 @@ export function EvidenceCapture({
           <Text style={styles.body}>
             {uploadedAssetId
               ? "Upload ready to finish"
-              : "No evidence captured"}
+              : "No photo or document added"}
           </Text>
         </View>
       )}
@@ -192,7 +192,7 @@ export function EvidenceCapture({
             <Text style={styles.primaryText}>
               {uploadedAssetId
                 ? "Try upload again"
-                : "Upload evidence"}
+                : "Add photo or document"}
             </Text>
           )}
         </Pressable>

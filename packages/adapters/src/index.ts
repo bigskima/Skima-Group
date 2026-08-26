@@ -62,6 +62,38 @@ export interface GeoPoint {
   readonly longitude: number;
 }
 
+/** Provider-neutral address returned to every SKIMA client and engine. */
+export interface NormalizedAddress {
+  readonly formattedAddress: string | null;
+  readonly country: string | null;
+  readonly countryCode: string | null;
+  readonly adminArea1: string | null;
+  readonly adminArea2: string | null;
+  readonly locality: string | null;
+  readonly sublocality: string | null;
+  readonly street: string | null;
+  readonly houseNumber: string | null;
+  readonly postalCode: string | null;
+  readonly providerReference: string | null;
+  readonly providerMetadata: Readonly<Record<string, unknown>>;
+}
+
+export interface GeocodingSearchResult extends NormalizedAddress {
+  readonly point: GeoPoint;
+}
+
+/**
+ * Business modules depend on this contract, never a maps SDK. Implementations normalize provider
+ * payloads before they cross the adapter boundary.
+ */
+export interface GeocodingProvider {
+  readonly key: string;
+  reverseGeocode(point: GeoPoint): Promise<NormalizedAddress>;
+  forwardGeocode(query: string): Promise<readonly GeocodingSearchResult[]>;
+  searchPlaces(query: string): Promise<readonly GeocodingSearchResult[]>;
+  resolveAddress(point: GeoPoint): Promise<NormalizedAddress>;
+}
+
 export interface MapProviderRequest {
   readonly operation: MapOperation;
   readonly subjectType?: string;

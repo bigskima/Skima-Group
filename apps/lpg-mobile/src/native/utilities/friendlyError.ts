@@ -19,6 +19,28 @@ export function friendlyError(
   if (!raw) return fallback;
   const message = raw.toLowerCase();
 
+  // Database, gateway and implementation details must never be shown on a
+  // customer, driver or station screen. Callers still receive their own
+  // context-specific fallback instead of PostgreSQL/RPC/schema internals.
+  if (
+    message.includes("sqlstate") ||
+    message.includes("postgres") ||
+    message.includes("postgrest") ||
+    message.includes("pgrst") ||
+    message.includes("violates") ||
+    message.includes("constraint") ||
+    message.includes("relation ") ||
+    message.includes("column ") ||
+    message.includes("function public.") ||
+    message.includes("permission denied") ||
+    message.includes("row-level security") ||
+    message.includes("schema cache") ||
+    /\b42p\d{2}\b/.test(message) ||
+    /\b23\d{3}\b/.test(message) ||
+    /\b42501\b/.test(message)
+  )
+    return fallback;
+
   if (
     message.includes("invalid login") ||
     message.includes("invalid credentials") ||
@@ -100,28 +122,6 @@ export function friendlyError(
     return "This refill belongs to another station or your station access needs updating.";
   if (message.includes("target_lpg_order_id must reference"))
     return "This job is no longer available. Return to the queue and refresh.";
-
-  // Database, gateway and implementation details must never be shown on a
-  // customer, driver or station screen. Callers still receive their own
-  // context-specific fallback instead of PostgreSQL/RPC/schema internals.
-  if (
-    message.includes("sqlstate") ||
-    message.includes("postgres") ||
-    message.includes("postgrest") ||
-    message.includes("pgrst") ||
-    message.includes("violates") ||
-    message.includes("constraint") ||
-    message.includes("relation ") ||
-    message.includes("column ") ||
-    message.includes("function public.") ||
-    message.includes("permission denied") ||
-    message.includes("row-level security") ||
-    message.includes("schema cache") ||
-    /\b42p\d{2}\b/.test(message) ||
-    /\b23\d{3}\b/.test(message) ||
-    /\b42501\b/.test(message)
-  )
-    return fallback;
 
   return fallback;
 }

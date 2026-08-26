@@ -56,7 +56,7 @@ export function SupportScreen() {
       });
       setDescription("");
       setMessageSuccess(true);
-      setMessage("Your safety report has been submitted to SKIMA operations.");
+      setMessage("Your safety report has been sent to SKIMA.");
     } catch (cause) {
       setMessageSuccess(false);
       setMessage(friendlyError(cause, "Your safety report could not be submitted."));
@@ -69,7 +69,7 @@ export function SupportScreen() {
     <Screen
       eyebrow="Safety & support"
       title="Report an LPG issue"
-      subtitle="Send a structured safety or fulfilment incident to SKIMA operations."
+      subtitle="Tell SKIMA about a safety concern or problem with an order."
     >
       {config.isPending || orders.isPending ? (
         <ScreenSkeleton cards={3} />
@@ -97,7 +97,7 @@ export function SupportScreen() {
             <FormSection
               step="1"
               title="Related order"
-              description="Link the report to an order when the issue happened during a specific SKIMA fulfilment."
+              description="Choose the order if the issue happened during a pickup, refill or delivery."
             >
               <View style={styles.options}>
                 <AppButton label="No related order" variant={!orderId ? "primary" : "secondary"} size="sm" onPress={() => setOrderId("")} />
@@ -139,7 +139,7 @@ export function SupportScreen() {
             <FormSection
               step="3"
               title="Severity"
-              description="Choose how serious the issue is according to the available SKIMA safety policy."
+              description="Choose how serious the issue is."
             >
               <View style={styles.options}>
                 {severities.map((item, index) => {
@@ -171,7 +171,7 @@ export function SupportScreen() {
 
             <View style={[styles.auth, { backgroundColor: palette.surfaceSubtle }]}>
               <ShieldCheck color={palette.mutedStrong} size={18} />
-              <Text style={[styles.authText, { color: palette.muted }]}>This report is submitted from your authenticated SKIMA account and becomes part of the operational incident record.</Text>
+              <Text style={[styles.authText, { color: palette.muted }]}>This report is securely linked to your SKIMA account so our safety team can follow up.</Text>
             </View>
 
             <AppButton

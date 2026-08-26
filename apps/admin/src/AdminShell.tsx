@@ -49,6 +49,8 @@ export function AdminShell(props: AdminShellProps) {
     sessionState.context?.permissions.includes("platform.revenue.manage") ||
     false;
   const canManageCoverage = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
+    sessionState.context?.permissions.includes("platform.coverage.read") ||
+    sessionState.context?.permissions.includes("platform.coverage.manage") ||
     sessionState.context?.permissions.includes("lpg.config.manage") ||
     false;
   const canReviewApplications = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||

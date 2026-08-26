@@ -75,7 +75,7 @@ export function OrderFeedbackScreen() {
     <Screen
       eyebrow="Completed service"
       title="Rate your experience"
-      subtitle="Your latest rating becomes your current rating of that driver or station. Earlier rating events stay securely recorded for service quality and dispute review."
+      subtitle="Your latest rating replaces your previous rating for this driver or station. SKIMA keeps earlier ratings securely for support and dispute review."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {state.data.driverProfileId ? (

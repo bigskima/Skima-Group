@@ -205,9 +205,9 @@ export function BankTransferModal({
                   <View style={styles.pulseDot} />
                 )}
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.pollingTitle}>Listening for Bank Transfer</Text>
+                  <Text style={styles.pollingTitle}>Waiting for your bank transfer</Text>
                   <Text style={styles.pollingSub}>
-                    Automatic ledger verification running. Your balance updates instantly once received.
+                    We are checking for your transfer. Your balance will update as soon as it is confirmed.
                   </Text>
                 </View>
               </View>
@@ -228,7 +228,7 @@ export function BankTransferModal({
               </View>
 
               <Text style={styles.securityNote}>
-                <ShieldCheck color={colors.muted} size={14} /> Automated Paystack Bank Transfer Provider Engine
+                <ShieldCheck color={colors.muted} size={14} /> Secure bank transfer powered by Paystack
               </Text>
             </View>
           )}

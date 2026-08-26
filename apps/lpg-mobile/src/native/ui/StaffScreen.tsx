@@ -83,7 +83,7 @@ export function StaffScreen() {
     setMessage(null);
     if (!organizationId || !roleKey || !email.trim() || ttlHours === null) {
       setMessageSuccess(false);
-      setMessage("Enter a valid work email, choose a staff role and make sure the invitation policy is available.");
+      setMessage("Enter a valid work email and choose a team role.");
       return;
     }
     try {
@@ -134,13 +134,13 @@ export function StaffScreen() {
     return (
       <Screen
         eyebrow="Station access"
-        title="Staff & permissions"
-        subtitle="Staff management is available only to authorised station roles."
+        title="Team and access"
+        subtitle="Only authorised station team members can manage staff."
       >
         <EmptyState
           icon={<ShieldCheck color={palette.brand} size={28} />}
           title="Staff management restricted"
-          description="Your current station role does not include the staff-management permission."
+          description="Your team role does not allow you to manage staff."
           action={<AppButton label="Back" variant="secondary" onPress={() => router.back()} />}
         />
       </Screen>
@@ -153,8 +153,8 @@ export function StaffScreen() {
   return (
     <Screen
       eyebrow="Station access"
-      title="Staff & permissions"
-      subtitle="Invite station teammates and manage existing membership access without sharing owner credentials."
+      title="Team and access"
+      subtitle="Invite team members and manage their access without sharing the owner's sign-in details."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {loading ? (
@@ -162,8 +162,8 @@ export function StaffScreen() {
       ) : failed ? (
         <EmptyState
           icon={<Users color={palette.brand} size={28} />}
-          title="Staff workspace could not be loaded"
-          description="Check your connection and refresh this station workspace."
+          title="Team information could not be loaded"
+          description="Check your connection and try again."
           action={<AppButton label="Retry" onPress={() => void Promise.all([staff.refetch(), roles.refetch(), invitations.refetch(), config.refetch()])} />}
         />
       ) : (
@@ -172,12 +172,12 @@ export function StaffScreen() {
             <View style={styles.heroIcon}><Users color="#FFFFFF" size={27} /></View>
             <View style={styles.heroCopy}>
               <Text style={styles.heroEyebrow}>STATION TEAM</Text>
-              <Text style={styles.heroTitle}>{staff.data?.length ?? 0} active membership records</Text>
-              <Text style={styles.heroBody}>{pendingInvitations.length} pending {pendingInvitations.length === 1 ? "invitation" : "invitations"} · role-based access controlled by SKIMA permissions.</Text>
+              <Text style={styles.heroTitle}>{staff.data?.length ?? 0} active team members</Text>
+              <Text style={styles.heroBody}>{pendingInvitations.length} pending {pendingInvitations.length === 1 ? "invitation" : "invitations"}</Text>
             </View>
           </View>
 
-          <SectionHeader title="Station members" description="Review who currently has membership access and the roles attached to each person." />
+          <SectionHeader title="Station members" description="See who can access this station account and what each person can do." />
           <View style={styles.memberList}>
             {(staff.data ?? []).length ? (
               (staff.data ?? []).map((member, index) => {
@@ -239,7 +239,7 @@ export function StaffScreen() {
               <EmptyState
                 icon={<Users color={palette.brand} size={27} />}
                 title="No staff members listed"
-                description="Station membership records will appear here after staff are invited and added."
+                description="Team members will appear here after they accept an invitation."
               />
             )}
           </View>
@@ -298,7 +298,7 @@ export function StaffScreen() {
             {ttlHours !== null ? (
               <Text style={[styles.expiry, { color: palette.muted }]}>Invitation expires automatically after {ttlHours} hours.</Text>
             ) : (
-              <Text style={[styles.expiry, { color: palette.danger }]}>Invitation policy is currently unavailable.</Text>
+              <Text style={[styles.expiry, { color: palette.danger }]}>Invitations are temporarily unavailable. Try again later.</Text>
             )}
           </View>
 

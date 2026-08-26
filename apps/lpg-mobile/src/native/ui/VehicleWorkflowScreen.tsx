@@ -224,7 +224,7 @@ export function VehicleWorkflowScreen() {
     <Screen
       eyebrow="Driver capability"
       title="Vehicles"
-      subtitle="Register and review the vehicles SKIMA can consider when matching you to eligible LPG work."
+      subtitle="Add the vehicles you use for SKIMA LPG jobs and track their approval."
       action={
         <AppButton
           label={showForm ? "Close" : "Add vehicle"}
@@ -251,11 +251,11 @@ export function VehicleWorkflowScreen() {
             <View style={styles.heroCopy}>
               <Text style={styles.heroEyebrow}>APPROVED DRIVER CAPABILITY</Text>
               <Text style={styles.heroTitle}>{vehicles.data?.length ?? 0} registered {vehicles.data?.length === 1 ? "vehicle" : "vehicles"}</Text>
-              <Text style={styles.heroBody}>Vehicle type, approval and load capacity are part of dispatch eligibility. SKIMA assigns jobs automatically; there is no manual job-accept step.</Text>
+              <Text style={styles.heroBody}>Your vehicle type, approval and load capacity affect the jobs you can receive. SKIMA assigns suitable jobs automatically.</Text>
             </View>
           </View>
 
-          <SectionHeader title="My vehicle" description="Your active driver and vehicle assignment, resolved from governed fleet records." />
+          <SectionHeader title="My vehicle" description="Your current approved vehicle." />
           {assignedVehicle ? (
             <View style={[styles.vehicleCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <View style={styles.vehicleHead}>
@@ -264,7 +264,7 @@ export function VehicleWorkflowScreen() {
                   <Text style={[styles.vehicleTitle, { color: palette.ink }]}>{firstString(assignedVehicle, ["manufacturer"]) ?? "Assigned vehicle"} {firstString(assignedVehicle, ["model"]) ?? ""}</Text>
                   <Text style={[styles.vehicleMeta, { color: palette.muted }]}>{firstString(assignedVehicle, ["registration_number"]) ?? "Registration pending"}</Text>
                 </View>
-                <StatusPill label={eligibilityPresentation.ready ? "Dispatch ready" : "Action required"} tone={eligibilityPresentation.ready ? "success" : "warning"} />
+                <StatusPill label={eligibilityPresentation.ready ? "Ready for jobs" : "Action required"} tone={eligibilityPresentation.ready ? "success" : "warning"} />
               </View>
               <View style={[styles.divider, { backgroundColor: palette.border }]} />
               <View style={styles.vehicleMetrics}>
@@ -277,7 +277,7 @@ export function VehicleWorkflowScreen() {
               </Text>
             </View>
           ) : (
-            <EmptyState icon={<Truck color={palette.brand} size={27} />} title="No active vehicle assignment" description="A registered vehicle is not dispatch eligible until an approved assignment and all configured compliance evidence are present." />
+            <EmptyState icon={<Truck color={palette.brand} size={27} />} title="No active vehicle assignment" description="A registered vehicle can receive jobs after SKIMA approves its assignment and required documents." />
           )}
 
           {current ? (
@@ -307,7 +307,7 @@ export function VehicleWorkflowScreen() {
                 <View style={[styles.formIcon, { backgroundColor: palette.brandSoft }]}><CarFront color={palette.brand} size={22} /></View>
                 <View style={styles.formCopy}>
                   <Text style={[styles.formTitle, { color: palette.ink }]}>Vehicle approval application</Text>
-                  <Text style={[styles.formBody, { color: palette.muted }]}>Add the vehicle you intend to use. SKIMA reviews it before that vehicle can be considered for dispatch.</Text>
+                  <Text style={[styles.formBody, { color: palette.muted }]}>Add the vehicle you intend to use. SKIMA will review it before you can receive jobs with it.</Text>
                 </View>
               </View>
 
@@ -386,7 +386,7 @@ export function VehicleWorkflowScreen() {
 
               <View style={[styles.policyNote, { backgroundColor: palette.surfaceSubtle }]}>
                 <Gauge color={palette.mutedStrong} size={18} />
-                <Text style={[styles.policyText, { color: palette.muted }]}>Vehicle approval does not guarantee every LPG assignment. Dispatch still checks current availability, service coverage, vehicle capability and order requirements.</Text>
+                <Text style={[styles.policyText, { color: palette.muted }]}>Job offers depend on your availability, approved service areas, vehicle and the order requirements.</Text>
               </View>
 
               <AppButton
@@ -399,7 +399,7 @@ export function VehicleWorkflowScreen() {
             </View>
           ) : null}
 
-          <SectionHeader title="Your vehicles" description="Current vehicle records attached to this driver profile." />
+          <SectionHeader title="Your vehicles" description="Vehicles added to your driver profile." />
           <View style={styles.vehicleList}>
             {(vehicles.data ?? []).length ? (
               (vehicles.data ?? []).map((vehicle, index) => {
@@ -436,7 +436,7 @@ export function VehicleWorkflowScreen() {
               <EmptyState
                 icon={<Truck color={palette.brand} size={27} />}
                 title="No approved vehicle yet"
-                description="Add the vehicle you intend to use so SKIMA can review its type, identity and capacity for dispatch eligibility."
+                description="Add the vehicle you intend to use so SKIMA can review its type and capacity."
                 action={<AppButton label="Add vehicle" onPress={() => setShowForm(true)} />}
               />
             )}

@@ -85,10 +85,10 @@ export function PolicyDocumentScreen({
   return (
     <Screen
       eyebrow="SKIMA terms"
-      title={document?.title ?? "Terms & policy"}
+      title={document?.title ?? "Terms and privacy"}
       subtitle={document?.published
         ? `Version ${document.versionLabel ?? "current"} • Read the full terms before accepting.`
-        : "Read the policy summary here. If the complete in-app version is not available yet, the official source remains available as a fallback."}
+        : "Read the summary here. If the full document is not available in the app, you can open the official version."}
       action={
         <Pressable accessibilityRole="button" onPress={() => router.back()}>
           <Text style={[styles.back, { color: palette.brand }]}>Back</Text>
@@ -112,9 +112,9 @@ export function PolicyDocumentScreen({
 
       {document?.summary ? (
         <Card>
-          <Text style={[styles.sectionTitle, { color: palette.ink }]}>Policy summary</Text>
+          <Text style={[styles.sectionTitle, { color: palette.ink }]}>Summary</Text>
           <Text style={[styles.body, { color: palette.muted }]}>{cleanInlineMarkdown(document.summary)}</Text>
-          <Text style={[styles.notice, { color: palette.muted }]}>This summary is for convenience. The complete current terms control.</Text>
+          <Text style={[styles.notice, { color: palette.muted }]}>This summary is for convenience. Read the full terms for complete details.</Text>
         </Card>
       ) : null}
 
@@ -125,13 +125,13 @@ export function PolicyDocumentScreen({
               <FileText color={palette.brand} size={22} />
             </View>
             <View style={styles.iconCopy}>
-              <Text style={[styles.sectionTitle, { color: palette.ink }]}>Full in-app version not published yet</Text>
-              <Text style={[styles.body, { color: palette.muted }]}>SKIMA will not show or accept an incomplete copy. You can use the official source below as a fallback until the complete in-app version is published.</Text>
+              <Text style={[styles.sectionTitle, { color: palette.ink }]}>Full terms are not available in the app yet</Text>
+              <Text style={[styles.body, { color: palette.muted }]}>Open the official version below to read the complete terms.</Text>
             </View>
           </View>
           {document.sourceUrl ? (
             <AppButton
-              label="Open fallback policy source"
+              label="Open full terms"
               variant="secondary"
               trailingIcon={<ExternalLink color={palette.brand} size={17} />}
               onPress={() => void openSource()}
@@ -146,10 +146,10 @@ export function PolicyDocumentScreen({
             <View style={styles.metaRow}>
               <ShieldCheck color={palette.brand} size={19} />
               <View style={styles.metaCopy}>
-                <Text style={[styles.metaTitle, { color: palette.ink }]}>Published SKIMA version</Text>
+                <Text style={[styles.metaTitle, { color: palette.ink }]}>Current version</Text>
                 <Text style={[styles.meta, { color: palette.muted }]}>Version {document.versionLabel} • {formatDate(document.effectiveFrom ?? document.publishedAt)}</Text>
                 {document.contentHash ? (
-                  <Text numberOfLines={1} style={[styles.hash, { color: palette.muted }]}>Integrity: {document.contentHash}</Text>
+                  <Text numberOfLines={1} style={[styles.hash, { color: palette.muted }]}>Document reference: {document.contentHash}</Text>
                 ) : null}
               </View>
             </View>
@@ -157,7 +157,7 @@ export function PolicyDocumentScreen({
 
           <Card>
             <View style={styles.progressHeader}>
-              <Text style={[styles.metaTitle, { color: palette.ink }]}>Policy section {page + 1} of {pages.length}</Text>
+              <Text style={[styles.metaTitle, { color: palette.ink }]}>Section {page + 1} of {pages.length}</Text>
               <Text style={[styles.meta, { color: palette.muted }]}>{Math.round(((page + 1) / Math.max(pages.length, 1)) * 100)}% read</Text>
             </View>
             <View style={[styles.progressTrack, { backgroundColor: palette.border }]}>
@@ -176,7 +176,7 @@ export function PolicyDocumentScreen({
 
           {document.sourceUrl ? (
             <AppButton
-              label="Open fallback source"
+              label="Open official terms"
               variant="ghost"
               trailingIcon={<ExternalLink color={palette.brand} size={16} />}
               onPress={() => void openSource()}
@@ -190,13 +190,13 @@ export function PolicyDocumentScreen({
                   <CheckCircle2 color={palette.success} size={22} />
                   <View style={styles.iconCopy}>
                     <Text style={[styles.sectionTitle, { color: palette.ink }]}>Accepted</Text>
-                    <Text style={[styles.body, { color: palette.muted }]}>Your acceptance of this exact published version is recorded.</Text>
+                    <Text style={[styles.body, { color: palette.muted }]}>SKIMA has saved your acceptance of this version.</Text>
                   </View>
                 </View>
               ) : session.status !== "authenticated" ? (
                 <>
                   <Text style={[styles.sectionTitle, { color: palette.ink }]}>Sign in to accept</Text>
-                  <Text style={[styles.body, { color: palette.muted }]}>You can read these terms without signing in. Acceptance is recorded only to your authenticated SKIMA account.</Text>
+                  <Text style={[styles.body, { color: palette.muted }]}>You can read these terms without signing in. Sign in to accept them for your account.</Text>
                 </>
               ) : canAccept ? (
                 <>

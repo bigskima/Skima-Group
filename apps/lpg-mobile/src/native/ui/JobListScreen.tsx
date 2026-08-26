@@ -42,7 +42,7 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
 
   return (
     <Screen
-      eyebrow={workspace === "driver" ? "Driver operations" : "Station verification"}
+      eyebrow={workspace === "driver" ? "Driver jobs" : "Station orders"}
       title={workspace === "driver" ? "Deliveries" : "Expected arrivals"}
       subtitle={workspace === "driver"
         ? "Your assigned cylinder pickups, station hand-offs and returns. More than one compatible order can be active at the same time."
@@ -62,8 +62,8 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
               <Route color={palette.brand} size={20} />
             </View>
             <View style={styles.workloadCopy}>
-              <Text style={[styles.workloadTitle, { color: palette.ink }]}>Active assignment capacity</Text>
-              <Text style={[styles.workloadBody, { color: palette.muted }]}>SKIMA can route another compatible nearby order to you while earlier orders are still active when your route, vehicle eligibility and configured workload allow it.</Text>
+              <Text style={[styles.workloadTitle, { color: palette.ink }]}>Active job capacity</Text>
+              <Text style={[styles.workloadBody, { color: palette.muted }]}>You may receive another nearby order while earlier orders are active when your route, vehicle and workload allow it.</Text>
             </View>
           </View>
           <View style={styles.workloadMetrics}>
@@ -73,14 +73,14 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
             </View>
             <View style={[styles.workloadMetric, { backgroundColor: palette.surfaceSubtle }]}>
               <Text style={[styles.workloadValue, { color: palette.ink }]}>{driverLimit ?? "—"}</Text>
-              <Text style={[styles.workloadLabel, { color: palette.muted }]}>POLICY LIMIT</Text>
+              <Text style={[styles.workloadLabel, { color: palette.muted }]}>JOB LIMIT</Text>
             </View>
             <View style={[styles.workloadMetric, { backgroundColor: palette.surfaceSubtle }]}>
               <Text style={[styles.workloadValue, { color: remainingDriverSlots === 0 ? palette.warning : palette.ink }]}>{remainingDriverSlots ?? "—"}</Text>
-              <Text style={[styles.workloadLabel, { color: palette.muted }]}>ORDER SLOTS</Text>
+              <Text style={[styles.workloadLabel, { color: palette.muted }]}>SPACES LEFT</Text>
             </View>
           </View>
-          <Text style={[styles.workloadHint, { color: palette.muted }]}>Order slots are a dispatch guard, not a promise of more work. Every cylinder remains its own paid order, and SKIMA still checks location, route, station, vehicle and safety eligibility before another assignment.</Text>
+          <Text style={[styles.workloadHint, { color: palette.muted }]}>The job limit is the maximum you can handle at once, not a promise of more work. SKIMA checks your location, route, vehicle and availability before each assignment.</Text>
         </View>
       ) : null}
 
@@ -91,8 +91,8 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
               <Search color={palette.brand} size={16} />
             </View>
             <View style={styles.searchCopy}>
-              <Text style={[styles.searchTitle, { color: palette.ink }]}>Verify LPG service</Text>
-              <Text style={[styles.searchBody, { color: palette.muted }]}>Find an assigned arrival by its SKIMA order reference, permanent Cylinder ID or assigned driver identity.</Text>
+              <Text style={[styles.searchTitle, { color: palette.ink }]}>Find an arrival</Text>
+              <Text style={[styles.searchBody, { color: palette.muted }]}>Find an assigned arrival by order reference, Cylinder ID or driver name.</Text>
             </View>
           </View>
           <TextInput
@@ -105,18 +105,18 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
             style={[styles.searchInput, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
             value={searchQuery}
           />
-          <Text style={[styles.searchHint, { color: palette.muted }]}>Search is limited to jobs already returned for this authenticated station. It does not expose unrelated customer or station records.</Text>
+          <Text style={[styles.searchHint, { color: palette.muted }]}>Search shows only orders assigned to this station. Other customer and station information remains private.</Text>
         </View>
       ) : null}
 
       {jobs.isPending ? (
         <View style={styles.loading}>
           <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.loadingText, { color: palette.muted }]}>Loading live jobs…</Text>
+          <Text style={[styles.loadingText, { color: palette.muted }]}>Loading jobs…</Text>
         </View>
       ) : jobs.error ? (
         <EmptyState
-          title="Couldn't load the queue"
+          title="Couldn't load jobs"
           description={friendlyError(jobs.error, "Jobs could not be loaded. Please try again.")}
           action={<AppButton label="Retry" variant="secondary" onPress={() => void jobs.refetch()} />}
         />
@@ -124,7 +124,7 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
         <EmptyState
           icon={<PackageCheck color={palette.brand} size={26} />}
           title={workspace === "driver" ? "No active deliveries" : "No expected arrivals"}
-          description={workspace === "driver" ? "New assignments appear here automatically when SKIMA dispatches a compatible job to you. You do not need to finish one order before another eligible order can be assigned." : "New refill jobs appear here automatically when SKIMA assigns an eligible order to this station."}
+          description={workspace === "driver" ? "New suitable jobs appear here automatically. You may receive another job before finishing the current one when your route and workload allow it." : "New refill orders appear here automatically when SKIMA assigns them to this station."}
         />
       ) : visibleJobs.length === 0 ? (
         <EmptyState

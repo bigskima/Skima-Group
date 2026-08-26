@@ -81,7 +81,7 @@ export function DriverAvailabilityScreen() {
         await stopDriverTracking();
         setTracking(false);
         setNoticeSuccess(true);
-        setNotice("You are now offline. Dispatch location sharing has stopped.");
+        setNotice("You are now offline. Location sharing for jobs has stopped.");
       } else {
         await startDriverTracking({
           driverProfileId: driverId,
@@ -107,15 +107,15 @@ export function DriverAvailabilityScreen() {
 
   return (
     <Screen
-      eyebrow="Driver operations"
+      eyebrow="Driver availability"
       title="Availability"
-      subtitle="Control whether SKIMA can consider you for eligible dispatch in your approved service area."
+      subtitle="Choose whether you are ready to receive jobs in your approved service areas."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: status === "offline" ? palette.ink : palette.brand }]}>
         <View style={styles.heroTop}>
           <View style={styles.heroCopy}>
-            <Text style={styles.heroEyebrow}>CURRENT DISPATCH STATUS</Text>
+            <Text style={styles.heroEyebrow}>CURRENT AVAILABILITY</Text>
             <Text style={styles.heroTitle}>{status === "online" ? "Ready for jobs" : status === "busy" ? "Busy with work" : "Offline"}</Text>
           </View>
           <View style={styles.heroIcon}>
@@ -131,7 +131,7 @@ export function DriverAvailabilityScreen() {
           selected={status === "online"}
           icon={<Radio color={status === "online" ? "#FFFFFF" : palette.success} size={21} />}
           title="Online"
-          description="Ready for eligible assignments"
+          description="Ready for new jobs"
           onPress={() => setStatus("online")}
         />
         <AvailabilityChoice
@@ -139,7 +139,7 @@ export function DriverAvailabilityScreen() {
           selected={status === "busy"}
           icon={<Timer color={status === "busy" ? "#FFFFFF" : palette.warning} size={21} />}
           title="Busy"
-          description="Working now; avoid treating me as freely available"
+          description="I am completing a job"
           onPress={() => setStatus("busy")}
         />
         <AvailabilityChoice
@@ -147,7 +147,7 @@ export function DriverAvailabilityScreen() {
           selected={status === "offline"}
           icon={<CircleOff color={status === "offline" ? "#FFFFFF" : palette.mutedStrong} size={21} />}
           title="Offline"
-          description="Do not send new assignments"
+          description="Do not send new jobs"
           onPress={() => setStatus("offline")}
         />
       </View>
@@ -158,8 +158,8 @@ export function DriverAvailabilityScreen() {
             <LocateFixed color={tracking ? palette.success : palette.mutedStrong} size={22} />
           </View>
           <View style={styles.trackingCopy}>
-            <Text style={[styles.trackingTitle, { color: palette.ink }]}>Dispatch location sharing</Text>
-            <Text style={[styles.trackingBody, { color: palette.muted }]}>Used for authorised driver matching and active LPG fulfilment only.</Text>
+            <Text style={[styles.trackingTitle, { color: palette.ink }]}>Location sharing for jobs</Text>
+            <Text style={[styles.trackingBody, { color: palette.muted }]}>Used only to find suitable nearby jobs and track active deliveries.</Text>
           </View>
           <StatusPill label={tracking ? "Active" : "Stopped"} tone={tracking ? "success" : "neutral"} />
         </View>
@@ -186,7 +186,7 @@ export function DriverAvailabilityScreen() {
 
       <View style={[styles.policy, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <ShieldCheck color={palette.mutedStrong} size={18} />
-        <Text style={[styles.policyText, { color: palette.muted }]}>Going offline stops the background dispatch service and removes its stored tracking credentials. Location is never intended as a public driver-location feed.</Text>
+        <Text style={[styles.policyText, { color: palette.muted }]}>Going offline stops background location sharing for new jobs. Your location is never shown publicly.</Text>
       </View>
     </Screen>
   );
@@ -234,8 +234,8 @@ function AvailabilityChoice({
 }
 
 function statusDescription(status: OnlineStatus) {
-  if (status === "online") return "SKIMA can consider you for new assignments that match your approval, vehicle and service coverage.";
-  if (status === "busy") return "You remain operational for active work, but should not be treated as freely available for a new assignment.";
+  if (status === "online") return "You can receive new job offers that match your approved areas and vehicle.";
+  if (status === "busy") return "You are completing an active job and will not receive another offer until you are available.";
   return "New dispatch should not be assigned while you are offline, and background tracking is stopped.";
 }
 

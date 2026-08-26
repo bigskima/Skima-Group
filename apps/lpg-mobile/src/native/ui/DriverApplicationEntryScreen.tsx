@@ -80,13 +80,11 @@ export function DriverApplicationEntryScreen() {
   const latestPayload = nestedRecord(latestVersion, "payload") ?? latestVersion;
   const storedService = nestedRecord(latestPayload, "service");
   const storedLocation = nestedRecord(latestPayload, "location");
-  const storedAreaIds = readStringArray(storedService?.serviceAreaIds);
-  const storedPrimaryId = firstString(storedService, ["primaryServiceAreaId"]);
+  const storedAreaIds = readCoverageGeographyIds(storedService);
   const storedLatitude = firstNumber(storedLocation, ["latitude"]);
   const storedLongitude = firstNumber(storedLocation, ["longitude"]);
   const geographyComplete =
     storedAreaIds.length > 0 &&
-    Boolean(storedPrimaryId && storedAreaIds.includes(storedPrimaryId)) &&
     storedLatitude !== null &&
     storedLongitude !== null;
 
@@ -141,7 +139,6 @@ export function DriverApplicationEntryScreen() {
       applicationTypeKey={firstString(driverType, ["key"]) ?? "application.lpg.driver.phase-one"}
       existingPayload={latestPayload ?? null}
       initialAreaIds={storedAreaIds}
-      initialPrimaryAreaId={storedPrimaryId}
       initialLocation={operationalLocationFromRecord(storedLocation)}
       onSaved={async () => {
         await applications.refetch();
@@ -158,7 +155,6 @@ function DriverGeographyStep(props: {
   applicationTypeKey: string;
   existingPayload: PlatformRecord | null;
   initialAreaIds: readonly string[];
-  initialPrimaryAreaId: string | null;
   initialLocation: OperationalLocation | null;
   onSaved: () => Promise<void>;
   onCancel?: () => void;
@@ -168,7 +164,6 @@ function DriverGeographyStep(props: {
   const [areas, setAreas] = useState<ServiceArea[]>([]);
   const [loadingAreas, setLoadingAreas] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([...props.initialAreaIds]);
-  const [primaryId, setPrimaryId] = useState<string | null>(props.initialPrimaryAreaId);
   const [location, setLocation] = useState<OperationalLocation | null>(props.initialLocation);
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -176,13 +171,12 @@ function DriverGeographyStep(props: {
   const hydratedKey = useRef<string | null>(null);
 
   useEffect(() => {
-    const key = `${props.applicationId ?? "new"}:${props.initialAreaIds.join(",")}:${props.initialPrimaryAreaId ?? ""}`;
+    const key = `${props.applicationId ?? "new"}:${props.initialAreaIds.join(",")}`;
     if (hydratedKey.current === key) return;
     hydratedKey.current = key;
     setSelectedIds([...props.initialAreaIds]);
-    setPrimaryId(props.initialPrimaryAreaId);
     setLocation(props.initialLocation);
-  }, [props.applicationId, props.initialAreaIds, props.initialPrimaryAreaId, props.initialLocation]);
+  }, [props.applicationId, props.initialAreaIds, props.initialLocation]);
 
   useEffect(() => {
     let active = true;
@@ -191,7 +185,7 @@ function DriverGeographyStep(props: {
 
     void (async () => {
       try {
-        const { data, error: queryError } = await session.supabase.rpc("read_selectable_lpg_service_areas");
+        const { data, error: queryError } = await session.supabase.rpc("read_selectable_operational_geographies");
         if (!active) return;
         if (queryError) throw queryError;
         setAreas(Array.isArray(data) ? data.flatMap(readServiceArea) : []);
@@ -227,32 +221,6 @@ function DriverGeographyStep(props: {
       const nextLocation = await readOperationalLocation();
       setLocation(nextLocation);
 
-      const { data, error: areaError } = await session.supabase.rpc(
-        "resolve_or_create_lpg_partner_candidate_area",
-        {
-          target_latitude: nextLocation.latitude,
-          target_longitude: nextLocation.longitude,
-          target_geography: nextLocation,
-          target_idempotency_key: idempotencyKey(
-            "driver-detected-service-area",
-            `${session.session?.user.id ?? "user"}:${Date.now()}`,
-          ),
-        },
-      );
-      if (areaError) throw areaError;
-
-      const resolved = readResolvedArea(data);
-      if (resolved) {
-        setAreas((current) =>
-          current.some((area) => area.area_id === resolved.area_id)
-            ? current
-            : [resolved, ...current],
-        );
-        setSelectedIds((current) =>
-          current.includes(resolved.area_id) ? current : [resolved.area_id, ...current],
-        );
-        setPrimaryId((current) => current ?? resolved.area_id);
-      }
     } catch (cause) {
       setError(friendlyError(cause, "We could not prepare your operating area. Please try again."));
     } finally {
@@ -264,11 +232,9 @@ function DriverGeographyStep(props: {
     setSelectedIds((current) => {
       if (current.includes(areaId)) {
         const next = current.filter((id) => id !== areaId);
-        if (primaryId === areaId) setPrimaryId(next[0] ?? null);
         return next;
       }
       const next = [...current, areaId];
-      if (!primaryId) setPrimaryId(areaId);
       return next;
     });
   };
@@ -283,17 +249,12 @@ function DriverGeographyStep(props: {
       setError("Choose at least one area where you can provide SKIMA service.");
       return;
     }
-    if (!primaryId || !selectedIds.includes(primaryId)) {
-      setError("Choose one of your selected service areas as your primary area.");
-      return;
-    }
 
     const mergedPayload: PlatformRecord = {
       ...(props.existingPayload ?? {}),
       location,
       service: {
-        serviceAreaIds: selectedIds,
-        primaryServiceAreaId: primaryId,
+        coverageRequests: selectedIds.map((geographyId) => ({ type: "ADMIN_GEOGRAPHY", geographyId })),
       },
     };
 
@@ -340,7 +301,7 @@ function DriverGeographyStep(props: {
           </View>
           <View style={styles.cardHeadingCopy}>
             <Text style={[styles.sectionTitle, { color: palette.ink }]}>Operating location</Text>
-            <Text style={[styles.helper, { color: palette.muted }]}>SKIMA uses this only to verify your application and match service coverage. It is not shown publicly as your live location.</Text>
+            <Text style={[styles.helper, { color: palette.muted }]}>SKIMA uses this only to review your application and requested service areas. It is never shown as your live public location.</Text>
           </View>
         </View>
 
@@ -373,7 +334,7 @@ function DriverGeographyStep(props: {
           </View>
           <View style={styles.cardHeadingCopy}>
             <Text style={[styles.sectionTitle, { color: palette.ink }]}>Service areas</Text>
-            <Text style={[styles.helper, { color: palette.muted }]}>Choose all areas you can cover. Mark one as your primary area; this does not stop you from receiving eligible jobs in your other approved areas.</Text>
+            <Text style={[styles.helper, { color: palette.muted }]}>Choose all the areas you can reliably serve. SKIMA will review these areas before you can receive jobs there.</Text>
           </View>
         </View>
 
@@ -388,7 +349,6 @@ function DriverGeographyStep(props: {
           <View style={styles.areaList}>
             {areas.map((area) => {
               const selected = selectedIds.includes(area.area_id);
-              const primary = primaryId === area.area_id;
               return (
                 <View key={area.area_id} style={[styles.areaRow, { borderColor: selected ? palette.brand : palette.border, backgroundColor: selected ? palette.brandSofter : palette.surface }]}> 
                   <Pressable style={styles.areaSelect} onPress={() => toggleArea(area.area_id)} accessibilityRole="checkbox" accessibilityState={{ checked: selected }}>
@@ -402,17 +362,7 @@ function DriverGeographyStep(props: {
                       </Text>
                     </View>
                   </Pressable>
-                  {selected ? (
-                    <Pressable
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: primary }}
-                      onPress={() => setPrimaryId(area.area_id)}
-                      style={[styles.primaryButton, { borderColor: primary ? palette.brand : palette.borderStrong, backgroundColor: primary ? palette.brand : palette.surface }]}
-                    >
-                      <Star size={14} color={primary ? "#FFFFFF" : palette.brand} fill={primary ? "#FFFFFF" : "transparent"} />
-                      <Text style={[styles.primaryText, { color: primary ? "#FFFFFF" : palette.brand }]}>{primary ? "Primary" : "Make primary"}</Text>
-                    </Pressable>
-                  ) : null}
+
                 </View>
               );
             })}
@@ -581,3 +531,12 @@ const styles = StyleSheet.create({
   errorBox: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.md },
   errorText: { ...typography.bodyStrong },
 });
+
+function readCoverageGeographyIds(service: Record<string, unknown> | null): string[] {
+  const requests = service?.coverageRequests;
+  if (Array.isArray(requests)) {
+    return requests.flatMap((request) => request && typeof request === "object" && !Array.isArray(request) && typeof (request as Record<string, unknown>).geographyId === "string" ? [(request as Record<string, unknown>).geographyId as string] : []);
+  }
+  const legacyIds = service?.serviceAreaIds;
+  return Array.isArray(legacyIds) ? legacyIds.filter((id): id is string => typeof id === "string") : [];
+}
