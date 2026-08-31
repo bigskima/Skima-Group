@@ -2,6 +2,7 @@ import {
   Activity,
   BookOpenCheck,
   Boxes,
+  BadgeDollarSign,
   Building2,
   CheckCircle2,
   ClipboardList,
@@ -23,6 +24,7 @@ import {
   UserCheck,
   UsersRound,
   WalletCards,
+  Warehouse,
   Truck,
   XCircle,
   Zap,
@@ -69,6 +71,8 @@ import { AdminAccessWorkspace } from "./admin-access-workspace";
 import { AdminContentWorkspace } from "./admin-content-workspace";
 import { AdminFleetWorkspace } from "./admin-fleet-workspace";
 import { AdminStartupBrandingWorkspace } from "./admin-startup-branding-workspace";
+import { AdminStationPricingWorkspace } from "./admin-station-pricing-workspace";
+import { AdminStationInventoryWorkspace } from "./admin-station-inventory-workspace";
 import {
   catalogConsoleConfig,
   financeConsoleConfig,
@@ -171,6 +175,8 @@ const navIconMap = {
   finance: WalletCards,
   content: Megaphone,
   branding: Image,
+  stations: BadgeDollarSign,
+  inventory: Warehouse,
   catalog: Boxes,
   providers: PlugZap,
   system: ServerCog,
@@ -210,6 +216,20 @@ const foundationNavigation: readonly NavigationItem[] = [
     href: "/fleet",
     icon: "fleet",
     requiredPermissions: ["platform.fleets.read"],
+  },
+  {
+    key: "stations",
+    label: "Stations",
+    href: "/stations",
+    icon: "stations",
+    requiredPermissions: ["platform.partner_price.manage"],
+  },
+  {
+    key: "inventory",
+    label: "Station Inventory",
+    href: "/station-inventory",
+    icon: "inventory",
+    requiredPermissions: ["platform.inventory.manage"],
   },
   {
     key: "operations",
@@ -312,7 +332,11 @@ export function App() {
     ? foundationNavigation
     : filterNavigationItems(foundationNavigation, permissionContext);
   const shellNavItems = filteredNavigation.map(toShellNavItem);
-  const activeRoute = shellNavItems.some((item) => item.href === route) ? route : "/";
+  const stationRoute = route === "/stations" || route.startsWith("/stations/");
+  const activeRoute = stationRoute
+    ? "/stations"
+    : shellNavItems.some((item) => item.href === route) ? route : "/";
+  const workspaceRoute = stationRoute ? route : activeRoute;
 
   const navigate = (href: string) => {
     window.location.hash = href === "/" ? "" : href;
@@ -331,7 +355,7 @@ export function App() {
         onNavigate={navigate}
         onSignOut={sessionState.signOut}
       >
-        <Workspace route={activeRoute} onNavigate={navigate} />
+        <Workspace route={workspaceRoute} onNavigate={navigate} />
       </AdminShell>
     </PermissionProvider>
   );
@@ -398,6 +422,14 @@ function LoginView() {
 }
 
 function Workspace(props: { readonly route: string; readonly onNavigate: (href: string) => void }) {
+  if (props.route === "/station-inventory") {
+    return <AdminStationInventoryWorkspace />;
+  }
+
+  if (props.route === "/stations" || props.route.startsWith("/stations/")) {
+    return <AdminStationPricingWorkspace route={props.route} onNavigate={props.onNavigate} />;
+  }
+
   if (props.route === "/company") {
     return <AdminCompanyWorkspace />;
   }

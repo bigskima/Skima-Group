@@ -72,6 +72,27 @@ const ROUTES = new Set([
   "/lpg/stations/catalog-prices",
   "/lpg/stations/settings",
   "/lpg/stations/capacity-adjustments",
+  "/lpg/stations/inventory",
+  "/lpg/stations/inventory/report",
+  "/lpg/stations/inventory/confirm",
+  "/lpg/stations/inventory/adjustments",
+  "/lpg/stations/inventory/configuration",
+  "/lpg/stations/inventory/tanks",
+  "/lpg/stations/inventory/tank-transfers",
+  "/lpg/stations/inventory/manual-fallback",
+  "/lpg/stations/inventory/manual-fallback/end",
+  "/lpg/stations/inventory/availability",
+  "/lpg/stations/inventory/operational-capacity",
+  "/lpg/stations/inventory/telemetry-devices",
+  "/lpg/stations/inventory/issues/unexpected-stockout",
+  "/lpg/stations/inventory/providers",
+  "/lpg/stations/inventory/provider-connections",
+  "/lpg/stations/inventory/provider-connections/disconnect",
+  "/admin/station-inventory",
+  "/admin/station-inventory/policy",
+  "/admin/station-inventory/automation-policy",
+  "/admin/station-inventory/reconciliation",
+  "/admin/station-inventory/override",
   "/lpg/jobs",
   "/lpg/inspections",
   "/lpg/scans",
@@ -859,6 +880,404 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_reason_key: requireString(payload.reasonKey, "reasonKey"),
         target_source: optionalString(payload.source) ?? "skima.lpg.station_capacity",
         target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory" && request.method === "GET") {
+    return rpcDataResponse(
+      supabase.rpc("read_lpg_station_inventory", {
+        target_limit: optionalIntegerQuery(url.searchParams.get("limit")) ?? 50,
+        target_station_branch_id: optionalUuid(
+          url.searchParams.get("stationBranchId"),
+          "stationBranchId",
+        ),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/providers" && request.method === "GET") {
+    return rpcDataResponse(
+      supabase.rpc("read_inventory_provider_catalog", {
+        target_source_type_key: url.searchParams.get("sourceType"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/report" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("report_lpg_station_inventory", {
+        target_evidence_asset_ids: optionalStringArray(payload.evidenceAssetIds) ?? [],
+        target_expected_version: optionalInteger(payload.expectedVersion),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_measurement_method_key: requireString(payload.measurementMethod, "measurementMethod"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_note: optionalString(payload.note),
+        target_physical_stock_kg: requireNumber(payload.physicalStockKg, "physicalStockKg"),
+        target_skima_allocation_kg: optionalNumber(payload.skimaAllocationKg, "skimaAllocationKg"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.manual",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+        target_tank_id: optionalUuid(payload.tankId, "tankId"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/confirm" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("confirm_lpg_station_inventory", {
+        target_expected_version: optionalInteger(payload.expectedVersion),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_note: optionalString(payload.note),
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.confirmation",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/adjustments" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("adjust_lpg_station_inventory", {
+        target_adjustment_kg: requireNumber(payload.adjustmentKg, "adjustmentKg"),
+        target_adjustment_type_key: requireString(payload.adjustmentType, "adjustmentType"),
+        target_evidence_asset_ids: optionalStringArray(payload.evidenceAssetIds) ?? [],
+        target_expected_version: optionalInteger(payload.expectedVersion),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_note: optionalString(payload.note),
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.adjustment",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+        target_tank_id: optionalUuid(payload.tankId, "tankId"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/configuration" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("configure_lpg_station_inventory", {
+        target_allocation_mode: optionalString(payload.allocationMode),
+        target_allocation_value: optionalNumber(payload.allocationValue, "allocationValue"),
+        target_fallback_source_key: optionalString(payload.fallbackSource),
+        target_expected_version: optionalInteger(payload.expectedVersion),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_primary_source_key: requireString(payload.primarySource, "primarySource"),
+        target_safety_reserve_mode: optionalString(payload.safetyReserveMode),
+        target_safety_reserve_value: optionalNumber(payload.safetyReserveValue, "safetyReserveValue"),
+        target_secondary_source_key: optionalString(payload.secondarySource),
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.configuration",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+        target_tracking_mode: requireString(payload.trackingMode, "trackingMode"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/tanks" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("upsert_lpg_station_tank", {
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_inspection_status: optionalString(payload.inspectionStatus) ?? "unknown",
+        target_installation_date: optionalString(payload.installationDate),
+        target_maximum_safe_fill_percentage: optionalNumber(payload.maximumSafeFillPercentage, "maximumSafeFillPercentage") ?? 85,
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_minimum_safe_stock_kg: optionalNumber(payload.minimumSafeStockKg, "minimumSafeStockKg") ?? 0,
+        target_rated_capacity_kg: requireNumber(payload.ratedCapacityKg, "ratedCapacityKg"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.tank_configuration",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+        target_status: optionalString(payload.status) ?? "active",
+        target_tank_code: requireString(payload.tankCode, "tankCode"),
+        target_tank_id: optionalUuid(payload.tankId, "tankId"),
+        target_tank_name: requireString(payload.tankName, "tankName"),
+        target_telemetry_capable: optionalBoolean(payload.telemetryCapable) ?? false,
+        target_usable_capacity_kg: requireNumber(payload.usableCapacityKg, "usableCapacityKg"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/tank-transfers" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("transfer_lpg_station_tank_stock", {
+        target_from_tank_id: requireUuid(payload.fromTankId, "fromTankId"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_note: optionalString(payload.note),
+        target_quantity_kg: requireNumber(payload.quantityKg, "quantityKg"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.tank_transfer",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+        target_to_tank_id: requireUuid(payload.toTankId, "toTankId"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/manual-fallback" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("enable_lpg_station_inventory_manual_fallback", {
+        target_duration_hours: requireNumber(payload.durationHours, "durationHours"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_reason: requireString(payload.reason, "reason"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.manual_fallback",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/provider-connections" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("configure_lpg_inventory_provider_connection", {
+        target_display_name: requireString(payload.displayName, "displayName"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_provider_key: requireString(payload.providerKey, "providerKey"),
+        target_settings: optionalRecord(payload.settings) ?? {},
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.provider_connection",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/provider-connections/disconnect" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("disconnect_lpg_inventory_provider", {
+        target_connection_public_reference: requireString(payload.connectionReference, "connectionReference"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_reason: requireString(payload.reason, "reason"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.provider_disconnect",
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/telemetry-devices" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("upsert_lpg_inventory_telemetry_device", {
+        target_calibration: optionalRecord(payload.calibration) ?? {},
+        target_connection_public_reference: requireString(payload.connectionReference, "connectionReference"),
+        target_display_name: requireString(payload.displayName, "displayName"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_measurement_kind: requireString(payload.measurementKind, "measurementKind"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_provider_device_reference: requireString(payload.providerDeviceReference, "providerDeviceReference"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.telemetry_device",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+        target_tank_public_reference: requireString(payload.tankReference, "tankReference"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/operational-capacity" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("configure_lpg_station_operational_capacity", {
+        target_congestion_status: optionalString(payload.congestionStatus) ?? "normal",
+        target_estimated_processing_minutes: optionalNumber(payload.estimatedProcessingMinutes, "estimatedProcessingMinutes"),
+        target_expected_version: optionalInteger(payload.expectedVersion),
+        target_filling_points: requireInteger(payload.fillingPoints, "fillingPoints"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_maximum_concurrent_jobs: requireInteger(payload.maximumConcurrentJobs, "maximumConcurrentJobs"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_pause_reason: optionalString(payload.pauseReason),
+        target_paused_until: optionalString(payload.pausedUntil),
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.operational_capacity",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/availability" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("set_lpg_station_inventory_availability", {
+        target_action: requireString(payload.action, "action"),
+        target_expected_version: optionalInteger(payload.expectedVersion),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_reason: optionalString(payload.reason) ?? "Station restored verified inventory availability.",
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.availability",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+        target_until: optionalString(payload.until),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/manual-fallback/end" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("end_lpg_station_inventory_manual_fallback", {
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_reason: requireString(payload.reason, "reason"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.manual_fallback_end",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/issues/unexpected-stockout" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("report_lpg_inventory_unexpected_stockout", {
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_order_public_reference: optionalString(payload.orderReference),
+        target_reason: requireString(payload.reason, "reason"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.unexpected_stockout",
+        target_station_branch_id: optionalUuid(payload.stationBranchId, "stationBranchId"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/station-inventory" && request.method === "GET") {
+    return rpcDataResponse(
+      supabase.rpc("read_lpg_admin_inventory_operations", {
+        target_limit: optionalIntegerQuery(url.searchParams.get("limit")) ?? 100,
+        target_station_branch_id: optionalUuid(
+          url.searchParams.get("stationBranchId"),
+          "stationBranchId",
+        ),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/station-inventory/policy" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("configure_inventory_runtime_policy", {
+        target_change_reason: requireString(payload.changeReason, "changeReason"),
+        target_critical_stock_percentage: requireNumber(payload.criticalStockPercentage, "criticalStockPercentage"),
+        target_discrepancy_tolerance_kg: requireNumber(payload.discrepancyToleranceKg, "discrepancyToleranceKg"),
+        target_dispatch_blocking_interval_minutes: requireInteger(payload.dispatchBlockingIntervalMinutes, "dispatchBlockingIntervalMinutes"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_low_stock_percentage: requireNumber(payload.lowStockPercentage, "lowStockPercentage"),
+        target_manual_confirmation_interval_minutes: requireInteger(payload.manualConfirmationIntervalMinutes, "manualConfirmationIntervalMinutes"),
+        target_manual_fallback_maximum_hours: requireNumber(payload.manualFallbackMaximumHours, "manualFallbackMaximumHours"),
+        target_manual_stale_interval_minutes: requireInteger(payload.manualStaleIntervalMinutes, "manualStaleIntervalMinutes"),
+        target_manual_warning_interval_minutes: requireInteger(payload.manualWarningIntervalMinutes, "manualWarningIntervalMinutes"),
+        target_minimum_dispatch_confidence: requireString(payload.minimumDispatchConfidence, "minimumDispatchConfidence"),
+        target_reservation_expiry_minutes: requireInteger(payload.reservationExpiryMinutes, "reservationExpiryMinutes"),
+        target_safety_reserve_mode: requireString(payload.safetyReserveMode, "safetyReserveMode"),
+        target_safety_reserve_value: requireNumber(payload.safetyReserveValue, "safetyReserveValue"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/station-inventory/reconciliation" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("resolve_lpg_inventory_reconciliation_case", {
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_reconciliation_public_reference: requireString(payload.reconciliationReference, "reconciliationReference"),
+        target_resolution: requireString(payload.resolution, "resolution"),
+        target_source: optionalString(payload.source) ?? "skima.lpg.inventory.reconciliation",
+        target_status: requireString(payload.status, "status"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/station-inventory/automation-policy" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("configure_inventory_automation_policy", {
+        target_actual_fill_tolerance_kg: requireNumber(payload.actualFillToleranceKg, "actualFillToleranceKg"),
+        target_alert_reminder_interval_minutes: requireInteger(payload.alertReminderIntervalMinutes, "alertReminderIntervalMinutes"),
+        target_change_reason: requireString(payload.changeReason, "changeReason"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_maximum_actual_fill_overage_kg: requireNumber(payload.maximumActualFillOverageKg, "maximumActualFillOverageKg"),
+        target_maximum_availability_pause_hours: requireInteger(payload.maximumAvailabilityPauseHours, "maximumAvailabilityPauseHours"),
+        target_provider_degraded_interval_minutes: requireInteger(payload.providerDegradedIntervalMinutes, "providerDegradedIntervalMinutes"),
+        target_provider_health_check_interval_minutes: requireInteger(payload.providerHealthCheckIntervalMinutes, "providerHealthCheckIntervalMinutes"),
+        target_provider_offline_interval_minutes: requireInteger(payload.providerOfflineIntervalMinutes, "providerOfflineIntervalMinutes"),
+        target_provider_retry_base_seconds: requireInteger(payload.providerRetryBaseSeconds, "providerRetryBaseSeconds"),
+        target_provider_retry_maximum_attempts: requireInteger(payload.providerRetryMaximumAttempts, "providerRetryMaximumAttempts"),
+        target_provider_sync_interval_minutes: requireInteger(payload.providerSyncIntervalMinutes, "providerSyncIntervalMinutes"),
+        target_source_disagreement_critical_percentage: requireNumber(payload.sourceDisagreementCriticalPercentage, "sourceDisagreementCriticalPercentage"),
+        target_source_disagreement_warning_percentage: requireNumber(payload.sourceDisagreementWarningPercentage, "sourceDisagreementWarningPercentage"),
+        target_telemetry_stale_interval_minutes: requireInteger(payload.telemetryStaleIntervalMinutes, "telemetryStaleIntervalMinutes"),
+        target_telemetry_warning_interval_minutes: requireInteger(payload.telemetryWarningIntervalMinutes, "telemetryWarningIntervalMinutes"),
+        target_unexpected_stockout_reliability_penalty: requireNumber(payload.unexpectedStockoutReliabilityPenalty, "unexpectedStockoutReliabilityPenalty"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/station-inventory/override" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("apply_lpg_inventory_admin_override", {
+        target_action: requireString(payload.action, "action"),
+        target_expected_version: optionalInteger(payload.expectedVersion),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_reason: requireString(payload.reason, "reason"),
+        target_source: optionalString(payload.source) ?? "skima.admin.inventory.override",
+        target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+        target_until: optionalString(payload.until),
       }),
       id,
     );
@@ -4974,7 +5393,7 @@ interface GatewayProviderExecutionInput {
   readonly errorMessage: string | null;
   readonly idempotencyKey: string;
   readonly operationKey: string;
-  readonly providerKind?: "payment" | "storage" | "maps" | "notification" | "ai" | "queue" | "cache" | "observability";
+  readonly providerKind?: "payment" | "storage" | "maps" | "notification" | "ai" | "queue" | "cache" | "observability" | "inventory";
   readonly providerAdapterKey: string;
   readonly requestPayload: Readonly<Record<string, unknown>>;
   readonly responsePayload: Readonly<Record<string, unknown>>;

@@ -25,6 +25,7 @@
     "lpg-mobile:ios": "npm --prefix apps/lpg-mobile run ios",
     "lpg-mobile:web": "npm --prefix apps/lpg-mobile run web",
     "lpg-mobile:test": "npm --prefix apps/lpg-mobile test",
+    "station-inventory:contract": "deno test --allow-read scripts/station-inventory-runtime-contract.test.ts",
     "deploy:check:admin": "npm run frontend:check && npm run frontend:build",
     "deploy:check:lpg": "npm run lpg-mobile:check && npm run lpg-mobile:build",
     "deploy:check": "npm run deploy:check:admin && npm run deploy:check:lpg",

@@ -1,10 +1,11 @@
 import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import { Bell, BellRing, ChevronRight, ShieldCheck, Truck, Wallet } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
-import { domainQueries } from "../api/domains";
+import { domainQueries, useOrganizationInvitations } from "../api/domains";
 import { firstString, nestedRecord, recordId, type PlatformRecord } from "../api/records";
+import { invitationIdFromMessage, isStationInvitationMessage } from "../api/stationInvitations";
 import { enableNotifications } from "../notifications/useNotificationLifecycle";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -13,14 +14,23 @@ import { AppButton } from "./AppButton";
 import { Card } from "./Card";
 import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
+import { StationInvitationNotification } from "./StationInvitationNotification";
 
 type NotificationCategory = "all" | "wallet" | "order" | "partner";
 
 export function NotificationsScreen() {
   const { palette } = useAppTheme();
   const query = domainQueries.notifications();
+  const invitations = useOrganizationInvitations();
   const [selectedCategory, setSelectedCategory] = useState<NotificationCategory>("all");
   const [notice, setNotice] = useState<string | null>(null);
+  const invitationsById = useMemo(
+    () => new Map((invitations.data ?? []).flatMap((invitation) => {
+      const id = recordId(invitation);
+      return id ? [[id, invitation] as const] : [];
+    })),
+    [invitations.data],
+  );
 
   const enable = async () => {
     try {
@@ -65,7 +75,7 @@ export function NotificationsScreen() {
       refreshControl={
         <RefreshControl
           refreshing={query.isRefetching}
-          onRefresh={() => void query.refetch()}
+          onRefresh={() => void Promise.all([query.refetch(), invitations.refetch()])}
           tintColor={palette.brand}
         />
       }
@@ -99,6 +109,18 @@ export function NotificationsScreen() {
       ) : filteredMessages.length ? (
         <View style={styles.list}>
           {filteredMessages.map((message, index) => {
+            if (isStationInvitationMessage(message)) {
+              const invitationId = invitationIdFromMessage(message);
+              const invitation = invitationId ? invitationsById.get(invitationId) : undefined;
+              return (
+                <StationInvitationNotification
+                  key={recordId(message) ?? invitationId ?? String(index)}
+                  message={message}
+                  invitation={invitation}
+                  onOpen={invitationId ? () => router.push(`/invitations/${invitationId}` as never) : undefined}
+                />
+              );
+            }
             const payload = nestedRecord(message, "payload");
             const metadata = nestedRecord(message, "metadata");
             const purpose = firstString(message, ["purpose"]) ?? "";

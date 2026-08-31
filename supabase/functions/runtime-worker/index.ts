@@ -177,6 +177,22 @@ interface WebhookDeliveryClaim {
   readonly occurredAt: string;
 }
 
+interface BackgroundJobClaim {
+  readonly id: string;
+  readonly jobTypeKey: string;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly attempts: number;
+  readonly maxAttempts: number;
+  readonly source: string;
+  readonly idempotencyKey: string;
+}
+
+interface BackgroundJobFinish {
+  readonly status: "completed" | "queued" | "failed";
+  readonly attempts: number;
+  readonly maxAttempts: number;
+}
+
 interface RuntimeError {
   readonly message: string;
 }
@@ -984,39 +1000,19 @@ async function processBackgroundJobs(
   supabase: RuntimeSupabaseClient,
   limit: number,
 ): Promise<number> {
-  const { data, error } = await supabase
-    .from("background_jobs")
-    .select("id,job_type_key,payload,attempts,max_attempts,source,idempotency_key")
-    .eq("status", "queued")
-    .lte("run_at", new Date().toISOString())
-    .order("run_at", { ascending: true })
-    .limit(limit);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
+  const workerId = `runtime-worker:${crypto.randomUUID()}`;
+  const jobs = parseBackgroundJobClaims(await requireRpcData(
+    supabase.rpc("claim_background_jobs", {
+      target_limit: limit,
+      target_lock_seconds: 180,
+      target_worker_id: workerId,
+    }),
+  ));
   let processed = 0;
 
-  for (const job of data ?? []) {
-    const jobId = requireString(job.id);
-    const attempts = Number(job.attempts ?? 0) + 1;
-    const maxAttempts = Number(job.max_attempts ?? 1);
-    const jobType = String(job.job_type_key);
-    const knownJobType = jobType.startsWith("platform.");
-
-    await requireUpdate(
-      supabase.from("background_jobs").update({
-        attempts,
-        locked_by: "runtime-worker",
-        locked_until: new Date(Date.now() + 60_000).toISOString(),
-        status: "running",
-        updated_at: new Date().toISOString(),
-      }).eq("id", jobId),
-    );
-
-    if (jobType === "platform.location_retention.run") {
-      try {
+  for (const job of jobs) {
+    try {
+      if (job.jobTypeKey === "platform.location_retention.run") {
         const payload = requireRecord(job.payload);
         const retentionLimit = boundedInteger(payload.limit, 5_000, 1, 50_000);
         await requireRpc(supabase.rpc("run_location_retention", { p_limit: retentionLimit }));
@@ -1025,77 +1021,440 @@ async function processBackgroundJobs(
         await requireRpc(supabase.rpc("enqueue_background_job", {
           target_idempotency_key: `location-retention:${nextRun.toISOString().slice(0, 13)}`,
           target_job_type_key: "platform.location_retention.run",
-          target_max_attempts: maxAttempts,
+          target_max_attempts: job.maxAttempts,
           target_payload: { intervalHours, limit: retentionLimit },
           target_queue_key: "platform.location_retention",
           target_run_at: nextRun.toISOString(),
           target_source: "platform.location_retention.scheduler",
         }));
-        await requireUpdate(
-          supabase.from("background_jobs").update({ locked_by: null, locked_until: null, status: "completed", updated_at: new Date().toISOString() }).eq("id", jobId),
-        );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "location retention failed";
-        await requireUpdate(supabase.from("background_jobs").update({
-          last_error: message, locked_by: null, locked_until: null,
-          status: attempts >= maxAttempts ? "failed" : "queued",
-          updated_at: new Date().toISOString(),
-        }).eq("id", jobId));
-        if (attempts >= maxAttempts) {
-          await requireRpc(supabase.rpc("enqueue_background_job", {
-            target_idempotency_key: `${requireString(job.idempotency_key)}:dead-letter`,
-            target_job_type_key: "platform.dead_letter.record", target_max_attempts: 1,
-            target_payload: { failedJobId: jobId, reason: message },
-            target_queue_key: "platform.dead_letters", target_run_at: new Date().toISOString(),
-            target_source: "platform.runtime_worker",
-          }));
-        }
+      } else if (job.jobTypeKey === "platform.inventory.maintenance") {
+        const maintenanceLimit = boundedInteger(job.payload.limit, 200, 1, 1_000);
+        await requireRpc(supabase.rpc("run_lpg_inventory_maintenance", {
+          target_limit: maintenanceLimit,
+        }));
+
+        const intervalMinutes = boundedInteger(job.payload.intervalMinutes, 1, 1, 60);
+        const nextRun = new Date(Date.now() + intervalMinutes * 60_000);
+        await requireRpc(supabase.rpc("enqueue_background_job", {
+          target_idempotency_key: `inventory-maintenance:${nextRun.toISOString().slice(0, 16)}`,
+          target_job_type_key: "platform.inventory.maintenance",
+          target_max_attempts: job.maxAttempts,
+          target_payload: { intervalMinutes, limit: maintenanceLimit },
+          target_queue_key: "platform.inventory",
+          target_run_at: nextRun.toISOString(),
+          target_source: "inventory.maintenance_schedule",
+        }));
+      } else if (job.jobTypeKey === "platform.inventory.provider_sync") {
+        await processInventoryProviderSync(supabase, job);
+      } else if (job.jobTypeKey === "platform.dead_letter.record") {
+        // The failed source job is itself the durable record. This terminal job
+        // acknowledges that the dead-letter handoff was observed.
+      } else {
+        throw new Error("unsupported_background_job_type");
       }
-      processed += 1;
-      continue;
+      await finishBackgroundJob(supabase, job.id, workerId, true, null);
+    } catch (error) {
+      const message = safeBackgroundJobError(error);
+      const finish = await finishBackgroundJob(supabase, job.id, workerId, false, message);
+
+      if (finish.status === "failed") {
+        await requireRpc(supabase.rpc("enqueue_background_job", {
+          target_idempotency_key: `${job.idempotencyKey}:dead-letter`,
+          target_job_type_key: "platform.dead_letter.record",
+          target_max_attempts: 1,
+          target_payload: { failedJobId: job.id, reason: message },
+          target_queue_key: "platform.dead_letters",
+          target_run_at: new Date().toISOString(),
+          target_source: "platform.runtime_worker",
+        }));
+      }
     }
 
-    if (knownJobType) {
-      await requireUpdate(
-        supabase.from("background_jobs").update({
-          locked_by: null,
-          locked_until: null,
-          status: "completed",
-          updated_at: new Date().toISOString(),
-        }).eq("id", jobId),
-      );
-
-      processed += 1;
-      continue;
-    }
-
-    await requireUpdate(
-      supabase.from("background_jobs").update({
-        last_error: "unknown job type",
-        locked_by: null,
-        locked_until: null,
-        status: attempts >= maxAttempts ? "failed" : "queued",
-        updated_at: new Date().toISOString(),
-      }).eq("id", jobId),
-    );
-
-    if (attempts >= maxAttempts) {
-      await requireRpc(supabase.rpc("enqueue_background_job", {
-        target_idempotency_key: `${requireString(job.idempotency_key)}:dead-letter`,
-        target_job_type_key: "platform.dead_letter.record",
-        target_max_attempts: 1,
-        target_payload: {
-          failedJobId: jobId,
-          reason: "unknown job type",
-        },
-        target_queue_key: "platform.dead_letters",
-        target_run_at: new Date().toISOString(),
-        target_source: "platform.runtime_worker",
-      }));
-    }
+    processed += 1;
   }
 
   return processed;
+}
+
+async function finishBackgroundJob(
+  supabase: RuntimeSupabaseClient,
+  jobId: string,
+  workerId: string,
+  succeeded: boolean,
+  errorMessage: string | null,
+): Promise<BackgroundJobFinish> {
+  const record = requireRecord(await requireRpcData(
+    supabase.rpc("finish_background_job", {
+      target_error_message: errorMessage,
+      target_job_id: jobId,
+      target_retry_at: null,
+      target_succeeded: succeeded,
+      target_worker_id: workerId,
+    }),
+  ));
+  const status = requireString(record.status);
+  if (status !== "completed" && status !== "queued" && status !== "failed") {
+    throw new Error("invalid_background_job_finish_status");
+  }
+
+  return {
+    attempts: requireNumber(record.attempts),
+    maxAttempts: requireNumber(record.maxAttempts),
+    status,
+  };
+}
+
+async function processInventoryProviderSync(
+  supabase: RuntimeSupabaseClient,
+  job: BackgroundJobClaim,
+): Promise<void> {
+  const connectionId = requireString(job.payload.connectionId);
+  const startedAt = performance.now();
+
+  try {
+    const context = requireRecord(await requireRpcData(
+      supabase.rpc("read_lpg_inventory_provider_runtime_context", {
+        target_connection_id: connectionId,
+      }),
+    ));
+    const adapterConfig = requireRecord(context.adapterConfig);
+    const polling = requireRecord(adapterConfig.polling);
+    const responseMapping = optionalRecord(polling.responseMapping) ?? {};
+    const providerKey = requireString(context.providerKey);
+    const endpoint = requireString(polling.url);
+    const url = safeInventoryProviderUrl(endpoint);
+    const method = (optionalString(polling.method) ?? "GET").toUpperCase();
+    if (method !== "GET" && method !== "POST") {
+      throw new Error("inventory_provider_method_invalid");
+    }
+
+    applyInventoryProviderQuery(url, polling.query);
+    const headers = buildInventoryProviderHeaders(
+      polling,
+      optionalString(context.credentialSecretRef),
+    );
+    const timeoutMs = boundedInteger(polling.timeoutMs, 10_000, 1_000, 30_000);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let response: Response;
+
+    try {
+      response = await fetch(url, {
+        body: method === "POST" ? JSON.stringify(optionalRecord(polling.requestBody) ?? {}) : undefined,
+        headers,
+        method,
+        redirect: "error",
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+      throw new Error(`inventory_provider_http_${response.status}`);
+    }
+    const responseText = await response.text();
+    if (responseText.length > 1_000_000) {
+      throw new Error("inventory_provider_response_too_large");
+    }
+
+    let responseValue: unknown;
+    try {
+      responseValue = JSON.parse(responseText);
+    } catch {
+      throw new Error("inventory_provider_response_invalid_json");
+    }
+
+    const stockKg = inventoryProviderNumber(
+      readConfiguredJsonPath(responseValue, requireString(responseMapping.stockKgPath)),
+      "inventory_provider_stock_invalid",
+    );
+    if (stockKg < 0) throw new Error("inventory_provider_stock_invalid");
+
+    const observedAtValue = optionalString(responseMapping.observedAtPath)
+      ? readConfiguredJsonPath(responseValue, requireString(responseMapping.observedAtPath))
+      : null;
+    const observedAt = observedAtValue === null || observedAtValue === undefined
+      ? new Date()
+      : new Date(requireString(observedAtValue));
+    if (Number.isNaN(observedAt.valueOf())) {
+      throw new Error("inventory_provider_observed_at_invalid");
+    }
+
+    const responseDigest = await sha256Hex(new TextEncoder().encode(responseText));
+    const eventReferenceValue = optionalString(responseMapping.eventReferencePath)
+      ? readConfiguredJsonPath(responseValue, requireString(responseMapping.eventReferencePath))
+      : null;
+    const providerEventReference = eventReferenceValue === null || eventReferenceValue === undefined
+      ? `${observedAt.toISOString()}:${responseDigest.slice(0, 32)}`
+      : String(eventReferenceValue);
+    if (!providerEventReference.trim() || providerEventReference.length > 500) {
+      throw new Error("inventory_provider_event_reference_invalid");
+    }
+
+    const providerSequenceValue = optionalString(responseMapping.providerSequencePath)
+      ? readConfiguredJsonPath(responseValue, requireString(responseMapping.providerSequencePath))
+      : null;
+    const providerSequence = providerSequenceValue === null || providerSequenceValue === undefined
+      ? null
+      : inventoryProviderInteger(providerSequenceValue, "inventory_provider_sequence_invalid");
+
+    const providerDeviceReferenceValue = optionalString(responseMapping.providerDeviceReferencePath)
+      ? readConfiguredJsonPath(responseValue, requireString(responseMapping.providerDeviceReferencePath))
+      : null;
+    const device = resolveInventoryProviderDevice(
+      context.devices,
+      providerDeviceReferenceValue === null || providerDeviceReferenceValue === undefined
+        ? null
+        : String(providerDeviceReferenceValue),
+    );
+    const rawValue = optionalString(responseMapping.rawValuePath)
+      ? inventoryProviderNumber(
+        readConfiguredJsonPath(responseValue, requireString(responseMapping.rawValuePath)),
+        "inventory_provider_raw_value_invalid",
+      )
+      : stockKg;
+    const rawUnitValue = optionalString(responseMapping.rawUnitPath)
+      ? readConfiguredJsonPath(responseValue, requireString(responseMapping.rawUnitPath))
+      : "kg";
+    const rawUnit = String(rawUnitValue ?? "kg").slice(0, 40);
+
+    await requireRpc(supabase.rpc("ingest_lpg_inventory_provider_observation", {
+      target_connection_id: connectionId,
+      target_idempotency_key: `${connectionId}:${providerEventReference}`,
+      target_observed_at: observedAt.toISOString(),
+      target_payload: {
+        normalizationVersion: device?.normalizationVersion ?? 1,
+        providerKey,
+        responseDigest,
+      },
+      target_provider_event_reference: providerEventReference,
+      target_provider_sequence: providerSequence,
+      target_raw_unit: rawUnit,
+      target_raw_value: rawValue,
+      target_source: inventoryProviderSource(providerKey),
+      target_stock_kg: stockKg,
+      target_tank_id: device?.tankId ?? null,
+      target_telemetry_device_id: device?.deviceId ?? null,
+    }));
+
+    await requireRpc(supabase.rpc("record_lpg_inventory_provider_sync_result", {
+      target_connection_id: connectionId,
+      target_error_code: null,
+      target_latency_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+      target_metadata: { jobId: job.id, providerKey, responseDigest },
+      target_succeeded: true,
+    }));
+  } catch (error) {
+    const errorCode = inventoryProviderErrorCode(error);
+    await requireRpc(supabase.rpc("record_lpg_inventory_provider_sync_result", {
+      target_connection_id: connectionId,
+      target_error_code: errorCode,
+      target_latency_ms: Math.max(0, Math.round(performance.now() - startedAt)),
+      target_metadata: { jobId: job.id },
+      target_succeeded: false,
+    }));
+    throw new Error(errorCode);
+  }
+}
+
+function parseBackgroundJobClaims(data: unknown): BackgroundJobClaim[] {
+  if (!Array.isArray(data)) throw new Error("invalid_background_job_claims");
+
+  return data.map((item) => {
+    const record = requireRecord(item);
+    const id = requireString(record.id);
+    return {
+      attempts: requireNumber(record.attempts),
+      id,
+      idempotencyKey: optionalString(record.idempotencyKey) ?? id,
+      jobTypeKey: requireString(record.jobTypeKey),
+      maxAttempts: requireNumber(record.maxAttempts),
+      payload: optionalRecord(record.payload) ?? {},
+      source: optionalString(record.source) ?? "platform.queue_engine",
+    };
+  });
+}
+
+function safeBackgroundJobError(error: unknown): string {
+  const message = error instanceof Error ? error.message : "background_job_failed";
+  return /^[a-z][a-z0-9_.:-]{2,120}$/i.test(message)
+    ? message.toLowerCase()
+    : "background_job_failed";
+}
+
+function inventoryProviderErrorCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : "inventory_provider_sync_failed";
+  if (/^inventory_provider_[a-z0-9_]{2,100}$/i.test(message)) {
+    return message.toLowerCase();
+  }
+  if (message === "The operation was aborted") return "inventory_provider_timeout";
+  return "inventory_provider_sync_failed";
+}
+
+function inventoryProviderSource(providerKey: string): string {
+  const normalized = `inventory.provider.${providerKey}`.toLowerCase();
+  if (!/^[a-z][a-z0-9_.:-]{2,105}$/.test(normalized)) {
+    throw new Error("inventory_provider_key_invalid");
+  }
+  return normalized;
+}
+
+function safeInventoryProviderUrl(value: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("inventory_provider_url_invalid");
+  }
+  const hostname = url.hostname.toLowerCase();
+  if (url.protocol !== "https:" || url.username || url.password || url.port && url.port !== "443") {
+    throw new Error("inventory_provider_url_invalid");
+  }
+  if (
+    hostname === "localhost" || hostname === "::1" || hostname.endsWith(".local") ||
+    /^127\./.test(hostname) || /^10\./.test(hostname) || /^192\.168\./.test(hostname) ||
+    /^169\.254\./.test(hostname) || /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+    /^(fc|fd|fe80):/i.test(hostname)
+  ) {
+    throw new Error("inventory_provider_url_private");
+  }
+  return url;
+}
+
+function applyInventoryProviderQuery(url: URL, value: unknown): void {
+  if (value === null || value === undefined) return;
+  const query = requireRecord(value);
+  for (const [key, queryValue] of Object.entries(query)) {
+    if (!/^[A-Za-z0-9_.-]{1,80}$/.test(key)) {
+      throw new Error("inventory_provider_query_invalid");
+    }
+    if (typeof queryValue !== "string" && typeof queryValue !== "number" && typeof queryValue !== "boolean") {
+      throw new Error("inventory_provider_query_invalid");
+    }
+    url.searchParams.set(key, String(queryValue));
+  }
+}
+
+function buildInventoryProviderHeaders(
+  polling: Readonly<Record<string, unknown>>,
+  credentialSecretRef: string | null,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "User-Agent": "skima-inventory-runtime/1",
+  };
+  const configuredHeaders = polling.headers;
+  if (configuredHeaders !== undefined && !Array.isArray(configuredHeaders)) {
+    throw new Error("inventory_provider_headers_invalid");
+  }
+
+  for (const entry of configuredHeaders ?? []) {
+    const header = requireRecord(entry);
+    const name = requireString(header.name);
+    if (!/^[A-Za-z0-9-]{1,80}$/.test(name) || /^(host|content-length|connection)$/i.test(name)) {
+      throw new Error("inventory_provider_header_name_invalid");
+    }
+    const secretRef = optionalString(header.secretRef);
+    if (!secretRef && /authorization|api[-_]?key|token|secret/i.test(name)) {
+      throw new Error("inventory_provider_secret_header_must_use_secret_ref");
+    }
+    const value = secretRef
+      ? resolveInventoryProviderSecret(secretRef)
+      : requireString(header.value);
+    headers[name] = value;
+  }
+
+  if (credentialSecretRef) {
+    const authentication = requireRecord(polling.authentication);
+    const secret = resolveInventoryProviderSecret(credentialSecretRef);
+    const type = requireString(authentication.type);
+    if (type === "bearer") {
+      headers.Authorization = `${optionalString(authentication.prefix) ?? "Bearer"} ${secret}`.trim();
+    } else if (type === "header") {
+      const headerName = requireString(authentication.headerName);
+      if (!/^[A-Za-z0-9-]{1,80}$/.test(headerName) || /^(host|content-length|connection)$/i.test(headerName)) {
+        throw new Error("inventory_provider_header_name_invalid");
+      }
+      headers[headerName] = `${optionalString(authentication.prefix) ?? ""}${secret}`;
+    } else {
+      throw new Error("inventory_provider_authentication_invalid");
+    }
+  }
+
+  if ((optionalString(polling.method) ?? "GET").toUpperCase() === "POST") {
+    headers["Content-Type"] = "application/json";
+  }
+  return headers;
+}
+
+function resolveInventoryProviderSecret(secretRef: string): string {
+  if (!/^SUPABASE_SECRET:[A-Za-z0-9_.:-]{3,180}$/.test(secretRef)) {
+    throw new Error("inventory_provider_secret_reference_invalid");
+  }
+  const value = Deno.env.get(secretRef.slice("SUPABASE_SECRET:".length));
+  if (!value) throw new Error("inventory_provider_secret_missing");
+  return value;
+}
+
+function readConfiguredJsonPath(value: unknown, path: string): unknown {
+  if (!/^[A-Za-z0-9_.-]{1,300}$/.test(path)) {
+    throw new Error("inventory_provider_response_path_invalid");
+  }
+  let current = value;
+  for (const segment of path.split(".")) {
+    if (Array.isArray(current)) {
+      const index = Number(segment);
+      if (!Number.isInteger(index) || index < 0 || index >= current.length) {
+        throw new Error("inventory_provider_response_path_missing");
+      }
+      current = current[index];
+    } else {
+      const record = requireRecord(current);
+      if (!Object.prototype.hasOwnProperty.call(record, segment)) {
+        throw new Error("inventory_provider_response_path_missing");
+      }
+      current = record[segment];
+    }
+  }
+  return current;
+}
+
+function inventoryProviderNumber(value: unknown, errorCode: string): number {
+  const number = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(number)) throw new Error(errorCode);
+  return number;
+}
+
+function inventoryProviderInteger(value: unknown, errorCode: string): number {
+  const number = inventoryProviderNumber(value, errorCode);
+  if (!Number.isSafeInteger(number)) throw new Error(errorCode);
+  return number;
+}
+
+function resolveInventoryProviderDevice(
+  value: unknown,
+  providerDeviceReference: string | null,
+): Readonly<{
+  deviceId: string;
+  tankId: string;
+  normalizationVersion: number;
+}> | null {
+  const devices = Array.isArray(value) ? value.map(requireRecord) : [];
+  let device: Readonly<Record<string, unknown>> | undefined;
+  if (providerDeviceReference) {
+    device = devices.find((candidate) => candidate.providerDeviceReference === providerDeviceReference);
+    if (!device) throw new Error("inventory_provider_device_unmapped");
+  } else if (devices.length === 1) {
+    device = devices[0];
+  }
+  if (!device) return null;
+
+  return {
+    deviceId: requireString(device.deviceId),
+    normalizationVersion: requireNumber(device.normalizationVersion),
+    tankId: requireString(device.tankId),
+  };
 }
 
 async function expireEscrowHolds(supabase: RuntimeSupabaseClient, limit: number): Promise<number> {

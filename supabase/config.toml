@@ -63,3 +63,6 @@ verify_jwt = false
 
 [functions.webhook-sandbox-receiver]
 verify_jwt = false
+
+[functions.inventory-provider-webhook]
+verify_jwt = false

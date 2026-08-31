@@ -1,5 +1,8 @@
 import { RecordArraySchema, RecordObjectSchema } from "./records";
 import { useGatewayQuery } from "./gateway";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useSession } from "../session/SessionProvider";
 
 export const domainQueries = {
   cylinders: () =>
@@ -275,6 +278,51 @@ export function useStationRuntime() {
     schema: RecordObjectSchema,
     refetchInterval: 30000,
   });
+}
+export function useStationInventory() {
+  const session = useSession();
+  const queryClient = useQueryClient();
+  const query = useGatewayQuery({
+    key: ["station-inventory"],
+    path: "/lpg/stations/inventory",
+    schema: RecordObjectSchema,
+    refetchInterval: 30000,
+    persist: true,
+  });
+  const station = query.data?.station;
+  const stationBranchId = station && typeof station === "object" && !Array.isArray(station)
+    ? (station as Record<string, unknown>).stationBranchId
+    : null;
+
+  useEffect(() => {
+    if (typeof stationBranchId !== "string" || !stationBranchId) return;
+    const invalidate = () => {
+      void queryClient.invalidateQueries({ queryKey: ["lpg-expo", "station-inventory"] });
+    };
+    let channel = session.supabase.channel(`station-inventory:${stationBranchId}`);
+    for (const table of [
+      "station_lpg_inventory_state",
+      "station_inventory_events",
+      "station_inventory_reservations",
+      "station_inventory_provider_connections",
+      "station_inventory_telemetry_devices",
+      "station_inventory_reconciliation_cases",
+      "station_inventory_operational_capacity",
+      "station_inventory_alert_states",
+    ]) {
+      channel = channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table, filter: `station_branch_id=eq.${stationBranchId}` },
+        invalidate,
+      );
+    }
+    channel.subscribe();
+    return () => {
+      void session.supabase.removeChannel(channel);
+    };
+  }, [queryClient, session.supabase, stationBranchId]);
+
+  return query;
 }
 export function useTrackingSessions() {
   return useGatewayQuery({

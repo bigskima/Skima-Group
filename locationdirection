@@ -1,0 +1,2026 @@
+# SKIMA LPG — SAFE LOCATION & MAP PROVIDER MIGRATION TO LOCATIONIQ
+
+# DO NOT DELETE THESE FILE
+
+
+Continue the existing SKIMA LPG production application.
+
+This task is a **full-stack location-runtime upgrade**.
+
+This is NOT permission to rewrite the existing location system.
+
+This is NOT permission to delete Google Maps.
+
+This is NOT permission to delete Mapbox.
+
+This is NOT permission to remove existing location screens, hooks, services, database tables, service-area logic, tracking logic, saved locations, coordinates, map components, permissions, or provider integrations.
+
+The current location implementation represents substantial previous work.
+
+## NON-NEGOTIABLE FIRST RULE
+
+Before changing ANY location-related code:
+
+**AUDIT THE ENTIRE CURRENT LOCATION IMPLEMENTATION.**
+
+Do not modify files first.
+
+Do not assume the existing implementation is wrong.
+
+Do not replace existing architecture merely because a new provider is being introduced.
+
+The objective is:
+
+```text
+EXISTING LOCATION SYSTEM
+        ↓
+Carefully audit and understand
+        ↓
+Preserve Google Maps implementation
+        ↓
+Preserve Mapbox implementation
+        ↓
+Introduce provider abstraction if missing
+        ↓
+Add LocationIQ
+        ↓
+Make LocationIQ the ACTIVE provider
+        ↓
+Keep Google Maps + Mapbox INACTIVE but fully intact
+```
+
+We must be able to re-enable Google Maps or Mapbox in the future without rebuilding those integrations.
+
+---
+
+# 1. FIRST PERFORM A COMPLETE LOCATION AUDIT
+
+Before implementation, inspect the repository thoroughly.
+
+Search for anything related to:
+
+```text
+location
+locations
+address
+addresses
+latitude
+longitude
+lat
+lng
+coordinates
+gps
+geolocation
+geocode
+reverse geocode
+autocomplete
+places
+map
+maps
+Mapbox
+Google Maps
+Google Places
+routing
+routes
+distance
+ETA
+tracking
+driver location
+customer location
+station location
+service areas
+zones
+geofence
+geofencing
+arrival
+device location
+Expo Location
+location permissions
+background location
+saved locations
+pickup location
+delivery location
+station verification
+driver service area
+```
+
+Inspect:
+
+* Existing frontend screens
+* Existing hooks
+* Existing API clients
+* Existing backend services
+* Supabase tables
+* Database functions
+* Migrations
+* Edge Functions
+* Environment variables
+* Provider adapters
+* Map components
+* Google Maps integration
+* Mapbox integration
+* Expo Location integration
+* Tracking sessions
+* Service-area calculations
+* Address-selection flows
+* Station onboarding
+* Driver onboarding
+* Customer address creation
+* Admin location verification
+* Dispatch location usage
+* Distance calculation
+* ETA calculation
+* Background tracking
+* Realtime location updates
+
+Document what is currently working before changing anything.
+
+---
+
+# 2. DO NOT DELETE GOOGLE MAPS
+
+If Google Maps / Google Places integration exists:
+
+PRESERVE IT.
+
+Do not:
+
+```text
+delete Google provider code
+remove Google dependencies
+remove environment-variable support
+remove Google Places logic
+remove Google geocoder adapters
+remove Google routing adapters
+remove existing Google map components
+rewrite files just to remove Google references
+```
+
+Instead Google should become an available but inactive provider.
+
+Example:
+
+```text
+Provider:
+google
+
+Status:
+configured / unconfigured
+
+Enabled:
+false
+
+Active:
+false
+```
+
+The integration should remain recoverable.
+
+---
+
+# 3. DO NOT DELETE MAPBOX
+
+Apply exactly the same rule to Mapbox.
+
+Do not:
+
+```text
+delete Mapbox code
+delete Mapbox components
+delete Mapbox SDK integration
+delete Mapbox map rendering
+delete Mapbox geocoding integration
+delete Mapbox routing code
+delete Mapbox tokens/config support
+```
+
+Mapbox becomes:
+
+```text
+Provider:
+mapbox
+
+Enabled:
+false
+
+Active:
+false
+```
+
+It remains available for future activation.
+
+---
+
+# 4. LOCATIONIQ BECOMES THE ACTIVE PROVIDER
+
+Introduce:
+
+```text
+locationiq
+```
+
+as the active location provider.
+
+For the current release:
+
+```text
+ACTIVE LOCATION PROVIDER:
+LocationIQ
+```
+
+Google Maps and Mapbox remain installed/preserved but inactive.
+
+Do not automatically invoke Google or Mapbox as fallback if doing so could incur unexpected costs.
+
+The active provider configuration should be backend/server controlled.
+
+Example concept:
+
+```text
+maps.active_provider = locationiq
+```
+
+or:
+
+```text
+LOCATION_PROVIDER=locationiq
+```
+
+Do not hardcode provider selection throughout frontend files.
+
+---
+
+# 5. LOCATIONIQ API KEY
+
+LocationIQ uses an API access token.
+
+Store this securely.
+
+Example:
+
+```text
+LOCATIONIQ_API_KEY=...
+```
+
+or:
+
+```text
+LOCATIONIQ_ACCESS_TOKEN=...
+```
+
+Follow the repository's existing secret-management conventions.
+
+Never:
+
+```text
+hardcode the API key
+commit it to Git
+put it in source files
+store it in database plaintext unnecessarily
+log it
+display it in frontend
+```
+
+If using Supabase Edge Functions:
+
+use Supabase environment/secrets.
+
+If backend services run elsewhere:
+
+use the appropriate production environment secret store.
+
+---
+
+# 6. DO NOT LET MOBILE CLIENTS OWN THE LOCATIONIQ SECRET
+
+Where practical, sensitive LocationIQ calls should flow through SKIMA backend infrastructure.
+
+Preferred:
+
+```text
+SKIMA Mobile
+      ↓
+SKIMA Location API
+      ↓
+Location Provider Service
+      ↓
+LocationIQ Adapter
+      ↓
+LocationIQ HTTPS API
+```
+
+Instead of:
+
+```text
+Mobile app
+      ↓
+LocationIQ directly with unrestricted secret
+```
+
+This allows:
+
+* Central rate limiting
+* Usage monitoring
+* Caching
+* Provider switching
+* Error normalization
+* Quota protection
+* Security
+* Observability
+
+---
+
+# 7. CREATE / IMPROVE A MAPS PROVIDER ABSTRACTION
+
+If the repository already has a provider-adapter architecture, use it.
+
+DO NOT create a second competing provider system.
+
+If it does not exist, introduce one carefully.
+
+Core location business logic should call something equivalent to:
+
+```text
+LocationProvider.geocode()
+LocationProvider.reverseGeocode()
+LocationProvider.autocomplete()
+LocationProvider.route()
+LocationProvider.distance()
+LocationProvider.matrix()
+```
+
+Provider implementations can include:
+
+```text
+LocationIQProvider
+GoogleMapsProvider
+MapboxProvider
+```
+
+But:
+
+```text
+LocationIQProvider = active
+GoogleMapsProvider = preserved/inactive
+MapboxProvider = preserved/inactive
+```
+
+Do not spread code such as:
+
+```text
+if provider === "locationiq"
+```
+
+through dozens of feature files.
+
+Provider-specific behavior belongs inside adapters.
+
+---
+
+# 8. NORMALIZE PROVIDER RESPONSES
+
+SKIMA must not expose raw LocationIQ response formats across the application.
+
+Create normalized SKIMA types.
+
+Example:
+
+```text
+NormalizedAddress
+```
+
+with something equivalent to:
+
+```text
+formatted_address
+house_number
+street
+neighbourhood
+district
+city
+town
+village
+lga
+state
+state_code
+country
+country_code
+postcode
+latitude
+longitude
+provider
+provider_place_id
+confidence
+raw_metadata_reference
+```
+
+If LocationIQ terminology differs from Google or Mapbox, normalize it.
+
+This is critical because switching providers later should not require rewriting the frontend.
+
+---
+
+# 9. REVERSE GEOCODING
+
+Implement production reverse geocoding.
+
+Input:
+
+```text
+latitude
+longitude
+```
+
+Output:
+
+```text
+human-readable address
+```
+
+Example:
+
+```text
+6.2101, 7.0712
+      ↓
+LocationIQ
+      ↓
+Ifite, Awka, Anambra State, Nigeria
+```
+
+Use this for appropriate workflows such as:
+
+* Customer creating/saving address
+* Station application
+* Driver application
+* Admin location verification
+* Customer pin selection
+* Important geofence/location events
+
+Do NOT reverse geocode every GPS tracking point.
+
+---
+
+# 10. ADDRESS AUTOCOMPLETE / SEARCH
+
+Implement LocationIQ-powered address search where supported.
+
+Customer can type:
+
+```text
+Zik Avenue...
+```
+
+and receive relevant suggestions.
+
+Frontend must use debounce.
+
+Do not call provider after every individual keystroke without control.
+
+Example:
+
+```text
+User types
+      ↓
+300–500ms debounce
+      ↓
+Minimum input length
+      ↓
+Backend request
+      ↓
+Cached?
+      ↓
+Provider if necessary
+```
+
+Exact values should be configurable where appropriate.
+
+---
+
+# 11. NIGERIA-FIRST ADDRESS UX
+
+Do not assume every Nigerian location has perfect structured addressing.
+
+SKIMA should store:
+
+```text
+latitude
+longitude
+provider formatted address
+street
+city/town
+LGA
+state
+country
+landmark
+customer-entered description
+delivery instructions
+```
+
+For example:
+
+```text
+Resolved location:
+Ifite, Awka
+
+Street:
+Ifite Road
+
+Landmark:
+Opposite XYZ Pharmacy
+
+Instructions:
+Brown gate after the junction.
+```
+
+Coordinates remain the operational geographic truth.
+
+The readable address helps humans.
+
+---
+
+# 12. LOCATION PICKER
+
+Review the current customer location picker before changing it.
+
+Preserve existing functionality.
+
+A location flow should eventually support:
+
+```text
+Use current location
+
+Search address
+
+Move/select map pin
+
+Add landmark
+
+Add delivery instructions
+
+Save location
+```
+
+Do not redesign working screens unnecessarily.
+
+Adapt them to consume the normalized SKIMA location API.
+
+---
+
+# 13. DEVICE GPS
+
+Continue using the existing device-location system.
+
+If Expo Location is already installed and working:
+
+PRESERVE IT.
+
+Do not replace working Expo Location code merely because LocationIQ is added.
+
+Roles:
+
+```text
+Expo/device GPS
+=
+determine latitude/longitude
+
+LocationIQ
+=
+translate/search geographical information
+```
+
+Example:
+
+```text
+Device GPS
+      ↓
+6.2101, 7.0712
+      ↓
+LocationIQ reverse geocode
+      ↓
+Readable address
+```
+
+---
+
+# 14. GPS TRACKING MUST NOT USE REVERSE GEOCODING CONTINUOUSLY
+
+This is mandatory.
+
+Driver tracking points should contain things such as:
+
+```text
+latitude
+longitude
+accuracy
+heading
+speed
+timestamp
+location freshness
+```
+
+Do NOT do:
+
+```text
+Driver location update
+      ↓
+reverse geocode
+      ↓
+Driver location update
+      ↓
+reverse geocode
+```
+
+This will waste API quota.
+
+The map can display the driver using raw coordinates.
+
+Reverse geocoding is only needed for meaningful human-readable events.
+
+---
+
+# 15. GEOCODING CACHE
+
+Create a location/geocoding cache.
+
+Before calling LocationIQ:
+
+```text
+Check cache
+```
+
+If suitable cached result exists:
+
+```text
+return cached result
+```
+
+Otherwise:
+
+```text
+call LocationIQ
+↓
+normalize
+↓
+cache
+↓
+return
+```
+
+Create/adapt something equivalent to:
+
+```text
+location_geocode_cache
+```
+
+Potential fields:
+
+```text
+id
+geohash
+latitude
+longitude
+formatted_address
+street
+neighbourhood
+city
+lga
+state
+country
+postcode
+provider
+provider_place_id
+confidence
+created_at
+refreshed_at
+expires_at
+```
+
+Do not unnecessarily geocode the same area repeatedly.
+
+---
+
+# 16. USE GEOHASH / SPATIAL PROXIMITY CACHE
+
+GPS coordinates vary slightly.
+
+Do not require exact coordinate equality for cache reuse.
+
+Example:
+
+```text
+6.210151, 7.071221
+```
+
+and:
+
+```text
+6.210158, 7.071229
+```
+
+may represent effectively the same location.
+
+Use:
+
+```text
+geohash
+PostGIS spatial proximity
+coordinate rounding
+```
+
+or an appropriate existing spatial method.
+
+Reuse nearby address results when safely appropriate.
+
+---
+
+# 17. HAVERSINE / POSTGIS DISTANCE PRE-FILTERING
+
+Do not call routing APIs for every driver or station candidate.
+
+Use SKIMA's database/math first.
+
+Example driver dispatch:
+
+```text
+300 drivers
+    ↓
+Approved + online
+    ↓
+Service zone filtering
+    ↓
+Location freshness
+    ↓
+PostGIS/Haversine distance
+    ↓
+10 nearest candidates
+    ↓
+Capability + workload
+    ↓
+3–5 candidates
+    ↓
+Route/ETA provider requests
+```
+
+This protects the LocationIQ quota.
+
+If PostGIS already exists, prefer the current spatial infrastructure rather than creating duplicate calculations.
+
+---
+
+# 18. ROUTING
+
+Implement LocationIQ routing through the provider adapter.
+
+Use routing only where actual road route matters.
+
+Examples:
+
+```text
+Driver → Customer
+Customer → Station
+Station → Customer
+```
+
+Return normalized:
+
+```text
+distance_meters
+duration_seconds
+route_geometry
+provider
+calculated_at
+```
+
+Do not use raw LocationIQ response formats throughout the application.
+
+---
+
+# 19. ROUTING CACHE
+
+Some route requests may be reused for short periods.
+
+Implement sensible caching where appropriate.
+
+Do NOT reuse routing information where live conditions make the result unsafe or misleading.
+
+At the current stage, route caching can focus on repeated static location combinations.
+
+---
+
+# 20. ETA
+
+Use provider routing duration as one input into SKIMA ETA.
+
+Do not pretend LocationIQ offers premium live traffic if it does not.
+
+ETA architecture should allow:
+
+```text
+route baseline
++
+SKIMA historical travel time
++
+driver movement
++
+station queue
++
+processing time
+```
+
+Premium traffic can be integrated later through another adapter.
+
+Do not make live traffic a blocker.
+
+---
+
+# 21. MAP RENDERING
+
+FIRST AUDIT WHAT CURRENTLY RENDERS THE MAP.
+
+If Mapbox currently renders maps successfully:
+
+DO NOT DELETE IT merely because LocationIQ becomes the active geocoding/routing provider.
+
+Separate:
+
+```text
+Map rendering provider
+```
+
+from:
+
+```text
+Geocoding provider
+Routing provider
+```
+
+Do not assume they have to be identical.
+
+If the existing map renderer requires a paid Mapbox dependency that currently prevents production usage, then assess MapLibre carefully.
+
+MapLibre may be introduced as an alternative renderer where necessary.
+
+BUT:
+
+do not delete the existing Mapbox renderer.
+
+Do not perform a destructive renderer migration without understanding the existing map UI.
+
+---
+
+# 22. MAPLIBRE
+
+If MapLibre is needed:
+
+Use:
+
+```text
+MapLibre React Native
+```
+
+for mobile and appropriate MapLibre web tooling for web/admin.
+
+However:
+
+MapLibre is a renderer.
+
+It is NOT the geocoder.
+
+It is NOT LocationIQ.
+
+Do not confuse:
+
+```text
+MapLibre
+```
+
+with:
+
+```text
+LocationIQ
+```
+
+MapLibre displays maps.
+
+LocationIQ provides location/geocoding/routing APIs.
+
+---
+
+# 23. GOOGLE AND MAPBOX MUST REMAIN SWITCHABLE
+
+Provider configuration should support future activation.
+
+Example conceptual admin/server configuration:
+
+```text
+Geocoder:
+locationiq
+
+Router:
+locationiq
+
+Map Renderer:
+current configured renderer
+```
+
+Future:
+
+```text
+Geocoder:
+google
+
+Router:
+google
+```
+
+or:
+
+```text
+Geocoder:
+mapbox
+```
+
+without rewriting SKIMA.
+
+---
+
+# 24. DO NOT AUTOMATICALLY FAIL OVER TO PAID PROVIDERS
+
+Because the current objective is minimizing cost:
+
+If LocationIQ quota is exhausted or unavailable:
+
+DO NOT silently start sending production requests to Google Maps or Mapbox if they could generate charges.
+
+Instead apply controlled fallback.
+
+Possible response:
+
+```text
+Location service temporarily unavailable
+```
+
+or use allowed local/native fallback where appropriate.
+
+Paid providers should only become active through explicit configuration.
+
+---
+
+# 25. NATIVE MOBILE FALLBACK
+
+Where Expo/native reverse geocoding already works:
+
+retain it as an optional mobile fallback.
+
+Do not make it the authoritative backend geocoder.
+
+Potential hierarchy:
+
+```text
+LocationIQ
+      ↓ failure
+Existing device-native geocoder
+      ↓ failure
+Manual location entry + map pin
+```
+
+Google and Mapbox remain inactive unless explicitly enabled.
+
+---
+
+# 26. LOCATION PROVIDER HEALTH
+
+Build provider health information.
+
+Track:
+
+```text
+provider
+enabled
+active
+last_success
+last_failure
+request_count
+error_count
+rate_limit_state
+quota_state where available
+latency
+```
+
+Operations/admin should eventually be able to see:
+
+```text
+LocationIQ
+ACTIVE
+Healthy
+
+Google Maps
+INACTIVE
+
+Mapbox
+INACTIVE
+```
+
+---
+
+# 27. QUOTA PROTECTION
+
+LocationIQ's free allocation is limited.
+
+Implement:
+
+```text
+rate limiting
+request throttling
+autocomplete debounce
+cache
+route candidate reduction
+request deduplication
+retry limits
+quota monitoring
+```
+
+Do not allow one buggy screen to consume thousands of requests.
+
+---
+
+# 28. REQUEST DEDUPLICATION
+
+If multiple frontend components request the same reverse-geocode operation simultaneously:
+
+do not necessarily send multiple provider requests.
+
+Use in-flight deduplication where appropriate.
+
+Example:
+
+```text
+Request A:
+reverseGeocode(6.21, 7.07)
+
+Request B:
+reverseGeocode(6.21, 7.07)
+
+↓
+One provider request
+↓
+Shared normalized result
+```
+
+---
+
+# 29. PROVIDER RETRIES
+
+Do not retry provider failures aggressively.
+
+Use controlled exponential backoff for retryable failures.
+
+Do not retry:
+
+```text
+invalid coordinates
+authentication failure
+invalid API key
+unsupported request
+```
+
+indefinitely.
+
+---
+
+# 30. PROVIDER ERROR NORMALIZATION
+
+Frontend must not receive confusing LocationIQ-specific errors.
+
+Normalize them.
+
+Examples:
+
+```text
+LOCATION_NOT_FOUND
+PROVIDER_UNAVAILABLE
+RATE_LIMITED
+INVALID_LOCATION
+NETWORK_ERROR
+LOCATION_PERMISSION_REQUIRED
+```
+
+Frontend displays user-facing language.
+
+---
+
+# 31. CUSTOMER SAVED LOCATIONS
+
+Review existing saved-location implementation.
+
+Do not delete or reset saved addresses.
+
+Ensure saved records include:
+
+```text
+latitude
+longitude
+formatted address
+structured fields
+landmark
+instructions
+source
+geocode confidence
+```
+
+Backfill only when safe.
+
+Do not automatically rewrite existing customer addresses through LocationIQ without necessity.
+
+---
+
+# 32. STATION LOCATION
+
+Review station onboarding and verification.
+
+Preserve existing station application location fields.
+
+LocationIQ should improve:
+
+```text
+address search
+reverse geocoding
+structured address
+location verification context
+```
+
+But coordinates must remain stored.
+
+Station location must continue integrating with:
+
+```text
+service zones
+dispatch
+distance
+station eligibility
+admin verification
+```
+
+---
+
+# 33. DRIVER LOCATION
+
+Do not break:
+
+```text
+driver online status
+live location
+background location
+location freshness
+dispatch eligibility
+tracking
+```
+
+LocationIQ should NOT sit in the critical path of every driver location update.
+
+Driver tracking operates primarily using coordinates.
+
+---
+
+# 34. SERVICE AREAS
+
+Review existing:
+
+```text
+country
+state
+LGA
+city/town
+service zone
+include/exclude
+radius
+polygon
+```
+
+logic before modifying location models.
+
+Do not replace the SKIMA geography/service-area engine with LocationIQ.
+
+LocationIQ helps resolve geography.
+
+SKIMA remains responsible for deciding whether an area is serviceable.
+
+Example:
+
+```text
+LocationIQ:
+This point is in Awka
+
+SKIMA:
+Awka is currently enabled for LPG
+```
+
+Those are different responsibilities.
+
+---
+
+# 35. GEOFENCING
+
+Continue using coordinates/spatial calculations for:
+
+```text
+driver arrival
+station arrival
+customer arrival
+pickup detection
+service-zone boundaries
+```
+
+Geofencing should not depend on converting GPS into a text address.
+
+---
+
+# 36. DATABASE GEOGRAPHY
+
+Where PostGIS is available:
+
+use it appropriately.
+
+Store coordinates correctly.
+
+Examples:
+
+```text
+latitude
+longitude
+geography(Point, 4326)
+```
+
+Do not create duplicate/conflicting spatial truth if an existing geography column already exists.
+
+Audit first.
+
+---
+
+# 37. ADMIN LOCATION VERIFICATION
+
+Improve, do not destroy, the existing admin verification system.
+
+Admin should be able to see:
+
+```text
+Resolved address
+Coordinates
+State
+LGA
+City/Town
+Service-zone result
+Verification status
+Map context
+```
+
+Do not expose raw provider JSON as the main UI.
+
+---
+
+# 38. PROVIDER CONFIGURATION
+
+Provider activation should be server-managed.
+
+Example conceptual configuration:
+
+```text
+location.geocoder.active = locationiq
+location.router.active = locationiq
+
+location.google.enabled = false
+location.mapbox.enabled = false
+```
+
+If the system already uses another configuration convention, follow it.
+
+Do not introduce conflicting configuration systems.
+
+---
+
+# 39. FRONTEND MUST REMAIN PROVIDER-AGNOSTIC
+
+Bad:
+
+```text
+useLocationIQAddress()
+```
+
+throughout feature screens.
+
+Preferred:
+
+```text
+useAddressSearch()
+useReverseGeocode()
+useRoute()
+useCurrentLocation()
+```
+
+The frontend should consume SKIMA concepts.
+
+Provider names should mostly remain an infrastructure concern.
+
+---
+
+# 40. FRONTEND LOADING STATES
+
+Add proper loading states for:
+
+```text
+Getting your location...
+Finding address...
+Searching locations...
+Calculating route...
+Checking service availability...
+```
+
+Do not leave spinner-only screens without context where avoidable.
+
+---
+
+# 41. FRONTEND ERROR STATES
+
+Handle:
+
+```text
+GPS disabled
+Location permission denied
+Location unavailable
+Address not found
+Provider unavailable
+Rate limited
+Poor network
+Location outside service area
+```
+
+Provide retry/manual alternatives.
+
+---
+
+# 42. MANUAL LOCATION FALLBACK
+
+A customer must not become completely blocked because geocoding fails.
+
+Allow:
+
+```text
+map pin / coordinates
++
+manual address
++
+landmark
++
+instructions
+```
+
+SKIMA can still dispatch using coordinates.
+
+---
+
+# 43. LOCATION PERMISSIONS
+
+Do not modify Android/iOS location permissions without checking existing Expo/native configuration.
+
+Preserve:
+
+```text
+foreground location
+background location where required
+Android permissions
+iOS usage descriptions
+```
+
+Do not accidentally break production builds.
+
+---
+
+# 44. BACKGROUND DRIVER TRACKING
+
+Audit current implementation thoroughly.
+
+Do not rewrite background tracking unless necessary.
+
+LocationIQ integration must not increase the background tracking workload.
+
+No reverse geocoding on every tracking event.
+
+---
+
+# 45. REALTIME TRACKING
+
+Tracking should continue flowing:
+
+```text
+Driver device
+↓
+latitude / longitude
+↓
+SKIMA backend/realtime
+↓
+Customer map
+```
+
+NOT:
+
+```text
+Driver
+↓
+LocationIQ
+↓
+address
+↓
+customer
+```
+
+Map marker movement does not require readable addresses.
+
+---
+
+# 46. DISTANCE CALCULATION
+
+Use local/PostGIS/Haversine calculations for broad filtering.
+
+Provider routing is used only for shortlisted candidates.
+
+Do not waste provider calls.
+
+---
+
+# 47. LOCATION DATA VALIDATION
+
+Validate:
+
+```text
+latitude between -90 and 90
+longitude between -180 and 180
+coordinate precision
+NaN/null
+impossible points
+location accuracy
+freshness
+```
+
+Do not trust arbitrary frontend coordinates.
+
+---
+
+# 48. LOCATION FRESHNESS
+
+Driver coordinates must contain timestamp/freshness.
+
+Dispatch should not treat:
+
+```text
+location from 45 minutes ago
+```
+
+as current.
+
+Location freshness policy remains backend-controlled.
+
+---
+
+# 49. LOCATION ACCURACY
+
+Track GPS accuracy.
+
+Do not treat a:
+
+```text
+±2000m
+```
+
+reading the same as:
+
+```text
+±8m
+```
+
+where operational precision matters.
+
+---
+
+# 50. ROUTE GEOMETRY
+
+Where LocationIQ returns route geometry:
+
+normalize and provide it to map rendering.
+
+The frontend should be able to draw:
+
+```text
+driver → customer
+customer → station
+station → customer
+```
+
+without depending on provider-specific shape formats throughout the app.
+
+---
+
+# 51. PROVIDER ATTRIBUTION
+
+Respect required provider/OpenStreetMap attribution.
+
+Do not remove attribution required by provider terms.
+
+Ensure map screens and related surfaces comply with provider requirements.
+
+---
+
+# 52. OBSERVABILITY
+
+Track:
+
+```text
+geocode_requests
+reverse_geocode_requests
+autocomplete_requests
+routing_requests
+provider_success_rate
+provider_latency
+provider_error_rate
+cache_hit_rate
+cache_miss_rate
+rate_limit_events
+quota_exhaustion_events
+location_resolution_failures
+```
+
+---
+
+# 53. ADMIN MAPS/LOCATION STATUS
+
+Add a lightweight operational area where appropriate:
+
+```text
+Maps & Location
+```
+
+Show:
+
+```text
+Active geocoder:
+LocationIQ
+
+Active router:
+LocationIQ
+
+Google:
+Preserved / Inactive
+
+Mapbox:
+Preserved / Inactive
+
+Provider health:
+Healthy
+
+Geocode cache:
+Healthy
+```
+
+Do not expose secrets.
+
+---
+
+# 54. SECURITY
+
+Implement:
+
+```text
+API authentication
+rate limiting
+input validation
+secret protection
+abuse protection
+audit where relevant
+```
+
+Do not create public unrestricted proxy endpoints that attackers can use to consume the LocationIQ quota.
+
+---
+
+# 55. API ENDPOINTS
+
+Use or implement appropriate SKIMA endpoints equivalent to:
+
+```text
+GET /locations/autocomplete
+POST /locations/geocode
+POST /locations/reverse-geocode
+POST /locations/route
+POST /locations/serviceability
+GET /locations/providers/status
+```
+
+Follow current repository conventions.
+
+Do not duplicate existing endpoints if equivalent ones already exist.
+
+---
+
+# 56. CACHE INVALIDATION
+
+Do not cache everything permanently without thinking.
+
+Static geocoding results can have long cache lifetimes.
+
+Route calculations may need shorter lifetimes.
+
+Provider status should have short cache durations.
+
+Implement cache semantics appropriate to each operation.
+
+---
+
+# 57. COST PROTECTION
+
+This migration exists partly because SKIMA has extremely limited funds.
+
+Therefore implement protection against accidental provider cost.
+
+Google and Mapbox must NOT silently become active.
+
+Do not configure automatic paid fallback.
+
+Do not send unnecessary API requests.
+
+Do not continuously geocode moving drivers.
+
+Do not route every dispatch candidate.
+
+Do not repeat cached lookups.
+
+---
+
+# 58. GOOGLE / MAPBOX CODE PRESERVATION TEST
+
+Before completing the work, verify:
+
+```text
+Google Maps provider code still exists.
+Mapbox provider code still exists.
+Their required adapters/components remain intact.
+Their configuration support remains intact.
+They are simply inactive.
+```
+
+Document how either can be re-enabled later.
+
+---
+
+# 59. ROLLBACK SAFETY
+
+Because location is mission critical:
+
+Prepare rollback ability.
+
+If LocationIQ migration causes a serious regression:
+
+the developer must be able to restore the previous provider selection/configuration without reconstructing deleted code.
+
+This is another reason why Google and Mapbox must not be erased.
+
+---
+
+# 60. DO NOT MIGRATE EVERYTHING IN ONE BLIND STEP
+
+Use controlled implementation.
+
+Recommended order:
+
+```text
+1. Audit entire current location implementation.
+
+2. Document existing Google Maps implementation.
+
+3. Document existing Mapbox implementation.
+
+4. Document Expo/native location implementation.
+
+5. Document service-area/location database schema.
+
+6. Document current dispatch dependency on location.
+
+7. Document tracking dependencies.
+
+8. Identify reusable provider abstraction.
+
+9. Preserve working provider code.
+
+10. Add/upgrade provider abstraction only if necessary.
+
+11. Add LocationIQ secure configuration.
+
+12. Implement LocationIQ adapter.
+
+13. Implement normalized address schema.
+
+14. Implement reverse geocoding.
+
+15. Implement geocoding/search.
+
+16. Implement autocomplete with debounce.
+
+17. Add caching.
+
+18. Add spatial/geohash cache matching.
+
+19. Integrate routing.
+
+20. Implement Haversine/PostGIS candidate filtering.
+
+21. Update customer location UX.
+
+22. Update station location UX where necessary.
+
+23. Update driver onboarding location UX where necessary.
+
+24. Update admin location verification where necessary.
+
+25. Verify live driver tracking remains independent of geocoding.
+
+26. Verify background tracking.
+
+27. Verify service-area calculations.
+
+28. Add provider monitoring.
+
+29. Add rate/quota protection.
+
+30. Set LocationIQ active.
+
+31. Explicitly keep Google inactive.
+
+32. Explicitly keep Mapbox inactive.
+
+33. Run complete location E2E tests.
+
+34. Run dispatch E2E tests.
+
+35. Run tracking E2E tests.
+
+36. Build production version.
+
+37. Verify real-device behavior.
+
+38. Verify rollback configuration.
+
+39. Only then consider task complete.
+```
+
+---
+
+# 61. REQUIRED TESTS
+
+## Customer
+
+```text
+Grant location permission
+→ GPS obtained
+→ reverse geocode
+→ readable address shown
+→ landmark added
+→ location saved
+→ app restarted
+→ saved location still works
+```
+
+Test address search:
+
+```text
+type address
+→ autocomplete
+→ select result
+→ map pin/location updated
+→ save
+```
+
+Test geocoder failure:
+
+```text
+LocationIQ fails
+→ customer still has controlled fallback
+```
+
+---
+
+## Station
+
+```text
+Station applies
+→ current location obtained
+→ address resolved
+→ structured geography captured
+→ admin sees location
+→ service-area engine evaluates eligibility
+```
+
+---
+
+## Driver
+
+```text
+Driver goes online
+→ live GPS captured
+→ tracking updates
+→ no repeated reverse-geocode requests
+→ location freshness maintained
+→ dispatch can discover driver
+```
+
+---
+
+## Dispatch
+
+```text
+Customer location
+→ eligible station filtering
+→ eligible driver filtering
+→ PostGIS/Haversine shortlist
+→ route requests only for finalists
+→ assignment
+```
+
+---
+
+## Tracking
+
+```text
+Driver moving
+→ raw coordinates update
+→ customer sees marker move
+→ LocationIQ quota does NOT increase for every movement
+```
+
+---
+
+## Provider
+
+Test:
+
+```text
+valid LocationIQ response
+invalid coordinates
+address not found
+timeout
+network error
+rate limit
+API authentication failure
+provider unavailable
+```
+
+---
+
+## Security
+
+Test:
+
+```text
+API key not exposed in client
+unauthenticated request cannot abuse proxy
+malformed coordinates rejected
+high request volume rate limited
+```
+
+---
+
+# 62. DEFINITION OF DONE
+
+Do not mark this work complete until:
+
+```text
+LocationIQ is actively resolving addresses.
+
+LocationIQ autocomplete works.
+
+LocationIQ routing works where required.
+
+Customer location works.
+
+Station location works.
+
+Driver registration/service locations work.
+
+Admin location verification works.
+
+Live tracking remains functional.
+
+Service-area checks remain functional.
+
+Dispatch remains functional.
+
+Address caching works.
+
+Candidate distance pre-filtering works.
+
+Quota protection works.
+
+LocationIQ key is secure.
+
+Google Maps implementation remains intact.
+
+Mapbox implementation remains intact.
+
+Google is inactive.
+
+Mapbox is inactive.
+
+LocationIQ is active.
+
+No paid-provider fallback occurs automatically.
+
+No customer/station/driver location history is lost.
+
+No existing location database is destructively reset.
+
+No working tracking functionality is removed.
+
+Production build passes location testing.
+```
+
+---
+
+# 63. MOST IMPORTANT WARNING
+
+LOCATION IS ALREADY A MAJOR PART OF SKIMA.
+
+DO NOT APPROACH THIS TASK AS:
+
+```text
+"Remove old maps and install LocationIQ."
+```
+
+That is NOT the task.
+
+The task is:
+
+```text
+Understand existing SKIMA location architecture
+               ↓
+Protect existing implementation
+               ↓
+Add a provider-neutral LocationIQ integration
+               ↓
+Use LocationIQ as the current active provider
+               ↓
+Preserve Google Maps
+               ↓
+Preserve Mapbox
+               ↓
+Improve cost efficiency
+               ↓
+Verify every dependent SKIMA workflow still works
+```
+
+A careless location rewrite can break:
+
+```text
+customer addresses
+station onboarding
+driver onboarding
+driver dispatch
+station eligibility
+service areas
+live tracking
+delivery tracking
+pickup
+arrival detection
+geofencing
+ETA
+order assignment
+admin verification
+```
+
+Therefore:
+
+**Inspect first. Modify second.**
+
+Do not delete before understanding.
+
+Do not replace working code unnecessarily.
+
+Do not reset existing location data.
+
+Do not remove Google Maps.
+
+Do not remove Mapbox.
+
+Do not remove Expo Location.
+
+Do not break service-area rules.
+
+Do not break live tracking.
+
+Do not expose the LocationIQ key.
+
+Do not consume LocationIQ quota on every driver movement.
+
+Do not activate paid provider fallbacks.
+
+The final system must preserve our previous work while making:
+
+# LOCATIONIQ THE ONLY ACTIVE EXTERNAL LOCATION API PROVIDER FOR NOW.
+
+Google Maps and Mapbox must remain available in the codebase and architecture for future use, but they must remain untouched/inactive unless explicitly enabled later.
