@@ -398,7 +398,7 @@ Deno.test("public inventory webhook verifies authenticity before normalized inge
   assertIncludes(
     webhookSource,
     'new WebhookError("signature_required", 401)',
-    "webhook signatures are optional",
+    "webhook signatures must be required",
   );
   assertIncludes(
     webhookSource,
@@ -535,7 +535,7 @@ function gatewayRouteHandler(source: string, route: string, method: "GET" | "POS
   return sectionUntilNext(
     source,
     `if (routePath === "${route}" && request.method === "${method}") {`,
-    /\n  if \(routePath === /g,
+    /\n {2}if \(routePath === /g,
     `${method} ${route} handler`,
   );
 }

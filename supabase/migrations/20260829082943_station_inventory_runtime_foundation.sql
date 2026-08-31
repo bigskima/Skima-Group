@@ -3245,7 +3245,8 @@ declare
 begin
   if auth.role() <> 'service_role'
      and not public.can_manage_lpg_operations()
-     and not public.has_permission('platform.inventory.manage', null) then
+     and not public.has_permission('platform.inventory.manage', null)
+     and not public.has_permission('platform.inventory.override', null) then
     raise exception 'platform inventory operations permission is required';
   end if;
   resolved_limit := least(greatest(coalesce(target_limit, 100), 1), 250);

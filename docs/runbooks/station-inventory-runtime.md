@@ -264,9 +264,8 @@ supabase functions deploy inventory-provider-webhook --project-ref $env:SUPABASE
 provider ingress validates its own configured HMAC signature, so those two functions are deployed
 without the platform JWT gate. Do not remove their application-level authentication checks.
 
-At the time this runbook was added, `npm run supabase:functions:deploy` deploys the baseline five
-functions but does not include `inventory-provider-webhook`. Use the explicit inventory webhook
-deployment command above unless the helper has since been updated and verified.
+The repository helper, `npm run supabase:functions:deploy`, includes all three inventory runtime
+functions. The explicit commands above remain useful when intentionally deploying only this runtime.
 
 ## Release verification
 
