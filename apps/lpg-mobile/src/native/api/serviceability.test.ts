@@ -1,3 +1,5 @@
+jest.mock("../session/SessionProvider", () => ({ useSession: jest.fn() }));
+
 import { LpgServiceabilitySchema } from "./serviceability";
 
 describe("LpgServiceabilitySchema", () => {

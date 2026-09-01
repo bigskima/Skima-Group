@@ -43,6 +43,7 @@ const InventoryStationSchema = z.object({
 });
 
 const InventoryPolicySchema = z.object({
+  configurationVersion: z.coerce.number().int().positive(),
   manualConfirmationIntervalMinutes: z.coerce.number().int().positive(),
   manualWarningIntervalMinutes: z.coerce.number().int().positive(),
   manualStaleIntervalMinutes: z.coerce.number().int().positive(),
@@ -104,6 +105,7 @@ const InventoryOperationsSchema = z.object({
 type InventoryStation = z.infer<typeof InventoryStationSchema>;
 type InventoryPolicy = z.infer<typeof InventoryPolicySchema>;
 type SelectedInventory = z.infer<typeof SelectedInventorySchema>;
+type ActionNotice = { readonly message: string; readonly tone: "success" | "error" };
 
 export function AdminStationInventoryWorkspace() {
   const { status, supabase } = useSessionState();
@@ -205,7 +207,7 @@ export function AdminStationInventoryWorkspace() {
             ) : <p className="skima-muted">No station inventory runtimes are available.</p>}
           </section>
 
-          {selected ? <StationInventoryDetail station={selected} runtime={selectedQuery.data ?? null} policy={query.data.policy} /> : null}
+          {selected ? <StationInventoryDetail key={selected.stationBranchId} station={selected} runtime={selectedQuery.data ?? null} policy={query.data.policy} /> : null}
 
           <section className="sk-panel">
             <div className="sk-panel__header">
@@ -267,7 +269,7 @@ function InventoryOverridePanel({ station, maximumPauseHours }: { readonly stati
   const [action, setAction] = useState<"temporarily_unavailable" | "out_of_stock" | "restore" | "require_reconciliation">("temporarily_unavailable");
   const [durationHours, setDurationHours] = useState("2");
   const [reason, setReason] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<ActionNotice | null>(null);
   const mutation = useMutation({
     mutationFn: async () => {
       if (reason.trim().length < 5) throw new Error("Add a short reason for this exceptional action.");
@@ -286,11 +288,11 @@ function InventoryOverridePanel({ station, maximumPauseHours }: { readonly stati
       if (result.error) throw result.error;
     },
     onSuccess: async () => {
-      setNotice("The audited inventory control was applied.");
+      setNotice({ message: "The audited inventory control was applied.", tone: "success" });
       setReason("");
       await queryClient.invalidateQueries({ queryKey: ["admin-station-inventory"] });
     },
-    onError: (error) => setNotice(readError(error)),
+    onError: (error) => setNotice({ message: readError(error), tone: "error" }),
   });
   const actions = [
     ["temporarily_unavailable", "Pause dispatch"], ["out_of_stock", "Mark out of stock"],
@@ -298,10 +300,10 @@ function InventoryOverridePanel({ station, maximumPauseHours }: { readonly stati
   ] as const;
   return <div style={{ border: "1px solid var(--sk-border, #d0d5dd)", borderRadius: 14, padding: "1rem", marginTop: "1rem", display: "grid", gap: "0.8rem" }}>
     <div><p className="admin-section-kicker">Audited controls</p><h3 style={{ margin: 0 }}>Exceptional inventory action</h3><p className="skima-muted">These controls pause or restore dispatch without changing measured stock.</p></div>
-    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.55rem" }}>{actions.map(([key, label]) => <Button key={key} variant={action === key ? "primary" : "outline"} onClick={() => setAction(key)}>{label}</Button>)}</div>
+    <div role="group" aria-label="Inventory action" style={{ display: "flex", flexWrap: "wrap", gap: "0.55rem" }}>{actions.map(([key, label]) => <Button key={key} aria-pressed={action === key} variant={action === key ? "primary" : "outline"} onClick={() => setAction(key)}>{label}</Button>)}</div>
     {action === "temporarily_unavailable" ? <TextInput label="Pause duration (hours)" type="number" value={durationHours} onChange={(event) => setDurationHours(event.currentTarget.value)} /> : null}
     <TextInput label="Reason for this action" value={reason} onChange={(event) => setReason(event.currentTarget.value)} />
-    {notice ? <div role="status" style={{ background: "rgba(15, 157, 138, 0.08)", borderRadius: 10, padding: "0.7rem" }}>{notice}</div> : null}
+    {notice ? <div role={notice.tone === "error" ? "alert" : "status"} style={{ background: notice.tone === "error" ? "rgba(239, 68, 68, 0.10)" : "rgba(15, 157, 138, 0.08)", borderRadius: 10, padding: "0.7rem" }}>{notice.message}</div> : null}
     <Button icon={Save} isLoading={mutation.isPending} onClick={() => { setNotice(null); mutation.mutate(); }}>Apply audited action</Button>
   </div>;
 }
@@ -311,7 +313,13 @@ function ReconciliationPanel({ cases }: { readonly cases: SelectedInventory["rec
   const queryClient = useQueryClient();
   const [selectedReference, setSelectedReference] = useState(cases[0]?.publicReference ?? "");
   const [resolution, setResolution] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<ActionNotice | null>(null);
+  useEffect(() => {
+    if (cases.some((item) => item.publicReference === selectedReference)) return;
+    setSelectedReference(cases[0]?.publicReference ?? "");
+    setResolution("");
+    setNotice(null);
+  }, [cases, selectedReference]);
   const mutation = useMutation({
     mutationFn: async (status: "resolved" | "dismissed" | "escalated") => {
       if (!selectedReference) throw new Error("Choose a reconciliation case.");
@@ -327,17 +335,17 @@ function ReconciliationPanel({ cases }: { readonly cases: SelectedInventory["rec
       if (result.error) throw result.error;
     },
     onSuccess: async () => {
-      setNotice("Reconciliation decision was recorded.");
+      setNotice({ message: "Reconciliation decision was recorded.", tone: "success" });
       setResolution("");
       await queryClient.invalidateQueries({ queryKey: ["admin-station-inventory"] });
     },
-    onError: (error) => setNotice(readError(error)),
+    onError: (error) => setNotice({ message: readError(error), tone: "error" }),
   });
   return <div style={{ border: "1px solid var(--sk-border, #d0d5dd)", borderRadius: 14, padding: "1rem", marginTop: "1rem", display: "grid", gap: "0.8rem" }}>
     <div><p className="admin-section-kicker">Evidence review</p><h3 style={{ margin: 0 }}>Open reconciliation cases</h3></div>
-    <div style={{ display: "grid", gap: "0.55rem" }}>{cases.map((item) => <button key={item.publicReference ?? item.summary} type="button" onClick={() => setSelectedReference(item.publicReference ?? "")} style={{ textAlign: "left", cursor: "pointer", border: selectedReference === item.publicReference ? "2px solid var(--sk-brand, #0f9d8a)" : "1px solid var(--sk-border, #d0d5dd)", background: "transparent", color: "inherit", padding: "0.75rem", borderRadius: 10 }}><strong>{item.summary}</strong><div className="skima-muted">{friendly(item.severity)} · {friendly(item.status)} · {item.publicReference ?? "Reference pending"}</div></button>)}</div>
+    <div style={{ display: "grid", gap: "0.55rem" }}>{cases.map((item) => <button key={item.publicReference ?? item.summary} type="button" aria-pressed={selectedReference === item.publicReference} onClick={() => setSelectedReference(item.publicReference ?? "")} style={{ textAlign: "left", cursor: "pointer", border: selectedReference === item.publicReference ? "2px solid var(--sk-brand, #0f9d8a)" : "1px solid var(--sk-border, #d0d5dd)", background: "transparent", color: "inherit", padding: "0.75rem", borderRadius: 10 }}><strong>{item.summary}</strong><div className="skima-muted">{friendly(item.severity)} · {friendly(item.status)} · {item.publicReference ?? "Reference pending"}</div></button>)}</div>
     <TextInput label="Decision notes" value={resolution} onChange={(event) => setResolution(event.currentTarget.value)} />
-    {notice ? <div role="status" style={{ borderRadius: 10, padding: "0.7rem", background: "rgba(15, 157, 138, 0.08)" }}>{notice}</div> : null}
+    {notice ? <div role={notice.tone === "error" ? "alert" : "status"} style={{ borderRadius: 10, padding: "0.7rem", background: notice.tone === "error" ? "rgba(239, 68, 68, 0.10)" : "rgba(15, 157, 138, 0.08)" }}>{notice.message}</div> : null}
     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.55rem" }}><Button isLoading={mutation.isPending} onClick={() => mutation.mutate("resolved")}>Resolve</Button><Button variant="outline" isLoading={mutation.isPending} onClick={() => mutation.mutate("dismissed")}>Dismiss</Button><Button variant="outline" isLoading={mutation.isPending} onClick={() => mutation.mutate("escalated")}>Escalate</Button></div>
   </div>;
 }
@@ -350,11 +358,14 @@ function InventoryPolicyEditor({ policy, onSaved }: { readonly policy: Inventory
   const { supabase } = useSessionState();
   const queryClient = useQueryClient();
   const [values, setValues] = useState(() => policyToStrings(policy));
+  const [expectedVersion] = useState(policy.configurationVersion);
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const policyChangedWhileEditing = policy.configurationVersion !== expectedVersion;
   const mutation = useMutation({
     mutationFn: async () => {
       const parsed = InventoryPolicySchema.parse({
+        configurationVersion: expectedVersion,
         manualConfirmationIntervalMinutes: values.manualConfirmationIntervalMinutes,
         manualWarningIntervalMinutes: values.manualWarningIntervalMinutes,
         manualStaleIntervalMinutes: values.manualStaleIntervalMinutes,
@@ -384,43 +395,39 @@ function InventoryPolicyEditor({ policy, onSaved }: { readonly policy: Inventory
         unexpectedStockoutReliabilityPenalty: values.unexpectedStockoutReliabilityPenalty,
       });
       if (reason.trim().length < 5) throw new Error("Add a short reason for the policy change.");
-      const result = await supabase.rpc("configure_inventory_runtime_policy", {
-        target_manual_confirmation_interval_minutes: parsed.manualConfirmationIntervalMinutes,
-        target_manual_warning_interval_minutes: parsed.manualWarningIntervalMinutes,
-        target_manual_stale_interval_minutes: parsed.manualStaleIntervalMinutes,
-        target_dispatch_blocking_interval_minutes: parsed.dispatchBlockingIntervalMinutes,
-        target_safety_reserve_mode: parsed.safetyReserveMode,
-        target_safety_reserve_value: parsed.safetyReserveValue,
-        target_low_stock_percentage: parsed.lowStockPercentage,
-        target_critical_stock_percentage: parsed.criticalStockPercentage,
-        target_reservation_expiry_minutes: parsed.reservationExpiryMinutes,
-        target_discrepancy_tolerance_kg: parsed.discrepancyToleranceKg,
-        target_manual_fallback_maximum_hours: parsed.manualFallbackMaximumHours,
-        target_minimum_dispatch_confidence: parsed.minimumDispatchConfidence,
-        target_change_reason: reason.trim(),
-        target_idempotency_key: createClientIdempotencyKey("admin.inventory-policy", "global"),
-      });
-      if (result.error) throw result.error;
-      const automationResult = await supabase.rpc("configure_inventory_automation_policy", {
+      const result = await supabase.rpc("configure_inventory_control_policy", {
         target_actual_fill_tolerance_kg: parsed.actualFillToleranceKg,
         target_alert_reminder_interval_minutes: parsed.alertReminderIntervalMinutes,
         target_change_reason: reason.trim(),
-        target_idempotency_key: createClientIdempotencyKey("admin.inventory-automation-policy", "global"),
+        target_critical_stock_percentage: parsed.criticalStockPercentage,
+        target_discrepancy_tolerance_kg: parsed.discrepancyToleranceKg,
+        target_dispatch_blocking_interval_minutes: parsed.dispatchBlockingIntervalMinutes,
+        target_expected_version: expectedVersion,
+        target_idempotency_key: createClientIdempotencyKey("admin.inventory-policy", "global"),
+        target_low_stock_percentage: parsed.lowStockPercentage,
+        target_manual_confirmation_interval_minutes: parsed.manualConfirmationIntervalMinutes,
+        target_manual_fallback_maximum_hours: parsed.manualFallbackMaximumHours,
+        target_manual_stale_interval_minutes: parsed.manualStaleIntervalMinutes,
+        target_manual_warning_interval_minutes: parsed.manualWarningIntervalMinutes,
         target_maximum_actual_fill_overage_kg: parsed.maximumActualFillOverageKg,
         target_maximum_availability_pause_hours: parsed.maximumAvailabilityPauseHours,
+        target_minimum_dispatch_confidence: parsed.minimumDispatchConfidence,
         target_provider_degraded_interval_minutes: parsed.providerDegradedIntervalMinutes,
         target_provider_health_check_interval_minutes: parsed.providerHealthCheckIntervalMinutes,
         target_provider_offline_interval_minutes: parsed.providerOfflineIntervalMinutes,
         target_provider_retry_base_seconds: parsed.providerRetryBaseSeconds,
         target_provider_retry_maximum_attempts: parsed.providerRetryMaximumAttempts,
         target_provider_sync_interval_minutes: parsed.providerSyncIntervalMinutes,
+        target_reservation_expiry_minutes: parsed.reservationExpiryMinutes,
+        target_safety_reserve_mode: parsed.safetyReserveMode,
+        target_safety_reserve_value: parsed.safetyReserveValue,
         target_source_disagreement_critical_percentage: parsed.sourceDisagreementCriticalPercentage,
         target_source_disagreement_warning_percentage: parsed.sourceDisagreementWarningPercentage,
         target_telemetry_stale_interval_minutes: parsed.telemetryStaleIntervalMinutes,
         target_telemetry_warning_interval_minutes: parsed.telemetryWarningIntervalMinutes,
         target_unexpected_stockout_reliability_penalty: parsed.unexpectedStockoutReliabilityPenalty,
       });
-      if (automationResult.error) throw automationResult.error;
+      if (result.error) throw result.error;
     },
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["admin-station-inventory"] }); onSaved(); },
     onError: (error) => setNotice(readError(error)),
@@ -454,13 +461,14 @@ function InventoryPolicyEditor({ policy, onSaved }: { readonly policy: Inventory
       <TextInput label="Maximum fill overage (kg)" type="number" value={values.maximumActualFillOverageKg} onChange={(event) => set("maximumActualFillOverageKg", event.currentTarget.value)} />
       <TextInput label="Unexpected stockout reliability penalty" type="number" value={values.unexpectedStockoutReliabilityPenalty} onChange={(event) => set("unexpectedStockoutReliabilityPenalty", event.currentTarget.value)} />
     </div>
-    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
-      {(["percentage", "fixed_kg"] as const).map((mode) => <Button key={mode} variant={values.safetyReserveMode === mode ? "primary" : "outline"} onClick={() => set("safetyReserveMode", mode)}>{mode === "percentage" ? "Reserve percentage" : "Reserve fixed kg"}</Button>)}
-      {(["HIGH", "MEDIUM", "LOW"] as const).map((confidence) => <Button key={confidence} variant={values.minimumDispatchConfidence === confidence ? "primary" : "outline"} onClick={() => set("minimumDispatchConfidence", confidence)}>{friendly(confidence)} minimum confidence</Button>)}
+    <div role="group" aria-label="Inventory policy choices" style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
+      {(["percentage", "fixed_kg"] as const).map((mode) => <Button key={mode} aria-pressed={values.safetyReserveMode === mode} variant={values.safetyReserveMode === mode ? "primary" : "outline"} onClick={() => set("safetyReserveMode", mode)}>{mode === "percentage" ? "Reserve percentage" : "Reserve fixed kg"}</Button>)}
+      {(["HIGH", "MEDIUM", "LOW"] as const).map((confidence) => <Button key={confidence} aria-pressed={values.minimumDispatchConfidence === confidence} variant={values.minimumDispatchConfidence === confidence ? "primary" : "outline"} onClick={() => set("minimumDispatchConfidence", confidence)}>{friendly(confidence)} minimum confidence</Button>)}
     </div>
     <TextInput label="Reason for this change" value={reason} onChange={(event) => setReason(event.currentTarget.value)} />
+    {policyChangedWhileEditing ? <div role="alert" style={{ background: "rgba(245, 158, 11, 0.12)", padding: "0.8rem", borderRadius: 12 }}>These settings changed while you were editing. Close this form and review the latest policy before saving.</div> : null}
     {notice ? <div role="alert" style={{ background: "rgba(239, 68, 68, 0.10)", padding: "0.8rem", borderRadius: 12 }}>{notice}</div> : null}
-    <Button icon={Save} isLoading={mutation.isPending} onClick={() => { setNotice(null); mutation.mutate(); }}>Save and activate policy</Button>
+    <Button icon={Save} disabled={policyChangedWhileEditing} isLoading={mutation.isPending} onClick={() => { setNotice(null); mutation.mutate(); }}>Save and activate policy</Button>
   </div>;
 }
 

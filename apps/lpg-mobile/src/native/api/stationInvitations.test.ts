@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import { invitationIdFromMessage, isStationInvitationMessage, resolveStationInvitation } from "./stationInvitations";
 
 const invitationId = "8efb01f1-3aed-4474-9dd2-eb2057f1a80f";

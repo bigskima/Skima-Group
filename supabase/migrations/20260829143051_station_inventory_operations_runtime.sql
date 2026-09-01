@@ -2272,6 +2272,126 @@ begin
 end;
 $$;
 
+create or replace function public.configure_inventory_control_policy(
+  target_manual_confirmation_interval_minutes integer,
+  target_manual_warning_interval_minutes integer,
+  target_manual_stale_interval_minutes integer,
+  target_dispatch_blocking_interval_minutes integer,
+  target_safety_reserve_mode text,
+  target_safety_reserve_value numeric,
+  target_low_stock_percentage numeric,
+  target_critical_stock_percentage numeric,
+  target_reservation_expiry_minutes integer,
+  target_discrepancy_tolerance_kg numeric,
+  target_manual_fallback_maximum_hours numeric,
+  target_minimum_dispatch_confidence text,
+  target_provider_sync_interval_minutes integer,
+  target_provider_health_check_interval_minutes integer,
+  target_provider_degraded_interval_minutes integer,
+  target_provider_offline_interval_minutes integer,
+  target_provider_retry_maximum_attempts integer,
+  target_provider_retry_base_seconds integer,
+  target_telemetry_warning_interval_minutes integer,
+  target_telemetry_stale_interval_minutes integer,
+  target_alert_reminder_interval_minutes integer,
+  target_maximum_availability_pause_hours integer,
+  target_source_disagreement_warning_percentage numeric,
+  target_source_disagreement_critical_percentage numeric,
+  target_actual_fill_tolerance_kg numeric,
+  target_maximum_actual_fill_overage_kg numeric,
+  target_unexpected_stockout_reliability_penalty numeric,
+  target_expected_version integer,
+  target_change_reason text,
+  target_idempotency_key text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  current_entry public.configuration_entries%rowtype;
+  existing_entry_id uuid;
+  final_entry_id uuid;
+begin
+  if auth.role() <> 'service_role'
+     and not public.is_platform_super_admin()
+     and not public.has_permission('platform.inventory.manage', null) then
+    raise exception 'platform inventory policy permission is required';
+  end if;
+  if nullif(btrim(target_idempotency_key), '') is null then
+    raise exception 'target_idempotency_key is required';
+  end if;
+
+  select entry.id into existing_entry_id
+  from public.configuration_entries entry
+  where entry.namespace = 'module.inventory'
+    and entry.key = 'lpg.runtime-policy'
+    and entry.value ->> 'changeIdempotencyKey' = target_idempotency_key
+    and entry.value ->> 'automationChangeIdempotencyKey' = target_idempotency_key
+  order by entry.version desc
+  limit 1;
+  if found then return existing_entry_id; end if;
+
+  select entry.* into current_entry
+  from public.configuration_entries entry
+  where entry.namespace = 'module.inventory'
+    and entry.key = 'lpg.runtime-policy'
+    and entry.scope_type = 'global'
+    and entry.scope_id is null
+    and entry.status = 'active'
+  order by entry.version desc
+  limit 1
+  for update;
+  if not found then raise exception 'active inventory runtime policy is required'; end if;
+  if target_expected_version is null then
+    raise exception 'target_expected_version is required';
+  end if;
+  if current_entry.version <> target_expected_version then
+    raise exception 'inventory policy changed after it was opened; refresh and review the latest settings';
+  end if;
+
+  perform public.configure_inventory_runtime_policy(
+    target_manual_confirmation_interval_minutes => target_manual_confirmation_interval_minutes,
+    target_manual_warning_interval_minutes => target_manual_warning_interval_minutes,
+    target_manual_stale_interval_minutes => target_manual_stale_interval_minutes,
+    target_dispatch_blocking_interval_minutes => target_dispatch_blocking_interval_minutes,
+    target_safety_reserve_mode => target_safety_reserve_mode,
+    target_safety_reserve_value => target_safety_reserve_value,
+    target_low_stock_percentage => target_low_stock_percentage,
+    target_critical_stock_percentage => target_critical_stock_percentage,
+    target_reservation_expiry_minutes => target_reservation_expiry_minutes,
+    target_discrepancy_tolerance_kg => target_discrepancy_tolerance_kg,
+    target_manual_fallback_maximum_hours => target_manual_fallback_maximum_hours,
+    target_minimum_dispatch_confidence => target_minimum_dispatch_confidence,
+    target_change_reason => target_change_reason,
+    target_idempotency_key => target_idempotency_key
+  );
+
+  final_entry_id := public.configure_inventory_automation_policy(
+    target_provider_sync_interval_minutes => target_provider_sync_interval_minutes,
+    target_provider_health_check_interval_minutes => target_provider_health_check_interval_minutes,
+    target_provider_degraded_interval_minutes => target_provider_degraded_interval_minutes,
+    target_provider_offline_interval_minutes => target_provider_offline_interval_minutes,
+    target_provider_retry_maximum_attempts => target_provider_retry_maximum_attempts,
+    target_provider_retry_base_seconds => target_provider_retry_base_seconds,
+    target_telemetry_warning_interval_minutes => target_telemetry_warning_interval_minutes,
+    target_telemetry_stale_interval_minutes => target_telemetry_stale_interval_minutes,
+    target_alert_reminder_interval_minutes => target_alert_reminder_interval_minutes,
+    target_maximum_availability_pause_hours => target_maximum_availability_pause_hours,
+    target_source_disagreement_warning_percentage => target_source_disagreement_warning_percentage,
+    target_source_disagreement_critical_percentage => target_source_disagreement_critical_percentage,
+    target_actual_fill_tolerance_kg => target_actual_fill_tolerance_kg,
+    target_maximum_actual_fill_overage_kg => target_maximum_actual_fill_overage_kg,
+    target_unexpected_stockout_reliability_penalty => target_unexpected_stockout_reliability_penalty,
+    target_change_reason => target_change_reason,
+    target_idempotency_key => target_idempotency_key
+  );
+
+  return final_entry_id;
+end;
+$$;
+
 alter function public.read_lpg_station_inventory(uuid, integer)
 rename to read_lpg_station_inventory_base;
 
@@ -2444,6 +2564,7 @@ declare
   base_payload jsonb;
   runtime_policy jsonb;
   enriched_stations jsonb;
+  policy_version integer;
 begin
   if auth.role() <> 'service_role'
      and not public.can_manage_lpg_operations()
@@ -2457,6 +2578,15 @@ begin
     target_limit
   );
   runtime_policy := public.inventory_runtime_policy();
+  select entry.version into policy_version
+  from public.configuration_entries entry
+  where entry.namespace = 'module.inventory'
+    and entry.key = 'lpg.runtime-policy'
+    and entry.scope_type = 'global'
+    and entry.scope_id is null
+    and entry.status = 'active'
+  order by entry.version desc
+  limit 1;
 
   select coalesce(jsonb_agg(
     station_payload || jsonb_build_object(
@@ -2499,7 +2629,8 @@ begin
       'sourceDisagreementCriticalPercentage', (runtime_policy ->> 'sourceDisagreementCriticalPercentage')::numeric,
       'actualFillToleranceKg', (runtime_policy ->> 'actualFillToleranceKg')::numeric,
       'maximumActualFillOverageKg', (runtime_policy ->> 'maximumActualFillOverageKg')::numeric,
-      'unexpectedStockoutReliabilityPenalty', (runtime_policy ->> 'unexpectedStockoutReliabilityPenalty')::numeric
+      'unexpectedStockoutReliabilityPenalty', (runtime_policy ->> 'unexpectedStockoutReliabilityPenalty')::numeric,
+      'configurationVersion', policy_version
     ),
     'activeAlerts', coalesce((
       select jsonb_agg(jsonb_build_object(
@@ -2652,6 +2783,10 @@ from public, anon;
 revoke all on function public.apply_lpg_inventory_admin_override(uuid, text, text, text, timestamptz, bigint, jsonb, text)
 from public, anon;
 revoke all on function public.configure_inventory_automation_policy(integer, integer, integer, integer, integer, integer, integer, integer, integer, integer, numeric, numeric, numeric, numeric, numeric, text, text)
+from public, anon, authenticated;
+revoke all on function public.configure_inventory_runtime_policy(integer, integer, integer, integer, text, numeric, numeric, numeric, integer, numeric, numeric, text, text, text)
+from authenticated;
+revoke all on function public.configure_inventory_control_policy(integer, integer, integer, integer, text, numeric, numeric, numeric, integer, numeric, numeric, text, integer, integer, integer, integer, integer, integer, integer, integer, integer, integer, numeric, numeric, numeric, numeric, numeric, integer, text, text)
 from public, anon;
 
 revoke all on function public.read_lpg_inventory_provider_runtime_context(uuid)
@@ -2691,7 +2826,11 @@ grant execute on function public.report_lpg_inventory_unexpected_stockout(uuid, 
 to authenticated, service_role;
 grant execute on function public.apply_lpg_inventory_admin_override(uuid, text, text, text, timestamptz, bigint, jsonb, text)
 to authenticated, service_role;
+grant execute on function public.configure_inventory_runtime_policy(integer, integer, integer, integer, text, numeric, numeric, numeric, integer, numeric, numeric, text, text, text)
+to service_role;
 grant execute on function public.configure_inventory_automation_policy(integer, integer, integer, integer, integer, integer, integer, integer, integer, integer, numeric, numeric, numeric, numeric, numeric, text, text)
+to service_role;
+grant execute on function public.configure_inventory_control_policy(integer, integer, integer, integer, text, numeric, numeric, numeric, integer, numeric, numeric, text, integer, integer, integer, integer, integer, integer, integer, integer, integer, integer, numeric, numeric, numeric, numeric, numeric, integer, text, text)
 to authenticated, service_role;
 
 grant execute on function public.read_lpg_station_inventory_base(uuid, integer) to service_role;

@@ -90,7 +90,6 @@ const ROUTES = new Set([
   "/lpg/stations/inventory/provider-connections/disconnect",
   "/admin/station-inventory",
   "/admin/station-inventory/policy",
-  "/admin/station-inventory/automation-policy",
   "/admin/station-inventory/reconciliation",
   "/admin/station-inventory/override",
   "/lpg/jobs",
@@ -1199,21 +1198,37 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     if ("response" in body) return body.response;
     const payload = body.value;
     return rpcResponse(
-      supabase.rpc("configure_inventory_runtime_policy", {
+      supabase.rpc("configure_inventory_control_policy", {
+        target_actual_fill_tolerance_kg: requireNumber(payload.actualFillToleranceKg, "actualFillToleranceKg"),
+        target_alert_reminder_interval_minutes: requireInteger(payload.alertReminderIntervalMinutes, "alertReminderIntervalMinutes"),
         target_change_reason: requireString(payload.changeReason, "changeReason"),
         target_critical_stock_percentage: requireNumber(payload.criticalStockPercentage, "criticalStockPercentage"),
         target_discrepancy_tolerance_kg: requireNumber(payload.discrepancyToleranceKg, "discrepancyToleranceKg"),
         target_dispatch_blocking_interval_minutes: requireInteger(payload.dispatchBlockingIntervalMinutes, "dispatchBlockingIntervalMinutes"),
+        target_expected_version: requireInteger(payload.expectedVersion, "expectedVersion"),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_low_stock_percentage: requireNumber(payload.lowStockPercentage, "lowStockPercentage"),
         target_manual_confirmation_interval_minutes: requireInteger(payload.manualConfirmationIntervalMinutes, "manualConfirmationIntervalMinutes"),
         target_manual_fallback_maximum_hours: requireNumber(payload.manualFallbackMaximumHours, "manualFallbackMaximumHours"),
         target_manual_stale_interval_minutes: requireInteger(payload.manualStaleIntervalMinutes, "manualStaleIntervalMinutes"),
         target_manual_warning_interval_minutes: requireInteger(payload.manualWarningIntervalMinutes, "manualWarningIntervalMinutes"),
+        target_maximum_actual_fill_overage_kg: requireNumber(payload.maximumActualFillOverageKg, "maximumActualFillOverageKg"),
+        target_maximum_availability_pause_hours: requireInteger(payload.maximumAvailabilityPauseHours, "maximumAvailabilityPauseHours"),
         target_minimum_dispatch_confidence: requireString(payload.minimumDispatchConfidence, "minimumDispatchConfidence"),
+        target_provider_degraded_interval_minutes: requireInteger(payload.providerDegradedIntervalMinutes, "providerDegradedIntervalMinutes"),
+        target_provider_health_check_interval_minutes: requireInteger(payload.providerHealthCheckIntervalMinutes, "providerHealthCheckIntervalMinutes"),
+        target_provider_offline_interval_minutes: requireInteger(payload.providerOfflineIntervalMinutes, "providerOfflineIntervalMinutes"),
+        target_provider_retry_base_seconds: requireInteger(payload.providerRetryBaseSeconds, "providerRetryBaseSeconds"),
+        target_provider_retry_maximum_attempts: requireInteger(payload.providerRetryMaximumAttempts, "providerRetryMaximumAttempts"),
+        target_provider_sync_interval_minutes: requireInteger(payload.providerSyncIntervalMinutes, "providerSyncIntervalMinutes"),
         target_reservation_expiry_minutes: requireInteger(payload.reservationExpiryMinutes, "reservationExpiryMinutes"),
         target_safety_reserve_mode: requireString(payload.safetyReserveMode, "safetyReserveMode"),
         target_safety_reserve_value: requireNumber(payload.safetyReserveValue, "safetyReserveValue"),
+        target_source_disagreement_critical_percentage: requireNumber(payload.sourceDisagreementCriticalPercentage, "sourceDisagreementCriticalPercentage"),
+        target_source_disagreement_warning_percentage: requireNumber(payload.sourceDisagreementWarningPercentage, "sourceDisagreementWarningPercentage"),
+        target_telemetry_stale_interval_minutes: requireInteger(payload.telemetryStaleIntervalMinutes, "telemetryStaleIntervalMinutes"),
+        target_telemetry_warning_interval_minutes: requireInteger(payload.telemetryWarningIntervalMinutes, "telemetryWarningIntervalMinutes"),
+        target_unexpected_stockout_reliability_penalty: requireNumber(payload.unexpectedStockoutReliabilityPenalty, "unexpectedStockoutReliabilityPenalty"),
       }),
       id,
     );
@@ -1231,34 +1246,6 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_resolution: requireString(payload.resolution, "resolution"),
         target_source: optionalString(payload.source) ?? "skima.lpg.inventory.reconciliation",
         target_status: requireString(payload.status, "status"),
-      }),
-      id,
-    );
-  }
-
-  if (routePath === "/admin/station-inventory/automation-policy" && request.method === "POST") {
-    const body = await readJsonBody(request, id);
-    if ("response" in body) return body.response;
-    const payload = body.value;
-    return rpcResponse(
-      supabase.rpc("configure_inventory_automation_policy", {
-        target_actual_fill_tolerance_kg: requireNumber(payload.actualFillToleranceKg, "actualFillToleranceKg"),
-        target_alert_reminder_interval_minutes: requireInteger(payload.alertReminderIntervalMinutes, "alertReminderIntervalMinutes"),
-        target_change_reason: requireString(payload.changeReason, "changeReason"),
-        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-        target_maximum_actual_fill_overage_kg: requireNumber(payload.maximumActualFillOverageKg, "maximumActualFillOverageKg"),
-        target_maximum_availability_pause_hours: requireInteger(payload.maximumAvailabilityPauseHours, "maximumAvailabilityPauseHours"),
-        target_provider_degraded_interval_minutes: requireInteger(payload.providerDegradedIntervalMinutes, "providerDegradedIntervalMinutes"),
-        target_provider_health_check_interval_minutes: requireInteger(payload.providerHealthCheckIntervalMinutes, "providerHealthCheckIntervalMinutes"),
-        target_provider_offline_interval_minutes: requireInteger(payload.providerOfflineIntervalMinutes, "providerOfflineIntervalMinutes"),
-        target_provider_retry_base_seconds: requireInteger(payload.providerRetryBaseSeconds, "providerRetryBaseSeconds"),
-        target_provider_retry_maximum_attempts: requireInteger(payload.providerRetryMaximumAttempts, "providerRetryMaximumAttempts"),
-        target_provider_sync_interval_minutes: requireInteger(payload.providerSyncIntervalMinutes, "providerSyncIntervalMinutes"),
-        target_source_disagreement_critical_percentage: requireNumber(payload.sourceDisagreementCriticalPercentage, "sourceDisagreementCriticalPercentage"),
-        target_source_disagreement_warning_percentage: requireNumber(payload.sourceDisagreementWarningPercentage, "sourceDisagreementWarningPercentage"),
-        target_telemetry_stale_interval_minutes: requireInteger(payload.telemetryStaleIntervalMinutes, "telemetryStaleIntervalMinutes"),
-        target_telemetry_warning_interval_minutes: requireInteger(payload.telemetryWarningIntervalMinutes, "telemetryWarningIntervalMinutes"),
-        target_unexpected_stockout_reliability_penalty: requireNumber(payload.unexpectedStockoutReliabilityPenalty, "unexpectedStockoutReliabilityPenalty"),
       }),
       id,
     );

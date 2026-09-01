@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import process from "node:process";
 
 const target = process.argv[2];
 const relevantPaths = target === "admin"

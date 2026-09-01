@@ -22,14 +22,16 @@ Deno.serve(async (request: Request): Promise<Response> => {
   });
   let receiptId: string | null = null;
   let connectionId: string | null = null;
-  let startedAt = performance.now();
+  const startedAt = performance.now();
 
   try {
     const connectionReference = readConnectionReference(request);
-    const context = record(await rpcData(supabase.rpc(
-      "read_lpg_inventory_provider_webhook_context",
-      { target_connection_public_reference: connectionReference },
-    )));
+    const context = record(
+      await rpcData(supabase.rpc(
+        "read_lpg_inventory_provider_webhook_context",
+        { target_connection_public_reference: connectionReference },
+      )),
+    );
     connectionId = string(context.connectionId);
     const providerKey = string(context.providerKey);
     const adapterConfig = record(context.adapterConfig);
@@ -88,36 +90,40 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
     const payloadDigest = await sha256Hex(rawBody);
     const sourceIpHash = await hmacSha256(secret, sourceIp(request));
-    const rateLimit = record(await rpcData(supabase.rpc("check_rate_limit", {
-      target_increment: 1,
-      target_policy_key: "webhook.inventory-provider.default",
-      target_subject: `${connectionId}:${sourceIpHash}`,
-    })));
+    const rateLimit = record(
+      await rpcData(supabase.rpc("check_rate_limit", {
+        target_increment: 1,
+        target_policy_key: "webhook.inventory-provider.default",
+        target_subject: `${connectionId}:${sourceIpHash}`,
+      })),
+    );
     if (rateLimit.allowed !== true) throw new WebhookError("rate_limited", 429);
 
     const eventIdHeader = optionalString(webhook.eventIdHeader);
     const mappedEventReference = optionalString(mapping.eventReferencePath)
       ? readPath(payload, string(mapping.eventReferencePath))
       : null;
-    const providerEventReference = (eventIdHeader
-      ? request.headers.get(safeHeaderName(eventIdHeader))
-      : null) ?? (mappedEventReference === null || mappedEventReference === undefined
-      ? payloadDigest
-      : String(mappedEventReference));
+    const providerEventReference =
+      (eventIdHeader ? request.headers.get(safeHeaderName(eventIdHeader)) : null) ??
+        (mappedEventReference === null || mappedEventReference === undefined
+          ? payloadDigest
+          : String(mappedEventReference));
     if (!providerEventReference.trim() || providerEventReference.length > 500) {
       throw new WebhookError("event_reference_invalid", 400);
     }
 
     const signatureDigest = await sha256Hex(normalizedSignature.toLowerCase());
-    const begin = record(await rpcData(supabase.rpc("begin_lpg_inventory_provider_webhook", {
-      target_connection_id: connectionId,
-      target_metadata: { providerKey, requestId: id },
-      target_payload_digest: payloadDigest,
-      target_provider_event_reference: providerEventReference,
-      target_provider_timestamp: providerTimestamp.toISOString(),
-      target_signature_digest: signatureDigest,
-      target_source_ip_hash: sourceIpHash,
-    })));
+    const begin = record(
+      await rpcData(supabase.rpc("begin_lpg_inventory_provider_webhook", {
+        target_connection_id: connectionId,
+        target_metadata: { providerKey, requestId: id },
+        target_payload_digest: payloadDigest,
+        target_provider_event_reference: providerEventReference,
+        target_provider_timestamp: providerTimestamp.toISOString(),
+        target_signature_digest: signatureDigest,
+        target_source_ip_hash: sourceIpHash,
+      })),
+    );
     receiptId = string(begin.receiptId);
     if (begin.duplicate === true) {
       return jsonResponse({ ok: true, duplicate: true, requestId: id }, 200);
@@ -219,7 +225,10 @@ Deno.serve(async (request: Request): Promise<Response> => {
       severity: webhookError.status >= 500 ? "error" : "warning",
       source: "inventory-provider-webhook",
     }));
-    return jsonResponse({ ok: false, error: webhookError.code, requestId: id }, webhookError.status);
+    return jsonResponse(
+      { ok: false, error: webhookError.code, requestId: id },
+      webhookError.status,
+    );
   }
 });
 
@@ -338,7 +347,9 @@ function resolveDevice(
   const devices = Array.isArray(value) ? value.map(record) : [];
   const selected = providerDeviceReference
     ? devices.find((device) => device.providerDeviceReference === providerDeviceReference)
-    : devices.length === 1 ? devices[0] : undefined;
+    : devices.length === 1
+    ? devices[0]
+    : undefined;
   if (providerDeviceReference && !selected) throw new WebhookError("device_unmapped", 400);
   if (!selected) return null;
   return {
@@ -359,7 +370,11 @@ function providerSource(providerKey: string): string {
 async function hmacSha256(secret: string, payload: string): Promise<string> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
-    "raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
   );
   const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
   return hex(new Uint8Array(signature));

@@ -1485,16 +1485,6 @@ async function requireRpcData(resultPromise: QueryResult<unknown>): Promise<unkn
   return data;
 }
 
-async function requireUpdate(
-  resultPromise: PromiseLike<{ error: RuntimeError | null }>,
-): Promise<void> {
-  const { error } = await resultPromise;
-
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
 async function recordWebhookProviderExecution(
   supabase: RuntimeSupabaseClient,
   delivery: WebhookDeliveryClaim,

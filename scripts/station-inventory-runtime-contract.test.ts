@@ -193,6 +193,33 @@ Deno.test("inventory service RPCs enforce leases, replay safety, and service-onl
     );
   }
 
+  const controlPolicy = sqlFunctionBlock(operationsSql, "configure_inventory_control_policy");
+  assertIncludes(
+    normalizeWhitespace(controlPolicy),
+    "for update;",
+    "the combined policy save must lock the active configuration version",
+  );
+  assertIncludes(
+    controlPolicy,
+    "current_entry.version <> target_expected_version",
+    "the combined policy save must reject stale admin forms",
+  );
+  assertIncludes(
+    controlPolicy,
+    "public.configure_inventory_runtime_policy(",
+    "the combined policy save must include the core inventory controls",
+  );
+  assertIncludes(
+    controlPolicy,
+    "public.configure_inventory_automation_policy(",
+    "the combined policy save must include automation controls in the same transaction",
+  );
+  assertMatch(
+    normalizedOperations,
+    /revoke all on function public\.configure_inventory_automation_policy\([^;]+\) from public, anon, authenticated;/i,
+    "partial automation policy writes must not be exposed to authenticated clients",
+  );
+
   assertIncludes(
     normalizedOperations,
     "revoke all on table public.station_inventory_provider_webhook_receipts from public, anon, authenticated;",
@@ -225,7 +252,7 @@ Deno.test("API Gateway inventory routes are registered and call the intended RPC
       "/lpg/stations/inventory/issues/unexpected-stockout",
       "report_lpg_inventory_unexpected_stockout",
     ],
-    ["/admin/station-inventory/automation-policy", "configure_inventory_automation_policy"],
+    ["/admin/station-inventory/policy", "configure_inventory_control_policy"],
     ["/admin/station-inventory/override", "apply_lpg_inventory_admin_override"],
   ] as const;
 

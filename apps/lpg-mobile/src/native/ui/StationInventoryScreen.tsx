@@ -405,6 +405,7 @@ function StockReportEditor({ stationBranchId, measurementMethods, currentAllocat
   onClose: () => void; onResult: (message: string, success: boolean) => void;
 }) {
   const { palette } = useAppTheme();
+  const [snapshotVersion] = useState(expectedVersion);
   const [physical, setPhysical] = useState("");
   const [allocation, setAllocation] = useState(currentAllocation === null ? "" : String(currentAllocation));
   const [method, setMethod] = useState(firstString(measurementMethods[0], ["key"]) ?? "operator_estimate");
@@ -414,7 +415,7 @@ function StockReportEditor({ stationBranchId, measurementMethods, currentAllocat
     const physicalKg = Number(physical); const allocationKg = Number(allocation);
     if (!Number.isFinite(physicalKg) || physicalKg < 0 || !Number.isFinite(allocationKg) || allocationKg < 0) return onResult("Enter valid stock and allocation quantities.", false);
     try {
-      await mutation.mutateAsync({ stationBranchId, physicalStockKg: physicalKg, skimaAllocationKg: allocationKg, measurementMethod: method, note: note.trim() || undefined, expectedVersion: expectedVersion ?? undefined, idempotencyKey: idempotencyKey("inventory-report", stationBranchId) });
+      await mutation.mutateAsync({ stationBranchId, physicalStockKg: physicalKg, skimaAllocationKg: allocationKg, measurementMethod: method, note: note.trim() || undefined, expectedVersion: snapshotVersion ?? undefined, idempotencyKey: idempotencyKey("inventory-report", stationBranchId) });
       onResult("Physical stock and SKIMA allocation were saved.", true);
     } catch (cause) { onResult(friendlyError(cause, "Inventory could not be updated."), false); }
   };
@@ -431,6 +432,7 @@ function AdjustmentEditor({ stationBranchId, adjustmentTypes, expectedVersion, o
   stationBranchId: string; adjustmentTypes: PlatformRecord[]; expectedVersion: number | null; onClose: () => void; onResult: (message: string, success: boolean) => void;
 }) {
   const { palette } = useAppTheme();
+  const [snapshotVersion] = useState(expectedVersion);
   const selectable = useMemo(() => adjustmentTypes.filter((item) => firstString(item, ["direction"]) !== "neutral"), [adjustmentTypes]);
   const [type, setType] = useState(firstString(selectable[0], ["key"]) ?? "supplier_delivery");
   const [quantity, setQuantity] = useState(""); const [note, setNote] = useState("");
@@ -440,7 +442,7 @@ function AdjustmentEditor({ stationBranchId, adjustmentTypes, expectedVersion, o
     if (!Number.isFinite(value) || value <= 0) return onResult("Enter a quantity greater than zero.", false);
     const signed = direction === "decrease" ? -value : value;
     try {
-      await mutation.mutateAsync({ stationBranchId, adjustmentKg: signed, adjustmentType: type, note: note.trim() || undefined, expectedVersion: expectedVersion ?? undefined, idempotencyKey: idempotencyKey("inventory-adjustment", stationBranchId) });
+      await mutation.mutateAsync({ stationBranchId, adjustmentKg: signed, adjustmentType: type, note: note.trim() || undefined, expectedVersion: snapshotVersion ?? undefined, idempotencyKey: idempotencyKey("inventory-adjustment", stationBranchId) });
       onResult("Inventory adjustment was recorded.", true);
     } catch (cause) { onResult(friendlyError(cause, "Inventory adjustment could not be recorded."), false); }
   };
@@ -458,6 +460,7 @@ function SourceEditor({ stationBranchId, sourceTypes, providers, configuration, 
   onClose: () => void; onResult: (message: string, success: boolean) => void;
 }) {
   const { palette } = useAppTheme();
+  const [snapshotVersion] = useState(expectedVersion);
   const current = firstString(configuration, ["primarySource"]) ?? "manual";
   const [source, setSource] = useState(current);
   const availableSources = useMemo(
@@ -476,7 +479,7 @@ function SourceEditor({ stationBranchId, sourceTypes, providers, configuration, 
       return;
     }
     try {
-      await mutation.mutateAsync({ stationBranchId, trackingMode: source, primarySource: source, expectedVersion: expectedVersion ?? undefined, idempotencyKey: idempotencyKey("inventory-source", stationBranchId) });
+      await mutation.mutateAsync({ stationBranchId, trackingMode: source, primarySource: source, expectedVersion: snapshotVersion ?? undefined, idempotencyKey: idempotencyKey("inventory-source", stationBranchId) });
       onResult(source === "manual" ? "Manual inventory tracking is active." : "Inventory source saved. Connect a supported provider before automatic stock can become active.", true);
     } catch (cause) { onResult(friendlyError(cause, "Inventory source could not be saved."), false); }
   };
@@ -493,6 +496,7 @@ function AvailabilityEditor({ stationBranchId, expectedVersion, maximumPauseHour
   onResult: (message: string, success: boolean) => void;
 }) {
   const { palette } = useAppTheme();
+  const [snapshotVersion] = useState(expectedVersion);
   const choices: PlatformRecord[] = [
     { key: "temporarily_unavailable", name: "Pause temporarily" },
     { key: "out_of_stock", name: "Mark out of stock" },
@@ -509,7 +513,7 @@ function AvailabilityEditor({ stationBranchId, expectedVersion, maximumPauseHour
     try {
       await mutation.mutateAsync({
         action,
-        expectedVersion: expectedVersion ?? undefined,
+        expectedVersion: snapshotVersion ?? undefined,
         idempotencyKey: idempotencyKey(`inventory-availability-${action}`, stationBranchId),
         reason: reason.trim() || "Verified inventory is ready for dispatch again.",
         stationBranchId,
@@ -563,6 +567,7 @@ function CapacityEditor({ stationBranchId, capacity, onClose, onResult }: {
   onResult: (message: string, success: boolean) => void;
 }) {
   const { palette } = useAppTheme();
+  const [snapshotVersion] = useState(() => firstNumber(capacity, ["version"]));
   const choices: PlatformRecord[] = [
     { key: "normal", name: "Normal" }, { key: "busy", name: "Busy" },
     { key: "congested", name: "Congested" }, { key: "paused", name: "Paused" },
@@ -578,7 +583,7 @@ function CapacityEditor({ stationBranchId, capacity, onClose, onResult }: {
     if (!Number.isInteger(points) || points <= 0 || !Number.isInteger(jobs) || jobs <= 0 || (minutes !== undefined && (!Number.isFinite(minutes) || minutes < 0))) return onResult("Enter valid processing capacity values.", false);
     if (status === "paused" && reason.trim().length < 5) return onResult("Add a reason before pausing refill processing.", false);
     try {
-      await mutation.mutateAsync({ stationBranchId, fillingPoints: points, maximumConcurrentJobs: jobs, estimatedProcessingMinutes: minutes, congestionStatus: status, pauseReason: status === "paused" ? reason.trim() : undefined, expectedVersion: firstNumber(capacity, ["version"]) ?? undefined, idempotencyKey: idempotencyKey("inventory-capacity", stationBranchId) });
+      await mutation.mutateAsync({ stationBranchId, fillingPoints: points, maximumConcurrentJobs: jobs, estimatedProcessingMinutes: minutes, congestionStatus: status, pauseReason: status === "paused" ? reason.trim() : undefined, expectedVersion: snapshotVersion ?? undefined, idempotencyKey: idempotencyKey("inventory-capacity", stationBranchId) });
       onResult("Station processing capacity was saved.", true);
     } catch (cause) { onResult(friendlyError(cause, "Processing capacity could not be saved."), false); }
   };
@@ -683,7 +688,7 @@ function EditorCard({ title, icon, onClose, children }: { title: string; icon: R
 
 function Field({ label, value, onChangeText, keyboardType = "decimal-pad" }: { label: string; value: string; onChangeText: (value: string) => void; keyboardType?: "decimal-pad" | "default" }) {
   const { palette } = useAppTheme();
-  return <View style={styles.fieldGroup}><Text style={[styles.fieldLabel, { color: palette.ink }]}>{label}</Text><TextInput style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]} value={value} onChangeText={onChangeText} keyboardType={keyboardType} placeholderTextColor={palette.muted} /></View>;
+  return <View style={styles.fieldGroup}><Text style={[styles.fieldLabel, { color: palette.ink }]}>{label}</Text><TextInput accessibilityLabel={label} style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]} value={value} onChangeText={onChangeText} keyboardType={keyboardType} placeholderTextColor={palette.muted} /></View>;
 }
 
 function ChoiceList({ label, records, selected, onSelect }: { label: string; records: PlatformRecord[]; selected: string; onSelect: (key: string) => void }) {
@@ -693,7 +698,7 @@ function ChoiceList({ label, records, selected, onSelect }: { label: string; rec
 
 function Metric({ label, value }: { label: string; value: string }) { const { palette } = useAppTheme(); return <View style={[styles.metric, { backgroundColor: palette.surface, borderColor: palette.border }]}><Text style={[styles.caption, { color: palette.muted }]}>{label}</Text><Text style={[styles.metricValue, { color: palette.ink }]}>{value}</Text></View>; }
 function SimpleRow({ icon, title, subtitle }: { icon: ReactNode; title: string; subtitle: string }) { const { palette } = useAppTheme(); return <View style={[styles.listCard, { backgroundColor: palette.surface, borderColor: palette.border }]}><View style={[styles.smallIcon, { backgroundColor: palette.brandSoft }]}>{icon}</View><View style={styles.flexCopy}><Text style={[styles.cardTitle, { color: palette.ink }]}>{title}</Text><Text style={[styles.body, { color: palette.muted }]}>{subtitle}</Text></View></View>; }
-function Notice({ tone, text }: { tone: "success" | "warning" | "danger"; text: string }) { const { palette } = useAppTheme(); const background = tone === "success" ? palette.successSoft : tone === "warning" ? palette.warningSoft : palette.dangerSoft; const color = tone === "success" ? palette.success : tone === "warning" ? palette.warning : palette.danger; return <View style={[styles.notice, { backgroundColor: background }]}>{tone === "success" ? <CheckCircle2 color={color} size={18} /> : <AlertTriangle color={color} size={18} />}<Text style={[styles.noticeText, { color }]}>{text}</Text></View>; }
+function Notice({ tone, text }: { tone: "success" | "warning" | "danger"; text: string }) { const { palette } = useAppTheme(); const background = tone === "success" ? palette.successSoft : tone === "warning" ? palette.warningSoft : palette.dangerSoft; const color = tone === "success" ? palette.success : tone === "warning" ? palette.warning : palette.danger; return <View accessibilityRole="alert" accessibilityLiveRegion={tone === "danger" ? "assertive" : "polite"} style={[styles.notice, { backgroundColor: background }]}>{tone === "success" ? <CheckCircle2 color={color} size={18} /> : <AlertTriangle color={color} size={18} />}<Text style={[styles.noticeText, { color }]}>{text}</Text></View>; }
 function kg(value: number | null) { return value === null ? "Not reported" : `${value.toLocaleString(undefined, { maximumFractionDigits: 3 })} kg`; }
 function signedKg(value: number | null) { if (value === null || value === 0) return "No stock change"; return `${value > 0 ? "+" : ""}${value.toLocaleString(undefined, { maximumFractionDigits: 3 })} kg`; }
 function friendlyLabel(value: string) { return value.replace(/[_-]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
