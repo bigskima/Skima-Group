@@ -16,6 +16,7 @@ import {
   readOperationalLocation,
   type OperationalLocation,
 } from "../device/location";
+import { useMapsGatewayAdapter } from "../domains/maps/gateway";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -161,6 +162,7 @@ function DriverGeographyStep(props: {
 }) {
   const session = useSession();
   const { palette } = useAppTheme();
+  const maps = useMapsGatewayAdapter();
   const [areas, setAreas] = useState<ServiceArea[]>([]);
   const [loadingAreas, setLoadingAreas] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([...props.initialAreaIds]);
@@ -218,9 +220,8 @@ function DriverGeographyStep(props: {
     setDetectingLocation(true);
     setError(null);
     try {
-      const nextLocation = await readOperationalLocation();
+      const nextLocation = await maps.resolveOperationalLocation(await readOperationalLocation());
       setLocation(nextLocation);
-
     } catch (cause) {
       setError(friendlyError(cause, "We could not prepare your operating area. Please try again."));
     } finally {

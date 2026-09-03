@@ -20,6 +20,12 @@ export interface OperationalAddress {
   postalCode: string | null;
   country: string | null;
   countryCode: string | null;
+  neighbourhood?: string | null;
+  town?: string | null;
+  village?: string | null;
+  lga?: string | null;
+  state?: string | null;
+  stateCode?: string | null;
 }
 
 export async function readOperationalLocation(options: { requestPermission?: boolean } = {}) {
@@ -98,6 +104,9 @@ function readAddress(address: Location.LocationGeocodedAddress): OperationalAddr
     postalCode: clean(address.postalCode),
     country: clean(address.country),
     countryCode: clean(address.isoCountryCode),
+    neighbourhood: clean(address.district),
+    lga: clean(address.subregion),
+    state: clean(address.region),
   };
 }
 

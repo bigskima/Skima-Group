@@ -34,6 +34,7 @@ import { PhotoCaptureCard } from "../application/PhotoCaptureCard";
 import { RequirementCard } from "../application/RequirementCard";
 import { requirementAppliesToPayload } from "../application/requirementApplicability";
 import { readOperationalLocation, type OperationalLocation } from "../device/location";
+import { useMapsGatewayAdapter } from "../domains/maps/gateway";
 import { uploadMedia } from "../media/upload";
 import { useSession } from "../session/SessionProvider";
 import { colors, radii, spacing } from "../theme/tokens";
@@ -71,6 +72,7 @@ function timestampOf(record: Record<string, unknown>) {
 
 export function DriverApplicationScreen() {
   const session = useSession();
+  const maps = useMapsGatewayAdapter();
   const applications = domainQueries.applications();
   const types = domainQueries.applicationTypes();
   const requirements = domainQueries.documentRequirements();
@@ -286,7 +288,7 @@ export function DriverApplicationScreen() {
     setDetectingLocation(true);
     setError(null);
     try {
-      const location = await readOperationalLocation();
+      const location = await maps.resolveOperationalLocation(await readOperationalLocation());
       setOperatingLocation(location);
     } catch (cause) {
       setError(

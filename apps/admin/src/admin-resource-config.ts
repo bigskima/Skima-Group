@@ -1458,6 +1458,61 @@ export const integrationConsoleConfig: AdminResourceConsoleConfig = {
     "Review provider adapters, outbound deliveries, payment events, communications, and OTP operations.",
   groups: [
     {
+      key: "maps-location",
+      label: "Maps & Location",
+      description:
+        "Monitor address search, routing, cache health and the active provider. Provider changes are explicit, audited and never trigger a paid fallback.",
+      resources: [
+        resource(
+          "maps-location-status",
+          "Location service status",
+          "/admin/maps/location/status",
+          [
+            "active_geocoder",
+            "active_router",
+            "provider_configuration",
+            "provider_health",
+            "geocode_cache",
+            "requests_last_24_hours",
+          ],
+          "See the active geocoder and router, recent reliability, cache use and cost-protection state without exposing provider secrets.",
+        ),
+        resource(
+          "maps-location-providers",
+          "Available location providers",
+          "/admin/maps/location/providers",
+          ["provider", "role", "configuration", "status", "capabilities", "last_updated"],
+          "LocationIQ is active. Google Maps and Mapbox remain preserved and inactive until a Super Admin makes an explicit change.",
+        ),
+        resource(
+          "maps-location-audit",
+          "Location configuration history",
+          "/admin/maps/location/audit",
+          ["change", "changed_by", "reason", "changed_at"],
+          "Review who changed the active location provider, when it changed and why.",
+        ),
+      ],
+      actions: [
+        action(
+          "activate-maps-provider",
+          "Change active location provider",
+          "/admin/maps/location/provider",
+          [
+            statusSelect("providerKey", "Location provider", [
+              { label: "LocationIQ", value: "provider.maps.locationiq" },
+              { label: "Google Maps Platform (rollback only)", value: "provider.maps.google-maps" },
+            ]),
+            requiredText(
+              "reason",
+              "Reason for change",
+              "Explain the operational reason. The change is immediate and recorded in the audit history.",
+            ),
+          ],
+          "platform.providers.manage",
+        ),
+      ],
+    },
+    {
       key: "providers",
       label: "Provider Connections",
       description: "Inspect swappable payment, map, notification, AI, queue, and cache adapters.",

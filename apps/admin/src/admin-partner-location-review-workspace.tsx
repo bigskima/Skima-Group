@@ -32,6 +32,26 @@ const ServiceAreaSchema = z.object({
   localityName: z.string().nullable().optional(),
 });
 
+const AddressDetailsSchema = z.object({
+  state: z.string().nullable().optional(),
+  stateCode: z.string().nullable().optional(),
+  lga: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  town: z.string().nullable().optional(),
+  district: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+  countryCode: z.string().nullable().optional(),
+}).passthrough();
+
+const ServiceZoneResultSchema = z.object({
+  available: z.boolean().nullable().optional(),
+  reason: z.string().nullable().optional(),
+  matchedGeographyId: z.string().uuid().nullable().optional(),
+  matchedPolicyId: z.string().uuid().nullable().optional(),
+  matchedGeographyName: z.string().nullable().optional(),
+  matchedGeographyLevel: z.string().nullable().optional(),
+}).passthrough();
+
 const LocationReviewSchema = z.object({
   application_id: z.string().uuid(),
   application_version_id: z.string().uuid(),
@@ -56,6 +76,8 @@ const LocationReviewSchema = z.object({
   service_areas: z.array(ServiceAreaSchema),
   submitted_at: z.string().nullable(),
   updated_at: z.string(),
+  address_details: AddressDetailsSchema.optional().default({}),
+  service_zone_result: ServiceZoneResultSchema.optional().default({}),
 });
 
 const LocationReviewsSchema = z.array(LocationReviewSchema);
@@ -74,9 +96,15 @@ export function AdminPartnerLocationReviewWorkspace() {
     enabled: status === "authenticated",
     retry: false,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("read_partner_application_location_reviews");
-      if (error) throw error;
-      return LocationReviewsSchema.parse(data ?? []);
+      const current = await supabase.rpc("read_partner_application_location_reviews_v2");
+      if (!current.error) return LocationReviewsSchema.parse(current.data ?? []);
+      if (!isMissingRpcError(current.error)) throw current.error;
+
+      // Keep Admin usable during a rolling backend/frontend deployment. The
+      // original RPC remains available until the new database shape is live.
+      const legacy = await supabase.rpc("read_partner_application_location_reviews");
+      if (legacy.error) throw legacy.error;
+      return LocationReviewsSchema.parse(legacy.data ?? []);
     },
   });
 
@@ -323,6 +351,13 @@ function LocationEvidencePanel(props: {
             <DetailList
               items={[
                 { label: "Detected address", value: record.formatted_address ?? "Address not resolved" },
+                { label: "State", value: record.address_details.state ?? "Not resolved" },
+                { label: "LGA", value: record.address_details.lga ?? "Not resolved" },
+                {
+                  label: "City / town",
+                  value: record.address_details.city ?? record.address_details.town ?? "Not resolved",
+                },
+                { label: "Service zone", value: serviceZoneLabel(record.service_zone_result) },
                 { label: "Coordinates", value: `${record.latitude?.toFixed(6)}, ${record.longitude?.toFixed(6)}` },
                 { label: "GPS accuracy", value: formatAccuracy(record.accuracy_meters) },
                 { label: "Captured", value: formatDate(record.recorded_at) },
@@ -472,6 +507,29 @@ function locationSourceLabel(source: string | null): string {
   if (source === "maps_adapter") return "Map selection";
   if (source === "manual_pin") return "Map pin";
   return normalizeStatusLabel(source);
+}
+
+function serviceZoneLabel(result: z.infer<typeof ServiceZoneResultSchema>): string {
+  const name = result.matchedGeographyName;
+  const level = result.matchedGeographyLevel;
+  if (name) {
+    const area = level ? `${name} (${level})` : name;
+    return result.available === false ? `${area} · Not enabled` : `${area} · Enabled`;
+  }
+  if (result.reason === "POLICY_CONFIGURATION_CONFLICT") return "Configuration conflict — review coverage policies";
+  if (result.reason === "AREA_EXCLUDED") return "This point is excluded by coverage policy";
+  if (result.reason === "SERVICE_NOT_LAUNCHED") return "No active service zone covers this point";
+  if (result.reason === "LOCATION_REQUIRED") return "Location evidence is required";
+  return result.available ? "Enabled service zone" : "No matching service zone";
+}
+
+function isMissingRpcError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as Record<string, unknown>;
+  const code = typeof record.code === "string" ? record.code : "";
+  const message = typeof record.message === "string" ? record.message.toLowerCase() : "";
+  return code === "42883" || code === "PGRST202" ||
+    message.includes("read_partner_application_location_reviews_v2");
 }
 
 function verificationTone(status: LocationReview["verification_status"]): "neutral" | "success" | "warning" | "danger" {

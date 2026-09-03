@@ -10,7 +10,12 @@ import {
   type OperationalAddress,
   type OperationalLocation,
 } from "../device/location";
-import { useMapsGatewayAdapter, type AddressPayload, type MapLookup } from "../domains/maps/gateway";
+import {
+  AddressSchema,
+  useMapsGatewayAdapter,
+  type AddressPayload,
+  type MapLookup,
+} from "../domains/maps/gateway";
 import { OperationalMap } from "../maps/OperationalMap";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, spacing } from "../theme/tokens";
@@ -116,10 +121,11 @@ export function LocationsScreen() {
     setResolving(true);
     showNotice("");
     try {
-      const result = await geocode.mutateAsync({
-        address: description,
-        idempotencyKey: idempotencyKey("geocode-location", description.toLowerCase()),
-      });
+      const embeddedLookup = mapLookupFromPrediction(prediction);
+      const result = embeddedLookup ?? await geocode.mutateAsync({
+          address: description,
+          idempotencyKey: idempotencyKey("geocode-location", description.toLowerCase()),
+        });
       acceptPoint(locationFromLookup(result, description));
       setSearch("");
       setPredictions([]);
@@ -441,6 +447,22 @@ function locationFromLookup(result: MapLookup, fallback: string): OperationalLoc
   };
 }
 
+function mapLookupFromPrediction(prediction: Record<string, unknown>): MapLookup | null {
+  const location = prediction.location;
+  if (!location || typeof location !== "object" || Array.isArray(location)) return null;
+  const latitude = Number((location as Record<string, unknown>).latitude);
+  const longitude = Number((location as Record<string, unknown>).longitude);
+  if (!validCoordinate(latitude, longitude)) return null;
+  const parsedAddress = AddressSchema.safeParse(prediction.addressComponents);
+  return {
+    addressComponents: parsedAddress.success ? parsedAddress.data : null,
+    formattedAddress: readString(prediction.formattedAddress) ?? readString(prediction.description),
+    location: { latitude, longitude },
+    placeId: readString(prediction.placeId),
+    provider: readString(prediction.provider) ?? "skima_gateway",
+  };
+}
+
 function normalizeAddress(value: AddressPayload | null | undefined): OperationalAddress {
   const street = clean(value?.street)
     ?? clean(value?.route)
@@ -450,11 +472,17 @@ function normalizeAddress(value: AddressPayload | null | undefined): Operational
     name: clean(value?.name) ?? clean(value?.landmark) ?? clean(value?.premise),
     street: streetNumber && street && !street.startsWith(streetNumber) ? `${streetNumber} ${street}` : street,
     district: clean(value?.district) ?? clean(value?.locality) ?? clean(value?.subLocality),
-    city: clean(value?.city),
+    city: clean(value?.city) ?? clean(value?.town) ?? clean(value?.village),
     region: clean(value?.region) ?? clean(value?.state),
     postalCode: clean(value?.postalCode),
     country: clean(value?.country),
     countryCode: clean(value?.countryCode),
+    neighbourhood: clean(value?.neighbourhood) ?? clean(value?.subLocality),
+    town: clean(value?.town),
+    village: clean(value?.village),
+    lga: clean(value?.lga),
+    state: clean(value?.state) ?? clean(value?.region),
+    stateCode: clean(value?.stateCode),
   };
 }
 
@@ -468,6 +496,12 @@ function mergeAddress(primary: OperationalAddress, fallback: OperationalAddress)
     postalCode: primary.postalCode ?? fallback.postalCode,
     country: primary.country ?? fallback.country,
     countryCode: primary.countryCode ?? fallback.countryCode,
+    neighbourhood: primary.neighbourhood ?? fallback.neighbourhood,
+    town: primary.town ?? fallback.town,
+    village: primary.village ?? fallback.village,
+    lga: primary.lga ?? fallback.lga,
+    state: primary.state ?? fallback.state,
+    stateCode: primary.stateCode ?? fallback.stateCode,
   };
 }
 

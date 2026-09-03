@@ -7,6 +7,8 @@ const [
   workerSource,
   webhookSource,
   supabaseConfig,
+  manualEditGuardSql,
+  stationInventoryScreen,
 ] = await Promise.all([
   readRepositoryFile("supabase/migrations/20260829082943_station_inventory_runtime_foundation.sql"),
   readRepositoryFile("supabase/migrations/20260829143051_station_inventory_operations_runtime.sql"),
@@ -14,6 +16,10 @@ const [
   readRepositoryFile("supabase/functions/runtime-worker/index.ts"),
   readRepositoryFile("supabase/functions/inventory-provider-webhook/index.ts"),
   readRepositoryFile("supabase/config.toml"),
+  readRepositoryFile(
+    "supabase/migrations/20260903142508_guard_provider_managed_inventory_edits.sql",
+  ),
+  readRepositoryFile("apps/lpg-mobile/src/native/ui/StationInventoryScreen.tsx"),
 ]);
 
 Deno.test("inventory schema keeps stock, reservations, capacity, and evidence normalized", () => {
@@ -500,6 +506,50 @@ Deno.test("public inventory webhook verifies authenticity before normalized inge
     webhookSource,
     "console.error(rawBody)",
     "webhook logs must not emit provider payloads",
+  );
+});
+
+Deno.test("station stock editing respects provider authority and configured evidence", () => {
+  const normalizedGuard = normalizeWhitespace(manualEditGuardSql);
+  assertIncludes(
+    normalizedGuard,
+    "rename to report_lpg_station_inventory_core;",
+    "the established stock-report implementation must remain behind the governed wrapper",
+  );
+  assertIncludes(
+    normalizedGuard,
+    "configuration_record.primary_source_key <> 'manual'",
+    "provider-managed inventory must be distinguished from manual inventory",
+  );
+  assertIncludes(
+    normalizedGuard,
+    "configuration_record.manual_fallback_until <= timezone('utc', now())",
+    "manual edits must require a currently active fallback window",
+  );
+  assertIncludes(
+    normalizedGuard,
+    "if evidence_required and cardinality(coalesce(target_evidence_asset_ids, array[]::uuid[])) = 0 then",
+    "measurement methods that require evidence must fail closed",
+  );
+  assertIncludes(
+    normalizedGuard,
+    "for share;",
+    "the source-authority decision must remain stable during the stock report",
+  );
+  assertIncludes(
+    stationInventoryScreen,
+    'const manualEditingAvailable = primarySource === "manual" || manualFallbackActive;',
+    "the station UI must use the same provider/fallback rule as the backend",
+  );
+  assertIncludes(
+    stationInventoryScreen,
+    "evidenceAssetIds, expectedVersion:",
+    "stock reports and adjustments must send evidence and their optimistic concurrency version",
+  );
+  assertIncludes(
+    stationInventoryScreen,
+    'assetTypeKey="media.lpg.inventory_evidence"',
+    "the stock editor must support governed media evidence",
   );
 });
 

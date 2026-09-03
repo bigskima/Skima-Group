@@ -2,6 +2,11 @@ import { createClient, type SupabaseClient, type User } from "npm:@supabase/supa
 
 import { createRequestSupabaseClient, requireAuthenticatedUser } from "../_shared/supabase-auth.ts";
 import { jsonResponse, optionsResponse, requestId } from "../_shared/http.ts";
+import {
+  createLocationIqMapsAdapter,
+  LocationProviderError,
+  type MapsOperation,
+} from "../_shared/locationiq-maps-adapter.ts";
 
 const ROUTES = new Set([
   "/health",
@@ -24,6 +29,10 @@ const ROUTES = new Set([
   "/admin/financial-policies/deactivate",
   "/admin/financial-policies/rollback",
   "/admin/payments/bank-transfer-config",
+  "/admin/maps/location/status",
+  "/admin/maps/location/providers",
+  "/admin/maps/location/audit",
+  "/admin/maps/location/provider",
   "/admin/system/overview",
   "/admin/system/health",
   "/admin/system/jobs",
@@ -102,6 +111,7 @@ const ROUTES = new Set([
   "/lpg/maps/geocode",
   "/lpg/maps/reverse-geocode",
   "/lpg/maps/route-estimate",
+  "/lpg/maps/providers/status",
   "/runtime/catalog",
   "/runtime/session-context",
   "/runtime/profile/avatar",
@@ -1466,6 +1476,8 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       const deliveryLocationId = requireUuid(payload.deliveryLocationId, "deliveryLocationId");
       const routeSnapshotResult = await buildLpgCommercialRouteSnapshot(
         supabase,
+        supabaseUrl,
+        authResult.user.id,
         pickupLocationId,
         deliveryLocationId,
         stationBranchId,
@@ -2038,20 +2050,109 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
   }
 
+  if (
+    (routePath === "/lpg/maps/providers/status" ||
+      routePath === "/admin/maps/location/status" ||
+      routePath === "/admin/maps/location/providers" ||
+      routePath === "/admin/maps/location/audit") &&
+    request.method === "GET"
+  ) {
+    const statusResult = await supabase.rpc("read_maps_location_status");
+    if (statusResult.error) return databaseError(statusResult.error, id);
+    const status = enrichMapsLocationStatus(requireRecord(statusResult.data, "maps location status"));
+
+    if (routePath === "/admin/maps/location/status") {
+      return jsonResponse({ ok: true, data: [mapsLocationStatusSummary(status)], requestId: id });
+    }
+    if (routePath === "/admin/maps/location/providers") {
+      return jsonResponse({
+        ok: true,
+        data: mapsLocationProviderRecords(status),
+        requestId: id,
+      });
+    }
+    if (routePath === "/admin/maps/location/audit") {
+      return jsonResponse({
+        ok: true,
+        data: mapsLocationAuditRecords(status),
+        requestId: id,
+      });
+    }
+    return jsonResponse({ ok: true, data: status, requestId: id });
+  }
+
+  if (routePath === "/admin/maps/location/provider" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const adminResult = await supabase.rpc("is_platform_super_admin");
+    if (adminResult.error) return databaseError(adminResult.error, id);
+    if (adminResult.data !== true) {
+      return jsonResponse({
+        ok: false,
+        error: "forbidden",
+        message: "Only an active Super Admin can change the location provider.",
+        requestId: id,
+      }, 403);
+    }
+    const providerKey = requireString(body.value.providerKey, "providerKey");
+    if (!mapsProviderSecretConfigured(providerKey)) {
+      return jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "Configure the selected provider secret in Supabase before activating it.",
+        requestId: id,
+      }, 409);
+    }
+    return rpcResponse(
+      supabase.rpc("configure_maps_provider", {
+        target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+        target_provider_key: providerKey,
+        target_reason: requireString(body.value.reason, "reason"),
+      }),
+      id,
+    );
+  }
+
   if (routePath === "/lpg/maps/geocode" && request.method === "POST") {
-    return handleMapsGeocodeRequest(request, id, supabase, supabaseUrl, "geocode");
+    return handleMapsGeocodeRequest(
+      request,
+      id,
+      supabase,
+      supabaseUrl,
+      authResult.user.id,
+      "geocode",
+    );
   }
 
   if (routePath === "/lpg/maps/reverse-geocode" && request.method === "POST") {
-    return handleMapsGeocodeRequest(request, id, supabase, supabaseUrl, "reverse_geocode");
+    return handleMapsGeocodeRequest(
+      request,
+      id,
+      supabase,
+      supabaseUrl,
+      authResult.user.id,
+      "reverse_geocode",
+    );
   }
 
   if (routePath === "/lpg/maps/route-estimate" && request.method === "POST") {
-    return handleMapsRouteEstimateRequest(request, id, supabase, supabaseUrl);
+    return handleMapsRouteEstimateRequest(
+      request,
+      id,
+      supabase,
+      supabaseUrl,
+      authResult.user.id,
+    );
   }
 
   if (routePath === "/lpg/maps/autocomplete" && request.method === "POST") {
-    return handleMapsAutocompleteRequest(request, id, supabase, supabaseUrl);
+    return handleMapsAutocompleteRequest(
+      request,
+      id,
+      supabase,
+      supabaseUrl,
+      authResult.user.id,
+    );
   }
 
   if (routePath === "/runtime/media/assets") {
@@ -7183,7 +7284,7 @@ async function lpgPaymentReservationResponse(
   });
 }
 
-type LpgMapsOperation = "autocomplete" | "geocode" | "reverse_geocode" | "route_estimate";
+type LpgMapsOperation = MapsOperation;
 
 async function resolveLpgMapsProvider(
   supabase: SupabaseClient,
@@ -7191,6 +7292,7 @@ async function resolveLpgMapsProvider(
   operation: LpgMapsOperation,
 ): Promise<{
   policy: Record<string, unknown>;
+  adapterConfig: Record<string, unknown>;
   providerKey: string;
   response: Response | null;
 }> {
@@ -7199,7 +7301,12 @@ async function resolveLpgMapsProvider(
   });
 
   if (mapsPolicyResult.error) {
-    return { policy: {}, providerKey: "", response: databaseError(mapsPolicyResult.error, id) };
+    return {
+      policy: {},
+      adapterConfig: {},
+      providerKey: "",
+      response: databaseError(mapsPolicyResult.error, id),
+    };
   }
 
   const policy = requireRecord(mapsPolicyResult.data, "LPG maps policy");
@@ -7211,6 +7318,7 @@ async function resolveLpgMapsProvider(
   if (!operations.includes(operation)) {
     return {
       policy,
+      adapterConfig: {},
       providerKey,
       response: jsonResponse({ ok: false, error: "server_misconfigured", message: `The configured maps policy does not enable ${operation}.`, requestId: id }, 500),
     };
@@ -7224,6 +7332,7 @@ async function resolveLpgMapsProvider(
   if (!supabaseUrl || !serviceRoleKey) {
     return {
       policy,
+      adapterConfig: {},
       providerKey,
       response: jsonResponse({
         ok: false,
@@ -7236,24 +7345,35 @@ async function resolveLpgMapsProvider(
 
   const adapterResult = await createServiceClient(supabaseUrl, serviceRoleKey)
     .from("provider_adapters")
-    .select("key,status,provider_kind")
+    .select("key,status,provider_kind,config")
     .eq("provider_kind", "maps")
     .eq("key", providerKey)
     .maybeSingle();
 
   if (adapterResult.error) {
-    return { policy, providerKey, response: databaseError(adapterResult.error, id) };
+    return {
+      policy,
+      adapterConfig: {},
+      providerKey,
+      response: databaseError(adapterResult.error, id),
+    };
   }
 
   if (!adapterResult.data || adapterResult.data.status !== "active") {
     return {
       policy,
+      adapterConfig: {},
       providerKey,
       response: jsonResponse({ ok: false, error: "server_misconfigured", message: "The configured maps provider adapter is not active.", requestId: id }, 500),
     };
   }
 
-  return { policy, providerKey, response: null };
+  return {
+    policy,
+    adapterConfig: requireRecordOrEmpty(adapterResult.data.config),
+    providerKey,
+    response: null,
+  };
 }
 
 function unsupportedMapsProviderResponse(
@@ -7306,11 +7426,489 @@ function haversineDistanceMeters(
   return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
 }
 
+type ResolvedMapsProvider = {
+  readonly policy: Record<string, unknown>;
+  readonly adapterConfig: Record<string, unknown>;
+  readonly providerKey: string;
+};
+
+type MapsProviderCallResult<TData extends Record<string, unknown>> =
+  | { readonly data: TData }
+  | { readonly response: Response };
+
+const mapsProviderInflight = new Map<
+  string,
+  Promise<{ readonly data: Record<string, unknown>; readonly latencyMs: number }>
+>();
+
+async function executeLocationIqProviderCall<TData extends Record<string, unknown>>(input: {
+  readonly actorUserId: string;
+  readonly cacheDescriptor: string;
+  readonly cacheTtlSeconds: number;
+  readonly id: string;
+  readonly idempotencyKey: string;
+  readonly operation: LpgMapsOperation;
+  readonly provider: ResolvedMapsProvider;
+  readonly requestPayload: Record<string, unknown>;
+  readonly supabase: SupabaseClient;
+  readonly supabaseUrl: string;
+  readonly execute: () => Promise<{ readonly data: TData; readonly latencyMs: number }>;
+}): Promise<MapsProviderCallResult<TData>> {
+  const userRateLimit = await consumeMapsRateLimit(
+    input.supabase,
+    `maps.locationiq.${input.operation}.user`,
+    input.actorUserId,
+    input.id,
+  );
+  if ("response" in userRateLimit) return userRateLimit;
+  if (!userRateLimit.allowed) {
+    await recordMapsRateLimit(input, "user");
+    return {
+      response: jsonResponse({
+        ok: false,
+        error: "rate_limited",
+        message: "Too many location requests. Wait a moment and try again.",
+        requestId: input.id,
+      }, 429),
+    };
+  }
+
+  const cacheKey = await mapsCacheKey(input.cacheDescriptor);
+  const cacheNamespace = `platform.maps.locationiq.${input.operation}`;
+  const cached = await readMapsCache(input.supabaseUrl, cacheNamespace, cacheKey);
+  if (cached) {
+    await maybeRecordGatewayProviderExecution(input.supabaseUrl, {
+      errorMessage: null,
+      idempotencyKey: `${input.idempotencyKey}:${input.id}:maps-cache-hit`,
+      operationKey: `provider.maps.${input.operation}`,
+      providerAdapterKey: input.provider.providerKey,
+      providerKind: "maps",
+      requestPayload: input.requestPayload,
+      responsePayload: { ...cached, cache: "hit", latencyMs: 0 },
+      status: "succeeded",
+    });
+    return { data: cached as TData };
+  }
+
+  const providerRateLimit = await consumeMapsRateLimit(
+    input.supabase,
+    "maps.locationiq.provider.daily",
+    input.provider.providerKey,
+    input.id,
+  );
+  if ("response" in providerRateLimit) return providerRateLimit;
+  if (!providerRateLimit.allowed) {
+    await recordMapsRateLimit(input, "provider_daily");
+    await recordMapsProviderHealth(
+      input.supabaseUrl,
+      "degraded",
+      input.operation,
+      { reason: "quota_guard_reached" },
+    );
+    return {
+      response: jsonResponse({
+        ok: false,
+        error: "rate_limited",
+        message: "Location lookup has reached its configured usage limit. Coordinates and manual address entry are still available.",
+        requestId: input.id,
+      }, 429),
+    };
+  }
+
+  try {
+    const result = await deduplicateMapsProviderCall<TData>(cacheNamespace, cacheKey, input.execute);
+    await writeMapsCache(
+      input.supabaseUrl,
+      cacheNamespace,
+      cacheKey,
+      result.data,
+      input.cacheTtlSeconds,
+    );
+    await maybeRecordGatewayProviderExecution(input.supabaseUrl, {
+      errorMessage: null,
+      idempotencyKey: `${input.idempotencyKey}:${input.id}:maps`,
+      operationKey: `provider.maps.${input.operation}`,
+      providerAdapterKey: input.provider.providerKey,
+      providerKind: "maps",
+      requestPayload: input.requestPayload,
+      responsePayload: { ...result.data, cache: "miss", latencyMs: result.latencyMs },
+      status: "succeeded",
+    });
+    await recordMapsProviderHealth(
+      input.supabaseUrl,
+      "healthy",
+      input.operation,
+      { latencyMs: result.latencyMs },
+    );
+    return { data: result.data };
+  } catch (cause) {
+    const error = cause instanceof LocationProviderError
+      ? cause
+      : new LocationProviderError(
+        "provider_unavailable",
+        "The location service is temporarily unavailable.",
+        503,
+        true,
+      );
+    await maybeRecordGatewayProviderExecution(input.supabaseUrl, {
+      errorMessage: error.code,
+      idempotencyKey: `${input.idempotencyKey}:${input.id}:maps`,
+      operationKey: `provider.maps.${input.operation}`,
+      providerAdapterKey: input.provider.providerKey,
+      providerKind: "maps",
+      requestPayload: input.requestPayload,
+      responsePayload: { cache: "miss", retryable: error.retryable },
+      status: "failed",
+    });
+    await recordMapsProviderHealth(
+      input.supabaseUrl,
+      error.code === "provider_authentication_failed" ? "unhealthy" : "degraded",
+      input.operation,
+      { reason: error.code },
+    );
+    return {
+      response: jsonResponse({
+        ok: false,
+        error: error.code,
+        message: error.message,
+        requestId: input.id,
+      }, error.httpStatus),
+    };
+  }
+}
+
+async function consumeMapsRateLimit(
+  supabase: SupabaseClient,
+  policyKey: string,
+  subject: string,
+  requestId: string,
+): Promise<{ readonly allowed: boolean } | { readonly response: Response }> {
+  const result = await supabase.rpc("check_rate_limit", {
+    target_increment: 1,
+    target_policy_key: policyKey,
+    target_subject: subject,
+  });
+  if (result.error) {
+    return { response: databaseError(result.error, requestId) };
+  }
+  return { allowed: !isRateLimited(result.data) };
+}
+
+async function recordMapsRateLimit(
+  input: {
+    readonly id: string;
+    readonly idempotencyKey: string;
+    readonly operation: LpgMapsOperation;
+    readonly provider: ResolvedMapsProvider;
+    readonly requestPayload: Record<string, unknown>;
+    readonly supabaseUrl: string;
+  },
+  scope: string,
+): Promise<void> {
+  await maybeRecordGatewayProviderExecution(input.supabaseUrl, {
+    errorMessage: "maps_rate_limited",
+    idempotencyKey: `${input.idempotencyKey}:${input.id}:maps-rate-limit`,
+    operationKey: `provider.maps.${input.operation}`,
+    providerAdapterKey: input.provider.providerKey,
+    providerKind: "maps",
+    requestPayload: input.requestPayload,
+    responsePayload: { cache: "none", scope },
+    status: "failed",
+  });
+}
+
+function createLocationIqAdapter(provider: ResolvedMapsProvider) {
+  const token = Deno.env.get("LOCATIONIQ_ACCESS_TOKEN")?.trim();
+  if (!token) {
+    throw new LocationProviderError(
+      "provider_authentication_failed",
+      "The location service is not configured yet.",
+      503,
+    );
+  }
+  return createLocationIqMapsAdapter({
+    accessToken: token,
+    attribution: mapsConfigString(
+      provider.policy,
+      "attribution",
+      mapsConfigString(
+        provider.adapterConfig,
+        "attribution",
+        "LocationIQ; OpenStreetMap contributors",
+      ),
+    ),
+    autocompleteBaseUrl: mapsConfigString(
+      provider.adapterConfig,
+      "autocomplete_base_url",
+      "https://api.locationiq.com/v1",
+    ),
+    autocompleteResultLimit: mapsConfigNumber(
+      provider.policy,
+      "autocomplete_result_limit",
+      6,
+      1,
+      20,
+    ),
+    countryCodes: mapsConfigStringArray(provider.policy, "search_country_codes", ["ng"]),
+    geocodingBaseUrl: mapsConfigString(
+      provider.adapterConfig,
+      "geocoding_base_url",
+      "https://eu1.locationiq.com/v1",
+    ),
+    language: mapsConfigString(provider.policy, "search_language", "en"),
+    retryCount: mapsConfigNumber(provider.policy, "provider_retry_count", 1, 0, 2),
+    routingBaseUrl: mapsConfigString(
+      provider.adapterConfig,
+      "routing_base_url",
+      "https://eu1.locationiq.com/v1",
+    ),
+    timeoutMs: mapsConfigNumber(
+      provider.policy,
+      "provider_timeout_milliseconds",
+      8_000,
+      1_000,
+      20_000,
+    ),
+  });
+}
+
+async function readMapsCache(
+  supabaseUrl: string,
+  namespace: string,
+  key: string,
+): Promise<Record<string, unknown> | null> {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) return null;
+  const result = await createServiceClient(supabaseUrl, serviceRoleKey).rpc("get_cache_entry", {
+    target_cache_key: key,
+    target_namespace: namespace,
+  });
+  if (result.error || !result.data) return null;
+  return requireRecordOrEmpty(result.data);
+}
+
+async function writeMapsCache(
+  supabaseUrl: string,
+  namespace: string,
+  key: string,
+  value: Record<string, unknown>,
+  ttlSeconds: number,
+): Promise<void> {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) return;
+  await createServiceClient(supabaseUrl, serviceRoleKey).rpc("set_cache_entry", {
+    target_cache_key: key,
+    target_namespace: namespace,
+    target_ttl_seconds: Math.max(1, Math.min(Math.round(ttlSeconds), 2_592_000)),
+    target_value: value,
+  });
+}
+
+async function recordMapsProviderHealth(
+  supabaseUrl: string,
+  status: "healthy" | "degraded" | "unhealthy",
+  operation: LpgMapsOperation,
+  details: Record<string, unknown>,
+): Promise<void> {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) return;
+  await createServiceClient(supabaseUrl, serviceRoleKey).rpc("record_health_check", {
+    target_details: {
+      ...details,
+      operation,
+      provider: "locationiq",
+      secretExposedToClients: false,
+    },
+    target_service_key: "platform.maps.locationiq",
+    target_status: status,
+  });
+}
+
+async function deduplicateMapsProviderCall<TData extends Record<string, unknown>>(
+  namespace: string,
+  cacheKey: string,
+  execute: () => Promise<{ readonly data: TData; readonly latencyMs: number }>,
+): Promise<{ readonly data: TData; readonly latencyMs: number }> {
+  const inflightKey = `${namespace}:${cacheKey}`;
+  const existing = mapsProviderInflight.get(inflightKey);
+  if (existing) {
+    const result = await existing;
+    return { data: result.data as TData, latencyMs: result.latencyMs };
+  }
+  const pending = execute() as Promise<{
+    readonly data: Record<string, unknown>;
+    readonly latencyMs: number;
+  }>;
+  mapsProviderInflight.set(inflightKey, pending);
+  try {
+    const result = await pending;
+    return { data: result.data as TData, latencyMs: result.latencyMs };
+  } finally {
+    mapsProviderInflight.delete(inflightKey);
+  }
+}
+
+async function mapsCacheKey(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function mapsConfigString(
+  record: Record<string, unknown>,
+  key: string,
+  fallback: string,
+): string {
+  return optionalString(record[key]) ?? fallback;
+}
+
+function mapsConfigNumber(
+  record: Record<string, unknown>,
+  key: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const value = optionalNumber(record[key], key) ?? fallback;
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function mapsConfigStringArray(
+  record: Record<string, unknown>,
+  key: string,
+  fallback: readonly string[],
+): readonly string[] {
+  const value = record[key];
+  if (!Array.isArray(value)) return fallback;
+  const strings = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  return strings.length ? strings : fallback;
+}
+
+function quantizedCoordinate(value: number, decimals: number): string {
+  return value.toFixed(Math.max(3, Math.min(6, Math.round(decimals))));
+}
+
+function mapsProviderSecretConfigured(providerKey: string): boolean {
+  if (providerKey === "provider.maps.locationiq") {
+    return Boolean(Deno.env.get("LOCATIONIQ_ACCESS_TOKEN")?.trim());
+  }
+  if (providerKey === "provider.maps.google-maps") {
+    return Boolean(Deno.env.get("GOOGLE_MAPS_API_KEY")?.trim());
+  }
+  if (providerKey === "provider.maps.mapbox") {
+    return Boolean(Deno.env.get("MAPBOX_ACCESS_TOKEN")?.trim());
+  }
+  return providerKey === "provider.maps.sandbox";
+}
+
+function enrichMapsLocationStatus(
+  status: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const activeProviderKey = optionalString(status.activeGeocoderKey);
+  const providers = Array.isArray(status.providers)
+    ? status.providers.flatMap((value) => {
+      const provider = optionalRecord(value);
+      if (!provider) return [];
+      const key = optionalString(provider.key) ?? "";
+      return [{ ...provider, configured: mapsProviderSecretConfigured(key) }];
+    })
+    : [];
+  const activeConfigured = activeProviderKey
+    ? mapsProviderSecretConfigured(activeProviderKey)
+    : false;
+  const health = requireRecordOrEmpty(status.health);
+  return {
+    ...status,
+    activeConfigured,
+    health: activeConfigured
+      ? health
+      : {
+        ...health,
+        status: "unhealthy",
+        details: {
+          message: "The active provider secret has not been configured in Supabase.",
+          secretExposedToClients: false,
+        },
+      },
+    providers,
+  };
+}
+
+function mapsLocationStatusSummary(
+  status: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const providers = Array.isArray(status.providers)
+    ? status.providers.flatMap((value) => optionalRecord(value) ? [value as Record<string, unknown>] : [])
+    : [];
+  const activeKey = optionalString(status.activeGeocoderKey);
+  const activeProvider = providers.find((provider) => optionalString(provider.key) === activeKey);
+  const health = requireRecordOrEmpty(status.health);
+  const metrics = requireRecordOrEmpty(status.metrics);
+  const cache = requireRecordOrEmpty(status.cache);
+  return {
+    active_geocoder: optionalString(activeProvider?.displayName) ?? "Not configured",
+    active_router: optionalString(activeProvider?.displayName) ?? "Not configured",
+    provider_configuration: status.activeConfigured === true ? "Configured" : "Secret required",
+    provider_health: optionalString(health.status) ?? "unknown",
+    geocode_cache: Number(cache.activeEntries ?? 0) > 0 ? "healthy" : "ready",
+    requests_last_24_hours: Number(metrics.requests24h ?? 0),
+    successful_requests: Number(metrics.succeeded24h ?? 0),
+    failed_requests: Number(metrics.failed24h ?? 0),
+    cache_hits: Number(metrics.cacheHits24h ?? 0),
+    rate_limit_events: Number(metrics.rateLimitEvents24h ?? 0),
+    average_latency_ms: metrics.averageLatencyMs24h ?? null,
+    automatic_paid_fallback: status.automaticPaidFallback === true ? "Enabled" : "Disabled",
+    attribution: optionalString(status.attribution),
+  };
+}
+
+function mapsLocationProviderRecords(
+  status: Readonly<Record<string, unknown>>,
+): readonly Record<string, unknown>[] {
+  if (!Array.isArray(status.providers)) return [];
+  return status.providers.flatMap((value) => {
+    const provider = optionalRecord(value);
+    if (!provider) return [];
+    const active = provider.active === true;
+    const runtimeSupported = provider.runtimeSupported === true;
+    const configured = provider.configured === true;
+    return [{
+      provider: optionalString(provider.displayName) ?? "Location provider",
+      role: active ? "Active geocoder and router" : provider.preserved === true ? "Preserved / inactive" : "Inactive",
+      configuration: configured
+        ? "Configured"
+        : runtimeSupported
+        ? "Secret required"
+        : "Preserved for future integration",
+      status: active && !configured ? "unhealthy" : optionalString(provider.status) ?? "inactive",
+      capabilities: Array.isArray(provider.supports) ? provider.supports : [],
+      last_updated: optionalString(provider.updatedAt),
+    }];
+  });
+}
+
+function mapsLocationAuditRecords(
+  status: Readonly<Record<string, unknown>>,
+): readonly Record<string, unknown>[] {
+  if (!Array.isArray(status.recentChanges)) return [];
+  return status.recentChanges.flatMap((value) => {
+    const change = optionalRecord(value);
+    if (!change) return [];
+    return [{
+      change: optionalString(change.action) ?? "Provider configuration changed",
+      changed_by: optionalString(change.changedBy) ?? "Platform administrator",
+      reason: optionalString(change.reason) ?? "No reason recorded",
+      changed_at: optionalString(change.createdAt),
+    }];
+  });
+}
+
 async function handleMapsGeocodeRequest(
   request: Request,
   id: string,
   supabase: SupabaseClient,
   supabaseUrl: string,
+  actorUserId: string,
   operation: "geocode" | "reverse_geocode",
 ): Promise<Response> {
   const body = await readJsonBody(request, id);
@@ -7341,8 +7939,9 @@ async function handleMapsGeocodeRequest(
     address = requireString(payload.address, "address");
     requestPayload.address = address;
   } else {
-    latitude = requireNumber(payload.latitude, "latitude");
-    longitude = requireNumber(payload.longitude, "longitude");
+    const point = requireCoordinate(payload, "location");
+    latitude = point.latitude;
+    longitude = point.longitude;
     requestPayload.latitude = latitude;
     requestPayload.longitude = longitude;
   }
@@ -7388,6 +7987,52 @@ async function handleMapsGeocodeRequest(
       status: "succeeded",
     });
     return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (activeProviderKey === "provider.maps.locationiq") {
+    const reverseGridDecimals = mapsConfigNumber(
+      providerResult.policy,
+      "reverse_geocode_grid_decimals",
+      4,
+      3,
+      6,
+    );
+    const cacheDescriptor = operation === "geocode"
+      ? `${operation}:${address?.trim().toLocaleLowerCase()}`
+      : `${operation}:${quantizedCoordinate(latitude ?? 0, reverseGridDecimals)}:${quantizedCoordinate(longitude ?? 0, reverseGridDecimals)}`;
+    const cacheTtlSeconds = mapsConfigNumber(
+      providerResult.policy,
+      operation === "geocode"
+        ? "geocode_cache_ttl_seconds"
+        : "reverse_geocode_cache_ttl_seconds",
+      604_800,
+      60,
+      2_592_000,
+    );
+    const execution = await executeLocationIqProviderCall({
+      actorUserId,
+      cacheDescriptor,
+      cacheTtlSeconds,
+      id,
+      idempotencyKey,
+      operation,
+      provider: providerResult,
+      requestPayload,
+      supabase,
+      supabaseUrl,
+      execute: async () => {
+        const adapter = createLocationIqAdapter(providerResult);
+        const result = operation === "geocode"
+          ? await adapter.geocode(address ?? "")
+          : await adapter.reverseGeocode({
+            latitude: latitude ?? 0,
+            longitude: longitude ?? 0,
+          });
+        return { data: { ...result.data }, latencyMs: result.latencyMs };
+      },
+    });
+    if ("response" in execution) return execution.response;
+    return jsonResponse({ ok: true, data: execution.data, requestId: id });
   }
 
   if (activeProviderKey !== "provider.maps.google-maps") {
@@ -7509,6 +8154,7 @@ async function handleMapsRouteEstimateRequest(
   id: string,
   supabase: SupabaseClient,
   supabaseUrl: string,
+  actorUserId: string,
 ): Promise<Response> {
   const body = await readJsonBody(request, id);
 
@@ -7580,6 +8226,47 @@ async function handleMapsRouteEstimateRequest(
       status: "succeeded",
     });
     return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (activeProviderKey === "provider.maps.locationiq") {
+    const routeGridDecimals = mapsConfigNumber(
+      providerResult.policy,
+      "route_cache_grid_decimals",
+      5,
+      3,
+      6,
+    );
+    const cacheDescriptor = [
+      "route_estimate",
+      quantizedCoordinate(origin.latitude, routeGridDecimals),
+      quantizedCoordinate(origin.longitude, routeGridDecimals),
+      quantizedCoordinate(destination.latitude, routeGridDecimals),
+      quantizedCoordinate(destination.longitude, routeGridDecimals),
+    ].join(":");
+    const execution = await executeLocationIqProviderCall({
+      actorUserId,
+      cacheDescriptor,
+      cacheTtlSeconds: mapsConfigNumber(
+        providerResult.policy,
+        "route_cache_ttl_seconds",
+        900,
+        30,
+        86_400,
+      ),
+      id,
+      idempotencyKey,
+      operation: "route_estimate",
+      provider: providerResult,
+      requestPayload,
+      supabase,
+      supabaseUrl,
+      execute: async () => {
+        const result = await createLocationIqAdapter(providerResult).routeEstimate(origin, destination);
+        return { data: { ...result.data }, latencyMs: result.latencyMs };
+      },
+    });
+    if ("response" in execution) return execution.response;
+    return jsonResponse({ ok: true, data: execution.data, requestId: id });
   }
 
   if (activeProviderKey !== "provider.maps.google-maps") {
@@ -7662,6 +8349,8 @@ async function handleMapsRouteEstimateRequest(
 
 async function buildLpgCommercialRouteSnapshot(
   supabase: SupabaseClient,
+  supabaseUrl: string,
+  actorUserId: string,
   pickupLocationId: string,
   deliveryLocationId: string,
   stationBranchId: string,
@@ -7715,9 +8404,27 @@ async function buildLpgCommercialRouteSnapshot(
   const providerResult = await resolveLpgMapsProvider(supabase, id, "route_estimate");
   if (providerResult.response) return { response: providerResult.response };
 
-  const firstLeg = await estimateCommercialRouteLeg(pickup, station, providerResult, id);
+  const firstLeg = await estimateCommercialRouteLeg(
+    pickup,
+    station,
+    providerResult,
+    supabase,
+    supabaseUrl,
+    actorUserId,
+    id,
+    "pickup-to-station",
+  );
   if ("response" in firstLeg) return firstLeg;
-  const secondLeg = await estimateCommercialRouteLeg(station, delivery, providerResult, id);
+  const secondLeg = await estimateCommercialRouteLeg(
+    station,
+    delivery,
+    providerResult,
+    supabase,
+    supabaseUrl,
+    actorUserId,
+    id,
+    "station-to-customer",
+  );
   if ("response" in secondLeg) return secondLeg;
 
   return {
@@ -7739,8 +8446,12 @@ async function buildLpgCommercialRouteSnapshot(
 async function estimateCommercialRouteLeg(
   origin: { readonly latitude: number; readonly longitude: number },
   destination: { readonly latitude: number; readonly longitude: number },
-  providerResult: { readonly policy: Record<string, unknown>; readonly providerKey: string },
+  providerResult: ResolvedMapsProvider,
+  supabase: SupabaseClient,
+  supabaseUrl: string,
+  actorUserId: string,
   id: string,
+  legKey: string,
 ): Promise<
   | { readonly data: { readonly distanceMeters: number; readonly durationSeconds: number; readonly provider: string } }
   | { readonly response: Response }
@@ -7756,6 +8467,53 @@ async function estimateCommercialRouteLeg(
         distanceMeters,
         durationSeconds: Math.max(1, Math.round(distanceMeters / (speedKph * 1000 / 3600))),
         provider: "sandbox",
+      },
+    };
+  }
+
+  if (providerResult.providerKey === "provider.maps.locationiq") {
+    const decimals = mapsConfigNumber(
+      providerResult.policy,
+      "route_cache_grid_decimals",
+      5,
+      3,
+      6,
+    );
+    const execution = await executeLocationIqProviderCall({
+      actorUserId,
+      cacheDescriptor: [
+        "route_estimate",
+        quantizedCoordinate(origin.latitude, decimals),
+        quantizedCoordinate(origin.longitude, decimals),
+        quantizedCoordinate(destination.latitude, decimals),
+        quantizedCoordinate(destination.longitude, decimals),
+      ].join(":"),
+      cacheTtlSeconds: mapsConfigNumber(
+        providerResult.policy,
+        "route_cache_ttl_seconds",
+        900,
+        30,
+        86_400,
+      ),
+      id,
+      idempotencyKey: `${id}:${legKey}`,
+      operation: "route_estimate",
+      provider: providerResult,
+      requestPayload: { destination, legKey, origin, operation: "route_estimate" },
+      supabase,
+      supabaseUrl,
+      execute: async () => {
+        const result = await createLocationIqAdapter(providerResult).routeEstimate(origin, destination);
+        return { data: { ...result.data }, latencyMs: result.latencyMs };
+      },
+    });
+    if ("response" in execution) return execution;
+    const duration = optionalString(execution.data.duration) ?? "0s";
+    return {
+      data: {
+        distanceMeters: requireNumber(execution.data.distanceMeters, "LocationIQ route distance"),
+        durationSeconds: providerDurationSeconds(duration, "LocationIQ route duration"),
+        provider: "locationiq",
       },
     };
   }
@@ -7808,10 +8566,18 @@ async function estimateCommercialRouteLeg(
   return {
     data: {
       distanceMeters: requireNumber(route.distanceMeters, "Google route distance"),
-      durationSeconds: Math.max(0, Math.round(Number(duration.replace(/s$/, "")))),
+      durationSeconds: providerDurationSeconds(duration, "Google route duration"),
       provider: "google_maps",
     },
   };
+}
+
+function providerDurationSeconds(value: string, label: string): number {
+  const seconds = Number(value.replace(/s$/i, ""));
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    throw new Error(`${label} is invalid.`);
+  }
+  return Math.round(seconds);
 }
 
 async function handleMapsAutocompleteRequest(
@@ -7819,6 +8585,7 @@ async function handleMapsAutocompleteRequest(
   id: string,
   supabase: SupabaseClient,
   supabaseUrl: string,
+  actorUserId: string,
 ): Promise<Response> {
   const body = await readJsonBody(request, id);
 
@@ -7837,6 +8604,18 @@ async function handleMapsAutocompleteRequest(
   }
 
   const activeProviderKey = providerResult.providerKey;
+  const minimumCharacters = mapsConfigNumber(
+    providerResult.policy,
+    "autocomplete_minimum_characters",
+    3,
+    2,
+    10,
+  );
+  if (input.trim().length < minimumCharacters) {
+    throw new RequestValidationError(
+      `input must contain at least ${minimumCharacters} characters.`,
+    );
+  }
   const requestPayload: Record<string, unknown> = {
     input,
     operation: "autocomplete",
@@ -7872,6 +8651,34 @@ async function handleMapsAutocompleteRequest(
     });
 
     return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (activeProviderKey === "provider.maps.locationiq") {
+    const normalizedInput = input.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+    const execution = await executeLocationIqProviderCall({
+      actorUserId,
+      cacheDescriptor: `autocomplete:${normalizedInput}`,
+      cacheTtlSeconds: mapsConfigNumber(
+        providerResult.policy,
+        "autocomplete_cache_ttl_seconds",
+        21_600,
+        60,
+        604_800,
+      ),
+      id,
+      idempotencyKey,
+      operation: "autocomplete",
+      provider: providerResult,
+      requestPayload,
+      supabase,
+      supabaseUrl,
+      execute: async () => {
+        const result = await createLocationIqAdapter(providerResult).autocomplete(input);
+        return { data: { ...result.data }, latencyMs: result.latencyMs };
+      },
+    });
+    if ("response" in execution) return execution.response;
+    return jsonResponse({ ok: true, data: execution.data, requestId: id });
   }
 
   if (activeProviderKey !== "provider.maps.google-maps") {

@@ -41,6 +41,7 @@ import {
   readOperationalLocation,
   type OperationalLocation,
 } from "../device/location";
+import { useMapsGatewayAdapter } from "../domains/maps/gateway";
 import { uploadMedia } from "../media/upload";
 import { useSession } from "../session/SessionProvider";
 import { colors, radii, spacing } from "../theme/tokens";
@@ -130,6 +131,7 @@ export function ApplicationOverviewScreen({
   workspace: "driver" | "station";
 }) {
   const session = useSession();
+  const maps = useMapsGatewayAdapter();
   const applications = domainQueries.applications();
   const types = domainQueries.applicationTypes();
   const requirements = domainQueries.documentRequirements();
@@ -419,7 +421,7 @@ export function ApplicationOverviewScreen({
     setDetectingLocation(true);
     setError(null);
     try {
-      const loc = await readOperationalLocation();
+      const loc = await maps.resolveOperationalLocation(await readOperationalLocation());
       setLastLocation(loc);
       setLatitude(loc.latitude);
       setLongitude(loc.longitude);

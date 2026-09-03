@@ -30,6 +30,7 @@ import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
+import { EvidenceCapture } from "./EvidenceCapture";
 import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 import { SectionHeader } from "./SectionHeader";
@@ -87,7 +88,13 @@ export function StationInventoryScreen() {
   const canManageCapacity = actions?.canManageOperationalCapacity === true;
   const canReportIssue = actions?.canReportIssue === true;
   const dispatchBlockReason = firstString(inventory, ["dispatchBlockReason"]);
+  const primarySource = firstString(configuration, ["primarySource"]) ?? "manual";
   const manualFallbackUntil = firstString(configuration, ["manualFallbackUntil"]);
+  const fallbackExpiry = manualFallbackUntil ? Date.parse(manualFallbackUntil) : Number.NaN;
+  const manualFallbackActive = Number.isFinite(fallbackExpiry) && fallbackExpiry > Date.now();
+  const manualEditingAvailable = primarySource === "manual" || manualFallbackActive;
+  const canUpdateStock = canUpdate && manualEditingAvailable;
+  const canAdjustStock = canAdjust && manualEditingAvailable;
 
   const confirmUnchanged = async () => {
     if (!stationBranchId) return;
@@ -175,8 +182,15 @@ export function StationInventoryScreen() {
                 <Text style={[styles.cardTitle, { color: palette.ink }]}>Confirm real LPG stock</Text>
                 <Text style={[styles.body, { color: palette.muted }]}>Installed tank capacity is not live stock. Enter the quantity physically at this station before new orders can be assigned.</Text>
               </View>
-              {canUpdate ? <AppButton label="Set up" size="sm" onPress={() => setEditor("report")} /> : null}
+              {canUpdateStock ? <AppButton label="Set up" size="sm" onPress={() => setEditor("report")} /> : null}
             </View>
+          ) : null}
+
+          {!manualEditingAvailable && (canUpdate || canAdjust) ? (
+            <Notice
+              tone="warning"
+              text="This station is managed by a connected inventory provider. Activate Manual fallback before reporting or adjusting stock; the provider connection will remain preserved."
+            />
           ) : null}
 
           <View style={styles.metricGrid}>
@@ -202,11 +216,11 @@ export function StationInventoryScreen() {
 
           <View style={styles.actionGrid}>
             {canConfirm ? <AppButton label="Confirm unchanged" variant="secondary" loading={confirm.isPending} onPress={() => void confirmUnchanged()} /> : null}
-            {canUpdate ? <AppButton label={physical === null ? "Report opening stock" : "Update stock"} variant="secondary" onPress={() => setEditor("report")} /> : null}
-            {canAdjust ? <AppButton label="Record adjustment" variant="secondary" onPress={() => setEditor("adjust")} /> : null}
+            {canUpdateStock ? <AppButton label={physical === null ? "Report opening stock" : "Update stock"} variant="secondary" onPress={() => setEditor("report")} /> : null}
+            {canAdjustStock ? <AppButton label="Record adjustment" variant="secondary" onPress={() => setEditor("adjust")} /> : null}
             {canManageSources ? <AppButton label="Manage source" variant="secondary" onPress={() => setEditor("source")} /> : null}
             {canManageAvailability ? <AppButton label="Availability" variant="secondary" onPress={() => setEditor("availability")} /> : null}
-            {canManageSources ? <AppButton label={manualFallbackUntil ? "End fallback" : "Manual fallback"} variant="secondary" onPress={() => setEditor("fallback")} /> : null}
+            {canManageSources ? <AppButton label={manualFallbackActive ? "End fallback" : "Manual fallback"} variant="secondary" onPress={() => setEditor("fallback")} /> : null}
             {canManageCapacity ? <AppButton label="Processing capacity" variant="secondary" onPress={() => setEditor("capacity")} /> : null}
             {canManageProviders ? <AppButton label="Provider setup" variant="secondary" onPress={() => setEditor("provider")} /> : null}
             {canManageProviders && tanks.length > 0 && connections.length > 0 ? <AppButton label="Map device" variant="secondary" onPress={() => setEditor("device")} /> : null}
@@ -255,7 +269,7 @@ export function StationInventoryScreen() {
           {editor === "fallback" && stationBranchId ? (
             <FallbackEditor
               stationBranchId={stationBranchId}
-              activeUntil={manualFallbackUntil}
+              activeUntil={manualFallbackActive ? manualFallbackUntil : null}
               maximumHours={firstNumber(limits, ["manualFallbackMaximumHours"]) ?? 24}
               onClose={() => setEditor(null)}
               onResult={(text, success) => { setMessage(text); setMessageSuccess(success); setEditor(success ? null : "fallback"); }}
@@ -410,12 +424,16 @@ function StockReportEditor({ stationBranchId, measurementMethods, currentAllocat
   const [allocation, setAllocation] = useState(currentAllocation === null ? "" : String(currentAllocation));
   const [method, setMethod] = useState(firstString(measurementMethods[0], ["key"]) ?? "operator_estimate");
   const [note, setNote] = useState("");
+  const [evidenceAssetIds, setEvidenceAssetIds] = useState<string[]>([]);
+  const selectedMethod = measurementMethods.find((item) => firstString(item, ["key"]) === method);
+  const evidenceRequired = selectedMethod?.requiresEvidence === true;
   const mutation = useGatewayMutation({ path: "/lpg/stations/inventory/report", schema: ActionResponseSchema, invalidate: [["station-inventory"], ["station-runtime"], ["stations"]] });
   const submit = async () => {
     const physicalKg = Number(physical); const allocationKg = Number(allocation);
     if (!Number.isFinite(physicalKg) || physicalKg < 0 || !Number.isFinite(allocationKg) || allocationKg < 0) return onResult("Enter valid stock and allocation quantities.", false);
+    if (evidenceRequired && evidenceAssetIds.length === 0) return onResult("Add the required measurement evidence before saving inventory.", false);
     try {
-      await mutation.mutateAsync({ stationBranchId, physicalStockKg: physicalKg, skimaAllocationKg: allocationKg, measurementMethod: method, note: note.trim() || undefined, expectedVersion: snapshotVersion ?? undefined, idempotencyKey: idempotencyKey("inventory-report", stationBranchId) });
+      await mutation.mutateAsync({ stationBranchId, physicalStockKg: physicalKg, skimaAllocationKg: allocationKg, measurementMethod: method, note: note.trim() || undefined, evidenceAssetIds, expectedVersion: snapshotVersion ?? undefined, idempotencyKey: idempotencyKey("inventory-report", stationBranchId) });
       onResult("Physical stock and SKIMA allocation were saved.", true);
     } catch (cause) { onResult(friendlyError(cause, "Inventory could not be updated."), false); }
   };
@@ -423,8 +441,17 @@ function StockReportEditor({ stationBranchId, measurementMethods, currentAllocat
     <Field label="Current physical LPG stock (kg)" value={physical} onChangeText={setPhysical} />
     <Field label="Amount available to SKIMA (kg)" value={allocation} onChangeText={setAllocation} />
     <ChoiceList label="How was this measured?" records={measurementMethods} selected={method} onSelect={setMethod} />
+    <EvidenceCapture
+      assetTypeKey="media.lpg.inventory_evidence"
+      label={evidenceRequired ? "Add measurement evidence (required)" : "Add measurement evidence (optional)"}
+      draftType={`station-inventory-report-${stationBranchId}`}
+      onUploaded={async (assetId) => {
+        setEvidenceAssetIds((current) => current.includes(assetId) ? current : [...current, assetId]);
+      }}
+    />
+    {evidenceAssetIds.length > 0 ? <Text style={[styles.caption, { color: palette.success }]}>Evidence added and ready to save.</Text> : null}
     <Field label="Optional note" value={note} onChangeText={setNote} keyboardType="default" />
-    <AppButton label="Save inventory" fullWidth loading={mutation.isPending} onPress={() => void submit()} />
+    <AppButton label="Save inventory" fullWidth disabled={evidenceRequired && evidenceAssetIds.length === 0} loading={mutation.isPending} onPress={() => void submit()} />
   </EditorCard>;
 }
 
@@ -436,19 +463,31 @@ function AdjustmentEditor({ stationBranchId, adjustmentTypes, expectedVersion, o
   const selectable = useMemo(() => adjustmentTypes.filter((item) => firstString(item, ["direction"]) !== "neutral"), [adjustmentTypes]);
   const [type, setType] = useState(firstString(selectable[0], ["key"]) ?? "supplier_delivery");
   const [quantity, setQuantity] = useState(""); const [note, setNote] = useState("");
+  const [evidenceAssetIds, setEvidenceAssetIds] = useState<string[]>([]);
+  const selectedType = selectable.find((item) => firstString(item, ["key"]) === type);
+  const evidenceRecommended = selectedType?.evidenceRecommended === true;
   const mutation = useGatewayMutation({ path: "/lpg/stations/inventory/adjustments", schema: ActionResponseSchema, invalidate: [["station-inventory"], ["station-runtime"], ["stations"]] });
   const submit = async () => {
     const value = Number(quantity); const selected = selectable.find((item) => firstString(item, ["key"]) === type); const direction = firstString(selected, ["direction"]);
     if (!Number.isFinite(value) || value <= 0) return onResult("Enter a quantity greater than zero.", false);
     const signed = direction === "decrease" ? -value : value;
     try {
-      await mutation.mutateAsync({ stationBranchId, adjustmentKg: signed, adjustmentType: type, note: note.trim() || undefined, expectedVersion: snapshotVersion ?? undefined, idempotencyKey: idempotencyKey("inventory-adjustment", stationBranchId) });
+      await mutation.mutateAsync({ stationBranchId, adjustmentKg: signed, adjustmentType: type, note: note.trim() || undefined, evidenceAssetIds, expectedVersion: snapshotVersion ?? undefined, idempotencyKey: idempotencyKey("inventory-adjustment", stationBranchId) });
       onResult("Inventory adjustment was recorded.", true);
     } catch (cause) { onResult(friendlyError(cause, "Inventory adjustment could not be recorded."), false); }
   };
   return <EditorCard title="Record stock adjustment" icon={<RefreshCw color={palette.brand} size={20} />} onClose={onClose}>
     <ChoiceList label="Adjustment type" records={selectable} selected={type} onSelect={setType} />
     <Field label="Quantity (kg)" value={quantity} onChangeText={setQuantity} />
+    <EvidenceCapture
+      assetTypeKey="media.lpg.inventory_evidence"
+      label={evidenceRecommended ? "Add adjustment evidence (recommended)" : "Add adjustment evidence (optional)"}
+      draftType={`station-inventory-adjustment-${stationBranchId}`}
+      onUploaded={async (assetId) => {
+        setEvidenceAssetIds((current) => current.includes(assetId) ? current : [...current, assetId]);
+      }}
+    />
+    {evidenceAssetIds.length > 0 ? <Text style={[styles.caption, { color: palette.success }]}>Evidence added and ready to save.</Text> : null}
     <Field label="Note" value={note} onChangeText={setNote} keyboardType="default" />
     <AppButton label="Record adjustment" fullWidth loading={mutation.isPending} onPress={() => void submit()} />
   </EditorCard>;
