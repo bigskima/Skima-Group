@@ -5,6 +5,7 @@ import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import { ActionResponseSchema, displaySubtitle, displayTitle, recordId } from "../api/records";
 import {
+  emptyOperationalAddress,
   readOperationalLocation,
   resolveOperationalAddress,
   type OperationalAddress,
@@ -202,6 +203,11 @@ export function LocationsScreen() {
       && !baseAddress.toLocaleLowerCase().includes(specificLandmark.toLocaleLowerCase())
       ? `${specificLandmark}, ${baseAddress}`
       : baseAddress;
+    const safeAddress = selected.address ?? emptyOperationalAddress();
+    const locationMetadata = {
+      ...safeAddress,
+      name: specificLandmark || safeAddress.name,
+    };
     try {
       await mutation.mutateAsync({
         label: label.trim(),
@@ -209,13 +215,13 @@ export function LocationsScreen() {
         latitude: selected.latitude,
         longitude: selected.longitude,
         accuracyMeters: selected.accuracyMeters ?? undefined,
-        address: selected.address,
+        address: safeAddress,
         captureSource: canonicalCaptureSource(selected.providerSource),
         capturedAt: selected.recordedAt,
         providerSource: selected.providerSource,
         providerPlaceId: selected.providerPlaceId ?? undefined,
         metadata: {
-          addressComponents: { ...selected.address, name: specificLandmark || selected.address.name },
+          addressComponents: locationMetadata,
           landmark: specificLandmark || undefined,
           recordedAt: selected.recordedAt,
         },
