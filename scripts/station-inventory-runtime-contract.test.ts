@@ -17,7 +17,7 @@ const [
   readRepositoryFile("supabase/functions/inventory-provider-webhook/index.ts"),
   readRepositoryFile("supabase/config.toml"),
   readRepositoryFile(
-    "supabase/migrations/20260903142508_guard_provider_managed_inventory_edits.sql",
+    "supabase/migrations/20260903142508_lpg_guard_provider_managed_inventory_edits.sql",
   ),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/StationInventoryScreen.tsx"),
 ]);

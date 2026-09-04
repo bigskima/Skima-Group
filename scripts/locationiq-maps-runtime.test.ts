@@ -185,9 +185,20 @@ Deno.test("LocationIQ retries a temporary provider failure within the configured
 });
 
 Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchronized", async () => {
-  const [migration, gateway, adminConfig, adminReview, mobileGateway, driverTracking] =
+  const [
+    migration,
+    moduleMigration,
+    gateway,
+    adminConfig,
+    adminReview,
+    mobileGateway,
+    driverTracking,
+  ] =
     await Promise.all([
       readRepositoryFile("supabase/migrations/20260901204813_locationiq_maps_provider_runtime.sql"),
+      readRepositoryFile(
+        "supabase/migrations/20260904162247_lpg_locationiq_maps_runtime_sync.sql",
+      ),
       readRepositoryFile("supabase/functions/api-gateway/index.ts"),
       readRepositoryFile("apps/admin/src/admin-resource-config.ts"),
       readRepositoryFile("apps/admin/src/admin-partner-location-review-workspace.tsx"),
@@ -209,12 +220,17 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
   assertIncludes(migration, "where provider_kind = 'maps';");
   assertIncludes(migration, "create or replace function public.configure_maps_provider(");
   assertIncludes(migration, "create or replace function public.read_maps_location_status()");
+  assertNotIncludes(migration, "lpg_operation_policies");
   assertIncludes(
-    migration,
+    moduleMigration,
     "create or replace function public.read_partner_application_location_reviews_v2()",
   );
+  assertIncludes(moduleMigration, "create trigger configuration_entries_sync_lpg_maps_provider");
+  assertIncludes(moduleMigration, "create or replace function public.sync_lpg_maps_provider_selection()");
   assertNotIncludes(migration.toLowerCase(), "drop table");
   assertNotIncludes(migration.toLowerCase(), " cascade");
+  assertNotIncludes(moduleMigration.toLowerCase(), "drop table");
+  assertNotIncludes(moduleMigration.toLowerCase(), " cascade");
 
   assertIncludes(adminConfig, 'label: "Maps & Location"');
   assertIncludes(adminConfig, '"Change active location provider"');

@@ -68,6 +68,10 @@
     "20260822143000_universal_location_geography_coverage_runtime.sql",
     "20260823100000_universal_coverage_dispatch_cutover.sql",
     "20260823120000_canonical_location_evidence_runtime.sql",
-    "20260823140000_expansion_interest_production_runtime.sql"
+    "20260823140000_expansion_interest_production_runtime.sql",
+    "20260826183151_stabilize_pricing_fees_and_team_invitations.sql",
+    "20260827033417_repair_station_pricing_and_invitation_notifications.sql",
+    "20260829082943_station_inventory_runtime_foundation.sql",
+    "20260829143051_station_inventory_operations_runtime.sql"
   ]
 }
