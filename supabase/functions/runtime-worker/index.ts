@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.110.9";
 
 import { jsonResponse, optionsResponse, requestId } from "../_shared/http.ts";
+import { resolveAiProviderRoute } from "../_shared/ai-provider-runtime.ts";
 
 const DEFAULT_LIMIT = 25;
 const DEFAULT_WEBHOOK_TIMEOUT_MS = 5_000;
@@ -108,9 +109,12 @@ interface WorkerBody {
 }
 
 interface ImageProviderConfig {
-  readonly provider: "cloudflare" | "gemini";
+  readonly transport: "cloudflare_workers_ai" | "google_generate_content";
   readonly adapter: string;
   readonly model: string;
+  readonly provider: string;
+  readonly providerConfig: Readonly<Record<string, unknown>>;
+  readonly secretRef: string | null;
 }
 
 interface SourceImage {
@@ -333,11 +337,19 @@ async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): P
     const subjectType = requireString(task.subject_type);
     const isPresentation = subjectType === "lpg_cylinder" && input.purpose === "public_presentation";
     const isDriverCardPhoto = subjectType === "driver_profile" && input.purpose === "public_driver_card_photo";
-    const imageProvider = isPresentation || isDriverCardPhoto ? resolveImageProvider() : null;
-    const adapter = imageProvider?.adapter ?? "provider.ai.sandbox";
-    const model = imageProvider?.model ?? "sandbox";
+    let imageProvider: ImageProviderConfig | null = null;
+    let adapter = "provider.ai.sandbox";
+    let model = "sandbox";
 
     try {
+      if (isPresentation || isDriverCardPhoto) {
+        const capabilityKey = isPresentation
+          ? "ai.lpg.cylinder.presentation"
+          : "ai.driver.card_photo.enhance";
+        imageProvider = await resolveImageProvider(supabase, capabilityKey);
+        adapter = imageProvider.adapter;
+        model = imageProvider.model;
+      }
       await requireRpc(supabase.rpc("update_ai_task_run_status", {
         target_ai_task_run_id: taskRunId,
         target_error_message: null,
@@ -413,7 +425,7 @@ async function generateDriverCardPhoto(
   input: Readonly<Record<string, unknown>>,
   provider: ImageProviderConfig | null,
 ): Promise<Readonly<Record<string, unknown>>> {
-  const resolvedProvider = provider ?? resolveImageProvider();
+  const resolvedProvider = provider ?? await resolveImageProvider(supabase, "ai.driver.card_photo.enhance");
   const taskRunId = requireString(task.id);
   const driverProfileId = requireString(task.subject_id);
   const ownerUserId = requireString(task.requested_by);
@@ -462,9 +474,11 @@ async function generateDriverCardPhoto(
   const stylePrompt = optionalString(input.stylePrompt) ?? optionalString(input.style_prompt);
   const avoidPreviousResult = input.avoidPreviousResult === true || input.avoid_previous_result === true;
   const prompt = buildDriverCardPhotoPrompt(driver, stylePrompt, avoidPreviousResult);
-  const generated = resolvedProvider.provider === "cloudflare"
-    ? await generateWithCloudflare(prompt, { bytes: sourceBytes, contentType }, resolvedProvider.model)
-    : await generateWithGemini(prompt, { bytes: sourceBytes, contentType }, resolvedProvider.model);
+  const generated = await generateWithConfiguredImageProvider(
+    resolvedProvider,
+    prompt,
+    { bytes: sourceBytes, contentType },
+  );
   const bytes = base64ToBytes(generated.base64);
   const generatedContentType = generated.contentType;
   const extension = generatedContentType.includes("jpeg") || generatedContentType.includes("jpg") ? "jpg" : "png";
@@ -579,9 +593,11 @@ async function generateCylinderPresentation(
     };
   }
 
-  const generated = resolvedProvider.provider === "cloudflare"
-    ? await generateWithCloudflare(prompt, sourceImage, resolvedProvider.model)
-    : await generateWithGemini(prompt, sourceImage, resolvedProvider.model);
+  const generated = await generateWithConfiguredImageProvider(
+    resolvedProvider,
+    prompt,
+    sourceImage,
+  );
   const base64 = generated.base64;
   const contentType = generated.contentType;
 
@@ -644,27 +660,114 @@ async function generateCylinderPresentation(
   };
 }
 
-function resolveImageProvider(): ImageProviderConfig {
+async function resolveImageProvider(
+  supabase: RuntimeSupabaseClient,
+  capabilityKey: string,
+): Promise<ImageProviderConfig> {
+  try {
+    const route = await resolveAiProviderRoute(supabase, capabilityKey);
+    if (!route) {
+      throw new Error("AI image capability has no active provider route");
+    }
+
+    const transport = optionalString(route.providerConfig.transport);
+    if (transport !== "cloudflare_workers_ai" && transport !== "google_generate_content") {
+      throw new Error("configured AI image provider transport is not supported");
+    }
+
+    return {
+      transport,
+      adapter: route.providerAdapterKey,
+      model: route.modelKey,
+      provider: optionalString(route.providerConfig.provider) ?? route.providerAdapterKey,
+      providerConfig: route.providerConfig,
+      secretRef: route.secretRef,
+    };
+  } catch (error) {
+    if (error instanceof Error && !error.message.includes("resolve_ai_provider_route")) {
+      throw error;
+    }
+
+    console.warn(JSON.stringify({
+      severity: "warning",
+      source: "runtime-worker.ai-provider-route",
+      capabilityKey,
+      message: "AI provider routing migration is not available yet; using the legacy server configuration temporarily.",
+    }));
+    return resolveLegacyImageProvider();
+  }
+}
+
+function resolveLegacyImageProvider(): ImageProviderConfig {
   const preferred = (Deno.env.get("AI_IMAGE_PROVIDER") ?? "").trim().toLowerCase();
-  const cloudflareConfigured = Boolean(Deno.env.get("CLOUDFLARE_ACCOUNT_ID") && Deno.env.get("CLOUDFLARE_API_TOKEN"));
+  const cloudflareConfigured = Boolean(
+    Deno.env.get("CLOUDFLARE_ACCOUNT_ID") && Deno.env.get("CLOUDFLARE_API_TOKEN"),
+  );
 
   if (preferred === "cloudflare" || (!preferred && cloudflareConfigured)) {
     return {
+      transport: "cloudflare_workers_ai",
       provider: "cloudflare",
       adapter: "provider.ai.cloudflare-workers-ai",
       model: Deno.env.get("CLOUDFLARE_AI_MODEL") ?? "@cf/black-forest-labs/flux-1-schnell",
+      providerConfig: {},
+      secretRef: "SUPABASE_SECRET:CLOUDFLARE_API_TOKEN",
     };
   }
 
   if (preferred && preferred !== "gemini") {
-    throw new Error(`AI_IMAGE_PROVIDER '${preferred}' is not supported`);
+    throw new Error("legacy AI image provider is not supported");
   }
 
   return {
+    transport: "google_generate_content",
     provider: "gemini",
     adapter: "provider.ai.google-gemini",
     model: Deno.env.get("GEMINI_IMAGE_MODEL") ?? "gemini-3.1-flash-image",
+    providerConfig: {
+      api_base_url: "https://generativelanguage.googleapis.com/v1",
+    },
+    secretRef: "SUPABASE_SECRET:GEMINI_API_KEY",
   };
+}
+
+async function generateWithConfiguredImageProvider(
+  provider: ImageProviderConfig,
+  prompt: string,
+  sourceImage: SourceImage | null,
+): Promise<GeneratedImage> {
+  const apiSecret = readProviderSecretReference(provider.secretRef);
+
+  if (provider.transport === "cloudflare_workers_ai") {
+    return generateWithCloudflare(prompt, sourceImage, provider.model, apiSecret);
+  }
+
+  if (provider.transport === "google_generate_content") {
+    return generateWithGemini(
+      prompt,
+      sourceImage,
+      provider.model,
+      apiSecret,
+      optionalString(provider.providerConfig.api_base_url),
+    );
+  }
+
+  throw new Error("configured AI image provider transport is not supported");
+}
+
+function readProviderSecretReference(secretRef: string | null): string {
+  if (!secretRef?.startsWith("SUPABASE_SECRET:")) {
+    throw new Error("AI provider credential reference is not configured");
+  }
+  const envName = secretRef.slice("SUPABASE_SECRET:".length).trim();
+  if (!/^[A-Z][A-Z0-9_]{2,100}$/.test(envName)) {
+    throw new Error("AI provider credential reference is invalid");
+  }
+  const value = Deno.env.get(envName)?.trim();
+  if (!value) {
+    throw new Error("AI provider credential is not configured");
+  }
+  return value;
 }
 
 async function loadCylinderForPrompt(
@@ -733,11 +836,11 @@ async function generateWithCloudflare(
   prompt: string,
   sourceImage: SourceImage | null,
   model: string,
+  apiToken: string,
 ): Promise<GeneratedImage> {
   const accountId = Deno.env.get("CLOUDFLARE_ACCOUNT_ID");
-  const apiToken = Deno.env.get("CLOUDFLARE_API_TOKEN");
-  if (!accountId || !apiToken) {
-    throw new Error("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are not configured");
+  if (!accountId) {
+    throw new Error("Cloudflare AI account is not configured");
   }
 
   const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${model.replace(/^\/+/, "")}`;
@@ -809,10 +912,9 @@ async function generateWithGemini(
   prompt: string,
   sourceImage: SourceImage | null,
   model: string,
+  apiKey: string,
+  configuredBaseUrl: string | null,
 ): Promise<GeneratedImage> {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
-
   const promptParts: Array<Record<string, unknown>> = [{ text: prompt }];
   if (sourceImage) {
     promptParts.unshift({
@@ -823,8 +925,10 @@ async function generateWithGemini(
     });
   }
 
+  const baseUrl = (configuredBaseUrl ?? "https://generativelanguage.googleapis.com/v1")
+    .replace(/\/+$/, "");
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/${encodeURIComponent(model)}:generateContent`,
+    `${baseUrl}/models/${encodeURIComponent(model)}:generateContent`,
     {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
