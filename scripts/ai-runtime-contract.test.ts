@@ -15,6 +15,7 @@ const [
   driverEarningsExplanationSql,
   stationSettlementExplanationSql,
   customerServiceabilitySql,
+  supportTriageSql,
   partnerRiskSql,
   partnerRiskGuardSql,
   dispatchShadowSql,
@@ -31,6 +32,7 @@ const [
   workerSource,
   gatewaySource,
   adminAiWorkspace,
+  adminQualityWorkspace,
   mobileAssistant,
   mobileAiLauncher,
   mobileAiContextAction,
@@ -59,6 +61,7 @@ const [
   readRepositoryFile("supabase/migrations/20260906006000_driver_earnings_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906007000_station_settlement_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906008000_customer_serviceability_explanation_runtime.sql"),
+  readRepositoryFile("supabase/migrations/20260906009000_ai_support_triage_intelligence.sql"),
   readRepositoryFile("supabase/migrations/20260905233000_ai_partner_trust_risk_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233500_ai_partner_risk_configuration_guard.sql"),
   readRepositoryFile("supabase/migrations/20260905235000_ai_dispatch_shadow_intelligence.sql"),
@@ -75,6 +78,7 @@ const [
   readRepositoryFile("supabase/functions/runtime-worker/index.ts"),
   readRepositoryFile("supabase/functions/api-gateway/index.ts"),
   readRepositoryFile("apps/admin/src/admin-ai-workspace.tsx"),
+  readRepositoryFile("apps/admin/src/admin-quality-workspace.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/AiAssistantScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/AiAssistantLauncher.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/AiContextAction.tsx"),
@@ -1924,6 +1928,118 @@ Deno.test("customer serviceability explanations use canonical coordinate coverag
   );
 });
 
+Deno.test("support triage is deterministic, advisory-only, and cannot mutate complaint state", () => {
+  const sql = normalizeWhitespace(supportTriageSql);
+
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_support_triage_rules",
+    "support triage policy must be database configuration",
+  );
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_support_triage_assessments",
+    "support triage results must be persisted separately from complaints",
+  );
+  assertIncludes(
+    sql,
+    '"control": "advisory_only"',
+    "support triage must be seeded as advisory-only",
+  );
+  assertIncludes(
+    sql,
+    "support triage control must remain advisory_only",
+    "support triage configuration must reject enforcement modes",
+  );
+  assertNotMatch(
+    supportTriageSql,
+    /provider\.ai\.|resolve_ai_provider_route|executeAiText|generativelanguage|chat\/completions/,
+    "support triage scoring must not depend on an LLM",
+  );
+  assertNotMatch(
+    supportTriageSql,
+    /\b(?:update|insert\s+into|delete\s+from)\s+public\.(?:lpg_service_complaints|driver_profiles|lpg_station_branches|dispatch_requests|dispatch_candidates|financial_transactions|wallet_ledger_entries|escrow_holds)\b/i,
+    "support triage must never mutate complaints, partners, dispatch, or finance",
+  );
+  for (const guardrail of [
+    "'doesnotchangecomplaintstatus', true",
+    "'doesnotresolveordismiss', true",
+    "'doesnotsuspendpartner', true",
+    "'doesnotchangedispatch', true",
+    "'doesnotmovefunds', true",
+    "'doesnotpostledger', true",
+  ]) {
+    assertIncludes(
+      sql,
+      guardrail,
+      "support triage evidence must preserve non-authoritative guardrail " + guardrail,
+    );
+  }
+  assertIncludes(
+    sql,
+    "revoke all on function public.refresh_ai_support_triage_assessments() from public, anon, authenticated",
+    "triage refresh must remain backend-only",
+  );
+  assertIncludes(
+    sql,
+    "grant execute on function public.refresh_ai_support_triage_assessments() to service_role",
+    "only the service runtime may refresh triage",
+  );
+  assertIncludes(
+    sql,
+    "public.has_permission('lpg.quality.read', null)",
+    "quality readers must be able to inspect advisory triage",
+  );
+});
+
+Deno.test("Service Quality uses triage only as a human-review aid and fails soft", () => {
+  assertIncludes(
+    adminQualityWorkspace,
+    'supabase.rpc("read_ai_support_triage_assessments"',
+    "Service Quality should read the support triage projection",
+  );
+  assertIncludes(
+    adminQualityWorkspace,
+    "Triage priority is advisory only.",
+    "Quality UI must visibly label triage as advisory",
+  );
+  assertIncludes(
+    adminQualityWorkspace,
+    "The manual quality queue remains fully usable.",
+    "Quality UI must remain usable when triage is unavailable",
+  );
+  assertIncludes(
+    adminQualityWorkspace,
+    'supabase.rpc("review_lpg_service_complaint"',
+    "human review must remain the canonical complaint mutation path",
+  );
+  assertIncludes(
+    adminQualityWorkspace,
+    "Human review is authoritative.",
+    "review dialog must preserve human authority",
+  );
+  assertNotIncludes(
+    adminQualityWorkspace,
+    "refresh_ai_support_triage_assessments",
+    "the browser must never run the backend triage refresh",
+  );
+  assertIncludes(
+    workerSource,
+    'source: "runtime-worker.ai-support-triage"',
+    "worker must isolate support triage refresh failures",
+  );
+  assertIncludes(
+    workerSource,
+    'reason: "support_triage_runtime_not_ready"',
+    "worker must fail soft when support triage migration is not deployed",
+  );
+  assertIncludes(
+    workerSource,
+    "aiSupportTriage,",
+    "worker health output must expose support triage refresh state",
+  );
+});
+
 Deno.test("AI workspace context keeps internal intelligence out of station/customer/driver surfaces", () => {
   const customerContext = sectionBetween(
     gatewaySource,
@@ -2048,6 +2164,7 @@ Deno.test("worker reports exception refresh exactly once per response section", 
     "aiFinance,",
     "aiPricing,",
     "aiExpansion,",
+    "aiSupportTriage,",
     "aiTasks,",
   ]) {
     assertIncludes(
