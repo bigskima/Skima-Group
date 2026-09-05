@@ -17,6 +17,7 @@ import {
 } from "../_shared/paystack-payouts.ts";
 import {
   AiProviderRuntimeError,
+  aiProviderRouteSupportsInputMode,
   invokeAiText,
   resolveAiProviderRoute,
   resolveAiProviderRoutes,
@@ -241,6 +242,8 @@ const ROUTES = new Set([
   "/runtime/verifications",
   "/runtime/notifications/queue",
   "/runtime/ai/assistant",
+  "/runtime/ai/cylinder-visual-review",
+  "/runtime/ai/cylinder-visual-reviews",
   "/runtime/ai/home-insight",
   "/runtime/ai/support-case",
   "/runtime/ai/conversations",
@@ -4976,6 +4979,69 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     );
   }
 
+  if (routePath === "/runtime/ai/cylinder-visual-reviews" && request.method === "GET") {
+    const cylinderId = requireUuid(
+      url.searchParams.get("cylinderId"),
+      "cylinderId",
+    );
+    return rpcResponse(
+      supabase.rpc("read_my_cylinder_visual_reviews", {
+        target_cylinder_id: cylinderId,
+        target_limit: 5,
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/ai/cylinder-visual-review" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+
+    try {
+      return await cylinderVisualReviewResponse({
+        authUser: authResult.user,
+        id,
+        payload: body.value,
+        requestClient: supabase,
+        supabaseUrl,
+      });
+    } catch (error) {
+      if (error instanceof RequestValidationError) throw error;
+
+      console.error(JSON.stringify({
+        severity: "error",
+        source: "api-gateway.ai-cylinder-visual-review",
+        requestId: id,
+        userId: authResult.user.id,
+        code: error instanceof AiProviderRuntimeError ? error.code : "visual_review_failed",
+        message: error instanceof Error ? error.message : "unknown error",
+      }));
+
+      if (error instanceof AiProviderRuntimeError) {
+        const usageLimited =
+          error.code === "provider_rate_limited" ||
+          error.code === "ai_quota_exhausted";
+        return jsonResponse({
+          ok: false,
+          error: error.code,
+          message: error.code === "ai_quota_exhausted"
+            ? "Cylinder photo review has reached its configured free-tier AI limit for now. Your cylinder record is unchanged."
+            : error.code === "provider_rate_limited"
+            ? "Cylinder photo review is busy right now. Please try again shortly."
+            : "Cylinder photo review is temporarily unavailable. Your cylinder record is unchanged.",
+          requestId: id,
+        }, usageLimited ? 429 : 503);
+      }
+
+      return jsonResponse({
+        ok: false,
+        error: "visual_review_unavailable",
+        message: "Cylinder photo review is temporarily unavailable. Your cylinder record is unchanged.",
+        requestId: id,
+      }, 503);
+    }
+  }
+
   if (routePath === "/runtime/ai/home-insight" && request.method === "GET") {
     const workspace = requireString(url.searchParams.get("workspace"), "workspace").trim().toLowerCase();
     if (!["customer", "driver", "station"].includes(workspace)) {
@@ -9579,6 +9645,570 @@ async function initializePaystackDeposit(
     id: depositId,
     requestId: params.id,
   });
+}
+
+interface CylinderVisualReviewParams {
+  readonly authUser: User;
+  readonly id: string;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly requestClient: SupabaseClient;
+  readonly supabaseUrl: string;
+}
+
+async function cylinderVisualReviewResponse(
+  params: CylinderVisualReviewParams,
+): Promise<Response> {
+  const cylinderId = requireUuid(params.payload.cylinderId, "cylinderId");
+  const sourceMediaAssetId = requireUuid(
+    params.payload.sourceMediaAssetId,
+    "sourceMediaAssetId",
+  );
+  const idempotencyKey = requireString(
+    params.payload.idempotencyKey,
+    "idempotencyKey",
+  ).trim();
+
+  if (idempotencyKey.length > 220) {
+    throw new RequestValidationError("idempotencyKey is too long.");
+  }
+
+  const cylinderResult = await params.requestClient
+    .from("lpg_cylinders")
+    .select("id,owner_user_id,public_reference,image_asset_ids,status")
+    .eq("id", cylinderId)
+    .eq("owner_user_id", params.authUser.id)
+    .neq("status", "deactivated")
+    .maybeSingle();
+
+  if (cylinderResult.error) {
+    throw new AiProviderRuntimeError(
+      "visual_review_context_failed",
+      cylinderResult.error.message,
+    );
+  }
+
+  const cylinder = optionalRecord(cylinderResult.data);
+  if (!cylinder) {
+    return jsonResponse({
+      ok: false,
+      error: "forbidden",
+      message: "This cylinder is not available for your account.",
+      requestId: params.id,
+    }, 403);
+  }
+
+  const attachedAssetIds = Array.isArray(cylinder.image_asset_ids)
+    ? cylinder.image_asset_ids.filter((value): value is string =>
+      typeof value === "string"
+    )
+    : [];
+
+  if (!attachedAssetIds.includes(sourceMediaAssetId)) {
+    throw new RequestValidationError(
+      "Choose an original photo already attached to this cylinder.",
+    );
+  }
+
+  const sourceResult = await params.requestClient
+    .from("media_assets")
+    .select("id,owner_user_id,storage_bucket,storage_path,content_type,byte_size,status")
+    .eq("id", sourceMediaAssetId)
+    .eq("owner_user_id", params.authUser.id)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (sourceResult.error) {
+    throw new AiProviderRuntimeError(
+      "visual_review_media_failed",
+      sourceResult.error.message,
+    );
+  }
+
+  const source = optionalRecord(sourceResult.data);
+  if (!source) {
+    throw new RequestValidationError(
+      "The selected cylinder photo is no longer available.",
+    );
+  }
+
+  const contentType = stringOrNull(source.content_type)?.toLowerCase() ?? "";
+  if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
+    throw new RequestValidationError(
+      "Cylinder visual review currently supports JPEG, PNG, or WebP source photos.",
+    );
+  }
+
+  const declaredBytes = numberOrNull(source.byte_size);
+  const maximumBytes = 8 * 1024 * 1024;
+  if (declaredBytes !== null && declaredBytes > maximumBytes) {
+    throw new RequestValidationError(
+      "The cylinder photo is too large for visual review. Use an image under 8 MB.",
+    );
+  }
+
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) {
+    throw new AiProviderRuntimeError(
+      "server_misconfigured",
+      "AI server runtime is not configured.",
+    );
+  }
+  const serviceClient = createServiceClient(params.supabaseUrl, serviceRoleKey);
+
+  const existing = await serviceClient
+    .from("ai_cylinder_visual_reviews")
+    .select("id,cylinder_id,source_media_asset_id,image_quality,visible_colour,probable_size_marking_kg,visible_markings,appearance_observations,retake_suggestions,manual_inspection_recommended,safety_certification,mutates_cylinder,created_at")
+    .eq("owner_user_id", params.authUser.id)
+    .eq("idempotency_key", idempotencyKey)
+    .maybeSingle();
+
+  if (!existing.error && existing.data) {
+    return jsonResponse({
+      ok: true,
+      data: cylinderVisualReviewApiRecord(existing.data),
+      requestId: params.id,
+    });
+  }
+
+  const download = await serviceClient.storage
+    .from(requireString(source.storage_bucket, "storage bucket"))
+    .download(requireString(source.storage_path, "storage path"));
+
+  if (download.error || !download.data) {
+    throw new AiProviderRuntimeError(
+      "visual_review_media_failed",
+      download.error?.message ?? "Cylinder photo could not be loaded.",
+      true,
+    );
+  }
+
+  const bytes = new Uint8Array(await download.data.arrayBuffer());
+  if (bytes.byteLength === 0 || bytes.byteLength > maximumBytes) {
+    throw new RequestValidationError(
+      "The cylinder photo must be a non-empty image under 8 MB.",
+    );
+  }
+
+  const capabilityKey = "ai.lpg.cylinder.visual_review";
+  let routes: readonly AiProviderRoute[];
+  try {
+    routes = await resolveAiProviderRoutes(serviceClient, capabilityKey);
+  } catch (error) {
+    if (
+      error instanceof AiProviderRuntimeError &&
+      error.code === "route_resolution_failed"
+    ) {
+      const legacyRoute = await resolveAiProviderRoute(
+        serviceClient,
+        capabilityKey,
+      );
+      routes = legacyRoute ? [legacyRoute] : [];
+    } else {
+      throw error;
+    }
+  }
+
+  routes = routes.filter((route) =>
+    aiProviderRouteSupportsInputMode(route, "image")
+  );
+
+  if (!routes.length) {
+    throw new AiProviderRuntimeError(
+      "ai_not_configured",
+      "No active AI route with image-input support is configured for cylinder visual review.",
+    );
+  }
+
+  const execution = await invokeCylinderVisualReviewWithGovernedFailover({
+    capabilityKey,
+    idempotencyKey,
+    imageBase64: bytesToBase64ForAi(bytes),
+    imageMediaType: contentType,
+    routes,
+    serviceClient,
+    sourceMediaAssetId,
+    userId: params.authUser.id,
+  });
+
+  const review = sanitizeCylinderVisualReview(execution.result.text);
+
+  const inserted = await serviceClient
+    .from("ai_cylinder_visual_reviews")
+    .insert({
+      cylinder_id: cylinderId,
+      owner_user_id: params.authUser.id,
+      source_media_asset_id: sourceMediaAssetId,
+      provider_adapter_key: execution.route.providerAdapterKey,
+      model_key: execution.route.modelKey,
+      image_quality: review.imageQuality,
+      visible_colour: review.visibleColour,
+      probable_size_marking_kg: review.probableSizeMarkingKg,
+      visible_markings: review.visibleMarkings,
+      appearance_observations: review.appearanceObservations,
+      retake_suggestions: review.retakeSuggestions,
+      manual_inspection_recommended: true,
+      safety_certification: false,
+      mutates_cylinder: false,
+      provider_metadata: execution.result.providerMetadata,
+      idempotency_key: idempotencyKey,
+      metadata: {
+        source: "skima.ai.cylinder_visual_review",
+        cylinderReference: stringOrNull(cylinder.public_reference),
+        quotaPolicyKey: execution.quotaPolicyKey,
+        failoverAttempt: execution.attempt,
+        failoverUsed: execution.attempt > 1,
+      },
+    })
+    .select("id,cylinder_id,source_media_asset_id,image_quality,visible_colour,probable_size_marking_kg,visible_markings,appearance_observations,retake_suggestions,manual_inspection_recommended,safety_certification,mutates_cylinder,created_at")
+    .single();
+
+  if (inserted.error || !inserted.data) {
+    throw new AiProviderRuntimeError(
+      "visual_review_write_failed",
+      inserted.error?.message ?? "Cylinder visual review could not be saved.",
+    );
+  }
+
+  await serviceClient.from("ai_usage_events").insert({
+    capability_key: capabilityKey,
+    provider_adapter_key: execution.route.providerAdapterKey,
+    model_key: execution.route.modelKey,
+    user_id: params.authUser.id,
+    workspace: "customer",
+    input_units: execution.result.inputUnits,
+    output_units: execution.result.outputUnits,
+    request_count: 1,
+    status: "succeeded",
+    metadata: {
+      sourceMediaAssetId,
+      failoverAttempt: execution.attempt,
+      failoverUsed: execution.attempt > 1,
+      quotaPolicyKey: execution.quotaPolicyKey,
+      transport: getRecordValue(execution.result.providerMetadata, "transport"),
+      safetyCertification: false,
+      mutatesCylinder: false,
+    },
+  });
+
+  return jsonResponse({
+    ok: true,
+    data: cylinderVisualReviewApiRecord(inserted.data),
+    requestId: params.id,
+  });
+}
+
+async function invokeCylinderVisualReviewWithGovernedFailover(input: {
+  readonly capabilityKey: string;
+  readonly idempotencyKey: string;
+  readonly imageBase64: string;
+  readonly imageMediaType: string;
+  readonly routes: readonly AiProviderRoute[];
+  readonly serviceClient: SupabaseClient;
+  readonly sourceMediaAssetId: string;
+  readonly userId: string;
+}): Promise<{
+  readonly attempt: number;
+  readonly quotaPolicyKey: string | null;
+  readonly result: AiTextResponse;
+  readonly route: AiProviderRoute;
+}> {
+  let lastError: unknown = null;
+  let automaticFreeFailover = false;
+  let attemptedRoutes = 0;
+
+  for (let index = 0; index < input.routes.length; index += 1) {
+    const route = input.routes[index];
+
+    if (
+      index > 0 &&
+      (
+        !automaticFreeFailover ||
+        !isFreeFailoverRoute(route) ||
+        !aiProviderRouteSupportsInputMode(route, "image")
+      )
+    ) {
+      continue;
+    }
+
+    attemptedRoutes += 1;
+    const quota = await reserveAiQuotaOrLegacyPassThrough({
+      capabilityKey: input.capabilityKey,
+      idempotencyKey:
+        input.idempotencyKey + ":quota:" + route.providerAdapterKey + ":" + route.modelKey,
+      modelKey: route.modelKey,
+      providerAdapterKey: route.providerAdapterKey,
+      serviceClient: input.serviceClient,
+      userId: input.userId,
+      workspace: "customer",
+    });
+
+    automaticFreeFailover = quota.automaticFreeFailover;
+
+    if (!quota.allowed) {
+      const quotaError = new AiProviderRuntimeError(
+        "ai_quota_exhausted",
+        "Cylinder visual review reached its configured AI quota.",
+      );
+      lastError = quotaError;
+
+      await input.serviceClient.from("ai_usage_events").insert({
+        capability_key: input.capabilityKey,
+        provider_adapter_key: route.providerAdapterKey,
+        model_key: route.modelKey,
+        user_id: input.userId,
+        workspace: "customer",
+        request_count: 1,
+        status: "failed",
+        metadata: {
+          errorCode: quotaError.code,
+          quotaReason: quota.reason,
+          quotaPolicyKey: quota.policyKey,
+          providerCalled: false,
+          sourceMediaAssetId: input.sourceMediaAssetId,
+        },
+      });
+
+      if (
+        automaticFreeFailover &&
+        input.routes.slice(index + 1).some((candidate) =>
+          isFreeFailoverRoute(candidate) &&
+          aiProviderRouteSupportsInputMode(candidate, "image")
+        )
+      ) {
+        continue;
+      }
+
+      throw quotaError;
+    }
+
+    try {
+      const result = await invokeAiText(route, {
+        system: [
+          "You are SKIMA Cylinder Visual Review.",
+          "Review only what is visibly supported by the supplied source photograph.",
+          "Return one JSON object and no markdown.",
+          "Never certify the cylinder as safe or unsafe.",
+          "Never infer leaks, pressure, structural integrity, legal compliance, inspection status, capacity, ownership or fitness for service from the image.",
+          "A visible printed size marking may be reported only when it is actually readable in the photo; otherwise use null.",
+          "Appearance observations may describe visible surface features such as rust-like discoloration, dents, scratches, paint wear or obscured markings, but must not turn those observations into a safety judgment.",
+          "If text is uncertain, omit it rather than guessing.",
+          "Always recommend normal manual inspection when operational safety matters.",
+          'Return exactly these fields: {"imageQuality":"good|usable|poor|unknown","visibleColour":string|null,"visibleMarkings":string[],"probableSizeMarkingKg":number|null,"appearanceObservations":string[],"retakeSuggestions":string[]}.',
+        ].join(" "),
+        message:
+          "Review this customer-owned LPG cylinder source photo for visible details and photo quality only.",
+        images: [{
+          base64: input.imageBase64,
+          mediaType: input.imageMediaType,
+        }],
+      });
+
+      return {
+        attempt: attemptedRoutes,
+        quotaPolicyKey: quota.policyKey,
+        result,
+        route,
+      };
+    } catch (error) {
+      lastError = error;
+      const providerError =
+        error instanceof AiProviderRuntimeError ? error : null;
+
+      await input.serviceClient.from("ai_usage_events").insert({
+        capability_key: input.capabilityKey,
+        provider_adapter_key: route.providerAdapterKey,
+        model_key: route.modelKey,
+        user_id: input.userId,
+        workspace: "customer",
+        request_count: 1,
+        status: providerError?.code === "provider_rate_limited"
+          ? "rate_limited"
+          : "failed",
+        metadata: {
+          errorCode: providerError?.code ?? "unknown",
+          failoverAttempt: attemptedRoutes,
+          quotaPolicyKey: quota.policyKey,
+          sourceMediaAssetId: input.sourceMediaAssetId,
+        },
+      });
+
+      if (
+        providerError?.retryable === true &&
+        automaticFreeFailover &&
+        input.routes.slice(index + 1).some((candidate) =>
+          isFreeFailoverRoute(candidate) &&
+          aiProviderRouteSupportsInputMode(candidate, "image")
+        )
+      ) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new AiProviderRuntimeError(
+      "ai_not_configured",
+      "No eligible cylinder visual review route is available.",
+    );
+}
+
+function sanitizeCylinderVisualReview(text: string): {
+  readonly imageQuality: "good" | "usable" | "poor" | "unknown";
+  readonly visibleColour: string | null;
+  readonly visibleMarkings: readonly string[];
+  readonly probableSizeMarkingKg: number | null;
+  readonly appearanceObservations: readonly string[];
+  readonly retakeSuggestions: readonly string[];
+} {
+  const parsed = parseAiJsonObject(text);
+  const quality = stringOrNull(parsed.imageQuality)?.toLowerCase();
+  const imageQuality =
+    quality === "good" || quality === "usable" || quality === "poor"
+      ? quality
+      : "unknown";
+
+  const sizeValue = numberOrNull(parsed.probableSizeMarkingKg);
+  const probableSizeMarkingKg =
+    sizeValue !== null && sizeValue >= 1 && sizeValue <= 100
+      ? Math.round(sizeValue * 100) / 100
+      : null;
+
+  return {
+    imageQuality,
+    visibleColour: sanitizeVisualReviewString(parsed.visibleColour, 80),
+    visibleMarkings: sanitizeVisualReviewStringArray(
+      parsed.visibleMarkings,
+      6,
+      120,
+      false,
+    ),
+    probableSizeMarkingKg,
+    appearanceObservations: sanitizeVisualReviewStringArray(
+      parsed.appearanceObservations,
+      6,
+      180,
+      true,
+    ),
+    retakeSuggestions: sanitizeVisualReviewStringArray(
+      parsed.retakeSuggestions,
+      5,
+      180,
+      false,
+    ),
+  };
+}
+
+function parseAiJsonObject(text: string): Readonly<Record<string, unknown>> {
+  const trimmed = text.trim()
+    .replace(/^\x60\x60\x60(?:json)?\s*/i, "")
+    .replace(/\s*\x60\x60\x60$/i, "");
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start < 0 || end <= start) {
+    throw new AiProviderRuntimeError(
+      "invalid_provider_response",
+      "Cylinder visual review returned invalid structured output.",
+      true,
+    );
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed.slice(start, end + 1));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("not an object");
+    }
+    return parsed as Readonly<Record<string, unknown>>;
+  } catch (_error) {
+    throw new AiProviderRuntimeError(
+      "invalid_provider_response",
+      "Cylinder visual review returned invalid structured output.",
+      true,
+    );
+  }
+}
+
+function sanitizeVisualReviewString(
+  value: unknown,
+  maximumLength: number,
+): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized ? normalized.slice(0, maximumLength) : null;
+}
+
+function sanitizeVisualReviewStringArray(
+  value: unknown,
+  maximumItems: number,
+  maximumLength: number,
+  removeSafetyJudgments: boolean,
+): readonly string[] {
+  if (!Array.isArray(value)) return [];
+
+  const safetyJudgment =
+    /\b(safe|unsafe|certified|certification|passed inspection|failed inspection|leak[- ]?free|no leaks?|fit for (?:use|service)|pressure (?:is )?(?:normal|safe))\b/i;
+
+  return value
+    .map((item) => sanitizeVisualReviewString(item, maximumLength))
+    .filter((item): item is string => Boolean(item))
+    .filter((item) => !removeSafetyJudgments || !safetyJudgment.test(item))
+    .slice(0, maximumItems);
+}
+
+function cylinderVisualReviewApiRecord(
+  value: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  return {
+    id: getRecordValue(value, "id"),
+    cylinderId:
+      getRecordValue(value, "cylinderId") ??
+      getRecordValue(value, "cylinder_id"),
+    sourceMediaAssetId:
+      getRecordValue(value, "sourceMediaAssetId") ??
+      getRecordValue(value, "source_media_asset_id"),
+    imageQuality:
+      getRecordValue(value, "imageQuality") ??
+      getRecordValue(value, "image_quality") ??
+      "unknown",
+    visibleColour:
+      getRecordValue(value, "visibleColour") ??
+      getRecordValue(value, "visible_colour") ??
+      null,
+    probableSizeMarkingKg:
+      getRecordValue(value, "probableSizeMarkingKg") ??
+      getRecordValue(value, "probable_size_marking_kg") ??
+      null,
+    visibleMarkings:
+      getRecordValue(value, "visibleMarkings") ??
+      getRecordValue(value, "visible_markings") ??
+      [],
+    appearanceObservations:
+      getRecordValue(value, "appearanceObservations") ??
+      getRecordValue(value, "appearance_observations") ??
+      [],
+    retakeSuggestions:
+      getRecordValue(value, "retakeSuggestions") ??
+      getRecordValue(value, "retake_suggestions") ??
+      [],
+    manualInspectionRecommended: true,
+    safetyCertification: false,
+    mutatesCylinder: false,
+    createdAt:
+      getRecordValue(value, "createdAt") ??
+      getRecordValue(value, "created_at"),
+  };
+}
+
+function bytesToBase64ForAi(bytes: Uint8Array): string {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(
+      ...bytes.subarray(index, Math.min(index + 0x8000, bytes.length)),
+    );
+  }
+  return btoa(binary);
 }
 
 interface AiAssistantParams {
