@@ -235,20 +235,33 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $$
+as $
 begin
-  if tg_op in ('UPDATE', 'DELETE')
-     and old.entity_type = 'DRIVER'
-     and old.service_key = 'lpg' then
+  if tg_op = 'DELETE' then
+    if old.entity_type = 'DRIVER' and old.service_key = 'lpg' then
+      perform public.refresh_driver_universal_service_profile(old.entity_id);
+    end if;
+    return old;
+  end if;
+
+  if tg_op = 'INSERT' then
+    if new.entity_type = 'DRIVER' and new.service_key = 'lpg' then
+      perform public.refresh_driver_universal_service_profile(new.entity_id);
+    end if;
+    return new;
+  end if;
+
+  -- UPDATE: refresh the former driver if the assignment moved away from it,
+  -- then refresh the current driver. AFTER-trigger return values are ignored,
+  -- but returning NEW keeps the function conventional and safe.
+  if old.entity_type = 'DRIVER' and old.service_key = 'lpg' then
     perform public.refresh_driver_universal_service_profile(old.entity_id);
   end if;
 
-  if tg_op in ('INSERT', 'UPDATE')
-     and new.entity_type = 'DRIVER'
+  if new.entity_type = 'DRIVER'
      and new.service_key = 'lpg'
      and (
-       tg_op = 'INSERT'
-       or old.entity_id is distinct from new.entity_id
+       old.entity_id is distinct from new.entity_id
        or old.entity_type is distinct from new.entity_type
        or old.service_key is distinct from new.service_key
        or old.status is distinct from new.status
@@ -263,9 +276,9 @@ begin
     perform public.refresh_driver_universal_service_profile(new.entity_id);
   end if;
 
-  return coalesce(new, old);
+  return new;
 end;
-$$;
+$;
 
 drop trigger if exists sync_driver_universal_service_profile_after_coverage
   on public.operational_coverage_assignments;
