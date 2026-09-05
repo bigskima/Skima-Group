@@ -21,6 +21,7 @@ const [
   usageGovernorSql,
   freeFallbackSql,
   primaryRoutePreservationSql,
+  fallbackIntegritySql,
   providerRuntime,
   workerSource,
   gatewaySource,
@@ -50,6 +51,7 @@ const [
   readRepositoryFile("supabase/migrations/20260905231500_ai_usage_quota_and_free_failover_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905232000_ai_free_fallback_and_quota_management.sql"),
   readRepositoryFile("supabase/migrations/20260905232500_ai_primary_route_preserve_free_fallback.sql"),
+  readRepositoryFile("supabase/migrations/20260905232700_ai_fallback_route_integrity_guard.sql"),
   readRepositoryFile("supabase/functions/_shared/ai-provider-runtime.ts"),
   readRepositoryFile("supabase/functions/runtime-worker/index.ts"),
   readRepositoryFile("supabase/functions/api-gateway/index.ts"),
@@ -244,6 +246,41 @@ Deno.test("changing the primary AI route preserves configured fallback routes", 
     sql,
     "where capability_id = capability_record.id and status = 'active';",
     "primary route changes must not blanket-pause all active fallback routes",
+  );
+});
+
+Deno.test("AI fallback integrity is enforced even for direct privileged route writes", () => {
+  const sql = normalizeWhitespace(fallbackIntegritySql);
+
+  assertIncludes(
+    sql,
+    "create or replace function public.validate_ai_provider_route_fallback_integrity",
+    "fallback integrity needs a table-level validation boundary",
+  );
+  assertIncludes(
+    sql,
+    "'fallback_only', false, 'automatic_failover_eligible', false",
+    "existing primary routes must be normalized before the guard is enabled",
+  );
+  assertIncludes(
+    sql,
+    "only fallback routes may be automatic-failover eligible",
+    "primary routes must never advertise automatic fallback eligibility",
+  );
+  assertIncludes(
+    sql,
+    "automatic ai fallback requires a provider marked free",
+    "direct writes must not bypass free-only fallback policy",
+  );
+  assertIncludes(
+    sql,
+    "ai fallback route priority must be 2 or greater",
+    "fallback routes must remain behind the primary route",
+  );
+  assertIncludes(
+    sql,
+    "cannot convert the active primary ai route into a fallback route",
+    "the active primary record must not be silently repurposed as its own fallback",
   );
 });
 
