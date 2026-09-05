@@ -9658,7 +9658,7 @@ async function buildAiAssistantContext(
     const [driver, jobs, commissions] = await Promise.all([
       supabase
         .from("driver_profiles")
-        .select("id,verification_status,operational_status,availability_status,updated_at")
+        .select("id,verification_status,operational_status,updated_at")
         .eq("user_id", user.id)
         .maybeSingle(),
       supabase.rpc("read_lpg_jobs", { target_queue: "driver", target_limit: 12 }),
@@ -9706,8 +9706,8 @@ async function buildAiAssistantContext(
         .order("created_at", { ascending: false })
         .limit(60),
       supabase
-        .from("applications")
-        .select("id,application_type_id,status,operational_status,organization_id,created_at,updated_at")
+        .from("application_records")
+        .select("id,application_type_id,status,organization_id,created_at,updated_at")
         .order("created_at", { ascending: false })
         .limit(40),
       supabase
