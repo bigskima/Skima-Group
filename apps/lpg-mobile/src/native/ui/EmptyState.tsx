@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { radii, spacing, typography } from "../theme/tokens";
+import { radii, shadows, spacing, typography } from "../theme/tokens";
 
 export function EmptyState({
   icon,
@@ -16,10 +16,12 @@ export function EmptyState({
 }) {
   const { palette } = useAppTheme();
   return (
-    <View style={[styles.container, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+    <View style={[styles.container, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
       {icon ? <View style={[styles.icon, { backgroundColor: palette.brandSoft }]}>{icon}</View> : null}
-      <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
-      <Text style={[styles.description, { color: palette.muted }]}>{description}</Text>
+      <View style={styles.copy}>
+        <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
+        <Text style={[styles.description, { color: palette.muted }]}>{description}</Text>
+      </View>
       {action ? <View style={styles.action}>{action}</View> : null}
     </View>
   );
@@ -28,14 +30,15 @@ export function EmptyState({
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    gap: spacing.sm,
+    gap: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radii.lg,
+    borderRadius: radii.xl,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xl,
   },
-  icon: { width: 52, height: 52, borderRadius: 18, alignItems: "center", justifyContent: "center", marginBottom: 2 },
-  title: { ...typography.subheading, textAlign: "center" },
-  description: { ...typography.body, textAlign: "center", maxWidth: 420 },
-  action: { marginTop: spacing.sm, minWidth: 180 },
+  icon: { width: 60, height: 60, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  copy: { alignItems: "center", gap: 5 },
+  title: { ...typography.heading, fontSize: 18, lineHeight: 23, textAlign: "center" },
+  description: { ...typography.body, fontSize: 13, lineHeight: 19, textAlign: "center", maxWidth: 420 },
+  action: { marginTop: spacing.xs, minWidth: 180, maxWidth: "100%" },
 });
