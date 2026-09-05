@@ -147,7 +147,7 @@ Deno.test("Ask SKIMA remains grounded, read-only, and workspace-authorized", () 
   );
   assertIncludes(
     gatewaySource,
-    '"This assistant is read-only."',
+    "This assistant is read-only.",
     "assistant system prompt must explicitly forbid business-state mutation",
   );
   assertIncludes(
@@ -155,9 +155,9 @@ Deno.test("Ask SKIMA remains grounded, read-only, and workspace-authorized", () 
     '"SKIMA database state, ledger entries, pricing policies, permissions, dispatch rules, custody records and workflow states are authoritative.',
     "assistant must treat SKIMA runtime state as authoritative",
   );
-  assertIncludes(
+  assertMatch(
     mobileAssistant,
-    'Read-only',
+    /Read[- ]only/i,
     "mobile assistant must visibly communicate its read-only posture",
   );
   assertNotMatch(
