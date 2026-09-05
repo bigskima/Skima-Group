@@ -236,6 +236,7 @@ const ROUTES = new Set([
   "/runtime/verifications",
   "/runtime/notifications/queue",
   "/runtime/ai/assistant",
+  "/runtime/ai/support-case",
   "/runtime/ai/conversations",
   "/runtime/ai/queue",
   "/runtime/ai/process",
@@ -4959,6 +4960,76 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         requestId: id,
       }, 503);
     }
+  }
+
+  if (routePath === "/runtime/ai/support-case" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+
+    const payload = body.value;
+    if (payload.confirmed !== true) {
+      throw new RequestValidationError(
+        "confirmed must be true before Ask SKIMA can create a support case.",
+      );
+    }
+
+    const subjectType = requireString(payload.subjectType, "subjectType").trim().toLowerCase();
+    if (!["driver", "station", "order", "payment", "cylinder"].includes(subjectType)) {
+      throw new RequestValidationError("subjectType is not supported.");
+    }
+
+    const category = requireString(payload.category, "category").trim().toLowerCase();
+    if (![
+      "underfill",
+      "safety",
+      "lost_cylinder",
+      "switched_cylinder",
+      "damaged_cylinder",
+      "delivery",
+      "payment",
+      "conduct",
+      "fraud",
+      "pricing",
+      "other",
+    ].includes(category)) {
+      throw new RequestValidationError("category is not supported.");
+    }
+
+    const severity = optionalString(payload.severity)?.trim().toLowerCase() ?? "standard";
+    if (!["standard", "high", "critical"].includes(severity)) {
+      throw new RequestValidationError("severity is not supported.");
+    }
+
+    const description = requireString(payload.description, "description").trim();
+    if (description.length < 10 || description.length > 4000) {
+      throw new RequestValidationError(
+        "description must be between 10 and 4000 characters.",
+      );
+    }
+
+    const conversationId = optionalUuid(payload.conversationId, "conversationId");
+    const idempotencyKey = requireString(payload.idempotencyKey, "idempotencyKey");
+    const orderId = requireUuid(payload.orderId, "orderId");
+
+    return rpcResponse(
+      supabase.rpc("create_lpg_service_complaint", {
+        target_order_id: orderId,
+        target_subject_type: subjectType,
+        target_category: category,
+        target_description: description,
+        target_severity: severity,
+        target_source: "skima.ai.customer_assistant",
+        target_idempotency_key: idempotencyKey,
+        target_metadata: {
+          surface: "ask_skima",
+          action: "create_support_case",
+          confirmation: "explicit",
+          conversationId,
+          initiatedByUserId: authResult.user.id,
+        },
+      }),
+      id,
+    );
   }
 
   if (routePath === "/runtime/ai/conversations" && request.method === "GET") {
@@ -9799,7 +9870,7 @@ function aiSystemPrompt(workspace: string): string {
     "SKIMA database state, ledger entries, pricing policies, permissions, dispatch rules, custody records and workflow states are authoritative. Never invent or overwrite them.",
     "Use supplied SKIMA account context for account-specific facts. If the requested fact is absent, say you cannot verify it from the available SKIMA data.",
     "Do not claim that a cylinder is safe based on AI or an image. For immediate LPG danger, advise the user to move away from danger and use the appropriate emergency channel.",
-    "Do not claim to have changed an order, payment, wallet, dispatch assignment, inventory value, approval or permission. This assistant is read-only.",
+    "Do not claim to have changed an order, payment, wallet, dispatch assignment, inventory value, approval or permission. This assistant is read-only. A separate user-confirmed support action may create a normal complaint record, but you cannot submit it yourself.",
     "Demand forecasts are statistical estimates from recent SKIMA order history. Never present them as guaranteed demand, authoritative inventory, a price instruction, or a dispatch decision.",
     "Customer refill outlooks are estimates from that customer's historical refill intervals. They do not measure remaining gas, cylinder pressure or safety and must never be described as a gas gauge.",
     "Be concise, practical and use normal customer-facing language. Do not expose internal database field names unless the user explicitly asks for technical detail.",
