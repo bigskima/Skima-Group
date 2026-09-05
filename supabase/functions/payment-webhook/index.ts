@@ -403,6 +403,17 @@ function normalizePaystackProviderStatus(
   eventName: string,
   status: string | null,
 ): "succeeded" | "failed" | "reversed" | null {
+  // Reversal must be resolved before the generic non-success transfer branch.
+  // Paystack can send transfer.reversed with status=reversed; treating that as
+  // failed would skip the provider-reversal ledger path.
+  if (
+    eventName === "transfer.reversed" ||
+    eventName === "refund.processed" ||
+    status === "reversed"
+  ) {
+    return "reversed";
+  }
+
   if (
     (eventName === "charge.success" && status === "success") ||
     eventName === "transfer.success" ||
@@ -416,14 +427,6 @@ function normalizePaystackProviderStatus(
     (eventName.startsWith("transfer.") && status && status !== "success")
   ) {
     return "failed";
-  }
-
-  if (
-    eventName === "transfer.reversed" ||
-    eventName === "refund.processed" ||
-    status === "reversed"
-  ) {
-    return "reversed";
   }
 
   if (eventName.startsWith("charge.") && status && status !== "success") {
