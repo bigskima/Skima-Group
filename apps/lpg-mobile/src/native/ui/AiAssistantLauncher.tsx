@@ -14,6 +14,7 @@ const AiHomeInsightSchema = z.object({
   title: z.string(),
   body: z.string(),
   actionLabel: z.string(),
+  prompt: z.string().max(3000).optional(),
   estimateOnly: z.boolean().default(false),
 }).nullable();
 
@@ -32,6 +33,7 @@ export function AiAssistantLauncher({ workspace }: { readonly workspace: AiAssis
         title: "Ask SKIMA",
         body: "Ask what to do next or understand your current work.",
         actionLabel: "Ask copilot",
+        prompt: "What should I do next? Use my current SKIMA driver readiness and assigned LPG work, and explain the next safe operational action without changing anything.",
       }
     : workspace === "station"
     ? {
@@ -53,7 +55,15 @@ export function AiAssistantLauncher({ workspace }: { readonly workspace: AiAssis
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={copy.actionLabel}
-      onPress={() => router.push(("/(" + workspace + ")/assistant") as never)}
+      onPress={() => {
+        const prompt = "prompt" in copy && typeof copy.prompt === "string" ? copy.prompt : null;
+        router.push(
+          (
+            "/(" + workspace + ")/assistant" +
+            (prompt ? "?prompt=" + encodeURIComponent(prompt) : "")
+          ) as never,
+        );
+      }}
       style={({ pressed }) => [styles.shell, { opacity: pressed ? 0.93 : 1 }]}
     >
       <LinearGradient
