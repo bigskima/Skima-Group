@@ -264,8 +264,11 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
   assertIncludes(adminCoverage, 'supabase.rpc("read_geography_admin_setup")');
   assertNotIncludes(adminCoverage, 'supabase.from("geography_levels")');
   assertIncludes(adminCoverage, 'supabase.rpc("import_legacy_spatial_geographies")');
+  assertIncludes(adminCoverage, 'supabase.rpc("link_geography_migration_mapping"');
   assertIncludes(adminCoverage, 'supabase.rpc("verify_geography_migration_mapping"');
   assertIncludes(adminCoverage, 'supabase.rpc("set_universal_geography_authority"');
+  assertIncludes(geographyCutover, "create or replace function public.link_geography_migration_mapping(");
+  assertIncludes(geographyCutover, "admin_linked_canonical_boundary");
   assertIncludes(geographyCutover, "create or replace function public.verify_geography_migration_mapping(");
   assertIncludes(geographyCutover, "migration_status = 'verified'");
   assertIncludes(geographyCutover, "VERIFIED_BY_ADMIN");
