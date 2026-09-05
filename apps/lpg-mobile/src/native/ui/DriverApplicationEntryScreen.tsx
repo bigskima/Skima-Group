@@ -39,6 +39,14 @@ type ServiceArea = {
   candidate?: boolean;
 };
 
+type CandidateCoverageRequest = {
+  type: "RADIUS";
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  source?: string;
+};
+
 const EDITABLE_APPLICATION_STATUSES = new Set([
   "draft",
   "incomplete",
@@ -82,10 +90,12 @@ export function DriverApplicationEntryScreen() {
   const storedService = nestedRecord(latestPayload, "service");
   const storedLocation = nestedRecord(latestPayload, "location");
   const storedAreaIds = readCoverageGeographyIds(storedService);
+  const storedCoverageCount = countCoverageRequests(storedService);
+  const storedCandidateCoverage = readRadiusCoverageRequest(storedService);
   const storedLatitude = firstNumber(storedLocation, ["latitude"]);
   const storedLongitude = firstNumber(storedLocation, ["longitude"]);
   const geographyComplete =
-    storedAreaIds.length > 0 &&
+    storedCoverageCount > 0 &&
     storedLatitude !== null &&
     storedLongitude !== null;
 
@@ -100,7 +110,11 @@ export function DriverApplicationEntryScreen() {
             <View style={styles.editBarText}>
               <Text style={[styles.editBarTitle, { color: palette.ink }]}>Service areas saved</Text>
               <Text style={[styles.editBarSubtitle, { color: palette.muted }]} numberOfLines={1}>
-                {storedAreaIds.length === 1 ? "1 operating area" : `${storedAreaIds.length} operating areas`} · location captured
+                {storedAreaIds.length > 0
+                  ? (storedAreaIds.length === 1 ? "1 operating area" : `${storedAreaIds.length} operating areas`)
+                  : storedCandidateCoverage
+                    ? `Candidate radius · ${Math.round(storedCandidateCoverage.radiusMeters / 1000 * 10) / 10} km`
+                    : `${storedCoverageCount} coverage request(s)`} · location captured
               </Text>
             </View>
           </View>
@@ -140,6 +154,7 @@ export function DriverApplicationEntryScreen() {
       applicationTypeKey={firstString(driverType, ["key"]) ?? "application.lpg.driver.phase-one"}
       existingPayload={latestPayload ?? null}
       initialAreaIds={storedAreaIds}
+      initialCandidateCoverage={storedCandidateCoverage}
       initialLocation={operationalLocationFromRecord(storedLocation)}
       onSaved={async () => {
         await applications.refetch();
@@ -156,6 +171,7 @@ function DriverGeographyStep(props: {
   applicationTypeKey: string;
   existingPayload: PlatformRecord | null;
   initialAreaIds: readonly string[];
+  initialCandidateCoverage: CandidateCoverageRequest | null;
   initialLocation: OperationalLocation | null;
   onSaved: () => Promise<void>;
   onCancel?: () => void;
@@ -166,8 +182,12 @@ function DriverGeographyStep(props: {
   const [areas, setAreas] = useState<ServiceArea[]>([]);
   const [loadingAreas, setLoadingAreas] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([...props.initialAreaIds]);
+  const [candidateCoverage, setCandidateCoverage] = useState<CandidateCoverageRequest | null>(
+    props.initialCandidateCoverage,
+  );
   const [location, setLocation] = useState<OperationalLocation | null>(props.initialLocation);
   const [detectingLocation, setDetectingLocation] = useState(false);
+  const [resolvingCandidate, setResolvingCandidate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hydratedKey = useRef<string | null>(null);
@@ -177,8 +197,14 @@ function DriverGeographyStep(props: {
     if (hydratedKey.current === key) return;
     hydratedKey.current = key;
     setSelectedIds([...props.initialAreaIds]);
+    setCandidateCoverage(props.initialCandidateCoverage);
     setLocation(props.initialLocation);
-  }, [props.applicationId, props.initialAreaIds, props.initialLocation]);
+  }, [
+    props.applicationId,
+    props.initialAreaIds,
+    props.initialCandidateCoverage,
+    props.initialLocation,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -216,12 +242,39 @@ function DriverGeographyStep(props: {
     invalidate: [["applications"], ["application-payload", props.applicationId ?? ""]],
   });
 
+  const resolveCandidateCoverage = async (
+    point: OperationalLocation,
+  ): Promise<CandidateCoverageRequest | null> => {
+    setResolvingCandidate(true);
+    try {
+      const { data, error: candidateError } = await session.supabase.rpc(
+        "resolve_lpg_partner_candidate_coverage",
+        {
+          p_partner_type: "DRIVER",
+          p_latitude: point.latitude,
+          p_longitude: point.longitude,
+        },
+      );
+      if (candidateError) throw candidateError;
+      const request = readCandidateCoverageResponse(data);
+      setCandidateCoverage(request);
+      return request;
+    } finally {
+      setResolvingCandidate(false);
+    }
+  };
+
   const detect = async () => {
     setDetectingLocation(true);
     setError(null);
     try {
       const nextLocation = await maps.resolveOperationalLocation(await readOperationalLocation());
       setLocation(nextLocation);
+      try {
+        await resolveCandidateCoverage(nextLocation);
+      } catch {
+        setCandidateCoverage(null);
+      }
     } catch (cause) {
       setError(friendlyError(cause, "We could not prepare your operating area. Please try again."));
     } finally {
@@ -246,9 +299,27 @@ function DriverGeographyStep(props: {
       setError("Detect your current operating location before continuing.");
       return;
     }
-    if (selectedIds.length === 0) {
-      setError("Choose at least one area where you can provide SKIMA service.");
-      return;
+    let coverageRequests: Record<string, unknown>[];
+    if (selectedIds.length > 0) {
+      coverageRequests = selectedIds.map((geographyId) => ({
+        type: "ADMIN_GEOGRAPHY",
+        geographyId,
+      }));
+    } else {
+      let fallback = candidateCoverage;
+      if (!fallback) {
+        try {
+          fallback = await resolveCandidateCoverage(location);
+        } catch (cause) {
+          setError(friendlyError(cause, "SKIMA could not prepare an operating-area request for this location. Try again."));
+          return;
+        }
+      }
+      if (!fallback) {
+        setError("This location is not open for a driver application. Choose an approved service area or another operating location.");
+        return;
+      }
+      coverageRequests = [fallback];
     }
 
     const existingPayload = props.existingPayload ?? {};
@@ -258,7 +329,7 @@ function DriverGeographyStep(props: {
       location,
       service: {
         ...existingService,
-        coverageRequests: selectedIds.map((geographyId) => ({ type: "ADMIN_GEOGRAPHY", geographyId })),
+        coverageRequests,
       },
     };
 
@@ -348,7 +419,21 @@ function DriverGeographyStep(props: {
             <Text style={[styles.helper, { color: palette.muted }]}>Loading available areas…</Text>
           </View>
         ) : areas.length === 0 ? (
-          <Text style={[styles.helper, { color: palette.muted }]}>No SKIMA driver service areas are available yet. Your operating location can still be captured, but an Admin must enable at least one approved geography before you can choose coverage.</Text>
+          candidateCoverage ? (
+            <View style={[styles.locationBox, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+              <Star size={18} color={palette.brand} />
+              <View style={styles.locationCopy}>
+                <Text style={[styles.locationTitle, { color: palette.ink }]}>Candidate operating area</Text>
+                <Text style={[styles.helper, { color: palette.muted }]}>
+                  No mapped SKIMA area covers this application yet. SKIMA will submit a {Math.round(candidateCoverage.radiusMeters / 1000 * 10) / 10} km radius around your captured operating location for Admin review. This does not turn on customer service in the area.
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <Text style={[styles.helper, { color: palette.muted }]}>
+              No approved service geography is available here. Detect your operating location again so SKIMA can check whether a candidate-area application is allowed.
+            </Text>
+          )
         ) : (
           <View style={styles.areaList}>
             {areas.map((area) => {
@@ -384,7 +469,12 @@ function DriverGeographyStep(props: {
         label="Save and continue"
         fullWidth
         loading={saving}
-        disabled={loadingAreas || !location || selectedIds.length === 0}
+        disabled={
+          loadingAreas ||
+          resolvingCandidate ||
+          !location ||
+          (selectedIds.length === 0 && !candidateCoverage)
+        }
         onPress={() => void save()}
       />
     </Screen>
@@ -535,6 +625,59 @@ const styles = StyleSheet.create({
   errorBox: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.md },
   errorText: { ...typography.bodyStrong },
 });
+
+function countCoverageRequests(service: Record<string, unknown> | null): number {
+  const requests = service?.coverageRequests;
+  if (Array.isArray(requests)) return requests.length;
+  const legacyIds = service?.serviceAreaIds;
+  return Array.isArray(legacyIds) ? legacyIds.length : 0;
+}
+
+function readRadiusCoverageRequest(
+  service: Record<string, unknown> | null,
+): CandidateCoverageRequest | null {
+  const requests = service?.coverageRequests;
+  if (!Array.isArray(requests)) return null;
+  for (const request of requests) {
+    const parsed = readCandidateCoverageRequest(request);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function readCandidateCoverageResponse(value: unknown): CandidateCoverageRequest | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const result = value as Record<string, unknown>;
+  return readCandidateCoverageRequest(result.request);
+}
+
+function readCandidateCoverageRequest(value: unknown): CandidateCoverageRequest | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const request = value as Record<string, unknown>;
+  if (request.type !== "RADIUS") return null;
+  const latitude = Number(request.latitude);
+  const longitude = Number(request.longitude);
+  const radiusMeters = Number(request.radiusMeters);
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    !Number.isFinite(radiusMeters) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180 ||
+    radiusMeters <= 0
+  ) {
+    return null;
+  }
+  return {
+    type: "RADIUS",
+    latitude,
+    longitude,
+    radiusMeters,
+    source: typeof request.source === "string" ? request.source : undefined,
+  };
+}
 
 function readCoverageGeographyIds(service: Record<string, unknown> | null): string[] {
   const requests = service?.coverageRequests;
