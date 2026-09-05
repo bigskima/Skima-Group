@@ -9,6 +9,7 @@ export default function Layout() {
       <WorkspaceTabs
         tabs={driverTabs}
         hidden={[
+          "assistant",
           "job/[id]",
           "notifications",
           "application",
