@@ -17,6 +17,7 @@ const [
   financeReconciliationSql,
   financeReconciliationScopeSql,
   pricingIntelligenceSql,
+  expansionIntelligenceSql,
   providerRuntime,
   workerSource,
   gatewaySource,
@@ -42,6 +43,7 @@ const [
   readRepositoryFile("supabase/migrations/20260905234500_ai_finance_reconciliation_intelligence.sql"),
   readRepositoryFile("supabase/migrations/20260906000500_ai_finance_reconciliation_scope_hardening.sql"),
   readRepositoryFile("supabase/migrations/20260906002000_ai_pricing_intelligence.sql"),
+  readRepositoryFile("supabase/migrations/20260906004000_ai_service_area_expansion_intelligence.sql"),
   readRepositoryFile("supabase/functions/_shared/ai-provider-runtime.ts"),
   readRepositoryFile("supabase/functions/runtime-worker/index.ts"),
   readRepositoryFile("supabase/functions/api-gateway/index.ts"),
@@ -1060,6 +1062,166 @@ Deno.test("pricing intelligence is admin-only and visibly non-authoritative", ()
   );
 });
 
+Deno.test("service-area expansion intelligence is deterministic, evidence-based, and review-only", () => {
+  const sql = normalizeWhitespace(expansionIntelligenceSql);
+
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_expansion_intelligence_rules",
+    "expansion weights and thresholds must be database configuration",
+  );
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_expansion_opportunities",
+    "expansion review results must stay separate from authoritative coverage state",
+  );
+  assertIncludes(
+    sql,
+    '"control": "review_only"',
+    "expansion intelligence must be seeded as review-only",
+  );
+  assertIncludes(
+    sql,
+    "expansion intelligence control must remain review_only",
+    "expansion configuration must reject authoritative control modes",
+  );
+  assertIncludes(
+    sql,
+    "from public.read_expansion_demand(service_value, null)",
+    "expansion scoring must build on the canonical expansion-demand projection",
+  );
+  assertIncludes(
+    sql,
+    "public.resolve_service_availability(",
+    "customer expansion evidence must use the authoritative coverage resolver",
+  );
+  assertIncludes(
+    sql,
+    "from public.application_operational_coverage_requests request",
+    "partner supply evidence must come from real driver/station application coverage requests",
+  );
+  assertIncludes(
+    sql,
+    "when combined.customer_policy_conflict_user_count > 0 then 'configuration_review'",
+    "coverage policy conflicts must be classified as configuration review rather than expansion",
+  );
+  assertIncludes(
+    sql,
+    "when combined.customer_not_launched_user_count > 0 then 'expansion_review'",
+    "SERVICE_NOT_LAUNCHED demand must be the customer signal that supports expansion review",
+  );
+  assertIncludes(
+    sql,
+    "when combined.customer_excluded_user_count > 0 then 'policy_review'",
+    "intentional exclusions must stay a policy-review signal",
+  );
+  for (const evidenceBoundary of [
+    "'changescoveragepolicy', false",
+    "'changesoperationalcoverage', false",
+    "'approvesapplication', false",
+    "'changesdispatch', false",
+  ]) {
+    assertIncludes(
+      sql,
+      evidenceBoundary,
+      "expansion evidence must preserve non-authoritative boundary " + evidenceBoundary,
+    );
+  }
+  assertNotMatch(
+    expansionIntelligenceSql,
+    /provider\.ai\.|resolve_ai_provider_route|executeAiText|generativelanguage|chat\/completions/,
+    "expansion scoring must not depend on an LLM",
+  );
+  assertNotMatch(
+    expansionIntelligenceSql,
+    /\b(?:update|insert\s+into|delete\s+from)\s+public\.(?:geographies|service_coverage_policies|operational_coverage_assignments|application_records|application_versions|application_operational_coverage_requests|dispatch_requests|dispatch_candidates)\b/i,
+    "expansion intelligence must never mutate authoritative geography, coverage, application or dispatch state",
+  );
+  assertIncludes(
+    sql,
+    "revoke all on function public.refresh_ai_expansion_opportunities() from public, anon, authenticated",
+    "expansion refresh must be unavailable to normal clients",
+  );
+  assertIncludes(
+    sql,
+    "grant execute on function public.refresh_ai_expansion_opportunities() to service_role",
+    "expansion refresh must remain a backend worker operation",
+  );
+  assertIncludes(
+    sql,
+    "public.has_permission('platform.coverage.read', null)",
+    "expansion reads must require authorized AI or coverage access",
+  );
+});
+
+Deno.test("service-area expansion intelligence is admin-only and cannot launch coverage", () => {
+  assertIncludes(
+    workerSource,
+    'source: "runtime-worker.ai-expansion-intelligence"',
+    "worker must isolate expansion intelligence refresh failures",
+  );
+  assertIncludes(
+    workerSource,
+    'reason: "expansion_intelligence_runtime_not_ready"',
+    "worker must fail soft when expansion intelligence migrations are unavailable",
+  );
+  assertIncludes(
+    workerSource,
+    "aiExpansion,",
+    "worker health/response payload must expose expansion refresh health",
+  );
+  assertIncludes(
+    gatewaySource,
+    "expansionOpportunities:",
+    "admin Ask SKIMA context must receive expansion opportunities",
+  );
+  assertIncludes(
+    gatewaySource,
+    "SERVICE_NOT_LAUNCHED can support expansion review; AREA_EXCLUDED is an intentional-policy review signal; POLICY_CONFIGURATION_CONFLICT requires configuration repair.",
+    "assistant prompt must preserve the authoritative coverage-decision distinctions",
+  );
+  assertIncludes(
+    gatewaySource,
+    "never disclose internal expansion scoring to customer, driver or station workspaces",
+    "assistant prompt must forbid cross-workspace expansion-score disclosure",
+  );
+  assertNotIncludes(
+    mobileAssistant,
+    "expansionOpportunities",
+    "mobile Ask SKIMA must not receive internal expansion scoring",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "Expansion opportunities",
+    "admin SKIMA Intelligence must surface expansion review",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "Open coverage workspace",
+    "expansion review must route administrators to the existing authoritative coverage controls",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "Review only",
+    "expansion opportunity rows must be visibly review-only",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    'requiredPermission="platform.coverage.read"',
+    "opening coverage controls from AI must still require coverage access",
+  );
+  assertNotIncludes(
+    adminAiWorkspace,
+    "review_application_coverage_request",
+    "AI expansion UI must not approve partner coverage requests",
+  );
+  assertNotIncludes(
+    adminAiWorkspace,
+    "upsert_coverage_policy",
+    "AI expansion UI must not create or modify coverage policies",
+  );
+});
+
 Deno.test("AI workspace context keeps internal intelligence out of station/customer/driver surfaces", () => {
   const stationContext = sectionBetween(
     gatewaySource,
@@ -1086,6 +1248,11 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_pricing_intelligence",
     "station assistant must not query internal pricing simulation intelligence",
   );
+  assertNotIncludes(
+    stationContext,
+    "read_ai_expansion_opportunities",
+    "station assistant must not query internal expansion intelligence",
+  );
 
   const adminContext = sectionBetween(
     gatewaySource,
@@ -1097,6 +1264,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_dispatch_shadow_assessments",
     "read_ai_finance_reconciliation_findings",
     "read_ai_pricing_intelligence",
+    "read_ai_expansion_opportunities",
   ]) {
     assertIncludes(
       adminContext,
@@ -1119,6 +1287,7 @@ Deno.test("worker reports exception refresh exactly once per response section", 
     "aiDispatch,",
     "aiFinance,",
     "aiPricing,",
+    "aiExpansion,",
     "aiTasks,",
   ]) {
     assertIncludes(
