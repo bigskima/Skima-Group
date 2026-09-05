@@ -9649,7 +9649,7 @@ async function buildAiAssistantContext(
   }
 
   if (workspace === "customer") {
-    const [orders, cylinders, locations] = await Promise.all([
+    const [orders, cylinders, locations, refillOutlook] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
         .select("id,public_reference,cylinder_id,station_branch_id,driver_profile_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,delivery_fee_amount,platform_fee_amount,status,payment_status,assignment_status,created_at,updated_at")
@@ -9667,6 +9667,7 @@ async function buildAiAssistantContext(
         .neq("status", "deleted")
         .order("updated_at", { ascending: false })
         .limit(5),
+      supabase.rpc("read_customer_refill_outlook"),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(cylinders.error);
@@ -9676,6 +9677,9 @@ async function buildAiAssistantContext(
       recentOrders: orders.data ?? [],
       cylinders: cylinders.data ?? [],
       savedLocations: locations.data ?? [],
+      refillOutlook: refillOutlook.error
+        ? []
+        : Array.isArray(refillOutlook.data) ? refillOutlook.data : [],
       myApplications: ownApplications,
     };
   }
@@ -9797,13 +9801,14 @@ function aiSystemPrompt(workspace: string): string {
     "Do not claim that a cylinder is safe based on AI or an image. For immediate LPG danger, advise the user to move away from danger and use the appropriate emergency channel.",
     "Do not claim to have changed an order, payment, wallet, dispatch assignment, inventory value, approval or permission. This assistant is read-only.",
     "Demand forecasts are statistical estimates from recent SKIMA order history. Never present them as guaranteed demand, authoritative inventory, a price instruction, or a dispatch decision.",
+    "Customer refill outlooks are estimates from that customer's historical refill intervals. They do not measure remaining gas, cylinder pressure or safety and must never be described as a gas gauge.",
     "Be concise, practical and use normal customer-facing language. Do not expose internal database field names unless the user explicitly asks for technical detail.",
   ].join("\n");
 }
 
 function aiWorkspaceSuggestions(workspace: string): readonly string[] {
   if (workspace === "customer") {
-    return ["Where is my refill?", "What's happening with my application?", "Explain my latest order"];
+    return ["Where is my refill?", "When might I need another refill?", "What's happening with my application?"];
   }
   if (workspace === "driver") {
     return ["What do I do next?", "Summarize my active jobs", "Explain my recent earnings"];
