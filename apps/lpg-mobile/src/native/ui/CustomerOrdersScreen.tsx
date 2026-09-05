@@ -104,7 +104,12 @@ export function CustomerOrdersScreen() {
                 style={({ pressed }) => [
                   styles.order,
                   shadows.soft,
-                  { backgroundColor: palette.surface, borderColor: palette.border, opacity: pressed ? 0.76 : 1 },
+                  {
+                    backgroundColor: palette.surface,
+                    borderColor: palette.border,
+                    opacity: pressed ? 0.8 : 1,
+                    transform: [{ scale: pressed ? 0.988 : 1 }],
+                  },
                 ]}
               >
                 <View style={styles.orderHead}>
@@ -217,10 +222,12 @@ export function CustomerOrderDetailScreen() {
               <Text style={[styles.detailSectionTitle, { color: palette.ink }]}>Order summary</Text>
               <StatusPill label={friendlyOrderStatus(status)} tone={orderStatusTone(status)} />
             </View>
-            <InfoField label="Cylinder" value={cylinderSummary(cylinder)} />
-            <InfoField label="Station" value={station ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned station") : "Finding the best station"} />
-            <InfoField label="Pickup address" value={pickup ? (firstString(pickup, ["formattedAddress", "formatted_address", "label"]) ?? "Saved location") : "Saved order location"} />
-            <InfoField label="Delivery address" value={delivery ? (firstString(delivery, ["formattedAddress", "formatted_address", "label"]) ?? "Saved location") : "Saved order location"} />
+            <View style={styles.infoGrid}>
+              <InfoField label="Cylinder" value={cylinderSummary(cylinder)} />
+              <InfoField label="Station" value={station ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned station") : "Finding the best station"} />
+              <InfoField label="Pickup" value={pickup ? (firstString(pickup, ["formattedAddress", "formatted_address", "label"]) ?? "Saved location") : "Saved order location"} />
+              <InfoField label="Return" value={delivery ? (firstString(delivery, ["formattedAddress", "formatted_address", "label"]) ?? "Saved location") : "Saved order location"} />
+            </View>
           </Card>
 
           <Card padding="lg">
@@ -375,13 +382,13 @@ function paymentStatusTone(value: string): "neutral" | "brand" | "success" | "wa
 const styles = StyleSheet.create({
   loading: { minHeight: 180, alignItems: "center", justifyContent: "center", gap: spacing.sm },
   loadingText: { ...typography.caption },
-  orderList: { gap: spacing.md },
-  order: { gap: spacing.md, padding: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl },
-  orderHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  orderIcon: { width: 46, height: 46, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  orderList: { gap: spacing.sm + 2 },
+  order: { gap: 12, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl },
+  orderHead: { flexDirection: "row", alignItems: "center", gap: 11 },
+  orderIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   orderHeadCopy: { flex: 1, minWidth: 0 },
-  orderRef: { ...typography.subheading, fontSize: 16 },
-  date: { ...typography.caption, fontSize: 11, marginTop: 3 },
+  orderRef: { ...typography.subheading, fontSize: 15 },
+  date: { ...typography.caption, fontSize: 10, marginTop: 2 },
   divider: { height: StyleSheet.hairlineWidth },
   summaryRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing.md },
   summaryCopy: { flex: 1, minWidth: 0 },
@@ -389,7 +396,7 @@ const styles = StyleSheet.create({
   label: { ...typography.eyebrow, fontSize: 8 },
   value: { ...typography.bodyStrong, fontSize: 13, marginTop: 3 },
   amount: { fontSize: 18, lineHeight: 23, fontWeight: "900", letterSpacing: -0.3, marginTop: 3 },
-  station: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.sm + 2, borderRadius: radii.md },
+  station: { minHeight: 40, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: 10, borderRadius: radii.lg },
   stationText: { flex: 1, ...typography.caption, fontSize: 12 },
   detailHero: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
   heroIcon: { width: 48, height: 48, borderRadius: 16, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
@@ -399,8 +406,9 @@ const styles = StyleSheet.create({
   heroBody: { color: "rgba(255,255,255,.82)", ...typography.caption, fontSize: 11, marginTop: 3 },
   detailStatusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.md, marginBottom: spacing.xs },
   detailSectionTitle: { ...typography.subheading, fontSize: 16 },
-  infoField: { gap: 3, paddingVertical: spacing.xs },
-  fieldValue: { ...typography.bodyStrong, fontSize: 14, lineHeight: 20 },
+  infoGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  infoField: { flexGrow: 1, flexBasis: "47%", minWidth: 135, gap: 3, padding: 11, borderRadius: radii.lg },
+  fieldValue: { ...typography.bodyStrong, fontSize: 12, lineHeight: 17 },
   metricsRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   metric: { flexGrow: 1, minWidth: 100, padding: spacing.md, borderRadius: radii.md },
   metricValue: { fontSize: 16, lineHeight: 22, fontWeight: "900", marginTop: 4 },
