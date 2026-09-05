@@ -128,6 +128,7 @@ const [
   migrations,
   correctiveMigration,
   treasuryPayoutMigration,
+  beneficiaryReuseMigration,
   gateway,
   financeRuntime,
   paystackPayoutAdapter,
@@ -139,6 +140,7 @@ const [
   readMigrations(),
   readMigrationBySuffix("_lpg_revenue_station_permission_security_repair.sql"),
   readMigrationBySuffix("_platform_revenue_treasury_payout_runtime.sql"),
+  readMigrationBySuffix("_withdrawal_beneficiary_reuse_reconciliation.sql"),
   read("supabase/functions/api-gateway/index.ts"),
   read("supabase/functions/finance-runtime/index.ts"),
   read("supabase/functions/_shared/paystack-payouts.ts"),
@@ -559,6 +561,25 @@ const checks: Check[] = [
     ],
     forbidden: [
       /amount:\s*Math\.round\(Number\(withdrawalRecord\.total_debit_amount\)\s*\*\s*100\)/i,
+    ],
+  },
+  {
+    name: "verified payout accounts are reusable per wallet",
+    source: beneficiaryReuseMigration,
+    required: [
+      /account_reference_hash = account_hash/i,
+      /wallet_id = target_wallet_id/i,
+      /lastReverifiedAt/i,
+      /return existing_record\.id/i,
+    ],
+  },
+  {
+    name: "Super Admin can prepare a revenue payout account before revenue exists",
+    source: gateway,
+    required: [
+      /ensure_platform_revenue_wallet/i,
+      /platform\.revenue_payout_setup/i,
+      /platform-revenue:ngn/i,
     ],
   },
   {
