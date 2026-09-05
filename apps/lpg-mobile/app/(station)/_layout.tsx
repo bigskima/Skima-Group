@@ -7,6 +7,7 @@ export default function Layout() {
       <WorkspaceTabs
         tabs={stationTabs}
         hidden={[
+          "assistant",
           "job/[id]",
           "notifications",
           "application",
