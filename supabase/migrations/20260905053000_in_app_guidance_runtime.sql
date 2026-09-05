@@ -438,21 +438,24 @@ values
 ('91000000-0000-4000-8000-000000000001',4,'/(customer)/cylinders','nav.cylinders','Cylinders','Keep your registered cylinders and their identification details here.','Next'),
 ('91000000-0000-4000-8000-000000000001',5,'/(customer)/orders','nav.orders','Orders','See active and previous refill orders, status and tracking from here.','Next'),
 ('91000000-0000-4000-8000-000000000001',6,'/(customer)/wallet','nav.wallet','Wallet','Payments, balances and transaction activity live in your wallet.','Next'),
-('91000000-0000-4000-8000-000000000001',7,'/(customer)/account','nav.account','Account','Manage your profile, notifications, support, partner applications, policies and guide settings here.','Finish'),
+('91000000-0000-4000-8000-000000000001',7,'/(customer)/account','nav.account','Account','Manage your profile, notifications, support, partner applications, policies and guide settings here.','Next'),
+('91000000-0000-4000-8000-000000000001',8,'/(customer)/account-settings','account.app-guide','Your app guide','Replay this practical tour from Account settings whenever you want. Automatic reminders still follow your saved guide schedule.','Finish'),
 
 ('91000000-0000-4000-8000-000000000002',1,'/(driver)','common.workspace-switcher','Driver workspace','Use this switcher to move between approved SKIMA workspaces without signing out.','Next'),
 ('91000000-0000-4000-8000-000000000002',2,'/(driver)','driver.operations','Your live driver controls','Your home screen keeps the controls for scanning, availability and the current route close to the work you are doing.','Next'),
 ('91000000-0000-4000-8000-000000000002',3,'/(driver)/jobs','nav.jobs','Jobs','Assigned and upcoming delivery work is organised here.','Next'),
 ('91000000-0000-4000-8000-000000000002',4,'/(driver)/scan','nav.scan','Scan','Use the scanner only at the required hand-off points to verify the correct cylinder and order.','Next'),
 ('91000000-0000-4000-8000-000000000002',5,'/(driver)/earnings','nav.earnings','Earnings','See earned commissions, payout status and related money activity here.','Next'),
-('91000000-0000-4000-8000-000000000002',6,'/(driver)/account','nav.account','Driver account','Your vehicle, documents, service area, support, policies and guide settings are available from Account.','Finish'),
+('91000000-0000-4000-8000-000000000002',6,'/(driver)/account','nav.account','Driver account','Your vehicle, documents, service area, support, policies and guide settings are available from Account.','Next'),
+('91000000-0000-4000-8000-000000000002',7,'/(driver)/account-settings','account.app-guide','Your app guide','Replay this practical driver tour from Account settings whenever you want.','Finish'),
 
 ('91000000-0000-4000-8000-000000000003',1,'/(station)','common.workspace-switcher','Station workspace','Use this switcher when your account can access more than one SKIMA workspace.','Next'),
 ('91000000-0000-4000-8000-000000000003',2,'/(station)','station.operations','Reception controls','The station home screen keeps verification and refill actions tied to the current reception queue.','Next'),
 ('91000000-0000-4000-8000-000000000003',3,'/(station)/jobs','nav.jobs','Reception queue','Incoming cylinders and their processing state are organised in the queue.','Next'),
 ('91000000-0000-4000-8000-000000000003',4,'/(station)/scan','nav.scan','Scan','Use scanning at the required reception hand-off to match the driver, order and cylinder.','Next'),
 ('91000000-0000-4000-8000-000000000003',5,'/(station)/settlements','nav.settlements','Money','Completed refill earnings and settlement activity are available here.','Next'),
-('91000000-0000-4000-8000-000000000003',6,'/(station)/account','nav.account','Station account','Manage station tools, staff access, policies, support and guide settings from Account.','Finish')
+('91000000-0000-4000-8000-000000000003',6,'/(station)/account','nav.account','Station account','Manage station tools, staff access, policies, support and guide settings from Account.','Next'),
+('91000000-0000-4000-8000-000000000003',7,'/(station)/account-settings','account.app-guide','Your app guide','Replay this practical station tour from Account settings whenever you want.','Finish')
 on conflict (guide_id, step_order) do update
 set
   route = excluded.route,
