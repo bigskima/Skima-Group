@@ -16,6 +16,7 @@ import {
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
+import { selectWorkspaceWallet } from "../utilities/financeWallet";
 import { idempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
 import { AppField } from "./AppField";
@@ -34,7 +35,10 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
   const bankQuery = useFinanceQuery({ key: ["banks"], path: "/banks", schema: RecordObjectSchema });
   const beneficiaryQuery = useFinanceQuery({ key: ["beneficiaries"], path: "/beneficiaries", schema: RecordArraySchema });
 
-  const wallet = useMemo(() => selectWallet(wallets.data ?? [], workspace), [wallets.data, workspace]);
+  const wallet = useMemo(
+    () => selectWorkspaceWallet(wallets.data ?? [], workspace),
+    [wallets.data, workspace],
+  );
   const walletId = firstString(wallet, ["wallet_id", "walletId", "id"]);
   const available = firstNumber(wallet, ["available_balance", "availableBalance", "balance"]) ?? 0;
   const currency = firstString(wallet, ["currency_code", "currencyCode"]) ?? "NGN";
@@ -501,19 +505,6 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
       />
     </Screen>
   );
-}
-
-function selectWallet(walletList: readonly PlatformRecord[], workspace: Workspace): PlatformRecord | null {
-  const active = walletList.filter((wallet) => firstString(wallet, ["wallet_status", "status"]) !== "closed");
-  if (workspace === "customer") {
-    return active.find((wallet) => firstString(wallet, ["wallet_type", "walletType"]) === "customer" && firstString(wallet, ["owner_entity_type", "ownerEntityType"]) === "user") ?? null;
-  }
-  if (workspace === "driver") {
-    return active.find((wallet) => firstString(wallet, ["wallet_type", "walletType"]) === "driver" && firstString(wallet, ["owner_entity_type", "ownerEntityType"]) === "driver") ?? null;
-  }
-  return active.find((wallet) => firstString(wallet, ["wallet_type", "walletType"]) === "partner" && firstString(wallet, ["owner_entity_type", "ownerEntityType"]) === "organization")
-    ?? active.find((wallet) => firstString(wallet, ["wallet_type", "walletType"]) === "partner")
-    ?? null;
 }
 
 function money(value: number, currency: string) {
