@@ -1192,6 +1192,208 @@
   margin-top: 3px;
 }
 
+.admin-ai-expansion {
+  margin-top: 20px;
+}
+
+.admin-ai-expansion-head-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.admin-ai-expansion-list {
+  display: grid;
+}
+
+.admin-ai-expansion-row {
+  align-items: flex-start;
+  border-bottom: 1px solid #e7ecee;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 15px 0;
+}
+
+.admin-ai-expansion-row:last-child {
+  border-bottom: 0;
+}
+
+.admin-ai-expansion-row.is-configuration_review {
+  background: linear-gradient(90deg, rgba(255, 240, 241, 0.7), rgba(255, 255, 255, 0));
+}
+
+.admin-ai-expansion-row.is-policy_review {
+  background: linear-gradient(90deg, rgba(255, 248, 232, 0.68), rgba(255, 255, 255, 0));
+}
+
+.admin-ai-expansion-pin {
+  align-items: center;
+  background: #eef8f5;
+  border-radius: 11px;
+  color: #0d8f79;
+  display: flex;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.admin-ai-expansion-pin svg {
+  height: 18px;
+  width: 18px;
+}
+
+.admin-ai-expansion-copy {
+  min-width: 0;
+}
+
+.admin-ai-expansion-title {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.admin-ai-expansion-title strong {
+  color: #17282d;
+  font-size: 0.9rem;
+}
+
+.admin-ai-expansion-title > span:last-child {
+  color: #74858b;
+  font-size: 0.7rem;
+}
+
+.admin-ai-expansion-signals {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 9px;
+}
+
+.admin-ai-expansion-signals span {
+  background: #f8fafb;
+  border: 1px solid #e4e9eb;
+  border-radius: 9px;
+  min-width: 0;
+  padding: 8px 9px;
+}
+
+.admin-ai-expansion-signals small,
+.admin-ai-expansion-signals b {
+  display: block;
+}
+
+.admin-ai-expansion-signals small {
+  color: #7b888d;
+  font-size: 0.63rem;
+  line-height: 1.25;
+}
+
+.admin-ai-expansion-signals b {
+  color: #294147;
+  font-size: 0.8rem;
+  margin-top: 3px;
+}
+
+.admin-ai-expansion-cautions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.admin-ai-expansion-cautions span {
+  background: #fff6e7;
+  border-radius: 999px;
+  color: #8d5c12;
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 5px 8px;
+}
+
+.admin-ai-expansion-copy p {
+  color: #66777d;
+  font-size: 0.77rem;
+  line-height: 1.48;
+  margin: 9px 0 0;
+}
+
+.admin-ai-expansion-mode {
+  min-width: 82px;
+  text-align: right;
+}
+
+.admin-ai-expansion-mode small,
+.admin-ai-expansion-mode b {
+  display: block;
+}
+
+.admin-ai-expansion-mode small {
+  color: #7b888d;
+  font-size: 0.65rem;
+}
+
+.admin-ai-expansion-mode b {
+  color: #31484e;
+  font-size: 0.75rem;
+  margin-top: 3px;
+}
+
+.admin-ai-expansion-empty {
+  align-items: center;
+  background: #f5faf8;
+  border: 1px solid #dcebe6;
+  border-radius: 14px;
+  color: #66777d;
+  display: flex;
+  gap: 12px;
+  padding: 18px;
+}
+
+.admin-ai-expansion-empty > svg {
+  color: #0d8f79;
+  height: 22px;
+  width: 22px;
+}
+
+.admin-ai-expansion-empty strong,
+.admin-ai-expansion-empty span {
+  display: block;
+}
+
+.admin-ai-expansion-empty strong {
+  color: #1a3534;
+  font-size: 0.86rem;
+}
+
+.admin-ai-expansion-empty span {
+  font-size: 0.76rem;
+  margin-top: 3px;
+}
+
+.admin-ai-expansion-guardrail {
+  align-items: center;
+  background: #eef8f5;
+  border-radius: 12px;
+  color: #42635c;
+  display: flex;
+  font-size: 0.74rem;
+  gap: 8px;
+  line-height: 1.4;
+  margin-top: 12px;
+  padding: 10px 12px;
+}
+
+.admin-ai-expansion-guardrail svg {
+  color: #0d8f79;
+  flex: 0 0 auto;
+  height: 16px;
+  width: 16px;
+}
+
 .admin-ai-pricing {
   margin-top: 20px;
 }
@@ -2050,18 +2252,25 @@
     flex-direction: column;
   }
 
+  .admin-ai-expansion-head-actions {
+    justify-content: flex-start;
+  }
+
   .admin-ai-route-row,
   .admin-ai-editor-grid,
   .admin-ai-insight-row,
   .admin-ai-forecast-grid,
   .admin-ai-risk-row,
   .admin-ai-dispatch-row,
-  .admin-ai-dispatch-selection {
+  .admin-ai-expansion-row,
+  .admin-ai-dispatch-selection,
+  .admin-ai-expansion-signals {
     grid-template-columns: 1fr;
   }
 
   .admin-ai-risk-score,
-  .admin-ai-dispatch-mode {
+  .admin-ai-dispatch-mode,
+  .admin-ai-expansion-mode {
     text-align: left;
   }
 
