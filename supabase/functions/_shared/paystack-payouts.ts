@@ -290,9 +290,39 @@ async function paystackRequest(
 
   if (!response.ok || body.status !== true) {
     const providerMessage = text(body.message);
-    const safeMessage = providerMessage && !providerMessage.toLowerCase().includes("secret")
+    const lowerMessage = providerMessage?.toLowerCase() ?? "";
+    const safeMessage = providerMessage && !lowerMessage.includes("secret")
       ? providerMessage
       : "Paystack could not complete the payout request.";
+
+    if (lowerMessage.includes("starter business")) {
+      throw new PaystackPayoutError(
+        "paystack_registered_business_required",
+        "Paystack Transfers require a Registered Business account. Complete the SKIMA Paystack business upgrade before live payouts.",
+        409,
+      );
+    }
+    if (lowerMessage.includes("otp") && lowerMessage.includes("disable")) {
+      throw new PaystackPayoutError(
+        "paystack_transfer_otp_configuration_required",
+        "Paystack transfer confirmation is enabled. Disable transfer confirmation for fully automated SKIMA payouts.",
+        409,
+      );
+    }
+    if (
+      lowerMessage.includes("balance") &&
+      (lowerMessage.includes("not enough") ||
+        lowerMessage.includes("insufficient") ||
+        lowerMessage.includes("fulfill") ||
+        lowerMessage.includes("fulfil"))
+    ) {
+      throw new PaystackPayoutError(
+        "paystack_transfer_balance_insufficient",
+        "SKIMA's Paystack transfer balance is insufficient for this payout.",
+        409,
+      );
+    }
+
     throw new PaystackPayoutError(
       response.status === 401 || response.status === 403
         ? "paystack_authentication_failed"
