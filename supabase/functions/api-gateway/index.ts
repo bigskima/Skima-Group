@@ -9861,6 +9861,11 @@ async function buildAiAssistantContext(
         .order("last_detected_at", { ascending: false })
         .limit(40),
       supabase.rpc("read_ai_demand_forecasts", { target_station_branch_id: null }),
+      supabase.rpc("read_ai_partner_risk_assessments", {
+        target_subject_type: null,
+        target_minimum_level: "medium",
+        target_limit: 50,
+      }),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(applications.error);
