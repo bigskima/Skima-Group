@@ -114,6 +114,10 @@ export async function invokeAiText(
     return invokeOpenAiCompatibleChat(route, request);
   }
 
+  if (transport === "anthropic_messages") {
+    return invokeAnthropicMessages(route, request);
+  }
+
   throw new AiProviderRuntimeError(
     "unsupported_transport",
     "The configured AI provider transport is not supported by this runtime.",
@@ -263,6 +267,87 @@ async function invokeOpenAiCompatibleChat(
       finishReason: isRecord(choice) ? stringValue(choice.finish_reason) : null,
       requestId: stringValue(payload.id),
       transport: "openai_compatible_chat",
+    },
+  };
+}
+
+async function invokeAnthropicMessages(
+  route: AiProviderRoute,
+  request: AiTextRequest,
+): Promise<AiTextResponse> {
+  const secret = readProviderSecret(route.secretRef);
+  const baseUrl = normalizedBaseUrl(stringValue(route.providerConfig.api_base_url));
+  if (!baseUrl) {
+    throw new AiProviderRuntimeError(
+      "provider_not_configured",
+      "The configured AI provider is missing an API base URL.",
+    );
+  }
+
+  const maxTokens =
+    numberValue(route.routeConfig.max_output_tokens) ??
+    numberValue(route.providerConfig.max_output_tokens) ??
+    900;
+  const anthropicVersion =
+    stringValue(route.providerConfig.anthropic_version) ??
+    "2023-06-01";
+
+  const response = await fetch(baseUrl + "/messages", {
+    method: "POST",
+    headers: {
+      "anthropic-version": anthropicVersion,
+      "content-type": "application/json",
+      "x-api-key": secret,
+    },
+    body: JSON.stringify({
+      model: route.modelKey,
+      max_tokens: Math.max(1, Math.floor(maxTokens)),
+      system: request.system,
+      messages: [
+        ...(request.history ?? []).map((item) => ({
+          role: item.role,
+          content: item.content,
+        })),
+        {
+          role: "user",
+          content: composeUserMessage(request.message, request.context),
+        },
+      ],
+    }),
+    signal: AbortSignal.timeout(45_000),
+  });
+
+  const payload = await readJson(response);
+  if (!response.ok) {
+    throw providerHttpError("anthropic_messages", response.status, payload);
+  }
+
+  const text = arrayValue(payload.content)
+    .map((part) => {
+      if (!isRecord(part) || stringValue(part.type) !== "text") return null;
+      return stringValue(part.text);
+    })
+    .filter((value): value is string => Boolean(value))
+    .join("\n")
+    .trim();
+
+  if (!text) {
+    throw new AiProviderRuntimeError(
+      "empty_provider_response",
+      "The configured AI provider returned an empty response.",
+      true,
+    );
+  }
+
+  const usage = recordValue(payload.usage);
+  return {
+    text,
+    inputUnits: numberValue(usage.input_tokens),
+    outputUnits: numberValue(usage.output_tokens),
+    providerMetadata: {
+      requestId: stringValue(payload.id),
+      stopReason: stringValue(payload.stop_reason),
+      transport: "anthropic_messages",
     },
   };
 }
