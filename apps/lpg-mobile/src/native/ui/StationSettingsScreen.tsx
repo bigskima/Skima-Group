@@ -125,7 +125,7 @@ export function StationSettingsScreen() {
           <View style={[styles.note, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.mutedStrong} size={18} />
             <Text style={[styles.noteText, { color: palette.muted }]}>
-              Station selling price and operating status are managed separately so each page stays focused.
+              Choose availability and pricing separately whenever you need to make a change.
             </Text>
           </View>
         </>
