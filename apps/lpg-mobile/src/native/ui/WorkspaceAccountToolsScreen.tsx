@@ -73,7 +73,6 @@ const toolGroups: Record<Workspace, readonly ToolGroup[]> = {
     {
       title: "Station operations",
       items: [
-        { label: "Verify a driver", detail: "Lookup or scan a SKIMA driver", href: "/driver-verification", icon: ShieldCheck },
         { label: "Branch profile", detail: "Station profile and status", href: "/(station)/profile", icon: Building2 },
         { label: "LPG stock", detail: "Availability and incoming cylinders", href: "/(station)/inventory", icon: Settings2 },
         { label: "Station reports", detail: "Completed orders and earnings", href: "/(station)/reports", icon: ReceiptText },
@@ -189,7 +188,7 @@ const styles = StyleSheet.create({
     minWidth: 142,
     flexGrow: 1,
     flexBasis: "47%",
-    minHeight: 116,
+    minHeight: 106,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radii.lg,
     padding: spacing.md,
