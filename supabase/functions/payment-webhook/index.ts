@@ -63,46 +63,129 @@ Deno.serve(async (request: Request): Promise<Response> => {
     (normalized.eventTypeKey.includes("transfer") ||
       String(normalized.metadata?.paystackEvent).startsWith("transfer."))
   ) {
-    const { data: withdrawalRecord } = await supabase
-      .from("withdrawal_requests")
-      .select("id")
-      .or(
-        `provider_reference.eq.${normalized.providerReference},public_reference.eq.${normalized.providerReference}`,
-      )
-      .maybeSingle();
+    let withdrawalRecord: { id: string } | null = null;
 
-    if (withdrawalRecord) {
-      const withdrawalResult = await supabase.rpc("process_wallet_withdrawal_transfer", {
-        target_idempotency_key: normalized.idempotencyKey,
-        target_metadata: {
-          ...normalized.metadata,
-          requestId: id,
-          source: "payment-webhook",
-        },
-        target_provider_reference: normalized.providerReference,
-        target_provider_status: normalized.providerStatus,
-        target_response_payload: payload,
-        target_source: normalized.source,
-        target_withdrawal_request_id: withdrawalRecord.id,
-      });
-
-      if (!withdrawalResult.error) {
-        await recordProviderExecution(
+    if (normalized.providerReference) {
+      const byReference = await supabase
+        .from("withdrawal_requests")
+        .select("id")
+        .or(
+          `provider_reference.eq.${normalized.providerReference},public_reference.eq.${normalized.providerReference}`,
+        )
+        .maybeSingle();
+      if (byReference.error) {
+        await recordPaymentWebhookError(
           supabase,
-          normalized,
-          payload,
-          { withdrawalRequestId: withdrawalResult.data },
-          "succeeded",
-          id,
+          `payment-transfer-lookup:${normalized.idempotencyKey}`,
+          byReference.error.message,
+          { code: byReference.error.code, payload, requestId: id },
         );
-
         return jsonResponse({
-          ok: true,
+          ok: false,
+          error: "database_error",
+          message: byReference.error.message,
           requestId: id,
-          withdrawalRequestId: withdrawalResult.data,
-        });
+        }, 500);
+      }
+      withdrawalRecord = byReference.data;
+
+      if (!withdrawalRecord) {
+        const deterministicId = withdrawalIdFromPaystackReference(normalized.providerReference);
+        if (deterministicId) {
+          const byId = await supabase
+            .from("withdrawal_requests")
+            .select("id")
+            .eq("id", deterministicId)
+            .maybeSingle();
+          if (byId.error) {
+            await recordPaymentWebhookError(
+              supabase,
+              `payment-transfer-id-lookup:${normalized.idempotencyKey}`,
+              byId.error.message,
+              { code: byId.error.code, payload, requestId: id },
+            );
+            return jsonResponse({
+              ok: false,
+              error: "database_error",
+              message: byId.error.message,
+              requestId: id,
+            }, 500);
+          }
+          withdrawalRecord = byId.data;
+        }
       }
     }
+
+    if (!withdrawalRecord) {
+      await recordPaymentWebhookError(
+        supabase,
+        `payment-transfer-unmatched:${normalized.idempotencyKey}`,
+        "Paystack transfer webhook did not match a SKIMA withdrawal.",
+        {
+          payload,
+          providerReference: normalized.providerReference,
+          providerStatus: normalized.providerStatus,
+          requestId: id,
+        },
+      );
+      // The webhook is authentic but cannot be reconciled. Acknowledging it
+      // avoids endless provider retries while preserving an actionable error.
+      return jsonResponse({
+        ok: true,
+        unmatchedTransfer: true,
+        providerReference: normalized.providerReference,
+        requestId: id,
+      });
+    }
+
+    const withdrawalResult = await supabase.rpc("process_wallet_withdrawal_transfer", {
+      target_idempotency_key: normalized.idempotencyKey,
+      target_metadata: {
+        ...normalized.metadata,
+        requestId: id,
+        source: "payment-webhook",
+      },
+      target_provider_reference: normalized.providerReference,
+      target_provider_status: normalized.providerStatus,
+      target_response_payload: payload,
+      target_source: normalized.source,
+      target_withdrawal_request_id: withdrawalRecord.id,
+    });
+
+    if (withdrawalResult.error) {
+      await recordPaymentWebhookError(
+        supabase,
+        `payment-transfer-process:${normalized.idempotencyKey}`,
+        withdrawalResult.error.message,
+        {
+          code: withdrawalResult.error.code,
+          payload,
+          requestId: id,
+          withdrawalRequestId: withdrawalRecord.id,
+        },
+      );
+      return jsonResponse({
+        ok: false,
+        error: "database_error",
+        message: withdrawalResult.error.message,
+        requestId: id,
+      }, 500);
+    }
+
+    await recordProviderExecution(
+      supabase,
+      normalized,
+      payload,
+      { withdrawalRequestId: withdrawalResult.data },
+      "succeeded",
+      id,
+    );
+
+    return jsonResponse({
+      ok: true,
+      requestId: id,
+      withdrawalRequestId: withdrawalResult.data,
+    });
   }
 
   if (
@@ -434,6 +517,35 @@ function normalizePaystackProviderStatus(
   }
 
   return null;
+}
+
+function withdrawalIdFromPaystackReference(reference: string): string | null {
+  const match = /^skima-wdl-([0-9a-f]{32})$/i.exec(reference.trim());
+  if (!match) return null;
+  const compact = match[1].toLowerCase();
+  return [
+    compact.slice(0, 8),
+    compact.slice(8, 12),
+    compact.slice(12, 16),
+    compact.slice(16, 20),
+    compact.slice(20),
+  ].join("-");
+}
+
+async function recordPaymentWebhookError(
+  supabase: ReturnType<typeof createClient>,
+  fingerprint: string,
+  message: string,
+  context: Readonly<Record<string, unknown>>,
+): Promise<void> {
+  await supabase.from("error_reports").upsert({
+    context,
+    fingerprint,
+    message,
+    severity: "error",
+    source: "payment-webhook",
+    status: "open",
+  });
 }
 
 async function recordProviderExecution(
