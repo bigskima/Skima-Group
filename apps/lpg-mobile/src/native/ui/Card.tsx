@@ -29,7 +29,7 @@ export function Card({
     <View
       style={[
         styles.card,
-        variant !== "outline" && styles.shadow,
+        variant !== "outline" && shadows.soft,
         padding === "sm" && styles.paddingSm,
         padding === "md" && styles.paddingMd,
         padding === "lg" && styles.paddingLg,
@@ -44,11 +44,10 @@ export function Card({
 const styles = StyleSheet.create({
   card: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radii.lg,
-    gap: 12,
+    borderRadius: radii.xl,
+    gap: 14,
   },
-  shadow: shadows.soft,
-  paddingSm: { padding: spacing.sm + 4 },
-  paddingMd: { padding: spacing.md },
+  paddingSm: { padding: 13 },
+  paddingMd: { padding: 17 },
   paddingLg: { padding: spacing.lg },
 });
