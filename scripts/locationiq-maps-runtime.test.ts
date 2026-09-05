@@ -403,6 +403,7 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
 Deno.test("mobile basemap falls back before a public API-key tile URL can blank the map", async () => {
   const runtime = await readRepositoryFile("apps/lpg-mobile/src/native/domains/maps/index.ts");
   const webMap = await readRepositoryFile("apps/lpg-mobile/src/native/maps/OperationalMap.web.tsx");
+  const nativeMap = await readRepositoryFile("apps/lpg-mobile/src/native/maps/OperationalMap.native.tsx");
 
   assertIncludes(runtime, "KEYLESS_RASTER_TILE_TEMPLATE");
   assertIncludes(runtime, "requiresPublicMapCredential");
@@ -410,9 +411,14 @@ Deno.test("mobile basemap falls back before a public API-key tile URL can blank 
   assertIncludes(runtime, '"api.mapbox.com"');
   assertIncludes(runtime, '"maps.googleapis.com"');
   assertIncludes(runtime, '"keyless_raster_fallback"');
+  assertIncludes(runtime, "DEFAULT_MAP_CENTER");
   assertIncludes(webMap, "EMERGENCY_RASTER_TILE_TEMPLATE");
   assertIncludes(webMap, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
   assertIncludes(webMap, "onError={() => setUseEmergencyTiles(true)}");
+  assertIncludes(webMap, "onSelectPoint ? DEFAULT_MAP_CENTER : null");
+  assertIncludes(nativeMap, "onSelectPoint ? DEFAULT_MAP_CENTER : null");
+  assertIncludes(webMap, "points.length ? initialZoom : 6");
+  assertIncludes(nativeMap, "points.length ? initialZoom : 6");
 });
 
 function testAdapter(fetcher: typeof fetch, retryCount = 0) {
