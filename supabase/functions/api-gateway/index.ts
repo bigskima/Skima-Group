@@ -7,6 +7,14 @@ import {
   LocationProviderError,
   type MapsOperation,
 } from "../_shared/locationiq-maps-adapter.ts";
+import {
+  createPaystackTransferRecipient,
+  initiatePaystackTransfer,
+  listPaystackBanks,
+  PaystackPayoutError,
+  readPaystackBalances,
+  resolvePaystackBankAccount,
+} from "../_shared/paystack-payouts.ts";
 
 const ROUTES = new Set([
   "/health",
@@ -3870,7 +3878,6 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
       if (providerAdapterKey === "provider.payment.paystack") {
         return configurePaystackWithdrawalBeneficiary({
-          accountName: requireString(payload.accountName, "accountName"),
           accountNumber: requireString(payload.accountNumber, "accountNumber"),
           bankCode: optionalString(payload.bankCode) ?? "058",
           beneficiaryType: optionalString(payload.beneficiaryType) ?? "bank_account",
@@ -3886,7 +3893,8 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
       return rpcResponse(
         supabase.rpc("configure_withdrawal_beneficiary", {
-          target_account_name: requireString(payload.accountName, "accountName"),
+          target_account_name: optionalString(payload.accountName) ??
+            `Sandbox payout account •••• ${requireString(payload.accountNumber, "accountNumber").slice(-4)}`,
           target_account_number: requireString(payload.accountNumber, "accountNumber"),
           target_bank_code: optionalString(payload.bankCode),
           target_beneficiary_type: optionalString(payload.beneficiaryType) ?? "bank_account",
@@ -3985,7 +3993,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
       const { data: withdrawalRecord } = await serviceClient
         .from("withdrawal_requests")
-        .select("id,public_reference,total_debit_amount,currency_code,beneficiary_id,provider_adapter_id")
+        .select("id,public_reference,amount,fee_amount,total_debit_amount,currency_code,beneficiary_id,provider_adapter_id")
         .eq("id", withdrawalRequestId)
         .single();
 
@@ -4000,36 +4008,51 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           optionalString(beneficiaryRecord?.metadata?.paystackRecipientCode);
 
         if (recipientCode) {
+          const transferReference = String(withdrawalRecord.public_reference ?? withdrawalRecord.id);
           try {
-            const transferResponse = await fetch("https://api.paystack.co/transfer", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${paystackSecretKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                source: "balance",
-                amount: Math.round(Number(withdrawalRecord.total_debit_amount) * 100),
-                recipient: recipientCode,
-                reason: "Wallet withdrawal",
-                reference: String(withdrawalRecord.public_reference ?? withdrawalRecord.id),
-              }),
+            const transfer = await initiatePaystackTransfer(paystackSecretKey, {
+              amountMajor: Number(withdrawalRecord.amount),
+              recipientCode,
+              reason: "SKIMA wallet withdrawal",
+              reference: transferReference,
             });
-            const transferBody = await transferResponse.json();
-            const transferStatus = transferBody?.data?.status;
-            const providerStatus = transferStatus === "success" ? "succeeded" : "processing";
 
             await supabase.rpc("process_wallet_withdrawal_transfer", {
-              target_idempotency_key: `${payload.idempotencyKey}:transfer`,
-              target_metadata: { paystackTransfer: transferBody?.data },
-              target_provider_reference: String(transferBody?.data?.reference ?? withdrawalRecord.public_reference),
-              target_provider_status: providerStatus,
-              target_response_payload: transferBody ?? {},
+              target_idempotency_key: `${payload.idempotencyKey}:transfer:${transfer.providerStatus}`,
+              target_metadata: {
+                automaticGatewayTransfer: true,
+                principalSentToProvider: withdrawalRecord.amount,
+                skimaFeeRetained: withdrawalRecord.fee_amount,
+              },
+              target_provider_reference: transfer.providerReference,
+              target_provider_status: transfer.providerStatus,
+              target_response_payload: transfer.response,
               target_source: "platform.paystack_transfer_engine",
               target_withdrawal_request_id: withdrawalRequestId,
             });
-          } catch (_err) {
-            // Keep as approved; webhook or retry will finalize transfer status
+          } catch (error) {
+            if (error instanceof PaystackPayoutError && error.code !== "paystack_unreachable") {
+              await supabase.rpc("process_wallet_withdrawal_transfer", {
+                target_idempotency_key: `${payload.idempotencyKey}:transfer:failed`,
+                target_metadata: {
+                  automaticGatewayTransfer: true,
+                  paystackErrorCode: error.code,
+                  paystackErrorMessage: error.message,
+                  principalAttempted: withdrawalRecord.amount,
+                  skimaFeeRetained: withdrawalRecord.fee_amount,
+                },
+                target_provider_reference: transferReference,
+                target_provider_status: "failed",
+                target_response_payload: {
+                  status: false,
+                  error: error.code,
+                  message: error.message,
+                },
+                target_source: "platform.paystack_transfer_engine",
+                target_withdrawal_request_id: withdrawalRequestId,
+              });
+            }
+            // Network ambiguity remains approved for a safe retry/webhook finalization.
           }
         }
       }
@@ -9586,7 +9609,6 @@ async function resolveActivePaymentProviderKey(supabase: SupabaseClient): Promis
 }
 
 async function configurePaystackWithdrawalBeneficiary(params: {
-  readonly accountName: string;
   readonly accountNumber: string;
   readonly bankCode: string;
   readonly beneficiaryType: string;
@@ -9601,68 +9623,87 @@ async function configurePaystackWithdrawalBeneficiary(params: {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
 
-  const configureResult = await params.supabase.rpc("configure_withdrawal_beneficiary", {
-    target_account_name: params.accountName,
-    target_account_number: params.accountNumber,
-    target_bank_code: params.bankCode,
-    target_beneficiary_type: params.beneficiaryType,
-    target_idempotency_key: params.idempotencyKey,
-    target_metadata: params.metadata,
-    target_provider_adapter_key: "provider.payment.paystack",
-    target_source: params.source,
-    target_wallet_id: params.walletId,
-  });
-
-  if (configureResult.error) {
-    return databaseError(configureResult.error, params.id);
+  if (!serviceRoleKey || !paystackSecretKey) {
+    return jsonResponse({
+      ok: false,
+      error: "payment_provider_unavailable",
+      message: "Paystack payouts are not configured.",
+      requestId: params.id,
+    }, 503);
   }
 
-  const beneficiaryId = requireString(configureResult.data, "beneficiary id");
+  try {
+    const resolved = await resolvePaystackBankAccount(
+      paystackSecretKey,
+      params.accountNumber,
+      params.bankCode,
+    );
+    const recipient = await createPaystackTransferRecipient(paystackSecretKey, resolved);
 
-  if (serviceRoleKey && paystackSecretKey) {
-    try {
-      const recipientResponse = await fetch("https://api.paystack.co/transferrecipient", {
-        body: JSON.stringify({
-          account_number: params.accountNumber,
-          bank_code: params.bankCode,
-          currency: "NGN",
-          name: params.accountName,
-          type: "nuban",
-        }),
-        headers: {
-          Authorization: `Bearer ${paystackSecretKey}`,
-          "Content-Type": "application/json",
-        },
-        method: "POST",
-      });
+    const configureResult = await params.supabase.rpc("configure_withdrawal_beneficiary", {
+      target_account_name: resolved.accountName,
+      target_account_number: resolved.accountNumber,
+      target_bank_code: resolved.bankCode,
+      target_beneficiary_type: params.beneficiaryType,
+      target_idempotency_key: params.idempotencyKey,
+      target_metadata: {
+        ...params.metadata,
+        accountNameSource: "paystack.bank.resolve",
+        resolvedAt: new Date().toISOString(),
+      },
+      target_provider_adapter_key: "provider.payment.paystack",
+      target_source: params.source,
+      target_wallet_id: params.walletId,
+    });
 
-      const recipientBody = await recipientResponse.json();
-
-      if (recipientResponse.ok && recipientBody?.status === true && recipientBody?.data?.recipient_code) {
-        const recipientCode = String(recipientBody.data.recipient_code);
-        const serviceClient = createServiceClient(params.supabaseUrl, serviceRoleKey);
-        await serviceClient
-          .from("withdrawal_beneficiaries")
-          .update({
-            metadata: {
-              ...params.metadata,
-              paystackRecipientCode: recipientCode,
-              paystackRecipientId: recipientBody.data.id,
-            },
-            provider_recipient_code: recipientCode,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", beneficiaryId);
-      }
-    } catch (_err) {
-      // Local beneficiary record created successfully
+    if (configureResult.error) {
+      return databaseError(configureResult.error, params.id);
     }
-  }
 
-  return jsonResponse({
-    data: beneficiaryId,
-    id: beneficiaryId,
-    ok: true,
-    requestId: params.id,
-  });
+    const beneficiaryId = requireString(configureResult.data, "beneficiary id");
+    const serviceClient = createServiceClient(params.supabaseUrl, serviceRoleKey);
+    const update = await serviceClient
+      .from("withdrawal_beneficiaries")
+      .update({
+        account_name: resolved.accountName,
+        metadata: {
+          ...params.metadata,
+          accountNameSource: "paystack.bank.resolve",
+          paystackRecipientCode: recipient.recipientCode,
+          paystackRecipientId: recipient.recipientId,
+        },
+        provider_recipient_code: recipient.recipientCode,
+        status: "verified",
+        verified_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", beneficiaryId);
+
+    if (update.error) {
+      return databaseError(update.error, params.id);
+    }
+
+    return jsonResponse({
+      data: {
+        id: beneficiaryId,
+        accountName: resolved.accountName,
+        accountNumberLast4: resolved.accountNumber.slice(-4),
+        bankCode: resolved.bankCode,
+        status: "verified",
+      },
+      id: beneficiaryId,
+      ok: true,
+      requestId: params.id,
+    });
+  } catch (error) {
+    if (error instanceof PaystackPayoutError) {
+      return jsonResponse({
+        ok: false,
+        error: error.code,
+        message: error.message,
+        requestId: params.id,
+      }, error.status);
+    }
+    throw error;
+  }
 }
