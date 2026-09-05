@@ -1,9 +1,9 @@
-import { Check, ChevronRight, Crosshair, LocateFixed, MapPin, RefreshCw, Search } from "lucide-react-native";
+import { router } from "expo-router";
+import { Check, ChevronRight, Crosshair, LocateFixed, MapPin, Search } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
-import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
-import { ActionResponseSchema, displaySubtitle, displayTitle, recordId } from "../api/records";
+import { ActionResponseSchema } from "../api/records";
 import {
   readOperationalLocation,
   resolveOperationalAddress,
@@ -22,13 +22,12 @@ import { colors, radii, spacing } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { prepareLocationSave, reuseLocationSaveAttempt, type LocationSaveAttempt } from "./locationSave";
+import { AppButton } from "./AppButton";
 import { Screen } from "./Screen";
-import { ScreenSkeleton } from "./ScreenSkeleton";
 
 export function LocationsScreen() {
   const { palette } = useAppTheme();
   const { width } = useWindowDimensions();
-  const locations = domainQueries.locations();
   const [label, setLabel] = useState("");
   const [selected, setSelected] = useState<OperationalLocation | null>(null);
   const [detecting, setDetecting] = useState(false);
@@ -204,6 +203,7 @@ export function LocationsScreen() {
       setLabel("");
       setLandmark("");
       showNotice("Place saved. It's ready for your next pickup or delivery.", true);
+      router.replace("/(customer)/locations");
     } catch (cause) {
       showNotice(friendlyError(cause, "We couldn't save this place. Check the details and try again."));
     }
@@ -219,7 +219,12 @@ export function LocationsScreen() {
     : [];
 
   return (
-    <Screen eyebrow="Delivery and pickup" title="Set your location">
+    <Screen
+      eyebrow="Delivery place"
+      title="Add a saved place"
+      subtitle="Pin the exact entrance, gate or roadside point your driver should use."
+      action={<AppButton label="Back" size="sm" variant="ghost" onPress={() => router.back()} />}
+    >
       <View style={[styles.currentRow, { borderBottomColor: palette.border }]}>
         <View style={[styles.currentIcon, { backgroundColor: palette.brandSoft }]}><LocateFixed color={colors.brand} size={20} /></View>
         <View style={styles.currentCopy}>
@@ -365,21 +370,6 @@ export function LocationsScreen() {
         </View>
       </View>
 
-      <View style={styles.savedSection}>
-        <Text style={[styles.sectionTitle, { color: palette.ink }]}>Saved places</Text>
-        {locations.isPending ? <ScreenSkeleton cards={1} /> : (locations.data ?? []).length ? (
-          (locations.data ?? []).map((item, index) => (
-            <View key={recordId(item) ?? String(index)} style={[styles.savedPlace, { borderBottomColor: palette.border }]}>
-              <View style={[styles.savedPin, { backgroundColor: palette.brandSoft }]}><MapPin color={colors.brand} size={18} /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.savedTitle, { color: palette.ink }]}>{displayTitle(item)}</Text>
-                <Text numberOfLines={2} style={[styles.savedAddress, { color: palette.muted }]}>{displaySubtitle(item) ?? "Saved pickup and delivery point"}</Text>
-              </View>
-              <ChevronRight color={palette.muted} size={18} />
-            </View>
-          ))
-        ) : <Text style={[styles.savedEmpty, { color: palette.muted }]}>Your saved places will appear here.</Text>}
-      </View>
     </Screen>
   );
 }
