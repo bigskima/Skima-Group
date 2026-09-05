@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2.110.9";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.110.9";
 
 import { jsonResponse, optionsResponse, requestId } from "../_shared/http.ts";
 
@@ -533,7 +533,7 @@ function withdrawalIdFromPaystackReference(reference: string): string | null {
 }
 
 async function recordPaymentWebhookError(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   fingerprint: string,
   message: string,
   context: Readonly<Record<string, unknown>>,
