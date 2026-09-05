@@ -437,6 +437,28 @@ const checks: Check[] = [
     required: [literalPattern(route), literalPattern(permission)],
   })),
   {
+    name: "Paystack transfer references are lowercase provider-safe identifiers",
+    source: paystackPayoutAdapter,
+    required: [
+      /normalizePaystackTransferReference/i,
+      /toLowerCase\(\)/i,
+      /\[\^a-z0-9_-\]/i,
+      /normalized\.length < 16 \|\| normalized\.length > 50/i,
+    ],
+  },
+  {
+    name: "wallet and treasury transfers do not reuse uppercase public references",
+    source: financeRuntime + "\n" + gateway,
+    required: [
+      /skima-wdl-/i,
+      /replaceAll\("-", ""\)/i,
+    ],
+    forbidden: [
+      /const reference = withdrawal\.data\.public_reference \?\?/i,
+      /const transferReference = String\(withdrawalRecord\.public_reference/i,
+    ],
+  },
+  {
     name: "Paystack payout adapter resolves account holder server-side",
     source: paystackPayoutAdapter,
     required: [
