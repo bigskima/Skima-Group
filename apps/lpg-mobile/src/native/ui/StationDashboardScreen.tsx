@@ -22,6 +22,7 @@ import {
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { AiAssistantLauncher } from "./AiAssistantLauncher";
 import { AppButton } from "./AppButton";
 import { BrandMark } from "./BrandMark";
 import { EmptyState } from "./EmptyState";
@@ -146,6 +147,8 @@ export function StationDashboardScreen() {
                 <HeroMetric label="Incoming cylinders" value={String(activeRecords.length)} />
               </View>
             </View>
+
+            <AiAssistantLauncher workspace="station" />
 
             <View style={styles.headingRow}>
               <View>
