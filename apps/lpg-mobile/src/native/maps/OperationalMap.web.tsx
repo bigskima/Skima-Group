@@ -57,14 +57,15 @@ export function OperationalMap({
   const attribution = useEmergencyTiles
     ? EMERGENCY_ATTRIBUTION
     : mapConfig.tile.attribution;
+  const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
+  const interactive = Boolean(onSelectPoint);
   const derivedCenter = useMemo(
-    () => averageCoordinate(points) ?? (onSelectPoint ? DEFAULT_MAP_CENTER : null),
-    [points, onSelectPoint],
+    () => averageCoordinate(points) ?? (interactive ? DEFAULT_MAP_CENTER : null),
+    [pointKey, interactive],
   );
   const automaticZoom = points.length ? initialZoom : 6;
   const [center, setCenter] = useState(derivedCenter);
   const [zoom, setZoom] = useState(() => clamp(automaticZoom, minZoom, effectiveMaxZoom));
-  const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
 
   useEffect(() => {
     setUseEmergencyTiles(false);
@@ -76,7 +77,7 @@ export function OperationalMap({
     setZoom(points.length > 1
       ? fitZoom(points, width, height, minZoom, effectiveMaxZoom)
       : clamp(points.length ? initialZoom : 6, minZoom, effectiveMaxZoom));
-  }, [derivedCenter, pointKey, width, height, initialZoom, effectiveMaxZoom, minZoom]);
+  }, [pointKey, interactive, width, height, initialZoom, effectiveMaxZoom, minZoom]);
 
   const layout = center
     ? createLayout(center, points, width, height, zoom, tileTemplate, providerTileMaxZoom)
