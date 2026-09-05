@@ -464,8 +464,13 @@ Deno.test("home intelligence is deterministic and reuses the existing Ask SKIMA 
 });
 
 Deno.test("Driver Daily Brief is first-class in Ask SKIMA without gaining operational authority", () => {
-  const driverContext = sectionBetween(
+  const assistantContext = sectionBetween(
     gatewaySource,
+    "async function buildAiAssistantContext(",
+    "function assertAiContextQuery",
+  );
+  const driverContext = sectionBetween(
+    assistantContext,
     'if (workspace === "driver")',
     'if (workspace === "station")',
   );
