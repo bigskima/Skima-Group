@@ -9725,7 +9725,7 @@ async function buildAiAssistantContext(
         .limit(40),
       supabase
         .from("ai_task_runs")
-        .select("id,status,subject_type,source,created_at,started_at,completed_at,failed_at")
+        .select("id,status,subject_type,source,created_at,started_at,completed_at,updated_at")
         .order("created_at", { ascending: false })
         .limit(30),
       supabase
