@@ -16,6 +16,7 @@ const [
   stationSettlementExplanationSql,
   customerServiceabilitySql,
   applicantApplicationExplanationSql,
+  applicationReviewReadinessSql,
   supportTriageSql,
   partnerRiskSql,
   partnerRiskGuardSql,
@@ -64,6 +65,7 @@ const [
   readRepositoryFile("supabase/migrations/20260906007000_station_settlement_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906008000_customer_serviceability_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906010000_applicant_application_explanation_runtime.sql"),
+  readRepositoryFile("supabase/migrations/20260906011000_ai_application_review_readiness.sql"),
   readRepositoryFile("supabase/migrations/20260906009000_ai_support_triage_intelligence.sql"),
   readRepositoryFile("supabase/migrations/20260905233000_ai_partner_trust_risk_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233500_ai_partner_risk_configuration_guard.sql"),
@@ -2035,6 +2037,103 @@ Deno.test("Ask SKIMA uses applicant-safe progress and contextual application act
   );
 });
 
+Deno.test("admin application review readiness mirrors canonical gates without becoming a decision engine", () => {
+  const sql = normalizeWhitespace(applicationReviewReadinessSql);
+
+  assertIncludes(
+    sql,
+    "public.application_requirement_applies",
+    "admin readiness must respect canonical conditional application requirements",
+  );
+  assertIncludes(
+    sql,
+    "submission.status in ('uploaded','submitted','under_review','approved')",
+    "admin readiness submission state must mirror the canonical submit gate",
+  );
+  assertIncludes(
+    sql,
+    "where submission.status = 'approved'",
+    "admin readiness approval state must require canonical approved document evidence",
+  );
+  assertIncludes(
+    sql,
+    "application_record.status = 'under_review' and document_summary.approval_blocker_count = 0",
+    "decisionReady must only mean the document approval gate is clear during human review",
+  );
+  assertIncludes(
+    sql,
+    "'humandecisionrequired', true",
+    "readiness output must explicitly require a human application decision",
+  );
+  for (const guardrail of [
+    "'doesnotapproveapplication', true",
+    "'doesnotrejectapplication', true",
+    "'doesnotsuspendapplication', true",
+    "'doesnotassignreviewer', true",
+    "'doesnotreviewdocuments', true",
+    "'doesnotexposeinternalnotes', true",
+  ]) {
+    assertIncludes(
+      sql,
+      guardrail,
+      "application readiness must preserve guardrail " + guardrail,
+    );
+  }
+  assertNotMatch(
+    applicationReviewReadinessSql,
+    /provider\.ai\.|resolve_ai_provider_route|executeAiText|generativelanguage|chat\/completions/,
+    "application readiness must be deterministic rather than model-generated",
+  );
+  assertNotMatch(
+    applicationReviewReadinessSql,
+    /\b(?:update|insert\s+into|delete\s+from)\s+public\.(?:application_records|application_versions|application_review_tasks|application_review_events|document_submissions|document_review_events)\b/i,
+    "application review readiness must never mutate the canonical application/document workflow",
+  );
+  assertNotMatch(
+    applicationReviewReadinessSql,
+    /review_event\.internal_notes/,
+    "application readiness must not expose private reviewer notes",
+  );
+  assertIncludes(
+    sql,
+    "public.has_permission('platform.applications.review', null)",
+    "application readiness must require an authorized admin/reviewer permission",
+  );
+});
+
+Deno.test("admin Ask SKIMA keeps application review readiness internal and human-controlled", () => {
+  assertIncludes(
+    gatewaySource,
+    'supabase.rpc("read_ai_application_review_readiness"',
+    "admin Ask SKIMA must ground review questions in deterministic readiness data",
+  );
+  assertIncludes(
+    gatewaySource,
+    "applicationReviewReadiness: applicationReviewRows",
+    "admin context must include application review readiness",
+  );
+  assertIncludes(
+    gatewaySource,
+    "It may identify applicable document blockers or that the canonical document approval gate is satisfied, but it is not an application decision.",
+    "assistant prompt must distinguish readiness from an application decision",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Only the existing human review workflow may approve, reject, suspend, assign a reviewer or review a document.",
+    "assistant prompt must keep application decisions in the human workflow",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Never disclose internal application review readiness ranking, review-task details or admin recommendations to customer, driver or station workspaces.",
+    "assistant prompt must keep admin readiness private",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Which applications are ready for review?",
+    "admin copilot should expose a review-readiness question",
+  );
+});
+
 Deno.test("support triage is deterministic, advisory-only, and cannot mutate complaint state", () => {
   const sql = normalizeWhitespace(supportTriageSql);
 
@@ -2170,6 +2269,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_pricing_intelligence",
     "read_ai_expansion_opportunities",
     "read_ai_support_triage_assessments",
+    "read_ai_application_review_readiness",
   ]) {
     assertNotIncludes(
       customerContext,
@@ -2195,6 +2295,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_pricing_intelligence",
     "read_ai_expansion_opportunities",
     "read_ai_support_triage_assessments",
+    "read_ai_application_review_readiness",
   ]) {
     assertNotIncludes(
       driverContext,
@@ -2243,6 +2344,11 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_support_triage_assessments",
     "station assistant must not query internal support triage intelligence",
   );
+  assertNotIncludes(
+    stationContext,
+    "read_ai_application_review_readiness",
+    "station assistant must not query internal application review readiness",
+  );
 
   const adminContext = sectionBetween(
     gatewaySource,
@@ -2256,6 +2362,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_pricing_intelligence",
     "read_ai_expansion_opportunities",
     "read_ai_support_triage_assessments",
+    "read_ai_application_review_readiness",
   ]) {
     assertIncludes(
       adminContext,
