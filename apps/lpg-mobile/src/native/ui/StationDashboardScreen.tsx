@@ -28,6 +28,7 @@ import { EmptyState } from "./EmptyState";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 import { StatusPill } from "./StatusPill";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { GuideTarget } from "../onboarding/InAppGuideProvider";
 
 export function StationDashboardScreen() {
   const session = useSession();
@@ -92,7 +93,7 @@ export function StationDashboardScreen() {
           </Pressable>
         </View>
 
-        <View style={styles.switcher}><WorkspaceSwitcher current="station" /></View>
+        <GuideTarget targetKey="common.workspace-switcher" style={styles.switcher}><WorkspaceSwitcher current="station" /></GuideTarget>
 
         {loading ? (
           <View style={styles.content}><ScreenSkeleton cards={4} /></View>
@@ -153,7 +154,7 @@ export function StationDashboardScreen() {
               </View>
             </View>
 
-            <View style={styles.actionGrid}>
+            <GuideTarget targetKey="station.operations" style={styles.actionGrid}>
               <OperationAction
                 primary
                 icon={<ShieldCheck color="#FFFFFF" size={24} />}
@@ -167,7 +168,7 @@ export function StationDashboardScreen() {
                 description="Complete the safety check, then enter the kilograms filled."
                 onPress={() => router.push((processingId ? `/(station)/job/${processingId}` : "/(station)/jobs") as never)}
               />
-            </View>
+            </GuideTarget>
 
             <View style={styles.statusGrid}>
               <StatusMetric label="Driver approaching" value={waitingForDriver} />
