@@ -1082,6 +1082,116 @@
 }
 
 
+.admin-ai-forecasts {
+  margin-top: 20px;
+}
+
+.admin-ai-forecast-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-ai-forecast-card {
+  background: #f8fafb;
+  border: 1px solid #e1e8ea;
+  border-radius: 14px;
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+}
+
+.admin-ai-forecast-card__top {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.admin-ai-forecast-card__top > span {
+  align-items: center;
+  background: #eef8f5;
+  border-radius: 10px;
+  color: #0d8f79;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.admin-ai-forecast-card__top svg {
+  height: 17px;
+  width: 17px;
+}
+
+.admin-ai-forecast-card > strong {
+  color: #17282d;
+  font-size: 0.88rem;
+}
+
+.admin-ai-forecast-card > small {
+  color: #718087;
+  font-size: 0.73rem;
+}
+
+.admin-ai-forecast-values {
+  border-top: 1px solid #e5ebed;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 4px;
+  padding-top: 10px;
+}
+
+.admin-ai-forecast-values span,
+.admin-ai-forecast-values b,
+.admin-ai-forecast-values small {
+  display: block;
+}
+
+.admin-ai-forecast-values b {
+  color: #1c343a;
+  font-size: 0.94rem;
+}
+
+.admin-ai-forecast-values small {
+  color: #7a888d;
+  font-size: 0.69rem;
+  margin-top: 2px;
+}
+
+.admin-ai-forecast-empty {
+  align-items: center;
+  background: #f7fafb;
+  border: 1px solid #e1e8ea;
+  border-radius: 14px;
+  color: #66777d;
+  display: flex;
+  gap: 12px;
+  padding: 18px;
+}
+
+.admin-ai-forecast-empty > svg {
+  color: #238ab3;
+  height: 22px;
+  width: 22px;
+}
+
+.admin-ai-forecast-empty strong,
+.admin-ai-forecast-empty span {
+  display: block;
+}
+
+.admin-ai-forecast-empty strong {
+  color: #1a3534;
+  font-size: 0.86rem;
+}
+
+.admin-ai-forecast-empty span {
+  font-size: 0.76rem;
+  margin-top: 3px;
+}
+
 .admin-ai-insights {
   margin-top: 20px;
 }
@@ -1207,6 +1317,10 @@
   .admin-ai-editor-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .admin-ai-forecast-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -1246,7 +1360,8 @@
 
   .admin-ai-route-row,
   .admin-ai-editor-grid,
-  .admin-ai-insight-row {
+  .admin-ai-insight-row,
+  .admin-ai-forecast-grid {
     grid-template-columns: 1fr;
   }
 
