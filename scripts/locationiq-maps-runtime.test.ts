@@ -207,6 +207,7 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
     partnerReviewReadModel,
     partnerOnboardingCutover,
     candidateCoverageRuntime,
+    coverageRequestReviewContext,
   ] =
     await Promise.all([
       readRepositoryFile("supabase/migrations/20260901204813_locationiq_maps_provider_runtime.sql"),
@@ -247,6 +248,9 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
       ),
       readRepositoryFile(
         "supabase/migrations/20260905020200_universal_partner_candidate_coverage_runtime.sql",
+      ),
+      readRepositoryFile(
+        "supabase/migrations/20260905020500_admin_coverage_request_review_context.sql",
       ),
     ]);
 
@@ -382,6 +386,16 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
   assertIncludes(driverApplication, "Candidate operating area");
   assertIncludes(driverWorkspaceApplication, "resolve_lpg_partner_candidate_coverage");
   assertIncludes(driverWorkspaceApplication, "candidateCoverage");
+  assertIncludes(driverApplication, "Use my captured location as a candidate area");
+  assertIncludes(driverWorkspaceApplication, "Candidate operating area available");
+  assertIncludes(
+    coverageRequestReviewContext,
+    "create or replace function public.read_application_coverage_requests_admin(",
+  );
+  assertIncludes(coverageRequestReviewContext, "center_longitude");
+  assertIncludes(coverageRequestReviewContext, "center_latitude");
+  assertIncludes(coverageRequestReviewContext, "location_verification_status");
+  assertIncludes(adminCoverage, 'supabase.rpc("read_application_coverage_requests_admin"');
 });
 
 function testAdapter(fetcher: typeof fetch, retryCount = 0) {
