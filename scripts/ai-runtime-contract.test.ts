@@ -8,6 +8,7 @@ const [
   providerModalitySql,
   forecastSql,
   forecastGuardSql,
+  refillOutlookSql,
   providerRuntime,
   workerSource,
   gatewaySource,
@@ -24,6 +25,7 @@ const [
   readRepositoryFile("supabase/migrations/20260905220500_ai_provider_modality_hardening.sql"),
   readRepositoryFile("supabase/migrations/20260905223000_ai_demand_forecast_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905223500_ai_demand_forecast_configuration_guard.sql"),
+  readRepositoryFile("supabase/migrations/20260905225000_customer_refill_outlook_runtime.sql"),
   readRepositoryFile("supabase/functions/_shared/ai-provider-runtime.ts"),
   readRepositoryFile("supabase/functions/runtime-worker/index.ts"),
   readRepositoryFile("supabase/functions/api-gateway/index.ts"),
@@ -370,6 +372,51 @@ Deno.test("forecast runtime is fail-soft and clearly labelled as an estimate", (
     adminAiWorkspace,
     "These numbers do not change",
     "admin demand UI must state that forecasts do not control business state",
+  );
+});
+
+Deno.test("customer refill outlook is personal, deterministic, and never a gas gauge", () => {
+  const sql = normalizeWhitespace(refillOutlookSql);
+
+  assertIncludes(
+    sql,
+    "where orders.customer_user_id = (select auth.uid())",
+    "refill outlook must be restricted to the signed-in customer's order history",
+  );
+  assertIncludes(
+    sql,
+    "orders.status in ('delivered', 'completed')",
+    "refill outlook must use completed delivery history",
+  );
+  assertIncludes(
+    sql,
+    "average_interval_days",
+    "refill outlook must derive its estimate from historical intervals",
+  );
+  assertIncludes(
+    sql,
+    "'doesnotmeasureremaininggas', true",
+    "refill outlook payload must explicitly state that it does not measure remaining gas",
+  );
+  assertNotMatch(
+    refillOutlookSql,
+    /provider\.ai\.|resolve_ai_provider_route|generativelanguage|chat\/completions/,
+    "refill outlook calculation must not consume an AI provider",
+  );
+  assertIncludes(
+    gatewaySource,
+    "They do not measure remaining gas, cylinder pressure or safety",
+    "Ask SKIMA must explain the limits of refill outlook estimates",
+  );
+  assertIncludes(
+    gatewaySource,
+    "refillOutlook:",
+    "customer AI grounding must include the personal refill outlook",
+  );
+  assertIncludes(
+    mobileAssistant,
+    "When might I need another refill?",
+    "customer assistant should expose the refill outlook question",
   );
 });
 
