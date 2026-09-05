@@ -47,25 +47,25 @@ export function WorkspaceTabs({ tabs, hidden = [] }: { tabs: readonly Tab[]; hid
             }
           : {
               position: "absolute",
-              left: 12,
-              right: 12,
-              bottom: 10,
-              height: 68,
+              left: 14,
+              right: 14,
+              bottom: 12,
+              height: 72,
               overflow: "hidden",
               borderTopWidth: 0,
               borderWidth: StyleSheet.hairlineWidth,
               borderColor: scheme === "dark" ? "rgba(255,255,255,.10)" : "rgba(25,25,27,.08)",
-              borderRadius: radii.xl,
+              borderRadius: 26,
               backgroundColor: scheme === "dark" ? "rgba(25,25,28,.92)" : "rgba(255,255,255,.93)",
               ...shadows.raised,
             },
         tabBarItemStyle: desktop
           ? { marginVertical: 3, borderRadius: radii.md }
-          : { paddingVertical: 6 },
+          : { paddingVertical: 7, marginHorizontal: 2 },
         tabBarLabelStyle: {
-          fontSize: desktop ? 13 : 9,
-          fontWeight: "800",
-          paddingBottom: desktop ? 0 : 2,
+          fontSize: desktop ? 13 : 9.5,
+          fontWeight: "900",
+          paddingBottom: desktop ? 0 : 3,
         },
       }}
     >
@@ -100,8 +100,8 @@ export function WorkspaceTabs({ tabs, hidden = [] }: { tabs: readonly Tab[]; hid
 
 const styles = StyleSheet.create({
   icon: {
-    width: 38,
-    height: 32,
+    width: 42,
+    height: 34,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 12,
