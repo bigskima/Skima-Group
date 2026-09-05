@@ -241,6 +241,7 @@ const ROUTES = new Set([
   "/runtime/verifications",
   "/runtime/notifications/queue",
   "/runtime/ai/assistant",
+  "/runtime/ai/home-insight",
   "/runtime/ai/support-case",
   "/runtime/ai/conversations",
   "/runtime/ai/queue",
@@ -4973,6 +4974,48 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }),
       id,
     );
+  }
+
+  if (routePath === "/runtime/ai/home-insight" && request.method === "GET") {
+    const workspace = requireString(url.searchParams.get("workspace"), "workspace").trim().toLowerCase();
+    if (!["customer", "driver", "station"].includes(workspace)) {
+      throw new RequestValidationError("workspace must be customer, driver, or station.");
+    }
+
+    const accessResult = await supabase.rpc("can_access_ai_workspace", {
+      target_workspace: workspace,
+    });
+    if (accessResult.error) return databaseError(accessResult.error, id);
+    if (accessResult.data !== true) {
+      return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+    }
+
+    try {
+      const context = await buildAiAssistantContext(
+        supabase,
+        authResult.user,
+        workspace,
+      );
+      return jsonResponse({
+        ok: true,
+        data: buildAiHomeInsight(workspace, context),
+        requestId: id,
+      });
+    } catch (error) {
+      console.warn(JSON.stringify({
+        severity: "warning",
+        source: "api-gateway.ai-home-insight",
+        requestId: id,
+        userId: authResult.user.id,
+        workspace,
+        message: error instanceof Error ? error.message : "unknown error",
+      }));
+      return jsonResponse({
+        ok: true,
+        data: null,
+        requestId: id,
+      });
+    }
   }
 
   if (routePath === "/runtime/ai/assistant" && request.method === "POST") {
@@ -10194,6 +10237,229 @@ function assertAiContextQuery(error: { readonly message?: string } | null): void
       error.message ?? "SKIMA account context could not be read.",
     );
   }
+}
+
+function buildAiHomeInsight(
+  workspace: string,
+  context: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> | null {
+  if (workspace === "customer") {
+    const orders = recordArrayValue(getRecordValue(context, "recentOrders"));
+    const activeOrder = orders.find((record) =>
+      !isTerminalLpgOrderStatus(stringOrNull(getRecordValue(record, "status")))
+    );
+
+    if (activeOrder) {
+      const status = stringOrNull(getRecordValue(activeOrder, "status")) ?? "active";
+      return {
+        kind: "active_order",
+        eyebrow: "LIVE REFILL",
+        title: "Your refill is " + normalizePlainStatus(status),
+        body: "Ask SKIMA what this stage means and what normally happens next.",
+        actionLabel: "Explain refill",
+        estimateOnly: false,
+      };
+    }
+
+    const supportCases = recordArrayValue(getRecordValue(context, "supportCases"));
+    const openCase = supportCases.find((record) =>
+      ["open", "triaged", "under_review"].includes(
+        stringOrNull(getRecordValue(record, "status")) ?? "",
+      )
+    );
+    if (openCase) {
+      const status = stringOrNull(getRecordValue(openCase, "status")) ?? "open";
+      return {
+        kind: "support_case",
+        eyebrow: "SUPPORT",
+        title: "Your support case is " + normalizePlainStatus(status),
+        body: "Ask SKIMA to explain the latest public update on your case.",
+        actionLabel: "Check support",
+        estimateOnly: false,
+      };
+    }
+
+    const applications = recordArrayValue(getRecordValue(context, "myApplications"));
+    const pendingApplication = applications.find((record) =>
+      !["approved", "rejected", "withdrawn", "cancelled", "completed"].includes(
+        stringOrNull(getRecordValue(record, "status")) ?? "",
+      )
+    );
+    if (pendingApplication) {
+      const status = stringOrNull(getRecordValue(pendingApplication, "status")) ?? "in review";
+      return {
+        kind: "application",
+        eyebrow: "APPLICATION",
+        title: "Application " + normalizePlainStatus(status),
+        body: "Ask SKIMA what your current application status means.",
+        actionLabel: "Explain status",
+        estimateOnly: false,
+      };
+    }
+
+    const outlook = recordArrayValue(getRecordValue(context, "refillOutlook"));
+    const nextOutlook = outlook.find((record) =>
+      Boolean(stringOrNull(getRecordValue(record, "estimatedNextRefillAt")))
+    );
+    if (nextOutlook) {
+      const estimatedAt = stringOrNull(getRecordValue(nextOutlook, "estimatedNextRefillAt"));
+      return {
+        kind: "refill_outlook",
+        eyebrow: "REFILL OUTLOOK",
+        title: "Your refill history has a pattern",
+        body: estimatedAt
+          ? "Your history suggests another refill around " + formatAiInsightDate(estimatedAt) + ". Estimate only."
+          : "Ask SKIMA about your usual refill interval. Estimate only.",
+        actionLabel: "View outlook",
+        estimateOnly: true,
+      };
+    }
+
+    return {
+      kind: "customer_help",
+      eyebrow: "SKIMA INTELLIGENCE",
+      title: "Ask SKIMA",
+      body: "Ask about your refill, cylinder, application or support activity.",
+      actionLabel: "Ask SKIMA",
+      estimateOnly: false,
+    };
+  }
+
+  if (workspace === "driver") {
+    const jobs = recordArrayValue(getRecordValue(context, "activeJobs"));
+    const activeJob = jobs.find((record) =>
+      !isTerminalLpgOrderStatus(
+        stringOrNull(getRecordValue(record, "status")) ??
+          stringOrNull(getRecordValue(record, "workflowState")),
+      )
+    );
+
+    if (activeJob) {
+      const status =
+        stringOrNull(getRecordValue(activeJob, "status")) ??
+        stringOrNull(getRecordValue(activeJob, "workflowState")) ??
+        "active";
+      return {
+        kind: "driver_next_step",
+        eyebrow: "DRIVER COPILOT",
+        title: "Next: " + normalizePlainStatus(status),
+        body: "Ask SKIMA what this job stage requires before you continue.",
+        actionLabel: "What next?",
+        estimateOnly: false,
+      };
+    }
+
+    const driver = recordObjectValue(getRecordValue(context, "driver"));
+    const operationalStatus = stringOrNull(getRecordValue(driver, "operational_status"));
+    return {
+      kind: "driver_clear",
+      eyebrow: "DRIVER COPILOT",
+      title: operationalStatus
+        ? "You are " + normalizePlainStatus(operationalStatus)
+        : "No active job right now",
+      body: "Ask about availability, recent jobs or earnings.",
+      actionLabel: "Ask copilot",
+      estimateOnly: false,
+    };
+  }
+
+  if (workspace === "station") {
+    const jobs = recordArrayValue(getRecordValue(context, "activeJobs"));
+    const activeJobs = jobs.filter((record) =>
+      !isTerminalLpgOrderStatus(
+        stringOrNull(getRecordValue(record, "status")) ??
+          stringOrNull(getRecordValue(record, "workflowState")),
+      )
+    );
+
+    if (activeJobs.length > 0) {
+      return {
+        kind: "station_queue",
+        eyebrow: "STATION INTELLIGENCE",
+        title: String(activeJobs.length) + (activeJobs.length === 1 ? " job needs attention" : " jobs need attention"),
+        body: "Ask SKIMA to summarize the current queue and the next reception actions.",
+        actionLabel: "Summarize queue",
+        estimateOnly: false,
+      };
+    }
+
+    const forecasts = recordArrayValue(getRecordValue(context, "demandForecasts"));
+    const weekForecast = forecasts.find((record) =>
+      numberOrNull(getRecordValue(record, "horizonDays")) === 7 ||
+      numberOrNull(getRecordValue(record, "horizon_days")) === 7
+    );
+    if (weekForecast) {
+      const predictedKg =
+        numberOrNull(getRecordValue(weekForecast, "predictedKg")) ??
+        numberOrNull(getRecordValue(weekForecast, "predicted_kg"));
+      const predictedOrders =
+        numberOrNull(getRecordValue(weekForecast, "predictedOrders")) ??
+        numberOrNull(getRecordValue(weekForecast, "predicted_orders"));
+      return {
+        kind: "station_demand_outlook",
+        eyebrow: "7-DAY OUTLOOK",
+        title: predictedKg !== null
+          ? formatAiInsightNumber(predictedKg) + " kg estimated demand"
+          : "Demand outlook ready",
+        body: predictedOrders !== null
+          ? formatAiInsightNumber(predictedOrders) + " orders estimated from recent history. Estimate only."
+          : "Ask SKIMA about the station demand estimate. Estimate only.",
+        actionLabel: "Explain outlook",
+        estimateOnly: true,
+      };
+    }
+
+    return {
+      kind: "station_clear",
+      eyebrow: "STATION INTELLIGENCE",
+      title: "Reception is clear",
+      body: "Ask SKIMA about your queue, station runtime or recent demand.",
+      actionLabel: "Ask SKIMA",
+      estimateOnly: false,
+    };
+  }
+
+  return null;
+}
+
+function recordArrayValue(value: unknown): readonly Readonly<Record<string, unknown>>[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is Readonly<Record<string, unknown>> =>
+      Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+}
+
+function recordObjectValue(value: unknown): Readonly<Record<string, unknown>> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Readonly<Record<string, unknown>>
+    : {};
+}
+
+function isTerminalLpgOrderStatus(value: string | null): boolean {
+  return [
+    "completed",
+    "delivered",
+    "cancelled",
+    "failed",
+    "refunded",
+    "expired",
+    "rejected",
+  ].includes((value ?? "").trim().toLowerCase());
+}
+
+function formatAiInsightDate(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.valueOf())) return "your usual refill window";
+  return new Intl.DateTimeFormat("en-NG", {
+    day: "numeric",
+    month: "short",
+  }).format(parsed);
+}
+
+function formatAiInsightNumber(value: number): string {
+  return new Intl.NumberFormat("en-NG", {
+    maximumFractionDigits: 1,
+  }).format(Math.max(0, value));
 }
 
 function aiSystemPrompt(workspace: string): string {
