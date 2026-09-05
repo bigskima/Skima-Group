@@ -1,2 +1,2 @@
-import { LocationsScreen } from "../../src/native/ui/LocationsScreen";
-export default function Locations() { return <LocationsScreen />; }
+import { SavedLocationsScreen } from "../../src/native/ui/SavedLocationsScreen";
+export default function Locations() { return <SavedLocationsScreen />; }
