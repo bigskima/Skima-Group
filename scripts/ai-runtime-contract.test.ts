@@ -6,6 +6,8 @@ const [
   exceptionSql,
   exceptionHardeningSql,
   providerModalitySql,
+  forecastSql,
+  forecastGuardSql,
   providerRuntime,
   workerSource,
   gatewaySource,
@@ -20,6 +22,8 @@ const [
   readRepositoryFile("supabase/migrations/20260905093000_ai_exception_intelligence.sql"),
   readRepositoryFile("supabase/migrations/20260905220000_ai_exception_runtime_hardening.sql"),
   readRepositoryFile("supabase/migrations/20260905220500_ai_provider_modality_hardening.sql"),
+  readRepositoryFile("supabase/migrations/20260905223000_ai_demand_forecast_runtime.sql"),
+  readRepositoryFile("supabase/migrations/20260905223500_ai_demand_forecast_configuration_guard.sql"),
   readRepositoryFile("supabase/functions/_shared/ai-provider-runtime.ts"),
   readRepositoryFile("supabase/functions/runtime-worker/index.ts"),
   readRepositoryFile("supabase/functions/api-gateway/index.ts"),
@@ -254,6 +258,118 @@ Deno.test("operational exception intelligence is deterministic and uses canonica
     gatewaySource,
     "completed_at,failed_at",
     "admin AI context must not query a non-existent ai_task_runs.failed_at column",
+  );
+});
+
+Deno.test("demand forecasting is deterministic, configuration-driven, and non-authoritative", () => {
+  const sql = normalizeWhitespace(forecastSql);
+
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_forecast_definitions",
+    "forecast definitions must be database configuration",
+  );
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_forecast_snapshots",
+    "forecast results must be persisted as auditable snapshots",
+  );
+  assertIncludes(
+    sql,
+    "method text not null check (method in ('weighted_moving_average'))",
+    "the initial forecast method must remain deterministic",
+  );
+  assertIncludes(
+    sql,
+    "short_weight * (short_order_count::numeric / short_window_days::numeric)",
+    "forecast calculation must be derived from order history rather than an LLM",
+  );
+  assertNotMatch(
+    forecastSql,
+    /provider\.ai\.|resolve_ai_provider_route|executeAiText|generativelanguage|chat\/completions/,
+    "forecast calculation must not call an AI provider",
+  );
+  assertIncludes(
+    sql,
+    "revoke all on function public.refresh_ai_demand_forecasts() from public, anon, authenticated",
+    "forecast refresh must not be callable by regular clients",
+  );
+  assertIncludes(
+    sql,
+    "grant execute on function public.refresh_ai_demand_forecasts() to service_role",
+    "forecast refresh must remain a backend worker operation",
+  );
+  assertIncludes(
+    sql,
+    "security invoker",
+    "forecast reads must preserve caller authorization and RLS",
+  );
+  assertIncludes(
+    sql,
+    "public.can_operate_lpg_station_branch(subject_id, 'lpg.stations.read')",
+    "station forecast reads must be branch-scoped",
+  );
+});
+
+Deno.test("demand forecast configuration is validated before background execution", () => {
+  const sql = normalizeWhitespace(forecastGuardSql);
+  assertIncludes(
+    sql,
+    "create or replace function public.validate_ai_forecast_definition_config",
+    "forecast configuration needs a database validation boundary",
+  );
+  assertIncludes(
+    sql,
+    "short forecast weight must be between 0 and 1",
+    "forecast weights must be bounded",
+  );
+  assertIncludes(
+    sql,
+    "each forecast horizon must be a whole number between 1 and 90 days",
+    "forecast horizons must be bounded",
+  );
+  assertIncludes(
+    sql,
+    "forecast order statuses must use canonical non-failed lpg lifecycle states",
+    "forecast input states must remain canonical and exclude failed/refunded/cancelled demand",
+  );
+});
+
+Deno.test("forecast runtime is fail-soft and clearly labelled as an estimate", () => {
+  assertIncludes(
+    workerSource,
+    'source: "runtime-worker.ai-demand-forecasts"',
+    "worker must isolate forecast refresh failures",
+  );
+  assertIncludes(
+    workerSource,
+    'reason: "forecast_runtime_not_ready"',
+    "worker must tolerate an undeployed forecast migration",
+  );
+  assertMatch(
+    workerSource,
+    /data:\s*\{\s*aiForecasts,\s*aiInsights,\s*aiTasks,/,
+    "worker response must expose forecast refresh health",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Demand forecasts are statistical estimates from recent SKIMA order history.",
+    "Ask SKIMA must label forecasts as estimates",
+  );
+  assertIncludes(
+    gatewaySource,
+    "demandForecasts:",
+    "station/admin grounding must include authorized forecast snapshots",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "Demand outlook",
+    "admin Intelligence must surface demand estimates",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "These numbers do not change",
+    "admin demand UI must state that forecasts do not control business state",
   );
 });
 
