@@ -235,7 +235,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 begin
   if tg_op = 'DELETE' then
     if old.entity_type = 'DRIVER' and old.service_key = 'lpg' then
@@ -278,7 +278,7 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 drop trigger if exists sync_driver_universal_service_profile_after_coverage
   on public.operational_coverage_assignments;
