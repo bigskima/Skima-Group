@@ -10762,10 +10762,15 @@ async function buildAiAssistantContext(
   }
 
   if (workspace === "station") {
-    const [jobs, runtime, forecasts] = await Promise.all([
+    const [jobs, runtime, forecasts, settlementExplanations] = await Promise.all([
       supabase.rpc("read_lpg_jobs", { target_queue: "station", target_limit: 15 }),
       supabase.rpc("read_lpg_station_runtime", { target_limit: 10, target_station_branch_id: null }),
       supabase.rpc("read_ai_demand_forecasts", { target_station_branch_id: null }),
+      supabase.rpc("read_my_lpg_station_settlement_explanations", {
+        target_lpg_order_id: null,
+        target_station_branch_id: null,
+        target_limit: 10,
+      }),
     ]);
     assertAiContextQuery(jobs.error);
     assertAiContextQuery(runtime.error);
@@ -10774,6 +10779,9 @@ async function buildAiAssistantContext(
       activeJobs: Array.isArray(jobs.data) ? jobs.data : [],
       stationRuntime: runtime.data ?? null,
       demandForecasts: forecasts.error ? [] : Array.isArray(forecasts.data) ? forecasts.data : [],
+      settlementExplanations: settlementExplanations.error
+        ? []
+        : Array.isArray(settlementExplanations.data) ? settlementExplanations.data : [],
       myApplications: ownApplications,
     };
   }
@@ -11126,6 +11134,8 @@ function aiSystemPrompt(workspace: string): string {
     "Customer refill outlooks are estimates from that customer's historical refill intervals. They do not measure remaining gas, cylinder pressure or safety and must never be described as a gas gauge.",
     "Driver earningsExplanations come from the assigned driver's immutable locked LPG payout snapshot and canonical commission execution. A locked payout that is pending delivery or awaiting posting is not yet posted earnings. Only say money was credited when walletPostingRecorded is true and the canonical execution status is posted.",
     "Never estimate a driver's earned amount, change a payout, trigger commission release, move wallet money, or substitute another driver's financial records.",
+    "Station settlementExplanations are branch-finance-scoped records of the station LPG principal, actual fulfilled kg, quantity reduction and canonical settlement posting. Only say station earnings were posted when walletPostingRecorded is true.",
+    "Never expose platform logistics margin, driver payout or escrow internals in a station settlement explanation, and never claim Ask SKIMA released settlement or changed a station balance.",
     "Customer support case context contains only that customer's complaint status and public support history. Never invent internal review notes, private moderation decisions, or a resolution that is not present.",
     "Customer priceExplanations come from that customer's immutable accepted LPG order snapshot. Use those accepted station price, SKIMA markup, delivery components, quantity, tax, total, actual kg and posted adjustment values when explaining a customer's price. Never substitute admin pricing simulations, current station prices, or a newly calculated scenario for the accepted order price.",
     "A customer price explanation is descriptive only. Never claim that Ask SKIMA changed the station price, SKIMA markup, delivery fee, tax, total, refund or financial policy.",
@@ -11151,7 +11161,7 @@ function aiWorkspaceSuggestions(workspace: string): readonly string[] {
     return ["What do I do next?", "Summarize my active jobs", "Explain my recent earnings"];
   }
   if (workspace === "station") {
-    return ["What needs attention?", "How busy could the next 7 days be?", "Summarize my current queue"];
+    return ["What needs attention?", "Explain my recent settlement", "How busy could the next 7 days be?"];
   }
   return ["Which areas deserve expansion review?", "What would our fee scenarios look like at recent volume?", "Are any money records out of balance?"];
 }
