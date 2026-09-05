@@ -15,6 +15,7 @@ import {
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
+import { selectWorkspaceWallet } from "../utilities/financeWallet";
 import { idempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
 import { AppField } from "./AppField";
@@ -39,13 +40,7 @@ export function TopUpScreen() {
   } | null>(null);
 
   const wallet = useMemo(
-    () =>
-      (wallets.data ?? []).find(
-        (item) =>
-          firstString(item, ["wallet_type", "walletType"]) === "customer" &&
-          firstString(item, ["owner_entity_type", "ownerEntityType"]) === "user" &&
-          firstString(item, ["wallet_status", "status"]) !== "closed",
-      ) ?? null,
+    () => selectWorkspaceWallet(wallets.data ?? [], "customer"),
     [wallets.data],
   );
   const walletId = firstString(wallet, ["id", "wallet_id", "walletId"]);
