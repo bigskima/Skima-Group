@@ -202,6 +202,8 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
     driverApplication,
     driverWorkspaceApplication,
     partnerGeographyReconciliation,
+    stationCoverageLifecycle,
+    driverCoverageProfile,
   ] =
     await Promise.all([
       readRepositoryFile("supabase/migrations/20260901204813_locationiq_maps_provider_runtime.sql"),
@@ -227,6 +229,12 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
       readRepositoryFile("apps/lpg-mobile/src/native/ui/DriverApplicationScreen.tsx"),
       readRepositoryFile(
         "supabase/migrations/20260905014400_universal_partner_application_geography_reconciliation.sql",
+      ),
+      readRepositoryFile(
+        "supabase/migrations/20260905014900_station_universal_coverage_lifecycle_sync.sql",
+      ),
+      readRepositoryFile(
+        "supabase/migrations/20260905015200_driver_universal_coverage_profile_reconciliation.sql",
       ),
     ]);
 
@@ -317,6 +325,28 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
     "create or replace function public.migrate_verified_operational_coverage()",
   );
   assertIncludes(partnerGeographyReconciliation, "public.is_platform_super_admin()");
+
+  // Approved station coverage must stay universal after the one-time backfill,
+  // and driver-facing service zones must come from universal assignments.
+  assertIncludes(
+    stationCoverageLifecycle,
+    "create or replace function public.sync_lpg_station_universal_coverage()",
+  );
+  assertIncludes(stationCoverageLifecycle, "'station_branch_lifecycle'");
+  assertIncludes(stationCoverageLifecycle, "approval_status = 'approved'");
+  assertIncludes(
+    driverCoverageProfile,
+    "create or replace function public.backfill_universal_driver_coverage_requests_from_legacy(",
+  );
+  assertIncludes(
+    driverCoverageProfile,
+    "drop trigger if exists application_records_project_driver_service_areas",
+  );
+  assertIncludes(
+    driverCoverageProfile,
+    "create or replace function public.refresh_driver_universal_service_profile(",
+  );
+  assertIncludes(driverCoverageProfile, "'coverageRuntime', 'universal'");
 });
 
 function testAdapter(fetcher: typeof fetch, retryCount = 0) {
