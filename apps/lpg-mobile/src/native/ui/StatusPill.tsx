@@ -33,24 +33,29 @@ export function StatusPill({
             : palette.mutedStrong;
 
   return (
-    <View style={[styles.pill, { backgroundColor }]}>
-      <View style={[styles.dot, { backgroundColor: color }]} />
-      <Text style={[styles.label, { color }]}>{label.replace(/[_-]/g, " ")}</Text>
+    <View style={[styles.pill, { backgroundColor, borderColor: palette.border }]}>
+      <View style={[styles.dotHalo, { backgroundColor }]}>
+        <View style={[styles.dot, { backgroundColor: color }]} />
+      </View>
+      <Text numberOfLines={1} style={[styles.label, { color }]}>{label.replace(/[_-]/g, " ")}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   pill: {
-    minHeight: 28,
+    minHeight: 30,
+    maxWidth: "100%",
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 5,
   },
+  dotHalo: { width: 14, height: 14, borderRadius: 7, alignItems: "center", justifyContent: "center" },
   dot: { width: 6, height: 6, borderRadius: 3 },
-  label: { ...typography.caption, fontSize: 11, textTransform: "capitalize" },
+  label: { flexShrink: 1, ...typography.caption, fontSize: 10, fontWeight: "900", textTransform: "capitalize" },
 });
