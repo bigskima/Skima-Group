@@ -312,7 +312,7 @@ function DriverGeographyStep(props: {
       setError("Detect your current operating location before continuing.");
       return;
     }
-    let coverageRequests: Record<string, unknown>[];
+    let coverageRequests: Array<Record<string, unknown> | CandidateCoverageRequest>;
     if (selectedIds.length > 0) {
       coverageRequests = selectedIds.map((geographyId) => ({
         type: "ADMIN_GEOGRAPHY",
@@ -464,10 +464,20 @@ function DriverGeographyStep(props: {
                       </Text>
                     </View>
                   </Pressable>
-
                 </View>
               );
             })}
+            {candidateCoverage && selectedIds.length === 0 ? (
+              <View style={[styles.locationBox, { borderColor: palette.brand, backgroundColor: palette.brandSofter }]}>
+                <Star size={18} color={palette.brand} />
+                <View style={styles.locationCopy}>
+                  <Text style={[styles.locationTitle, { color: palette.ink }]}>Use my captured location as a candidate area</Text>
+                  <Text style={[styles.helper, { color: palette.muted }]}>
+                    If you do not select one of the approved geographies above, SKIMA will submit a {Math.round(candidateCoverage.radiusMeters / 1000 * 10) / 10} km radius around your captured operating location for Admin review. Customer LPG service is not enabled by this request.
+                  </Text>
+                </View>
+              </View>
+            ) : null}
           </View>
         )}
       </Card>
