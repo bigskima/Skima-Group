@@ -10810,6 +10810,7 @@ async function buildAiAssistantContext(
       financeFindings,
       pricingIntelligence,
       expansionOpportunities,
+      supportTriageAssessments,
     ] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
@@ -10852,6 +10853,10 @@ async function buildAiAssistantContext(
       supabase.rpc("read_ai_expansion_opportunities", {
         target_limit: 40,
       }),
+      supabase.rpc("read_ai_support_triage_assessments", {
+        target_minimum_priority: "elevated",
+        target_limit: 40,
+      }),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(applications.error);
@@ -10871,6 +10876,9 @@ async function buildAiAssistantContext(
     const expansionRows = expansionOpportunities.error
       ? []
       : Array.isArray(expansionOpportunities.data) ? expansionOpportunities.data : [];
+    const supportTriageRows = supportTriageAssessments.error
+      ? []
+      : Array.isArray(supportTriageAssessments.data) ? supportTriageAssessments.data : [];
     return {
       ...base,
       recentOrders: orders.data ?? [],
@@ -10883,6 +10891,7 @@ async function buildAiAssistantContext(
       financeReconciliationFindings: financeRows,
       pricingIntelligence: pricingSnapshot,
       expansionOpportunities: expansionRows,
+      supportTriageAssessments: supportTriageRows,
     };
   }
 
@@ -11159,6 +11168,8 @@ function aiSystemPrompt(workspace: string): string {
     "Never claim that pricing intelligence changed a station price, SKIMA fee, quote or financial policy, and never disclose internal pricing simulations to customer, driver or station workspaces.",
     "Service-area expansion opportunities are admin-only review signals built from canonical expansion interest, authoritative service-availability decisions and real partner coverage requests. SERVICE_NOT_LAUNCHED can support expansion review; AREA_EXCLUDED is an intentional-policy review signal; POLICY_CONFIGURATION_CONFLICT requires configuration repair. Never treat any of them as permission to launch an area.",
     "Never claim that expansion intelligence enabled a geography, changed a coverage policy, approved a partner application or changed dispatch, and never disclose internal expansion scoring to customer, driver or station workspaces.",
+    "Support triage assessments are internal advisory priorities for authorized administrators. Complaint status, evidence review and the human quality workflow remain authoritative. A triage score cannot resolve or dismiss a complaint, suspend a partner, change dispatch, move money, post ledger entries or certify LPG safety.",
+    "Never disclose internal support triage scores, SLA priorities or recommendations to customer, driver or station workspaces.",
     "Be concise, practical and use normal customer-facing language. Do not expose internal database field names unless the user explicitly asks for technical detail.",
   ].join("\n");
 }
@@ -11173,7 +11184,7 @@ function aiWorkspaceSuggestions(workspace: string): readonly string[] {
   if (workspace === "station") {
     return ["What needs attention?", "Explain my recent settlement", "How busy could the next 7 days be?"];
   }
-  return ["Which areas deserve expansion review?", "What would our fee scenarios look like at recent volume?", "Are any money records out of balance?"];
+  return ["Which support cases need attention?", "Which areas deserve expansion review?", "Are any money records out of balance?"];
 }
 
 async function adminAiRuntimeResponse(
