@@ -44,6 +44,7 @@ import { PromotionBanner } from "./PromotionBanner";
 import { RuntimeMediaImage } from "./RuntimeMediaImage";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { GuideTarget } from "../onboarding/InAppGuideProvider";
 
 type Workspace = "customer" | "driver" | "station";
 type IconType = ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
@@ -95,7 +96,9 @@ export function CustomerDashboard() {
 
   return (
     <MobileHome workspace="customer" context="Refill and delivery">
-      <CustomerLocation location={location} />
+      <GuideTarget targetKey="customer.location">
+        <CustomerLocation location={location} />
+      </GuideTarget>
       {pending ? (
         <ScreenSkeleton cards={3} />
       ) : failed ? (
@@ -110,7 +113,9 @@ export function CustomerDashboard() {
         />
       ) : (
         <>
-          <CustomerPrimaryAction {...primary} />
+          <GuideTarget targetKey="customer.primary-action">
+            <CustomerPrimaryAction {...primary} />
+          </GuideTarget>
 
           {order && orderId ? (
             <ActiveOrder record={order} href={`/(customer)/orders/${orderId}`} />
@@ -176,7 +181,7 @@ export function DriverDashboard() {
         <>
           <DriverCockpit record={active} />
 
-          <View style={styles.driverActions}>
+          <GuideTarget targetKey="driver.operations" style={styles.driverActions}>
             <OperationalAction
               icon={ScanLine}
               label="Scan cylinder"
@@ -189,7 +194,7 @@ export function DriverDashboard() {
               hint="Update your live status"
               href="/(driver)/availability"
             />
-          </View>
+          </GuideTarget>
 
           <View style={styles.driverMetrics}>
             <MetricLink
@@ -338,9 +343,9 @@ function MobileHome({ workspace, context, children }: {
           </Pressable>
         </View>
 
-        <View style={styles.workspaceSwitcher}>
+        <GuideTarget targetKey="common.workspace-switcher" style={styles.workspaceSwitcher}>
           <WorkspaceSwitcher current={workspace} />
-        </View>
+        </GuideTarget>
 
         <View style={styles.homeContent}>{children}</View>
       </View>
