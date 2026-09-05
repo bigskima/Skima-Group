@@ -278,7 +278,7 @@ function cylinderSummary(cylinder: PlatformRecord | null) {
 function InfoField({ label, value }: { label: string; value: string }) {
   const { palette } = useAppTheme();
   return (
-    <View style={styles.infoField}>
+    <View style={[styles.infoField, { backgroundColor: palette.surfaceSubtle }]}>
       <Text style={[styles.label, { color: palette.muted }]}>{label.toUpperCase()}</Text>
       <Text style={[styles.fieldValue, { color: palette.ink }]}>{value}</Text>
     </View>
