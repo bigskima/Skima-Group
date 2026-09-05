@@ -21,6 +21,7 @@ export default function Layout() {
           "stations",
           "station/[id]",
           "locations",
+          "location-editor",
           "transactions",
           "payment-methods",
           "support",
