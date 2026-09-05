@@ -1081,6 +1081,118 @@
   grid-column: 1 / -1;
 }
 
+
+.admin-ai-insights {
+  margin-top: 20px;
+}
+
+.admin-ai-insight-list {
+  display: grid;
+}
+
+.admin-ai-insight-row {
+  align-items: flex-start;
+  border-bottom: 1px solid #e7ecee;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 15px 0;
+}
+
+.admin-ai-insight-row:last-child {
+  border-bottom: 0;
+}
+
+.admin-ai-severity-dot {
+  background: #87959a;
+  border-radius: 999px;
+  height: 9px;
+  margin-top: 7px;
+  width: 9px;
+}
+
+.admin-ai-severity-dot.is-info {
+  background: #238ab3;
+}
+
+.admin-ai-severity-dot.is-warning {
+  background: #d28a18;
+}
+
+.admin-ai-severity-dot.is-high,
+.admin-ai-severity-dot.is-critical {
+  background: #c83f48;
+}
+
+.admin-ai-insight-copy {
+  min-width: 0;
+}
+
+.admin-ai-insight-title {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.admin-ai-insight-title strong {
+  color: #17282d;
+  font-size: 0.9rem;
+}
+
+.admin-ai-insight-copy p {
+  color: #66777d;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 5px 0;
+}
+
+.admin-ai-insight-copy small {
+  color: #53676d;
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.admin-ai-insight-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
+.admin-ai-insights-empty {
+  align-items: center;
+  background: #f5faf8;
+  border: 1px solid #dcebe6;
+  border-radius: 14px;
+  color: #66777d;
+  display: flex;
+  gap: 12px;
+  padding: 18px;
+}
+
+.admin-ai-insights-empty > svg {
+  color: #15917c;
+  height: 22px;
+  width: 22px;
+}
+
+.admin-ai-insights-empty strong,
+.admin-ai-insights-empty span {
+  display: block;
+}
+
+.admin-ai-insights-empty strong {
+  color: #1a3534;
+  font-size: 0.86rem;
+}
+
+.admin-ai-insights-empty span {
+  font-size: 0.76rem;
+  margin-top: 3px;
+}
+
 @media (max-width: 1120px) {
   .skima-grid--compact {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1133,8 +1245,13 @@
   }
 
   .admin-ai-route-row,
-  .admin-ai-editor-grid {
+  .admin-ai-editor-grid,
+  .admin-ai-insight-row {
     grid-template-columns: 1fr;
+  }
+
+  .admin-ai-insight-actions {
+    justify-content: flex-start;
   }
 
   .admin-ai-route-editor {
