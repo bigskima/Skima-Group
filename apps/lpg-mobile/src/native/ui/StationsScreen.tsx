@@ -29,9 +29,9 @@ export function StationsScreen() {
 
   return (
     <Screen
-      eyebrow="Verified station network"
-      title="Stations near you"
-      subtitle="Public station profiles show only customer-safe information for SKIMA-approved service locations."
+      eyebrow="SKIMA stations"
+      title="Nearby stations"
+      subtitle="Find verified LPG stations available through SKIMA in your area."
     >
       {stations.isPending ? (
         <View style={styles.loading}>
@@ -46,8 +46,8 @@ export function StationsScreen() {
       ) : (stations.data ?? []).length === 0 ? (
         <EmptyState
           icon={<ShieldCheck color={palette.brand} size={27} />}
-          title="No public stations available"
-          description="Only approved SKIMA stations that are currently available appear here."
+          title="No stations nearby yet"
+          description="Verified stations will appear here as SKIMA service becomes available around you."
         />
       ) : (
         <>
@@ -63,7 +63,7 @@ export function StationsScreen() {
               const status = displayStatus(station) ?? firstString(station, ["availability_status", "availabilityStatus"]) ?? "configured";
               const capacity = firstNumber(station, ["currentAvailableKg", "current_available_kg"]);
               const name = firstString(station, ["display_name", "displayName", "name"]) ?? "SKIMA station";
-              const address = firstString(station, ["formatted_address", "formattedAddress", "address"]) ?? "Public address unavailable";
+              const address = firstString(station, ["formatted_address", "formattedAddress", "address"]) ?? "Address will appear when available";
 
               return (
                 <Pressable
@@ -120,7 +120,7 @@ function friendlyStationStatus(value: string) {
   const labels: Record<string, string> = {
     available: "Available now",
     active: "Available now",
-    configured: "Service configured",
+    configured: "Ready for SKIMA orders",
     busy: "High activity",
     temporarily_unavailable: "Temporarily unavailable",
     unavailable: "Unavailable",
