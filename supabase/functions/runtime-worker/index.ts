@@ -58,7 +58,6 @@ Deno.serve(async (request: Request): Promise<Response> => {
     await supabase.rpc("record_health_check", {
       target_details: {
         aiInsights,
-        aiInsights,
         aiTasks,
         communications,
         expirations,
@@ -76,6 +75,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     return jsonResponse({
       ok: true,
       data: {
+        aiInsights,
         aiTasks,
         communications,
         expirations,
