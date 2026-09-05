@@ -2456,8 +2456,13 @@ Deno.test("Service Quality uses triage only as a human-review aid and fails soft
 });
 
 Deno.test("AI workspace context keeps internal intelligence out of station/customer/driver surfaces", () => {
-  const customerContext = sectionBetween(
+  const assistantContext = sectionBetween(
     gatewaySource,
+    "async function buildAiAssistantContext(",
+    "function assertAiContextQuery",
+  );
+  const customerContext = sectionBetween(
+    assistantContext,
     'if (workspace === "customer")',
     'if (workspace === "driver")',
   );
@@ -2489,7 +2494,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
   }
 
   const driverContext = sectionBetween(
-    gatewaySource,
+    assistantContext,
     'if (workspace === "driver")',
     'if (workspace === "station")',
   );
@@ -2516,7 +2521,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
   }
 
   const stationContext = sectionBetween(
-    gatewaySource,
+    assistantContext,
     'if (workspace === "station")',
     'if (workspace === "admin")',
   );
@@ -2567,7 +2572,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
   );
 
   const adminContext = sectionBetween(
-    gatewaySource,
+    assistantContext,
     'if (workspace === "admin")',
     "return base;",
   );
