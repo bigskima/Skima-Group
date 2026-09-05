@@ -6,6 +6,7 @@ import {
   RefreshCcw,
   Route,
   Send,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   TrendingUp,
@@ -38,6 +39,7 @@ const AdminAiRuntimeSchema = z.object({
   providers: z.array(PlatformRecordSchema),
   insights: z.array(PlatformRecordSchema).default([]),
   forecasts: z.array(PlatformRecordSchema).default([]),
+  riskAssessments: z.array(PlatformRecordSchema).default([]),
   userId: z.string().uuid().optional(),
 });
 const AiAssistantResponseSchema = z.object({
@@ -105,6 +107,7 @@ export function AdminAiWorkspace() {
   const providers = runtime.data?.providers ?? [];
   const insights = runtime.data?.insights ?? [];
   const forecasts = runtime.data?.forecasts ?? [];
+  const riskAssessments = runtime.data?.riskAssessments ?? [];
   const activeCapabilities = capabilities.filter((item) => recordString(item, "status") === "active");
   const activeProviders = providers.filter((item) =>
     ["active", "degraded"].includes(recordString(item, "status") ?? "")
@@ -209,8 +212,8 @@ export function AdminAiWorkspace() {
           <div className="admin-ai-suggestions">
             {[
               "What needs attention right now?",
+              "Which partner risks need review?",
               "Where is LPG demand likely to be highest?",
-              "Are any AI tasks failing?",
             ].map((suggestion) => (
               <button
                 type="button"
@@ -349,6 +352,8 @@ export function AdminAiWorkspace() {
 
       <DemandForecastPanel forecasts={forecasts} />
 
+      <PartnerRiskPanel assessments={riskAssessments} />
+
       <OperationalInsightsPanel
         api={api}
         insights={insights}
@@ -425,6 +430,81 @@ function DemandForecastPanel(props: {
                     <b>{formatForecastNumber(recordNumber(forecast, "predicted_kg"), 1)} kg</b>
                     <small>LPG demand</small>
                   </span>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PartnerRiskPanel(props: {
+  readonly assessments: readonly PlatformRecord[];
+}) {
+  const sorted = [...props.assessments].sort(
+    (left, right) => recordNumber(right, "score") - recordNumber(left, "score"),
+  );
+  const elevated = sorted.filter((item) =>
+    ["high", "critical"].includes(recordString(item, "risk_level") ?? "")
+  ).length;
+
+  return (
+    <section className="sk-panel admin-ai-risk">
+      <div className="sk-panel__header admin-ai-panel-head">
+        <div>
+          <p className="admin-section-kicker">Trust intelligence</p>
+          <h2>Partner risk review</h2>
+          <p>
+            Internal advisory signals from configured SKIMA evidence. A score is not proof of fraud
+            and does not suspend a partner, hold funds, change dispatch eligibility or alter public reputation.
+          </p>
+        </div>
+        <StatusBadge tone={elevated ? "warning" : "success"}>
+          {elevated ? String(elevated) + " elevated" : "No elevated risk"}
+        </StatusBadge>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="admin-ai-risk-empty">
+          <ShieldCheck aria-hidden="true" />
+          <div>
+            <strong>No partner risk review needs attention</strong>
+            <span>Medium, high and critical advisory assessments will appear here when evidence supports review.</span>
+          </div>
+        </div>
+      ) : (
+        <div className="admin-ai-risk-list">
+          {sorted.slice(0, 12).map((assessment) => {
+            const evidence = recordObject(assessment, "evidence");
+            const level = recordString(assessment, "risk_level") ?? "medium";
+            const score = recordNumber(assessment, "score");
+            const subjectType = recordString(assessment, "subject_type") ?? "partner";
+            const subjectName = recordString(evidence, "subjectDisplayName") ??
+              shortReference(recordString(assessment, "subject_id"));
+            return (
+              <article className="admin-ai-risk-row" key={recordString(assessment, "id") ?? subjectName + score}>
+                <div className={"admin-ai-risk-icon is-" + level}>
+                  <ShieldAlert aria-hidden="true" />
+                </div>
+                <div className="admin-ai-risk-copy">
+                  <div className="admin-ai-risk-title">
+                    <strong>{subjectName}</strong>
+                    <StatusBadge tone={riskTone(level)}>{normalizeStatusLabel(level)}</StatusBadge>
+                    <span>{normalizeStatusLabel(subjectType)}</span>
+                  </div>
+                  <p>{recordString(assessment, "recommended_action") ?? "Review the supporting SKIMA evidence before making any decision."}</p>
+                  <div className="admin-ai-risk-evidence">
+                    <span><b>{formatForecastNumber(recordNumber(evidence, "recentOrders"), 0)}</b> recent orders</span>
+                    <span><b>{formatForecastNumber(recordNumber(evidence, "openComplaints"), 0)}</b> open complaints</span>
+                    <span><b>{formatForecastNumber(recordNumber(evidence, "disputedOrders"), 0)}</b> disputes</span>
+                    <span><b>{formatForecastNumber(recordNumber(evidence, "fraudOpenComplaints"), 0)}</b> fraud reports</span>
+                  </div>
+                </div>
+                <div className="admin-ai-risk-score">
+                  <b>{formatForecastNumber(score, 0)}</b>
+                  <small>/ 100 advisory</small>
                 </div>
               </article>
             );
@@ -798,6 +878,14 @@ function forecastConfidenceTone(
   if (value === "high") return "success";
   if (value === "medium") return "info";
   return "warning";
+}
+
+function riskTone(
+  value: string,
+): "neutral" | "success" | "warning" | "danger" | "info" {
+  if (value === "critical" || value === "high") return "danger";
+  if (value === "medium") return "warning";
+  return "success";
 }
 
 function severityRank(value: string | null): number {
