@@ -14,6 +14,8 @@ const [
   partnerRiskGuardSql,
   dispatchShadowSql,
   dispatchShadowGuardSql,
+  financeReconciliationSql,
+  financeReconciliationScopeSql,
   providerRuntime,
   workerSource,
   gatewaySource,
@@ -36,6 +38,8 @@ const [
   readRepositoryFile("supabase/migrations/20260905233500_ai_partner_risk_configuration_guard.sql"),
   readRepositoryFile("supabase/migrations/20260905235000_ai_dispatch_shadow_intelligence.sql"),
   readRepositoryFile("supabase/migrations/20260905235500_ai_dispatch_shadow_configuration_guard.sql"),
+  readRepositoryFile("supabase/migrations/20260905234500_ai_finance_reconciliation_intelligence.sql"),
+  readRepositoryFile("supabase/migrations/20260906000500_ai_finance_reconciliation_scope_hardening.sql"),
   readRepositoryFile("supabase/functions/_shared/ai-provider-runtime.ts"),
   readRepositoryFile("supabase/functions/runtime-worker/index.ts"),
   readRepositoryFile("supabase/functions/api-gateway/index.ts"),
@@ -804,6 +808,178 @@ Deno.test("shadow dispatch comparisons remain admin-only and visibly non-authori
   );
 });
 
+Deno.test("finance reconciliation intelligence is deterministic and cannot move money", () => {
+  const sql = normalizeWhitespace(financeReconciliationSql);
+
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_finance_reconciliation_rules",
+    "finance intelligence rules must live in database configuration",
+  );
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_finance_reconciliation_findings",
+    "finance findings must be persisted separately from authoritative financial records",
+  );
+  assertIncludes(
+    sql,
+    '"control": "advisory_only"',
+    "finance intelligence must be seeded as advisory-only",
+  );
+  assertIncludes(
+    sql,
+    "finance reconciliation intelligence must remain advisory_only",
+    "finance configuration must reject authoritative control modes",
+  );
+  assertIncludes(
+    sql,
+    "'authoritativecheck', 'reconcile_service_request_financials'",
+    "finance findings must point administrators back to the canonical reconciliation engine",
+  );
+  assertIncludes(
+    sql,
+    "'doesnotpostledger', true",
+    "finance findings must state they do not post ledger entries",
+  );
+  assertIncludes(
+    sql,
+    "'doesnotmovefunds', true",
+    "finance findings must state they do not move funds",
+  );
+  assertNotMatch(
+    financeReconciliationSql,
+    /provider\.ai\.|resolve_ai_provider_route|executeAiText|generativelanguage|chat\/completions/,
+    "finance reconciliation math must never depend on an LLM",
+  );
+  assertNotMatch(
+    financeReconciliationSql,
+    /\b(?:update|insert\s+into|delete\s+from)\s+public\.(?:financial_transactions|wallet_ledger_entries|escrow_holds|settlement_executions|payment_deposit_requests|wallet_accounts)\b/i,
+    "finance intelligence must never mutate authoritative money tables",
+  );
+  assertIncludes(
+    sql,
+    "revoke all on function public.refresh_ai_finance_reconciliation_findings() from public, anon, authenticated",
+    "finance reconciliation refresh must be unavailable to normal clients",
+  );
+  assertIncludes(
+    sql,
+    "grant execute on function public.refresh_ai_finance_reconciliation_findings() to service_role",
+    "finance reconciliation refresh must remain a backend worker operation",
+  );
+  assertIncludes(
+    sql,
+    "public.has_permission('platform.financial.read', null)",
+    "finance findings must require authorized AI or finance access",
+  );
+});
+
+Deno.test("finance reconciliation scope avoids false alarms for pre-money cancellations", () => {
+  const sql = normalizeWhitespace(financeReconciliationScopeSql);
+  assertIncludes(
+    sql,
+    "'[\"completed\",\"settled\",\"refunded\"]'::jsonb",
+    "automated finance review must only inspect lifecycle states where a money outcome is expected",
+  );
+  assertNotIncludes(
+    sql,
+    '"cancelled"',
+    "cancelled requests must not be treated as automatically unbalanced merely because they had a quote",
+  );
+  assertNotIncludes(
+    sql,
+    '"failed"',
+    "failed pre-money requests must not be treated as automatically unbalanced",
+  );
+});
+
+Deno.test("finance reconciliation is admin-only, fail-soft, and visibly review-only", () => {
+  assertIncludes(
+    workerSource,
+    'source: "runtime-worker.ai-finance-reconciliation"',
+    "worker must isolate finance intelligence refresh failures",
+  );
+  assertIncludes(
+    workerSource,
+    'reason: "finance_reconciliation_runtime_not_ready"',
+    "worker must fail soft when finance intelligence migrations are unavailable",
+  );
+  assertIncludes(
+    gatewaySource,
+    "financeReconciliationFindings:",
+    "admin Ask SKIMA context must receive finance reconciliation findings",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Finance reconciliation findings are internal deterministic diagnostics for authorized administrators.",
+    "assistant prompt must state the finance finding authority boundary",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Never disclose internal finance reconciliation findings to customer, driver or station workspaces.",
+    "assistant prompt must forbid cross-workspace finance disclosure",
+  );
+  assertNotIncludes(
+    mobileAssistant,
+    "financeReconciliationFindings",
+    "mobile Ask SKIMA must not receive internal finance findings",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "Reconciliation review",
+    "admin SKIMA Intelligence must surface reconciliation review",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "This screen cannot post ledger entries, move funds, refund, release escrow",
+    "admin finance UI must clearly state it has no money-moving authority",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "Review only",
+    "finance findings must be labelled as review-only",
+  );
+});
+
+Deno.test("AI workspace context keeps internal intelligence out of station/customer/driver surfaces", () => {
+  const stationContext = sectionBetween(
+    gatewaySource,
+    'if (workspace === "station")',
+    'if (workspace === "admin")',
+  );
+  assertNotIncludes(
+    stationContext,
+    "read_ai_partner_risk_assessments",
+    "station assistant must not query internal partner-risk intelligence",
+  );
+  assertNotIncludes(
+    stationContext,
+    "read_ai_dispatch_shadow_assessments",
+    "station assistant must not query internal dispatch shadow intelligence",
+  );
+  assertNotIncludes(
+    stationContext,
+    "read_ai_finance_reconciliation_findings",
+    "station assistant must not query internal finance reconciliation intelligence",
+  );
+
+  const adminContext = sectionBetween(
+    gatewaySource,
+    'if (workspace === "admin")',
+    "return base;",
+  );
+  for (const adminOnlyRpc of [
+    "read_ai_partner_risk_assessments",
+    "read_ai_dispatch_shadow_assessments",
+    "read_ai_finance_reconciliation_findings",
+  ]) {
+    assertIncludes(
+      adminContext,
+      adminOnlyRpc,
+      "admin Ask SKIMA must ground internal intelligence with " + adminOnlyRpc,
+    );
+  }
+});
+
 Deno.test("worker reports exception refresh exactly once per response section", () => {
   assertNotIncludes(
     workerSource,
@@ -815,6 +991,7 @@ Deno.test("worker reports exception refresh exactly once per response section", 
     "aiForecasts,",
     "aiRisk,",
     "aiDispatch,",
+    "aiFinance,",
     "aiTasks,",
   ]) {
     assertIncludes(
@@ -827,6 +1004,14 @@ Deno.test("worker reports exception refresh exactly once per response section", 
 
 async function readRepositoryFile(path: string): Promise<string> {
   return await Deno.readTextFile(new URL(path, repositoryRoot));
+}
+
+function sectionBetween(source: string, startMarker: string, endMarker: string): string {
+  const start = source.indexOf(startMarker);
+  if (start < 0) throw new Error("Missing section start: " + startMarker);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  if (end < 0) throw new Error("Missing section end: " + endMarker);
+  return source.slice(start, end);
 }
 
 function normalizeWhitespace(value: string): string {
