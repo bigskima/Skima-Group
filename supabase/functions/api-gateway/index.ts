@@ -43,6 +43,7 @@ const ROUTES = new Set([
   "/admin/revenue/payout-account/resolve",
   "/admin/revenue/payout-account",
   "/admin/revenue/payout",
+  "/admin/revenue/payout/retry",
   "/runtime/payout-banks",
   "/runtime/payout-bank-account/resolve",
   "/admin/maps/location/status",
@@ -2222,6 +2223,44 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase,
         supabaseUrl,
         walletId,
+      });
+    }
+
+    if (routePath === "/admin/revenue/payout/retry" && request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      const withdrawalId = requireUuid(body.value.withdrawalRequestId, "withdrawalRequestId");
+      const payoutIdempotencyKey = requireString(body.value.idempotencyKey, "idempotencyKey");
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!serviceRoleKey) {
+        return jsonResponse({
+          ok: false,
+          error: "server_misconfigured",
+          message: "SKIMA payout execution is not configured.",
+          requestId: id,
+        }, 503);
+      }
+
+      const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+      const transferResult = await executePaystackWithdrawalTransfer(
+        serviceClient,
+        withdrawalId,
+        `${payoutIdempotencyKey}:transfer`,
+      );
+      const payout = await serviceClient
+        .from("withdrawal_requests")
+        .select("id,public_reference,beneficiary_id,currency_code,amount,fee_amount,total_debit_amount,status,provider_reference,requested_at,approved_at,processed_at,failed_at,reversed_at")
+        .eq("id", withdrawalId)
+        .single();
+      if (payout.error) return databaseError(payout.error, id);
+
+      return jsonResponse({
+        ok: true,
+        data: {
+          ...payout.data,
+          transfer: transferResult,
+        },
+        requestId: id,
       });
     }
 
@@ -9936,11 +9975,25 @@ async function executePaystackWithdrawalTransfer(
 ): Promise<Record<string, unknown>> {
   const withdrawal = await serviceClient
     .from("withdrawal_requests")
-    .select("id,public_reference,amount,fee_amount,beneficiary_id,provider_adapter_id,status")
+    .select("id,public_reference,amount,fee_amount,beneficiary_id,provider_adapter_id,status,source")
     .eq("id", withdrawalId)
     .single();
   if (withdrawal.error || !withdrawal.data) {
     throw new RequestValidationError(withdrawal.error?.message ?? "Withdrawal was not found.");
+  }
+  if (withdrawal.data.source !== "platform.revenue_payout") {
+    throw new RequestValidationError("Only SKIMA revenue treasury payouts can use this transfer path.");
+  }
+  if (withdrawal.data.status === "succeeded" || withdrawal.data.status === "processing") {
+    return {
+      provider: "provider.payment.paystack",
+      status: withdrawal.data.status,
+      providerReference: withdrawal.data.public_reference ?? withdrawalId,
+      retryable: false,
+    };
+  }
+  if (withdrawal.data.status !== "approved") {
+    throw new RequestValidationError("Only an approved SKIMA revenue payout can be retried.");
   }
 
   const adapter = await serviceClient
