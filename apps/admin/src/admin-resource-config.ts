@@ -1280,9 +1280,8 @@ export const financeConsoleConfig: AdminResourceConsoleConfig = {
           "/runtime/withdrawal-beneficiaries",
           [
             requiredText("walletId", "Wallet ID"),
-            requiredText("accountName", "Account Name"),
             requiredText("accountNumber", "Account Number"),
-            optionalText("bankCode", "Bank Code"),
+            requiredText("bankCode", "Bank Code"),
             optionalText("beneficiaryType", "Beneficiary Type"),
             {
               key: "providerAdapterKey",
