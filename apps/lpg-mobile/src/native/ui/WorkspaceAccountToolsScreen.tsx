@@ -12,6 +12,9 @@ import {
   WalletCards,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { domainQueries } from "../api/domains";
+import { firstString, nestedRecords } from "../api/records";
+import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { AppButton } from "./AppButton";
@@ -95,7 +98,27 @@ const toolGroups: Record<Workspace, readonly ToolGroup[]> = {
 };
 
 export function WorkspaceAccountToolsScreen({ workspace }: { workspace: Workspace }) {
+  const session = useSession();
   const { palette } = useAppTheme();
+  const access = domainQueries.workspaceAccess(session.status === "authenticated");
+  const activeWorkspaces = new Set(
+    nestedRecords(access.data, "workspaces")
+      .filter((item) => firstString(item, ["status"]) === "active")
+      .map((item) => firstString(item, ["key"]))
+      .filter((key): key is string => Boolean(key)),
+  );
+  const groups = toolGroups[workspace]
+    .map((group) => ({
+      ...group,
+      items: workspace === "customer"
+        ? group.items.filter((item) => {
+            if (item.href === "/(customer)/driver-application" && activeWorkspaces.has("driver")) return false;
+            if (item.href === "/(customer)/station-application" && activeWorkspaces.has("station")) return false;
+            return true;
+          })
+        : group.items,
+    }))
+    .filter((group) => group.items.length > 0);
   const label = workspace === "customer" ? "SKIMA services" : `${capitalize(workspace)} tools`;
 
   return (
@@ -105,7 +128,7 @@ export function WorkspaceAccountToolsScreen({ workspace }: { workspace: Workspac
       subtitle="Everything for this workspace, organised by what you want to do."
       action={<AppButton label="Back" size="sm" variant="ghost" onPress={() => router.back()} />}
     >
-      {toolGroups[workspace].map((group) => (
+      {groups.map((group) => (
         <View key={group.title} style={styles.group}>
           <View style={styles.heading}>
             <Text style={[styles.groupTitle, { color: palette.ink }]}>{group.title}</Text>
