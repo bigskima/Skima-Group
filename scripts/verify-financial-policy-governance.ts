@@ -130,6 +130,7 @@ const [
   treasuryPayoutMigration,
   beneficiaryReuseMigration,
   paymentProviderResolverMigration,
+  revenueBeneficiaryAclMigration,
   gateway,
   financeRuntime,
   paymentWebhook,
@@ -144,6 +145,7 @@ const [
   readMigrationBySuffix("_platform_revenue_treasury_payout_runtime.sql"),
   readMigrationBySuffix("_withdrawal_beneficiary_reuse_reconciliation.sql"),
   readMigrationBySuffix("_payment_provider_runtime_resolver.sql"),
+  readMigrationBySuffix("_platform_revenue_beneficiary_acl.sql"),
   read("supabase/functions/api-gateway/index.ts"),
   read("supabase/functions/finance-runtime/index.ts"),
   read("supabase/functions/payment-webhook/index.ts"),
@@ -618,6 +620,26 @@ const checks: Check[] = [
     ],
     forbidden: [
       /amount:\s*Math\.round\(Number\(withdrawalRecord\.total_debit_amount\)\s*\*\s*100\)/i,
+    ],
+  },
+  {
+    name: "SKIMA revenue payout beneficiary mutations are Super Admin only",
+    source: revenueBeneficiaryAclMigration,
+    required: [
+      /platform_revenue/i,
+      /is_platform_super_admin\(\)/i,
+      /Only the active Super Admin can configure the SKIMA revenue payout account/i,
+      /before insert or update on public\.withdrawal_beneficiaries/i,
+    ],
+  },
+  {
+    name: "bank account resolution is scoped to the active wallet",
+    source: financeRuntime + "\n" + mobileWithdrawal,
+    required: [
+      /target_wallet_id:\s*walletId/i,
+      /can_access_wallet_account/i,
+      /walletId,/i,
+      /You can only verify a payout account for a wallet you are allowed to use/i,
     ],
   },
   {
