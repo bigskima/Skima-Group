@@ -76,6 +76,83 @@ begin
 end;
 $$;
 
+create or replace function public.link_geography_migration_mapping(
+  p_mapping_id uuid,
+  p_geography_id uuid,
+  p_reason text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions, pg_temp
+as $
+declare
+  mapping_record public.geography_migration_mappings%rowtype;
+  geography_record public.geographies%rowtype;
+  now_at timestamptz := timezone('utc', now());
+begin
+  if coalesce(auth.role(), '') <> 'service_role'
+     and not public.is_platform_super_admin()
+     and not public.has_permission('platform.geography.manage', null) then
+    raise exception using errcode = '42501', message = 'geography management permission required';
+  end if;
+
+  if p_mapping_id is null or p_geography_id is null then
+    raise exception using errcode = '22023',
+      message = 'mapping id and canonical geography id are required';
+  end if;
+  if nullif(btrim(p_reason), '') is null then
+    raise exception using errcode = '22023', message = 'link reason is required';
+  end if;
+
+  select *
+  into mapping_record
+  from public.geography_migration_mappings
+  where id = p_mapping_id
+  for update;
+
+  if not found then
+    raise exception using errcode = 'P0002', message = 'geography migration mapping was not found';
+  end if;
+
+  if mapping_record.migration_status in ('verified', 'retired') then
+    raise exception using errcode = '55000',
+      message = 'verified or retired geography mappings cannot be relinked';
+  end if;
+
+  select *
+  into geography_record
+  from public.geographies
+  where id = p_geography_id;
+
+  if not found
+     or geography_record.status <> 'active'
+     or geography_record.boundary_geometry is null
+     or not extensions.st_isvalid(geography_record.boundary_geometry::extensions.geometry) then
+    raise exception using errcode = '55000',
+      message = 'choose an active canonical geography with a valid boundary';
+  end if;
+
+  update public.geography_migration_mappings
+  set geography_id = p_geography_id,
+      migration_status = 'migrated',
+      validation_code = 'READY_FOR_VERIFICATION',
+      geometry_source = 'admin_linked_canonical_boundary',
+      verified_by = null,
+      verified_at = null,
+      details = coalesce(details, '{}'::jsonb) || jsonb_build_object(
+        'linkReason', btrim(p_reason),
+        'linkedAt', now_at,
+        'linkedBy', auth.uid(),
+        'linkedThrough', 'admin.geography_cutover'
+      ),
+      updated_at = now_at
+  where id = p_mapping_id;
+
+  return public.read_universal_geography_cutover_readiness();
+end;
+$;
+
 create or replace function public.verify_geography_migration_mapping(
   p_mapping_id uuid,
   p_reason text
@@ -159,12 +236,16 @@ $$;
 
 comment on function public.read_geography_migration_review_queue() is
   'Returns legacy-to-canonical geography mappings requiring explicit Admin review before universal cutover.';
+comment on function public.link_geography_migration_mapping(uuid, uuid, text) is
+  'Explicitly links a legacy area to an existing active canonical bounded geography without guessing a boundary or matching by place name.';
 comment on function public.verify_geography_migration_mapping(uuid, text) is
-  'Verifies one successfully imported, valid canonical geography mapping after an explicit Admin review reason.';
+  'Verifies one successfully imported or explicitly linked, valid canonical geography mapping after an explicit Admin review reason.';
 
 revoke all on function public.read_geography_migration_review_queue() from public, anon, authenticated;
+revoke all on function public.link_geography_migration_mapping(uuid, uuid, text) from public, anon, authenticated;
 revoke all on function public.verify_geography_migration_mapping(uuid, text) from public, anon, authenticated;
 grant execute on function public.read_geography_migration_review_queue() to authenticated, service_role;
+grant execute on function public.link_geography_migration_mapping(uuid, uuid, text) to authenticated, service_role;
 grant execute on function public.verify_geography_migration_mapping(uuid, text) to authenticated, service_role;
 
 commit;
