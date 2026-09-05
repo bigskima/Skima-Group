@@ -201,6 +201,7 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
     partnerApplication,
     driverApplication,
     driverWorkspaceApplication,
+    partnerGeographyReconciliation,
   ] =
     await Promise.all([
       readRepositoryFile("supabase/migrations/20260901204813_locationiq_maps_provider_runtime.sql"),
@@ -224,6 +225,9 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
       readRepositoryFile("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx"),
       readRepositoryFile("apps/lpg-mobile/src/native/ui/DriverApplicationEntryScreen.tsx"),
       readRepositoryFile("apps/lpg-mobile/src/native/ui/DriverApplicationScreen.tsx"),
+      readRepositoryFile(
+        "supabase/migrations/20260905014400_universal_partner_application_geography_reconciliation.sql",
+      ),
     ]);
 
   for (const route of ["autocomplete", "geocode", "reverse-geocode", "route-estimate"]) {
@@ -296,6 +300,23 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
   assertIncludes(driverApplication, "...existingService");
   assertIncludes(driverWorkspaceApplication, "...basePayload");
   assertIncludes(driverWorkspaceApplication, "...existingService");
+  assertIncludes(adminCoverage, 'supabase.rpc("migrate_verified_operational_coverage")');
+  assertIncludes(partnerGeographyReconciliation, "'service.coverageRequests'");
+  assertIncludes(partnerGeographyReconciliation, "'service.serviceAreaIds'");
+  assertIncludes(partnerGeographyReconciliation, "application_operational_coverage_requests");
+  assertIncludes(
+    partnerGeographyReconciliation,
+    "create or replace function public.enforce_lpg_partner_location_before_approval()",
+  );
+  assertIncludes(
+    partnerGeographyReconciliation,
+    "create or replace function public.review_application_coverage_request(",
+  );
+  assertIncludes(
+    partnerGeographyReconciliation,
+    "create or replace function public.migrate_verified_operational_coverage()",
+  );
+  assertIncludes(partnerGeographyReconciliation, "public.is_platform_super_admin()");
 });
 
 function testAdapter(fetcher: typeof fetch, retryCount = 0) {
