@@ -1081,6 +1081,96 @@
   grid-column: 1 / -1;
 }
 
+.admin-ai-usage-guard {
+  margin-top: 20px;
+}
+
+.admin-ai-usage-summary {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.admin-ai-usage-form {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-ai-toggle-row {
+  align-items: flex-start;
+  background: #f8fafb;
+  border: 1px solid #e0e7e9;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 12px 13px;
+}
+
+.admin-ai-toggle-row input {
+  accent-color: #0d8f79;
+  flex: 0 0 auto;
+  height: 16px;
+  margin-top: 2px;
+  width: 16px;
+}
+
+.admin-ai-toggle-row span,
+.admin-ai-toggle-row strong,
+.admin-ai-toggle-row small {
+  display: block;
+}
+
+.admin-ai-toggle-row strong {
+  color: #183036;
+  font-size: 0.82rem;
+}
+
+.admin-ai-toggle-row small {
+  color: #718087;
+  font-size: 0.73rem;
+  line-height: 1.45;
+  margin-top: 3px;
+}
+
+.admin-ai-fallback-editor {
+  background: #ffffff;
+  border: 1px dashed #cbdadd;
+  border-radius: 11px;
+  display: grid;
+  gap: 10px;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(170px, 1.1fr) minmax(150px, 0.85fr) minmax(160px, 0.9fr) minmax(90px, 0.5fr) auto;
+  padding: 12px;
+}
+
+.admin-ai-fallback-editor > div:first-child {
+  align-self: center;
+}
+
+.admin-ai-fallback-editor > div:first-child strong,
+.admin-ai-fallback-editor > div:first-child small {
+  display: block;
+}
+
+.admin-ai-fallback-editor > div:first-child strong {
+  color: #1d383e;
+  font-size: 0.8rem;
+}
+
+.admin-ai-fallback-editor > div:first-child small {
+  color: #76868b;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+.admin-ai-fallback-editor > .admin-ai-provider-note,
+.admin-ai-fallback-editor > .admin-notice {
+  grid-column: 1 / -1;
+}
 
 .admin-ai-forecasts {
   margin-top: 20px;
@@ -2211,6 +2301,15 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .admin-ai-fallback-editor {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-ai-fallback-editor > div:first-child,
+  .admin-ai-fallback-editor > .admin-ai-editor-action {
+    grid-column: 1 / -1;
+  }
+
   .admin-ai-forecast-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2252,12 +2351,14 @@
     flex-direction: column;
   }
 
-  .admin-ai-expansion-head-actions {
+  .admin-ai-expansion-head-actions,
+  .admin-ai-usage-summary {
     justify-content: flex-start;
   }
 
   .admin-ai-route-row,
   .admin-ai-editor-grid,
+  .admin-ai-fallback-editor,
   .admin-ai-insight-row,
   .admin-ai-forecast-grid,
   .admin-ai-risk-row,
