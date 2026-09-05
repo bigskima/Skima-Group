@@ -279,6 +279,16 @@ export function useStationRuntime() {
     refetchInterval: 30000,
   });
 }
+export function useStationInventoryOutlook(stationBranchId: string | null) {
+  return useGatewayQuery({
+    key: ["station-inventory-outlook", stationBranchId ?? "current"],
+    path: `/lpg/stations/inventory/outlook?stationBranchId=${encodeURIComponent(stationBranchId ?? "")}`,
+    schema: RecordArraySchema,
+    enabled: Boolean(stationBranchId),
+    refetchInterval: 60000,
+  });
+}
+
 export function useStationInventory() {
   const session = useSession();
   const queryClient = useQueryClient();
