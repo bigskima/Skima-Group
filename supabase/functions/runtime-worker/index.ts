@@ -50,6 +50,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const aiInsights = await refreshAiOperationalInsights(supabase);
     const aiForecasts = await refreshAiDemandForecasts(supabase);
     const aiRisk = await refreshAiPartnerRiskAssessments(supabase);
+    const aiFinance = await refreshAiFinanceReconciliationFindings(supabase);
     const webhooks = await processWebhooks(supabase, limit);
     const jobs = await processBackgroundJobs(supabase, limit);
     const expirations = await expireEscrowHolds(supabase, limit);
@@ -59,6 +60,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
     await supabase.rpc("record_health_check", {
       target_details: {
+        aiFinance,
         aiForecasts,
         aiInsights,
         aiRisk,
@@ -79,6 +81,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     return jsonResponse({
       ok: true,
       data: {
+        aiFinance,
         aiForecasts,
         aiInsights,
         aiRisk,
@@ -383,6 +386,28 @@ async function refreshAiPartnerRiskAssessments(
     return {
       status: "unavailable",
       reason: "risk_runtime_not_ready",
+    };
+  }
+
+  return optionalRecord(result.data) ?? {
+    status: "completed",
+  };
+}
+
+async function refreshAiFinanceReconciliationFindings(
+  supabase: RuntimeSupabaseClient,
+): Promise<Readonly<Record<string, unknown>>> {
+  const result = await supabase.rpc("refresh_ai_finance_reconciliation_findings");
+
+  if (result.error) {
+    console.warn(JSON.stringify({
+      severity: "warning",
+      source: "runtime-worker.ai-finance-reconciliation",
+      message: result.error.message,
+    }));
+    return {
+      status: "unavailable",
+      reason: "finance_reconciliation_runtime_not_ready",
     };
   }
 
