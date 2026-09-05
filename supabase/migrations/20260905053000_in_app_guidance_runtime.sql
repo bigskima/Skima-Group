@@ -12,6 +12,7 @@ create table if not exists public.in_app_guides (
   status text not null default 'active' check (status in ('draft','active','paused','archived')),
   frequency_days integer not null default 30 check (frequency_days between 1 and 365),
   max_shows_per_period integer not null default 1 check (max_shows_per_period between 1 and 12),
+  min_interval_days integer not null default 7 check (min_interval_days between 0 and 365),
   allow_snooze boolean not null default true,
   max_snooze_days integer not null default 30 check (max_snooze_days between 1 and 365),
   starts_at timestamptz,
@@ -125,6 +126,7 @@ declare
   guide_steps jsonb := '[]'::jsonb;
   eligible boolean := false;
   period_due_at timestamptz;
+  interval_due_at timestamptz;
 begin
   if current_user_id is null then
     raise exception using errcode = '42501', message = 'Authentication required';
@@ -183,8 +185,13 @@ begin
     eligible := true;
   else
     period_due_at := state_record.period_started_at + make_interval(days => guide_record.frequency_days);
+    interval_due_at := coalesce(state_record.last_shown_at, state_record.period_started_at)
+      + make_interval(days => guide_record.min_interval_days);
     eligible := period_due_at <= timezone('utc', now())
-      or state_record.shown_count < guide_record.max_shows_per_period;
+      or (
+        state_record.shown_count < guide_record.max_shows_per_period
+        and interval_due_at <= timezone('utc', now())
+      );
   end if;
 
   return jsonb_build_object(
@@ -199,6 +206,7 @@ begin
       'version', guide_record.version,
       'frequencyDays', guide_record.frequency_days,
       'maxShowsPerPeriod', guide_record.max_shows_per_period,
+      'minIntervalDays', guide_record.min_interval_days,
       'allowSnooze', guide_record.allow_snooze,
       'maxSnoozeDays', guide_record.max_snooze_days,
       'metadata', guide_record.metadata
@@ -238,6 +246,7 @@ declare
   state_record public.user_in_app_guide_state%rowtype;
   now_utc timestamptz := timezone('utc', now());
   reset_period boolean := false;
+  state_was_new boolean := false;
   snooze_days integer;
 begin
   if current_user_id is null then
@@ -283,6 +292,7 @@ begin
       target_event
     )
     returning * into state_record;
+    state_was_new := true;
   end if;
 
   reset_period :=
@@ -296,8 +306,8 @@ begin
       guide_version = guide_record.version,
       status = 'in_progress',
       last_step_order = 0,
-      period_started_at = case when reset_period then now_utc else period_started_at end,
-      shown_count = case when reset_period then 1 else shown_count + 1 end,
+      period_started_at = case when reset_period or state_was_new then now_utc else period_started_at end,
+      shown_count = case when reset_period or state_was_new then 1 else shown_count + 1 end,
       first_shown_at = coalesce(first_shown_at, now_utc),
       last_shown_at = now_utc,
       completed_at = case when state_record.guide_version <> guide_record.version then null else completed_at end,
@@ -373,7 +383,7 @@ grant execute on function public.record_in_app_guide_event(text,text,integer,int
 
 insert into public.in_app_guides (
   id, key, workspace, title, description, policy_key, version,
-  frequency_days, max_shows_per_period, allow_snooze, max_snooze_days, metadata
+  frequency_days, max_shows_per_period, min_interval_days, allow_snooze, max_snooze_days, metadata
 )
 values
 (
@@ -383,7 +393,7 @@ values
   'Customer app guide',
   'A practical tour of the controls used to request refills, follow orders and manage the customer account.',
   'policy.customer.terms',
-  1, 30, 1, true, 30,
+  1, 30, 1, 7, true, 30,
   '{"surface":"lpg-mobile","purpose":"core-navigation"}'::jsonb
 ),
 (
@@ -393,7 +403,7 @@ values
   'Driver app guide',
   'A practical tour of the controls used for availability, jobs, scanning, earnings and account management.',
   'policy.partner.participation',
-  1, 30, 1, true, 30,
+  1, 30, 1, 7, true, 30,
   '{"surface":"lpg-mobile","purpose":"core-navigation"}'::jsonb
 ),
 (
@@ -403,7 +413,7 @@ values
   'Station app guide',
   'A practical tour of reception, queue, scanning, settlement and station account controls.',
   'policy.partner.participation',
-  1, 30, 1, true, 30,
+  1, 30, 1, 7, true, 30,
   '{"surface":"lpg-mobile","purpose":"core-navigation"}'::jsonb
 )
 on conflict (key) do update
@@ -414,6 +424,7 @@ set
   policy_key = excluded.policy_key,
   frequency_days = excluded.frequency_days,
   max_shows_per_period = excluded.max_shows_per_period,
+  min_interval_days = excluded.min_interval_days,
   allow_snooze = excluded.allow_snooze,
   max_snooze_days = excluded.max_snooze_days,
   metadata = excluded.metadata,
