@@ -32,6 +32,8 @@ export default function Layout() {
           "station-documents",
           "fleet",
           "cylinder-capacity/[id]",
+          "account-tools",
+          "account-settings",
         ]}
       />
     </WorkspaceGate>
