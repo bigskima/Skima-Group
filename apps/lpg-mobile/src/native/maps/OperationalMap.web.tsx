@@ -31,6 +31,9 @@ export interface OperationalMapProps {
 
 const TILE = 256;
 const DEFAULT_HEIGHT = 420;
+const EMERGENCY_RASTER_TILE_TEMPLATE =
+  "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const EMERGENCY_ATTRIBUTION = "© OpenStreetMap contributors";
 
 export function OperationalMap({
   points,
@@ -46,10 +49,21 @@ export function OperationalMap({
   const providerTileMaxZoom = mapConfig.tile.maxZoom;
   const effectiveMaxZoom = maxZoom ?? Math.max(21, providerTileMaxZoom);
   const [width, setWidth] = useState(720);
+  const [useEmergencyTiles, setUseEmergencyTiles] = useState(false);
+  const tileTemplate = useEmergencyTiles
+    ? EMERGENCY_RASTER_TILE_TEMPLATE
+    : mapConfig.tile.rasterTileTemplate;
+  const attribution = useEmergencyTiles
+    ? EMERGENCY_ATTRIBUTION
+    : mapConfig.tile.attribution;
   const derivedCenter = useMemo(() => averageCoordinate(points), [points]);
   const [center, setCenter] = useState(derivedCenter);
   const [zoom, setZoom] = useState(() => clamp(initialZoom, minZoom, effectiveMaxZoom));
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
+
+  useEffect(() => {
+    setUseEmergencyTiles(false);
+  }, [mapConfig.tile.rasterTileTemplate]);
 
   useEffect(() => {
     if (!derivedCenter) return;
@@ -60,7 +74,7 @@ export function OperationalMap({
   }, [pointKey, width, height, initialZoom, effectiveMaxZoom, minZoom]);
 
   const layout = center
-    ? createLayout(center, points, width, height, zoom, mapConfig.tile.rasterTileTemplate, providerTileMaxZoom)
+    ? createLayout(center, points, width, height, zoom, tileTemplate, providerTileMaxZoom)
     : null;
   const onLayout = (event: LayoutChangeEvent) =>
     setWidth(Math.max(280, event.nativeEvent.layout.width));
@@ -100,6 +114,7 @@ export function OperationalMap({
           key={`${tile.zoom}:${tile.x}:${tile.y}:${tile.left}`}
           source={tile.url}
           contentFit="cover"
+          onError={() => setUseEmergencyTiles(true)}
           style={[styles.tile, { left: tile.left, top: tile.top, width: tile.size, height: tile.size }]}
           transition={60}
         />
@@ -149,7 +164,7 @@ export function OperationalMap({
         </Pressable>
       </View>
       <View pointerEvents="none" style={styles.zoomBadge}><Text style={styles.zoomText}>Street detail · {zoom}</Text></View>
-      <Text pointerEvents="none" style={styles.attribution}>{mapConfig.tile.attribution}</Text>
+      <Text pointerEvents="none" style={styles.attribution}>{attribution}</Text>
     </Pressable>
   );
 }
