@@ -10843,6 +10843,7 @@ async function buildAiAssistantContext(
       expansionOpportunities,
       supportTriageAssessments,
       applicationReviewReadiness,
+      stationInventoryOutlook,
     ] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
@@ -10892,6 +10893,9 @@ async function buildAiAssistantContext(
       supabase.rpc("read_ai_application_review_readiness", {
         target_limit: 40,
       }),
+      supabase.rpc("read_ai_station_inventory_outlook", {
+        target_station_branch_id: null,
+      }),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(applications.error);
@@ -10917,6 +10921,9 @@ async function buildAiAssistantContext(
     const applicationReviewRows = applicationReviewReadiness.error
       ? []
       : Array.isArray(applicationReviewReadiness.data) ? applicationReviewReadiness.data : [];
+    const stationInventoryOutlookRows = stationInventoryOutlook.error
+      ? []
+      : Array.isArray(stationInventoryOutlook.data) ? stationInventoryOutlook.data : [];
     return {
       ...base,
       recentOrders: orders.data ?? [],
@@ -10931,6 +10938,7 @@ async function buildAiAssistantContext(
       expansionOpportunities: expansionRows,
       supportTriageAssessments: supportTriageRows,
       applicationReviewReadiness: applicationReviewRows,
+      stationInventoryOutlook: stationInventoryOutlookRows,
     };
   }
 
