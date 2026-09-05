@@ -766,10 +766,17 @@ export function DriverApplicationScreen() {
                           <Text style={styles.areaMeta}>{serviceAreaSummary(area)}</Text>
                         </View>
                       </Pressable>
-
                     </View>
                   );
                 })}
+                {candidateCoverage && selectedServiceAreaIds.length === 0 ? (
+                  <View style={styles.emptyAreaBox}>
+                    <Text style={styles.emptyAreaTitle}>Candidate operating area available</Text>
+                    <Text style={styles.helperText}>
+                      If you leave the approved geographies above unselected, SKIMA will submit a {Math.round(candidateCoverage.radiusMeters / 1000 * 10) / 10} km radius around your captured operating location for Admin review. This request does not enable customer LPG service in the area.
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             )}
           </Card>
