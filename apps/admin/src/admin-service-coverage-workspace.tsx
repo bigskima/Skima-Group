@@ -31,8 +31,15 @@ const PolicySchema = z.object({
   geographies: z.object({ canonical_name: z.string() }).nullable(),
 });
 const ReadinessSchema = z.object({
-  authorityMode: z.enum(["preparing", "universal", "retired"]), legacyAreaCount: z.coerce.number(), mappedCount: z.coerce.number(),
-  verifiedCount: z.coerce.number(), blockedCount: z.coerce.number(), activeUniversalPolicyCount: z.coerce.number(), ready: z.boolean(),
+  authorityMode: z.enum(["preparing", "universal", "retired"]),
+  legacyAreaCount: z.coerce.number(),
+  mappedCount: z.coerce.number(),
+  verifiedCount: z.coerce.number(),
+  blockedCount: z.coerce.number(),
+  activeUniversalPolicyCount: z.coerce.number(),
+  approvedDriversWithoutCoverage: z.coerce.number().default(0),
+  approvedStationsWithoutCoverage: z.coerce.number().default(0),
+  ready: z.boolean(),
 });
 const GeographyAdminSetupSchema = z.object({
   levels: z.array(LevelSchema),
@@ -168,6 +175,7 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
   const client = useQueryClient();
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [linkTargets, setLinkTargets] = useState<Record<string, string>>({});
   const enabled = status === "authenticated";
 
   const mappings = useQuery({
@@ -254,6 +262,21 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
     },
   });
 
+  const migrateOperationalCoverage = useMutation({
+    mutationFn: async () => {
+      setNotice(null);
+      const { data, error } = await supabase.rpc("migrate_verified_operational_coverage");
+      if (error) throw error;
+      return data as { driverAssignmentsMigrated?: number; stationAssignmentsMigrated?: number } | null;
+    },
+    onSuccess: async (result) => {
+      setNotice(
+        `Operational coverage migrated: ${result?.driverAssignmentsMigrated ?? 0} driver assignment(s), ${result?.stationAssignmentsMigrated ?? 0} station assignment(s).`,
+      );
+      await refresh();
+    },
+  });
+
   const activateAuthority = useMutation({
     mutationFn: async () => {
       if (!reason.trim()) throw new Error("Enter an activation reason before switching geography authority.");
@@ -295,7 +318,14 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
           : <small>Retired</small> },
   ];
 
-  const actionError = mappings.error ?? importLegacy.error ?? linkMapping.error ?? verifyMapping.error ?? activateAuthority.error;
+  const actionError =
+    mappings.error ??
+    importLegacy.error ??
+    linkMapping.error ??
+    verifyMapping.error ??
+    migratePolicies.error ??
+    migrateOperationalCoverage.error ??
+    activateAuthority.error;
   return (
     <section className="sk-panel">
       <div className="sk-panel__header">
@@ -314,6 +344,15 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
           >
             Migrate verified LPG policies
           </Button>
+          <Button
+            variant="outline"
+            icon={MapPinned}
+            disabled={migrateOperationalCoverage.isPending}
+            isLoading={migrateOperationalCoverage.isPending}
+            onClick={() => migrateOperationalCoverage.mutate()}
+          >
+            Migrate driver & station coverage
+          </Button>
           {readiness?.authorityMode === "preparing"
             ? <Button icon={ShieldCheck} disabled={!readiness.ready || !reason.trim()} isLoading={activateAuthority.isPending} onClick={() => activateAuthority.mutate()}>Activate universal geography</Button>
             : null}
@@ -324,6 +363,8 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
         <MetricTile label="Blocked imports" value={blocked} icon={ShieldCheck} tone={blocked ? "warning" : "success"} />
         <MetricTile label="Verified mappings" value={readiness?.verifiedCount ?? 0} icon={ShieldCheck} tone="success" />
         <MetricTile label="Active policies required" value={readiness?.activeUniversalPolicyCount ?? 0} icon={ShieldCheck} tone={(readiness?.activeUniversalPolicyCount ?? 0) > 0 ? "success" : "warning"} />
+        <MetricTile label="Approved drivers missing coverage" value={readiness?.approvedDriversWithoutCoverage ?? 0} icon={MapPinned} tone={(readiness?.approvedDriversWithoutCoverage ?? 0) > 0 ? "warning" : "success"} />
+        <MetricTile label="Approved stations missing coverage" value={readiness?.approvedStationsWithoutCoverage ?? 0} icon={MapPinned} tone={(readiness?.approvedStationsWithoutCoverage ?? 0) > 0 ? "warning" : "success"} />
       </div>
       <TextAreaInput label="Review / activation reason" helperText="Required for mapping verification and the final authority switch. The reason is preserved in audit history." value={reason} onChange={(event) => setReason(event.currentTarget.value)} />
       {notice ? <StatusBadge tone="success">{notice}</StatusBadge> : null}
