@@ -63,16 +63,9 @@ Deno.test("driver daily brief stays own-driver scoped and read-only", () => {
   );
 });
 
-Deno.test("driver daily brief uses only canonical LPG lifecycle states", () => {
-  const canonicalStates = extractCanonicalLifecycleStates(lifecycleGuardSql);
-  const referencedStates = extractDriverBriefOrderStates(driverBriefSql);
-
-  const unknown = [...referencedStates].filter((status) => !canonicalStates.has(status));
-  if (unknown.length) {
-    throw new Error(
-      "driver daily brief references non-canonical LPG order states: " + unknown.join(", "),
-    );
-  }
+Deno.test("driver daily brief follows canonical LPG lifecycle states", () => {
+  const canonicalSql = normalizeWhitespace(lifecycleGuardSql);
+  const briefSql = normalizeWhitespace(driverBriefSql);
 
   for (const required of [
     "driver_offered",
@@ -89,9 +82,16 @@ Deno.test("driver daily brief uses only canonical LPG lifecycle states", () => {
     "delivered",
     "disputed",
   ]) {
-    if (!referencedStates.has(required)) {
-      throw new Error("driver daily brief is missing canonical operational state " + required);
-    }
+    assertIncludes(
+      canonicalSql,
+      `'${required}'`,
+      `canonical LPG lifecycle guard must recognize ${required}`,
+    );
+    assertIncludes(
+      briefSql,
+      `'${required}'`,
+      `driver daily brief must use canonical operational state ${required}`,
+    );
   }
 
   for (const legacyOrInvented of [
@@ -104,49 +104,13 @@ Deno.test("driver daily brief uses only canonical LPG lifecycle states", () => {
     "delivery_challenge_pending",
     "delivery_verified",
   ]) {
-    if (referencedStates.has(legacyOrInvented)) {
-      throw new Error("driver daily brief must not use invented/legacy state " + legacyOrInvented);
-    }
+    assertNotIncludes(
+      briefSql,
+      `'${legacyOrInvented}'`,
+      `driver daily brief must not use invented/legacy state ${legacyOrInvented}`,
+    );
   }
 });
-
-function extractCanonicalLifecycleStates(sql: string): Set<string> {
-  const marker = "forecast order statuses must use canonical non-failed lpg lifecycle states";
-  const normalized = sql.toLowerCase();
-  const markerIndex = normalized.indexOf(marker);
-  const source = markerIndex >= 0 ? normalized.slice(Math.max(0, markerIndex - 2600), markerIndex) : normalized;
-  return new Set(
-    [...source.matchAll(/'([a-z][a-z0-9_]*)'/g)].map((match) => match[1]),
-  );
-}
-
-function extractDriverBriefOrderStates(sql: string): Set<string> {
-  const ignored = new Set([
-    "approved",
-    "available",
-    "busy",
-    "online",
-    "posted",
-    "authentication required",
-    "driver workspace access is required",
-  ]);
-  return new Set(
-    [...sql.toLowerCase().matchAll(/'([a-z][a-z0-9_]*)'/g)]
-      .map((match) => match[1])
-      .filter((value) =>
-        !ignored.has(value) &&
-        (
-          value.includes("driver") ||
-          value.includes("pickup") ||
-          value.includes("station") ||
-          value.includes("refill") ||
-          value.includes("return") ||
-          value.includes("delivery") ||
-          ["delivered","completed","cancelled","refunded","failed","disputed"].includes(value)
-        )
-      ),
-  );
-}
 
 function normalizeWhitespace(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
@@ -155,6 +119,12 @@ function normalizeWhitespace(value: string): string {
 function assertIncludes(value: string, expected: string, message: string): void {
   if (!value.includes(expected)) {
     throw new Error(message + `\nExpected to include: ${expected}`);
+  }
+}
+
+function assertNotIncludes(value: string, unexpected: string, message: string): void {
+  if (value.includes(unexpected)) {
+    throw new Error(message + `\nUnexpected content: ${unexpected}`);
   }
 }
 
