@@ -251,10 +251,13 @@ function DriverGeographyStep(props: {
       return;
     }
 
+    const existingPayload = props.existingPayload ?? {};
+    const existingService = nestedRecord(existingPayload, "service") ?? {};
     const mergedPayload: PlatformRecord = {
-      ...(props.existingPayload ?? {}),
+      ...existingPayload,
       location,
       service: {
+        ...existingService,
         coverageRequests: selectedIds.map((geographyId) => ({ type: "ADMIN_GEOGRAPHY", geographyId })),
       },
     };
@@ -345,7 +348,7 @@ function DriverGeographyStep(props: {
             <Text style={[styles.helper, { color: palette.muted }]}>Loading available areas…</Text>
           </View>
         ) : areas.length === 0 ? (
-          <Text style={[styles.helper, { color: palette.muted }]}>Detect your location to prepare your area for the application.</Text>
+          <Text style={[styles.helper, { color: palette.muted }]}>No SKIMA driver service areas are available yet. Your operating location can still be captured, but an Admin must enable at least one approved geography before you can choose coverage.</Text>
         ) : (
           <View style={styles.areaList}>
             {areas.map((area) => {
