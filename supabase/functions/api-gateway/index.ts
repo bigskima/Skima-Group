@@ -9815,15 +9815,6 @@ async function buildAiAssistantContext(
       supabase.rpc("read_lpg_jobs", { target_queue: "station", target_limit: 15 }),
       supabase.rpc("read_lpg_station_runtime", { target_limit: 10, target_station_branch_id: null }),
       supabase.rpc("read_ai_demand_forecasts", { target_station_branch_id: null }),
-      supabase.rpc("read_ai_partner_risk_assessments", {
-        target_subject_type: null,
-        target_minimum_level: "medium",
-        target_limit: 50,
-      }),
-      supabase.rpc("read_ai_dispatch_shadow_assessments", {
-        target_disagreement_only: false,
-        target_limit: 40,
-      }),
     ]);
     assertAiContextQuery(jobs.error);
     assertAiContextQuery(runtime.error);
@@ -9842,7 +9833,16 @@ async function buildAiAssistantContext(
     if (access.data !== true) {
       throw new AiProviderRuntimeError("forbidden", "Admin AI access is not available.");
     }
-    const [orders, applications, aiRuns, insights, forecasts, riskAssessments, dispatchAssessments] = await Promise.all([
+    const [
+      orders,
+      applications,
+      aiRuns,
+      insights,
+      forecasts,
+      riskAssessments,
+      dispatchAssessments,
+      financeFindings,
+    ] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
         .select("id,public_reference,status,payment_status,assignment_status,station_branch_id,driver_profile_id,created_at,updated_at")
@@ -9870,6 +9870,14 @@ async function buildAiAssistantContext(
         target_minimum_level: "medium",
         target_limit: 50,
       }),
+      supabase.rpc("read_ai_dispatch_shadow_assessments", {
+        target_disagreement_only: false,
+        target_limit: 40,
+      }),
+      supabase.rpc("read_ai_finance_reconciliation_findings", {
+        target_minimum_severity: "warning",
+        target_limit: 40,
+      }),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(applications.error);
@@ -9882,6 +9890,9 @@ async function buildAiAssistantContext(
     const dispatchRows = dispatchAssessments.error
       ? []
       : Array.isArray(dispatchAssessments.data) ? dispatchAssessments.data : [];
+    const financeRows = financeFindings.error
+      ? []
+      : Array.isArray(financeFindings.data) ? financeFindings.data : [];
     return {
       ...base,
       recentOrders: orders.data ?? [],
@@ -9891,6 +9902,7 @@ async function buildAiAssistantContext(
       demandForecasts: forecastRows,
       partnerRiskAssessments: riskRows,
       dispatchShadowAssessments: dispatchRows,
+      financeReconciliationFindings: financeRows,
     };
   }
 
@@ -9929,6 +9941,8 @@ function aiSystemPrompt(workspace: string): string {
     "Never disclose internal partner risk assessments to customer, driver or station workspaces.",
     "Dispatch shadow assessments are admin-only comparisons. Canonical SKIMA dispatch remains authoritative; a shadow advisory rank never means a driver was assigned, rejected, blocked or made ineligible. Risk signals in shadow dispatch are review-only and have no ranking effect.",
     "Never disclose dispatch shadow assessments to customer, driver or station workspaces.",
+    "Finance reconciliation findings are internal deterministic diagnostics for authorized administrators. They may identify ledger, escrow, settlement or deposit records that need review, but they cannot post ledger entries, move money, reverse transactions, release escrow or authorize a correction.",
+    "Never disclose internal finance reconciliation findings to customer, driver or station workspaces.",
     "Be concise, practical and use normal customer-facing language. Do not expose internal database field names unless the user explicitly asks for technical detail.",
   ].join("\n");
 }
@@ -9943,7 +9957,7 @@ function aiWorkspaceSuggestions(workspace: string): readonly string[] {
   if (workspace === "station") {
     return ["What needs attention?", "How busy could the next 7 days be?", "Summarize my current queue"];
   }
-  return ["Where does shadow dispatch disagree?", "Which partner risks need review?", "Where is LPG demand likely to be highest?"];
+  return ["Are any money records out of balance?", "Where does shadow dispatch disagree?", "Which partner risks need review?"];
 }
 
 async function adminAiRuntimeResponse(
@@ -9963,7 +9977,16 @@ async function adminAiRuntimeResponse(
     return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
   }
   const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
-  const [capabilities, routes, providers, insights, forecasts, riskAssessments, dispatchAssessments] = await Promise.all([
+  const [
+    capabilities,
+    routes,
+    providers,
+    insights,
+    forecasts,
+    riskAssessments,
+    dispatchAssessments,
+    financeFindings,
+  ] = await Promise.all([
     serviceClient
       .from("ai_capabilities")
       .select("id,key,display_name,description,category,response_mode,control_mode,status,config,updated_at")
@@ -10000,6 +10023,12 @@ async function adminAiRuntimeResponse(
       target_disagreement_only: false,
       target_limit: 50,
     }),
+    serviceClient
+      .from("ai_finance_reconciliation_findings")
+      .select("id,finding_key,finding_type,subject_type,subject_id,currency_code,severity,status,expected_amount,observed_amount,variance_amount,evidence,recommended_action,generated_at,last_detected_at,version")
+      .eq("status", "open")
+      .order("last_detected_at", { ascending: false })
+      .limit(100),
   ]);
 
   if (capabilities.error) return databaseError(capabilities.error, id);
@@ -10018,6 +10047,7 @@ async function adminAiRuntimeResponse(
       dispatchAssessments: dispatchAssessments.error
         ? []
         : Array.isArray(dispatchAssessments.data) ? dispatchAssessments.data : [],
+      financeFindings: financeFindings.error ? [] : financeFindings.data ?? [],
       userId: user.id,
     },
     requestId: id,
