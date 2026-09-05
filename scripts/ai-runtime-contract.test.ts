@@ -5,6 +5,7 @@ const [
   providerExtensionSql,
   exceptionSql,
   exceptionHardeningSql,
+  providerModalitySql,
   providerRuntime,
   workerSource,
   gatewaySource,
@@ -18,6 +19,7 @@ const [
   readRepositoryFile("supabase/migrations/20260905214500_ai_copilot_provider_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905093000_ai_exception_intelligence.sql"),
   readRepositoryFile("supabase/migrations/20260905220000_ai_exception_runtime_hardening.sql"),
+  readRepositoryFile("supabase/migrations/20260905220500_ai_provider_modality_hardening.sql"),
   readRepositoryFile("supabase/functions/_shared/ai-provider-runtime.ts"),
   readRepositoryFile("supabase/functions/runtime-worker/index.ts"),
   readRepositoryFile("supabase/functions/api-gateway/index.ts"),
@@ -90,6 +92,16 @@ Deno.test("text AI runtime is transport-driven rather than provider-name-driven"
     providerExtensionSql,
     "to_jsonb(provider_record) - 'secret_ref'",
     "provider configuration responses must remove secret references",
+  );
+  assertIncludes(
+    providerModalitySql,
+    "when 'anthropic_messages' then '[\"text\",\"json\"]'::jsonb",
+    "Anthropic configuration must advertise text/json support",
+  );
+  assertIncludes(
+    providerModalitySql,
+    "'supports', transport_supports",
+    "new provider configuration must persist its response-mode support",
   );
 });
 
@@ -190,6 +202,11 @@ Deno.test("admin SKIMA Intelligence can switch providers without exposing API ke
     'requiredPermission="platform.ai.manage"',
     "AI provider mutations must be permission-gated in the admin UI",
   );
+  assertIncludes(
+    adminAiWorkspace,
+    "providerSupportsResponseMode",
+    "admin route editor must filter providers by capability response mode",
+  );
   assertNotMatch(
     adminAiWorkspace,
     /(AIza[0-9A-Za-z_-]{20,}|sk-[0-9A-Za-z_-]{20,})/,
@@ -222,6 +239,16 @@ Deno.test("operational exception intelligence is deterministic and uses canonica
     exceptionHardeningSql,
     "status in ('dismissed','acknowledged')",
     "refresh must preserve an administrator acknowledgement while an exception persists",
+  );
+  assertIncludes(
+    normalizeWhitespace(exceptionHardeningSql),
+    "revoke all on function public.refresh_ai_operational_insights() from public, anon, authenticated",
+    "exception refresh must remain unavailable to authenticated clients",
+  );
+  assertIncludes(
+    normalizeWhitespace(exceptionHardeningSql),
+    "grant execute on function public.refresh_ai_operational_insights() to service_role",
+    "exception refresh execution must stay backend-only",
   );
   assertNotIncludes(
     gatewaySource,
