@@ -112,6 +112,7 @@ const ROUTES = new Set([
   "/lpg/stations/settings",
   "/lpg/stations/capacity-adjustments",
   "/lpg/stations/inventory",
+  "/lpg/stations/inventory/outlook",
   "/lpg/stations/inventory/report",
   "/lpg/stations/inventory/confirm",
   "/lpg/stations/inventory/adjustments",
@@ -1039,6 +1040,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     return rpcDataResponse(
       supabase.rpc("read_lpg_station_inventory", {
         target_limit: optionalIntegerQuery(url.searchParams.get("limit")) ?? 50,
+        target_station_branch_id: optionalUuid(
+          url.searchParams.get("stationBranchId"),
+          "stationBranchId",
+        ),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/stations/inventory/outlook" && request.method === "GET") {
+    return rpcDataResponse(
+      supabase.rpc("read_ai_station_inventory_outlook", {
         target_station_branch_id: optionalUuid(
           url.searchParams.get("stationBranchId"),
           "stationBranchId",
@@ -10780,7 +10793,7 @@ async function buildAiAssistantContext(
   }
 
   if (workspace === "station") {
-    const [jobs, runtime, forecasts, settlementExplanations] = await Promise.all([
+    const [jobs, runtime, forecasts, settlementExplanations, inventoryOutlook] = await Promise.all([
       supabase.rpc("read_lpg_jobs", { target_queue: "station", target_limit: 15 }),
       supabase.rpc("read_lpg_station_runtime", { target_limit: 10, target_station_branch_id: null }),
       supabase.rpc("read_ai_demand_forecasts", { target_station_branch_id: null }),
@@ -10788,6 +10801,9 @@ async function buildAiAssistantContext(
         target_lpg_order_id: null,
         target_station_branch_id: null,
         target_limit: 10,
+      }),
+      supabase.rpc("read_ai_station_inventory_outlook", {
+        target_station_branch_id: null,
       }),
     ]);
     assertAiContextQuery(jobs.error);
@@ -10800,6 +10816,9 @@ async function buildAiAssistantContext(
       settlementExplanations: settlementExplanations.error
         ? []
         : Array.isArray(settlementExplanations.data) ? settlementExplanations.data : [],
+      inventoryOutlook: inventoryOutlook.error
+        ? []
+        : Array.isArray(inventoryOutlook.data) ? inventoryOutlook.data : [],
       applicationExplanations: ownApplicationExplanations,
       myApplications: ownApplications,
     };
@@ -11057,6 +11076,27 @@ function buildAiHomeInsight(
   }
 
   if (workspace === "station") {
+    const inventoryOutlook = recordArrayValue(getRecordValue(context, "inventoryOutlook"));
+    const highestPressureOutlook = inventoryOutlook.find((record) =>
+      ["critical", "urgent"].includes(
+        (stringOrNull(getRecordValue(record, "pressureLevel")) ?? "").toLowerCase(),
+      )
+    );
+    if (highestPressureOutlook) {
+      const pressure = stringOrNull(getRecordValue(highestPressureOutlook, "pressureLevel")) ?? "urgent";
+      const coverageDays = numberOrNull(getRecordValue(highestPressureOutlook, "coverageDays"));
+      return {
+        kind: "station_inventory_pressure",
+        eyebrow: "STOCK OUTLOOK",
+        title: pressure === "critical" ? "Stock pressure is critical" : "Stock pressure needs attention",
+        body: coverageDays !== null
+          ? "About " + formatAiInsightNumber(coverageDays) + " days of dispatchable stock against estimated demand, assuming no replenishment. Estimate only."
+          : "Inventory or demand evidence needs attention before SKIMA can estimate stock coverage.",
+        actionLabel: "Explain stock outlook",
+        estimateOnly: true,
+      };
+    }
+
     const jobs = recordArrayValue(getRecordValue(context, "activeJobs"));
     const activeJobs = jobs.filter((record) =>
       !isTerminalLpgOrderStatus(
@@ -11073,6 +11113,23 @@ function buildAiHomeInsight(
         body: "Ask SKIMA to summarize the current queue and the next reception actions.",
         actionLabel: "Summarize queue",
         estimateOnly: false,
+      };
+    }
+
+    const elevatedOutlook = inventoryOutlook.find((record) =>
+      (stringOrNull(getRecordValue(record, "pressureLevel")) ?? "").toLowerCase() === "elevated"
+    );
+    if (elevatedOutlook) {
+      const coverageDays = numberOrNull(getRecordValue(elevatedOutlook, "coverageDays"));
+      return {
+        kind: "station_inventory_outlook",
+        eyebrow: "STOCK OUTLOOK",
+        title: coverageDays !== null
+          ? formatAiInsightNumber(coverageDays) + " days estimated coverage"
+          : "Stock pressure is elevated",
+        body: "Based on current dispatchable stock and recent demand, assuming no replenishment. Estimate only.",
+        actionLabel: "Explain stock outlook",
+        estimateOnly: true,
       };
     }
 
@@ -11172,6 +11229,8 @@ function aiSystemPrompt(workspace: string): string {
     "Do not claim that a cylinder is safe based on AI or an image. For immediate LPG danger, advise the user to move away from danger and use the appropriate emergency channel.",
     "Do not claim to have changed an order, payment, wallet, dispatch assignment, inventory value, approval or permission. This assistant is read-only. A separate user-confirmed support action may create a normal complaint record, but you cannot submit it yourself.",
     "Demand forecasts are statistical estimates from recent SKIMA order history. Never present them as guaranteed demand, authoritative inventory, a price instruction, or a dispatch decision.",
+    "Station inventoryOutlook combines canonical station inventory state with that deterministic demand forecast. It assumes no replenishment, never predicts supplier delivery, and withholds a depletion estimate when inventory freshness/confidence is not trustworthy. Never present coverageDays or estimatedDepletionAt as guaranteed stockout timing.",
+    "Station inventoryOutlook is descriptive only. Never claim Ask SKIMA changed stock, reservations, station availability, dispatch eligibility, operational capacity, provider settings or safety state.",
     "Customer refill outlooks are estimates from that customer's historical refill intervals. They do not measure remaining gas, cylinder pressure or safety and must never be described as a gas gauge.",
     "Driver earningsExplanations come from the assigned driver's immutable locked LPG payout snapshot and canonical commission execution. A locked payout that is pending delivery or awaiting posting is not yet posted earnings. Only say money was credited when walletPostingRecorded is true and the canonical execution status is posted.",
     "Never estimate a driver's earned amount, change a payout, trigger commission release, move wallet money, or substitute another driver's financial records.",
@@ -11211,7 +11270,7 @@ function aiWorkspaceSuggestions(workspace: string): readonly string[] {
     return ["What do I do next?", "Summarize my active jobs", "Explain my recent earnings"];
   }
   if (workspace === "station") {
-    return ["What needs attention?", "Explain my recent settlement", "How busy could the next 7 days be?"];
+    return ["How long could current stock cover?", "What needs attention?", "Explain my recent settlement"];
   }
   return ["Which applications are ready for review?", "Which support cases need attention?", "Are any money records out of balance?", "Which areas deserve expansion review?"];
 }
