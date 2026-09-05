@@ -268,7 +268,7 @@ begin
         from public.driver_profiles driver
         left join public.profiles profile on profile.id = driver.user_id
         where rule_record.subject_type = 'driver'
-          and driver.verification_status in ('approved','verified')
+          and driver.verification_status = 'approved'
         union all
         select
           station.id,
