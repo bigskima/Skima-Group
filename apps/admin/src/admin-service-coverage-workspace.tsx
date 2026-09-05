@@ -105,6 +105,7 @@ export function AdminServiceCoverageWorkspace() {
   const [geographyOpen, setGeographyOpen] = useState(false);
   const [policyOpen, setPolicyOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [linkTargets, setLinkTargets] = useState<Record<string, string>>({});
   const enabled = status === "authenticated";
   const adminSetup = useQuery({
     queryKey: ["universal-geography-admin-setup"],
@@ -144,7 +145,7 @@ export function AdminServiceCoverageWorkspace() {
       <MetricTile label="Blocked legacy areas" value={readiness?.blockedCount ?? 0} icon={ShieldCheck} tone={(readiness?.blockedCount ?? 0) > 0 ? "warning" : "success"} />
       <MetricTile label="Authority mode" value={readiness?.authorityMode ?? "Loading"} icon={MapPinned} tone={readiness?.ready ? "success" : "warning"} />
     </section>
-    <GeographyCutoverPanel readiness={readiness} />
+    <GeographyCutoverPanel readiness={readiness} geographies={geographies.filter((geography) => geography.status === "active")} />
     {loading ? <LoadingState label="Loading universal geography" /> : null}
     {error ? <ErrorState title="Geography unavailable" message={readError(error)} onRetry={() => void refresh()} /> : null}
     {!loading && !error ? <section className="sk-panel"><div className="sk-panel__header"><div><h2>Service policies</h2><p className="skima-muted">More-specific configured levels override broader levels. Equal specificity and priority fail closed as a conflict.</p></div></div><DataTable caption="Universal service coverage policies" columns={columns} records={records} getRowKey={(p) => p.id} emptyTitle="No universal policies" emptyMessage="Import or draw a bounded geography, then add a capability policy." /></section> : null}
@@ -162,7 +163,7 @@ export function AdminServiceCoverageWorkspace() {
 }
 
 type GeographyMigration = z.infer<typeof GeographyMigrationSchema>;
-function GeographyCutoverPanel({ readiness }: { readiness: z.infer<typeof ReadinessSchema> | undefined }) {
+function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<typeof ReadinessSchema> | undefined; geographies: Geography[] }) {
   const { supabase, status } = useSessionState();
   const client = useQueryClient();
   const [reason, setReason] = useState("");
@@ -196,6 +197,30 @@ function GeographyCutoverPanel({ readiness }: { readiness: z.infer<typeof Readin
     },
     onSuccess: async (result) => {
       setNotice(`Spatial import completed: ${result?.imported ?? 0} imported, ${result?.blocked ?? 0} blocked for correction.`);
+      await refresh();
+    },
+  });
+
+  const linkMapping = useMutation({
+    mutationFn: async (mappingId: string) => {
+      const geographyId = linkTargets[mappingId];
+      if (!geographyId) throw new Error("Choose the canonical geography that replaces this legacy area.");
+      if (!reason.trim()) throw new Error("Enter a review reason before linking a legacy area.");
+      const { data, error } = await supabase.rpc("link_geography_migration_mapping", {
+        p_mapping_id: mappingId,
+        p_geography_id: geographyId,
+        p_reason: reason.trim(),
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async (_data, mappingId) => {
+      setLinkTargets((current) => {
+        const next = { ...current };
+        delete next[mappingId];
+        return next;
+      });
+      setNotice("Legacy area linked to a canonical bounded geography. Review and verify the mapping next.");
       await refresh();
     },
   });
@@ -242,16 +267,28 @@ function GeographyCutoverPanel({ readiness }: { readiness: z.infer<typeof Readin
     { key: "boundary", header: "Boundary", render: (item) => <StatusBadge tone={item.boundary_ready ? "success" : "danger"}>{item.boundary_ready ? "Valid" : "Needs correction"}</StatusBadge> },
     { key: "action", header: "Review", render: (item) => item.migration_status === "migrated"
       ? <Button size="sm" variant="outline" disabled={!item.boundary_ready || !reason.trim()} isLoading={verifyMapping.isPending && verifyMapping.variables === item.id} onClick={() => verifyMapping.mutate(item.id)}>Verify mapping</Button>
-      : item.migration_status === "verified" ? <small>Reviewed</small> : <small>Resolve source data first</small> },
+      : item.migration_status === "verified"
+        ? <small>Reviewed</small>
+        : item.migration_status === "blocked" || item.migration_status === "pending"
+          ? <div className="skima-form-grid">
+              <SelectInput
+                label="Canonical geography"
+                value={linkTargets[item.id] ?? ""}
+                onChange={(event) => setLinkTargets((current) => ({ ...current, [item.id]: event.currentTarget.value }))}
+                options={[{ label: "Choose bounded geography", value: "" }, ...geographies.map((geography) => ({ label: geography.canonical_name, value: geography.id }))]}
+              />
+              <Button size="sm" variant="outline" disabled={!linkTargets[item.id] || !reason.trim()} isLoading={linkMapping.isPending && linkMapping.variables === item.id} onClick={() => linkMapping.mutate(item.id)}>Link for review</Button>
+            </div>
+          : <small>Retired</small> },
   ];
 
-  const actionError = mappings.error ?? importLegacy.error ?? verifyMapping.error ?? activateAuthority.error;
+  const actionError = mappings.error ?? importLegacy.error ?? linkMapping.error ?? verifyMapping.error ?? activateAuthority.error;
   return (
     <section className="sk-panel">
       <div className="sk-panel__header">
         <div>
           <h2>Geography cutover setup</h2>
-          <p className="skima-muted">Import existing bounded service areas, explicitly verify each canonical mapping, create the required service policies, then switch authority only when the readiness guard passes.</p>
+          <p className="skima-muted">Import existing spatial areas. For older name-only rows, explicitly link them to a real bounded canonical geography instead of guessing a boundary. Verify every mapping, create the required service policies, then switch authority only when the readiness guard passes.</p>
         </div>
         <div className="skima-action-row">
           <Button variant="outline" icon={RefreshCcw} disabled={importLegacy.isPending} onClick={() => importLegacy.mutate()}>Import existing areas</Button>
