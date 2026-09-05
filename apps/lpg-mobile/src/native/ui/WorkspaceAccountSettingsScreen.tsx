@@ -10,7 +10,7 @@ import {
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSession } from "../session/SessionProvider";
-import { useInAppGuide } from "../onboarding/InAppGuideProvider";
+import { GuideTarget, useInAppGuide } from "../onboarding/InAppGuideProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { AppButton } from "./AppButton";
@@ -43,14 +43,16 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
             value={theme.scheme === "dark" ? "Switch to light" : "Switch to dark"}
             onPress={() => void theme.toggle()}
           />
-          <SettingsRow
-            icon={CircleHelp}
-            label="App guide"
-            detail="Replay the practical guide for this workspace"
-            value="Start guided tour"
-            onPress={() => void guide.startNow(workspace)}
-            last
-          />
+          <GuideTarget targetKey="account.app-guide">
+            <SettingsRow
+              icon={CircleHelp}
+              label="App guide"
+              detail="Replay the practical guide for this workspace"
+              value="Start guided tour"
+              onPress={() => void guide.startNow(workspace)}
+              last
+            />
+          </GuideTarget>
         </View>
       </View>
 
