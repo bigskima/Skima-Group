@@ -480,12 +480,12 @@ begin
     raise exception using errcode = '22023', message = 'unsupported risk subject type';
   end if;
 
-  minimum_rank := case target_minimum_level
-    when null then 0
-    when 'low' then 1
-    when 'medium' then 2
-    when 'high' then 3
-    when 'critical' then 4
+  minimum_rank := case
+    when target_minimum_level is null then 0
+    when target_minimum_level = 'low' then 1
+    when target_minimum_level = 'medium' then 2
+    when target_minimum_level = 'high' then 3
+    when target_minimum_level = 'critical' then 4
     else -1
   end;
 
