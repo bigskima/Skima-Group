@@ -3,12 +3,8 @@ import {
   Bell,
   ChevronRight,
   CircleCheck,
-  Gauge,
   PackageCheck,
-  Settings2,
   ShieldCheck,
-  Users,
-  WalletCards,
 } from "lucide-react-native";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -40,7 +36,6 @@ export function StationDashboardScreen() {
   const { width } = useWindowDimensions();
   const runtime = useStationRuntime();
   const jobs = domainQueries.stationJobs();
-  const settlements = domainQueries.settlements();
 
   const branch = nestedRecord(runtime.data, "branch");
   const records = jobs.data ?? [];
@@ -53,22 +48,15 @@ export function StationDashboardScreen() {
   const readyForStation = activeRecords.filter((item) => normalized(displayStatus(item) ?? "") === "station_verified").length;
   const processing = activeRecords.filter((item) => ["refill_started", "refill_in_progress"].includes(normalized(displayStatus(item) ?? ""))).length;
   const availableKg = firstNumber(branch, ["currentAvailableKg", "current_available_kg"]);
-  const capacityKg = firstNumber(branch, ["refillCapacityKg", "refill_capacity_kg"]);
   const availability = firstString(branch, ["availabilityStatus", "availability_status"]) ?? "unavailable";
   const normalizedAvailability = normalized(availability);
-  const settled = (settlements.data ?? []).reduce(
-    (sum, item) => sum + (firstNumber(item, ["net_amount", "netAmount", "amount"]) ?? 0),
-    0,
-  );
-  const currency = firstString(settlements.data?.[0], ["currency_code", "currencyCode"]) ?? "NGN";
-  const settlementSummary = settlements.error ? "Temporarily unavailable" : money(settled, currency);
   const firstName = session.context?.profile?.display_name?.trim().split(/\s+/)[0];
   const loading = runtime.isPending || jobs.isPending;
   const failed = runtime.error || jobs.error;
-  const refreshing = runtime.isRefetching || jobs.isRefetching || settlements.isRefetching;
+  const refreshing = runtime.isRefetching || jobs.isRefetching;
 
   const refresh = async () => {
-    await Promise.allSettled([runtime.refetch(), jobs.refetch(), settlements.refetch()]);
+    await Promise.allSettled([runtime.refetch(), jobs.refetch()]);
   };
 
   return (
@@ -206,39 +194,6 @@ export function StationDashboardScreen() {
               )}
             </View>
 
-            <SectionTitle title="Station tools" />
-            <View style={styles.utilities}>
-              <UtilityRow
-                icon={<Gauge color={palette.brand} size={20} />}
-                label="Inventory & capacity"
-                value={capacityKg === null ? "Capacity not reported" : `${availableKg === null ? "—" : availableKg} / ${capacityKg} kg available`}
-                onPress={() => router.push("/(station)/inventory")}
-              />
-              <UtilityRow
-                icon={<WalletCards color={palette.brand} size={20} />}
-                label="Earnings"
-                value={settlementSummary}
-                onPress={() => router.push("/(station)/settlements")}
-              />
-              <UtilityRow
-                icon={<Users color={palette.brand} size={20} />}
-                label="Team and access"
-                value="Manage station access"
-                onPress={() => router.push("/(station)/staff")}
-              />
-              <UtilityRow
-                icon={<Settings2 color={palette.brand} size={20} />}
-                label="Settings & pricing"
-                value="Availability, hours and station price"
-                onPress={() => router.push("/(station)/settings")}
-                last
-              />
-            </View>
-
-            <View style={[styles.handoff, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
-              <ShieldCheck color={palette.mutedStrong} size={19} />
-              <Text style={[styles.handoffText, { color: palette.muted }]}>The driver scans the SKIMA cylinder at reception. Confirm the order here before starting the safety check.</Text>
-            </View>
           </View>
         )}
       </View>
@@ -345,27 +300,6 @@ function SectionTitle({ title, action, onPress }: { title: string; action?: stri
   );
 }
 
-function UtilityRow({ icon, label, value, onPress, last = false }: { icon: React.ReactNode; label: string; value: string; onPress(): void; last?: boolean }) {
-  const { palette } = useAppTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.utility,
-        !last && { borderBottomColor: palette.border, borderBottomWidth: StyleSheet.hairlineWidth },
-        { opacity: pressed ? 0.72 : 1 },
-      ]}
-    >
-      <View style={[styles.utilityIcon, { backgroundColor: palette.brandSoft }]}>{icon}</View>
-      <View style={styles.utilityCopy}>
-        <Text style={[styles.utilityLabel, { color: palette.ink }]}>{label}</Text>
-        <Text numberOfLines={1} style={[styles.utilityValue, { color: palette.muted }]}>{value}</Text>
-      </View>
-      <ChevronRight color={palette.muted} size={18} />
-    </Pressable>
-  );
-}
-
 function isDriverApproaching(value?: string | null) {
   return ["driver_accepted", "pickup_en_route", "pickup_verified", "station_en_route"].includes(normalized(value ?? ""));
 }
@@ -422,14 +356,6 @@ function queueTone(value: string): "neutral" | "brand" | "success" | "warning" |
   if (["station_verified", "refill_started", "refill_in_progress", "refill_confirmed"].includes(key)) return "brand";
   if (["cancelled", "disputed"].includes(key)) return "danger";
   return "warning";
-}
-
-function money(value: number, currency: string) {
-  try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
-  } catch {
-    return `${currency} ${value.toFixed(0)}`;
-  }
 }
 
 const styles = StyleSheet.create({
