@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BadgeDollarSign, RefreshCcw, RotateCcw, TrendingUp, WalletCards } from "lucide-react";
+import { BadgeDollarSign, Building2, Landmark, RefreshCcw, RotateCcw, Send, TrendingUp, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { z } from "zod";
 
 import {
   Button,
@@ -26,9 +27,78 @@ type RevenueSummary = {
   readonly grossCredits: number;
   readonly reversalsAndDebits: number;
   readonly entryCount: number;
+  readonly treasuryNetOutflow: number;
+  readonly treasuryEntryCount: number;
   readonly byStream: readonly PlatformRecord[];
   readonly byComponent: readonly PlatformRecord[];
 };
+
+const ProviderBalanceSchema = z.object({
+  provider: z.string(),
+  available: z.boolean(),
+  currencyCode: z.string().default("NGN"),
+  balance: z.coerce.number().nullable(),
+  balanceMinor: z.coerce.number().nullable(),
+}).passthrough();
+
+const RevenuePayoutBeneficiarySchema = z.object({
+  id: z.string().uuid(),
+  bankCode: z.string().nullable(),
+  accountName: z.string(),
+  accountNumberLast4: z.string().nullable(),
+  status: z.string(),
+  verifiedAt: z.string().nullable(),
+  createdAt: z.string(),
+}).passthrough();
+
+const RevenuePayoutSchema = z.object({
+  id: z.string().uuid(),
+  publicReference: z.string().nullable(),
+  beneficiaryId: z.string().uuid(),
+  amount: z.coerce.number(),
+  currencyCode: z.string(),
+  status: z.string(),
+  providerReference: z.string().nullable(),
+  requestedAt: z.string().nullable(),
+  processedAt: z.string().nullable(),
+  failedAt: z.string().nullable(),
+  reversedAt: z.string().nullable(),
+}).passthrough();
+
+const RevenuePayoutContextSchema = z.object({
+  currencyCode: z.string().default("NGN"),
+  walletId: z.string().uuid().nullable(),
+  availableBalance: z.coerce.number(),
+  beneficiaries: z.array(RevenuePayoutBeneficiarySchema),
+  recentPayouts: z.array(RevenuePayoutSchema),
+}).passthrough();
+
+const PayoutBanksSchema = z.object({
+  currencyCode: z.string().default("NGN"),
+  provider: z.string().optional(),
+  source: z.string().optional(),
+  banks: z.array(z.object({
+    name: z.string(),
+    code: z.string(),
+  }).passthrough()),
+}).passthrough();
+
+const ResolvedPayoutAccountSchema = z.object({
+  accountName: z.string(),
+  accountNumber: z.string(),
+  bankCode: z.string(),
+  verified: z.boolean().optional(),
+}).passthrough();
+
+const RevenuePayoutResultSchema = z.object({
+  id: z.string().uuid(),
+  amount: z.coerce.number(),
+  status: z.string(),
+  public_reference: z.string().nullable().optional(),
+  publicReference: z.string().nullable().optional(),
+  provider_reference: z.string().nullable().optional(),
+  providerReference: z.string().nullable().optional(),
+}).passthrough();
 
 type FeeControl = {
   readonly key: string;
@@ -84,13 +154,21 @@ const activityColumns: readonly TableColumn<PlatformRecord>[] = [
 ];
 
 export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => void }) {
-  const { context, status, supabase } = useSessionState();
+  const { api, context, status, supabase } = useSessionState();
   const queryClient = useQueryClient();
   const [windowDays, setWindowDays] = useState(30);
   const [rangeRevision, setRangeRevision] = useState(0);
   const [feeAmounts, setFeeAmounts] = useState<Record<string, string>>({});
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [saveSucceeded, setSaveSucceeded] = useState(false);
+  const [payoutBankSearch, setPayoutBankSearch] = useState("");
+  const [payoutBankCode, setPayoutBankCode] = useState("");
+  const [payoutAccountNumber, setPayoutAccountNumber] = useState("");
+  const [resolvedPayoutName, setResolvedPayoutName] = useState("");
+  const [resolvedPayoutKey, setResolvedPayoutKey] = useState("");
+  const [selectedRevenueBeneficiaryId, setSelectedRevenueBeneficiaryId] = useState("");
+  const [revenuePayoutAmount, setRevenuePayoutAmount] = useState("");
+  const [payoutNotice, setPayoutNotice] = useState<string | null>(null);
 
   const isSuperAdmin = context?.platformAdmin?.admin_kind === "super_admin";
   const canReadRevenue = isSuperAdmin ||
@@ -131,6 +209,27 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
     },
   });
 
+  const providerBalance = useQuery({
+    queryKey: ["admin-revenue", "provider-balance"],
+    enabled: status === "authenticated" && canReadRevenue,
+    retry: false,
+    queryFn: () => api.get("/admin/revenue/provider-balance", ProviderBalanceSchema),
+  });
+
+  const payoutContext = useQuery({
+    queryKey: ["admin-revenue", "payout-context"],
+    enabled: status === "authenticated" && isSuperAdmin,
+    retry: false,
+    queryFn: () => api.get("/admin/revenue/payout-context?currency=NGN", RevenuePayoutContextSchema),
+  });
+
+  const payoutBanks = useQuery({
+    queryKey: ["admin-revenue", "payout-banks"],
+    enabled: status === "authenticated" && isSuperAdmin,
+    retry: false,
+    queryFn: () => api.get("/admin/revenue/payout-banks", PayoutBanksSchema),
+  });
+
   const activity = useQuery({
     queryKey: ["admin-revenue", "activity", windowDays, rangeRevision],
     enabled: status === "authenticated" && canReadRevenue,
@@ -160,6 +259,104 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
       setFeeAmounts(Object.fromEntries(configuration.data.map((fee) => [fee.key, String(fee.amount)])));
     }
   }, [configuration.data]);
+
+  const resolvePayoutAccount = useMutation({
+    mutationFn: (payload: { bankCode: string; accountNumber: string }) =>
+      api.post(
+        "/admin/revenue/payout-account/resolve",
+        payload,
+        ResolvedPayoutAccountSchema,
+      ),
+  });
+
+  const createRevenuePayoutAccount = useMutation({
+    mutationFn: (payload: { bankCode: string; accountNumber: string }) =>
+      api.post(
+        "/admin/revenue/payout-account",
+        {
+          ...payload,
+          idempotencyKey: revenuePayoutKey("beneficiary"),
+        },
+        z.object({
+          id: z.string().uuid(),
+          accountName: z.string(),
+          accountNumberLast4: z.string(),
+          bankCode: z.string(),
+          status: z.string(),
+        }).passthrough(),
+      ),
+    onSuccess: async (created) => {
+      setPayoutNotice(`SKIMA revenue payout account confirmed: ${created.accountName}.`);
+      setPayoutBankCode("");
+      setPayoutAccountNumber("");
+      setResolvedPayoutName("");
+      setResolvedPayoutKey("");
+      await queryClient.invalidateQueries({ queryKey: ["admin-revenue", "payout-context"] });
+      await payoutContext.refetch();
+      setSelectedRevenueBeneficiaryId(created.id);
+    },
+    onError: (error) => setPayoutNotice(readError(error)),
+  });
+
+  const withdrawRevenue = useMutation({
+    mutationFn: (payload: { beneficiaryId: string; amount: number }) =>
+      api.post(
+        "/admin/revenue/payout",
+        {
+          ...payload,
+          idempotencyKey: revenuePayoutKey("withdrawal"),
+          metadata: { initiatedFrom: "money_revenue" },
+        },
+        RevenuePayoutResultSchema,
+      ),
+    onSuccess: async (result) => {
+      const reference = result.publicReference ?? result.public_reference ?? result.id;
+      setPayoutNotice(
+        `SKIMA revenue withdrawal ${reference} is ${label(result.status).toLowerCase()}.`,
+      );
+      setRevenuePayoutAmount("");
+      setRangeRevision((revision) => revision + 1);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin-revenue"] }),
+        payoutContext.refetch(),
+        providerBalance.refetch(),
+      ]);
+    },
+    onError: (error) => setPayoutNotice(readError(error)),
+  });
+
+  const payoutAccountIsValid = /^\d{10}$/.test(payoutAccountNumber);
+  const payoutAccountKey = payoutBankCode && payoutAccountIsValid
+    ? `${payoutBankCode}:${payoutAccountNumber}`
+    : "";
+
+  useEffect(() => {
+    setResolvedPayoutName("");
+    setResolvedPayoutKey("");
+    if (!isSuperAdmin || !payoutBankCode || !payoutAccountIsValid) return;
+
+    const key = `${payoutBankCode}:${payoutAccountNumber}`;
+    const timer = window.setTimeout(() => {
+      setPayoutNotice(null);
+      resolvePayoutAccount.mutate({
+        bankCode: payoutBankCode,
+        accountNumber: payoutAccountNumber,
+      }, {
+        onSuccess: (resolved) => {
+          if (
+            resolved.bankCode === payoutBankCode &&
+            resolved.accountNumber === payoutAccountNumber
+          ) {
+            setResolvedPayoutName(resolved.accountName);
+            setResolvedPayoutKey(key);
+          }
+        },
+        onError: (error) => setPayoutNotice(readError(error)),
+      });
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [isSuperAdmin, payoutBankCode, payoutAccountNumber, payoutAccountIsValid]);
 
   const updateRevenueRate = useMutation({
     mutationFn: async ({ feeKey, amount }: { feeKey: string; amount: number }) => {
@@ -271,7 +468,13 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
                   inputMode="decimal"
                   value={feeAmounts[fee.key] ?? ""}
                   disabled={!canSubmitRevenueRate || updateRevenueRate.isPending}
-                  onChange={(event) => setFeeAmounts((current) => ({...current,[fee.key]:event.currentTarget.value}))}
+                  onChange={(event) => {
+                    // React clears currentTarget after the event handler. Capture
+                    // the primitive now instead of reading the event later from
+                    // inside the state-updater callback.
+                    const nextValue = event.currentTarget.value;
+                    setFeeAmounts((current) => ({ ...current, [fee.key]: nextValue }));
+                  }}
                   style={{
                     minHeight: 46,
                     border: "1px solid var(--sk-border, #d0d5dd)",
@@ -354,16 +557,30 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
         <>
           <section className="skima-grid skima-grid--compact">
           <MetricTile
-            label="Current SKIMA Revenue balance"
+            label="SKIMA Revenue available"
             value={money(current.currentRevenueBalance, current.currencyCode)}
             icon={WalletCards}
             tone="success"
           />
           <MetricTile
-            label={`Net revenue · ${windowDays} days`}
+            label="Paystack transfer balance"
+            value={providerBalance.data?.balance === null || providerBalance.data?.balance === undefined
+              ? "Unavailable"
+              : money(providerBalance.data.balance, providerBalance.data.currencyCode)}
+            icon={Landmark}
+            tone={providerBalance.data?.available ? "info" : "neutral"}
+          />
+          <MetricTile
+            label={`Revenue earned · ${windowDays} days`}
             value={money(current.netRevenue, current.currencyCode)}
             icon={TrendingUp}
             tone="success"
+          />
+          <MetricTile
+            label={`Treasury outflow · ${windowDays} days`}
+            value={money(current.treasuryNetOutflow, current.currencyCode)}
+            icon={Send}
+            tone={current.treasuryNetOutflow > 0 ? "info" : "neutral"}
           />
           <MetricTile
             label="Gross revenue credits"
@@ -462,6 +679,246 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
           )}
       </section>
 
+      {isSuperAdmin ? (
+        <section className="sk-panel">
+          <div className="sk-panel__header">
+            <div>
+              <p className="admin-section-kicker">Company treasury</p>
+              <h2>Withdraw SKIMA Revenue</h2>
+              <p className="skima-muted">
+                Withdraw only from SKIMA's protected revenue wallet. Customer balances, driver earnings,
+                station earnings, escrow, and provider liabilities are never included here.
+              </p>
+            </div>
+            <StatusBadge tone="info">Super Admin only</StatusBadge>
+          </div>
+
+          {payoutContext.isLoading ? <LoadingState label="Loading SKIMA revenue payout account" /> : null}
+          {payoutContext.error ? (
+            <ErrorState
+              title="Revenue payout controls unavailable"
+              message={readError(payoutContext.error)}
+              onRetry={() => void payoutContext.refetch()}
+            />
+          ) : null}
+
+          {payoutContext.data ? (
+            <div style={{ display: "grid", gap: "1rem" }}>
+              <div className="skima-grid skima-grid--compact">
+                <MetricTile
+                  label="Ledger available for company withdrawal"
+                  value={money(payoutContext.data.availableBalance, payoutContext.data.currencyCode)}
+                  icon={WalletCards}
+                  tone="success"
+                />
+                <MetricTile
+                  label="Paystack available for transfers"
+                  value={providerBalance.data?.balance === null || providerBalance.data?.balance === undefined
+                    ? "Unavailable"
+                    : money(providerBalance.data.balance, providerBalance.data.currencyCode)}
+                  icon={Landmark}
+                  tone="info"
+                />
+              </div>
+              <p className="skima-muted" style={{ margin: 0 }}>
+                Paystack transfer balance is external provider cash and may include money owed to customers or partners.
+                It is not the same as SKIMA Revenue. The revenue-ledger balance is the maximum company-owned amount this screen permits.
+              </p>
+
+              <div className="admin-command-grid">
+                <div style={{ display: "grid", gap: "0.8rem" }}>
+                  <h3 style={{ margin: 0 }}>Company payout account</h3>
+                  {payoutContext.data.beneficiaries.length ? (
+                    <div style={{ display: "grid", gap: "0.55rem" }}>
+                      {payoutContext.data.beneficiaries.map((beneficiary) => (
+                        <button
+                          key={beneficiary.id}
+                          type="button"
+                          aria-pressed={selectedRevenueBeneficiaryId === beneficiary.id}
+                          onClick={() => setSelectedRevenueBeneficiaryId(beneficiary.id)}
+                          style={{
+                            textAlign: "left",
+                            border: selectedRevenueBeneficiaryId === beneficiary.id
+                              ? "2px solid var(--sk-brand, #0f9d8a)"
+                              : "1px solid var(--sk-border, #d0d5dd)",
+                            borderRadius: 12,
+                            padding: "0.8rem",
+                            background: "var(--sk-surface, #fff)",
+                            color: "inherit",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <strong>{beneficiary.accountName}</strong>
+                          <div className="skima-muted">
+                            {payoutBankName(payoutBanks.data?.banks ?? [], beneficiary.bankCode)}
+                            {beneficiary.accountNumberLast4 ? ` · •••• ${beneficiary.accountNumberLast4}` : ""}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="skima-muted">No verified company payout account has been saved yet.</p>
+                  )}
+
+                  <label style={{ display: "grid", gap: "0.35rem" }}>
+                    <span style={{ fontWeight: 700 }}>Bank</span>
+                    <input
+                      aria-label="Search payout bank"
+                      placeholder="Search bank"
+                      value={payoutBankSearch}
+                      onChange={(event) => setPayoutBankSearch(event.currentTarget.value)}
+                      style={adminInputStyle}
+                    />
+                  </label>
+                  <div style={{ display: "grid", gap: "0.4rem", maxHeight: 220, overflow: "auto" }}>
+                    {filteredPayoutBanks(payoutBanks.data?.banks ?? [], payoutBankSearch).slice(0, 25).map((bank) => (
+                      <button
+                        key={bank.code}
+                        type="button"
+                        onClick={() => {
+                          setPayoutBankCode(bank.code);
+                          setResolvedPayoutName("");
+                          setResolvedPayoutKey("");
+                          setPayoutNotice(null);
+                        }}
+                        style={{
+                          textAlign: "left",
+                          border: payoutBankCode === bank.code
+                            ? "2px solid var(--sk-brand, #0f9d8a)"
+                            : "1px solid var(--sk-border, #d0d5dd)",
+                          borderRadius: 10,
+                          padding: "0.65rem 0.75rem",
+                          background: "transparent",
+                          color: "inherit",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <Building2 size={15} style={{ marginRight: 8, verticalAlign: "middle" }} />
+                        {bank.name}
+                      </button>
+                    ))}
+                  </div>
+                  <label style={{ display: "grid", gap: "0.35rem" }}>
+                    <span style={{ fontWeight: 700 }}>10-digit account number</span>
+                    <input
+                      inputMode="numeric"
+                      maxLength={10}
+                      value={payoutAccountNumber}
+                      onChange={(event) => {
+                        const nextValue = event.currentTarget.value.replace(/\D/g, "").slice(0, 10);
+                        setPayoutAccountNumber(nextValue);
+                        setResolvedPayoutName("");
+                        setResolvedPayoutKey("");
+                        setPayoutNotice(null);
+                      }}
+                      style={adminInputStyle}
+                    />
+                  </label>
+                  {payoutBankCode && payoutAccountIsValid ? (
+                    <div style={{
+                      border: "1px solid var(--sk-border, #d0d5dd)",
+                      borderRadius: 12,
+                      padding: "0.75rem",
+                    }}>
+                      <small className="skima-muted">ACCOUNT NAME</small>
+                      <div style={{ fontWeight: 800, marginTop: 3 }}>
+                        {resolvePayoutAccount.isPending
+                          ? "Confirming with Paystack…"
+                          : resolvedPayoutName || "Account name could not be confirmed yet"}
+                      </div>
+                    </div>
+                  ) : null}
+                  <Button
+                    icon={Building2}
+                    variant="outline"
+                    disabled={
+                      !payoutBankCode ||
+                      !payoutAccountIsValid ||
+                      !resolvedPayoutName ||
+                      resolvedPayoutKey !== payoutAccountKey ||
+                      createRevenuePayoutAccount.isPending
+                    }
+                    isLoading={createRevenuePayoutAccount.isPending}
+                    onClick={() => createRevenuePayoutAccount.mutate({
+                      bankCode: payoutBankCode,
+                      accountNumber: payoutAccountNumber,
+                    })}
+                  >
+                    Save verified company payout account
+                  </Button>
+                </div>
+
+                <div style={{ display: "grid", gap: "0.8rem", alignContent: "start" }}>
+                  <h3 style={{ margin: 0 }}>Withdraw company revenue</h3>
+                  <label style={{ display: "grid", gap: "0.35rem" }}>
+                    <span style={{ fontWeight: 700 }}>Amount (NGN)</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={revenuePayoutAmount}
+                      onChange={(event) => setRevenuePayoutAmount(event.currentTarget.value)}
+                      style={adminInputStyle}
+                    />
+                  </label>
+                  <p className="skima-muted" style={{ margin: 0 }}>
+                    This company treasury payout has no SKIMA withdrawal fee. The amount entered is the amount sent to the selected bank.
+                  </p>
+                  <Button
+                    icon={Send}
+                    disabled={
+                      !selectedRevenueBeneficiaryId ||
+                      !validRevenuePayoutAmount(
+                        revenuePayoutAmount,
+                        payoutContext.data.availableBalance,
+                        providerBalance.data?.balance ?? null,
+                      ) ||
+                      withdrawRevenue.isPending
+                    }
+                    isLoading={withdrawRevenue.isPending}
+                    onClick={() => withdrawRevenue.mutate({
+                      beneficiaryId: selectedRevenueBeneficiaryId,
+                      amount: Number(revenuePayoutAmount),
+                    })}
+                  >
+                    Withdraw SKIMA revenue
+                  </Button>
+
+                  {payoutContext.data.recentPayouts.length ? (
+                    <div style={{ display: "grid", gap: "0.45rem" }}>
+                      <h4 style={{ margin: "0.4rem 0 0" }}>Recent company withdrawals</h4>
+                      {payoutContext.data.recentPayouts.slice(0, 6).map((payout) => (
+                        <div key={payout.id} className="admin-detail-row">
+                          <span>
+                            {payout.publicReference ?? payout.id}
+                            <br />
+                            <small>{formatDate(payout.requestedAt)}</small>
+                          </span>
+                          <strong>
+                            {money(payout.amount, payout.currencyCode)} · {label(payout.status)}
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              {payoutNotice ? (
+                <div role="status" style={{
+                  borderRadius: 12,
+                  padding: "0.8rem 0.9rem",
+                  background: "rgba(15, 157, 138, 0.08)",
+                  fontWeight: 650,
+                }}>
+                  {payoutNotice}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="sk-panel">
         <div className="sk-panel__header">
           <div>
@@ -491,6 +948,8 @@ function normalizeSummary(value: unknown): RevenueSummary {
     grossCredits: requireRecordNumber(record, "grossCredits", "Revenue summary"),
     reversalsAndDebits: requireRecordNumber(record, "reversalsAndDebits", "Revenue summary"),
     entryCount: requireRecordNumber(record, "entryCount", "Revenue summary"),
+    treasuryNetOutflow: recordNumber(record, "treasuryNetOutflow"),
+    treasuryEntryCount: recordNumber(record, "treasuryEntryCount"),
     byStream: requireRecordArray(record, "byStream", "Revenue summary"),
     byComponent: requireRecordArray(record, "byComponent", "Revenue summary"),
   };
@@ -507,6 +966,50 @@ function normalizeFeeControls(value: unknown): readonly FeeControl[] {
     if (!key || !displayName || !description || !unitLabel) throw new Error("A platform fee control is incomplete.");
     return { key, displayName, description, unitLabel, currencyCode: recordString(record,"currencyCode") ?? "NGN", amount: requireRecordNumber(record,"amount","Platform fee control"), policyVersionId: recordString(record,"policyVersionId"), policyVersion: recordNumber(record,"policyVersion"), effectiveFrom: recordString(record,"effectiveFrom") };
   });
+}
+
+const adminInputStyle = {
+  minHeight: 44,
+  border: "1px solid var(--sk-border, #d0d5dd)",
+  borderRadius: 10,
+  padding: "0 0.75rem",
+  font: "inherit",
+  background: "var(--sk-surface, #fff)",
+  color: "inherit",
+} as const;
+
+function filteredPayoutBanks(
+  banks: readonly { readonly name: string; readonly code: string }[],
+  query: string,
+) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return banks;
+  return banks.filter((bank) =>
+    bank.name.toLowerCase().includes(normalized) || bank.code.includes(normalized)
+  );
+}
+
+function payoutBankName(
+  banks: readonly { readonly name: string; readonly code: string }[],
+  code: string | null,
+) {
+  if (!code) return "Bank";
+  return banks.find((bank) => bank.code === code)?.name ?? `Bank code ${code}`;
+}
+
+function validRevenuePayoutAmount(
+  value: string,
+  ledgerBalance: number,
+  providerBalance: number | null,
+) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > ledgerBalance) return false;
+  if (providerBalance !== null && amount > providerBalance) return false;
+  return true;
+}
+
+function revenuePayoutKey(scope: string) {
+  return `admin-revenue-${scope}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function requireRecord(value: unknown, label: string): PlatformRecord {
