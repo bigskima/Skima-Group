@@ -580,7 +580,7 @@ async function generateCylinderPresentation(
   input: Readonly<Record<string, unknown>>,
   provider: ImageProviderConfig | null,
 ): Promise<Readonly<Record<string, unknown>>> {
-  const resolvedProvider = provider ?? resolveImageProvider();
+  const resolvedProvider = provider ?? await resolveImageProvider(supabase, "ai.lpg.cylinder.presentation");
 
   const taskRunId = requireString(task.id);
   const subjectId = requireString(task.subject_id);
