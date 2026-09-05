@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.110.9";
 
 import { jsonResponse, optionsResponse, requestId } from "../_shared/http.ts";
-import { resolveAiProviderRoute } from "../_shared/ai-provider-runtime.ts";
+import { AiProviderRuntimeError, resolveAiProviderRoute } from "../_shared/ai-provider-runtime.ts";
 
 const DEFAULT_LIMIT = 25;
 const DEFAULT_WEBHOOK_TIMEOUT_MS = 5_000;
@@ -684,7 +684,11 @@ async function resolveImageProvider(
       secretRef: route.secretRef,
     };
   } catch (error) {
-    if (error instanceof Error && !error.message.includes("resolve_ai_provider_route")) {
+    const routingRpcUnavailable =
+      error instanceof AiProviderRuntimeError &&
+      error.code === "route_resolution_failed";
+
+    if (!routingRpcUnavailable) {
       throw error;
     }
 
