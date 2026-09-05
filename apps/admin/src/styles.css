@@ -736,6 +736,79 @@
 }
 
 
+/* Service quality intelligence */
+
+.admin-quality-triage-cell {
+  align-items: flex-start;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-quality-triage-cell small {
+  color: #718087;
+  font-size: 0.67rem;
+}
+
+.admin-quality-triage-cell small.is-overdue {
+  color: #bd3f49;
+  font-weight: 700;
+}
+
+.admin-quality-triage-advisory,
+.admin-quality-triage-unavailable {
+  border-radius: 10px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  margin: 8px 0 0;
+  max-width: 720px;
+  padding: 8px 10px;
+}
+
+.admin-quality-triage-advisory {
+  background: #eef8f5;
+  color: #42635c;
+}
+
+.admin-quality-triage-unavailable {
+  background: #fff7e8;
+  color: #8a611a;
+}
+
+.admin-quality-triage-note {
+  background: #f8fafb;
+  border: 1px solid #e2e9eb;
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.admin-quality-triage-note > div {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-quality-triage-note > div > span:not(.sk-badge) {
+  color: #6f7e84;
+  font-size: 0.72rem;
+}
+
+.admin-quality-triage-note p {
+  color: #31484e;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.admin-quality-triage-note small {
+  color: #7b888d;
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
 /* SKIMA Intelligence */
 
 .admin-ai-layout {
