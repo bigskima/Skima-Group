@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { Clock3, MapPin, PackageCheck, Route, ScanLine, Search, UserCheck } from "lucide-react-native";
+import { MapPin, PackageCheck, Route, ScanLine, Search, UserCheck } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries, useLpgConfig } from "../api/domains";
@@ -159,7 +159,6 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
             const driverReference = driver
               ? firstString(driver, ["publicReference", "public_reference", "driverId", "driver_id"])
               : firstString(job, ["driverReference", "driver_reference"]);
-            const driverVerificationStatus = firstString(job, ["driverVerificationStatus", "driver_verification_status"]);
             const locationText = location
               ? (firstString(location, ["formattedAddress", "formatted_address", "displayName", "display_name"]) ?? "Location details available in the job")
               : workspace === "station"
@@ -286,13 +285,6 @@ function tagStatusLabel(status: string) {
   return labels[key] ?? key.replace(/_/g, " ");
 }
 
-function driverStatusLabel(status: string) {
-  const key = normalizedStatus(status);
-  if (["verified", "approved", "active"].includes(key)) return "Verified driver";
-  if (["rejected", "blocked", "suspended"].includes(key)) return "Driver not eligible";
-  return key.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase());
-}
-
 function jobStatusLabel(status: string) {
   const labels: Record<string, string> = {
     accepted: "Accepted",
@@ -342,6 +334,7 @@ const styles = StyleSheet.create({
   workloadHint: { ...typography.caption, fontSize: 10, lineHeight: 15 },
   searchCard: { gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
   searchHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
+  detailIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   searchCopy: { flex: 1, gap: 3 },
   searchTitle: { ...typography.subheading, fontSize: 15 },
   searchBody: { ...typography.caption, lineHeight: 18 },
