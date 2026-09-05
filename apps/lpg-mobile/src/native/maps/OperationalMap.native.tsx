@@ -13,6 +13,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
   averageCoordinate,
   cameraBounds,
+  DEFAULT_MAP_CENTER,
   fromLngLat,
   getMapsRuntimeConfig,
   pointCollection,
@@ -45,9 +46,9 @@ export function OperationalMap({
 }: OperationalMapProps) {
   const camera = useRef<CameraRef>(null);
   const mapConfig = getMapsRuntimeConfig();
-  const first = points[0] ?? averageCoordinate(points);
+  const first = points[0] ?? averageCoordinate(points) ?? (onSelectPoint ? DEFAULT_MAP_CENTER : null);
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
-  const zoom = clamp(initialZoom, minZoom, maxZoom);
+  const zoom = clamp(points.length ? initialZoom : 6, minZoom, maxZoom);
   const markers = useMemo(() => pointCollection(points), [pointKey]);
   const route = useMemo(() => routeCollection(points), [pointKey]);
 
