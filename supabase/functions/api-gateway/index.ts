@@ -2292,7 +2292,10 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         }, 503);
       }
       const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
-      const approveResult = await serviceClient.rpc("approve_wallet_withdrawal", {
+      // Approval is a Super Admin action, so execute it in the authenticated
+      // request context. This preserves approved_by instead of attributing the
+      // human treasury decision to the service role.
+      const approveResult = await supabase.rpc("approve_wallet_withdrawal", {
         target_idempotency_key: `${payoutIdempotencyKey}:approve`,
         target_metadata: {
           payoutKind: "platform_revenue_treasury",
