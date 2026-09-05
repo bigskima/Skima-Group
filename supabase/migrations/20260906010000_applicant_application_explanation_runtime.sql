@@ -142,7 +142,18 @@ begin
     ) latest_review on true
     cross join lateral (
       select
-        count(*)::integer as missing_count,
+        count(*) filter (
+          where nullif(
+            btrim(
+              coalesce(
+                coalesce(active_payload.payload, '{}'::jsonb)
+                  #>> string_to_array(field_definition ->> 'path', '.'),
+                ''
+              )
+            ),
+            ''
+          ) is null
+        )::integer as missing_count,
         coalesce(
           jsonb_agg(
             coalesce(field_definition ->> 'label', field_definition ->> 'path')
