@@ -11,6 +11,7 @@ const [
   refillOutlookSql,
   complaintStatusSql,
   cylinderVisualReviewSql,
+  customerPriceExplanationSql,
   partnerRiskSql,
   partnerRiskGuardSql,
   dispatchShadowSql,
@@ -49,6 +50,7 @@ const [
   readRepositoryFile("supabase/migrations/20260905225000_customer_refill_outlook_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905230500_customer_complaint_status_read_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905234000_ai_cylinder_visual_review_runtime.sql"),
+  readRepositoryFile("supabase/migrations/20260906005000_customer_price_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233000_ai_partner_trust_risk_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233500_ai_partner_risk_configuration_guard.sql"),
   readRepositoryFile("supabase/migrations/20260905235000_ai_dispatch_shadow_intelligence.sql"),
@@ -1622,7 +1624,101 @@ Deno.test("Supabase migration versions are unique", async () => {
   }
 });
 
+Deno.test("customer price explanations use immutable accepted order snapshots only", () => {
+  const sql = normalizeWhitespace(customerPriceExplanationSql);
+
+  assertIncludes(
+    sql,
+    "where owned_order.id = target_lpg_order_id and owned_order.customer_user_id = auth.uid()",
+    "specific customer price reads must prove order ownership",
+  );
+  assertIncludes(
+    sql,
+    "where target_order.customer_user_id = auth.uid()",
+    "all customer price explanation rows must be scoped to the signed-in customer",
+  );
+  assertIncludes(
+    sql,
+    "target_order.financial_policy_snapshot #>> '{acceptedquote,totalamount}'",
+    "price explanation must read the immutable accepted quote snapshot",
+  );
+  assertIncludes(
+    sql,
+    "target_order.financial_policy_snapshot #>> '{commercialquote,stationpriceperkg}'",
+    "station price/kg must come from the accepted commercial snapshot when available",
+  );
+  assertIncludes(
+    sql,
+    "target_order.financial_policy_snapshot #>> '{commercialquote,platformmarkupperkg}'",
+    "SKIMA markup/kg must come from the accepted commercial snapshot when available",
+  );
+  assertIncludes(
+    sql,
+    "'adminpricingsimulationused', false",
+    "customer price projection must explicitly exclude admin pricing simulation",
+  );
+  assertNotIncludes(
+    sql,
+    "driverpayout",
+    "customer price projection must not disclose internal driver payout data",
+  );
+  assertNotIncludes(
+    sql,
+    "platformlogisticsmargin",
+    "customer price projection must not disclose internal platform logistics margin",
+  );
+  assertIncludes(
+    gatewaySource,
+    "priceExplanations:",
+    "customer Ask SKIMA context must include customer-safe accepted price explanations",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Never substitute admin pricing simulations, current station prices, or a newly calculated scenario for the accepted order price.",
+    "assistant prompt must keep accepted order price authoritative",
+  );
+  assertIncludes(
+    customerOrderScreen,
+    'label="Explain this price"',
+    "customer order detail must expose contextual price explanation",
+  );
+  assertIncludes(
+    customerOrderScreen,
+    "Nothing is sent until you choose Send.",
+    "price explanation action must remain user-triggered and prefill-only",
+  );
+  assertIncludes(
+    mobileAssistant,
+    "Explain my latest refill price",
+    "customer assistant should expose price explanation as a primary suggestion",
+  );
+});
+
 Deno.test("AI workspace context keeps internal intelligence out of station/customer/driver surfaces", () => {
+  const customerContext = sectionBetween(
+    gatewaySource,
+    'if (workspace === "customer")',
+    'if (workspace === "driver")',
+  );
+  assertIncludes(
+    customerContext,
+    "read_my_lpg_price_explanations",
+    "customer assistant must ground price questions in the customer-safe accepted snapshot",
+  );
+  for (const internalRpc of [
+    "read_ai_partner_risk_assessments",
+    "read_ai_dispatch_shadow_assessments",
+    "read_ai_finance_reconciliation_findings",
+    "read_ai_pricing_intelligence",
+    "read_ai_expansion_opportunities",
+  ]) {
+    assertNotIncludes(
+      customerContext,
+      internalRpc,
+      "customer assistant must not query internal intelligence with " + internalRpc,
+    );
+  }
+
   const stationContext = sectionBetween(
     gatewaySource,
     'if (workspace === "station")',
