@@ -748,6 +748,10 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
                 Paystack transfer balance is external provider cash and may include money owed to customers or partners.
                 It is not the same as SKIMA Revenue. The revenue-ledger balance is the maximum company-owned amount this screen permits.
               </p>
+              <p className="skima-muted" style={{ margin: 0 }}>
+                Live automated payouts require SKIMA's Paystack account to have Transfers enabled as a Registered Business
+                and transfer confirmation/OTP disabled. Bank-account holder names are resolved by Paystack; they are never typed into this screen.
+              </p>
 
               <div className="admin-command-grid">
                 <div style={{ display: "grid", gap: "0.8rem" }}>
