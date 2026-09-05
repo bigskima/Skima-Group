@@ -101,6 +101,7 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
   const [snoozeDays, setSnoozeDays] = useState("7");
   const [busy, setBusy] = useState(false);
+  const [policyError, setPolicyError] = useState<string | null>(null);
   const targetsRef = useRef(new Map<string, View>());
   const automaticLoadRef = useRef<string | null>(null);
 
@@ -168,6 +169,7 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
     }
 
     setConfirmedPolicy(false);
+    setPolicyError(null);
     setPolicy({
       key: policyKey,
       title: textValue(policyData.title, "SKIMA terms"),
@@ -258,6 +260,7 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
   const agreePolicy = useCallback(async () => {
     if (!policy || !payload?.guide || !confirmedPolicy || busy) return;
     setBusy(true);
+    setPolicyError(null);
     try {
       const { error } = await session.supabase.rpc("accept_policy", {
         target_policy_key: policy.key,
@@ -276,6 +279,7 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
       await beginTour(payload);
     } catch (cause) {
       if (__DEV__) console.info("SKIMA policy acceptance unavailable", cause);
+      setPolicyError("We couldn’t save your agreement. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -332,16 +336,15 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
   const policyRoute = policy?.key === "policy.customer.terms"
     ? "/policies/customer-terms"
     : "/policies/partner-participation";
-  const policyVisible = phase === "policy" && policy && !pathname.startsWith("/policies/");
-
   return (
     <GuideContext.Provider value={value}>
       {children}
-      {policyVisible ? (
+      {phase === "policy" && policy && !pathname.startsWith("/policies/") ? (
         <PolicyGate
           policy={policy}
           confirmed={confirmedPolicy}
           busy={busy}
+          error={policyError}
           onToggle={() => setConfirmedPolicy((current) => !current)}
           onReview={() => router.push(policyRoute as never)}
           onAgree={() => void agreePolicy()}
@@ -405,6 +408,7 @@ function PolicyGate({
   policy,
   confirmed,
   busy,
+  error,
   onToggle,
   onReview,
   onAgree,
@@ -413,6 +417,7 @@ function PolicyGate({
   policy: PolicyPrompt;
   confirmed: boolean;
   busy: boolean;
+  error: string | null;
   onToggle(): void;
   onReview(): void;
   onAgree(): void;
@@ -455,6 +460,7 @@ function PolicyGate({
             </View>
             <Text style={[styles.checkText, { color: palette.ink }]}>{policy.acceptanceStatement}</Text>
           </Pressable>
+          {error ? <Text accessibilityRole="alert" style={styles.policyError}>{error}</Text> : null}
           <Pressable
             accessibilityRole="button"
             disabled={!confirmed || busy}
@@ -758,6 +764,7 @@ const styles = StyleSheet.create({
   textButton: { minHeight: 38, alignItems: "center", justifyContent: "center" },
   textButtonText: { ...typography.caption, fontWeight: "900" },
   policyNote: { ...typography.caption, fontSize: 9, lineHeight: 14, textAlign: "center" },
+  policyError: { color: colors.danger, ...typography.caption, fontWeight: "800", lineHeight: 17 },
   disabled: { opacity: 0.42 },
   shade: { position: "absolute", backgroundColor: "rgba(7,8,10,.70)" },
   highlight: {
