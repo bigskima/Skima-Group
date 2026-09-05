@@ -13,6 +13,7 @@ import {
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { selectWorkspaceWallet, walletRecordId } from "../utilities/financeWallet";
+import { AiContextAction } from "./AiContextAction";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
@@ -79,6 +80,15 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
             <Metric icon={<Clock3 color={palette.warning} size={19} />} label="Pending activity" value={String(pendingCount)} />
             <Metric icon={<ArrowDownToLine color={palette.brand} size={19} />} label="Withdrawals" value={String(withdrawalRows.length)} />
           </View>
+
+          {workspace === "driver" ? (
+            <AiContextAction
+              workspace="driver"
+              label="Explain my earnings"
+              detail="Ask why recent delivery pay is pending or posted. Nothing is sent until you choose Send."
+              prompt="Explain my recent LPG delivery earnings using my locked payout records. Show which payouts are still pending delivery or posting and which are actually posted to my driver wallet. For each relevant payout, explain the base, distance, load and route surcharge components when they are available. Do not estimate earnings, release commission, move wallet money or change a payout."
+            />
+          ) : null}
 
           <SectionHeader
             title="Recent activity"
