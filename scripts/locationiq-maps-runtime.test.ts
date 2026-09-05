@@ -193,6 +193,13 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
     adminReview,
     mobileGateway,
     driverTracking,
+    geographyRepair,
+    geographyCutover,
+    adminCoverage,
+    adminGeometry,
+    customerLocationSave,
+    partnerApplication,
+    driverApplication,
   ] =
     await Promise.all([
       readRepositoryFile("supabase/migrations/20260901204813_locationiq_maps_provider_runtime.sql"),
@@ -204,6 +211,17 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
       readRepositoryFile("apps/admin/src/admin-partner-location-review-workspace.tsx"),
       readRepositoryFile("apps/lpg-mobile/src/native/domains/maps/gateway.ts"),
       readRepositoryFile("apps/lpg-mobile/src/native/device/driverTracking.ts"),
+      readRepositoryFile(
+        "supabase/migrations/20260905011955_repair_geography_admin_setup_and_map_renderer.sql",
+      ),
+      readRepositoryFile(
+        "supabase/migrations/20260905013500_complete_geography_cutover_review_workflow.sql",
+      ),
+      readRepositoryFile("apps/admin/src/admin-service-coverage-workspace.tsx"),
+      readRepositoryFile("apps/admin/src/admin-geometry-editor.tsx"),
+      readRepositoryFile("apps/lpg-mobile/src/native/ui/locationSave.ts"),
+      readRepositoryFile("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx"),
+      readRepositoryFile("apps/lpg-mobile/src/native/ui/DriverApplicationEntryScreen.tsx"),
     ]);
 
   for (const route of ["autocomplete", "geocode", "reverse-geocode", "route-estimate"]) {
@@ -238,6 +256,35 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
   assertIncludes(adminReview, '{ label: "State"');
   assertIncludes(adminReview, '{ label: "LGA"');
   assertIncludes(adminReview, '{ label: "Service zone"');
+
+  // Geography setup must be driven by the repaired backend contract rather
+  // than several RLS-sensitive direct table reads.
+  assertIncludes(geographyRepair, "create or replace function public.read_geography_admin_setup()");
+  assertIncludes(geographyRepair, "create or replace function public.read_maps_renderer_configuration()");
+  assertIncludes(adminCoverage, 'supabase.rpc("read_geography_admin_setup")');
+  assertNotIncludes(adminCoverage, 'supabase.from("geography_levels")');
+  assertIncludes(adminCoverage, 'supabase.rpc("import_legacy_spatial_geographies")');
+  assertIncludes(adminCoverage, 'supabase.rpc("verify_geography_migration_mapping"');
+  assertIncludes(adminCoverage, 'supabase.rpc("set_universal_geography_authority"');
+  assertIncludes(geographyCutover, "create or replace function public.verify_geography_migration_mapping(");
+  assertIncludes(geographyCutover, "migration_status = 'verified'");
+  assertIncludes(geographyCutover, "VERIFIED_BY_ADMIN");
+
+  // Admin rendering must not require an env-only basemap to be usable.
+  assertIncludes(adminGeometry, 'supabase.rpc("read_maps_renderer_configuration")');
+  assertIncludes(adminGeometry, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+  assertNotIncludes(
+    adminGeometry,
+    "Configure VITE_MAP_TILE_URL_TEMPLATE for the provider basemap",
+  );
+
+  // Customer and partner saves must preserve normalized location data and
+  // must not erase geography written by another onboarding step.
+  assertIncludes(customerLocationSave, "prepareLocationSave");
+  assertIncludes(customerLocationSave, "formattedAddress");
+  assertIncludes(partnerApplication, "...basePayload");
+  assertIncludes(partnerApplication, "location: lastLocation ?? existingLocation ?? null");
+  assertIncludes(driverApplication, "...existingService");
 });
 
 function testAdapter(fetcher: typeof fetch, retryCount = 0) {
