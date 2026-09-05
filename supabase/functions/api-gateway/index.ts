@@ -9820,6 +9820,10 @@ async function buildAiAssistantContext(
         target_minimum_level: "medium",
         target_limit: 50,
       }),
+      supabase.rpc("read_ai_dispatch_shadow_assessments", {
+        target_disagreement_only: false,
+        target_limit: 40,
+      }),
     ]);
     assertAiContextQuery(jobs.error);
     assertAiContextQuery(runtime.error);
@@ -9838,7 +9842,7 @@ async function buildAiAssistantContext(
     if (access.data !== true) {
       throw new AiProviderRuntimeError("forbidden", "Admin AI access is not available.");
     }
-    const [orders, applications, aiRuns, insights, forecasts, riskAssessments] = await Promise.all([
+    const [orders, applications, aiRuns, insights, forecasts, riskAssessments, dispatchAssessments] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
         .select("id,public_reference,status,payment_status,assignment_status,station_branch_id,driver_profile_id,created_at,updated_at")
@@ -9875,6 +9879,9 @@ async function buildAiAssistantContext(
     const riskRows = riskAssessments.error
       ? []
       : Array.isArray(riskAssessments.data) ? riskAssessments.data : [];
+    const dispatchRows = dispatchAssessments.error
+      ? []
+      : Array.isArray(dispatchAssessments.data) ? dispatchAssessments.data : [];
     return {
       ...base,
       recentOrders: orders.data ?? [],
@@ -9883,6 +9890,7 @@ async function buildAiAssistantContext(
       operationalInsights: insightRows,
       demandForecasts: forecastRows,
       partnerRiskAssessments: riskRows,
+      dispatchShadowAssessments: dispatchRows,
     };
   }
 
@@ -9919,6 +9927,8 @@ function aiSystemPrompt(workspace: string): string {
     "Customer support case context contains only that customer's complaint status and public support history. Never invent internal review notes, private moderation decisions, or a resolution that is not present.",
     "Partner risk assessments are internal advisory signals for authorized administrators only. They are derived from configured SKIMA evidence, are not proof of fraud, and must never be described as an automatic suspension, fund hold, dispatch block, verification decision or public reputation score.",
     "Never disclose internal partner risk assessments to customer, driver or station workspaces.",
+    "Dispatch shadow assessments are admin-only comparisons. Canonical SKIMA dispatch remains authoritative; a shadow advisory rank never means a driver was assigned, rejected, blocked or made ineligible. Risk signals in shadow dispatch are review-only and have no ranking effect.",
+    "Never disclose dispatch shadow assessments to customer, driver or station workspaces.",
     "Be concise, practical and use normal customer-facing language. Do not expose internal database field names unless the user explicitly asks for technical detail.",
   ].join("\n");
 }
@@ -9933,7 +9943,7 @@ function aiWorkspaceSuggestions(workspace: string): readonly string[] {
   if (workspace === "station") {
     return ["What needs attention?", "How busy could the next 7 days be?", "Summarize my current queue"];
   }
-  return ["What needs attention?", "Which partner risks need review?", "Where is LPG demand likely to be highest?"];
+  return ["Where does shadow dispatch disagree?", "Which partner risks need review?", "Where is LPG demand likely to be highest?"];
 }
 
 async function adminAiRuntimeResponse(
@@ -9953,7 +9963,7 @@ async function adminAiRuntimeResponse(
     return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
   }
   const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
-  const [capabilities, routes, providers, insights, forecasts, riskAssessments] = await Promise.all([
+  const [capabilities, routes, providers, insights, forecasts, riskAssessments, dispatchAssessments] = await Promise.all([
     serviceClient
       .from("ai_capabilities")
       .select("id,key,display_name,description,category,response_mode,control_mode,status,config,updated_at")
@@ -9986,6 +9996,10 @@ async function adminAiRuntimeResponse(
       .in("risk_level", ["medium", "high", "critical"])
       .order("score", { ascending: false })
       .limit(100),
+    requestClient.rpc("read_ai_dispatch_shadow_assessments", {
+      target_disagreement_only: false,
+      target_limit: 50,
+    }),
   ]);
 
   if (capabilities.error) return databaseError(capabilities.error, id);
@@ -10001,6 +10015,9 @@ async function adminAiRuntimeResponse(
       insights: insights.error ? [] : insights.data ?? [],
       forecasts: forecasts.error ? [] : forecasts.data ?? [],
       riskAssessments: riskAssessments.error ? [] : riskAssessments.data ?? [],
+      dispatchAssessments: dispatchAssessments.error
+        ? []
+        : Array.isArray(dispatchAssessments.data) ? dispatchAssessments.data : [],
       userId: user.id,
     },
     requestId: id,
