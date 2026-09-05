@@ -10,6 +10,7 @@ const [
   forecastGuardSql,
   refillOutlookSql,
   complaintStatusSql,
+  cylinderVisualReviewSql,
   partnerRiskSql,
   partnerRiskGuardSql,
   dispatchShadowSql,
@@ -29,6 +30,8 @@ const [
   mobileAssistant,
   mobileAiLauncher,
   mobileAiContextAction,
+  cylinderVisualReviewPanel,
+  cylinderDetailScreen,
   customerOrderScreen,
   jobDetailScreen,
   stationInventoryScreen,
@@ -45,6 +48,7 @@ const [
   readRepositoryFile("supabase/migrations/20260905223500_ai_demand_forecast_configuration_guard.sql"),
   readRepositoryFile("supabase/migrations/20260905225000_customer_refill_outlook_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905230500_customer_complaint_status_read_runtime.sql"),
+  readRepositoryFile("supabase/migrations/20260905234000_ai_cylinder_visual_review_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233000_ai_partner_trust_risk_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233500_ai_partner_risk_configuration_guard.sql"),
   readRepositoryFile("supabase/migrations/20260905235000_ai_dispatch_shadow_intelligence.sql"),
@@ -64,6 +68,8 @@ const [
   readRepositoryFile("apps/lpg-mobile/src/native/ui/AiAssistantScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/AiAssistantLauncher.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/AiContextAction.tsx"),
+  readRepositoryFile("apps/lpg-mobile/src/native/ui/CylinderVisualReviewPanel.tsx"),
+  readRepositoryFile("apps/lpg-mobile/src/native/ui/CylinderDetailScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/CustomerOrdersScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/StationInventoryScreen.tsx"),
@@ -1509,6 +1515,111 @@ Deno.test("service-area expansion intelligence is admin-only and cannot launch c
     "upsert_coverage_policy",
     "AI expansion UI must not create or modify coverage policies",
   );
+});
+
+Deno.test("cylinder visual review is owner-bound, opt-in, and non-authoritative", () => {
+  const sql = normalizeWhitespace(cylinderVisualReviewSql);
+
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_cylinder_visual_reviews",
+    "visual review observations must be stored separately from cylinder business state",
+  );
+  assertIncludes(
+    sql,
+    "manual_inspection_recommended boolean not null default true",
+    "visual review must always recommend manual inspection rather than certify safety",
+  );
+  assertIncludes(
+    sql,
+    "safety_certification boolean not null default false",
+    "visual review must never certify cylinder safety",
+  );
+  assertIncludes(
+    sql,
+    "mutates_cylinder boolean not null default false",
+    "visual review records must be non-mutating",
+  );
+  assertIncludes(
+    gatewaySource,
+    ".eq(\"owner_user_id\", params.authUser.id)",
+    "visual review API must restrict both cylinder and media reads to the signed-in owner",
+  );
+  assertIncludes(
+    gatewaySource,
+    "if (!attachedAssetIds.includes(sourceMediaAssetId))",
+    "visual review API must only accept an original media asset attached to that cylinder",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Choose an original photo already attached to this cylinder.",
+    "visual review API must reject unrelated user media",
+  );
+  assertIncludes(
+    cylinderVisualReviewPanel,
+    "Review is optional and runs only when you press the button below.",
+    "mobile visual review must remain explicit opt-in",
+  );
+  assertIncludes(
+    cylinderVisualReviewPanel,
+    "Photo review is not a safety inspection or certification.",
+    "mobile visual review must visibly state the safety limitation",
+  );
+  assertIncludes(
+    cylinderDetailScreen,
+    "<CylinderVisualReviewPanel",
+    "customer cylinder details must actually surface the visual review feature",
+  );
+  assertIncludes(
+    cylinderDetailScreen,
+    "sourceMediaAssetId={originalAssetId}",
+    "visual review UI must use the cylinder's existing original source photo",
+  );
+});
+
+Deno.test("multimodal provider migration preserves existing modes while adding image support", () => {
+  const sql = normalizeWhitespace(cylinderVisualReviewSql);
+
+  assertIncludes(
+    sql,
+    "when (config -> 'input_modes') ? 'text' then '[]'::jsonb",
+    "Gemini input-mode upgrade must preserve/add text support",
+  );
+  assertIncludes(
+    sql,
+    "when (config -> 'input_modes') ? 'image' then '[]'::jsonb",
+    "Gemini input-mode upgrade must append image support to an existing mode array",
+  );
+  assertIncludes(
+    sql,
+    "create or replace function public.validate_ai_provider_route_input_modes",
+    "multimodal routes must validate provider input-mode compatibility",
+  );
+  assertIncludes(
+    sql,
+    "cannot remove input mode % while active ai route % requires it",
+    "provider edits must not remove an input mode required by an active capability",
+  );
+});
+
+Deno.test("Supabase migration versions are unique", async () => {
+  const migrationDirectory = new URL("supabase/migrations/", repositoryRoot);
+  const seen = new Map<string, string>();
+
+  for await (const entry of Deno.readDir(migrationDirectory)) {
+    if (!entry.isFile || !entry.name.endsWith(".sql")) continue;
+    const match = entry.name.match(/^(\d{14})_/);
+    if (!match) continue;
+
+    const version = match[1];
+    const existing = seen.get(version);
+    if (existing) {
+      throw new Error(
+        "Duplicate Supabase migration version " + version + ": " + existing + " and " + entry.name,
+      );
+    }
+    seen.set(version, entry.name);
+  }
 });
 
 Deno.test("AI workspace context keeps internal intelligence out of station/customer/driver surfaces", () => {
