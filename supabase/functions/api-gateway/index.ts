@@ -10123,27 +10123,11 @@ async function executePaystackWithdrawalTransfer(
 }
 
 async function resolveActivePaymentProviderKey(supabase: SupabaseClient): Promise<string> {
-  try {
-    const { data } = await supabase
-      .from("configuration_entries")
-      .select("value")
-      .eq("namespace", "platform.payments")
-      .eq("key", "provider_selection")
-      .eq("scope_type", "global")
-      .eq("status", "active")
-      .maybeSingle();
-
-    if (data?.value && typeof data.value === "object") {
-      const activeKey = (data.value as Record<string, unknown>).active_provider_key;
-      if (typeof activeKey === "string" && activeKey) {
-        return activeKey;
-      }
-    }
-  } catch (_err) {
-    // Fall back to default Paystack provider
+  const result = await supabase.rpc("resolve_active_payment_provider");
+  if (result.error) {
+    throw new Error(`Payment provider selection is unavailable: ${result.error.message}`);
   }
-
-  return "provider.payment.paystack";
+  return requireString(result.data, "active payment provider");
 }
 
 async function configurePaystackWithdrawalBeneficiary(params: {
