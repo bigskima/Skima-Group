@@ -15,6 +15,11 @@ import {
   readPaystackBalances,
   resolvePaystackBankAccount,
 } from "../_shared/paystack-payouts.ts";
+import {
+  AiProviderRuntimeError,
+  invokeAiText,
+  resolveAiProviderRoute,
+} from "../_shared/ai-provider-runtime.ts";
 
 const ROUTES = new Set([
   "/health",
@@ -48,6 +53,9 @@ const ROUTES = new Set([
   "/admin/maps/location/providers",
   "/admin/maps/location/audit",
   "/admin/maps/location/provider",
+  "/admin/ai/runtime",
+  "/admin/ai/provider-route",
+  "/admin/ai/provider-config",
   "/admin/system/overview",
   "/admin/system/health",
   "/admin/system/jobs",
@@ -226,6 +234,8 @@ const ROUTES = new Set([
   "/runtime/tracking/points",
   "/runtime/verifications",
   "/runtime/notifications/queue",
+  "/runtime/ai/assistant",
+  "/runtime/ai/conversations",
   "/runtime/ai/queue",
   "/runtime/ai/process",
   "/runtime/settlements/execute",
@@ -344,6 +354,47 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       timestamp: new Date().toISOString(),
       requestId: id,
     });
+  }
+
+  if (routePath === "/admin/ai/runtime" && request.method === "GET") {
+    return adminAiRuntimeResponse(supabase, authResult.user, supabaseUrl, id);
+  }
+
+  if (routePath === "/admin/ai/provider-route" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("set_ai_capability_provider", {
+        target_capability_key: requirePlatformKey(payload.capabilityKey, "capabilityKey"),
+        target_provider_adapter_key: requirePlatformKey(payload.providerAdapterKey, "providerAdapterKey"),
+        target_model_key: requireString(payload.modelKey, "modelKey"),
+        target_reason: requireString(payload.reason, "reason"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_route_config: optionalRecord(payload.routeConfig) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/ai/provider-config" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("upsert_ai_provider_configuration", {
+        target_provider_key: requirePlatformKey(payload.providerKey, "providerKey"),
+        target_display_name: requireString(payload.displayName, "displayName"),
+        target_transport: requireString(payload.transport, "transport"),
+        target_api_base_url: optionalString(payload.apiBaseUrl),
+        target_secret_ref: optionalString(payload.secretRef),
+        target_status: optionalString(payload.status) ?? "inactive",
+        target_config: optionalRecord(payload.config) ?? {},
+        target_reason: requireString(payload.reason, "reason"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+      }),
+      id,
+    );
   }
 
   if (routePath === "/engines/catalog" && request.method === "GET") {
@@ -4853,6 +4904,61 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     );
   }
 
+  if (routePath === "/runtime/ai/assistant" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+
+    try {
+      return await aiAssistantResponse({
+        authUser: authResult.user,
+        id,
+        payload: body.value,
+        requestClient: supabase,
+        supabaseUrl,
+      });
+    } catch (error) {
+      if (error instanceof RequestValidationError) throw error;
+
+      console.error(JSON.stringify({
+        severity: "error",
+        source: "api-gateway.ai-assistant",
+        requestId: id,
+        userId: authResult.user.id,
+        code: error instanceof AiProviderRuntimeError ? error.code : "assistant_failed",
+        message: error instanceof Error ? error.message : "unknown error",
+      }));
+
+      if (error instanceof AiProviderRuntimeError) {
+        return jsonResponse({
+          ok: false,
+          error: error.code,
+          message: error.code === "provider_rate_limited"
+            ? "SKIMA AI is busy right now. Please try again shortly."
+            : "SKIMA AI is temporarily unavailable. Your account and LPG operations are unaffected.",
+          requestId: id,
+        }, error.code === "provider_rate_limited" ? 429 : 503);
+      }
+
+      return jsonResponse({
+        ok: false,
+        error: "ai_assistant_unavailable",
+        message: "SKIMA AI is temporarily unavailable. Your account and LPG operations are unaffected.",
+        requestId: id,
+      }, 503);
+    }
+  }
+
+  if (routePath === "/runtime/ai/conversations" && request.method === "GET") {
+    const workspace = url.searchParams.get("workspace");
+    const query = supabase
+      .from("ai_conversations")
+      .select("id,workspace,capability_key,title,status,last_message_at,created_at,updated_at")
+      .eq("owner_user_id", authResult.user.id)
+      .order("updated_at", { ascending: false })
+      .limit(30);
+    return selectRecords(workspace ? query.eq("workspace", workspace) : query, id);
+  }
+
   if (routePath === "/runtime/ai/queue" && request.method === "POST") {
     const body = await readJsonBody(request, id);
 
@@ -9258,6 +9364,460 @@ async function initializePaystackDeposit(
     },
     id: depositId,
     requestId: params.id,
+  });
+}
+
+interface AiAssistantParams {
+  readonly authUser: User;
+  readonly id: string;
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly requestClient: SupabaseClient;
+  readonly supabaseUrl: string;
+}
+
+async function aiAssistantResponse(params: AiAssistantParams): Promise<Response> {
+  const workspace = requireString(params.payload.workspace, "workspace").trim().toLowerCase();
+  if (!["customer", "driver", "station", "admin"].includes(workspace)) {
+    throw new RequestValidationError("workspace must be customer, driver, station, or admin.");
+  }
+
+  const message = requireString(params.payload.message, "message").trim();
+  if (message.length > 3000) {
+    throw new RequestValidationError("message must be 3000 characters or fewer.");
+  }
+
+  const accessResult = await params.requestClient.rpc("can_access_ai_workspace", {
+    target_workspace: workspace,
+  });
+  if (accessResult.error) {
+    throw new AiProviderRuntimeError("workspace_check_failed", accessResult.error.message);
+  }
+  if (accessResult.data !== true) {
+    return jsonResponse({
+      ok: false,
+      error: "forbidden",
+      message: "This SKIMA AI workspace is not available for your account.",
+      requestId: params.id,
+    }, 403);
+  }
+
+  const capabilityResult = await params.requestClient.rpc("resolve_ai_workspace_capability", {
+    target_workspace: workspace,
+  });
+  if (capabilityResult.error) {
+    throw new AiProviderRuntimeError("capability_resolution_failed", capabilityResult.error.message);
+  }
+  const capabilityKey = stringOrNull(capabilityResult.data);
+  if (!capabilityKey) {
+    throw new AiProviderRuntimeError("ai_not_configured", "AI assistant capability is not active.");
+  }
+
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) {
+    throw new AiProviderRuntimeError("server_misconfigured", "AI server runtime is not configured.");
+  }
+  const serviceClient = createServiceClient(params.supabaseUrl, serviceRoleKey);
+  const route = await resolveAiProviderRoute(serviceClient, capabilityKey);
+  if (!route) {
+    throw new AiProviderRuntimeError("ai_not_configured", "No active AI provider route is configured.");
+  }
+
+  const conversation = await resolveAiConversation({
+    capabilityKey,
+    conversationId: optionalUuid(params.payload.conversationId, "conversationId"),
+    message,
+    requestClient: params.requestClient,
+    userId: params.authUser.id,
+    workspace,
+  });
+
+  const historyResult = await params.requestClient
+    .from("ai_messages")
+    .select("role,content,created_at")
+    .eq("conversation_id", conversation.id)
+    .in("role", ["user", "assistant"])
+    .order("created_at", { ascending: false })
+    .limit(12);
+  if (historyResult.error) {
+    throw new AiProviderRuntimeError("conversation_read_failed", historyResult.error.message);
+  }
+
+  const history = (Array.isArray(historyResult.data) ? historyResult.data : [])
+    .slice()
+    .reverse()
+    .map((item) => ({
+      role: stringOrNull(getRecordValue(item, "role")) === "assistant" ? "assistant" as const : "user" as const,
+      content: stringOrNull(getRecordValue(item, "content")) ?? "",
+    }))
+    .filter((item) => item.content.length > 0);
+
+  const userMessageResult = await params.requestClient
+    .from("ai_messages")
+    .insert({
+      conversation_id: conversation.id,
+      role: "user",
+      content: message,
+      metadata: { source: "skima.ai.assistant" },
+    })
+    .select("id")
+    .single();
+  if (userMessageResult.error) {
+    throw new AiProviderRuntimeError("conversation_write_failed", userMessageResult.error.message);
+  }
+
+  const context = await buildAiAssistantContext(
+    params.requestClient,
+    params.authUser,
+    workspace,
+  );
+
+  try {
+    const result = await invokeAiText(route, {
+      system: aiSystemPrompt(workspace),
+      message,
+      context,
+      history,
+    });
+
+    const assistantInsert = await serviceClient.from("ai_messages").insert({
+      conversation_id: conversation.id,
+      role: "assistant",
+      content: result.text,
+      provider_adapter_key: route.providerAdapterKey,
+      model_key: route.modelKey,
+      metadata: {
+        controlMode: route.controlMode,
+        provider: route.providerDisplayName,
+        providerMetadata: result.providerMetadata,
+      },
+    });
+    if (assistantInsert.error) {
+      throw new AiProviderRuntimeError("conversation_write_failed", assistantInsert.error.message);
+    }
+
+    await serviceClient
+      .from("ai_conversations")
+      .update({
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", conversation.id);
+
+    await serviceClient.from("ai_usage_events").insert({
+      capability_key: capabilityKey,
+      provider_adapter_key: route.providerAdapterKey,
+      model_key: route.modelKey,
+      user_id: params.authUser.id,
+      workspace,
+      conversation_id: conversation.id,
+      input_units: result.inputUnits,
+      output_units: result.outputUnits,
+      request_count: 1,
+      status: "succeeded",
+      metadata: {
+        transport: getRecordValue(result.providerMetadata, "transport"),
+      },
+    });
+
+    return jsonResponse({
+      ok: true,
+      data: {
+        conversationId: conversation.id,
+        reply: result.text,
+        capabilityKey,
+        suggestions: aiWorkspaceSuggestions(workspace),
+      },
+      requestId: params.id,
+    });
+  } catch (error) {
+    await serviceClient.from("ai_usage_events").insert({
+      capability_key: capabilityKey,
+      provider_adapter_key: route.providerAdapterKey,
+      model_key: route.modelKey,
+      user_id: params.authUser.id,
+      workspace,
+      conversation_id: conversation.id,
+      request_count: 1,
+      status: error instanceof AiProviderRuntimeError && error.code === "provider_rate_limited"
+        ? "rate_limited"
+        : "failed",
+      metadata: {
+        errorCode: error instanceof AiProviderRuntimeError ? error.code : "unknown",
+      },
+    });
+    throw error;
+  }
+}
+
+async function resolveAiConversation(input: {
+  readonly capabilityKey: string;
+  readonly conversationId: string | null;
+  readonly message: string;
+  readonly requestClient: SupabaseClient;
+  readonly userId: string;
+  readonly workspace: string;
+}): Promise<{ readonly id: string }> {
+  if (input.conversationId) {
+    const existing = await input.requestClient
+      .from("ai_conversations")
+      .select("id,workspace,capability_key,status")
+      .eq("id", input.conversationId)
+      .eq("owner_user_id", input.userId)
+      .eq("workspace", input.workspace)
+      .eq("capability_key", input.capabilityKey)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (existing.error) {
+      throw new AiProviderRuntimeError("conversation_read_failed", existing.error.message);
+    }
+
+    const existingId = stringOrNull(getRecordValue(existing.data, "id"));
+    if (!existingId) {
+      throw new RequestValidationError("conversationId does not belong to this active AI workspace.");
+    }
+    return { id: existingId };
+  }
+
+  const title = input.message.length > 72 ? input.message.slice(0, 69).trimEnd() + "..." : input.message;
+  const created = await input.requestClient
+    .from("ai_conversations")
+    .insert({
+      owner_user_id: input.userId,
+      workspace: input.workspace,
+      capability_key: input.capabilityKey,
+      title,
+      status: "active",
+      metadata: { source: "skima.ai.assistant" },
+    })
+    .select("id")
+    .single();
+
+  if (created.error) {
+    throw new AiProviderRuntimeError("conversation_write_failed", created.error.message);
+  }
+
+  const id = stringOrNull(getRecordValue(created.data, "id"));
+  if (!id) {
+    throw new AiProviderRuntimeError("conversation_write_failed", "AI conversation was not created.");
+  }
+  return { id };
+}
+
+async function buildAiAssistantContext(
+  supabase: SupabaseClient,
+  user: User,
+  workspace: string,
+): Promise<Readonly<Record<string, unknown>>> {
+  const profileResult = await supabase
+    .from("profiles")
+    .select("id,display_name,status")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profileResult.error) throw new AiProviderRuntimeError("context_read_failed", profileResult.error.message);
+
+  const base = {
+    workspace,
+    profile: profileResult.data ?? { id: user.id },
+    generatedAt: new Date().toISOString(),
+    dataPolicy: "Only facts in this context may be treated as SKIMA account facts.",
+  };
+
+  if (workspace === "customer") {
+    const [orders, cylinders, locations] = await Promise.all([
+      supabase
+        .from("lpg_refill_orders")
+        .select("id,public_reference,cylinder_id,station_branch_id,driver_profile_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,delivery_fee_amount,platform_fee_amount,status,payment_status,assignment_status,created_at,updated_at")
+        .order("created_at", { ascending: false })
+        .limit(8),
+      supabase
+        .from("lpg_cylinders")
+        .select("id,public_reference,display_name,size_kg,max_capacity_kg,brand,colour,condition_status,last_inspection_at,next_inspection_at,status,safety_restriction,updated_at")
+        .neq("status", "deactivated")
+        .order("updated_at", { ascending: false })
+        .limit(8),
+      supabase
+        .from("lpg_customer_locations")
+        .select("id,label,formatted_address,verification_status,status,updated_at")
+        .neq("status", "deleted")
+        .order("updated_at", { ascending: false })
+        .limit(5),
+    ]);
+    assertAiContextQuery(orders.error);
+    assertAiContextQuery(cylinders.error);
+    assertAiContextQuery(locations.error);
+    return {
+      ...base,
+      recentOrders: orders.data ?? [],
+      cylinders: cylinders.data ?? [],
+      savedLocations: locations.data ?? [],
+    };
+  }
+
+  if (workspace === "driver") {
+    const [driver, jobs, commissions] = await Promise.all([
+      supabase
+        .from("driver_profiles")
+        .select("id,verification_status,operational_status,availability_status,updated_at")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase.rpc("read_lpg_jobs", { target_queue: "driver", target_limit: 12 }),
+      supabase
+        .from("commission_executions")
+        .select("id,public_reference,order_id,currency_code,amount,status,created_at,updated_at")
+        .order("created_at", { ascending: false })
+        .limit(10),
+    ]);
+    assertAiContextQuery(driver.error);
+    assertAiContextQuery(jobs.error);
+    assertAiContextQuery(commissions.error);
+    return {
+      ...base,
+      driver: driver.data ?? null,
+      activeJobs: Array.isArray(jobs.data) ? jobs.data : [],
+      recentEarnings: commissions.data ?? [],
+    };
+  }
+
+  if (workspace === "station") {
+    const [jobs, runtime] = await Promise.all([
+      supabase.rpc("read_lpg_jobs", { target_queue: "station", target_limit: 15 }),
+      supabase.rpc("read_lpg_station_runtime", { target_limit: 10, target_station_branch_id: null }),
+    ]);
+    assertAiContextQuery(jobs.error);
+    assertAiContextQuery(runtime.error);
+    return {
+      ...base,
+      activeJobs: Array.isArray(jobs.data) ? jobs.data : [],
+      stationRuntime: runtime.data ?? null,
+    };
+  }
+
+  if (workspace === "admin") {
+    const access = await supabase.rpc("can_access_ai_workspace", { target_workspace: "admin" });
+    assertAiContextQuery(access.error);
+    if (access.data !== true) {
+      throw new AiProviderRuntimeError("forbidden", "Admin AI access is not available.");
+    }
+    const [orders, applications, aiRuns] = await Promise.all([
+      supabase
+        .from("lpg_refill_orders")
+        .select("id,public_reference,status,payment_status,assignment_status,station_branch_id,driver_profile_id,created_at,updated_at")
+        .order("created_at", { ascending: false })
+        .limit(60),
+      supabase
+        .from("applications")
+        .select("id,application_type_id,status,operational_status,organization_id,created_at,updated_at")
+        .order("created_at", { ascending: false })
+        .limit(40),
+      supabase
+        .from("ai_task_runs")
+        .select("id,status,subject_type,source,created_at,started_at,completed_at,failed_at")
+        .order("created_at", { ascending: false })
+        .limit(30),
+    ]);
+    assertAiContextQuery(orders.error);
+    assertAiContextQuery(applications.error);
+    assertAiContextQuery(aiRuns.error);
+    return {
+      ...base,
+      recentOrders: orders.data ?? [],
+      applications: applications.data ?? [],
+      aiRuns: aiRuns.data ?? [],
+    };
+  }
+
+  return base;
+}
+
+function assertAiContextQuery(error: { readonly message?: string } | null): void {
+  if (error) {
+    throw new AiProviderRuntimeError(
+      "context_read_failed",
+      error.message ?? "SKIMA account context could not be read.",
+    );
+  }
+}
+
+function aiSystemPrompt(workspace: string): string {
+  const roleInstruction = workspace === "customer"
+    ? "Help the customer understand their LPG orders, cylinders, locations, quotes, account state and support options."
+    : workspace === "driver"
+    ? "Act as a driver workflow copilot. Explain active jobs, the next operational step and earnings records only from supplied context."
+    : workspace === "station"
+    ? "Act as a station operations assistant. Explain visible queue and station runtime information, and highlight attention items without changing them."
+    : "Act as the SKIMA admin operations copilot. Summarize visible operations and exceptions, but never perform or imply an administrative action.";
+
+  return [
+    "You are Ask SKIMA, the assistive intelligence layer inside the SKIMA LPG platform.",
+    roleInstruction,
+    "SKIMA database state, ledger entries, pricing policies, permissions, dispatch rules, custody records and workflow states are authoritative. Never invent or overwrite them.",
+    "Use supplied SKIMA account context for account-specific facts. If the requested fact is absent, say you cannot verify it from the available SKIMA data.",
+    "Do not claim that a cylinder is safe based on AI or an image. For immediate LPG danger, advise the user to move away from danger and use the appropriate emergency channel.",
+    "Do not claim to have changed an order, payment, wallet, dispatch assignment, inventory value, approval or permission. This assistant is read-only.",
+    "Be concise, practical and use normal customer-facing language. Do not expose internal database field names unless the user explicitly asks for technical detail.",
+  ].join("\n");
+}
+
+function aiWorkspaceSuggestions(workspace: string): readonly string[] {
+  if (workspace === "customer") {
+    return ["Where is my refill?", "Explain my latest order", "Which cylinder did I use last?"];
+  }
+  if (workspace === "driver") {
+    return ["What do I do next?", "Summarize my active jobs", "Explain my recent earnings"];
+  }
+  if (workspace === "station") {
+    return ["What needs attention?", "Summarize my current queue", "What work is active right now?"];
+  }
+  return ["What needs attention?", "Summarize current LPG operations", "Are any AI tasks failing?"];
+}
+
+async function adminAiRuntimeResponse(
+  requestClient: SupabaseClient,
+  user: User,
+  supabaseUrl: string,
+  id: string,
+): Promise<Response> {
+  const access = await requestClient.rpc("can_access_ai_workspace", { target_workspace: "admin" });
+  if (access.error) return databaseError(access.error, id);
+  if (access.data !== true) {
+    return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+  }
+
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) {
+    return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+  }
+  const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+  const [capabilities, routes, providers] = await Promise.all([
+    serviceClient
+      .from("ai_capabilities")
+      .select("id,key,display_name,description,category,response_mode,control_mode,status,config,updated_at")
+      .order("display_name", { ascending: true }),
+    serviceClient
+      .from("ai_provider_routes")
+      .select("id,capability_id,provider_adapter_id,model_key,priority,status,effective_from,effective_until,config,version,updated_at")
+      .order("priority", { ascending: true }),
+    serviceClient
+      .from("provider_adapters")
+      .select("id,key,display_name,status,config,updated_at")
+      .eq("provider_kind", "ai")
+      .order("display_name", { ascending: true }),
+  ]);
+
+  if (capabilities.error) return databaseError(capabilities.error, id);
+  if (routes.error) return databaseError(routes.error, id);
+  if (providers.error) return databaseError(providers.error, id);
+
+  return jsonResponse({
+    ok: true,
+    data: {
+      capabilities: capabilities.data ?? [],
+      routes: routes.data ?? [],
+      providers: providers.data ?? [],
+      userId: user.id,
+    },
+    requestId: id,
   });
 }
 
