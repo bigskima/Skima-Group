@@ -10823,6 +10823,7 @@ async function buildAiAssistantContext(
       pricingIntelligence,
       expansionOpportunities,
       supportTriageAssessments,
+      applicationReviewReadiness,
     ] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
@@ -10869,6 +10870,9 @@ async function buildAiAssistantContext(
         target_minimum_priority: "elevated",
         target_limit: 40,
       }),
+      supabase.rpc("read_ai_application_review_readiness", {
+        target_limit: 40,
+      }),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(applications.error);
@@ -10891,6 +10895,9 @@ async function buildAiAssistantContext(
     const supportTriageRows = supportTriageAssessments.error
       ? []
       : Array.isArray(supportTriageAssessments.data) ? supportTriageAssessments.data : [];
+    const applicationReviewRows = applicationReviewReadiness.error
+      ? []
+      : Array.isArray(applicationReviewReadiness.data) ? applicationReviewReadiness.data : [];
     return {
       ...base,
       recentOrders: orders.data ?? [],
@@ -10904,6 +10911,7 @@ async function buildAiAssistantContext(
       pricingIntelligence: pricingSnapshot,
       expansionOpportunities: expansionRows,
       supportTriageAssessments: supportTriageRows,
+      applicationReviewReadiness: applicationReviewRows,
     };
   }
 
@@ -11189,6 +11197,8 @@ function aiSystemPrompt(workspace: string): string {
     "Never claim that expansion intelligence enabled a geography, changed a coverage policy, approved a partner application or changed dispatch, and never disclose internal expansion scoring to customer, driver or station workspaces.",
     "Support triage assessments are internal advisory priorities for authorized administrators. Complaint status, evidence review and the human quality workflow remain authoritative. A triage score cannot resolve or dismiss a complaint, suspend a partner, change dispatch, move money, post ledger entries or certify LPG safety.",
     "Never disclose internal support triage scores, SLA priorities or recommendations to customer, driver or station workspaces.",
+    "Application review readiness is internal, deterministic decision support for authorized administrators. It may identify applicable document blockers or that the canonical document approval gate is satisfied, but it is not an application decision. Only the existing human review workflow may approve, reject, suspend, assign a reviewer or review a document.",
+    "Never disclose internal application review readiness ranking, review-task details or admin recommendations to customer, driver or station workspaces. Applicants may only receive their applicant-safe applicationExplanations and explicit applicant-facing messages.",
     "Be concise, practical and use normal customer-facing language. Do not expose internal database field names unless the user explicitly asks for technical detail.",
   ].join("\n");
 }
@@ -11203,7 +11213,7 @@ function aiWorkspaceSuggestions(workspace: string): readonly string[] {
   if (workspace === "station") {
     return ["What needs attention?", "Explain my recent settlement", "How busy could the next 7 days be?"];
   }
-  return ["Which support cases need attention?", "Which areas deserve expansion review?", "Are any money records out of balance?"];
+  return ["Which applications are ready for review?", "Which support cases need attention?", "Are any money records out of balance?", "Which areas deserve expansion review?"];
 }
 
 async function adminAiRuntimeResponse(
