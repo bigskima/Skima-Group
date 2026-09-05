@@ -34,6 +34,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { operationIdempotencyKey } from "../utilities/idempotency";
+import { AiContextAction } from "./AiContextAction";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { EvidenceCapture } from "./EvidenceCapture";
@@ -149,6 +150,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const stationWaitingForDriverScan = workspace === "station" && ["pickup_verified", "station_en_route"].includes(status);
   const refillActive = ["station_verified", "refill_in_progress", "refill_started"].includes(status);
   const releaseReady = ["refill_confirmed", "station_settled"].includes(status);
+  const aiJobReference = firstString(order, ["public_reference", "reference", "id"]) ?? id ?? "this LPG job";
 
   const submitDriverScan = async () => {
     if (!id || !token || !driverScanType) return;
@@ -302,6 +304,16 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             </View>
             <StatusPill label={friendlyJobStatus(status)} tone={statusTone(status)} />
           </View>
+
+          <AiContextAction
+            workspace={workspace}
+            label={workspace === "driver" ? "What should I do next?" : "Explain this station job"}
+            prompt={
+              workspace === "driver"
+                ? `Explain my assigned SKIMA driver job ${aiJobReference}. The current workflow stage is ${status}. Tell me the next normal action I should take and any required scan or hand-off. Do not accept, cancel, scan, complete or change the job.`
+                : `Explain this SKIMA station refill job ${aiJobReference}. The current workflow stage is ${status}. Tell me what the station should check or do next. Do not record an inspection, refill, scan, settlement or other action.`
+            }
+          />
 
           {workspace === "driver" && routePoints.length ? (
             <View style={[styles.mapShell, shadows.soft]}>
