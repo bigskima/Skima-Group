@@ -683,7 +683,13 @@ async function retryWithdrawal(
     throw new FinanceError("invalid_withdrawal_state", "Only an approved withdrawal can be retried.");
   }
   const transfer = await initiateWithdrawalTransfer(serviceClient, withdrawalId);
-  return json({ ok: true, data: { id: withdrawalId, transfer }, requestId });
+  const record = await userClient
+    .from("withdrawal_requests")
+    .select("id,public_reference,wallet_id,beneficiary_id,currency_code,amount,fee_amount,total_debit_amount,status,provider_reference,requested_at,approved_at,processed_at,failed_at,reversed_at,created_at,updated_at")
+    .eq("id", withdrawalId)
+    .single();
+  if (record.error) throw new FinanceError("database_error", record.error.message);
+  return json({ ok: true, data: { ...record.data, transfer }, requestId });
 }
 
 async function initiateWithdrawalTransfer(
@@ -760,6 +766,37 @@ async function initiateWithdrawalTransfer(
         message: error.message,
       };
     }
+
+    if (error instanceof PaystackPayoutError) {
+      await requireRpc(serviceClient.rpc("process_wallet_withdrawal_transfer", {
+        target_withdrawal_request_id: withdrawalId,
+        target_provider_status: "failed",
+        target_provider_reference: reference,
+        target_response_payload: {
+          status: false,
+          error: error.code,
+          message: error.message,
+        },
+        target_source: "platform.finance_runtime",
+        target_idempotency_key: `finance-runtime:${withdrawalId}:transfer:${reference}:failed`,
+        target_metadata: {
+          automaticRuntimeTransfer: true,
+          paystackErrorCode: error.code,
+          paystackErrorMessage: error.message,
+          principalAttempted: withdrawal.data.amount,
+          skimaFeeRetained: withdrawal.data.fee_amount,
+        },
+      }));
+      return {
+        provider: "provider.payment.paystack",
+        providerReference: reference,
+        providerStatus: "failed",
+        principalSentToProvider: 0,
+        skimaFee: withdrawal.data.fee_amount,
+        message: error.message,
+      };
+    }
+
     throw financeErrorFromPaystack(error);
   }
 
