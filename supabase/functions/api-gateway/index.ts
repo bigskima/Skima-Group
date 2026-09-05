@@ -10885,6 +10885,37 @@ function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function requireInteger(
+  value: unknown,
+  fieldName: string,
+  minimum: number,
+  maximum: number,
+): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (
+    !Number.isSafeInteger(parsed) ||
+    parsed < minimum ||
+    parsed > maximum
+  ) {
+    throw new RequestValidationError(
+      `${fieldName} must be a whole number between ${minimum} and ${maximum}.`,
+    );
+  }
+  return parsed;
+}
+
+function optionalInteger(
+  value: unknown,
+  fieldName: string,
+  minimum: number,
+  maximum: number,
+): number | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+  return requireInteger(value, fieldName, minimum, maximum);
+}
+
 function createPublicStorageUrl(supabaseUrl: string, storageBucket: string, storagePath: string): string {
   const safeBucket = encodeURIComponent(storageBucket);
   const safePath = storagePath.split("/").map((segment) => encodeURIComponent(segment)).join("/");
