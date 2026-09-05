@@ -52,14 +52,14 @@ export function ScreenSkeleton({ cards = 3 }: { cards?: number }) {
 }
 const styles = StyleSheet.create({
   stack: { gap: spacing.md },
-  hero: { height: 118, borderRadius: radii.lg },
+  hero: { height: 126, borderRadius: radii.xl },
   card: {
     height: 126,
     gap: spacing.sm,
     justifyContent: "center",
     padding: spacing.lg,
     borderWidth: 1,
-    borderRadius: radii.lg,
+    borderRadius: radii.xl,
   },
   line: { height: 12, width: "100%", borderRadius: radii.pill },
   lineMedium: { height: 12, width: "68%", borderRadius: radii.pill },
