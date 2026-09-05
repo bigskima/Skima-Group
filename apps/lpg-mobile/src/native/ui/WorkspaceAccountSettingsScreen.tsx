@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import {
   ChevronRight,
+  CircleHelp,
   FileText,
   LogOut,
   Moon,
@@ -9,6 +10,7 @@ import {
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSession } from "../session/SessionProvider";
+import { useInAppGuide } from "../onboarding/InAppGuideProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { AppButton } from "./AppButton";
@@ -18,6 +20,7 @@ type Workspace = "customer" | "driver" | "station";
 
 export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Workspace }) {
   const session = useSession();
+  const guide = useInAppGuide();
   const theme = useAppTheme();
   const policyHref = workspace === "customer"
     ? "/policies/customer-terms"
@@ -39,6 +42,14 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
             detail={theme.scheme === "dark" ? "Dark mode is on" : "Light mode is on"}
             value={theme.scheme === "dark" ? "Switch to light" : "Switch to dark"}
             onPress={() => void theme.toggle()}
+          />
+          <SettingsRow
+            icon={CircleHelp}
+            label="App guide"
+            detail="Replay the practical guide for this workspace"
+            value="Start guided tour"
+            onPress={() => void guide.startNow(workspace)}
+            last
           />
         </View>
       </View>
