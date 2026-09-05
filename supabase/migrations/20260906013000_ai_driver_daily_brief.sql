@@ -21,6 +21,7 @@ declare
   station_jobs integer := 0;
   return_jobs integer := 0;
   completion_jobs integer := 0;
+  disputed_jobs integer := 0;
   next_job record;
   posted_earnings numeric := 0;
   pending_earnings numeric := 0;
@@ -63,18 +64,21 @@ begin
   select
     count(*)::integer,
     count(*) filter (
-      where orders.status in ('driver_offered','driver_assigned','pickup_started','pickup_confirmed')
+      where orders.status in ('driver_offered','driver_accepted','pickup_en_route','pickup_verified')
     )::integer,
     count(*) filter (
-      where orders.status in ('arrived_station','station_verified','refill_in_progress','refill_confirmed','station_settled')
+      where orders.status in ('station_en_route','station_verified','refill_in_progress','refill_confirmed','station_settled')
     )::integer,
     count(*) filter (
-      where orders.status in ('return_in_transit','delivery_arrived','delivery_challenge_pending')
+      where orders.status in ('return_en_route','delivery_verification_pending')
     )::integer,
     count(*) filter (
-      where orders.status in ('delivered','delivery_verified')
+      where orders.status = 'delivered'
+    )::integer,
+    count(*) filter (
+      where orders.status = 'disputed'
     )::integer
-  into active_jobs, pickup_jobs, station_jobs, return_jobs, completion_jobs
+  into active_jobs, pickup_jobs, station_jobs, return_jobs, completion_jobs, disputed_jobs
   from public.lpg_refill_orders orders
   where orders.driver_profile_id = driver_record.id
     and orders.status not in ('completed','cancelled','refunded','failed');
@@ -85,7 +89,6 @@ begin
     orders.status,
     orders.assignment_status,
     orders.station_branch_id,
-    orders.customer_user_id,
     orders.requested_kg,
     orders.actual_kg,
     orders.currency_code,
@@ -97,18 +100,19 @@ begin
     and orders.status not in ('completed','cancelled','refunded','failed')
   order by
     case orders.status
-      when 'delivery_challenge_pending' then 10
-      when 'delivery_arrived' then 20
-      when 'return_in_transit' then 30
-      when 'station_settled' then 40
-      when 'refill_confirmed' then 50
-      when 'refill_in_progress' then 60
-      when 'station_verified' then 70
-      when 'arrived_station' then 80
-      when 'pickup_confirmed' then 90
-      when 'pickup_started' then 100
-      when 'driver_assigned' then 110
-      when 'driver_offered' then 120
+      when 'disputed' then 5
+      when 'delivery_verification_pending' then 10
+      when 'return_en_route' then 20
+      when 'station_settled' then 30
+      when 'refill_confirmed' then 40
+      when 'refill_in_progress' then 50
+      when 'station_verified' then 60
+      when 'station_en_route' then 70
+      when 'pickup_verified' then 80
+      when 'pickup_en_route' then 90
+      when 'driver_accepted' then 100
+      when 'driver_offered' then 110
+      when 'delivered' then 120
       else 200
     end asc,
     orders.updated_at asc,
@@ -148,19 +152,21 @@ begin
       then 'Go online through the normal driver controls when you are ready for work.'
     when next_job.id is null
       then 'No active LPG job needs action right now. Stay available if you want to receive work.'
-    when next_job.status in ('driver_offered','driver_assigned')
-      then 'Review the assigned refill job and proceed to the customer pickup using the normal job workflow.'
-    when next_job.status in ('pickup_started','pickup_confirmed')
-      then 'Complete cylinder pickup and proceed to the assigned station using the normal job workflow.'
-    when next_job.status in ('arrived_station','station_verified','refill_in_progress')
+    when next_job.status = 'disputed'
+      then 'This job is disputed. Follow the support and operations instructions shown in the canonical job record; do not attempt to change settlement or delivery state yourself.'
+    when next_job.status in ('driver_offered','driver_accepted','pickup_en_route')
+      then 'Proceed with the customer pickup using the normal assigned-job workflow.'
+    when next_job.status = 'pickup_verified'
+      then 'The cylinder pickup is verified. Proceed toward the assigned station using the normal job workflow.'
+    when next_job.status in ('station_en_route','station_verified','refill_in_progress')
       then 'Follow the station handoff and refill verification steps before leaving the station.'
     when next_job.status in ('refill_confirmed','station_settled')
       then 'Return the refilled cylinder to the customer and continue delivery tracking.'
-    when next_job.status in ('return_in_transit','delivery_arrived')
-      then 'Complete the customer delivery and required delivery verification.'
-    when next_job.status = 'delivery_challenge_pending'
-      then 'Complete the customer delivery verification challenge. Do not mark delivery complete without the required verification.'
-    when next_job.status in ('delivered','delivery_verified')
+    when next_job.status = 'return_en_route'
+      then 'Continue to the customer delivery location and prepare for required delivery verification.'
+    when next_job.status = 'delivery_verification_pending'
+      then 'Complete the customer delivery verification. Do not mark delivery complete without the required verification.'
+    when next_job.status = 'delivered'
       then 'The delivery is recorded. Wait for the canonical completion and commission workflow to finish.'
     else 'Open the active job and follow the next action shown by the canonical LPG workflow.'
   end;
@@ -181,7 +187,8 @@ begin
       'pickupStageJobs', pickup_jobs,
       'stationStageJobs', station_jobs,
       'returnStageJobs', return_jobs,
-      'completionStageJobs', completion_jobs
+      'completionStageJobs', completion_jobs,
+      'disputedJobs', disputed_jobs
     ),
     'nextJob', case
       when next_job.id is null then null
