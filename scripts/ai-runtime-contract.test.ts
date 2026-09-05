@@ -2062,6 +2062,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_finance_reconciliation_findings",
     "read_ai_pricing_intelligence",
     "read_ai_expansion_opportunities",
+    "read_ai_support_triage_assessments",
   ]) {
     assertNotIncludes(
       customerContext,
@@ -2086,6 +2087,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_finance_reconciliation_findings",
     "read_ai_pricing_intelligence",
     "read_ai_expansion_opportunities",
+    "read_ai_support_triage_assessments",
   ]) {
     assertNotIncludes(
       driverContext,
@@ -2129,6 +2131,11 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_expansion_opportunities",
     "station assistant must not query internal expansion intelligence",
   );
+  assertNotIncludes(
+    stationContext,
+    "read_ai_support_triage_assessments",
+    "station assistant must not query internal support triage intelligence",
+  );
 
   const adminContext = sectionBetween(
     gatewaySource,
@@ -2141,6 +2148,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_finance_reconciliation_findings",
     "read_ai_pricing_intelligence",
     "read_ai_expansion_opportunities",
+    "read_ai_support_triage_assessments",
   ]) {
     assertIncludes(
       adminContext,
@@ -2148,6 +2156,39 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
       "admin Ask SKIMA must ground internal intelligence with " + adminOnlyRpc,
     );
   }
+});
+
+Deno.test("admin Ask SKIMA treats support triage as internal advisory context", () => {
+  assertIncludes(
+    gatewaySource,
+    "supportTriageAssessments:",
+    "admin Ask SKIMA context must include advisory support triage",
+  );
+  assertIncludes(
+    gatewaySource,
+    'target_minimum_priority: "elevated"',
+    "admin Ask SKIMA should avoid flooding context with routine cases",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Complaint status, evidence review and the human quality workflow remain authoritative.",
+    "assistant prompt must preserve the human complaint workflow as authoritative",
+  );
+  assertIncludes(
+    gatewaySource,
+    "A triage score cannot resolve or dismiss a complaint, suspend a partner, change dispatch, move money, post ledger entries or certify LPG safety.",
+    "assistant prompt must preserve triage non-enforcement boundaries",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Never disclose internal support triage scores, SLA priorities or recommendations to customer, driver or station workspaces.",
+    "assistant prompt must forbid triage disclosure outside admin",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Which support cases need attention?",
+    "admin copilot should expose a support triage question",
+  );
 });
 
 Deno.test("worker reports exception refresh exactly once per response section", () => {
