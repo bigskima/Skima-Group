@@ -745,7 +745,7 @@ async function initiateWithdrawalTransfer(
     throw new FinanceError("payment_provider_unavailable", "Paystack transfer is not configured.", 503);
   }
 
-  const reference = withdrawal.data.public_reference ?? `skima-withdrawal-${withdrawalId.replaceAll("-", "")}`;
+  const reference = `skima-wdl-${withdrawalId.replaceAll("-", "")}`;
   let transfer;
   try {
     transfer = await initiatePaystackTransfer(paystackSecret, {
