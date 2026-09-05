@@ -324,6 +324,12 @@ function requiresPublicMapCredential(value: string) {
     "api.mapbox.com",
     "tiles.mapbox.com",
     "api.maptiler.com",
+    "maps.geoapify.com",
+    "api.geoapify.com",
+    "hereapi.com",
+    "tomtom.com",
+    "tile.thunderforest.com",
+    "tiles.stadiamaps.com",
   ];
   return credentialMarkers.some((marker) => normalized.includes(marker)) ||
     credentialProviders.some((provider) => normalized.includes(provider));
