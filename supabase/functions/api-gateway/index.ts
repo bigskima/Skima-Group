@@ -44,8 +44,6 @@ const ROUTES = new Set([
   "/admin/revenue/payout-account",
   "/admin/revenue/payout",
   "/admin/revenue/payout/retry",
-  "/runtime/payout-banks",
-  "/runtime/payout-bank-account/resolve",
   "/admin/maps/location/status",
   "/admin/maps/location/providers",
   "/admin/maps/location/audit",
@@ -2084,22 +2082,6 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         id,
       );
     }
-  }
-
-  if (routePath === "/runtime/payout-banks" && request.method === "GET") {
-    return payoutBankDirectoryResponse(supabase, id, false);
-  }
-
-  if (routePath === "/runtime/payout-bank-account/resolve" && request.method === "POST") {
-    const body = await readJsonBody(request, id);
-    if ("response" in body) return body.response;
-    return payoutBankResolveResponse(
-      supabase,
-      id,
-      requireString(body.value.accountNumber, "accountNumber"),
-      requireString(body.value.bankCode, "bankCode"),
-      false,
-    );
   }
 
   if (routePath.startsWith("/admin/revenue/")) {
