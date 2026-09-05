@@ -163,7 +163,7 @@ export function OperationalMap({
           <Minus color={colors.ink} size={19} />
         </Pressable>
       </View>
-      <View pointerEvents="none" style={styles.zoomBadge}><Text style={styles.zoomText}>Street detail · {zoom}</Text></View>
+      <View pointerEvents="none" style={styles.zoomBadge}><Text style={styles.zoomText}>{onSelectPoint ? "Pinpoint mode" : "Map view"}</Text></View>
       <Text pointerEvents="none" style={styles.attribution}>{attribution}</Text>
     </Pressable>
   );
