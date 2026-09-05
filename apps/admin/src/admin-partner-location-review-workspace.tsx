@@ -379,7 +379,7 @@ function LocationEvidencePanel(props: {
       {record.workspace === "driver" ? (
         <section style={{ marginTop: 22 }}>
           <h3>Requested service areas</h3>
-          <p className="skima-muted">A driver may cover several nearby areas. The primary area is marked separately.</p>
+          <p className="skima-muted">A driver may request several approved geographies. These are the service areas attached to the current application version.</p>
           <div className="skima-action-row" style={{ marginTop: 10 }}>
             {record.service_areas.length > 0 ? record.service_areas.map((area) => (
               <StatusBadge key={area.areaId} tone={area.isPrimary ? "info" : "neutral"}>
