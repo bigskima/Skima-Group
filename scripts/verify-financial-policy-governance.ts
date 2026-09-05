@@ -124,11 +124,26 @@ function evaluate(check: Check): string[] {
   return failures;
 }
 
-const [migrations, correctiveMigration, gateway, adminConfig] = await Promise.all([
+const [
+  migrations,
+  correctiveMigration,
+  treasuryPayoutMigration,
+  gateway,
+  financeRuntime,
+  paystackPayoutAdapter,
+  adminConfig,
+  adminRevenue,
+  mobileWithdrawal,
+] = await Promise.all([
   readMigrations(),
   readMigrationBySuffix("_lpg_revenue_station_permission_security_repair.sql"),
+  readMigrationBySuffix("_platform_revenue_treasury_payout_runtime.sql"),
   read("supabase/functions/api-gateway/index.ts"),
+  read("supabase/functions/finance-runtime/index.ts"),
+  read("supabase/functions/_shared/paystack-payouts.ts"),
   read("apps/admin/src/admin-resource-config.ts"),
+  read("apps/admin/src/admin-revenue-workspace.tsx"),
+  read("apps/lpg-mobile/src/native/ui/FinanceWithdrawalExperience.tsx"),
 ]);
 
 const correctedStationCatalogHelper = sqlFunctionSection(
@@ -419,6 +434,102 @@ const checks: Check[] = [
     source: actionSection(adminConfig, actionKey),
     required: [literalPattern(route), literalPattern(permission)],
   })),
+  {
+    name: "Paystack payout adapter resolves account holder server-side",
+    source: paystackPayoutAdapter,
+    required: [
+      /api\.paystack\.co\/bank\/resolve/i,
+      /account_number/i,
+      /bank_code/i,
+      /account_name/i,
+      /api\.paystack\.co\/transferrecipient/i,
+      /api\.paystack\.co\/transfer/i,
+      /api\.paystack\.co\/balance/i,
+    ],
+  },
+  {
+    name: "mobile payout account name is provider resolved",
+    source: financeRuntime,
+    required: [
+      /resolvePaystackBankAccount\(secret, accountNumber, bankCode\)/i,
+      /accountNameSource:\s*"paystack\.bank\.resolve"/i,
+      /createPaystackTransferRecipient\(secret, resolved\)/i,
+    ],
+    forbidden: [
+      /const accountName\s*=\s*requireString\(body\.accountName/i,
+    ],
+  },
+  {
+    name: "mobile payout UI has no manual account-name input",
+    source: mobileWithdrawal,
+    required: [
+      /\/beneficiaries\/resolve/i,
+      /resolvedAccountName/i,
+      /ACCOUNT CONFIRMED/i,
+    ],
+    forbidden: [
+      /label="Account holder name"/i,
+      /placeholder="Full account name"/i,
+    ],
+  },
+  {
+    name: "gateway Paystack transfers send principal only",
+    source: gateway,
+    required: [
+      /amountMajor:\s*Number\(withdrawalRecord\.amount\)/i,
+      /principalSentToProvider:\s*withdrawalRecord\.amount/i,
+      /skimaFeeRetained:\s*withdrawalRecord\.fee_amount/i,
+    ],
+    forbidden: [
+      /amount:\s*Math\.round\(Number\(withdrawalRecord\.total_debit_amount\)\s*\*\s*100\)/i,
+    ],
+  },
+  {
+    name: "platform revenue payout remains Super Admin treasury-only",
+    source: treasuryPayoutMigration,
+    required: [
+      /create or replace function public\.request_platform_revenue_withdrawal/i,
+      /public\.is_platform_super_admin\(\)/i,
+      /wallet_type\s*=\s*'platform_revenue'/i,
+      /owner_entity_type\s*=\s*'platform'/i,
+      /'platform\.revenue_payout'/i,
+      /fee_amount[\s\S]*0/i,
+    ],
+  },
+  {
+    name: "treasury withdrawals do not reduce earned revenue reporting",
+    source: treasuryPayoutMigration,
+    required: [
+      /earned_entries/i,
+      /treasury_entries/i,
+      /withdrawal_source\s*=\s*'platform\.revenue_payout'/i,
+      /'treasuryNetOutflow'/i,
+      /'activityKind'/i,
+      /'treasury_payout'/i,
+    ],
+  },
+  {
+    name: "Admin exposes provider balance and protected revenue withdrawal",
+    source: adminRevenue,
+    required: [
+      /Paystack transfer balance/i,
+      /Withdraw SKIMA Revenue/i,
+      /\/admin\/revenue\/payout-account\/resolve/i,
+      /\/admin\/revenue\/payout/i,
+      /Treasury outflow/i,
+    ],
+  },
+  {
+    name: "fee editor captures React input value before deferred state update",
+    source: adminRevenue,
+    required: [
+      /const nextValue = event\.currentTarget\.value;/i,
+      /setFeeAmounts\(\(current\)\s*=>\s*\(\{\s*\.\.\.current,\s*\[fee\.key\]:\s*nextValue/i,
+    ],
+    forbidden: [
+      /setFeeAmounts\(\(current\)\s*=>[\s\S]{0,120}event\.currentTarget\.value/i,
+    ],
+  },
   {
     name: "admin withdrawal does not submit a fee",
     source: actionSection(adminConfig, "request-withdrawal"),
