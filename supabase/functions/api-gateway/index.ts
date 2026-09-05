@@ -9843,6 +9843,7 @@ async function buildAiAssistantContext(
       dispatchAssessments,
       financeFindings,
       pricingIntelligence,
+      expansionOpportunities,
     ] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
@@ -9882,6 +9883,9 @@ async function buildAiAssistantContext(
       supabase.rpc("read_ai_pricing_intelligence", {
         target_currency_code: "NGN",
       }),
+      supabase.rpc("read_ai_expansion_opportunities", {
+        target_limit: 40,
+      }),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(applications.error);
@@ -9898,6 +9902,9 @@ async function buildAiAssistantContext(
       ? []
       : Array.isArray(financeFindings.data) ? financeFindings.data : [];
     const pricingSnapshot = pricingIntelligence.error ? null : pricingIntelligence.data ?? null;
+    const expansionRows = expansionOpportunities.error
+      ? []
+      : Array.isArray(expansionOpportunities.data) ? expansionOpportunities.data : [];
     return {
       ...base,
       recentOrders: orders.data ?? [],
@@ -9909,6 +9916,7 @@ async function buildAiAssistantContext(
       dispatchShadowAssessments: dispatchRows,
       financeReconciliationFindings: financeRows,
       pricingIntelligence: pricingSnapshot,
+      expansionOpportunities: expansionRows,
     };
   }
 
@@ -9951,6 +9959,8 @@ function aiSystemPrompt(workspace: string): string {
     "Never disclose internal finance reconciliation findings to customer, driver or station workspaces.",
     "Pricing intelligence is admin-only simulation from governed SKIMA station prices, the current platform markup and recent historical kg. Scenario projections assume volume stays constant; they do not model demand elasticity and must never be presented as a recommended or automatically applied price.",
     "Never claim that pricing intelligence changed a station price, SKIMA fee, quote or financial policy, and never disclose internal pricing simulations to customer, driver or station workspaces.",
+    "Service-area expansion opportunities are admin-only review signals built from canonical expansion interest, authoritative service-availability decisions and real partner coverage requests. SERVICE_NOT_LAUNCHED can support expansion review; AREA_EXCLUDED is an intentional-policy review signal; POLICY_CONFIGURATION_CONFLICT requires configuration repair. Never treat any of them as permission to launch an area.",
+    "Never claim that expansion intelligence enabled a geography, changed a coverage policy, approved a partner application or changed dispatch, and never disclose internal expansion scoring to customer, driver or station workspaces.",
     "Be concise, practical and use normal customer-facing language. Do not expose internal database field names unless the user explicitly asks for technical detail.",
   ].join("\n");
 }
@@ -9965,7 +9975,7 @@ function aiWorkspaceSuggestions(workspace: string): readonly string[] {
   if (workspace === "station") {
     return ["What needs attention?", "How busy could the next 7 days be?", "Summarize my current queue"];
   }
-  return ["What would our fee scenarios look like at recent volume?", "Are any money records out of balance?", "Where does shadow dispatch disagree?"];
+  return ["Which areas deserve expansion review?", "What would our fee scenarios look like at recent volume?", "Are any money records out of balance?"];
 }
 
 async function adminAiRuntimeResponse(
@@ -9995,6 +10005,7 @@ async function adminAiRuntimeResponse(
     dispatchAssessments,
     financeFindings,
     pricingIntelligence,
+    expansionOpportunities,
   ] = await Promise.all([
     serviceClient
       .from("ai_capabilities")
@@ -10041,6 +10052,9 @@ async function adminAiRuntimeResponse(
     requestClient.rpc("read_ai_pricing_intelligence", {
       target_currency_code: "NGN",
     }),
+    requestClient.rpc("read_ai_expansion_opportunities", {
+      target_limit: 100,
+    }),
   ]);
 
   if (capabilities.error) return databaseError(capabilities.error, id);
@@ -10061,6 +10075,9 @@ async function adminAiRuntimeResponse(
         : Array.isArray(dispatchAssessments.data) ? dispatchAssessments.data : [],
       financeFindings: financeFindings.error ? [] : financeFindings.data ?? [],
       pricingIntelligence: pricingIntelligence.error ? null : pricingIntelligence.data ?? null,
+      expansionOpportunities: expansionOpportunities.error
+        ? []
+        : Array.isArray(expansionOpportunities.data) ? expansionOpportunities.data : [],
       userId: user.id,
     },
     requestId: id,
