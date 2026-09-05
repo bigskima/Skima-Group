@@ -157,7 +157,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
                     selectable
                     style={[
                       styles.messageText,
-                      { color: message.role === "user" ? palette.canvas : palette.ink },
+                      { color: message.role === "user" ? "#FFFFFF" : palette.ink },
                     ]}
                   >
                     {message.content}
