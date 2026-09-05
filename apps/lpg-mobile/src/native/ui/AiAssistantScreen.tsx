@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from "expo-router";
 import { ArrowUp, Bot, CircleAlert, ShieldCheck, Sparkles, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
@@ -67,9 +68,11 @@ type ChatMessage = {
 
 export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssistantWorkspace }) {
   const { palette } = useAppTheme();
+  const params = useLocalSearchParams<{ prompt?: string | string[] }>();
+  const initialPrompt = Array.isArray(params.prompt) ? params.prompt[0] ?? "" : params.prompt ?? "";
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialPrompt.slice(0, 3000));
   const [suggestions, setSuggestions] = useState<string[]>(() => initialSuggestions(workspace));
   const [error, setError] = useState<string | null>(null);
   const [supportOpen, setSupportOpen] = useState(false);
@@ -228,7 +231,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
               </View>
               <Text style={[styles.emptyTitle, { color: palette.ink }]}>What can I help you understand?</Text>
               <Text style={[styles.emptyBody, { color: palette.muted }]}>
-                I use the SKIMA information already available to your account. I won’t change orders, payments, assignments or approvals.
+                I use the SKIMA information already available to your account. I won’t change orders, payments, assignments or approvals. Contextual questions are prepared here but never sent automatically.
               </Text>
             </View>
           ) : (
