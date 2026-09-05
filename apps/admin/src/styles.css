@@ -1192,6 +1192,180 @@
   margin-top: 3px;
 }
 
+.admin-ai-dispatch-shadow {
+  margin-top: 20px;
+}
+
+.admin-ai-dispatch-list {
+  display: grid;
+}
+
+.admin-ai-dispatch-row {
+  align-items: flex-start;
+  border-bottom: 1px solid #e7ecee;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 15px 0;
+}
+
+.admin-ai-dispatch-row:last-child {
+  border-bottom: 0;
+}
+
+.admin-ai-dispatch-row.is-disagreement {
+  background: linear-gradient(90deg, rgba(255, 247, 232, 0.72), rgba(255, 255, 255, 0));
+}
+
+.admin-ai-dispatch-route {
+  align-items: center;
+  background: #edf7fb;
+  border-radius: 11px;
+  color: #238ab3;
+  display: flex;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.admin-ai-dispatch-route svg {
+  height: 18px;
+  width: 18px;
+}
+
+.admin-ai-dispatch-copy {
+  min-width: 0;
+}
+
+.admin-ai-dispatch-title {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.admin-ai-dispatch-title strong {
+  color: #17282d;
+  font-size: 0.9rem;
+}
+
+.admin-ai-dispatch-title > span:last-child {
+  color: #7b888d;
+  font-size: 0.72rem;
+}
+
+.admin-ai-dispatch-selection {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 9px;
+}
+
+.admin-ai-dispatch-selection span {
+  background: #f8fafb;
+  border: 1px solid #e2e9eb;
+  border-radius: 10px;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.admin-ai-dispatch-selection small,
+.admin-ai-dispatch-selection b {
+  display: block;
+}
+
+.admin-ai-dispatch-selection small {
+  color: #7b888d;
+  font-size: 0.67rem;
+}
+
+.admin-ai-dispatch-selection b {
+  color: #294147;
+  font-size: 0.78rem;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.admin-ai-dispatch-copy p {
+  color: #718087;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  margin: 8px 0 0;
+}
+
+.admin-ai-dispatch-mode {
+  min-width: 80px;
+  text-align: right;
+}
+
+.admin-ai-dispatch-mode small,
+.admin-ai-dispatch-mode b {
+  display: block;
+}
+
+.admin-ai-dispatch-mode small {
+  color: #7b888d;
+  font-size: 0.66rem;
+}
+
+.admin-ai-dispatch-mode b {
+  color: #31484e;
+  font-size: 0.76rem;
+  margin-top: 3px;
+}
+
+.admin-ai-dispatch-empty {
+  align-items: center;
+  background: #f7fafb;
+  border: 1px solid #e1e8ea;
+  border-radius: 14px;
+  color: #66777d;
+  display: flex;
+  gap: 12px;
+  padding: 18px;
+}
+
+.admin-ai-dispatch-empty > svg {
+  color: #238ab3;
+  height: 22px;
+  width: 22px;
+}
+
+.admin-ai-dispatch-empty strong,
+.admin-ai-dispatch-empty span {
+  display: block;
+}
+
+.admin-ai-dispatch-empty strong {
+  color: #1a3534;
+  font-size: 0.86rem;
+}
+
+.admin-ai-dispatch-empty span {
+  font-size: 0.76rem;
+  margin-top: 3px;
+}
+
+.admin-ai-dispatch-guardrail {
+  align-items: center;
+  background: #eef8f5;
+  border-radius: 12px;
+  color: #42635c;
+  display: flex;
+  font-size: 0.74rem;
+  gap: 8px;
+  line-height: 1.4;
+  margin-top: 12px;
+  padding: 10px 12px;
+}
+
+.admin-ai-dispatch-guardrail svg {
+  color: #0d8f79;
+  flex: 0 0 auto;
+  height: 16px;
+  width: 16px;
+}
+
 .admin-ai-risk {
   margin-top: 20px;
 }
@@ -1506,11 +1680,14 @@
   .admin-ai-editor-grid,
   .admin-ai-insight-row,
   .admin-ai-forecast-grid,
-  .admin-ai-risk-row {
+  .admin-ai-risk-row,
+  .admin-ai-dispatch-row,
+  .admin-ai-dispatch-selection {
     grid-template-columns: 1fr;
   }
 
-  .admin-ai-risk-score {
+  .admin-ai-risk-score,
+  .admin-ai-dispatch-mode {
     text-align: left;
   }
 
