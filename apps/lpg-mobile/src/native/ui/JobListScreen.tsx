@@ -45,8 +45,8 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
       eyebrow={workspace === "driver" ? "Driver jobs" : "Station orders"}
       title={workspace === "driver" ? "Deliveries" : "Expected arrivals"}
       subtitle={workspace === "driver"
-        ? "Your assigned cylinder pickups, station hand-offs and returns. More than one compatible order can be active at the same time."
-        : "These jobs are already assigned to this station. Verify the order, cylinder and assigned driver here; a separate station QR scanner is not required."}
+        ? "See what needs your attention now and open a delivery for the full route."
+        : "See expected SKIMA arrivals and open one when the driver reaches reception."}
       refreshControl={
         <RefreshControl
           refreshing={jobs.isRefetching || (workspace === "driver" && config.isRefetching)}
@@ -62,8 +62,8 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
               <Route color={palette.brand} size={20} />
             </View>
             <View style={styles.workloadCopy}>
-              <Text style={[styles.workloadTitle, { color: palette.ink }]}>Active job capacity</Text>
-              <Text style={[styles.workloadBody, { color: palette.muted }]}>You may receive another nearby order while earlier orders are active when your route, vehicle and workload allow it.</Text>
+              <Text style={[styles.workloadTitle, { color: palette.ink }]}>Workload</Text>
+              <Text style={[styles.workloadBody, { color: palette.muted }]}>Your current delivery capacity at a glance.</Text>
             </View>
           </View>
           <View style={styles.workloadMetrics}>
@@ -80,7 +80,7 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
               <Text style={[styles.workloadLabel, { color: palette.muted }]}>SPACES LEFT</Text>
             </View>
           </View>
-          <Text style={[styles.workloadHint, { color: palette.muted }]}>The job limit is the maximum you can handle at once, not a promise of more work. SKIMA checks your location, route, vehicle and availability before each assignment.</Text>
+          <Text style={[styles.workloadHint, { color: palette.muted }]}>New work is assigned only when your route, vehicle and availability are suitable.</Text>
         </View>
       ) : null}
 
@@ -92,7 +92,7 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
             </View>
             <View style={styles.searchCopy}>
               <Text style={[styles.searchTitle, { color: palette.ink }]}>Find an arrival</Text>
-              <Text style={[styles.searchBody, { color: palette.muted }]}>Find an assigned arrival by order reference, Cylinder ID or driver name.</Text>
+              <Text style={[styles.searchBody, { color: palette.muted }]}>Search your station queue by order, cylinder or driver.</Text>
             </View>
           </View>
           <TextInput
@@ -105,7 +105,7 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
             style={[styles.searchInput, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
             value={searchQuery}
           />
-          <Text style={[styles.searchHint, { color: palette.muted }]}>Search shows only orders assigned to this station. Other customer and station information remains private.</Text>
+          <Text style={[styles.searchHint, { color: palette.muted }]}>Only arrivals assigned to this station are shown.</Text>
         </View>
       ) : null}
 
@@ -175,12 +175,17 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
                 style={({ pressed }) => [
                   styles.job,
                   shadows.soft,
-                  { backgroundColor: palette.surface, borderColor: palette.border, opacity: pressed ? 0.76 : 1 },
+                  {
+                    backgroundColor: palette.surface,
+                    borderColor: palette.border,
+                    opacity: pressed ? 0.78 : 1,
+                    transform: [{ scale: pressed ? 0.988 : 1 }],
+                  },
                 ]}
               >
                 <View style={styles.head}>
                   <View style={[styles.icon, { backgroundColor: palette.brandSoft }]}>
-                    {workspace === "driver" ? <Route color={palette.brand} size={23} /> : <ScanLine color={palette.brand} size={23} />}
+                    {workspace === "driver" ? <Route color={palette.brand} size={21} /> : <ScanLine color={palette.brand} size={21} />}
                   </View>
                   <View style={styles.headingCopy}>
                     <Text numberOfLines={1} style={[styles.title, { color: palette.ink }]}>{reference}</Text>
@@ -192,54 +197,31 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
                   </View>
                 </View>
 
-                <View style={[styles.divider, { backgroundColor: palette.border }]} />
-
-                {cylinderReference ? (
-                  <View style={styles.detail}>
-                    <View style={[styles.detailIcon, { backgroundColor: palette.soft }]}>
-                      <PackageCheck color={palette.mutedStrong} size={15} />
-                    </View>
-                    <View style={styles.detailCopy}>
-                      <Text style={[styles.detailLabel, { color: palette.muted }]}>CYLINDER ID</Text>
-                      <Text style={[styles.body, { color: palette.ink }]}>
-                        {cylinderReference}{cylinderTagStatus ? ` · ${tagStatusLabel(cylinderTagStatus)}` : ""}
+                <View style={styles.metaRow}>
+                  {cylinderReference ? (
+                    <View style={[styles.metaChip, { backgroundColor: palette.surfaceSubtle }]}>
+                      <PackageCheck color={palette.mutedStrong} size={13} />
+                      <Text numberOfLines={1} style={[styles.metaText, { color: palette.mutedStrong }]}>
+                        {cylinderReference}{cylinderTagStatus && normalizedStatus(cylinderTagStatus) !== "tagged" ? ` · ${tagStatusLabel(cylinderTagStatus)}` : ""}
                       </Text>
                     </View>
-                  </View>
-                ) : null}
-
-                {workspace === "station" && (driver || driverName || driverReference) ? (
-                  <View style={styles.detail}>
-                    <View style={[styles.detailIcon, { backgroundColor: palette.soft }]}>
-                      <UserCheck color={palette.mutedStrong} size={15} />
-                    </View>
-                    <View style={styles.detailCopy}>
-                      <Text style={[styles.detailLabel, { color: palette.muted }]}>ASSIGNED DRIVER</Text>
-                      <Text style={[styles.body, { color: palette.ink }]}>
-                        {[driverName, driverReference, driverVerificationStatus ? driverStatusLabel(driverVerificationStatus) : null].filter(Boolean).join(" · ") || "Driver details available in the job"}
+                  ) : null}
+                  {workspace === "station" && (driverName || driverReference) ? (
+                    <View style={[styles.metaChip, { backgroundColor: palette.surfaceSubtle }]}>
+                      <UserCheck color={palette.mutedStrong} size={13} />
+                      <Text numberOfLines={1} style={[styles.metaText, { color: palette.mutedStrong }]}>
+                        {[driverName, driverReference].filter(Boolean).join(" · ")}
                       </Text>
                     </View>
-                  </View>
-                ) : null}
-
-                <View style={styles.detail}>
-                  <View style={[styles.detailIcon, { backgroundColor: palette.soft }]}>
-                    <MapPin color={palette.mutedStrong} size={15} />
-                  </View>
-                  <View style={styles.detailCopy}>
-                    <Text style={[styles.detailLabel, { color: palette.muted }]}>LOCATION</Text>
-                    <Text numberOfLines={2} style={[styles.body, { color: palette.ink }]}>{locationText}</Text>
-                  </View>
+                  ) : null}
                 </View>
 
-                <View style={styles.detail}>
-                  <View style={[styles.detailIcon, { backgroundColor: palette.soft }]}>
-                    <Clock3 color={palette.mutedStrong} size={15} />
-                  </View>
-                  <View style={styles.detailCopy}>
-                    <Text style={[styles.detailLabel, { color: palette.muted }]}>LAST UPDATED</Text>
-                    <Text style={[styles.body, { color: palette.ink }]}>{formatDate(firstString(job, ["updated_at", "updatedAt", "created_at", "createdAt"]))}</Text>
-                  </View>
+                <View style={[styles.locationRow, { borderTopColor: palette.border }]}>
+                  <MapPin color={palette.brand} size={15} />
+                  <Text numberOfLines={1} style={[styles.locationText, { color: palette.ink }]}>{locationText}</Text>
+                  <Text style={[styles.updatedText, { color: palette.muted }]}>
+                    {compactDate(firstString(job, ["updated_at", "updatedAt", "created_at", "createdAt"]))}
+                  </Text>
                 </View>
               </Pressable>
             );
@@ -279,10 +261,11 @@ function readDriverDispatchLimit(config: PlatformRecord | null | undefined): num
   return Math.floor(configured);
 }
 
-function formatDate(value: string | null) {
-  if (!value) return "Time not available";
+function compactDate(value: string | null) {
+  if (!value) return "";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Time not available" : date.toLocaleString();
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function normalizedStatus(status: string) {
@@ -346,18 +329,18 @@ function jobStatusTone(status: string): "neutral" | "brand" | "success" | "warni
 }
 
 const styles = StyleSheet.create({
-  workloadCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  workloadCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
   workloadHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
   workloadIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   workloadCopy: { flex: 1, minWidth: 0, gap: 3 },
   workloadTitle: { ...typography.subheading, fontSize: 15 },
-  workloadBody: { ...typography.caption, lineHeight: 18 },
+  workloadBody: { ...typography.caption, fontSize: 11, lineHeight: 16 },
   workloadMetrics: { flexDirection: "row", gap: spacing.sm },
-  workloadMetric: { flex: 1, minHeight: 72, borderRadius: radii.md, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.xs },
+  workloadMetric: { flex: 1, minHeight: 64, borderRadius: radii.lg, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.xs },
   workloadValue: { fontSize: 20, fontWeight: "900" },
   workloadLabel: { ...typography.eyebrow, fontSize: 7, marginTop: 3, textAlign: "center" },
   workloadHint: { ...typography.caption, fontSize: 10, lineHeight: 15 },
-  searchCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
+  searchCard: { gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
   searchHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   searchCopy: { flex: 1, gap: 3 },
   searchTitle: { ...typography.subheading, fontSize: 15 },
@@ -366,19 +349,19 @@ const styles = StyleSheet.create({
   searchInput: { minHeight: 48, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, ...typography.bodyStrong, fontSize: 14 },
   loading: { minHeight: 180, alignItems: "center", justifyContent: "center", gap: spacing.sm },
   loadingText: { ...typography.caption },
-  list: { gap: spacing.md },
-  job: { gap: spacing.md, padding: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl },
-  head: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  icon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  headingCopy: { flex: 1, minWidth: 0, gap: 6 },
-  title: { ...typography.subheading, fontSize: 16 },
-  sizeBadge: { minWidth: 52, minHeight: 48, borderRadius: 15, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm },
-  sizeValue: { fontSize: 16, fontWeight: "900" },
-  sizeUnit: { ...typography.caption, fontSize: 9, marginTop: -1 },
-  divider: { height: StyleSheet.hairlineWidth },
-  detail: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
-  detailIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  detailCopy: { flex: 1, minWidth: 0, gap: 2 },
-  detailLabel: { ...typography.eyebrow, fontSize: 8 },
-  body: { ...typography.caption, fontSize: 12, lineHeight: 17 },
+  list: { gap: spacing.sm + 2 },
+  job: { gap: 12, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl },
+  head: { flexDirection: "row", alignItems: "center", gap: 11 },
+  icon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  headingCopy: { flex: 1, minWidth: 0, gap: 5 },
+  title: { ...typography.subheading, fontSize: 15 },
+  sizeBadge: { minWidth: 48, minHeight: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm },
+  sizeValue: { fontSize: 15, fontWeight: "900" },
+  sizeUnit: { ...typography.caption, fontSize: 8, marginTop: -1 },
+  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  metaChip: { maxWidth: "100%", minHeight: 28, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8, borderRadius: radii.pill },
+  metaText: { flexShrink: 1, ...typography.caption, fontSize: 9, fontWeight: "800" },
+  locationRow: { minHeight: 36, flexDirection: "row", alignItems: "center", gap: 7, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10 },
+  locationText: { flex: 1, minWidth: 0, ...typography.caption, fontSize: 11, fontWeight: "800" },
+  updatedText: { ...typography.caption, fontSize: 9 },
 });
