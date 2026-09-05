@@ -83,7 +83,16 @@ begin
     btrim(target_display_name),
     target_status,
     coalesce(target_config, '{}'::jsonb)
-      || jsonb_build_object('transport', target_transport)
+      || jsonb_build_object(
+        'transport', target_transport,
+        'supports', case target_transport
+          when 'google_generate_content' then '["text","json","image"]'::jsonb
+          when 'openai_compatible_chat' then '["text","json"]'::jsonb
+          when 'anthropic_messages' then '["text","json"]'::jsonb
+          when 'cloudflare_workers_ai' then '["image"]'::jsonb
+          else '[]'::jsonb
+        end
+      )
       || case when target_api_base_url is null then '{}'::jsonb
               else jsonb_build_object('api_base_url', target_api_base_url) end,
     target_secret_ref,
