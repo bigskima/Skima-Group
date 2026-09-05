@@ -314,6 +314,8 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
     adminGeometry,
     "Configure VITE_MAP_TILE_URL_TEMPLATE for the provider basemap",
   );
+  assertIncludes(adminGeometry, "requiresPublicMapCredential");
+  assertIncludes(adminGeometry, '"locationiq.com"');
 
   // Customer and partner saves must preserve normalized location data and
   // must not erase geography written by another onboarding step.
