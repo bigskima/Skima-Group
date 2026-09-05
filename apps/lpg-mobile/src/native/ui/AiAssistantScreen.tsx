@@ -612,7 +612,7 @@ function workspaceCopy(workspace: AiAssistantWorkspace) {
     return {
       title: "Driver copilot",
       subtitle: "Understand your jobs, next steps and earnings using your live SKIMA workspace.",
-      body: "Practical guidance grounded in the jobs and records visible to you.",
+      body: "Practical guidance grounded in your Driver Daily Brief, assigned jobs and records visible to you.",
       placeholder: "Ask about your current job or earnings",
     };
   }
@@ -634,7 +634,7 @@ function workspaceCopy(workspace: AiAssistantWorkspace) {
 
 function initialSuggestions(workspace: AiAssistantWorkspace): string[] {
   if (workspace === "driver") {
-    return ["What do I do next?", "Summarize my active jobs", "Explain my recent earnings"];
+    return ["What should I do next?", "Summarize my active jobs", "Explain my recent earnings"];
   }
   if (workspace === "station") {
     return ["What needs attention?", "Explain my recent settlement", "How busy could the next 7 days be?"];
