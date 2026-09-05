@@ -9842,6 +9842,7 @@ async function buildAiAssistantContext(
       riskAssessments,
       dispatchAssessments,
       financeFindings,
+      pricingIntelligence,
     ] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
@@ -9878,6 +9879,9 @@ async function buildAiAssistantContext(
         target_minimum_severity: "warning",
         target_limit: 40,
       }),
+      supabase.rpc("read_ai_pricing_intelligence", {
+        target_currency_code: "NGN",
+      }),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(applications.error);
@@ -9893,6 +9897,7 @@ async function buildAiAssistantContext(
     const financeRows = financeFindings.error
       ? []
       : Array.isArray(financeFindings.data) ? financeFindings.data : [];
+    const pricingSnapshot = pricingIntelligence.error ? null : pricingIntelligence.data ?? null;
     return {
       ...base,
       recentOrders: orders.data ?? [],
@@ -9903,6 +9908,7 @@ async function buildAiAssistantContext(
       partnerRiskAssessments: riskRows,
       dispatchShadowAssessments: dispatchRows,
       financeReconciliationFindings: financeRows,
+      pricingIntelligence: pricingSnapshot,
     };
   }
 
@@ -9943,6 +9949,8 @@ function aiSystemPrompt(workspace: string): string {
     "Never disclose dispatch shadow assessments to customer, driver or station workspaces.",
     "Finance reconciliation findings are internal deterministic diagnostics for authorized administrators. They may identify ledger, escrow, settlement or deposit records that need review, but they cannot post ledger entries, move money, reverse transactions, release escrow or authorize a correction.",
     "Never disclose internal finance reconciliation findings to customer, driver or station workspaces.",
+    "Pricing intelligence is admin-only simulation from governed SKIMA station prices, the current platform markup and recent historical kg. Scenario projections assume volume stays constant; they do not model demand elasticity and must never be presented as a recommended or automatically applied price.",
+    "Never claim that pricing intelligence changed a station price, SKIMA fee, quote or financial policy, and never disclose internal pricing simulations to customer, driver or station workspaces.",
     "Be concise, practical and use normal customer-facing language. Do not expose internal database field names unless the user explicitly asks for technical detail.",
   ].join("\n");
 }
@@ -9957,7 +9965,7 @@ function aiWorkspaceSuggestions(workspace: string): readonly string[] {
   if (workspace === "station") {
     return ["What needs attention?", "How busy could the next 7 days be?", "Summarize my current queue"];
   }
-  return ["Are any money records out of balance?", "Where does shadow dispatch disagree?", "Which partner risks need review?"];
+  return ["What would our fee scenarios look like at recent volume?", "Are any money records out of balance?", "Where does shadow dispatch disagree?"];
 }
 
 async function adminAiRuntimeResponse(
@@ -9986,6 +9994,7 @@ async function adminAiRuntimeResponse(
     riskAssessments,
     dispatchAssessments,
     financeFindings,
+    pricingIntelligence,
   ] = await Promise.all([
     serviceClient
       .from("ai_capabilities")
@@ -10029,6 +10038,9 @@ async function adminAiRuntimeResponse(
       .eq("status", "open")
       .order("last_detected_at", { ascending: false })
       .limit(100),
+    requestClient.rpc("read_ai_pricing_intelligence", {
+      target_currency_code: "NGN",
+    }),
   ]);
 
   if (capabilities.error) return databaseError(capabilities.error, id);
@@ -10048,6 +10060,7 @@ async function adminAiRuntimeResponse(
         ? []
         : Array.isArray(dispatchAssessments.data) ? dispatchAssessments.data : [],
       financeFindings: financeFindings.error ? [] : financeFindings.data ?? [],
+      pricingIntelligence: pricingIntelligence.error ? null : pricingIntelligence.data ?? null,
       userId: user.id,
     },
     requestId: id,
