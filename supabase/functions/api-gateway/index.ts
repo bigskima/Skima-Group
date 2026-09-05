@@ -58,6 +58,8 @@ const ROUTES = new Set([
   "/admin/maps/location/provider",
   "/admin/ai/runtime",
   "/admin/ai/provider-route",
+  "/admin/ai/free-fallback-route",
+  "/admin/ai/usage-policy",
   "/admin/ai/provider-config",
   "/admin/ai/insight-action",
   "/admin/system/overview",
@@ -377,6 +379,58 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_reason: requireString(payload.reason, "reason"),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_route_config: optionalRecord(payload.routeConfig) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/ai/free-fallback-route" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("configure_ai_free_fallback_route", {
+        target_capability_key: requirePlatformKey(payload.capabilityKey, "capabilityKey"),
+        target_provider_adapter_key: requirePlatformKey(payload.providerAdapterKey, "providerAdapterKey"),
+        target_model_key: requireString(payload.modelKey, "modelKey"),
+        target_priority: requireInteger(payload.priority, "priority", 2, 10000),
+        target_enabled: payload.enabled === true,
+        target_reason: requireString(payload.reason, "reason"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/ai/usage-policy" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("set_ai_usage_policy_limits", {
+        target_policy_key: requirePlatformKey(payload.policyKey, "policyKey"),
+        target_daily_request_limit: requireInteger(payload.dailyRequestLimit, "dailyRequestLimit", 1, 1000000),
+        target_per_user_daily_request_limit: requireInteger(
+          payload.perUserDailyRequestLimit,
+          "perUserDailyRequestLimit",
+          1,
+          1000000,
+        ),
+        target_daily_input_unit_limit: optionalInteger(
+          payload.dailyInputUnitLimit,
+          "dailyInputUnitLimit",
+          1,
+          Number.MAX_SAFE_INTEGER,
+        ),
+        target_daily_output_unit_limit: optionalInteger(
+          payload.dailyOutputUnitLimit,
+          "dailyOutputUnitLimit",
+          1,
+          Number.MAX_SAFE_INTEGER,
+        ),
+        target_automatic_free_failover: payload.automaticFreeFailover === true,
+        target_reason: requireString(payload.reason, "reason"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
       }),
       id,
     );
@@ -4946,14 +5000,19 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }));
 
       if (error instanceof AiProviderRuntimeError) {
+        const usageLimited =
+          error.code === "provider_rate_limited" ||
+          error.code === "ai_quota_exhausted";
         return jsonResponse({
           ok: false,
           error: error.code,
-          message: error.code === "provider_rate_limited"
+          message: error.code === "ai_quota_exhausted"
+            ? "SKIMA AI has reached its configured free-tier usage limit for now. Your account and LPG operations are unaffected."
+            : error.code === "provider_rate_limited"
             ? "SKIMA AI is busy right now. Please try again shortly."
             : "SKIMA AI is temporarily unavailable. Your account and LPG operations are unaffected.",
           requestId: id,
-        }, error.code === "provider_rate_limited" ? 429 : 503);
+        }, usageLimited ? 429 : 503);
       }
 
       return jsonResponse({
@@ -10211,6 +10270,7 @@ async function adminAiRuntimeResponse(
     financeFindings,
     pricingIntelligence,
     expansionOpportunities,
+    usageGovernor,
   ] = await Promise.all([
     serviceClient
       .from("ai_capabilities")
@@ -10260,6 +10320,7 @@ async function adminAiRuntimeResponse(
     requestClient.rpc("read_ai_expansion_opportunities", {
       target_limit: 100,
     }),
+    requestClient.rpc("read_ai_usage_governor_status"),
   ]);
 
   if (capabilities.error) return databaseError(capabilities.error, id);
@@ -10283,6 +10344,7 @@ async function adminAiRuntimeResponse(
       expansionOpportunities: expansionOpportunities.error
         ? []
         : Array.isArray(expansionOpportunities.data) ? expansionOpportunities.data : [],
+      usageGovernor: usageGovernor.error ? null : usageGovernor.data ?? null,
       userId: user.id,
     },
     requestId: id,
