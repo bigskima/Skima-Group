@@ -3,6 +3,16 @@ begin;
 -- Enforce fallback invariants at the table boundary, not only through admin RPCs.
 -- This prevents direct privileged writes from bypassing free-only automatic failover rules.
 
+-- Earlier free-tier metadata marked the initial Gemini route as eligible before the runtime
+-- distinguished primary versus fallback routes. Normalize every non-fallback route first.
+update public.ai_provider_routes
+set config = config || jsonb_build_object(
+      'fallback_only', false,
+      'automatic_failover_eligible', false
+    ),
+    updated_at = timezone('utc', now())
+where coalesce((config ->> 'fallback_only')::boolean, false) = false;
+
 create or replace function public.validate_ai_provider_route_fallback_integrity()
 returns trigger
 language plpgsql
