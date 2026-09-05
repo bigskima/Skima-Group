@@ -168,13 +168,7 @@ declare
   application_record record;
   insight_key_value text;
 begin
-  -- Service runtime or AI managers can refresh deterministic exception state.
-  if coalesce(auth.role(), '') <> 'service_role'
-    and not public.is_platform_super_admin()
-    and not public.has_permission('platform.ai.manage', null) then
-    raise exception 'AI operations management permission is required';
-  end if;
-
+  -- Execution is restricted to service_role by the grants below.
   select * into rule_record
   from public.ai_operational_rules
   where key = 'lpg.order.stale_active'
