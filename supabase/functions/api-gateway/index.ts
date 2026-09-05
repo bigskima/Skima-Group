@@ -9815,6 +9815,11 @@ async function buildAiAssistantContext(
       supabase.rpc("read_lpg_jobs", { target_queue: "station", target_limit: 15 }),
       supabase.rpc("read_lpg_station_runtime", { target_limit: 10, target_station_branch_id: null }),
       supabase.rpc("read_ai_demand_forecasts", { target_station_branch_id: null }),
+      supabase.rpc("read_ai_partner_risk_assessments", {
+        target_subject_type: null,
+        target_minimum_level: "medium",
+        target_limit: 50,
+      }),
     ]);
     assertAiContextQuery(jobs.error);
     assertAiContextQuery(runtime.error);
@@ -9833,7 +9838,7 @@ async function buildAiAssistantContext(
     if (access.data !== true) {
       throw new AiProviderRuntimeError("forbidden", "Admin AI access is not available.");
     }
-    const [orders, applications, aiRuns, insights, forecasts] = await Promise.all([
+    const [orders, applications, aiRuns, insights, forecasts, riskAssessments] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
         .select("id,public_reference,status,payment_status,assignment_status,station_branch_id,driver_profile_id,created_at,updated_at")
@@ -9862,6 +9867,9 @@ async function buildAiAssistantContext(
     assertAiContextQuery(aiRuns.error);
     const insightRows = insights.error ? [] : insights.data ?? [];
     const forecastRows = forecasts.error ? [] : Array.isArray(forecasts.data) ? forecasts.data : [];
+    const riskRows = riskAssessments.error
+      ? []
+      : Array.isArray(riskAssessments.data) ? riskAssessments.data : [];
     return {
       ...base,
       recentOrders: orders.data ?? [],
@@ -9869,6 +9877,7 @@ async function buildAiAssistantContext(
       aiRuns: aiRuns.data ?? [],
       operationalInsights: insightRows,
       demandForecasts: forecastRows,
+      partnerRiskAssessments: riskRows,
     };
   }
 
@@ -9903,6 +9912,8 @@ function aiSystemPrompt(workspace: string): string {
     "Demand forecasts are statistical estimates from recent SKIMA order history. Never present them as guaranteed demand, authoritative inventory, a price instruction, or a dispatch decision.",
     "Customer refill outlooks are estimates from that customer's historical refill intervals. They do not measure remaining gas, cylinder pressure or safety and must never be described as a gas gauge.",
     "Customer support case context contains only that customer's complaint status and public support history. Never invent internal review notes, private moderation decisions, or a resolution that is not present.",
+    "Partner risk assessments are internal advisory signals for authorized administrators only. They are derived from configured SKIMA evidence, are not proof of fraud, and must never be described as an automatic suspension, fund hold, dispatch block, verification decision or public reputation score.",
+    "Never disclose internal partner risk assessments to customer, driver or station workspaces.",
     "Be concise, practical and use normal customer-facing language. Do not expose internal database field names unless the user explicitly asks for technical detail.",
   ].join("\n");
 }
@@ -9917,7 +9928,7 @@ function aiWorkspaceSuggestions(workspace: string): readonly string[] {
   if (workspace === "station") {
     return ["What needs attention?", "How busy could the next 7 days be?", "Summarize my current queue"];
   }
-  return ["What needs attention?", "Where is LPG demand likely to be highest?", "Are any AI tasks failing?"];
+  return ["What needs attention?", "Which partner risks need review?", "Where is LPG demand likely to be highest?"];
 }
 
 async function adminAiRuntimeResponse(
@@ -9937,7 +9948,7 @@ async function adminAiRuntimeResponse(
     return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
   }
   const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
-  const [capabilities, routes, providers, insights, forecasts] = await Promise.all([
+  const [capabilities, routes, providers, insights, forecasts, riskAssessments] = await Promise.all([
     serviceClient
       .from("ai_capabilities")
       .select("id,key,display_name,description,category,response_mode,control_mode,status,config,updated_at")
@@ -9964,6 +9975,12 @@ async function adminAiRuntimeResponse(
       .eq("subject_type", "lpg_station_branch")
       .order("horizon_days", { ascending: true })
       .limit(200),
+    serviceClient
+      .from("ai_risk_assessments")
+      .select("id,subject_type,subject_id,score,risk_level,evidence,recommended_action,generated_at,valid_until,version")
+      .in("risk_level", ["medium", "high", "critical"])
+      .order("score", { ascending: false })
+      .limit(100),
   ]);
 
   if (capabilities.error) return databaseError(capabilities.error, id);
@@ -9978,6 +9995,7 @@ async function adminAiRuntimeResponse(
       providers: providers.data ?? [],
       insights: insights.error ? [] : insights.data ?? [],
       forecasts: forecasts.error ? [] : forecasts.data ?? [],
+      riskAssessments: riskAssessments.error ? [] : riskAssessments.data ?? [],
       userId: user.id,
     },
     requestId: id,
