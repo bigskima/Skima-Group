@@ -81,9 +81,9 @@ set search_path = public, pg_temp
 as $$
 declare
   configuration jsonb := '{}'::jsonb;
-  enabled boolean := true;
-  driver_enabled boolean := true;
-  station_enabled boolean := true;
+  enabled boolean := false;
+  driver_enabled boolean := false;
+  station_enabled boolean := false;
   radius_meters integer := 5000;
   minimum_radius integer := 500;
   maximum_radius integer := 50000;
