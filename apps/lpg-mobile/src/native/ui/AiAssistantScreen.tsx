@@ -135,6 +135,11 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
       setSupportSeverity("standard");
       setSupportOpen(false);
       setSupportNotice("Support case created. SKIMA support can now review the issue.");
+      setSuggestions([
+        "What's happening with my support case?",
+        "Where is my refill?",
+        "Explain my latest order",
+      ]);
     } catch (cause) {
       setSupportError(
         friendlyError(
@@ -349,7 +354,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
                   </View>
                   <View style={[styles.confirmBadge, { backgroundColor: palette.successSoft }]}>
                     <ShieldCheck color={palette.success} size={13} />
-                    <Text style={[styles.confirmBadgeText, { color: palette.success }]}>User confirmed</Text>
+                    <Text style={[styles.confirmBadgeText, { color: palette.success }]}>User controlled</Text>
                   </View>
                 </View>
 
