@@ -69,7 +69,7 @@ export function Screen({
         <View style={[styles.heading, compact && styles.headingCompact]}>
           <View style={styles.headingCopy}>
             {eyebrow ? (
-              <View style={[styles.eyebrowPill, { backgroundColor: palette.brandSoft }]}>
+              <View style={[styles.eyebrowPill, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}>
                 <Text style={[styles.eyebrow, { color: palette.brand }]}>{eyebrow}</Text>
               </View>
             ) : null}
@@ -98,25 +98,26 @@ export function Screen({
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
-  outer: { alignItems: "center", paddingTop: spacing.md, paddingBottom: 112 },
+  outer: { alignItems: "center", paddingTop: 14, paddingBottom: 120 },
   content: { width: "100%" },
-  body: { gap: spacing.md },
+  body: { gap: 18 },
   heading: {
     minHeight: 72,
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: spacing.md,
-    marginBottom: spacing.lg,
+    marginBottom: 20,
     paddingTop: spacing.xs,
   },
-  headingCompact: { minHeight: 64, marginBottom: spacing.md },
+  headingCompact: { minHeight: 62, marginBottom: 18 },
   headingCopy: { flex: 1, alignItems: "flex-start", gap: 7 },
   action: { alignSelf: "center" },
   actionCompact: { alignSelf: "flex-start", paddingTop: 2 },
   eyebrowPill: {
-    minHeight: 24,
+    minHeight: 25,
     justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radii.pill,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -126,8 +127,8 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   title: { ...typography.title },
-  titleMobile: { fontSize: 25, lineHeight: 30, letterSpacing: -0.55 },
-  subtitle: { ...typography.body, maxWidth: 620 },
+  titleMobile: { fontSize: 27, lineHeight: 32, letterSpacing: -0.7 },
+  subtitle: { ...typography.body, maxWidth: 620, fontSize: 13, lineHeight: 19 },
   offline: {
     flexDirection: "row",
     alignItems: "center",
