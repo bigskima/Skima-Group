@@ -29,7 +29,7 @@ export interface PaystackBalance {
 
 export interface PaystackTransferResult {
   readonly providerReference: string;
-  readonly providerStatus: "processing" | "succeeded";
+  readonly providerStatus: "processing" | "succeeded" | "failed" | "reversed";
   readonly rawStatus: string | null;
   readonly response: Record<string, unknown>;
 }
@@ -195,31 +195,81 @@ export async function initiatePaystackTransfer(
   }
   const transferReference = normalizePaystackTransferReference(input.reference);
 
-  const body = await paystackRequest(
-    secretKey,
-    new URL("https://api.paystack.co/transfer"),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        source: "balance",
-        amount: Math.round(input.amountMajor * 100),
-        recipient: input.recipientCode.trim(),
-        reason: input.reason.trim() || "SKIMA payout",
-        reference: transferReference,
-      }),
-    },
-    fetcher,
-  );
+  let body: Record<string, unknown>;
+  try {
+    body = await paystackRequest(
+      secretKey,
+      new URL("https://api.paystack.co/transfer"),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "balance",
+          amount: Math.round(input.amountMajor * 100),
+          recipient: input.recipientCode.trim(),
+          reason: input.reason.trim() || "SKIMA payout",
+          reference: transferReference,
+        }),
+      },
+      fetcher,
+    );
+  } catch (error) {
+    if (error instanceof PaystackPayoutError && error.code === "paystack_transfer_reference_exists") {
+      const existing = await verifyPaystackTransfer(secretKey, transferReference, fetcher);
+      if (existing) return existing;
+    }
+    throw error;
+  }
+
   const data = record(body.data);
   const providerReference = text(data.reference) ?? transferReference;
   const rawStatus = text(data.status);
   return {
     providerReference,
-    providerStatus: rawStatus === "success" ? "succeeded" : "processing",
+    providerStatus: mapPaystackTransferStatus(rawStatus),
     rawStatus,
     response: body,
   };
+}
+
+export async function verifyPaystackTransfer(
+  secretKey: string,
+  reference: string,
+  fetcher: Fetcher = fetch,
+): Promise<PaystackTransferResult | null> {
+  const transferReference = normalizePaystackTransferReference(reference);
+  try {
+    const body = await paystackRequest(
+      secretKey,
+      new URL(`https://api.paystack.co/transfer/verify/${encodeURIComponent(transferReference)}`),
+      { method: "GET" },
+      fetcher,
+    );
+    const data = record(body.data);
+    const providerReference = text(data.reference) ?? transferReference;
+    const rawStatus = text(data.status);
+    return {
+      providerReference,
+      providerStatus: mapPaystackTransferStatus(rawStatus),
+      rawStatus,
+      response: body,
+    };
+  } catch (error) {
+    if (error instanceof PaystackPayoutError && error.code === "paystack_transfer_not_found") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function mapPaystackTransferStatus(
+  rawStatus: string | null,
+): "processing" | "succeeded" | "failed" | "reversed" {
+  const status = rawStatus?.trim().toLowerCase() ?? "";
+  if (status === "success") return "succeeded";
+  if (status === "reversed") return "reversed";
+  if (["failed", "abandoned", "blocked", "rejected"].includes(status)) return "failed";
+  return "processing";
 }
 
 export function normalizePaystackTransferReference(value: string): string {
@@ -295,6 +345,20 @@ async function paystackRequest(
       ? providerMessage
       : "Paystack could not complete the payout request.";
 
+    if (lowerMessage.includes("reference already exists") || lowerMessage.includes("unique reference")) {
+      throw new PaystackPayoutError(
+        "paystack_transfer_reference_exists",
+        "This Paystack transfer reference already exists.",
+        409,
+      );
+    }
+    if (lowerMessage.includes("transfer not found")) {
+      throw new PaystackPayoutError(
+        "paystack_transfer_not_found",
+        "No Paystack transfer exists for this reference.",
+        404,
+      );
+    }
     if (lowerMessage.includes("starter business")) {
       throw new PaystackPayoutError(
         "paystack_registered_business_required",
