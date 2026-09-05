@@ -439,6 +439,18 @@ const checks: Check[] = [
     required: [literalPattern(route), literalPattern(permission)],
   })),
   {
+    name: "Paystack duplicate transfer retries verify the existing transfer first",
+    source: paystackPayoutAdapter,
+    required: [
+      /verifyPaystackTransfer/i,
+      /transfer\/verify/i,
+      /paystack_transfer_reference_exists/i,
+      /paystack_transfer_not_found/i,
+      /mapPaystackTransferStatus/i,
+      /\["failed", "abandoned", "blocked", "rejected"\]/i,
+    ],
+  },
+  {
     name: "Paystack transfer references are lowercase provider-safe identifiers",
     source: paystackPayoutAdapter,
     required: [
