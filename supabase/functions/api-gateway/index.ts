@@ -2208,7 +2208,26 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       });
       if (contextResult.error) return databaseError(contextResult.error, id);
       const context = requireRecord(contextResult.data, "platform revenue payout context");
-      const walletId = requireUuid(context.walletId, "SKIMA revenue wallet");
+      let walletId = optionalUuid(context.walletId, "SKIMA revenue wallet");
+      if (!walletId) {
+        const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (!serviceRoleKey) {
+          return jsonResponse({
+            ok: false,
+            error: "server_misconfigured",
+            message: "SKIMA revenue payout setup is not configured.",
+            requestId: id,
+          }, 503);
+        }
+        const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+        const ensured = await serviceClient.rpc("ensure_platform_revenue_wallet", {
+          target_currency_code: "NGN",
+          target_source: "platform.revenue_payout_setup",
+          target_idempotency_key: "platform-revenue:ngn",
+        });
+        if (ensured.error) return databaseError(ensured.error, id);
+        walletId = requireUuid(ensured.data, "SKIMA revenue wallet");
+      }
       return configurePaystackWithdrawalBeneficiary({
         accountNumber: requireString(body.value.accountNumber, "accountNumber"),
         bankCode: requireString(body.value.bankCode, "bankCode"),
