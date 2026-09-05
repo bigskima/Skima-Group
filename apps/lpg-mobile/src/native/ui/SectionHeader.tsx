@@ -19,14 +19,15 @@ export function SectionHeader({
         <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
         {description ? <Text style={[styles.description, { color: palette.muted }]}>{description}</Text> : null}
       </View>
-      {action ? <View>{action}</View> : null}
+      {action ? <View style={styles.action}>{action}</View> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
-  copy: { flex: 1, gap: 3 },
-  title: { ...typography.heading },
-  description: { ...typography.caption, maxWidth: 620 },
+  row: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: spacing.md, paddingHorizontal: 2 },
+  copy: { flex: 1, gap: 4 },
+  title: { ...typography.heading, fontSize: 18, lineHeight: 23, letterSpacing: -0.3 },
+  description: { ...typography.caption, fontSize: 11, lineHeight: 16, maxWidth: 620 },
+  action: { paddingBottom: 1 },
 });
