@@ -58,7 +58,10 @@ export function AppButton({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={props.accessibilityLabel ?? label}
+      accessibilityState={{ disabled: inactive, busy: loading }}
       disabled={inactive}
+      hitSlop={size === "sm" ? 4 : 2}
       {...props}
       style={({ pressed }) => [
         styles.base,
@@ -71,7 +74,7 @@ export function AppButton({
           backgroundColor: pressed && variant === "ghost" ? palette.brandSoft : backgroundColor,
           borderColor,
           opacity: inactive ? 0.46 : 1,
-          transform: [{ scale: pressed && !inactive ? 0.985 : 1 }],
+          transform: [{ scale: pressed && !inactive ? 0.975 : 1 }],
         },
       ]}
     >
@@ -95,6 +98,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: spacing.md,
+    overflow: "hidden",
   },
   sm: { minHeight: controlHeights.sm + 2, paddingHorizontal: 14 },
   md: { minHeight: controlHeights.md + 2, paddingHorizontal: 18 },
@@ -102,5 +106,5 @@ const styles = StyleSheet.create({
   fullWidth: { width: "100%" },
   content: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm },
   icon: { alignItems: "center", justifyContent: "center" },
-  label: { ...typography.bodyStrong, fontSize: 13, letterSpacing: -0.08 },
+  label: { ...typography.bodyStrong, fontSize: 14, letterSpacing: -0.08 },
 });
