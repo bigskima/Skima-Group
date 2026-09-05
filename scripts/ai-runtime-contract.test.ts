@@ -27,6 +27,7 @@ const [
   gatewaySource,
   adminAiWorkspace,
   mobileAssistant,
+  mobileAiLauncher,
   customerLayout,
   driverLayout,
   stationLayout,
@@ -57,6 +58,7 @@ const [
   readRepositoryFile("supabase/functions/api-gateway/index.ts"),
   readRepositoryFile("apps/admin/src/admin-ai-workspace.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/AiAssistantScreen.tsx"),
+  readRepositoryFile("apps/lpg-mobile/src/native/ui/AiAssistantLauncher.tsx"),
   readRepositoryFile("apps/lpg-mobile/app/(customer)/_layout.tsx"),
   readRepositoryFile("apps/lpg-mobile/app/(driver)/_layout.tsx"),
   readRepositoryFile("apps/lpg-mobile/app/(station)/_layout.tsx"),
@@ -383,6 +385,42 @@ Deno.test("Ask SKIMA remains grounded, read-only, and workspace-authorized", () 
     mobileAssistant,
     /SUPABASE_SERVICE_ROLE|GEMINI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY/,
     "provider or service secrets must never be present in the mobile assistant",
+  );
+});
+
+Deno.test("home intelligence is deterministic and reuses the existing Ask SKIMA launcher", () => {
+  assertIncludes(
+    gatewaySource,
+    'routePath === "/runtime/ai/home-insight"',
+    "mobile home intelligence needs a read-only contextual endpoint",
+  );
+  assertIncludes(
+    gatewaySource,
+    "buildAiHomeInsight(workspace, context)",
+    "home insight must derive from already authorized SKIMA context",
+  );
+  assertIncludes(gatewaySource, 'kind: "refill_outlook"', "customer home intelligence should surface deterministic refill outlooks");
+  assertIncludes(gatewaySource, 'kind: "driver_next_step"', "driver home intelligence should surface the current workflow stage");
+  assertIncludes(gatewaySource, 'kind: "station_demand_outlook"', "station home intelligence should surface deterministic demand estimates");
+  assertIncludes(
+    mobileAiLauncher,
+    "path: `/runtime/ai/home-insight?workspace=${encodeURIComponent(workspace)}`",
+    "the existing launcher must fetch contextual insight rather than add another dashboard card",
+  );
+  assertIncludes(
+    mobileAiLauncher,
+    "History-based estimate",
+    "estimated home intelligence must be visibly labelled",
+  );
+  assertNotIncludes(
+    mobileAiLauncher,
+    "invokeAiText",
+    "rendering the home intelligence card must never consume an LLM call",
+  );
+  assertNotMatch(
+    mobileAiLauncher,
+    /GEMINI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|SUPABASE_SERVICE_ROLE/,
+    "home intelligence UI must not contain server credentials",
   );
 });
 
