@@ -9,9 +9,10 @@ import {
   WalletCards,
 } from "lucide-react-native";
 import type { ComponentType } from "react";
-import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { StyleSheet, useWindowDimensions } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows } from "../theme/tokens";
+import { GuideTarget } from "../onboarding/InAppGuideProvider";
 
 type Tab = {
   name: string;
@@ -76,7 +77,8 @@ export function WorkspaceTabs({ tabs, hidden = [] }: { tabs: readonly Tab[]; hid
           options={{
             title,
             tabBarIcon: ({ color, size, focused }) => (
-              <View
+              <GuideTarget
+                targetKey={`nav.${name}`}
                 style={[
                   styles.icon,
                   desktop && focused && { backgroundColor: palette.brandSofter },
@@ -88,7 +90,7 @@ export function WorkspaceTabs({ tabs, hidden = [] }: { tabs: readonly Tab[]; hid
                   size={desktop ? Math.min(size, 21) : 20}
                   strokeWidth={focused ? 2.6 : 2}
                 />
-              </View>
+              </GuideTarget>
             ),
           }}
         />
