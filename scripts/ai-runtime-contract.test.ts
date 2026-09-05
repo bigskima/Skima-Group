@@ -15,6 +15,7 @@ const [
   driverEarningsExplanationSql,
   stationSettlementExplanationSql,
   customerServiceabilitySql,
+  applicantApplicationExplanationSql,
   supportTriageSql,
   partnerRiskSql,
   partnerRiskGuardSql,
@@ -43,6 +44,7 @@ const [
   savedLocationsScreen,
   jobDetailScreen,
   stationInventoryScreen,
+  applicationOverviewScreen,
   customerLayout,
   driverLayout,
   stationLayout,
@@ -61,6 +63,7 @@ const [
   readRepositoryFile("supabase/migrations/20260906006000_driver_earnings_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906007000_station_settlement_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906008000_customer_serviceability_explanation_runtime.sql"),
+  readRepositoryFile("supabase/migrations/20260906010000_applicant_application_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906009000_ai_support_triage_intelligence.sql"),
   readRepositoryFile("supabase/migrations/20260905233000_ai_partner_trust_risk_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233500_ai_partner_risk_configuration_guard.sql"),
@@ -89,6 +92,7 @@ const [
   readRepositoryFile("apps/lpg-mobile/src/native/ui/SavedLocationsScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/StationInventoryScreen.tsx"),
+  readRepositoryFile("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/app/(customer)/_layout.tsx"),
   readRepositoryFile("apps/lpg-mobile/app/(driver)/_layout.tsx"),
   readRepositoryFile("apps/lpg-mobile/app/(station)/_layout.tsx"),
@@ -1925,6 +1929,109 @@ Deno.test("customer serviceability explanations use canonical coordinate coverag
     mobileAssistant,
     "Can SKIMA serve my saved location?",
     "customer assistant should surface saved-location availability",
+  );
+});
+
+Deno.test("applicant application explanations mirror canonical gates without leaking reviewer internals", () => {
+  const sql = normalizeWhitespace(applicantApplicationExplanationSql);
+
+  assertIncludes(
+    sql,
+    "where application_record.applicant_user_id = auth.uid()",
+    "application explanations must be limited to the signed-in applicant",
+  );
+  assertIncludes(
+    sql,
+    "public.application_requirement_applies",
+    "application explanations must respect the canonical conditional requirement engine",
+  );
+  assertIncludes(
+    sql,
+    "submission.status in ('uploaded','submitted','under_review','approved')",
+    "submission readiness must mirror the canonical application submission gate",
+  );
+  assertIncludes(
+    sql,
+    "where submission.status = 'approved'",
+    "approval readiness must use canonical approved document state",
+  );
+  assertIncludes(
+    applicantApplicationExplanationSql,
+    "review_event.applicant_message",
+    "application explanations may expose explicit applicant-facing review messages",
+  );
+  assertIncludes(
+    applicantApplicationExplanationSql,
+    "document_event.applicant_message",
+    "document explanations may expose explicit applicant-facing document messages",
+  );
+  assertNotMatch(
+    applicantApplicationExplanationSql,
+    /(?:review_event|document_event)\.internal_notes/,
+    "applicant explanations must never select private reviewer notes",
+  );
+  assertNotIncludes(
+    applicantApplicationExplanationSql,
+    "'reviewerUserId'",
+    "applicant projection must not expose reviewer identity",
+  );
+  assertNotMatch(
+    applicantApplicationExplanationSql,
+    /\b(?:update|insert\s+into|delete\s+from)\s+public\.(?:application_records|application_versions|application_review_tasks|application_review_events|document_submissions|document_review_events)\b/i,
+    "application explanation runtime must remain read-only",
+  );
+  assertIncludes(
+    sql,
+    "'doesnotexposeinternalnotes', true",
+    "application projection must explicitly record its privacy boundary",
+  );
+});
+
+Deno.test("Ask SKIMA uses applicant-safe progress and contextual application actions", () => {
+  assertIncludes(
+    gatewaySource,
+    'supabase.rpc("read_my_application_explanations"',
+    "non-admin Ask SKIMA context must use the applicant-safe projection",
+  );
+  assertIncludes(
+    gatewaySource,
+    "applicationExplanations: ownApplicationExplanations",
+    "customer/driver/station context must receive applicant-safe application progress",
+  );
+  assertIncludes(
+    gatewaySource,
+    "They intentionally exclude internal reviewer notes and reviewer identities.",
+    "assistant prompt must preserve application reviewer privacy",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Never invent a reviewer decision, approval timeline, hidden reason or internal note",
+    "assistant must not invent hidden application review information",
+  );
+  assertIncludes(
+    gatewaySource,
+    'getRecordValue(context, "applicationExplanations")',
+    "home insight should prefer applicant-safe application progress",
+  );
+  assertIncludes(
+    applicationOverviewScreen,
+    'label="Explain my application"',
+    "post-submission application UI must expose contextual Ask SKIMA guidance",
+  );
+  assertIncludes(
+    applicationOverviewScreen,
+    'label="Check what is still missing"',
+    "pre-submission review must expose a missing-requirements explanation action",
+  );
+  assertIncludes(
+    applicationOverviewScreen,
+    "Nothing is sent until you choose Send.",
+    "application contextual AI actions must remain prefill-only",
+  );
+  assertIncludes(
+    applicationOverviewScreen,
+    "Do not submit or change anything.",
+    "application guidance prompt must keep Ask SKIMA read-only",
   );
 });
 
