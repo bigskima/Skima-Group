@@ -10670,15 +10670,24 @@ async function buildAiAssistantContext(
   };
 
   let ownApplications: readonly unknown[] = [];
+  let ownApplicationExplanations: readonly unknown[] = [];
   if (workspace !== "admin") {
-    const applications = await supabase
-      .from("application_records")
-      .select("id,application_type_id,status,organization_id,active_version,submitted_at,decided_at,approved_at,rejected_at,activated_subject_type,activated_subject_id,source,created_at,updated_at")
-      .eq("applicant_user_id", user.id)
-      .order("updated_at", { ascending: false })
-      .limit(8);
+    const [applications, applicationExplanations] = await Promise.all([
+      supabase
+        .from("application_records")
+        .select("id,application_type_id,status,organization_id,active_version,submitted_at,decided_at,approved_at,rejected_at,activated_subject_type,activated_subject_id,source,created_at,updated_at")
+        .eq("applicant_user_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(8),
+      supabase.rpc("read_my_application_explanations", {
+        target_limit: 8,
+      }),
+    ]);
     assertAiContextQuery(applications.error);
     ownApplications = applications.data ?? [];
+    ownApplicationExplanations = applicationExplanations.error
+      ? []
+      : Array.isArray(applicationExplanations.data) ? applicationExplanations.data : [];
   }
 
   if (workspace === "customer") {
@@ -10731,6 +10740,7 @@ async function buildAiAssistantContext(
       locationServiceability: locationServiceability.error
         ? []
         : Array.isArray(locationServiceability.data) ? locationServiceability.data : [],
+      applicationExplanations: ownApplicationExplanations,
       myApplications: ownApplications,
     };
   }
@@ -10764,6 +10774,7 @@ async function buildAiAssistantContext(
       earningsExplanations: earningsExplanations.error
         ? []
         : Array.isArray(earningsExplanations.data) ? earningsExplanations.data : [],
+      applicationExplanations: ownApplicationExplanations,
       myApplications: ownApplications,
     };
   }
@@ -10789,6 +10800,7 @@ async function buildAiAssistantContext(
       settlementExplanations: settlementExplanations.error
         ? []
         : Array.isArray(settlementExplanations.data) ? settlementExplanations.data : [],
+      applicationExplanations: ownApplicationExplanations,
       myApplications: ownApplications,
     };
   }
@@ -10947,7 +10959,12 @@ function buildAiHomeInsight(
       };
     }
 
-    const applications = recordArrayValue(getRecordValue(context, "myApplications"));
+    const applicationExplanations = recordArrayValue(
+      getRecordValue(context, "applicationExplanations"),
+    );
+    const applications = applicationExplanations.length > 0
+      ? applicationExplanations
+      : recordArrayValue(getRecordValue(context, "myApplications"));
     const pendingApplication = applications.find((record) =>
       !["approved", "rejected", "withdrawn", "cancelled", "completed"].includes(
         stringOrNull(getRecordValue(record, "status")) ?? "",
@@ -11153,6 +11170,8 @@ function aiSystemPrompt(workspace: string): string {
     "Station settlementExplanations are branch-finance-scoped records of the station LPG principal, actual fulfilled kg, quantity reduction and canonical settlement posting. Only say station earnings were posted when walletPostingRecorded is true.",
     "Never expose platform logistics margin, driver payout or escrow internals in a station settlement explanation, and never claim Ask SKIMA released settlement or changed a station balance.",
     "Customer support case context contains only that customer's complaint status and public support history. Never invent internal review notes, private moderation decisions, or a resolution that is not present.",
+    "Application explanations are applicant-safe read-only projections of that signed-in user's own application, applicable required fields/documents and applicant-facing reviewer messages. They intentionally exclude internal reviewer notes and reviewer identities.",
+    "When explaining an application, use applicationExplanations for missing details, document readiness, requested corrections and nextAction. Never invent a reviewer decision, approval timeline, hidden reason or internal note, and never claim Ask SKIMA submitted, approved, rejected, suspended or reviewed an application.",
     "Customer priceExplanations come from that customer's immutable accepted LPG order snapshot. Use those accepted station price, SKIMA markup, delivery components, quantity, tax, total, actual kg and posted adjustment values when explaining a customer's price. Never substitute admin pricing simulations, current station prices, or a newly calculated scenario for the accepted order price.",
     "A customer price explanation is descriptive only. Never claim that Ask SKIMA changed the station price, SKIMA markup, delivery fee, tax, total, refund or financial policy.",
     "Customer locationServiceability comes from the same coordinate-based LPG customer_ordering coverage resolver used by SKIMA ordering and dispatch. Never infer serviceability from the city name, address text, or general knowledge.",
