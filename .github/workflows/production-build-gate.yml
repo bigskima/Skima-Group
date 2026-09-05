@@ -45,6 +45,8 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      - name: Typecheck platform and edge functions
+        run: npm run check
       - name: Verify migration history policy
         run: npm run migration-history:verify
       - name: Validate migration foundation

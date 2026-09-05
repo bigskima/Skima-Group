@@ -398,7 +398,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_capability_key: requirePlatformKey(payload.capabilityKey, "capabilityKey"),
         target_provider_adapter_key: requirePlatformKey(payload.providerAdapterKey, "providerAdapterKey"),
         target_model_key: requireString(payload.modelKey, "modelKey"),
-        target_priority: requireInteger(payload.priority, "priority", 2, 10000),
+        target_priority: requireBoundedInteger(payload.priority, "priority", 2, 10000),
         target_enabled: payload.enabled === true,
         target_reason: requireString(payload.reason, "reason"),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
@@ -414,20 +414,20 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     return rpcResponse(
       supabase.rpc("set_ai_usage_policy_limits", {
         target_policy_key: requirePlatformKey(payload.policyKey, "policyKey"),
-        target_daily_request_limit: requireInteger(payload.dailyRequestLimit, "dailyRequestLimit", 1, 1000000),
-        target_per_user_daily_request_limit: requireInteger(
+        target_daily_request_limit: requireBoundedInteger(payload.dailyRequestLimit, "dailyRequestLimit", 1, 1000000),
+        target_per_user_daily_request_limit: requireBoundedInteger(
           payload.perUserDailyRequestLimit,
           "perUserDailyRequestLimit",
           1,
           1000000,
         ),
-        target_daily_input_unit_limit: optionalInteger(
+        target_daily_input_unit_limit: optionalBoundedInteger(
           payload.dailyInputUnitLimit,
           "dailyInputUnitLimit",
           1,
           Number.MAX_SAFE_INTEGER,
         ),
-        target_daily_output_unit_limit: optionalInteger(
+        target_daily_output_unit_limit: optionalBoundedInteger(
           payload.dailyOutputUnitLimit,
           "dailyOutputUnitLimit",
           1,
@@ -11956,7 +11956,7 @@ function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function requireInteger(
+function requireBoundedInteger(
   value: unknown,
   fieldName: string,
   minimum: number,
@@ -11975,7 +11975,7 @@ function requireInteger(
   return parsed;
 }
 
-function optionalInteger(
+function optionalBoundedInteger(
   value: unknown,
   fieldName: string,
   minimum: number,
@@ -11984,7 +11984,7 @@ function optionalInteger(
   if (value === undefined || value === null || value === "") {
     return null;
   }
-  return requireInteger(value, fieldName, minimum, maximum);
+  return requireBoundedInteger(value, fieldName, minimum, maximum);
 }
 
 function createPublicStorageUrl(supabaseUrl: string, storageBucket: string, storagePath: string): string {

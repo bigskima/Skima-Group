@@ -362,7 +362,7 @@ async function ensureCustomerWallet(
   const supplied = optionalString(body.walletId);
   if (supplied) return supplied;
   const idempotencyKey = optionalString(body.idempotencyKey) ?? crypto.randomUUID();
-  const walletId = await requireRpc<string>(client.rpc("ensure_wallet_account", {
+  const walletId = await requireRpc(client.rpc("ensure_wallet_account", {
     target_wallet_type: "customer",
     target_owner_entity_type: "user",
     target_owner_entity_id: user.id,
