@@ -310,7 +310,10 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
               <SelectInput
                 label="Canonical geography"
                 value={linkTargets[item.id] ?? ""}
-                onChange={(event) => setLinkTargets((current) => ({ ...current, [item.id]: event.currentTarget.value }))}
+                onChange={(event) => {
+                  const nextValue = event.currentTarget.value;
+                  setLinkTargets((current) => ({ ...current, [item.id]: nextValue }));
+                }}
                 options={[{ label: "Choose bounded geography", value: "" }, ...geographies.map((geography) => ({ label: geography.canonical_name, value: geography.id }))]}
               />
               <Button size="sm" variant="outline" disabled={!linkTargets[item.id] || !reason.trim()} isLoading={linkMapping.isPending && linkMapping.variables === item.id} onClick={() => linkMapping.mutate(item.id)}>Link for review</Button>
