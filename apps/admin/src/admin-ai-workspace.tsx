@@ -485,7 +485,7 @@ function ProviderSetupForm(props: {
         <ShieldCheck aria-hidden="true" />
         <span>
           API key values are never stored here. This form stores only a server secret reference such as{" "}
-          <code>SUPABASE_SECRET:GEMINI_API_KEY</code>.
+          <code>SUPABASE_SECRET:GEMINI_API_KEY</code>. Provider and model routing is saved in the database, so switching an already configured provider does not require an app redeploy.
         </span>
       </div>
       <div className="admin-form-grid">
@@ -508,7 +508,8 @@ function ProviderSetupForm(props: {
           <select value={transport} onChange={(event) => setTransport(event.currentTarget.value)}>
             <option value="google_generate_content">Google GenerateContent</option>
             <option value="openai_compatible_chat">OpenAI-compatible chat</option>
-            <option value="cloudflare_workers_ai">Cloudflare Workers AI</option>
+            <option value="anthropic_messages">Anthropic Messages</option>
+            <option value="cloudflare_workers_ai">Cloudflare Workers AI (image)</option>
           </select>
         </label>
         <label className="admin-ai-field">
