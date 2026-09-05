@@ -9707,9 +9707,10 @@ async function buildAiAssistantContext(
   }
 
   if (workspace === "station") {
-    const [jobs, runtime] = await Promise.all([
+    const [jobs, runtime, forecasts] = await Promise.all([
       supabase.rpc("read_lpg_jobs", { target_queue: "station", target_limit: 15 }),
       supabase.rpc("read_lpg_station_runtime", { target_limit: 10, target_station_branch_id: null }),
+      supabase.rpc("read_ai_demand_forecasts", { target_station_branch_id: null }),
     ]);
     assertAiContextQuery(jobs.error);
     assertAiContextQuery(runtime.error);
@@ -9717,6 +9718,7 @@ async function buildAiAssistantContext(
       ...base,
       activeJobs: Array.isArray(jobs.data) ? jobs.data : [],
       stationRuntime: runtime.data ?? null,
+      demandForecasts: forecasts.error ? [] : Array.isArray(forecasts.data) ? forecasts.data : [],
       myApplications: ownApplications,
     };
   }
@@ -9727,7 +9729,7 @@ async function buildAiAssistantContext(
     if (access.data !== true) {
       throw new AiProviderRuntimeError("forbidden", "Admin AI access is not available.");
     }
-    const [orders, applications, aiRuns, insights] = await Promise.all([
+    const [orders, applications, aiRuns, insights, forecasts] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
         .select("id,public_reference,status,payment_status,assignment_status,station_branch_id,driver_profile_id,created_at,updated_at")
@@ -9749,17 +9751,20 @@ async function buildAiAssistantContext(
         .in("status", ["open", "acknowledged"])
         .order("last_detected_at", { ascending: false })
         .limit(40),
+      supabase.rpc("read_ai_demand_forecasts", { target_station_branch_id: null }),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(applications.error);
     assertAiContextQuery(aiRuns.error);
     const insightRows = insights.error ? [] : insights.data ?? [];
+    const forecastRows = forecasts.error ? [] : Array.isArray(forecasts.data) ? forecasts.data : [];
     return {
       ...base,
       recentOrders: orders.data ?? [],
       applications: applications.data ?? [],
       aiRuns: aiRuns.data ?? [],
       operationalInsights: insightRows,
+      demandForecasts: forecastRows,
     };
   }
 
@@ -9791,6 +9796,7 @@ function aiSystemPrompt(workspace: string): string {
     "Use supplied SKIMA account context for account-specific facts. If the requested fact is absent, say you cannot verify it from the available SKIMA data.",
     "Do not claim that a cylinder is safe based on AI or an image. For immediate LPG danger, advise the user to move away from danger and use the appropriate emergency channel.",
     "Do not claim to have changed an order, payment, wallet, dispatch assignment, inventory value, approval or permission. This assistant is read-only.",
+    "Demand forecasts are statistical estimates from recent SKIMA order history. Never present them as guaranteed demand, authoritative inventory, a price instruction, or a dispatch decision.",
     "Be concise, practical and use normal customer-facing language. Do not expose internal database field names unless the user explicitly asks for technical detail.",
   ].join("\n");
 }
@@ -9803,9 +9809,9 @@ function aiWorkspaceSuggestions(workspace: string): readonly string[] {
     return ["What do I do next?", "Summarize my active jobs", "Explain my recent earnings"];
   }
   if (workspace === "station") {
-    return ["What needs attention?", "Summarize my current queue", "What work is active right now?"];
+    return ["What needs attention?", "How busy could the next 7 days be?", "Summarize my current queue"];
   }
-  return ["What needs attention?", "Summarize current LPG operations", "Are any AI tasks failing?"];
+  return ["What needs attention?", "Where is LPG demand likely to be highest?", "Are any AI tasks failing?"];
 }
 
 async function adminAiRuntimeResponse(
