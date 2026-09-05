@@ -10682,7 +10682,7 @@ async function buildAiAssistantContext(
   }
 
   if (workspace === "customer") {
-    const [orders, cylinders, locations, refillOutlook, complaints, priceExplanations] = await Promise.all([
+    const [orders, cylinders, locations, refillOutlook, complaints, priceExplanations, locationServiceability] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
         .select("id,public_reference,cylinder_id,station_branch_id,driver_profile_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,delivery_fee_amount,platform_fee_amount,status,payment_status,assignment_status,created_at,updated_at")
@@ -10706,6 +10706,10 @@ async function buildAiAssistantContext(
         target_lpg_order_id: null,
         target_limit: 8,
       }),
+      supabase.rpc("read_my_lpg_location_serviceability", {
+        target_location_id: null,
+        target_limit: 10,
+      }),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(cylinders.error);
@@ -10724,6 +10728,9 @@ async function buildAiAssistantContext(
       priceExplanations: priceExplanations.error
         ? []
         : Array.isArray(priceExplanations.data) ? priceExplanations.data : [],
+      locationServiceability: locationServiceability.error
+        ? []
+        : Array.isArray(locationServiceability.data) ? locationServiceability.data : [],
       myApplications: ownApplications,
     };
   }
@@ -11139,6 +11146,9 @@ function aiSystemPrompt(workspace: string): string {
     "Customer support case context contains only that customer's complaint status and public support history. Never invent internal review notes, private moderation decisions, or a resolution that is not present.",
     "Customer priceExplanations come from that customer's immutable accepted LPG order snapshot. Use those accepted station price, SKIMA markup, delivery components, quantity, tax, total, actual kg and posted adjustment values when explaining a customer's price. Never substitute admin pricing simulations, current station prices, or a newly calculated scenario for the accepted order price.",
     "A customer price explanation is descriptive only. Never claim that Ask SKIMA changed the station price, SKIMA markup, delivery fee, tax, total, refund or financial policy.",
+    "Customer locationServiceability comes from the same coordinate-based LPG customer_ordering coverage resolver used by SKIMA ordering and dispatch. Never infer serviceability from the city name, address text, or general knowledge.",
+    "Interpret location serviceability reasons carefully: AVAILABLE means LPG ordering is currently enabled at that saved coordinate; SERVICE_NOT_LAUNCHED means no active customer-ordering service zone currently covers it and is not a promise of a future launch; AREA_EXCLUDED means current coverage policy deliberately excludes the coordinate; POLICY_CONFIGURATION_CONFLICT means SKIMA cannot confirm availability until a coverage configuration issue is reviewed; LOCATION_REQUIRED or LOCATION_TOO_INACCURATE means better location evidence is needed.",
+    "Never expose coverage policy IDs or internal expansion scores to a customer, and never claim that Ask SKIMA enabled, excluded, paused or launched an area.",
     "Partner risk assessments are internal advisory signals for authorized administrators only. They are derived from configured SKIMA evidence, are not proof of fraud, and must never be described as an automatic suspension, fund hold, dispatch block, verification decision or public reputation score.",
     "Never disclose internal partner risk assessments to customer, driver or station workspaces.",
     "Dispatch shadow assessments are admin-only comparisons. Canonical SKIMA dispatch remains authoritative; a shadow advisory rank never means a driver was assigned, rejected, blocked or made ineligible. Risk signals in shadow dispatch are review-only and have no ranking effect.",
@@ -11155,7 +11165,7 @@ function aiSystemPrompt(workspace: string): string {
 
 function aiWorkspaceSuggestions(workspace: string): readonly string[] {
   if (workspace === "customer") {
-    return ["Where is my refill?", "Explain my latest refill price", "When might I need another refill?"];
+    return ["Where is my refill?", "Can SKIMA serve my saved location?", "Explain my latest refill price"];
   }
   if (workspace === "driver") {
     return ["What do I do next?", "Summarize my active jobs", "Explain my recent earnings"];
