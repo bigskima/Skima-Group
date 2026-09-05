@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { ChevronRight, Plus, QrCode, Sparkles } from "lucide-react-native";
+import { ChevronRight, Plus, QrCode } from "lucide-react-native";
 import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useEntityMediaLinks } from "../api/domains";
 import { displayReference, displayStatus, displayTitle, firstNumber, firstString, recordId, type PlatformRecord } from "../api/records";
@@ -18,9 +18,9 @@ export function CylindersScreen() {
 
   return (
     <Screen
-      eyebrow="Your cylinders"
-      title="Your cylinders"
-      subtitle="Every cylinder keeps one permanent SKIMA Cylinder ID for all refill orders. A printed QR code is optional because the Cylinder ID can also be entered manually."
+      eyebrow="Cylinders"
+      title="My cylinders"
+      subtitle="Registered cylinders ready for SKIMA refills."
       action={<AppButton label="Add cylinder" size="sm" icon={<Plus color="#FFFFFF" size={16} />} onPress={() => router.push("/(customer)/cylinder/register")} />}
       refreshControl={
         <RefreshControl
@@ -48,7 +48,7 @@ export function CylindersScreen() {
         <EmptyState
           icon={<QrCode color={palette.brand} size={28} />}
           title="Add your first cylinder"
-          description="Give it a name, choose its size and add a photo. SKIMA creates its permanent Cylinder ID immediately, and you do not need a printer to place a refill order."
+          description="Add the cylinder once, confirm its size and photo, then reuse it for future refills."
           action={<AppButton label="Add a cylinder" icon={<Plus color="#FFFFFF" size={17} />} onPress={() => router.push("/(customer)/cylinder/register")} />}
         />
       )}
@@ -67,6 +67,7 @@ function CylinderRow({ cylinder }: { cylinder: PlatformRecord }) {
   const size = firstNumber(cylinder, ["size_kg", "sizeKg"]);
   const reference = displayReference(cylinder) ?? "SKIMA cylinder";
   const tagStatus = physicalTagStatus(cylinder);
+  const showTagWarning = ["tag_damaged", "tag_lost", "replacement_pending"].includes(normalizeStatus(tagStatus));
 
   return (
     <Pressable
@@ -76,7 +77,12 @@ function CylinderRow({ cylinder }: { cylinder: PlatformRecord }) {
       style={({ pressed }) => [
         styles.asset,
         shadows.soft,
-        { backgroundColor: palette.surface, borderColor: palette.border, opacity: pressed ? 0.76 : 1 },
+        {
+          backgroundColor: palette.surface,
+          borderColor: palette.border,
+          opacity: pressed ? 0.8 : 1,
+          transform: [{ scale: pressed ? 0.988 : 1 }],
+        },
       ]}
     >
       <View style={styles.mediaShell}>
@@ -89,17 +95,11 @@ function CylinderRow({ cylinder }: { cylinder: PlatformRecord }) {
       <View style={styles.assetCopy}>
         <View style={styles.assetHead}>
           <Text numberOfLines={1} style={[styles.title, { color: palette.ink }]}>{displayTitle(cylinder)}</Text>
-          {presentationId ? (
-            <View style={[styles.presentationBadge, { backgroundColor: palette.brandSofter }]}>
-              <Sparkles color={palette.brand} size={11} />
-              <Text style={[styles.presentationText, { color: palette.brand }]}>Enhanced</Text>
-            </View>
-          ) : null}
         </View>
         <Text style={[styles.body, { color: palette.muted }]}>{cylinderIdentityLine(size, reference)}</Text>
         <View style={styles.statusRow}>
           <StatusPill label={friendlyCylinderStatus(status)} tone={cylinderStatusTone(status)} />
-          <StatusPill label={friendlyTagStatus(tagStatus)} tone={tagStatusTone(tagStatus)} />
+          {showTagWarning ? <StatusPill label={friendlyTagStatus(tagStatus)} tone={tagStatusTone(tagStatus)} /> : null}
         </View>
       </View>
 
@@ -177,15 +177,13 @@ function tagStatusTone(value: string): "neutral" | "brand" | "success" | "warnin
 }
 
 const styles = StyleSheet.create({
-  list: { gap: spacing.md },
+  list: { gap: spacing.sm + 2 },
   asset: { minHeight: 126, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderRadius: radii.xl, borderWidth: StyleSheet.hairlineWidth },
   mediaShell: { position: "relative" },
   qrBadge: { position: "absolute", right: -4, bottom: -4, width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#FFFFFF" },
-  assetCopy: { flex: 1, minWidth: 0, gap: spacing.sm },
+  assetCopy: { flex: 1, minWidth: 0, gap: 6 },
   assetHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  title: { flexShrink: 1, ...typography.subheading, fontSize: 17 },
-  body: { ...typography.caption, fontSize: 12, lineHeight: 18 },
+  title: { flexShrink: 1, ...typography.subheading, fontSize: 15 },
+  body: { ...typography.caption, fontSize: 11, lineHeight: 16 },
   statusRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing.xs },
-  presentationBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 4, borderRadius: radii.pill },
-  presentationText: { ...typography.caption, fontSize: 9, fontWeight: "900" },
 });
