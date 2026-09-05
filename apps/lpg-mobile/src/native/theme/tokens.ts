@@ -51,6 +51,13 @@ export const radii = {
   pill: 999,
 } as const;
 
+/** Shared borders keep cards and controls visually consistent across every workspace. */
+export const borders = {
+  hairline: 0.5,
+  control: 1,
+  emphasis: 1.5,
+} as const;
+
 export const typography = {
   display: { fontSize: 36, lineHeight: 42, fontWeight: "900" as const, letterSpacing: -1.1 },
   title: { fontSize: 28, lineHeight: 34, fontWeight: "900" as const, letterSpacing: -0.7 },
@@ -70,6 +77,13 @@ export const controlHeights = {
 } as const;
 
 export const shadows = {
+  subtle: {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.035,
+    shadowRadius: 8,
+    elevation: 1,
+  },
   soft: {
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 5 },
@@ -83,5 +97,12 @@ export const shadows = {
     shadowOpacity: 0.09,
     shadowRadius: 24,
     elevation: 5,
+  },
+  floating: {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.14,
+    shadowRadius: 32,
+    elevation: 8,
   },
 } as const;

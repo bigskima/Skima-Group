@@ -41,6 +41,10 @@ export function Screen({
       style={[styles.page, { backgroundColor: palette.canvas }]}
       contentContainerStyle={styles.outer}
     >
+      <View pointerEvents="none" style={styles.ambientLayer}>
+        <View style={[styles.ambientPrimary, { backgroundColor: palette.brandSoft }]} />
+        <View style={[styles.ambientSecondary, { backgroundColor: palette.soft }]} />
+      </View>
       <View
         style={[
           styles.content,
@@ -99,7 +103,10 @@ export function Screen({
 const styles = StyleSheet.create({
   page: { flex: 1 },
   outer: { alignItems: "center", paddingTop: 14, paddingBottom: 120 },
-  content: { width: "100%" },
+  content: { width: "100%", zIndex: 1 },
+  ambientLayer: { position: "absolute", inset: 0, overflow: "hidden" },
+  ambientPrimary: { position: "absolute", width: 280, height: 280, borderRadius: 140, right: -150, top: -150, opacity: 0.7 },
+  ambientSecondary: { position: "absolute", width: 190, height: 190, borderRadius: 95, left: -120, top: 260, opacity: 0.55 },
   body: { gap: 18 },
   heading: {
     minHeight: 72,
