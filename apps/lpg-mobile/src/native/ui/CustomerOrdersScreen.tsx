@@ -222,7 +222,7 @@ export function CustomerOrderDetailScreen() {
           <AiContextAction
             workspace="customer"
             label="Explain this refill"
-            prompt={`Explain my refill order ${aiOrderReference}. Its current SKIMA stage is ${status} and payment status is ${paymentStatus}. Tell me what these mean and what normally happens next. Do not change the order or payment.`}
+            prompt={`Explain my refill order ${aiOrderReference}. Its current SKIMA stage is ${friendlyOrderStatus(status)} and payment status is ${friendlyPaymentStatus(paymentStatus)}. Tell me what these mean and what normally happens next. Do not change the order or payment.`}
           />
 
           <Card padding="lg">
