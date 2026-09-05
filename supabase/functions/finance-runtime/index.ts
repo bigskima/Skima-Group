@@ -1,4 +1,12 @@
 import { createClient, type SupabaseClient, type User } from "npm:@supabase/supabase-js@2.110.9";
+import {
+  createPaystackTransferRecipient,
+  initiatePaystackTransfer,
+  listPaystackBanks,
+  PaystackPayoutError,
+  readPaystackBalances,
+  resolvePaystackBankAccount,
+} from "../_shared/paystack-payouts.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -38,7 +46,15 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const path = financePath(request.url);
 
     if (path === "/banks" && request.method === "GET") {
-      return payoutBanks(userClient, requestId);
+      return payoutBanks(userClient, serviceClient, requestId);
+    }
+
+    if (path === "/beneficiaries/resolve" && request.method === "POST") {
+      return resolveBeneficiaryAccount(
+        serviceClient,
+        await readBody(request),
+        requestId,
+      );
     }
 
     if (path === "/deposits" && request.method === "GET") {
@@ -211,7 +227,11 @@ async function requireRevenueAccess(client: SupabaseClient): Promise<void> {
   }
 }
 
-async function payoutBanks(client: SupabaseClient, requestId: string): Promise<Response> {
+async function payoutBanks(
+  client: SupabaseClient,
+  serviceClient: SupabaseClient,
+  requestId: string,
+): Promise<Response> {
   const { data, error } = await client
     .from("currency_definitions")
     .select("code,display_name,symbol,metadata")
@@ -219,17 +239,92 @@ async function payoutBanks(client: SupabaseClient, requestId: string): Promise<R
     .eq("status", "enabled")
     .maybeSingle();
   if (error) throw new FinanceError("database_error", error.message);
+
   const metadata = optionalRecord(data?.metadata);
   const publicPayout = optionalRecord(metadata.public_payout);
+  const configuredBanks = Array.isArray(publicPayout.banks) ? publicPayout.banks : [];
+  const providerKey = await activePaymentProvider(serviceClient);
+
+  if (providerKey === "provider.payment.paystack") {
+    const secret = Deno.env.get("PAYSTACK_SECRET_KEY");
+    if (secret) {
+      try {
+        const banks = await listPaystackBanks(secret);
+        if (banks.length > 0) {
+          return json({
+            ok: true,
+            data: {
+              currencyCode: "NGN",
+              available: true,
+              provider: providerKey,
+              source: "paystack",
+              banks,
+            },
+            requestId,
+          });
+        }
+      } catch (error) {
+        if (!(error instanceof PaystackPayoutError)) throw error;
+      }
+    }
+  }
+
   return json({
     ok: true,
     data: {
       currencyCode: data?.code ?? "NGN",
       available: publicPayout.available === true,
-      banks: Array.isArray(publicPayout.banks) ? publicPayout.banks : [],
+      provider: providerKey,
+      source: "configured-fallback",
+      banks: configuredBanks,
     },
     requestId,
   });
+}
+
+async function resolveBeneficiaryAccount(
+  serviceClient: SupabaseClient,
+  body: Body,
+  requestId: string,
+): Promise<Response> {
+  const bankCode = requireString(body.bankCode, "bankCode");
+  const accountNumber = requireString(body.accountNumber, "accountNumber");
+  const providerKey = await activePaymentProvider(serviceClient);
+
+  if (providerKey !== "provider.payment.paystack") {
+    await assertConfiguredBank(serviceClient, bankCode);
+    return json({
+      ok: true,
+      data: {
+        bankCode,
+        accountNumber,
+        accountName: `Sandbox payout account •••• ${accountNumber.slice(-4)}`,
+        provider: providerKey,
+        verified: true,
+      },
+      requestId,
+    });
+  }
+
+  const secret = Deno.env.get("PAYSTACK_SECRET_KEY");
+  if (!secret) {
+    throw new FinanceError("payment_provider_unavailable", "Paystack payouts are not configured.", 503);
+  }
+
+  try {
+    const account = await resolvePaystackBankAccount(secret, accountNumber, bankCode);
+    return json({
+      ok: true,
+      data: {
+        ...account,
+        provider: providerKey,
+        verified: true,
+      },
+      requestId,
+    });
+  } catch (error) {
+    throw financeErrorFromPaystack(error);
+  }
 }
 
 async function deposits(client: SupabaseClient, requestId: string): Promise<Response> {
@@ -406,11 +501,30 @@ async function configureBeneficiary(
   const walletId = requireString(body.walletId, "walletId");
   const bankCode = requireString(body.bankCode, "bankCode");
   const accountNumber = requireString(body.accountNumber, "accountNumber");
-  const accountName = requireString(body.accountName, "accountName");
   const idempotencyKey = requireString(body.idempotencyKey, "idempotencyKey");
   const providerKey = await activePaymentProvider(serviceClient);
+  const baseMetadata = optionalRecord(body.metadata);
 
-  await assertConfiguredBank(serviceClient, bankCode);
+  let accountName: string;
+  let recipient: Awaited<ReturnType<typeof createPaystackTransferRecipient>> | null = null;
+
+  if (providerKey === "provider.payment.paystack") {
+    const secret = Deno.env.get("PAYSTACK_SECRET_KEY");
+    if (!secret) {
+      throw new FinanceError("payment_provider_unavailable", "Paystack payouts are not configured.", 503);
+    }
+    try {
+      const resolved = await resolvePaystackBankAccount(secret, accountNumber, bankCode);
+      accountName = resolved.accountName;
+      recipient = await createPaystackTransferRecipient(secret, resolved);
+    } catch (error) {
+      throw financeErrorFromPaystack(error);
+    }
+  } else {
+    await assertConfiguredBank(serviceClient, bankCode);
+    accountName = optionalString(body.accountName) ??
+      `Sandbox payout account •••• ${accountNumber.slice(-4)}`;
+  }
 
   const beneficiaryId = String(await requireRpc(userClient.rpc("configure_withdrawal_beneficiary", {
     target_wallet_id: walletId,
@@ -421,46 +535,16 @@ async function configureBeneficiary(
     target_provider_adapter_key: providerKey,
     target_source: "platform.finance_runtime",
     target_idempotency_key: idempotencyKey,
-    target_metadata: optionalRecord(body.metadata),
+    target_metadata: {
+      ...baseMetadata,
+      accountNameSource: providerKey === "provider.payment.paystack"
+        ? "paystack.bank.resolve"
+        : "sandbox",
+      resolvedAt: new Date().toISOString(),
+    },
   })));
 
-  if (providerKey === "provider.payment.paystack") {
-    const paystackSecret = Deno.env.get("PAYSTACK_SECRET_KEY");
-    if (!paystackSecret) {
-      throw new FinanceError("payment_provider_unavailable", "Paystack is not configured.", 503);
-    }
-
-    const response = await fetch("https://api.paystack.co/transferrecipient", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${paystackSecret}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        type: "nuban",
-        name: accountName,
-        account_number: accountNumber,
-        bank_code: bankCode,
-        currency: "NGN",
-      }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    const responseBody = await response.json() as Record<string, unknown>;
-    const responseData = optionalRecord(responseBody.data);
-    const recipientCode = optionalString(responseData.recipient_code);
-
-    if (!response.ok || !recipientCode) {
-      await serviceClient
-        .from("withdrawal_beneficiaries")
-        .update({ status: "failed", updated_at: new Date().toISOString() })
-        .eq("id", beneficiaryId);
-      throw new FinanceError(
-        "beneficiary_verification_failed",
-        optionalString(responseBody.message) ?? "Bank beneficiary could not be verified.",
-        502,
-      );
-    }
-
+  if (recipient) {
     const current = await serviceClient
       .from("withdrawal_beneficiaries")
       .select("metadata")
@@ -471,13 +555,15 @@ async function configureBeneficiary(
     const updated = await serviceClient
       .from("withdrawal_beneficiaries")
       .update({
-        provider_recipient_code: recipientCode,
+        account_name: recipient.accountName,
+        provider_recipient_code: recipient.recipientCode,
         status: "verified",
         verified_at: new Date().toISOString(),
         metadata: {
           ...optionalRecord(current.data?.metadata),
-          paystackRecipientCode: recipientCode,
-          paystackRecipientId: responseData.id ?? null,
+          paystackRecipientCode: recipient.recipientCode,
+          paystackRecipientId: recipient.recipientId,
+          accountNameSource: "paystack.bank.resolve",
         },
         updated_at: new Date().toISOString(),
       })
@@ -655,50 +741,36 @@ async function initiateWithdrawalTransfer(
   }
 
   const reference = withdrawal.data.public_reference ?? `skima-withdrawal-${withdrawalId.replaceAll("-", "")}`;
-  let response: Response;
+  let transfer;
   try {
-    response = await fetch("https://api.paystack.co/transfer", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${paystackSecret}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        source: "balance",
-        amount: Math.round(Number(withdrawal.data.amount) * 100),
-        recipient: beneficiary.data.provider_recipient_code,
-        reason: "SKIMA wallet withdrawal",
-        reference,
-      }),
-      signal: AbortSignal.timeout(20_000),
+    transfer = await initiatePaystackTransfer(paystackSecret, {
+      amountMajor: Number(withdrawal.data.amount),
+      recipientCode: beneficiary.data.provider_recipient_code,
+      reason: "SKIMA wallet withdrawal",
+      reference,
     });
   } catch (error) {
-    // Network ambiguity is deliberately not treated as a failed payout. The
-    // reserved wallet funds remain approved and the same provider reference can
-    // be safely retried or finalized by webhook.
-    return {
-      provider: "provider.payment.paystack",
-      status: "approved",
-      retryable: true,
-      message: error instanceof Error ? error.message : "Provider request was interrupted.",
-    };
+    if (error instanceof PaystackPayoutError && error.code === "paystack_unreachable") {
+      // Network ambiguity is deliberately not treated as a failed payout. The
+      // reserved wallet funds remain approved and the same provider reference
+      // can be safely retried or finalized by webhook.
+      return {
+        provider: "provider.payment.paystack",
+        status: "approved",
+        retryable: true,
+        message: error.message,
+      };
+    }
+    throw financeErrorFromPaystack(error);
   }
-
-  const responseBody = await response.json() as Record<string, unknown>;
-  const responseData = optionalRecord(responseBody.data);
-  const providerReference = optionalString(responseData.reference) ?? reference;
-  const providerRawStatus = optionalString(responseData.status);
-  const providerStatus = response.ok
-    ? (providerRawStatus === "success" ? "succeeded" : "processing")
-    : "failed";
 
   await requireRpc(serviceClient.rpc("process_wallet_withdrawal_transfer", {
     target_withdrawal_request_id: withdrawalId,
-    target_provider_status: providerStatus,
-    target_provider_reference: providerReference,
-    target_response_payload: responseBody,
+    target_provider_status: transfer.providerStatus,
+    target_provider_reference: transfer.providerReference,
+    target_response_payload: transfer.response,
     target_source: "platform.finance_runtime",
-    target_idempotency_key: `finance-runtime:${withdrawalId}:transfer:${providerReference}:${providerStatus}`,
+    target_idempotency_key: `finance-runtime:${withdrawalId}:transfer:${transfer.providerReference}:${transfer.providerStatus}`,
     target_metadata: {
       automaticRuntimeTransfer: true,
       principalSentToProvider: withdrawal.data.amount,
@@ -708,8 +780,8 @@ async function initiateWithdrawalTransfer(
 
   return {
     provider: "provider.payment.paystack",
-    providerReference,
-    providerStatus,
+    providerReference: transfer.providerReference,
+    providerStatus: transfer.providerStatus,
     principalSentToProvider: withdrawal.data.amount,
     skimaFee: withdrawal.data.fee_amount,
   };
@@ -774,6 +846,17 @@ async function moneySettings(client: SupabaseClient, requestId: string): Promise
     }
   }
   return json({ ok: true, data, requestId });
+}
+
+function financeErrorFromPaystack(error: unknown): FinanceError {
+  if (error instanceof PaystackPayoutError) {
+    return new FinanceError(error.code, error.message, error.status);
+  }
+  return new FinanceError(
+    "paystack_payout_error",
+    error instanceof Error ? error.message : "Paystack payout request failed.",
+    502,
+  );
 }
 
 async function activePaymentProvider(serviceClient: SupabaseClient): Promise<string> {
