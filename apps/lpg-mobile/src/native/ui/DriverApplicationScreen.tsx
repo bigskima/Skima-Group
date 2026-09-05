@@ -64,6 +64,14 @@ interface ServiceAreaOption {
   readonly radiusMeters: number | null;
 }
 
+interface CandidateCoverageRequest {
+  readonly type: "RADIUS";
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly radiusMeters: number;
+  readonly source?: string;
+}
+
 function timestampOf(record: Record<string, unknown>) {
   const value = firstString(record, ["updated_at", "updatedAt", "created_at", "createdAt"]);
   const time = value ? Date.parse(value) : 0;
@@ -83,7 +91,9 @@ export function DriverApplicationScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [loadingServiceAreas, setLoadingServiceAreas] = useState(true);
+  const [resolvingCandidateCoverage, setResolvingCandidateCoverage] = useState(false);
   const [serviceAreas, setServiceAreas] = useState<readonly ServiceAreaOption[]>([]);
+  const [candidateCoverage, setCandidateCoverage] = useState<CandidateCoverageRequest | null>(null);
 
   const [name, setName] = useState(session.context?.profile?.display_name ?? "");
   const [driverDisplayName, setDriverDisplayName] = useState("");
@@ -222,6 +232,7 @@ export function DriverApplicationScreen() {
 
     const storedIds = readCoverageGeographyIds(service);
     if (storedIds.length > 0) setSelectedServiceAreaIds(storedIds);
+    setCandidateCoverage(readRadiusCoverageRequest(service));
 
     hydratedApplication.current = currentId;
   }, [currentId, payloadVersions.data]);
@@ -238,6 +249,19 @@ export function DriverApplicationScreen() {
     const existingService = nestedRecord(basePayload, "service") ?? {};
     const existingLocation = nestedRecord(basePayload, "location");
 
+    const selectedCoverageRequests = selectedServiceAreaIds.map((geographyId) => ({
+      type: "ADMIN_GEOGRAPHY",
+      geographyId,
+    }));
+    const existingCoverageRequests = Array.isArray(existingService.coverageRequests)
+      ? existingService.coverageRequests
+      : [];
+    const coverageRequests = selectedCoverageRequests.length > 0
+      ? selectedCoverageRequests
+      : candidateCoverage
+        ? [candidateCoverage]
+        : existingCoverageRequests;
+
     return {
       ...basePayload,
       identity: {
@@ -251,10 +275,7 @@ export function DriverApplicationScreen() {
       location: operatingLocation ?? existingLocation ?? null,
       service: {
         ...existingService,
-        coverageRequests: selectedServiceAreaIds.map((geographyId) => ({
-          type: "ADMIN_GEOGRAPHY",
-          geographyId,
-        })),
+        coverageRequests,
       },
     };
   };
@@ -305,12 +326,39 @@ export function DriverApplicationScreen() {
     }
   };
 
+  const resolveCandidateCoverage = async (
+    location: OperationalLocation,
+  ): Promise<CandidateCoverageRequest | null> => {
+    setResolvingCandidateCoverage(true);
+    try {
+      const { data, error: candidateError } = await session.supabase.rpc(
+        "resolve_lpg_partner_candidate_coverage",
+        {
+          p_partner_type: "DRIVER",
+          p_latitude: location.latitude,
+          p_longitude: location.longitude,
+        },
+      );
+      if (candidateError) throw candidateError;
+      const request = readCandidateCoverageResponse(data);
+      setCandidateCoverage(request);
+      return request;
+    } finally {
+      setResolvingCandidateCoverage(false);
+    }
+  };
+
   const detectOperatingLocation = async () => {
     setDetectingLocation(true);
     setError(null);
     try {
       const location = await maps.resolveOperationalLocation(await readOperationalLocation());
       setOperatingLocation(location);
+      try {
+        await resolveCandidateCoverage(location);
+      } catch {
+        setCandidateCoverage(null);
+      }
     } catch (cause) {
       setError(
         friendlyError(
@@ -346,8 +394,8 @@ export function DriverApplicationScreen() {
         setError("Capture the location you normally operate from before continuing.");
         return false;
       }
-      if (selectedServiceAreaIds.length === 0) {
-        setError("Choose at least one requested operating area.");
+      if (selectedServiceAreaIds.length === 0 && !candidateCoverage) {
+        setError("Choose an approved service area, or detect your location so SKIMA can prepare a candidate operating-area request.");
         return false;
       }
     }
@@ -439,7 +487,7 @@ export function DriverApplicationScreen() {
     address.trim() &&
     licenceNumber.trim() &&
     operatingLocation &&
-    selectedServiceAreaIds.length > 0,
+    (selectedServiceAreaIds.length > 0 || Boolean(candidateCoverage)),
   );
   const canSubmit = missingRequiredDocs.length === 0 && applicationFieldsReady;
 
@@ -469,6 +517,11 @@ export function DriverApplicationScreen() {
   const selectedAreaNames = selectedServiceAreaIds
     .map((id) => serviceAreas.find((area) => area.areaId === id)?.displayName)
     .filter((value): value is string => Boolean(value));
+  const requestedAreaSummary = selectedAreaNames.length > 0
+    ? selectedAreaNames.join(", ")
+    : candidateCoverage
+      ? `Candidate radius · ${Math.round(candidateCoverage.radiusMeters / 1000 * 10) / 10} km around operating location`
+      : "Not selected";
 
   const handleSubmitApplication = async () => {
     setError(null);
@@ -673,7 +726,9 @@ export function DriverApplicationScreen() {
               <View style={styles.emptyAreaBox}>
                 <Text style={styles.emptyAreaTitle}>No service areas are available yet</Text>
                 <Text style={styles.helperText}>
-                  You can save your application and return when driver applications open in your area.
+                  {candidateCoverage
+                    ? `SKIMA will submit a ${Math.round(candidateCoverage.radiusMeters / 1000 * 10) / 10} km candidate radius around your captured operating location for Admin review. Customer LPG service remains off until SKIMA separately enables it.`
+                    : "Detect your operating location so SKIMA can check whether a candidate-area application is allowed here."}
                 </Text>
               </View>
             ) : (
@@ -782,10 +837,10 @@ export function DriverApplicationScreen() {
                   label: "Operating Location",
                   value: operatingLocation?.formattedAddress || (operatingLocation ? "Location captured" : "Not captured"),
                 },
-                { label: "Requested Operating Areas", value: selectedAreaNames.join(", ") || "Not selected" },
+                { label: "Requested Operating Areas", value: requestedAreaSummary },
                 {
                   label: "Service Areas",
-                  value: selectedAreaNames.length > 0 ? selectedAreaNames.join(", ") : "None selected",
+                  value: requestedAreaSummary,
                 },
               ],
             },
@@ -832,6 +887,51 @@ export function DriverApplicationScreen() {
       </View>
     </Screen>
   );
+}
+
+function readCandidateCoverageResponse(value: unknown): CandidateCoverageRequest | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return readCandidateCoverageRequest((value as Record<string, unknown>).request);
+}
+
+function readRadiusCoverageRequest(
+  service: Record<string, unknown> | null,
+): CandidateCoverageRequest | null {
+  const requests = service?.coverageRequests;
+  if (!Array.isArray(requests)) return null;
+  for (const request of requests) {
+    const parsed = readCandidateCoverageRequest(request);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function readCandidateCoverageRequest(value: unknown): CandidateCoverageRequest | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const request = value as Record<string, unknown>;
+  if (request.type !== "RADIUS") return null;
+  const latitude = Number(request.latitude);
+  const longitude = Number(request.longitude);
+  const radiusMeters = Number(request.radiusMeters);
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    !Number.isFinite(radiusMeters) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180 ||
+    radiusMeters <= 0
+  ) {
+    return null;
+  }
+  return {
+    type: "RADIUS",
+    latitude,
+    longitude,
+    radiusMeters,
+    source: typeof request.source === "string" ? request.source : undefined,
+  };
 }
 
 function readStringArray(value: unknown): string[] {
