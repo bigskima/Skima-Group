@@ -9831,7 +9831,7 @@ async function adminAiRuntimeResponse(
     return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
   }
   const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
-  const [capabilities, routes, providers, insights] = await Promise.all([
+  const [capabilities, routes, providers, insights, forecasts] = await Promise.all([
     serviceClient
       .from("ai_capabilities")
       .select("id,key,display_name,description,category,response_mode,control_mode,status,config,updated_at")
@@ -9852,6 +9852,12 @@ async function adminAiRuntimeResponse(
       .order("severity", { ascending: false })
       .order("last_detected_at", { ascending: false })
       .limit(100),
+    serviceClient
+      .from("ai_forecast_snapshots")
+      .select("id,subject_type,subject_id,horizon_days,method,confidence,predicted_orders,predicted_kg,evidence,generated_at,valid_until,version")
+      .eq("subject_type", "lpg_station_branch")
+      .order("horizon_days", { ascending: true })
+      .limit(200),
   ]);
 
   if (capabilities.error) return databaseError(capabilities.error, id);
@@ -9865,6 +9871,7 @@ async function adminAiRuntimeResponse(
       routes: routes.data ?? [],
       providers: providers.data ?? [],
       insights: insights.error ? [] : insights.data ?? [],
+      forecasts: forecasts.error ? [] : forecasts.data ?? [],
       userId: user.id,
     },
     requestId: id,
