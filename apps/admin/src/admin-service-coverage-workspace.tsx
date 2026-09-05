@@ -482,10 +482,21 @@ function GeometryDraftRecoveryPanel(){const{supabase,status}=useSessionState();c
 
 
 const CoverageRequestSchema = z.object({
-  id: z.string().uuid(), application_id: z.string().uuid(), applicant_user_id: z.string().uuid(),
-  entity_type: z.enum(["DRIVER", "STATION"]), service_key: z.string(),
-  coverage_type: z.enum(["ADMIN_GEOGRAPHY", "RADIUS", "CUSTOM_ZONE"]), status: z.enum(["REQUESTED", "APPROVED", "REJECTED", "WITHDRAWN"]),
-  radius_meters: z.coerce.number().nullable(), geographies: z.object({ canonical_name: z.string() }).nullable(), created_at: z.string(),
+  id: z.string().uuid(),
+  application_id: z.string().uuid(),
+  application_version_id: z.string().uuid(),
+  applicant_user_id: z.string().uuid(),
+  entity_type: z.enum(["DRIVER", "STATION"]),
+  service_key: z.string(),
+  coverage_type: z.enum(["ADMIN_GEOGRAPHY", "RADIUS", "CUSTOM_ZONE"]),
+  status: z.enum(["REQUESTED", "APPROVED", "REJECTED", "WITHDRAWN"]),
+  radius_meters: z.coerce.number().nullable(),
+  center_longitude: z.coerce.number().nullable(),
+  center_latitude: z.coerce.number().nullable(),
+  geography_name: z.string().nullable(),
+  location_verification_status: z.string().nullable(),
+  formatted_address: z.string().nullable(),
+  created_at: z.string(),
 });
 type CoverageRequest = z.infer<typeof CoverageRequestSchema>;
 
@@ -494,20 +505,67 @@ function CoverageRequestsPanel() {
   const client = useQueryClient();
   const [review, setReview] = useState<{ request: CoverageRequest; decision: "APPROVED" | "REJECTED" } | null>(null);
   const [reason, setReason] = useState("");
-  const query = useQuery({ queryKey: ["universal-coverage-requests"], enabled: status === "authenticated", queryFn: async () => {
-    const { data, error } = await supabase.from("application_operational_coverage_requests").select("id,application_id,applicant_user_id,entity_type,service_key,coverage_type,status,radius_meters,created_at,geographies(canonical_name)").eq("status", "REQUESTED").order("created_at");
-    if (error) throw error; return z.array(CoverageRequestSchema).parse(data ?? []);
-  }});
-  const mutation = useMutation({ mutationFn: async () => {
-    if (!review || !reason.trim()) throw new Error("A review reason is required.");
-    const { error } = await supabase.rpc("review_application_coverage_request", { p_request_id: review.request.id, p_decision: review.decision, p_reason: reason.trim(), p_valid_from: null, p_valid_to: null });
-    if (error) throw error;
-  }, onSuccess: async () => { setReview(null); setReason(""); await client.invalidateQueries({ queryKey: ["universal-coverage-requests"] }); } });
+  const query = useQuery({
+    queryKey: ["universal-coverage-requests"],
+    enabled: status === "authenticated",
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("read_application_coverage_requests_admin", {
+        p_status: "REQUESTED",
+      });
+      if (error) throw error;
+      return z.array(CoverageRequestSchema).parse(data ?? []);
+    },
+  });
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!review || !reason.trim()) throw new Error("A review reason is required.");
+      const { error } = await supabase.rpc("review_application_coverage_request", {
+        p_request_id: review.request.id,
+        p_decision: review.decision,
+        p_reason: reason.trim(),
+        p_valid_from: null,
+        p_valid_to: null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      setReview(null);
+      setReason("");
+      await client.invalidateQueries({ queryKey: ["universal-coverage-requests"] });
+    },
+  });
   const columns: TableColumn<CoverageRequest>[] = [
-    { key: "entity", header: "Applicant", render: (item) => <><strong>{item.entity_type}</strong><br /><small>{item.applicant_user_id}</small></> },
-    { key: "coverage", header: "Requested coverage", render: (item) => item.geographies?.canonical_name ?? (item.coverage_type === "RADIUS" ? `${item.radius_meters ?? 0} m radius` : item.coverage_type) },
+    {
+      key: "entity",
+      header: "Applicant",
+      render: (item) => <><strong>{item.entity_type}</strong><br /><small>{item.applicant_user_id}</small><br /><small>App {item.application_id}</small></>,
+    },
+    {
+      key: "coverage",
+      header: "Requested coverage",
+      render: (item) => {
+        if (item.geography_name) return item.geography_name;
+        if (item.coverage_type === "RADIUS") {
+          const radius = item.radius_meters ?? 0;
+          const radiusLabel = radius >= 1000 ? `${(radius / 1000).toFixed(radius % 1000 === 0 ? 0 : 1)} km radius` : `${Math.round(radius)} m radius`;
+          const point = item.center_latitude !== null && item.center_longitude !== null
+            ? `${item.center_latitude.toFixed(5)}, ${item.center_longitude.toFixed(5)}`
+            : "Center unavailable";
+          return <><strong>{radiusLabel}</strong><br /><small>{point}</small></>;
+        }
+        return item.coverage_type;
+      },
+    },
+    {
+      key: "evidence",
+      header: "Location evidence",
+      render: (item) => <><StatusBadge tone={item.location_verification_status === "verified" ? "success" : "warning"}>{item.location_verification_status ?? "not reviewed"}</StatusBadge>{item.formatted_address ? <><br /><small>{item.formatted_address}</small></> : null}</>,
+    },
     { key: "service", header: "Service", render: (item) => item.service_key },
     { key: "actions", header: "Review", render: (item) => <div className="skima-action-row"><Button size="sm" onClick={() => setReview({ request: item, decision: "APPROVED" })}>Approve</Button><Button size="sm" variant="destructive" onClick={() => setReview({ request: item, decision: "REJECTED" })}>Reject</Button></div> },
   ];
-  return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Requested operating coverage</h2><p className="skima-muted">Application requests never grant dispatch eligibility until an authorized review creates approved coverage.</p></div><StatusBadge>{query.data?.length ?? 0} pending</StatusBadge></div>{query.isLoading ? <LoadingState label="Loading coverage requests" /> : query.error ? <ErrorState title="Coverage requests unavailable" message={readError(query.error)} onRetry={() => void query.refetch()} /> : <DataTable caption="Requested operating coverage" columns={columns} records={query.data ?? []} getRowKey={(item) => item.id} emptyTitle="No pending requests" emptyMessage="Submitted driver and station coverage requests will appear here." />}<Dialog isOpen={Boolean(review)} title={`${review?.decision === "APPROVED" ? "Approve" : "Reject"} requested coverage`} onClose={() => setReview(null)} footer={<><Button variant="ghost" onClick={() => setReview(null)}>Cancel</Button><Button variant={review?.decision === "REJECTED" ? "destructive" : "primary"} isLoading={mutation.isPending} onClick={() => mutation.mutate()}>Confirm decision</Button></>}><TextAreaInput label="Decision reason" value={reason} onChange={(event) => setReason(event.currentTarget.value)} required />{mutation.error ? <StatusBadge tone="danger">{readError(mutation.error)}</StatusBadge> : null}</Dialog></section>;
+  const reviewSummary = review?.request.coverage_type === "RADIUS"
+    ? `${review.request.radius_meters ?? 0} m radius at ${review.request.center_latitude?.toFixed(5) ?? "?"}, ${review.request.center_longitude?.toFixed(5) ?? "?"}`
+    : review?.request.geography_name ?? review?.request.coverage_type ?? "";
+  return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Requested operating coverage</h2><p className="skima-muted">Application requests never grant dispatch eligibility until an authorized review creates approved coverage. Radius requests show their exact center and location-verification state before approval.</p></div><StatusBadge>{query.data?.length ?? 0} pending</StatusBadge></div>{query.isLoading ? <LoadingState label="Loading coverage requests" /> : query.error ? <ErrorState title="Coverage requests unavailable" message={readError(query.error)} onRetry={() => void query.refetch()} /> : <DataTable caption="Requested operating coverage" columns={columns} records={query.data ?? []} getRowKey={(item) => item.id} emptyTitle="No pending requests" emptyMessage="Submitted driver and station coverage requests will appear here." />}<Dialog isOpen={Boolean(review)} title={`${review?.decision === "APPROVED" ? "Approve" : "Reject"} requested coverage`} onClose={() => setReview(null)} footer={<><Button variant="ghost" onClick={() => setReview(null)}>Cancel</Button><Button variant={review?.decision === "REJECTED" ? "destructive" : "primary"} isLoading={mutation.isPending} onClick={() => mutation.mutate()}>Confirm decision</Button></>}><p><strong>{reviewSummary}</strong></p>{review?.request.formatted_address ? <p className="skima-muted">{review.request.formatted_address}</p> : null}<TextAreaInput label="Decision reason" value={reason} onChange={(event) => setReason(event.currentTarget.value)} required />{mutation.error ? <StatusBadge tone="danger">{readError(mutation.error)}</StatusBadge> : null}</Dialog></section>;
 }
