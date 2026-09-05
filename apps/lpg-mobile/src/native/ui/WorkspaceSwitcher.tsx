@@ -41,8 +41,9 @@ export function WorkspaceSwitcher({ current }: { current: Workspace }) {
             style={({ pressed }) => [
               styles.option,
               {
-                backgroundColor: active ? palette.brand : "transparent",
-                opacity: pressed ? 0.76 : 1,
+                backgroundColor: active ? palette.brand : pressed ? palette.brandSofter : "transparent",
+                opacity: pressed ? 0.84 : 1,
+                transform: [{ scale: pressed ? 0.985 : 1 }],
               },
             ]}
           >
@@ -58,19 +59,20 @@ export function WorkspaceSwitcher({ current }: { current: Workspace }) {
 const styles = StyleSheet.create({
   wrap: {
     alignSelf: "flex-start",
+    maxWidth: "100%",
     flexDirection: "row",
     gap: 3,
     padding: 4,
-    borderRadius: radii.lg,
+    borderRadius: radii.xl,
     borderWidth: StyleSheet.hairlineWidth,
   },
   option: {
-    minHeight: 36,
+    minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs + 2,
-    paddingHorizontal: 11,
-    borderRadius: radii.md,
+    paddingHorizontal: 12,
+    borderRadius: radii.lg,
   },
-  label: { ...typography.caption, fontSize: 11, fontWeight: "900" },
+  label: { ...typography.caption, fontSize: 10, fontWeight: "900" },
 });
