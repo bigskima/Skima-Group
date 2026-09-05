@@ -47,6 +47,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const notifications = await processNotifications(supabase, limit);
     const communications = await syncCommunicationMessages(supabase, limit);
     const aiTasks = await processAiTasks(supabase, limit);
+    const aiInsights = await refreshAiOperationalInsights(supabase);
     const webhooks = await processWebhooks(supabase, limit);
     const jobs = await processBackgroundJobs(supabase, limit);
     const expirations = await expireEscrowHolds(supabase, limit);
@@ -56,6 +57,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
     await supabase.rpc("record_health_check", {
       target_details: {
+        aiInsights,
+        aiInsights,
         aiTasks,
         communications,
         expirations,
@@ -314,6 +317,28 @@ async function processLpgOrderLifecycle(
   }
 
   return result.data ?? {};
+}
+
+async function refreshAiOperationalInsights(
+  supabase: RuntimeSupabaseClient,
+): Promise<Readonly<Record<string, unknown>>> {
+  const result = await supabase.rpc("refresh_ai_operational_insights");
+
+  if (result.error) {
+    console.warn(JSON.stringify({
+      severity: "warning",
+      source: "runtime-worker.ai-operational-insights",
+      message: result.error.message,
+    }));
+    return {
+      status: "unavailable",
+      reason: "exception_runtime_not_ready",
+    };
+  }
+
+  return optionalRecord(result.data) ?? {
+    status: "completed",
+  };
 }
 
 async function processAiTasks(supabase: RuntimeSupabaseClient, limit: number): Promise<number> {
