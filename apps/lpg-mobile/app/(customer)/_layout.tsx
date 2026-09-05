@@ -9,6 +9,7 @@ export default function Layout() {
       <WorkspaceTabs
         tabs={customerTabs}
         hidden={[
+          "assistant",
           "cylinder/register",
           "cylinder/[id]",
           "orders/[id]",
