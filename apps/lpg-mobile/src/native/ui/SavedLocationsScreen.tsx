@@ -34,9 +34,9 @@ export function SavedLocationsScreen() {
           <MapPin color={palette.brand} size={23} />
         </View>
         <View style={styles.summaryCopy}>
-          <Text style={[styles.summaryValue, { color: palette.ink }]}>{records.length}</Text>
+          <Text style={[styles.summaryValue, { color: palette.ink }]}>{locations.isPending ? "—" : records.length}</Text>
           <Text style={[styles.summaryLabel, { color: palette.muted }]}>
-            {records.length === 1 ? "saved delivery place" : "saved delivery places"}
+            {locations.isPending ? "loading saved places" : records.length === 1 ? "saved delivery place" : "saved delivery places"}
           </Text>
         </View>
         <View style={[styles.safeBadge, { backgroundColor: palette.surface }]}>
