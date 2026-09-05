@@ -9636,6 +9636,18 @@ async function buildAiAssistantContext(
     dataPolicy: "Only facts in this context may be treated as SKIMA account facts.",
   };
 
+  let ownApplications: readonly unknown[] = [];
+  if (workspace !== "admin") {
+    const applications = await supabase
+      .from("application_records")
+      .select("id,application_type_id,status,organization_id,active_version,submitted_at,decided_at,approved_at,rejected_at,activated_subject_type,activated_subject_id,source,created_at,updated_at")
+      .eq("applicant_user_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(8);
+    assertAiContextQuery(applications.error);
+    ownApplications = applications.data ?? [];
+  }
+
   if (workspace === "customer") {
     const [orders, cylinders, locations] = await Promise.all([
       supabase
@@ -9664,6 +9676,7 @@ async function buildAiAssistantContext(
       recentOrders: orders.data ?? [],
       cylinders: cylinders.data ?? [],
       savedLocations: locations.data ?? [],
+      myApplications: ownApplications,
     };
   }
 
@@ -9689,6 +9702,7 @@ async function buildAiAssistantContext(
       driver: driver.data ?? null,
       activeJobs: Array.isArray(jobs.data) ? jobs.data : [],
       recentEarnings: commissions.data ?? [],
+      myApplications: ownApplications,
     };
   }
 
@@ -9703,6 +9717,7 @@ async function buildAiAssistantContext(
       ...base,
       activeJobs: Array.isArray(jobs.data) ? jobs.data : [],
       stationRuntime: runtime.data ?? null,
+      myApplications: ownApplications,
     };
   }
 
@@ -9762,7 +9777,7 @@ function assertAiContextQuery(error: { readonly message?: string } | null): void
 
 function aiSystemPrompt(workspace: string): string {
   const roleInstruction = workspace === "customer"
-    ? "Help the customer understand their LPG orders, cylinders, locations, quotes, account state and support options."
+    ? "Help the customer understand their LPG orders, cylinders, locations, quotes, account state, their own driver/station application status and support options."
     : workspace === "driver"
     ? "Act as a driver workflow copilot. Explain active jobs, the next operational step and earnings records only from supplied context."
     : workspace === "station"
@@ -9782,7 +9797,7 @@ function aiSystemPrompt(workspace: string): string {
 
 function aiWorkspaceSuggestions(workspace: string): readonly string[] {
   if (workspace === "customer") {
-    return ["Where is my refill?", "Explain my latest order", "Which cylinder did I use last?"];
+    return ["Where is my refill?", "What's happening with my application?", "Explain my latest order"];
   }
   if (workspace === "driver") {
     return ["What do I do next?", "Summarize my active jobs", "Explain my recent earnings"];
