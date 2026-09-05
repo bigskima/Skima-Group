@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  BadgeDollarSign,
   Bot,
   CheckCircle2,
   Cpu,
@@ -41,6 +42,7 @@ const AdminAiRuntimeSchema = z.object({
   forecasts: z.array(PlatformRecordSchema).default([]),
   riskAssessments: z.array(PlatformRecordSchema).default([]),
   dispatchAssessments: z.array(PlatformRecordSchema).default([]),
+  financeFindings: z.array(PlatformRecordSchema).default([]),
   userId: z.string().uuid().optional(),
 });
 const AiAssistantResponseSchema = z.object({
@@ -110,6 +112,7 @@ export function AdminAiWorkspace() {
   const forecasts = runtime.data?.forecasts ?? [];
   const riskAssessments = runtime.data?.riskAssessments ?? [];
   const dispatchAssessments = runtime.data?.dispatchAssessments ?? [];
+  const financeFindings = runtime.data?.financeFindings ?? [];
   const activeCapabilities = capabilities.filter((item) => recordString(item, "status") === "active");
   const activeProviders = providers.filter((item) =>
     ["active", "degraded"].includes(recordString(item, "status") ?? "")
@@ -356,6 +359,8 @@ export function AdminAiWorkspace() {
 
       <DispatchShadowPanel assessments={dispatchAssessments} />
 
+      <FinanceReconciliationPanel findings={financeFindings} />
+
       <PartnerRiskPanel assessments={riskAssessments} />
 
       <OperationalInsightsPanel
@@ -531,6 +536,107 @@ function DispatchShadowPanel(props: {
         <ShieldCheck aria-hidden="true" />
         <span>
           No comparison on this screen can assign, reject, block or make a driver ineligible.
+        </span>
+      </div>
+    </section>
+  );
+}
+
+function FinanceReconciliationPanel(props: {
+  readonly findings: readonly PlatformRecord[];
+}) {
+  const sorted = [...props.findings].sort((left, right) => {
+    const severityDifference =
+      severityRank(recordString(right, "severity")) - severityRank(recordString(left, "severity"));
+    if (severityDifference !== 0) return severityDifference;
+    return (recordString(right, "last_detected_at") ?? "").localeCompare(
+      recordString(left, "last_detected_at") ?? "",
+    );
+  });
+  const elevated = sorted.filter((item) =>
+    ["high", "critical"].includes(recordString(item, "severity") ?? "")
+  ).length;
+
+  return (
+    <section className="sk-panel admin-ai-finance">
+      <div className="sk-panel__header admin-ai-panel-head">
+        <div>
+          <p className="admin-section-kicker">Finance intelligence</p>
+          <h2>Reconciliation review</h2>
+          <p>
+            Deterministic checks compare authoritative SKIMA finance records and surface mismatches
+            for review. This screen cannot post ledger entries, move funds, refund, release escrow,
+            reverse a transaction or authorize a correction.
+          </p>
+        </div>
+        <StatusBadge tone={elevated ? "danger" : sorted.length ? "warning" : "success"}>
+          {sorted.length ? String(sorted.length) + " finding" + (sorted.length === 1 ? "" : "s") : "Balanced"}
+        </StatusBadge>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="admin-ai-finance-empty">
+          <CheckCircle2 aria-hidden="true" />
+          <div>
+            <strong>No reconciliation finding needs review</strong>
+            <span>Configured checks have not found an open ledger, settlement or deposit mismatch.</span>
+          </div>
+        </div>
+      ) : (
+        <div className="admin-ai-finance-list">
+          {sorted.slice(0, 12).map((finding) => {
+            const severity = recordString(finding, "severity") ?? "warning";
+            const type = recordString(finding, "finding_type") ?? "finance_review";
+            const subjectType = recordString(finding, "subject_type") ?? "finance_record";
+            const subjectId = recordString(finding, "subject_id");
+            const currency = recordString(finding, "currency_code") ?? "NGN";
+            const expected = nullableRecordNumber(finding, "expected_amount");
+            const observed = nullableRecordNumber(finding, "observed_amount");
+            const variance = nullableRecordNumber(finding, "variance_amount");
+
+            return (
+              <article className="admin-ai-finance-row" key={recordString(finding, "id") ?? type + subjectId}>
+                <div className={"admin-ai-finance-icon is-" + severity}>
+                  <BadgeDollarSign aria-hidden="true" />
+                </div>
+                <div className="admin-ai-finance-copy">
+                  <div className="admin-ai-finance-title">
+                    <strong>{financeFindingTitle(type)}</strong>
+                    <StatusBadge tone={severityTone(severity)}>
+                      {normalizeStatusLabel(severity)}
+                    </StatusBadge>
+                    <span>{normalizeStatusLabel(subjectType)} · {shortEntityReference(subjectId)}</span>
+                  </div>
+                  <p>
+                    {recordString(finding, "recommended_action") ??
+                      "Review the authoritative finance records before considering any correction."}
+                  </p>
+                  <div className="admin-ai-finance-values">
+                    {expected !== null ? (
+                      <span><small>Expected</small><b>{formatFinanceAmount(expected, currency)}</b></span>
+                    ) : null}
+                    {observed !== null ? (
+                      <span><small>Observed</small><b>{formatFinanceAmount(observed, currency)}</b></span>
+                    ) : null}
+                    {variance !== null ? (
+                      <span><small>Variance</small><b>{formatFinanceAmount(variance, currency)}</b></span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="admin-ai-finance-mode">
+                  <small>Control</small>
+                  <b>Review only</b>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="admin-ai-finance-guardrail">
+        <ShieldCheck aria-hidden="true" />
+        <span>
+          The immutable ledger and existing reconciliation engine remain authoritative. SKIMA Intelligence only explains what should be reviewed.
         </span>
       </div>
     </section>
@@ -963,6 +1069,44 @@ function recordNumber(record: PlatformRecord | null | undefined, key: string): n
     return Number.isFinite(parsed) ? parsed : 0;
   }
   return 0;
+}
+
+function nullableRecordNumber(
+  record: PlatformRecord | null | undefined,
+  key: string,
+): number | null {
+  const value = record?.[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function financeFindingTitle(value: string): string {
+  if (value === "service_request_unbalanced") return "Service request is out of balance";
+  if (value === "settlement_missing_transaction") return "Posted settlement has no ledger transaction";
+  if (value === "deposit_missing_transaction") return "Successful deposit has no ledger transaction";
+  return "Finance record needs review";
+}
+
+function shortEntityReference(value: string | null): string {
+  return value ? value.slice(0, 8) : "unknown";
+}
+
+function formatFinanceAmount(value: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return currency + " " + new Intl.NumberFormat("en-NG", {
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
 }
 
 function shortReference(value: string | null): string {
