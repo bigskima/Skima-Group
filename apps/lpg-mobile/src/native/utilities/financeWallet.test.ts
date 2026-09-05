@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import type { PlatformRecord } from "../api/records";
 import { selectWorkspaceWallet, walletRecordId } from "./financeWallet";
 
-const wallets = [
+const wallets: readonly PlatformRecord[] = [
   {
     id: "11111111-1111-4111-8111-111111111111",
     wallet_type: "customer",
@@ -26,7 +26,7 @@ const wallets = [
     owner_entity_type: "user",
     status: "closed",
   },
-] as const;
+];
 
 describe("role-aware finance wallet selection", () => {
   it("never uses the first accessible wallet as a role shortcut", () => {
