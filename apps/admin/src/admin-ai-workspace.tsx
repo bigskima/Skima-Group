@@ -35,6 +35,7 @@ const AdminAiRuntimeSchema = z.object({
   capabilities: z.array(PlatformRecordSchema),
   routes: z.array(PlatformRecordSchema),
   providers: z.array(PlatformRecordSchema),
+  insights: z.array(PlatformRecordSchema).default([]),
   userId: z.string().uuid().optional(),
 });
 const AiAssistantResponseSchema = z.object({
@@ -100,6 +101,7 @@ export function AdminAiWorkspace() {
   const capabilities = runtime.data?.capabilities ?? [];
   const routes = runtime.data?.routes ?? [];
   const providers = runtime.data?.providers ?? [];
+  const insights = runtime.data?.insights ?? [];
   const activeCapabilities = capabilities.filter((item) => recordString(item, "status") === "active");
   const activeProviders = providers.filter((item) =>
     ["active", "degraded"].includes(recordString(item, "status") ?? "")
@@ -157,7 +159,12 @@ export function AdminAiWorkspace() {
         <MetricTile label="Active capabilities" value={activeCapabilities.length} icon={Sparkles} tone="info" />
         <MetricTile label="Available providers" value={activeProviders.length} icon={Cpu} tone="success" />
         <MetricTile label="Active routes" value={activeRoutes.length} icon={Route} tone="neutral" />
-        <MetricTile label="Read-only copilots" value={readOnlyCapabilities.length} icon={ShieldCheck} tone="success" />
+        <MetricTile
+          label="Open exceptions"
+          value={insights.filter((item) => recordString(item, "status") !== "resolved").length}
+          icon={ShieldCheck}
+          tone={insights.length ? "warning" : "success"}
+        />
       </section>
 
       {notice ? <div className="admin-notice" role="status">{notice}</div> : null}
@@ -339,7 +346,120 @@ export function AdminAiWorkspace() {
           </div>
         </div>
       </section>
+
+      <OperationalInsightsPanel
+        api={api}
+        insights={insights}
+        onChanged={async () => {
+          await queryClient.invalidateQueries({ queryKey: ["admin-ai-runtime"] });
+        }}
+      />
     </>
+  );
+}
+
+function OperationalInsightsPanel(props: {
+  readonly api: ReturnType<typeof useSessionState>["api"];
+  readonly insights: readonly PlatformRecord[];
+  readonly onChanged: () => Promise<void>;
+}) {
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const action = useMutation({
+    mutationFn: (input: { readonly insightId: string; readonly action: "acknowledge" | "dismiss" }) =>
+      props.api.post(
+        "/admin/ai/insight-action",
+        {
+          insightId: input.insightId,
+          action: input.action,
+        },
+        MutationSchema,
+      ),
+    onSuccess: async () => {
+      setActionError(null);
+      await props.onChanged();
+    },
+    onError: (cause) => setActionError(readError(cause)),
+  });
+
+  const sorted = [...props.insights].sort(
+    (a, b) => severityRank(recordString(b, "severity")) - severityRank(recordString(a, "severity")),
+  );
+
+  return (
+    <section className="sk-panel admin-ai-insights">
+      <div className="sk-panel__header admin-ai-panel-head">
+        <div>
+          <p className="admin-section-kicker">Exception intelligence</p>
+          <h2>Needs attention</h2>
+          <p>
+            Deterministic SKIMA rules detect unusual operational states first. Ask SKIMA can then explain
+            these facts without changing the affected record.
+          </p>
+        </div>
+        <StatusBadge tone={sorted.length ? "warning" : "success"}>
+          {sorted.length ? String(sorted.length) + " open" : "Clear"}
+        </StatusBadge>
+      </div>
+
+      {actionError ? <div className="admin-notice is-error" role="alert">{actionError}</div> : null}
+
+      {sorted.length === 0 ? (
+        <div className="admin-ai-insights-empty">
+          <CheckCircle2 aria-hidden="true" />
+          <div>
+            <strong>No current AI operational exceptions</strong>
+            <span>The detector will surface configured exceptions here when they occur.</span>
+          </div>
+        </div>
+      ) : (
+        <div className="admin-ai-insight-list">
+          {sorted.slice(0, 20).map((insight) => {
+            const id = recordString(insight, "id") ?? "";
+            const statusValue = recordString(insight, "status") ?? "open";
+            const severity = recordString(insight, "severity") ?? "warning";
+            return (
+              <article className="admin-ai-insight-row" key={id}>
+                <div className={"admin-ai-severity-dot is-" + severity} aria-hidden="true" />
+                <div className="admin-ai-insight-copy">
+                  <div className="admin-ai-insight-title">
+                    <strong>{recordString(insight, "title") ?? "Operational exception"}</strong>
+                    <StatusBadge tone={severityTone(severity)}>{normalizeStatusLabel(severity)}</StatusBadge>
+                    {statusValue === "acknowledged" ? <StatusBadge tone="neutral">Acknowledged</StatusBadge> : null}
+                  </div>
+                  <p>{recordString(insight, "summary") ?? "SKIMA detected an operational state that needs review."}</p>
+                  {recordString(insight, "recommended_action") ? (
+                    <small><b>Suggested next check:</b> {recordString(insight, "recommended_action")}</small>
+                  ) : null}
+                </div>
+                <div className="admin-ai-insight-actions">
+                  {statusValue !== "acknowledged" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      requiredPermission="platform.ai.manage"
+                      disabled={action.isPending}
+                      onClick={() => action.mutate({ insightId: id, action: "acknowledge" })}
+                    >
+                      Acknowledge
+                    </Button>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    requiredPermission="platform.ai.manage"
+                    disabled={action.isPending}
+                    onClick={() => action.mutate({ insightId: id, action: "dismiss" })}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -554,6 +674,19 @@ function ProviderSetupForm(props: {
       </div>
     </form>
   );
+}
+
+function severityRank(value: string | null): number {
+  if (value === "critical") return 4;
+  if (value === "high") return 3;
+  if (value === "warning") return 2;
+  return 1;
+}
+
+function severityTone(value: string): "neutral" | "success" | "warning" | "danger" | "info" {
+  if (value === "critical" || value === "high") return "danger";
+  if (value === "warning") return "warning";
+  return "info";
 }
 
 function recordString(record: PlatformRecord | null | undefined, key: string): string | null {
