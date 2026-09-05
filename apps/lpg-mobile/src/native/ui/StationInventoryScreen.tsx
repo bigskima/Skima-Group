@@ -28,6 +28,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
+import { AiContextAction } from "./AiContextAction";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { EvidenceCapture } from "./EvidenceCapture";
@@ -174,6 +175,12 @@ export function StationInventoryScreen() {
               </Text>
             </View>
           </View>
+
+          <AiContextAction
+            workspace="station"
+            label="Explain inventory status"
+            prompt={`Explain my station inventory status using the live SKIMA station context. Current inventory status: ${inventoryStatus}. Dispatchable stock shown here: ${dispatchable === null ? "not reported" : String(dispatchable) + " kg"}. ${dispatchBlockReason ? "Dispatch block reason shown here: " + dispatchBlockReason + "." : ""} Tell me what needs attention, including source freshness or demand outlook if available. Do not change stock, availability, capacity, provider settings or dispatch.`}
+          />
 
           {needsSetup ? (
             <View style={[styles.attention, { backgroundColor: palette.warningSoft, borderColor: palette.warning }]}>
