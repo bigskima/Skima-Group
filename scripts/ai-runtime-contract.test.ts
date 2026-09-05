@@ -16,6 +16,7 @@ const [
   dispatchShadowGuardSql,
   financeReconciliationSql,
   financeReconciliationScopeSql,
+  pricingIntelligenceSql,
   providerRuntime,
   workerSource,
   gatewaySource,
@@ -40,6 +41,7 @@ const [
   readRepositoryFile("supabase/migrations/20260905235500_ai_dispatch_shadow_configuration_guard.sql"),
   readRepositoryFile("supabase/migrations/20260905234500_ai_finance_reconciliation_intelligence.sql"),
   readRepositoryFile("supabase/migrations/20260906000500_ai_finance_reconciliation_scope_hardening.sql"),
+  readRepositoryFile("supabase/migrations/20260906002000_ai_pricing_intelligence.sql"),
   readRepositoryFile("supabase/functions/_shared/ai-provider-runtime.ts"),
   readRepositoryFile("supabase/functions/runtime-worker/index.ts"),
   readRepositoryFile("supabase/functions/api-gateway/index.ts"),
@@ -940,6 +942,124 @@ Deno.test("finance reconciliation is admin-only, fail-soft, and visibly review-o
   );
 });
 
+Deno.test("pricing intelligence is deterministic, simulation-only, and cannot set prices", () => {
+  const sql = normalizeWhitespace(pricingIntelligenceSql);
+
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_pricing_intelligence_rules",
+    "pricing intelligence rules must be database configuration",
+  );
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_pricing_intelligence_snapshots",
+    "pricing simulations must be stored separately from authoritative price records",
+  );
+  assertIncludes(
+    sql,
+    '"control": "simulation_only"',
+    "pricing intelligence must be seeded as simulation-only",
+  );
+  assertIncludes(
+    sql,
+    "pricing intelligence control must remain simulation_only",
+    "pricing configuration must reject authoritative control modes",
+  );
+  assertIncludes(
+    sql,
+    "pricing intelligence must not claim demand elasticity without an approved forecasting model",
+    "pricing simulation must not pretend constant-volume arithmetic models customer behavior",
+  );
+  assertIncludes(
+    sql,
+    "'assumption', 'constant_historical_volume'",
+    "every scenario must carry the constant-volume assumption",
+  );
+  assertIncludes(
+    sql,
+    "'changespolicy', false",
+    "scenario data must explicitly state that it does not change policy",
+  );
+  assertNotMatch(
+    pricingIntelligenceSql,
+    /provider\.ai\.|resolve_ai_provider_route|executeAiText|generativelanguage|chat\/completions/,
+    "pricing arithmetic must not depend on an LLM",
+  );
+  assertNotMatch(
+    pricingIntelligenceSql,
+    /\b(?:update|insert\s+into|delete\s+from)\s+public\.(?:catalog_prices|lpg_refill_pricing|financial_policy_versions|financial_policy_events|lpg_refill_orders|price_quotes)\b/i,
+    "pricing intelligence must never mutate authoritative prices, policies, orders or quotes",
+  );
+  assertIncludes(
+    sql,
+    "revoke all on function public.refresh_ai_pricing_intelligence() from public, anon, authenticated",
+    "pricing refresh must remain unavailable to normal clients",
+  );
+  assertIncludes(
+    sql,
+    "grant execute on function public.refresh_ai_pricing_intelligence() to service_role",
+    "pricing refresh must remain a backend worker operation",
+  );
+  assertIncludes(
+    sql,
+    "public.has_permission('platform.pricing.read', null)",
+    "pricing intelligence reads must require authorized admin access",
+  );
+});
+
+Deno.test("pricing intelligence is admin-only and visibly non-authoritative", () => {
+  assertIncludes(
+    workerSource,
+    'source: "runtime-worker.ai-pricing-intelligence"',
+    "worker must isolate pricing intelligence refresh failures",
+  );
+  assertIncludes(
+    workerSource,
+    'reason: "pricing_intelligence_runtime_not_ready"',
+    "worker must fail soft when pricing intelligence migrations are unavailable",
+  );
+  assertIncludes(
+    workerSource,
+    "aiPricing,",
+    "worker health/response payload must expose pricing intelligence refresh health",
+  );
+  assertIncludes(
+    gatewaySource,
+    "pricingIntelligence:",
+    "admin Ask SKIMA context must receive pricing intelligence",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Scenario projections assume volume stays constant; they do not model demand elasticity",
+    "assistant prompt must state the pricing simulation limitation",
+  );
+  assertIncludes(
+    gatewaySource,
+    "never disclose internal pricing simulations to customer, driver or station workspaces",
+    "assistant prompt must forbid cross-workspace pricing simulation disclosure",
+  );
+  assertNotIncludes(
+    mobileAssistant,
+    "pricingIntelligence",
+    "mobile Ask SKIMA must not receive internal pricing simulation data",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "Pricing simulation",
+    "admin SKIMA Intelligence must surface pricing simulation",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "Scenarios assume the same volume and do not model how customers would react",
+    "admin pricing UI must explain the constant-volume limitation",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "Simulation only. This panel cannot set a station price, change the SKIMA fee",
+    "admin pricing UI must expose the non-authoritative boundary",
+  );
+});
+
 Deno.test("AI workspace context keeps internal intelligence out of station/customer/driver surfaces", () => {
   const stationContext = sectionBetween(
     gatewaySource,
@@ -961,6 +1081,11 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_finance_reconciliation_findings",
     "station assistant must not query internal finance reconciliation intelligence",
   );
+  assertNotIncludes(
+    stationContext,
+    "read_ai_pricing_intelligence",
+    "station assistant must not query internal pricing simulation intelligence",
+  );
 
   const adminContext = sectionBetween(
     gatewaySource,
@@ -971,6 +1096,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_partner_risk_assessments",
     "read_ai_dispatch_shadow_assessments",
     "read_ai_finance_reconciliation_findings",
+    "read_ai_pricing_intelligence",
   ]) {
     assertIncludes(
       adminContext,
@@ -992,6 +1118,7 @@ Deno.test("worker reports exception refresh exactly once per response section", 
     "aiRisk,",
     "aiDispatch,",
     "aiFinance,",
+    "aiPricing,",
     "aiTasks,",
   ]) {
     assertIncludes(
