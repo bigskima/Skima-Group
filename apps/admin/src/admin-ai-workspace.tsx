@@ -107,10 +107,6 @@ export function AdminAiWorkspace() {
     ["active", "degraded"].includes(recordString(item, "status") ?? "")
   );
   const activeRoutes = routes.filter((item) => recordString(item, "status") === "active");
-  const readOnlyCapabilities = activeCapabilities.filter((item) =>
-    recordString(item, "control_mode") === "read_only"
-  );
-
   const refresh = () => {
     setNotice(null);
     void queryClient.invalidateQueries({ queryKey: ["admin-ai-runtime"] });
