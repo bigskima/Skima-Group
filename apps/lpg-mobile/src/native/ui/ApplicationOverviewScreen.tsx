@@ -245,11 +245,13 @@ export function ApplicationOverviewScreen({
     invalidate: [["applications"]],
   });
 
+  const activeVersion = payloadVersions.data?.[0];
+  const activePayload = nestedRecord(activeVersion, "payload") ?? activeVersion ?? null;
+
   const hydratedApplication = useRef<string | null>(null);
   useEffect(() => {
     if (!currentId || hydratedApplication.current === currentId) return;
-    const version = payloadVersions.data?.[0];
-    const payload = nestedRecord(version, "payload") ?? version;
+    const payload = activePayload;
     if (!payload) return;
 
     const contact = nestedRecord(payload, "contact");
@@ -305,20 +307,38 @@ export function ApplicationOverviewScreen({
   }, [currentId, payloadVersions.data]);
 
   const buildPayload = () => {
+    // update_application_payload replaces the entire application payload. Always
+    // merge the latest version so a save from this screen cannot erase location,
+    // requested coverage, policy acceptance, media metadata, or future fields
+    // written by another application step.
+    const basePayload = activePayload ?? {};
+    const existingIdentity = nestedRecord(basePayload, "identity") ?? {};
+    const existingContact = nestedRecord(basePayload, "contact") ?? {};
+    const existingLicence = nestedRecord(basePayload, "licence") ?? {};
+
     if (workspace === "driver") {
       return {
+        ...basePayload,
         identity: {
+          ...existingIdentity,
           fullName: name.trim(),
           driverDisplayName: driverDisplayName.trim() || name.trim(),
           address: address.trim(),
         },
-        contact: { phone: phone.trim() },
-        licence: { number: legalOrLicence.trim() },
+        contact: { ...existingContact, phone: phone.trim() },
+        licence: { ...existingLicence, number: legalOrLicence.trim() },
       };
     }
 
+    const existingOrganization = nestedRecord(basePayload, "organization") ?? {};
+    const existingAuthority = nestedRecord(basePayload, "authority") ?? {};
+    const existingStation = nestedRecord(basePayload, "station") ?? {};
+    const existingLocation = nestedRecord(basePayload, "location");
+
     return {
+      ...basePayload,
       organization: {
+        ...existingOrganization,
         displayName: stationName.trim() || name.trim(),
         legalName: legalOrLicence.trim() || stationName.trim(),
         slug:
@@ -326,11 +346,13 @@ export function ApplicationOverviewScreen({
           stationName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
       },
       authority: {
+        ...existingAuthority,
         role: stationRole,
         fullName: name.trim(),
       },
-      contact: { phone: phone.trim() },
+      contact: { ...existingContact, phone: phone.trim() },
       station: {
+        ...existingStation,
         displayName: stationName.trim(),
         formattedAddress: address.trim(),
         latitude,
@@ -338,7 +360,7 @@ export function ApplicationOverviewScreen({
         refillCapacityKg: Number(capacity) || 5000,
         operatingHours: { opensAt: opens, closesAt: closes },
       },
-      location: lastLocation,
+      location: lastLocation ?? existingLocation ?? null,
     };
   };
 
