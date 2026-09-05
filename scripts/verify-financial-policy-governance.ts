@@ -134,6 +134,7 @@ const [
   adminConfig,
   adminRevenue,
   mobileWithdrawal,
+  withdrawalModal,
 ] = await Promise.all([
   readMigrations(),
   readMigrationBySuffix("_lpg_revenue_station_permission_security_repair.sql"),
@@ -144,6 +145,7 @@ const [
   read("apps/admin/src/admin-resource-config.ts"),
   read("apps/admin/src/admin-revenue-workspace.tsx"),
   read("apps/lpg-mobile/src/native/ui/FinanceWithdrawalExperience.tsx"),
+  read("apps/lpg-mobile/src/native/ui/WithdrawalModal.tsx"),
 ]);
 
 const correctedStationCatalogHelper = sqlFunctionSection(
@@ -470,6 +472,59 @@ const checks: Check[] = [
     forbidden: [
       /label="Account holder name"/i,
       /placeholder="Full account name"/i,
+    ],
+  },
+  {
+    name: "Paystack hard payout failures restore wallet funds",
+    source: financeRuntime,
+    required: [
+      /error instanceof PaystackPayoutError/i,
+      /target_provider_status:\s*"failed"/i,
+      /process_wallet_withdrawal_transfer/i,
+      /principalAttempted:\s*withdrawal\.data\.amount/i,
+      /providerStatus:\s*"failed"/i,
+    ],
+  },
+  {
+    name: "ambiguous wallet payouts expose safe retry without duplicate processing",
+    source: financeRuntime,
+    required: [
+      /path === "\/withdrawals\/retry"/i,
+      /owned\.data\.status === "processing" \|\| owned\.data\.status === "succeeded"/i,
+      /owned\.data\.status !== "approved"/i,
+      /retryable:\s*true/i,
+    ],
+  },
+  {
+    name: "withdrawal UI explains reservation and failure reversal accurately",
+    source: withdrawalModal,
+    required: [
+      /Retry bank transfer/i,
+      /reserved amount is restored automatically/i,
+      /Ready to retry/i,
+      /Failed · funds restored/i,
+    ],
+    forbidden: [
+      /You will be charged only after the transfer succeeds/i,
+    ],
+  },
+  {
+    name: "Super Admin revenue payout retries are guarded against duplicate transfers",
+    source: gateway,
+    required: [
+      /\/admin\/revenue\/payout\/retry/i,
+      /withdrawal\.data\.source !== "platform\.revenue_payout"/i,
+      /withdrawal\.data\.status === "succeeded" \|\| withdrawal\.data\.status === "processing"/i,
+      /withdrawal\.data\.status !== "approved"/i,
+    ],
+  },
+  {
+    name: "Admin exposes retry for approved revenue payouts",
+    source: adminRevenue,
+    required: [
+      /\/admin\/revenue\/payout\/retry/i,
+      /payout\.status === "approved"/i,
+      /Retry transfer/i,
     ],
   },
   {
