@@ -301,7 +301,32 @@ function isUsableTileTemplate(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const template = value.trim();
   if (!template.startsWith("https://")) return false;
-  return ["{z}", "{x}", "{y}"].every((token) => template.includes(token));
+  if (!["{z}", "{x}", "{y}"].every((token) => template.includes(token))) return false;
+  return !requiresPublicMapCredential(template);
+}
+
+function requiresPublicMapCredential(value: string) {
+  const normalized = value.toLowerCase();
+  const credentialMarkers = [
+    "{access_token}",
+    "{api_key}",
+    "{apikey}",
+    "{key}",
+    "access_token=",
+    "api_key=",
+    "apikey=",
+    "token=",
+    "key=",
+  ];
+  const credentialProviders = [
+    "locationiq.com",
+    "maps.googleapis.com",
+    "api.mapbox.com",
+    "tiles.mapbox.com",
+    "api.maptiler.com",
+  ];
+  return credentialMarkers.some((marker) => normalized.includes(marker)) ||
+    credentialProviders.some((provider) => normalized.includes(provider));
 }
 
 function readPolygons(value?: string): Coordinate[][] {
