@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { Redirect, router } from "expo-router";
-import { LockKeyhole, Mail } from "lucide-react-native";
+import { Eye, EyeOff, LockKeyhole, Mail } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSession } from "../../src/native/session/SessionProvider";
@@ -14,11 +14,13 @@ export default function Login() {
   const { palette } = useAppTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const ready = Boolean(email.trim() && password);
 
   const submit = async () => {
-    if (!email.trim() || !password || pending) return;
+    if (!ready || pending) return;
     setPending(true);
     setMessage(null);
     try {
@@ -37,50 +39,65 @@ export default function Login() {
   return (
     <AuthShell
       eyebrow="Welcome back"
-      title="Sign in to SKIMA"
-      body="Continue your refill, delivery, driver or station work from one secure account."
+      title="Sign in"
+      body="Use the account you created for SKIMA. Your available customer, driver and station workspaces will load after sign-in."
       footer={
-        <View style={styles.footerArea}>
-          <View style={styles.footerLinks}>
-            <Pressable onPress={() => router.push("/(auth)/register")}>
-              <Text style={styles.linkStrong}>Create account</Text>
-            </Pressable>
-            <Pressable onPress={() => router.push("/(auth)/forgot-password")}>
-              <Text style={[styles.linkMuted, { color: palette.muted }]}>Forgot password?</Text>
-            </Pressable>
-          </View>
-        </View>
+        <Text style={[styles.footerText, { color: palette.muted }]}>
+          New to SKIMA?{" "}
+          <Text onPress={() => router.push("/(auth)/register")} style={styles.linkStrong}>
+            Create an account
+          </Text>
+        </Text>
       }
     >
-      <View style={[styles.field, { backgroundColor: palette.input, borderColor: palette.border }]}>
-        <Mail color={palette.muted} size={18} />
-        <TextInput
-          accessibilityLabel="Email address"
-          autoCapitalize="none"
-          autoComplete="email"
-          keyboardType="email-address"
-          onChangeText={setEmail}
-          placeholder="Email address"
-          placeholderTextColor={palette.muted}
-          returnKeyType="next"
-          style={[styles.input, { color: palette.ink }]}
-          value={email}
-        />
+      <View style={styles.fieldBlock}>
+        <Text style={[styles.label, { color: palette.ink }]}>Email</Text>
+        <View style={[styles.field, { backgroundColor: palette.input, borderColor: palette.border }]}>
+          <Mail color={palette.muted} size={18} />
+          <TextInput
+            accessibilityLabel="Email address"
+            autoCapitalize="none"
+            autoComplete="email"
+            keyboardType="email-address"
+            onChangeText={setEmail}
+            placeholder="you@example.com"
+            placeholderTextColor={palette.muted}
+            returnKeyType="next"
+            style={[styles.input, { color: palette.ink }]}
+            value={email}
+          />
+        </View>
       </View>
 
-      <View style={[styles.field, { backgroundColor: palette.input, borderColor: palette.border }]}>
-        <LockKeyhole color={palette.muted} size={18} />
-        <TextInput
-          accessibilityLabel="Password"
-          autoComplete="current-password"
-          onChangeText={setPassword}
-          onSubmitEditing={() => void submit()}
-          placeholder="Password"
-          placeholderTextColor={palette.muted}
-          secureTextEntry
-          style={[styles.input, { color: palette.ink }]}
-          value={password}
-        />
+      <View style={styles.fieldBlock}>
+        <View style={styles.labelRow}>
+          <Text style={[styles.label, { color: palette.ink }]}>Password</Text>
+          <Pressable accessibilityRole="button" onPress={() => router.push("/(auth)/forgot-password")}>
+            <Text style={styles.linkStrong}>Forgot password?</Text>
+          </Pressable>
+        </View>
+        <View style={[styles.field, { backgroundColor: palette.input, borderColor: palette.border }]}>
+          <LockKeyhole color={palette.muted} size={18} />
+          <TextInput
+            accessibilityLabel="Password"
+            autoComplete="current-password"
+            onChangeText={setPassword}
+            onSubmitEditing={() => void submit()}
+            placeholder="Enter your password"
+            placeholderTextColor={palette.muted}
+            secureTextEntry={!showPassword}
+            style={[styles.input, { color: palette.ink }]}
+            value={password}
+          />
+          <Pressable
+            accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => setShowPassword((value) => !value)}
+          >
+            {showPassword ? <EyeOff color={palette.muted} size={18} /> : <Eye color={palette.muted} size={18} />}
+          </Pressable>
+        </View>
       </View>
 
       {session.error || message ? (
@@ -91,12 +108,12 @@ export default function Login() {
 
       <Pressable
         accessibilityRole="button"
-        disabled={!email.trim() || !password || pending}
+        disabled={!ready || pending}
         onPress={() => void submit()}
-        style={({ pressed }) => [styles.button, (!email.trim() || !password) && styles.disabled, (pressed || pending) && styles.pressed]}
+        style={({ pressed }) => [styles.button, !ready && styles.disabled, (pressed || pending) && styles.pressed]}
       >
         <LinearGradient colors={[colors.brand, colors.brandDark]} style={styles.buttonFill}>
-          {pending ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Sign in</Text>}
+          {pending ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Sign in to SKIMA</Text>}
         </LinearGradient>
       </Pressable>
     </AuthShell>
@@ -104,29 +121,25 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
+  fieldBlock: { gap: 8 },
+  labelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
+  label: { fontSize: 12, fontWeight: "900" },
   field: {
-    minHeight: 54,
+    minHeight: 56,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     paddingHorizontal: spacing.md,
   },
-  input: { flex: 1, minHeight: 52, fontSize: 15, fontWeight: "700" },
-  button: { minHeight: 54, overflow: "hidden", borderRadius: radii.md },
+  input: { flex: 1, minHeight: 54, fontSize: 15, fontWeight: "700" },
+  button: { minHeight: 56, overflow: "hidden", borderRadius: radii.lg, marginTop: 2 },
   buttonFill: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.lg },
   buttonText: { color: "white", fontSize: 15, fontWeight: "900" },
   error: { color: colors.danger, fontSize: 12, lineHeight: 18, fontWeight: "800" },
-  footerArea: { gap: spacing.md },
-  footerLinks: { flexDirection: "row", justifyContent: "space-between", gap: spacing.md },
-  linkStrong: { color: colors.brand, fontSize: 13, fontWeight: "900" },
-  linkMuted: { fontSize: 13, fontWeight: "900" },
-  publicVerify: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md },
-  publicVerifyIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  publicVerifyCopy: { flex: 1, gap: 2 },
-  publicVerifyTitle: { fontSize: 13, fontWeight: "900" },
-  publicVerifyBody: { fontSize: 10, fontWeight: "700" },
-  disabled: { opacity: 0.52 },
-  pressed: { opacity: 0.76 },
+  footerText: { textAlign: "center", fontSize: 13, lineHeight: 20, fontWeight: "700" },
+  linkStrong: { color: colors.brand, fontSize: 12, fontWeight: "900" },
+  disabled: { opacity: 0.48 },
+  pressed: { opacity: 0.8 },
 });
