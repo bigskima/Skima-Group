@@ -10,6 +10,8 @@ const [
   forecastGuardSql,
   refillOutlookSql,
   complaintStatusSql,
+  partnerRiskSql,
+  partnerRiskGuardSql,
   providerRuntime,
   workerSource,
   gatewaySource,
@@ -28,6 +30,8 @@ const [
   readRepositoryFile("supabase/migrations/20260905223500_ai_demand_forecast_configuration_guard.sql"),
   readRepositoryFile("supabase/migrations/20260905225000_customer_refill_outlook_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905230500_customer_complaint_status_read_runtime.sql"),
+  readRepositoryFile("supabase/migrations/20260905233000_ai_partner_trust_risk_runtime.sql"),
+  readRepositoryFile("supabase/migrations/20260905233500_ai_partner_risk_configuration_guard.sql"),
   readRepositoryFile("supabase/functions/_shared/ai-provider-runtime.ts"),
   readRepositoryFile("supabase/functions/runtime-worker/index.ts"),
   readRepositoryFile("supabase/functions/api-gateway/index.ts"),
@@ -352,7 +356,7 @@ Deno.test("forecast runtime is fail-soft and clearly labelled as an estimate", (
   );
   assertMatch(
     workerSource,
-    /data:\s*\{\s*aiForecasts,\s*aiInsights,\s*aiTasks,/,
+    /data:\s*\{\s*aiForecasts,\s*aiInsights,\s*aiRisk,\s*aiTasks,/,
     "worker response must expose forecast refresh health",
   );
   assertIncludes(
@@ -500,6 +504,154 @@ Deno.test("customer support case status projection never exposes internal modera
   );
 });
 
+Deno.test("partner trust risk is deterministic, internal, and advisory-only", () => {
+  const sql = normalizeWhitespace(partnerRiskSql);
+
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_risk_rules",
+    "partner risk rules must be database configuration",
+  );
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_risk_assessments",
+    "partner risk assessments must be versioned internal records",
+  );
+  assertIncludes(
+    sql,
+    "and driver.verification_status = 'approved'",
+    "driver risk review must follow the canonical production approval state",
+  );
+  assertIncludes(
+    sql,
+    "and station.approval_status = 'approved'",
+    "station risk review must follow the canonical production approval state",
+  );
+  assertIncludes(
+    sql,
+    "'control': 'advisory_only'".replace(":", ","),
+    "risk configuration must identify advisory-only control",
+  );
+  assertNotMatch(
+    partnerRiskSql,
+    /provider\.ai\.|resolve_ai_provider_route|executeAiText|generativelanguage|chat\/completions/,
+    "risk scoring must not call an LLM or model provider",
+  );
+  assertIncludes(
+    sql,
+    "revoke all on function public.refresh_ai_partner_risk_assessments() from public, anon, authenticated",
+    "risk refresh must remain unavailable to normal clients",
+  );
+  assertIncludes(
+    sql,
+    "grant execute on function public.refresh_ai_partner_risk_assessments() to service_role",
+    "risk refresh must remain a backend worker operation",
+  );
+  assertIncludes(
+    sql,
+    "'doesnotchangeeligibility', true",
+    "risk evidence must explicitly state it does not change eligibility",
+  );
+  assertIncludes(
+    sql,
+    "'doesnotholdfunds', true",
+    "risk evidence must explicitly state it does not hold funds",
+  );
+  assertIncludes(
+    sql,
+    "'doesnotchangedispatch', true",
+    "risk evidence must explicitly state it does not alter dispatch",
+  );
+  assertIncludes(
+    sql,
+    "public.has_permission('platform.ai.read', null)",
+    "risk reads must require authorized AI administration access",
+  );
+});
+
+Deno.test("partner risk configuration cannot be converted into automatic enforcement", () => {
+  const sql = normalizeWhitespace(partnerRiskGuardSql);
+
+  assertIncludes(
+    sql,
+    "create or replace function public.validate_ai_risk_rule_config",
+    "risk configuration must have a database validation boundary",
+  );
+  assertIncludes(
+    sql,
+    "partner risk control must remain advisory_only",
+    "risk configuration must reject automatic enforcement modes",
+  );
+  assertIncludes(
+    sql,
+    "risk thresholds must increase from medium to high to critical within 0 to 100",
+    "risk thresholds must be ordered and bounded",
+  );
+  assertIncludes(
+    sql,
+    "risk weights must be numbers between 0 and 100",
+    "risk weights must be bounded",
+  );
+});
+
+Deno.test("partner risk is exposed only to authorized admin intelligence", () => {
+  assertIncludes(
+    gatewaySource,
+    "partnerRiskAssessments:",
+    "admin Ask SKIMA context must receive risk assessments",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Partner risk assessments are internal advisory signals for authorized administrators only.",
+    "assistant prompt must identify risk data as internal advisory context",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Never disclose internal partner risk assessments to customer, driver or station workspaces.",
+    "assistant prompt must forbid cross-workspace risk disclosure",
+  );
+  assertIncludes(
+    gatewaySource,
+    'target_minimum_level: "medium"',
+    "admin AI grounding should avoid flooding context with routine low-risk assessments",
+  );
+  assertNotIncludes(
+    mobileAssistant,
+    "partnerRiskAssessments",
+    "mobile customer/driver/station assistant must never receive the internal risk projection",
+  );
+  assertNotIncludes(
+    mobileAssistant,
+    "Partner risk review",
+    "internal partner risk UI must not appear in the mobile assistant",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "Partner risk review",
+    "admin SKIMA Intelligence must surface internal risk review",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "A score is not proof of fraud",
+    "admin risk UI must state the fairness/evidence limitation",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "does not suspend a partner, hold funds, change dispatch eligibility or alter public reputation",
+    "admin risk UI must state the non-enforcement boundary",
+  );
+  assertIncludes(
+    workerSource,
+    'source: "runtime-worker.ai-partner-risk"',
+    "worker must isolate risk refresh failures",
+  );
+  assertIncludes(
+    workerSource,
+    'reason: "risk_runtime_not_ready"',
+    "worker must fail soft if risk migrations are not deployed",
+  );
+});
+
 Deno.test("worker reports exception refresh exactly once per response section", () => {
   assertNotIncludes(
     workerSource,
@@ -508,7 +660,7 @@ Deno.test("worker reports exception refresh exactly once per response section", 
   );
   assertMatch(
     workerSource,
-    /data:\s*\{\s*aiInsights,\s*aiTasks,/,
+    /data:\s*\{\s*aiForecasts,\s*aiInsights,\s*aiRisk,\s*aiTasks,/,
     "worker response must expose the AI insight refresh result",
   );
 });
