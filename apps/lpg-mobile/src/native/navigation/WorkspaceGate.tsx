@@ -1,11 +1,12 @@
 import { Redirect } from "expo-router";
-import type { PropsWithChildren } from "react";
+import { useEffect, type PropsWithChildren } from "react";
 import { StyleSheet, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { firstString, nestedRecords, type PlatformRecord } from "../api/records";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
+import { useInAppGuide } from "../onboarding/InAppGuideProvider";
 
 type Workspace = "customer" | "driver" | "station";
 
@@ -15,9 +16,14 @@ export function WorkspaceGate({
 }: PropsWithChildren<{ workspace: Workspace }>) {
   const session = useSession();
   const { palette } = useAppTheme();
+  const guide = useInAppGuide();
   const access = domainQueries.workspaceAccess(
     session.status === "authenticated" && workspace !== "customer",
   );
+
+  useEffect(() => {
+    if (session.status === "authenticated") guide.setWorkspace(workspace);
+  }, [guide, session.status, workspace]);
 
   if (session.status === "loading") {
     return <Loading canvas={palette.canvas} />;
