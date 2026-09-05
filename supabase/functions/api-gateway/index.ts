@@ -4257,7 +4257,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           optionalString(beneficiaryRecord?.metadata?.paystackRecipientCode);
 
         if (recipientCode) {
-          const transferReference = String(withdrawalRecord.public_reference ?? withdrawalRecord.id);
+          const transferReference = `skima-wdl-${String(withdrawalRecord.id).replaceAll("-", "")}`;
           try {
             const transfer = await initiatePaystackTransfer(paystackSecretKey, {
               amountMajor: Number(withdrawalRecord.amount),
@@ -10031,7 +10031,7 @@ async function executePaystackWithdrawalTransfer(
 
   const secret = Deno.env.get("PAYSTACK_SECRET_KEY");
   if (!secret) throw new RequestValidationError("Paystack payouts are not configured.");
-  const reference = String(withdrawal.data.public_reference ?? withdrawalId);
+  const reference = `skima-wdl-${withdrawalId.replaceAll("-", "")}`;
 
   try {
     const transfer = await initiatePaystackTransfer(secret, {
