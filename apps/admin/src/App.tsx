@@ -21,6 +21,7 @@ import {
   ServerCog,
   Settings2,
   ShieldCheck,
+  Sparkles,
   UserCheck,
   UsersRound,
   WalletCards,
@@ -68,6 +69,7 @@ import { AdminResourceConsole } from "./admin-resource-console";
 import { AdminCompanyWorkspace } from "./admin-company-workspace";
 import { AdminSystemWorkspace } from "./admin-system-workspace";
 import { AdminAccessWorkspace } from "./admin-access-workspace";
+import { AdminAiWorkspace } from "./admin-ai-workspace";
 import { AdminContentWorkspace } from "./admin-content-workspace";
 import { AdminFleetWorkspace } from "./admin-fleet-workspace";
 import { AdminStartupBrandingWorkspace } from "./admin-startup-branding-workspace";
@@ -171,6 +173,7 @@ const navIconMap = {
   applications: ClipboardList,
   organizations: Building2,
   operations: Activity,
+  ai: Sparkles,
   fleet: Truck,
   finance: WalletCards,
   content: Megaphone,
@@ -244,6 +247,13 @@ const foundationNavigation: readonly NavigationItem[] = [
     href: "/finance",
     icon: "finance",
     requiredPermissions: ["platform.financial.read"],
+  },
+  {
+    key: "ai",
+    label: "SKIMA Intelligence",
+    href: "/ai",
+    icon: "ai",
+    requiredPermissions: ["platform.ai.read"],
   },
   {
     key: "content",
@@ -461,6 +471,10 @@ function Workspace(props: { readonly route: string; readonly onNavigate: (href: 
 
   if (props.route === "/finance") {
     return <AdminResourceConsole config={financeConsoleConfig} />;
+  }
+
+  if (props.route === "/ai") {
+    return <AdminAiWorkspace />;
   }
 
   if (props.route === "/catalog") {
