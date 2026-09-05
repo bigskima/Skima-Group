@@ -45,6 +45,11 @@ for (const migrationFile of migrationFiles) {
   } else {
     versions.set(version, migrationFile);
   }
+
+  const migrationSource = await Deno.readTextFile(
+    new URL(migrationFile, migrationsDirectory),
+  );
+  validateSqlDollarQuotes(migrationFile, migrationSource);
 }
 
 const policy = await readPolicy();
@@ -191,6 +196,33 @@ async function readPolicy(): Promise<MigrationHistoryPolicy | undefined> {
     staleAliases,
     businessModuleMigrations,
   };
+}
+
+function validateSqlDollarQuotes(migrationFile: string, source: string): void {
+  const lines = source.split("\n");
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+
+    if (/^\s*as\s+\$\s*$/i.test(line)) {
+      errors.push(
+        `${migrationFile}:${index + 1} uses malformed PL/pgSQL opener "as $"; use a complete dollar quote such as "as $".`,
+      );
+    }
+
+    if (/^\s*\$;\s*$/.test(line)) {
+      errors.push(
+        `${migrationFile}:${index + 1} uses malformed PL/pgSQL closer "$;"; use "$;".`,
+      );
+    }
+  }
+
+  const plainDollarQuoteCount = source.match(/\$\$/g)?.length ?? 0;
+  if (plainDollarQuoteCount % 2 !== 0) {
+    errors.push(
+      `${migrationFile} has an odd number of "$" dollar-quote tokens (${plainDollarQuoteCount}).`,
+    );
+  }
 }
 
 function requireMigration(migrationFile: string, description: string): void {
