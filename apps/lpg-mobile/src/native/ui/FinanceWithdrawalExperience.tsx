@@ -96,6 +96,11 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
     schema: RecordObjectSchema,
     invalidate: [["withdrawals"], ["wallets"]],
   });
+  const retryTransfer = useFinanceMutation({
+    path: "/withdrawals/retry",
+    schema: RecordObjectSchema,
+    invalidate: [["withdrawals"], ["wallets"]],
+  });
 
   const filteredBanks = useMemo(() => {
     const query = bankSearch.trim().toLowerCase();
@@ -230,8 +235,36 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
       const id = firstString(result, ["id"]);
       const status = firstString(result, ["status"]) ?? "processing";
       setWithdrawalResult({ id: id ?? undefined, reference: reference ?? undefined, status });
+      if (status === "failed") {
+        setModalError("The bank transfer could not be completed. Your wallet balance was restored automatically.");
+      }
     } catch (cause) {
       setModalError(friendlyError(cause, "The withdrawal could not be processed."));
+    }
+  };
+
+  const retrySubmittedWithdrawal = async () => {
+    const withdrawalId = withdrawalResult?.id;
+    if (!withdrawalId) return;
+    setModalError(null);
+    try {
+      const result = await retryTransfer.mutateAsync({
+        withdrawalRequestId: withdrawalId,
+      });
+      const reference = firstString(result, ["public_reference", "publicReference", "reference"]) ??
+        withdrawalResult.reference;
+      const status = firstString(result, ["status"]) ?? withdrawalResult.status ?? "approved";
+      setWithdrawalResult({
+        id: withdrawalId,
+        reference: reference ?? undefined,
+        status,
+      });
+      if (status === "failed") {
+        setModalError("The bank transfer could not be completed. Your wallet balance was restored automatically.");
+      }
+      await wallets.refetch();
+    } catch (cause) {
+      setModalError(friendlyError(cause, "The payout retry could not be completed."));
     }
   };
 
@@ -449,9 +482,11 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
         accountNumber={selectedBeneficiaryLast4}
         bankName={selectedBeneficiaryBankName}
         isSubmitting={withdraw.isPending}
+        isRetrying={retryTransfer.isPending}
         submittedResult={withdrawalResult}
         error={modalError}
         onConfirm={() => void confirmWithdrawal()}
+        onRetry={() => void retrySubmittedWithdrawal()}
         onClose={() => {
           setModalVisible(false);
           if (withdrawalResult) {
