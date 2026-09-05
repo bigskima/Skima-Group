@@ -64,22 +64,38 @@ export interface MapsRuntimeConfig {
   mapMatchingProviderKey: string;
 }
 
-const DEVELOPMENT_RASTER_TILE_TEMPLATE =
+const KEYLESS_RASTER_TILE_TEMPLATE =
   "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
-const DEVELOPMENT_MAP_STYLE_URL = "https://demotiles.maplibre.org/style.json";
+const KEYLESS_MAP_STYLE_URL = "https://demotiles.maplibre.org/style.json";
+const KEYLESS_ATTRIBUTION = "© OpenStreetMap contributors, © CARTO";
 
 export function getMapsRuntimeConfig(): MapsRuntimeConfig {
   const tileMaxZoom = Number(process.env.EXPO_PUBLIC_MAP_TILE_MAX_ZOOM);
+  const configuredRaster = process.env.EXPO_PUBLIC_MAP_TILE_URL?.trim();
+  const configuredStyle = process.env.EXPO_PUBLIC_MAP_STYLE_URL?.trim();
+  const safeRaster = isUsablePublicTileTemplate(configuredRaster)
+    ? configuredRaster!
+    : KEYLESS_RASTER_TILE_TEMPLATE;
+  const safeStyle = isUsablePublicStyleUrl(configuredStyle)
+    ? configuredStyle!
+    : KEYLESS_MAP_STYLE_URL;
+  const usingRasterFallback = safeRaster === KEYLESS_RASTER_TILE_TEMPLATE &&
+    Boolean(configuredRaster && configuredRaster !== KEYLESS_RASTER_TILE_TEMPLATE);
+
   return {
     renderer: {
       key: readEnv("EXPO_PUBLIC_MAP_RENDERER_PROVIDER", "maplibre"),
       renderer: "maplibre",
     },
     tile: {
-      key: readEnv("EXPO_PUBLIC_MAP_TILE_PROVIDER", "configured_tile_provider"),
-      styleUrl: readEnv("EXPO_PUBLIC_MAP_STYLE_URL", DEVELOPMENT_MAP_STYLE_URL),
-      rasterTileTemplate: readEnv("EXPO_PUBLIC_MAP_TILE_URL", DEVELOPMENT_RASTER_TILE_TEMPLATE),
-      attribution: readEnv("EXPO_PUBLIC_MAP_ATTRIBUTION", "© OpenStreetMap contributors, © CARTO"),
+      key: usingRasterFallback
+        ? "keyless_raster_fallback"
+        : readEnv("EXPO_PUBLIC_MAP_TILE_PROVIDER", "carto_voyager"),
+      styleUrl: safeStyle,
+      rasterTileTemplate: safeRaster,
+      attribution: usingRasterFallback
+        ? KEYLESS_ATTRIBUTION
+        : readEnv("EXPO_PUBLIC_MAP_ATTRIBUTION", KEYLESS_ATTRIBUTION),
       maxZoom: Number.isFinite(tileMaxZoom) ? clamp(Math.round(tileMaxZoom), 1, 24) : 19,
     },
     geocodingProviderKey: readEnv("EXPO_PUBLIC_MAP_GEOCODING_PROVIDER", "skima_gateway"),
@@ -148,6 +164,46 @@ export function averageCoordinate(points: readonly Coordinate[]): Coordinate | n
     latitude: points.reduce((sum, point) => sum + point.latitude, 0) / points.length,
     longitude: points.reduce((sum, point) => sum + point.longitude, 0) / points.length,
   };
+}
+
+export function isUsablePublicTileTemplate(value?: string | null): value is string {
+  if (!value) return false;
+  const normalized = value.trim();
+  if (!/^https:\/\//i.test(normalized)) return false;
+  if (!["{z}", "{x}", "{y}"].every((token) => normalized.includes(token))) return false;
+  return !requiresPublicMapCredential(normalized);
+}
+
+export function isUsablePublicStyleUrl(value?: string | null): value is string {
+  if (!value) return false;
+  const normalized = value.trim();
+  if (!/^https:\/\//i.test(normalized)) return false;
+  return !requiresPublicMapCredential(normalized);
+}
+
+function requiresPublicMapCredential(value: string) {
+  const normalized = value.toLowerCase();
+  const credentialMarkers = [
+    "{access_token}",
+    "{accesstoken}",
+    "{api_key}",
+    "{apikey}",
+    "{key}",
+    "access_token=",
+    "api_key=",
+    "apikey=",
+    "token=",
+    "key=",
+  ];
+  const credentialProviders = [
+    "locationiq.com",
+    "maps.googleapis.com",
+    "api.mapbox.com",
+    "tiles.mapbox.com",
+    "api.maptiler.com",
+  ];
+  return credentialMarkers.some((marker) => normalized.includes(marker)) ||
+    credentialProviders.some((provider) => normalized.includes(provider));
 }
 
 function readEnv(key: string, fallback: string) {
