@@ -1321,21 +1321,40 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }
 
       const payload = body.value;
+      const label = requireString(payload.label, "label").trim();
+      const formattedAddress = requireString(payload.formattedAddress, "formattedAddress").trim();
+      const latitude = requireNumber(payload.latitude, "latitude");
+      const longitude = requireNumber(payload.longitude, "longitude");
+      const accuracyMeters = optionalNumber(payload.accuracyMeters, "accuracyMeters");
+
+      if (label.length < 2) {
+        throw new RequestValidationError("label must contain at least 2 characters.");
+      }
+      if (formattedAddress.length < 5) {
+        throw new RequestValidationError("formattedAddress must contain at least 5 characters.");
+      }
+      if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        throw new RequestValidationError("latitude and longitude must be valid coordinates.");
+      }
+      if (accuracyMeters !== null && accuracyMeters < 0) {
+        throw new RequestValidationError("accuracyMeters cannot be negative.");
+      }
+
       return rpcResponse(
         supabase.rpc("create_canonical_customer_location", {
-          target_accuracy_meters: optionalNumber(payload.accuracyMeters, "accuracyMeters"),
+          target_accuracy_meters: accuracyMeters,
           target_address: optionalRecord(payload.address) ?? {},
           target_capture_source: optionalString(payload.captureSource) ?? "DEVICE_GPS",
           target_captured_at: optionalString(payload.capturedAt),
           target_contact_name: optionalString(payload.contactName),
           target_contact_phone: optionalString(payload.contactPhone),
           target_delivery_instructions: optionalString(payload.deliveryInstructions),
-          target_formatted_address: requireString(payload.formattedAddress, "formattedAddress"),
+          target_formatted_address: formattedAddress,
           target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-          target_label: requireString(payload.label, "label"),
+          target_label: label,
           target_landmark: optionalString(payload.landmark),
-          target_latitude: requireNumber(payload.latitude, "latitude"),
-          target_longitude: requireNumber(payload.longitude, "longitude"),
+          target_latitude: latitude,
+          target_longitude: longitude,
           target_metadata: optionalRecord(payload.metadata) ?? {},
           target_provider_place_id: optionalString(payload.providerPlaceId),
           target_provider_source: optionalString(payload.providerSource),

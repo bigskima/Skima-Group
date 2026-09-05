@@ -1,11 +1,10 @@
 import { Check, ChevronRight, Crosshair, LocateFixed, MapPin, RefreshCw, Search } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import { ActionResponseSchema, displaySubtitle, displayTitle, recordId } from "../api/records";
 import {
-  emptyOperationalAddress,
   readOperationalLocation,
   resolveOperationalAddress,
   type OperationalAddress,
@@ -22,6 +21,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
+import { prepareLocationSave, reuseLocationSaveAttempt, type LocationSaveAttempt } from "./locationSave";
 import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 
@@ -41,6 +41,7 @@ export function LocationsScreen() {
   const [showManual, setShowManual] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeSuccess, setNoticeSuccess] = useState(false);
+  const saveAttempt = useRef<LocationSaveAttempt | null>(null);
   const mutation = useGatewayMutation({ path: "/lpg/locations", schema: ActionResponseSchema, invalidate: [["locations"]] });
   const maps = useMapsGatewayAdapter();
   const reverseLookup = maps.reverseGeocode;
@@ -182,52 +183,24 @@ export function LocationsScreen() {
 
 
   const save = async () => {
-    if (!label.trim()) {
-      showNotice("Name this place—for example, Home, Office or Mum's house.");
+    const prepared = prepareLocationSave({ label, landmark, manualAddress, selected });
+    if (!prepared.ok) {
+      if (prepared.requiresManualAddress) setShowManual(true);
+      showNotice(prepared.message);
       return;
     }
-    if (!selected) {
-      showNotice("Choose the location on the map before saving it.");
-      return;
-    }
-    const baseAddress = isGenericAddress(selected.formattedAddress)
-      ? manualAddress.trim()
-      : selected.formattedAddress;
-    if (!baseAddress) {
-      setShowManual(true);
-      showNotice("Add a street, building or nearby landmark so your driver can find you.");
-      return;
-    }
-    const specificLandmark = landmark.trim();
-    const formattedAddress = specificLandmark
-      && !baseAddress.toLocaleLowerCase().includes(specificLandmark.toLocaleLowerCase())
-      ? `${specificLandmark}, ${baseAddress}`
-      : baseAddress;
-    const safeAddress = selected.address ?? emptyOperationalAddress();
-    const locationMetadata = {
-      ...safeAddress,
-      name: specificLandmark || safeAddress.name,
-    };
+    const attempt = reuseLocationSaveAttempt(
+      saveAttempt.current,
+      prepared.fingerprint,
+      () => idempotencyKey("create-location", "attempt"),
+    );
+    saveAttempt.current = attempt;
     try {
       await mutation.mutateAsync({
-        label: label.trim(),
-        formattedAddress,
-        latitude: selected.latitude,
-        longitude: selected.longitude,
-        accuracyMeters: selected.accuracyMeters ?? undefined,
-        address: safeAddress,
-        captureSource: canonicalCaptureSource(selected.providerSource),
-        capturedAt: selected.recordedAt,
-        providerSource: selected.providerSource,
-        providerPlaceId: selected.providerPlaceId ?? undefined,
-        metadata: {
-          addressComponents: locationMetadata,
-          landmark: specificLandmark || undefined,
-          recordedAt: selected.recordedAt,
-        },
-        source: "skima.lpg.location_api",
-        idempotencyKey: idempotencyKey("create-location", label.trim()),
+        ...prepared.payload,
+        idempotencyKey: attempt.idempotencyKey,
       });
+      saveAttempt.current = null;
       setLabel("");
       setLandmark("");
       showNotice("Place saved. It's ready for your next pickup or delivery.", true);
@@ -626,8 +599,3 @@ const styles = StyleSheet.create({
   savedEmpty: { paddingVertical: spacing.md, fontSize: 13 },
 });
 
-function canonicalCaptureSource(source: OperationalLocation["providerSource"]): "DEVICE_GPS" | "MAP_PIN" | "GEOCODED" {
-  if (source === "manual_pin") return "MAP_PIN";
-  if (source === "maps_adapter") return "GEOCODED";
-  return "DEVICE_GPS";
-}
