@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { controlHeights, radii, spacing, typography } from "../theme/tokens";
@@ -17,29 +17,41 @@ export function AppField({
   leading?: ReactNode;
 }) {
   const { palette } = useAppTheme();
+  const [focused, setFocused] = useState(false);
+  const { onFocus, onBlur, style: inputStyle, ...inputProps } = props;
+
   return (
     <View style={styles.group}>
-      <Text style={[styles.label, { color: palette.ink }]}>{label}</Text>
+      <Text style={[styles.label, { color: focused ? palette.brand : palette.ink }]}>{label}</Text>
       <View
         style={[
           styles.inputShell,
           multiline && styles.multilineShell,
           {
-            backgroundColor: palette.input,
-            borderColor: error ? palette.danger : palette.borderStrong,
+            backgroundColor: focused ? palette.surface : palette.input,
+            borderColor: error ? palette.danger : focused ? palette.brand : palette.borderStrong,
           },
         ]}
       >
         {leading ? <View style={styles.leading}>{leading}</View> : null}
         <TextInput
-          {...props}
+          {...inputProps}
           multiline={multiline}
+          onFocus={(event) => {
+            setFocused(true);
+            onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            setFocused(false);
+            onBlur?.(event);
+          }}
           placeholderTextColor={palette.muted}
+          selectionColor={palette.brand}
           style={[
             styles.input,
             multiline && styles.multilineInput,
             { color: palette.ink },
-            props.style,
+            inputStyle,
           ]}
         />
       </View>
@@ -54,18 +66,18 @@ export function AppField({
 
 const styles = StyleSheet.create({
   group: { gap: 7 },
-  label: { ...typography.caption, fontSize: 13, fontWeight: "800" },
+  label: { ...typography.caption, fontSize: 12, fontWeight: "900", paddingHorizontal: 2 },
   inputShell: {
-    minHeight: controlHeights.lg,
+    minHeight: controlHeights.lg + 2,
     borderWidth: 1,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: spacing.md,
   },
-  multilineShell: { minHeight: 94, alignItems: "flex-start", paddingVertical: 12 },
+  multilineShell: { minHeight: 104, alignItems: "flex-start", paddingVertical: 13 },
   leading: { marginRight: spacing.sm, paddingTop: 1 },
-  input: { flex: 1, minHeight: controlHeights.md, paddingVertical: 0, ...typography.body },
-  multilineInput: { minHeight: 68, textAlignVertical: "top", paddingTop: 0 },
-  support: { ...typography.caption, paddingHorizontal: 2 },
+  input: { flex: 1, minHeight: controlHeights.md, paddingVertical: 0, ...typography.body, fontSize: 14 },
+  multilineInput: { minHeight: 74, textAlignVertical: "top", paddingTop: 0 },
+  support: { ...typography.caption, fontSize: 11, lineHeight: 16, paddingHorizontal: 2 },
 });
