@@ -1192,6 +1192,150 @@
   margin-top: 3px;
 }
 
+.admin-ai-risk {
+  margin-top: 20px;
+}
+
+.admin-ai-risk-list {
+  display: grid;
+}
+
+.admin-ai-risk-row {
+  align-items: flex-start;
+  border-bottom: 1px solid #e7ecee;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 15px 0;
+}
+
+.admin-ai-risk-row:last-child {
+  border-bottom: 0;
+}
+
+.admin-ai-risk-icon {
+  align-items: center;
+  background: #f4f6f7;
+  border-radius: 11px;
+  color: #738087;
+  display: flex;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.admin-ai-risk-icon.is-medium {
+  background: #fff7e8;
+  color: #b77815;
+}
+
+.admin-ai-risk-icon.is-high,
+.admin-ai-risk-icon.is-critical {
+  background: #fff0f1;
+  color: #bd3f49;
+}
+
+.admin-ai-risk-icon svg {
+  height: 18px;
+  width: 18px;
+}
+
+.admin-ai-risk-copy {
+  min-width: 0;
+}
+
+.admin-ai-risk-title {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.admin-ai-risk-title strong {
+  color: #17282d;
+  font-size: 0.9rem;
+}
+
+.admin-ai-risk-title > span:last-child {
+  color: #7b888d;
+  font-size: 0.72rem;
+}
+
+.admin-ai-risk-copy p {
+  color: #66777d;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 5px 0 8px;
+}
+
+.admin-ai-risk-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+}
+
+.admin-ai-risk-evidence span {
+  color: #718087;
+  font-size: 0.7rem;
+}
+
+.admin-ai-risk-evidence b {
+  color: #31484e;
+}
+
+.admin-ai-risk-score {
+  min-width: 72px;
+  text-align: right;
+}
+
+.admin-ai-risk-score b,
+.admin-ai-risk-score small {
+  display: block;
+}
+
+.admin-ai-risk-score b {
+  color: #1e3439;
+  font-size: 1.2rem;
+}
+
+.admin-ai-risk-score small {
+  color: #7b888d;
+  font-size: 0.66rem;
+  margin-top: 2px;
+}
+
+.admin-ai-risk-empty {
+  align-items: center;
+  background: #f5faf8;
+  border: 1px solid #dcebe6;
+  border-radius: 14px;
+  color: #66777d;
+  display: flex;
+  gap: 12px;
+  padding: 18px;
+}
+
+.admin-ai-risk-empty > svg {
+  color: #15917c;
+  height: 22px;
+  width: 22px;
+}
+
+.admin-ai-risk-empty strong,
+.admin-ai-risk-empty span {
+  display: block;
+}
+
+.admin-ai-risk-empty strong {
+  color: #1a3534;
+  font-size: 0.86rem;
+}
+
+.admin-ai-risk-empty span {
+  font-size: 0.76rem;
+  margin-top: 3px;
+}
+
 .admin-ai-insights {
   margin-top: 20px;
 }
@@ -1361,8 +1505,13 @@
   .admin-ai-route-row,
   .admin-ai-editor-grid,
   .admin-ai-insight-row,
-  .admin-ai-forecast-grid {
+  .admin-ai-forecast-grid,
+  .admin-ai-risk-row {
     grid-template-columns: 1fr;
+  }
+
+  .admin-ai-risk-score {
+    text-align: left;
   }
 
   .admin-ai-insight-actions {
