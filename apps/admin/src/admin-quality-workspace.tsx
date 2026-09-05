@@ -37,7 +37,20 @@ const ComplaintSchema = z.object({
 });
 
 const QueueSchema = z.array(ComplaintSchema);
+const SupportTriageSchema = z.object({
+  complaintId: z.string().uuid(),
+  priorityScore: z.number(),
+  priorityLevel: z.enum(["routine", "elevated", "urgent", "critical"]),
+  slaStatus: z.enum(["on_track", "due_soon", "overdue"]),
+  attentionBy: z.string(),
+  relatedOpenCases: z.number().int().nonnegative(),
+  recommendedAction: z.string(),
+  generatedAt: z.string(),
+  validUntil: z.string(),
+});
+const SupportTriageQueueSchema = z.array(SupportTriageSchema);
 type Complaint = z.infer<typeof ComplaintSchema>;
+type SupportTriage = z.infer<typeof SupportTriageSchema>;
 
 export function AdminQualityWorkspace() {
   const { supabase, status, context } = useSessionState();
@@ -69,10 +82,30 @@ export function AdminQualityWorkspace() {
     },
   });
 
+  const triage = useQuery({
+    queryKey: ["lpg-quality-triage"],
+    enabled: status === "authenticated",
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("read_ai_support_triage_assessments", {
+        target_minimum_priority: "routine",
+        target_limit: 200,
+      });
+      if (error) throw error;
+      return SupportTriageQueueSchema.parse(data ?? []);
+    },
+  });
+
   const rows = queue.data ?? [];
+  const triageRows = triage.data ?? [];
+  const triageByComplaintId = useMemo(
+    () => new Map(triageRows.map((item) => [item.complaintId, item] as const)),
+    [triageRows],
+  );
   const openCount = rows.filter((item) => item.status === "open").length;
   const criticalCount = rows.filter((item) => item.severity === "critical" && !["resolved", "dismissed"].includes(item.status)).length;
-  const underfillCount = rows.filter((item) => item.category === "underfill" && !["resolved", "dismissed"].includes(item.status)).length;
+  const urgentTriageCount = triageRows.filter((item) => ["urgent", "critical"].includes(item.priorityLevel)).length;
+  const overdueTriageCount = triageRows.filter((item) => item.slaStatus === "overdue").length;
 
   const review = useMutation({
     mutationFn: async ({
@@ -106,7 +139,10 @@ export function AdminQualityWorkspace() {
     onSuccess: async (_data, variables) => {
       setReviewTarget(null);
       setNotice(`Complaint moved to ${normalizeStatusLabel(variables.nextStatus)}.`);
-      await queryClient.invalidateQueries({ queryKey: ["lpg-quality-admin"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["lpg-quality-admin"] }),
+        queryClient.invalidateQueries({ queryKey: ["lpg-quality-triage"] }),
+      ]);
     },
   });
 
@@ -129,6 +165,28 @@ export function AdminQualityWorkspace() {
           {normalizeStatusLabel(record.severity)}
         </StatusBadge>
       ),
+    },
+    {
+      key: "priority",
+      header: "Triage",
+      render: (record) => {
+        const assessment = triageByComplaintId.get(record.complaintId);
+        if (!assessment) return <span className="skima-muted">Manual</span>;
+        return (
+          <span className="admin-quality-triage-cell">
+            <StatusBadge tone={triageTone(assessment.priorityLevel)}>
+              {normalizeStatusLabel(assessment.priorityLevel)}
+            </StatusBadge>
+            <small className={assessment.slaStatus === "overdue" ? "is-overdue" : ""}>
+              {assessment.slaStatus === "overdue"
+                ? "Attention overdue"
+                : assessment.slaStatus === "due_soon"
+                ? "Due soon"
+                : "On track"}
+            </small>
+          </span>
+        );
+      },
     },
     {
       key: "status",
@@ -156,7 +214,7 @@ export function AdminQualityWorkspace() {
         ? <Button size="sm" variant="outline" onClick={() => setReviewTarget(record)}>Review</Button>
         : <span className="skima-muted">Closed</span>,
     },
-  ], [canManage]);
+  ], [canManage, triageByComplaintId]);
 
   return (
     <>
@@ -164,7 +222,10 @@ export function AdminQualityWorkspace() {
         eyebrow="LPG operations"
         title="Service Quality"
         description="Review customer service reports separately from star ratings. Underfill, safety, custody, payment and conduct reports require evidence-based handling before they affect a partner."
-        actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void queue.refetch()}>Refresh</Button>}
+        actions={<Button icon={RefreshCcw} variant="outline" onClick={() => {
+          void queue.refetch();
+          void triage.refetch();
+        }}>Refresh</Button>}
       />
 
       {notice ? <StatusBadge tone="success" className="skima-status-note">{notice}</StatusBadge> : null}
@@ -172,8 +233,8 @@ export function AdminQualityWorkspace() {
       <section className="skima-grid skima-grid--compact">
         <MetricTile label="Open reports" value={openCount} icon={AlertTriangle} tone={openCount ? "warning" : "success"} />
         <MetricTile label="Critical active" value={criticalCount} icon={ShieldAlert} tone={criticalCount ? "danger" : "success"} />
-        <MetricTile label="Underfill reports" value={underfillCount} icon={Star} tone={underfillCount ? "warning" : "info"} />
-        <MetricTile label="Visible records" value={rows.length} icon={CheckCircle2} tone="info" />
+        <MetricTile label="Urgent triage" value={urgentTriageCount} icon={Star} tone={urgentTriageCount ? "warning" : "success"} />
+        <MetricTile label="Attention overdue" value={overdueTriageCount} icon={CheckCircle2} tone={overdueTriageCount ? "danger" : "success"} />
       </section>
 
       <section className="sk-panel">
@@ -181,6 +242,15 @@ export function AdminQualityWorkspace() {
           <div>
             <h2>Quality reports</h2>
             <p className="skima-muted">A complaint is an allegation until reviewed. Do not treat a low rating alone as proof of underfilling, fraud or unsafe conduct.</p>
+            {triage.error ? (
+              <p className="admin-quality-triage-unavailable">
+                Triage intelligence is unavailable. The manual quality queue remains fully usable.
+              </p>
+            ) : (
+              <p className="admin-quality-triage-advisory">
+                Triage priority is advisory only. It cannot resolve a complaint, suspend a partner, change dispatch or move money.
+              </p>
+            )}
           </div>
           <SelectInput
             label="Status"
@@ -213,6 +283,7 @@ export function AdminQualityWorkspace() {
 
       <ReviewDialog
         complaint={reviewTarget}
+        triage={reviewTarget ? triageByComplaintId.get(reviewTarget.complaintId) ?? null : null}
         isSubmitting={review.isPending}
         error={review.error}
         onClose={() => {
@@ -231,12 +302,14 @@ export function AdminQualityWorkspace() {
 
 function ReviewDialog({
   complaint,
+  triage,
   isSubmitting,
   error,
   onClose,
   onSubmit,
 }: {
   complaint: Complaint | null;
+  triage: SupportTriage | null;
   isSubmitting: boolean;
   error: unknown;
   onClose: () => void;
@@ -273,6 +346,19 @@ function ReviewDialog({
     >
       <form id="quality-review-form" className="skima-form-grid" onSubmit={submit}>
         <p className="admin-dialog-guidance">Customer report: {complaint.description}</p>
+        {triage ? (
+          <div className="admin-quality-triage-note">
+            <div>
+              <StatusBadge tone={triageTone(triage.priorityLevel)}>
+                {normalizeStatusLabel(triage.priorityLevel)} priority
+              </StatusBadge>
+              <span>{Math.round(triage.priorityScore)} / 100 advisory score</span>
+              <span>{triage.slaStatus === "overdue" ? "Attention target overdue" : triage.slaStatus === "due_soon" ? "Attention target due soon" : "Attention target on track"}</span>
+            </div>
+            <p>{triage.recommendedAction}</p>
+            <small>Human review is authoritative. Triage does not change complaint, partner, dispatch or financial state.</small>
+          </div>
+        ) : null}
         <SelectInput
           label="Review status"
           value={nextStatus}
@@ -305,6 +391,13 @@ function ReviewDialog({
       </form>
     </Dialog>
   );
+}
+
+function triageTone(value: SupportTriage["priorityLevel"]): "neutral" | "info" | "warning" | "danger" {
+  if (value === "critical") return "danger";
+  if (value === "urgent") return "warning";
+  if (value === "elevated") return "info";
+  return "neutral";
 }
 
 function subjectLabel(value: string) {
