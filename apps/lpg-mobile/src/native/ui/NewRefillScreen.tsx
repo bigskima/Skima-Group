@@ -435,7 +435,7 @@ export function NewRefillScreen() {
                 <Text style={[styles.requirementTitle, { color: palette.ink }]}>Add a pickup location first</Text>
                 <Text style={[styles.requirementBody, { color: palette.muted }]}>SKIMA needs a precise pickup and return point before it can calculate the trip.</Text>
               </View>
-              <AppButton label="Add location" size="sm" onPress={() => router.push("/(customer)/locations")} />
+              <AppButton label="Add location" size="sm" onPress={() => router.push("/(customer)/location-editor" as never)} />
             </View>
           ) : null}
 
