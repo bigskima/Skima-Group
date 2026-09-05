@@ -5,6 +5,11 @@ export interface Coordinate {
   longitude: number;
 }
 
+export const DEFAULT_MAP_CENTER: Coordinate = {
+  latitude: 9.082,
+  longitude: 8.6753,
+};
+
 export interface MapPoint extends Coordinate {
   label: string;
   kind?: "driver" | "destination" | "pickup" | "station" | "location";
