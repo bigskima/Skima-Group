@@ -56,17 +56,27 @@ begin
     ),
     auth.uid(),
     auth.uid()
-  from public.lpg_service_area_rules rule
-  join public.geography_migration_mappings mapping
-    on mapping.legacy_source = 'service_areas'
-   and mapping.legacy_id = rule.area_id
-   and mapping.migration_status = 'verified'
-   and mapping.geography_id is not null
+  from public.geography_migration_mappings mapping
   join public.geographies geography
     on geography.id = mapping.geography_id
    and geography.status = 'active'
    and geography.boundary_geometry is not null
-  where rule.status = 'active'
+  join lateral (
+    select rule.*
+    from public.lpg_service_area_rules rule
+    where rule.area_id = mapping.legacy_id
+      and rule.status = 'active'
+      and (rule.effective_from is null or rule.effective_from <= timezone('utc', now()))
+      and (rule.effective_until is null or rule.effective_until > timezone('utc', now()))
+    order by
+      rule.priority desc,
+      case rule.effect when 'exclude' then 1 else 0 end desc,
+      rule.created_at desc
+    limit 1
+  ) rule on true
+  where mapping.legacy_source = 'service_areas'
+    and mapping.migration_status = 'verified'
+    and mapping.geography_id is not null
     and not exists (
       select 1
       from public.service_coverage_policies policy
