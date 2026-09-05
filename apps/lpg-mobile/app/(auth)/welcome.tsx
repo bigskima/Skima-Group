@@ -1,6 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { ArrowRight, ShieldCheck, Truck, Warehouse } from "lucide-react-native";
+import type { ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../../src/native/theme/ThemeProvider";
@@ -71,7 +72,7 @@ export default function Welcome() {
   );
 }
 
-function Role({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
+function Role({ icon, title, body }: { icon: ReactNode; title: string; body: string }) {
   const { palette } = useAppTheme();
   return (
     <View style={styles.role}>
