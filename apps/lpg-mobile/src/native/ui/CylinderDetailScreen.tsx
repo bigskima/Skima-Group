@@ -13,6 +13,7 @@ import { saveQrPng } from "../utilities/qrDownload";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { PresentationMediaPanel } from "./PresentationMediaPanel";
+import { CylinderVisualReviewPanel } from "./CylinderVisualReviewPanel";
 import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 import { StatusPill } from "./StatusPill";
@@ -35,6 +36,9 @@ export function CylinderDetailScreen() {
   const cylinderId = cylinder ? recordId(cylinder) : null;
   const cylinderSizeKg = cylinder ? firstNumber(cylinder, ["size_kg", "sizeKg"]) : null;
   const verifiedCapacityKg = cylinder ? firstNumber(cylinder, ["max_capacity_kg", "maxCapacityKg"]) : null;
+  const originalAssetId = cylinder
+    ? firstAssetId(cylinder.image_asset_ids ?? cylinder.imageAssetIds)
+    : null;
   const status = cylinder ? displayStatus(cylinder) ?? "registered" : "";
   const tagStatus = cylinder ? physicalTagStatus(cylinder) : "untagged";
 
@@ -126,10 +130,17 @@ export function CylinderDetailScreen() {
 
           <PresentationMediaPanel
             colour={firstString(cylinder, ["colour", "color"])}
-            originalAssetId={firstAssetId(cylinder.image_asset_ids ?? cylinder.imageAssetIds)}
+            originalAssetId={originalAssetId}
             subjectId={cylinderId ?? id ?? ""}
             subjectType="lpg_cylinder"
           />
+
+          {cylinderId ? (
+            <CylinderVisualReviewPanel
+              cylinderId={cylinderId}
+              sourceMediaAssetId={originalAssetId}
+            />
+          ) : null}
 
           <View style={[styles.nameCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <View style={styles.nameHead}>
