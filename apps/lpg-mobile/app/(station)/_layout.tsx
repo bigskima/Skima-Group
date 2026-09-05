@@ -13,6 +13,8 @@ export default function Layout() {
           "documents",
           "staff",
           "settings",
+          "operating-settings",
+          "pricing-settings",
           "support",
           "inventory",
           "withdraw",
