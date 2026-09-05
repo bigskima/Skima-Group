@@ -1,5 +1,6 @@
 import { router } from "expo-router";
 import { ArrowDownToLine, Banknote, Clock3, ReceiptText, WalletCards } from "lucide-react-native";
+import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import {
@@ -21,6 +22,7 @@ import { StatusPill } from "./StatusPill";
 
 export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }) {
   const { palette } = useAppTheme();
+  const [showAllActivity, setShowAllActivity] = useState(false);
   const wallets = domainQueries.wallets();
   const entries = workspace === "driver" ? domainQueries.commissions() : domainQueries.settlements();
   const withdrawals = domainQueries.withdrawals();
@@ -45,8 +47,8 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
       title={workspace === "driver" ? "Earnings" : "Earnings"}
       subtitle={
         workspace === "driver"
-          ? "Track commission activity, available earnings and payout requests."
-          : "Track station earnings, settlement activity and withdrawals."
+          ? "Available earnings, recent delivery pay and withdrawals."
+          : "Available earnings, recent LPG settlements and withdrawals."
       }
       action={<AppButton label="Withdraw" size="sm" icon={<ArrowDownToLine color="#FFFFFF" size={16} />} onPress={() => router.push(withdrawPath)} />}
     >
@@ -58,7 +60,7 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
           </View>
           <View style={styles.heroIcon}><WalletCards color="#FFFFFF" size={27} /></View>
         </View>
-        <Text style={styles.heroBody}>This is the amount currently available in your SKIMA wallet. Withdrawal requests are sent to your verified bank account.</Text>
+        <Text style={styles.heroBody}>Ready to send to your verified bank account.</Text>
       </View>
 
       {entries.isPending || wallets.isPending || withdrawals.isPending ? (
@@ -80,12 +82,12 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
 
           <SectionHeader
             title="Recent activity"
-            description={workspace === "driver" ? "Your latest earnings from completed and active deliveries." : "Your latest station earnings from LPG orders."}
+            description={workspace === "driver" ? "Latest delivery earnings." : "Latest station settlements."}
           />
 
           <View style={styles.activityList}>
             {activity.length ? (
-              activity.slice(0, 15).map((item, index) => {
+              (showAllActivity ? activity : activity.slice(0, 6)).map((item, index) => {
                 const status = displayStatus(item) ?? "recorded";
                 const amount = firstNumber(item, ["net_amount", "netAmount", "amount", "commission_amount", "commissionAmount"]) ?? 0;
                 const itemCurrency = firstString(item, ["currency_code", "currencyCode"]) ?? currency;
@@ -117,6 +119,15 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
               />
             )}
           </View>
+
+          {activity.length > 6 ? (
+            <AppButton
+              label={showAllActivity ? "Show less" : `Show all ${activity.length}`}
+              variant="secondary"
+              fullWidth
+              onPress={() => setShowAllActivity((value) => !value)}
+            />
+          ) : null}
 
           <View style={[styles.ledgerNote, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <WalletCards color={palette.mutedStrong} size={18} />
@@ -193,11 +204,11 @@ const styles = StyleSheet.create({
   metricValue: { ...typography.heading, fontSize: 21 },
   metricLabel: { ...typography.caption },
   activityList: { gap: spacing.sm },
-  activityCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
-  activityIcon: { width: 45, height: 45, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  activityCard: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: 13 },
+  activityIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   activityCopy: { flex: 1, minWidth: 0, gap: 3 },
-  activityTitle: { ...typography.bodyStrong, fontSize: 14 },
-  activityMeta: { ...typography.caption, fontSize: 11 },
+  activityTitle: { ...typography.bodyStrong, fontSize: 13 },
+  activityMeta: { ...typography.caption, fontSize: 10 },
   activityRight: { alignItems: "flex-end", gap: 6 },
   activityAmount: { ...typography.bodyStrong, fontSize: 14 },
   ledgerNote: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
