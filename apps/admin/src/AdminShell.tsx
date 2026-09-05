@@ -24,12 +24,12 @@ interface NavigationGroup extends NavigationGroupDefinition {
   readonly items: readonly NavItem[];
 }
 
-const mobilePriorityKeys = ["overview", "applications", "location-review", "operations", "revenue", "finance"] as const;
+const mobilePriorityKeys = ["overview", "applications", "support", "location-review", "operations", "revenue", "finance"] as const;
 
 const navigationGroupDefinitions: readonly NavigationGroupDefinition[] = [
   {
     label: "Daily work",
-    keys: ["overview", "applications", "location-review", "operations", "revenue", "finance"],
+    keys: ["overview", "applications", "support", "location-review", "operations", "revenue", "finance"],
   },
   {
     label: "Company management",
