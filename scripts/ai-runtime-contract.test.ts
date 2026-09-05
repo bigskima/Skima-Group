@@ -17,6 +17,7 @@ const [
   customerServiceabilitySql,
   applicantApplicationExplanationSql,
   applicationReviewReadinessSql,
+  stationInventoryOutlookSql,
   supportTriageSql,
   partnerRiskSql,
   partnerRiskGuardSql,
@@ -66,6 +67,7 @@ const [
   readRepositoryFile("supabase/migrations/20260906008000_customer_serviceability_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906010000_applicant_application_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906011000_ai_application_review_readiness.sql"),
+  readRepositoryFile("supabase/migrations/20260906012000_ai_station_inventory_outlook.sql"),
   readRepositoryFile("supabase/migrations/20260906009000_ai_support_triage_intelligence.sql"),
   readRepositoryFile("supabase/migrations/20260905233000_ai_partner_trust_risk_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233500_ai_partner_risk_configuration_guard.sql"),
@@ -2134,6 +2136,143 @@ Deno.test("admin Ask SKIMA keeps application review readiness internal and human
   );
 });
 
+Deno.test("station inventory outlook combines canonical stock and demand without becoming inventory authority", () => {
+  const sql = normalizeWhitespace(stationInventoryOutlookSql);
+
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_station_inventory_outlook_rules",
+    "stock-pressure thresholds must be database configuration",
+  );
+  assertIncludes(
+    sql,
+    '"control": "advisory_only"',
+    "station inventory outlook must be advisory-only",
+  );
+  assertIncludes(
+    sql,
+    '"assume_no_replenishment": true',
+    "stock coverage must preserve the explicit no-replenishment assumption",
+  );
+  assertIncludes(
+    sql,
+    "station inventory outlook control must remain advisory_only",
+    "configuration must reject an authoritative inventory mode",
+  );
+  assertIncludes(
+    sql,
+    "station inventory outlook must retain the no-replenishment assumption",
+    "configuration must not silently assume future supplier deliveries",
+  );
+  assertIncludes(
+    sql,
+    "public.can_read_lpg_station_inventory(branch.id)",
+    "stock outlook must preserve branch-scoped inventory authorization",
+  );
+  assertIncludes(
+    sql,
+    "inventory.source_confidence in",
+    "depletion calculation must be gated by source confidence",
+  );
+  assertIncludes(
+    sql,
+    "inventory.freshness_status in",
+    "depletion calculation must be gated by inventory freshness",
+  );
+  assertIncludes(
+    sql,
+    "inventory.source_health in",
+    "depletion calculation must be gated by source health",
+  );
+  assertIncludes(
+    sql,
+    "snapshot.valid_until > timezone('utc', now())",
+    "stock outlook must not use expired demand forecasts",
+  );
+  assertIncludes(
+    sql,
+    "'assumesnoreplenishment', true",
+    "outlook payload must identify its no-replenishment assumption",
+  );
+  for (const guardrail of [
+    "'doesnotchangeinventory', true",
+    "'doesnotchangereservations', true",
+    "'doesnotchangeavailability', true",
+    "'doesnotchangedispatch', true",
+    "'doesnotchangecapacity', true",
+    "'doesnotcertifysafety', true",
+  ]) {
+    assertIncludes(
+      sql,
+      guardrail,
+      "station outlook must preserve guardrail " + guardrail,
+    );
+  }
+  assertNotMatch(
+    stationInventoryOutlookSql,
+    /provider\.ai\.|resolve_ai_provider_route|executeAiText|generativelanguage|chat\/completions/,
+    "stock-pressure calculation must remain deterministic",
+  );
+  assertNotMatch(
+    stationInventoryOutlookSql,
+    /\b(?:update|insert\s+into|delete\s+from)\s+public\.(?:station_lpg_inventory_state|station_inventory_reservations|station_inventory_operational_capacity|lpg_station_branches|dispatch_requests|dispatch_candidates|lpg_refill_orders|ai_forecast_snapshots)\b/i,
+    "station outlook must not mutate canonical stock, capacity, dispatch, orders, or forecasts",
+  );
+});
+
+Deno.test("station stock outlook is visible, estimate-labelled, and workspace-scoped", () => {
+  assertIncludes(
+    gatewaySource,
+    '"/lpg/stations/inventory/outlook"',
+    "gateway must expose the branch-scoped read-only stock outlook",
+  );
+  assertIncludes(
+    gatewaySource,
+    'supabase.rpc("read_ai_station_inventory_outlook"',
+    "station/admin Ask SKIMA must use the canonical stock outlook projection",
+  );
+  assertIncludes(
+    gatewaySource,
+    "It assumes no replenishment, never predicts supplier delivery",
+    "assistant prompt must preserve stock-outlook assumptions",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Never present coverageDays or estimatedDepletionAt as guaranteed stockout timing.",
+    "assistant prompt must label depletion timing as an estimate",
+  );
+  assertIncludes(
+    gatewaySource,
+    "stationInventoryOutlook: stationInventoryOutlookRows",
+    "admin Ask SKIMA must receive authorized branch stock pressure",
+  );
+  assertIncludes(
+    stationInventoryScreen,
+    'label="Explain inventory status"',
+    "inventory UI must keep contextual Ask SKIMA access",
+  );
+  assertIncludes(
+    stationInventoryScreen,
+    "Stock outlook",
+    "inventory UI must surface a compact stock outlook",
+  );
+  assertIncludes(
+    stationInventoryScreen,
+    "assumes no replenishment",
+    "station stock card must visibly state the replenishment assumption",
+  );
+  assertIncludes(
+    stationInventoryScreen,
+    "Estimate only",
+    "station stock card must visibly label the projection as an estimate",
+  );
+  assertIncludes(
+    stationInventoryScreen,
+    "SKIMA does not use this card to change stock, reservations or dispatch.",
+    "station stock card must state its non-authoritative boundary",
+  );
+});
+
 Deno.test("support triage is deterministic, advisory-only, and cannot mutate complaint state", () => {
   const sql = normalizeWhitespace(supportTriageSql);
 
@@ -2270,6 +2409,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_expansion_opportunities",
     "read_ai_support_triage_assessments",
     "read_ai_application_review_readiness",
+    "read_ai_station_inventory_outlook",
   ]) {
     assertNotIncludes(
       customerContext,
@@ -2296,6 +2436,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_expansion_opportunities",
     "read_ai_support_triage_assessments",
     "read_ai_application_review_readiness",
+    "read_ai_station_inventory_outlook",
   ]) {
     assertNotIncludes(
       driverContext,
@@ -2313,6 +2454,11 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     stationContext,
     "read_my_lpg_station_settlement_explanations",
     "station assistant must ground finance questions in branch-scoped settlement records",
+  );
+  assertIncludes(
+    stationContext,
+    "read_ai_station_inventory_outlook",
+    "station assistant must ground stock-pressure questions in branch-scoped inventory outlook",
   );
   assertNotIncludes(
     stationContext,
@@ -2363,6 +2509,7 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     "read_ai_expansion_opportunities",
     "read_ai_support_triage_assessments",
     "read_ai_application_review_readiness",
+    "read_ai_station_inventory_outlook",
   ]) {
     assertIncludes(
       adminContext,
