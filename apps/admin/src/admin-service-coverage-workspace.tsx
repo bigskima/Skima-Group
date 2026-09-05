@@ -51,6 +51,22 @@ const GeographyAdminSetupSchema = z.object({
     authorityCanBeActivated: z.boolean(),
   }),
 });
+const GeographyMigrationSchema = z.object({
+  id: z.string().uuid(),
+  legacy_source: z.string(),
+  legacy_id: z.string().uuid(),
+  legacy_display_name: z.string(),
+  legacy_area_type: z.string().nullable(),
+  geography_id: z.string().uuid().nullable(),
+  geography_name: z.string().nullable(),
+  geography_country_code: z.string().nullable(),
+  migration_status: z.enum(["pending", "migrated", "blocked", "verified", "retired"]),
+  validation_code: z.string(),
+  geometry_source: z.string().nullable(),
+  boundary_ready: z.boolean(),
+  verified_at: z.string().nullable(),
+  details: z.record(z.unknown()),
+});
 const ExpansionDemandSchema = z.object({
   service_key: z.string(), interest_type: z.enum(["CUSTOMER", "DRIVER", "STATION"]),
   geography_id: z.string().uuid().nullable(), geography_name: z.string(), request_count: z.coerce.number(),
@@ -119,7 +135,7 @@ export function AdminServiceCoverageWorkspace() {
   const loading = adminSetup.isLoading;
   const error = adminSetup.error;
   return <>
-    <PageHeader eyebrow="Platform geography" title="Geography & Service Coverage" description="Manage canonical boundaries and capability-specific policies. Coordinates and PostGIS boundaries—not place names—determine availability." actions={<div className="skima-action-row"><Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button><Button icon={MapPinned} onClick={() => setGeographyOpen(true)}>Add geography</Button><Button icon={Plus} onClick={() => setPolicyOpen(true)}>Add policy</Button></div>} />
+    <PageHeader eyebrow="Platform geography" title="Geography & Service Coverage" description="Manage canonical boundaries and capability-specific policies. Coordinates and PostGIS boundaries—not place names—determine availability." actions={<div className="skima-action-row"><Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button><Button icon={MapPinned} disabled={!adminSetup.data?.permissions.canManageGeographies} onClick={() => setGeographyOpen(true)}>Add geography</Button><Button icon={Plus} disabled={!adminSetup.data?.permissions.canManageCoverage} onClick={() => setPolicyOpen(true)}>Add policy</Button></div>} />
     <ProductionReadinessAlerts readiness={productionReadiness.data} error={productionReadiness.error}/>
     {notice ? <StatusBadge tone="success">{notice}</StatusBadge> : null}
     <section className="skima-grid skima-grid--compact">
@@ -128,6 +144,7 @@ export function AdminServiceCoverageWorkspace() {
       <MetricTile label="Blocked legacy areas" value={readiness?.blockedCount ?? 0} icon={ShieldCheck} tone={(readiness?.blockedCount ?? 0) > 0 ? "warning" : "success"} />
       <MetricTile label="Authority mode" value={readiness?.authorityMode ?? "Loading"} icon={MapPinned} tone={readiness?.ready ? "success" : "warning"} />
     </section>
+    <GeographyCutoverPanel readiness={readiness} />
     {loading ? <LoadingState label="Loading universal geography" /> : null}
     {error ? <ErrorState title="Geography unavailable" message={readError(error)} onRetry={() => void refresh()} /> : null}
     {!loading && !error ? <section className="sk-panel"><div className="sk-panel__header"><div><h2>Service policies</h2><p className="skima-muted">More-specific configured levels override broader levels. Equal specificity and priority fail closed as a conflict.</p></div></div><DataTable caption="Universal service coverage policies" columns={columns} records={records} getRowKey={(p) => p.id} emptyTitle="No universal policies" emptyMessage="Import or draw a bounded geography, then add a capability policy." /></section> : null}
@@ -142,6 +159,121 @@ export function AdminServiceCoverageWorkspace() {
     <GeographyDialog open={geographyOpen} levels={levels} geographies={geographies} defaultCountryCode={adminSetup.data?.defaultCountryCode ?? ""} onClose={() => setGeographyOpen(false)} onSaved={async () => { setGeographyOpen(false); setNotice("Canonical geography saved."); await refresh(); }} />
     <PolicyDialog open={policyOpen} geographies={geographies.filter((g) => g.status === "active")} onClose={() => setPolicyOpen(false)} onSaved={async () => { setPolicyOpen(false); setNotice("Coverage policy saved."); await refresh(); }} />
   </>;
+}
+
+type GeographyMigration = z.infer<typeof GeographyMigrationSchema>;
+function GeographyCutoverPanel({ readiness }: { readiness: z.infer<typeof ReadinessSchema> | undefined }) {
+  const { supabase, status } = useSessionState();
+  const client = useQueryClient();
+  const [reason, setReason] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const enabled = status === "authenticated";
+
+  const mappings = useQuery({
+    queryKey: ["universal-geography-migration-review"],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("read_geography_migration_review_queue");
+      if (error) throw error;
+      return z.array(GeographyMigrationSchema).parse(data ?? []);
+    },
+  });
+
+  const refresh = async () => {
+    await Promise.all([
+      mappings.refetch(),
+      client.invalidateQueries({ queryKey: ["universal-geography-admin-setup"] }),
+      client.invalidateQueries({ queryKey: ["location-production-readiness"] }),
+    ]);
+  };
+
+  const importLegacy = useMutation({
+    mutationFn: async () => {
+      setNotice(null);
+      const { data, error } = await supabase.rpc("import_legacy_spatial_geographies");
+      if (error) throw error;
+      return data as { imported?: number; blocked?: number } | null;
+    },
+    onSuccess: async (result) => {
+      setNotice(`Spatial import completed: ${result?.imported ?? 0} imported, ${result?.blocked ?? 0} blocked for correction.`);
+      await refresh();
+    },
+  });
+
+  const verifyMapping = useMutation({
+    mutationFn: async (mappingId: string) => {
+      if (!reason.trim()) throw new Error("Enter a review reason before verifying a geography.");
+      const { data, error } = await supabase.rpc("verify_geography_migration_mapping", {
+        p_mapping_id: mappingId,
+        p_reason: reason.trim(),
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async () => {
+      setNotice("Geography mapping verified.");
+      await refresh();
+    },
+  });
+
+  const activateAuthority = useMutation({
+    mutationFn: async () => {
+      if (!reason.trim()) throw new Error("Enter an activation reason before switching geography authority.");
+      const { data, error } = await supabase.rpc("set_universal_geography_authority", {
+        p_mode: "universal",
+        p_reason: reason.trim(),
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async () => {
+      setNotice("Universal geography authority activated.");
+      await refresh();
+    },
+  });
+
+  const records = mappings.data ?? [];
+  const needsReview = records.filter((item) => item.migration_status === "migrated").length;
+  const blocked = records.filter((item) => item.migration_status === "blocked").length;
+  const columns: TableColumn<GeographyMigration>[] = [
+    { key: "legacy", header: "Existing area", render: (item) => <><strong>{item.legacy_display_name}</strong><br /><small>{item.legacy_area_type ?? item.legacy_source}</small></> },
+    { key: "canonical", header: "Canonical geography", render: (item) => item.geography_name ?? "Not imported" },
+    { key: "state", header: "Review state", render: (item) => <><StatusBadge tone={item.migration_status === "verified" ? "success" : item.migration_status === "blocked" ? "danger" : "warning"}>{item.migration_status}</StatusBadge><br /><small>{item.validation_code}</small></> },
+    { key: "boundary", header: "Boundary", render: (item) => <StatusBadge tone={item.boundary_ready ? "success" : "danger"}>{item.boundary_ready ? "Valid" : "Needs correction"}</StatusBadge> },
+    { key: "action", header: "Review", render: (item) => item.migration_status === "migrated"
+      ? <Button size="sm" variant="outline" disabled={!item.boundary_ready || !reason.trim()} isLoading={verifyMapping.isPending && verifyMapping.variables === item.id} onClick={() => verifyMapping.mutate(item.id)}>Verify mapping</Button>
+      : item.migration_status === "verified" ? <small>Reviewed</small> : <small>Resolve source data first</small> },
+  ];
+
+  const actionError = mappings.error ?? importLegacy.error ?? verifyMapping.error ?? activateAuthority.error;
+  return (
+    <section className="sk-panel">
+      <div className="sk-panel__header">
+        <div>
+          <h2>Geography cutover setup</h2>
+          <p className="skima-muted">Import existing bounded service areas, explicitly verify each canonical mapping, create the required service policies, then switch authority only when the readiness guard passes.</p>
+        </div>
+        <div className="skima-action-row">
+          <Button variant="outline" icon={RefreshCcw} disabled={importLegacy.isPending} onClick={() => importLegacy.mutate()}>Import existing areas</Button>
+          {readiness?.authorityMode === "preparing"
+            ? <Button icon={ShieldCheck} disabled={!readiness.ready || !reason.trim()} isLoading={activateAuthority.isPending} onClick={() => activateAuthority.mutate()}>Activate universal geography</Button>
+            : null}
+        </div>
+      </div>
+      <div className="skima-grid skima-grid--compact">
+        <MetricTile label="Awaiting review" value={needsReview} icon={MapPinned} tone={needsReview ? "warning" : "success"} />
+        <MetricTile label="Blocked imports" value={blocked} icon={ShieldCheck} tone={blocked ? "warning" : "success"} />
+        <MetricTile label="Verified mappings" value={readiness?.verifiedCount ?? 0} icon={ShieldCheck} tone="success" />
+        <MetricTile label="Active policies required" value={readiness?.activeUniversalPolicyCount ?? 0} icon={ShieldCheck} tone={(readiness?.activeUniversalPolicyCount ?? 0) > 0 ? "success" : "warning"} />
+      </div>
+      <TextAreaInput label="Review / activation reason" helperText="Required for mapping verification and the final authority switch. The reason is preserved in audit history." value={reason} onChange={(event) => setReason(event.currentTarget.value)} />
+      {notice ? <StatusBadge tone="success">{notice}</StatusBadge> : null}
+      {actionError ? <StatusBadge tone="danger">{readError(actionError)}</StatusBadge> : null}
+      {mappings.isLoading
+        ? <LoadingState label="Loading geography migration review" />
+        : <DataTable caption="Legacy geography migration review" columns={columns} records={records} getRowKey={(item) => item.id} emptyTitle="No legacy geography mappings" emptyMessage="Use Import existing areas if legacy service areas exist, or add canonical geographies manually." />}
+    </section>
+  );
 }
 
 type ExpansionDemand = z.infer<typeof ExpansionDemandSchema>;
@@ -174,7 +306,7 @@ function GeographyDialog({ open, levels, geographies, defaultCountryCode, onClos
     ? geographies.filter((geography) => geography.status === "active" && geography.geography_level_id === requiredParentLevelId)
     : [];
   const submit = async (event: FormEvent) => { event.preventDefault(); setSaving(true); setError(null); try { const boundary = JSON.parse(form.boundary) as unknown; const { data:savedDraft,error:draftError}=await supabase.rpc("save_coverage_geometry_draft",{p_draft_id:draftId,p_draft_type:"GEOGRAPHY_BOUNDARY",p_target_id:null,p_parent_geography_id:form.parentId||null,p_geojson:boundary});if(draftError)throw draftError;setDraftId(savedDraft as string); const { data:geographyId,error: rpcError } = await supabase.rpc("configure_universal_geography", { p_geography_id: null, p_parent_id: form.parentId || null, p_level_id: form.levelId, p_canonical_name: form.name.trim(), p_country_code: form.countryCode.trim().toUpperCase(), p_boundary_geojson: boundary, p_source: form.source.trim(), p_external_reference: null, p_status: "active", p_aliases: [], p_metadata: { sourceSurface: "admin_geography",geometryDraftId:savedDraft } }); if (rpcError) throw rpcError; const{error:activationError}=await supabase.rpc("activate_coverage_geometry_draft",{p_draft_id:savedDraft,p_target_id:geographyId,p_reason:`Activated canonical geography: ${form.name.trim()}`});if(activationError)throw activationError; setForm(EMPTY_GEOGRAPHY);setDraftId(null); await onSaved(); } catch (cause) { setError(readError(cause)); } finally { setSaving(false); } };
-  return <Dialog isOpen title="Add bounded geography" onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" form="geography-form" isLoading={saving}>Preview and activate geography</Button></>}><form id="geography-form" className="skima-form-grid" onSubmit={(e) => void submit(e)}><TextInput label="Canonical name" value={form.name} onChange={(e) => setForm({ ...form, name: e.currentTarget.value })} required /><TextInput label="ISO country code" value={form.countryCode} onChange={(e) => setForm({ ...form, countryCode: e.currentTarget.value })} required /><SelectInput label="Configured level" value={form.levelId} onChange={(e) => { const levelId=e.currentTarget.value; const nextLevel=levels.find((level)=>level.id===levelId); setForm({ ...form, levelId, parentId: nextLevel?.parent_level_id ? form.parentId : "" }); }} options={[{ label: "Select level", value: "" }, ...levels.map((l) => ({ label: l.display_name, value: l.id }))]} required /><SelectInput label="Parent geography" value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.currentTarget.value })} options={[{ label: requiredParentLevelId ? "Select parent" : "No parent required", value: "" }, ...parentOptions.map((g) => ({ label: g.canonical_name, value: g.id }))]} required={Boolean(requiredParentLevelId)} disabled={!requiredParentLevelId} /><AdminGeometryEditor mode="polygon" value={form.boundary} onChange={(boundary)=>setForm({...form,boundary})}/><TextAreaInput label="Boundary GeoJSON" helperText="Synchronized with the interactive editor for provider imports and diagnostics." value={form.boundary} onChange={(e) => setForm({ ...form, boundary: e.currentTarget.value })} required /><TextInput label="Boundary source" value={form.source} onChange={(e) => setForm({ ...form, source: e.currentTarget.value })} required />{draftId?<StatusBadge tone="info">Geometry draft preserved</StatusBadge>:null}{error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}</form></Dialog>;
+  return <Dialog isOpen title="Add bounded geography" onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" form="geography-form" isLoading={saving}>Preview and activate geography</Button></>}><form id="geography-form" className="skima-form-grid" onSubmit={(e) => void submit(e)}><TextInput label="Canonical name" value={form.name} onChange={(e) => setForm({ ...form, name: e.currentTarget.value })} required /><TextInput label="ISO country code" value={form.countryCode} onChange={(e) => setForm({ ...form, countryCode: e.currentTarget.value })} required /><SelectInput label="Configured level" value={form.levelId} onChange={(e) => { const levelId=e.currentTarget.value; const nextLevel=levels.find((level)=>level.id===levelId); const requiredParent=nextLevel?.parent_level_id ?? null; const parentStillValid=Boolean(requiredParent && geographies.some((geography)=>geography.id===form.parentId && geography.geography_level_id===requiredParent)); setForm({ ...form, levelId, parentId: parentStillValid ? form.parentId : "" }); }} options={[{ label: "Select level", value: "" }, ...levels.map((l) => ({ label: l.display_name, value: l.id }))]} required /><SelectInput label="Parent geography" value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.currentTarget.value })} options={[{ label: requiredParentLevelId ? "Select parent" : "No parent required", value: "" }, ...parentOptions.map((g) => ({ label: g.canonical_name, value: g.id }))]} required={Boolean(requiredParentLevelId)} disabled={!requiredParentLevelId} /><AdminGeometryEditor mode="polygon" value={form.boundary} onChange={(boundary)=>setForm({...form,boundary})}/><TextAreaInput label="Boundary GeoJSON" helperText="Synchronized with the interactive editor for provider imports and diagnostics." value={form.boundary} onChange={(e) => setForm({ ...form, boundary: e.currentTarget.value })} required /><TextInput label="Boundary source" value={form.source} onChange={(e) => setForm({ ...form, source: e.currentTarget.value })} required />{draftId?<StatusBadge tone="info">Geometry draft preserved</StatusBadge>:null}{error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}</form></Dialog>;
 }
 
 function PolicyDialog({ open, geographies, onClose, onSaved }: { open: boolean; geographies: Geography[]; onClose: () => void; onSaved: () => Promise<void> }) {
