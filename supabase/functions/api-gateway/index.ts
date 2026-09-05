@@ -10759,7 +10759,7 @@ async function buildAiAssistantContext(
   }
 
   if (workspace === "driver") {
-    const [driver, jobs, commissions, earningsExplanations] = await Promise.all([
+    const [driver, jobs, commissions, earningsExplanations, dailyBrief] = await Promise.all([
       supabase
         .from("driver_profiles")
         .select("id,verification_status,operational_status,updated_at")
@@ -10775,6 +10775,7 @@ async function buildAiAssistantContext(
         target_lpg_order_id: null,
         target_limit: 10,
       }),
+      supabase.rpc("read_my_lpg_driver_daily_brief"),
     ]);
     assertAiContextQuery(driver.error);
     assertAiContextQuery(jobs.error);
@@ -10787,6 +10788,7 @@ async function buildAiAssistantContext(
       earningsExplanations: earningsExplanations.error
         ? []
         : Array.isArray(earningsExplanations.data) ? earningsExplanations.data : [],
+      driverDailyBrief: dailyBrief.error ? null : dailyBrief.data ?? null,
       applicationExplanations: ownApplicationExplanations,
       myApplications: ownApplications,
     };
@@ -11046,6 +11048,30 @@ function buildAiHomeInsight(
   }
 
   if (workspace === "driver") {
+    const dailyBrief = recordObjectValue(getRecordValue(context, "driverDailyBrief"));
+    const nextStep = stringOrNull(getRecordValue(dailyBrief, "nextStep"));
+
+    if (nextStep) {
+      const nextJob = recordObjectValue(getRecordValue(dailyBrief, "nextJob"));
+      const nextJobStatus = stringOrNull(getRecordValue(nextJob, "status"));
+      const readiness = stringOrNull(getRecordValue(dailyBrief, "readiness"));
+      const title = nextJobStatus
+        ? "Next: " + normalizePlainStatus(nextJobStatus)
+        : readiness && readiness !== "ready"
+        ? "Action: " + normalizePlainStatus(readiness)
+        : "Your next step is ready";
+
+      return {
+        kind: "driver_daily_brief",
+        eyebrow: "DRIVER DAILY BRIEF",
+        title,
+        body: nextStep,
+        actionLabel: "Ask what next",
+        prompt: "What should I do next? Use my Driver Daily Brief as the primary guide. Explain the next action in plain language, mention any readiness issue that must be fixed first, and do not change or imply a change to my job, availability, location, dispatch rank, commission, or wallet.",
+        estimateOnly: false,
+      };
+    }
+
     const jobs = recordArrayValue(getRecordValue(context, "activeJobs"));
     const activeJob = jobs.find((record) =>
       !isTerminalLpgOrderStatus(
@@ -11065,6 +11091,7 @@ function buildAiHomeInsight(
         title: "Next: " + normalizePlainStatus(status),
         body: "Ask SKIMA what this job stage requires before you continue.",
         actionLabel: "What next?",
+        prompt: "What should I do next? Explain my current assigned LPG job stage using only the canonical job information available to me.",
         estimateOnly: false,
       };
     }
@@ -11079,6 +11106,7 @@ function buildAiHomeInsight(
         : "No active job right now",
       body: "Ask about availability, recent jobs or earnings.",
       actionLabel: "Ask copilot",
+      prompt: "What should I do next? Check my current driver readiness, active jobs and recent SKIMA records, and explain the next safe operational action without changing anything.",
       estimateOnly: false,
     };
   }
@@ -11224,7 +11252,7 @@ function aiSystemPrompt(workspace: string): string {
   const roleInstruction = workspace === "customer"
     ? "Help the customer understand their LPG orders, cylinders, locations, quotes, account state, their own driver/station application status and support options."
     : workspace === "driver"
-    ? "Act as a driver workflow copilot. Explain active jobs, the next operational step and earnings records only from supplied context."
+    ? "Act as a driver workflow copilot. Use driverDailyBrief as the primary source for what the driver should do next, with active jobs and earnings records as supporting context only."
     : workspace === "station"
     ? "Act as a station operations assistant. Explain visible queue and station runtime information, and highlight attention items without changing them."
     : "Act as the SKIMA admin operations copilot. Summarize visible operations and exceptions, but never perform or imply an administrative action.";
@@ -11240,6 +11268,8 @@ function aiSystemPrompt(workspace: string): string {
     "Station inventoryOutlook combines canonical station inventory state with that deterministic demand forecast. It assumes no replenishment, never predicts supplier delivery, and withholds a depletion estimate when inventory freshness/confidence is not trustworthy. Never present coverageDays or estimatedDepletionAt as guaranteed stockout timing.",
     "Station inventoryOutlook is descriptive only. Never claim Ask SKIMA changed stock, reservations, station availability, dispatch eligibility, operational capacity, provider settings or safety state.",
     "Customer refill outlooks are estimates from that customer's historical refill intervals. They do not measure remaining gas, cylinder pressure or safety and must never be described as a gas gauge.",
+    "Driver driverDailyBrief is a deterministic, own-driver-scoped read-only projection from canonical LPG jobs, location freshness, driver readiness and commission state. When the driver asks what to do next, use driverDailyBrief.nextStep as the primary guidance and use its readiness, workload and nextJob only to explain that guidance. If driverDailyBrief is unavailable, fall back to the canonical activeJobs context.",
+    "Never claim that Driver Daily Brief or Ask SKIMA assigned, accepted or re-ranked a job; changed driver availability or location; advanced an LPG order state; posted commission; or moved wallet funds.",
     "Driver earningsExplanations come from the assigned driver's immutable locked LPG payout snapshot and canonical commission execution. A locked payout that is pending delivery or awaiting posting is not yet posted earnings. Only say money was credited when walletPostingRecorded is true and the canonical execution status is posted.",
     "Never estimate a driver's earned amount, change a payout, trigger commission release, move wallet money, or substitute another driver's financial records.",
     "Station settlementExplanations are branch-finance-scoped records of the station LPG principal, actual fulfilled kg, quantity reduction and canonical settlement posting. Only say station earnings were posted when walletPostingRecorded is true.",
@@ -11275,7 +11305,7 @@ function aiWorkspaceSuggestions(workspace: string): readonly string[] {
     return ["Where is my refill?", "Can SKIMA serve my saved location?", "Explain my latest refill price"];
   }
   if (workspace === "driver") {
-    return ["What do I do next?", "Summarize my active jobs", "Explain my recent earnings"];
+    return ["What should I do next?", "Summarize my active jobs", "Explain my recent earnings"];
   }
   if (workspace === "station") {
     return ["How long could current stock cover?", "What needs attention?", "Explain my recent settlement"];
