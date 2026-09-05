@@ -11302,7 +11302,7 @@ function aiSystemPrompt(workspace: string): string {
 
 function aiWorkspaceSuggestions(workspace: string): readonly string[] {
   if (workspace === "customer") {
-    return ["Where is my refill?", "When might I need another refill?", "Can SKIMA serve my saved location?"];
+    return ["Where is my refill?", "When might I need another refill?", "Can SKIMA serve my saved location?", "Explain my latest refill price"];
   }
   if (workspace === "driver") {
     return ["What should I do next?", "Summarize my active jobs", "Explain my recent earnings"];

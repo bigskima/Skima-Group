@@ -287,7 +287,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
 
         {suggestions.length ? (
           <View style={styles.suggestions}>
-            {suggestions.slice(0, 3).map((suggestion) => (
+            {suggestions.slice(0, workspace === "customer" ? 4 : 3).map((suggestion) => (
               <Pressable
                 accessibilityRole="button"
                 disabled={mutation.isPending}
@@ -639,7 +639,7 @@ function initialSuggestions(workspace: AiAssistantWorkspace): string[] {
   if (workspace === "station") {
     return ["What needs attention?", "Explain my recent settlement", "How busy could the next 7 days be?"];
   }
-  return ["Where is my refill?", "When might I need another refill?", "Can SKIMA serve my saved location?"];
+  return ["Where is my refill?", "When might I need another refill?", "Can SKIMA serve my saved location?", "Explain my latest refill price"];
 }
 
 const styles = StyleSheet.create({
