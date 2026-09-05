@@ -255,6 +255,13 @@ export function CustomerOrderDetailScreen() {
               </View>
               <StatusPill label={friendlyPaymentStatus(paymentStatus)} tone={paymentStatusTone(paymentStatus)} />
             </View>
+
+            <AiContextAction
+              workspace="customer"
+              label="Explain this price"
+              detail="Ask SKIMA to break down the price saved with this refill. Nothing is sent until you choose Send."
+              prompt={`Explain the accepted price for my refill order ${aiOrderReference}. Break down the gas amount, SKIMA charge, delivery fee, tax if any, total, and any posted adjustment using the price saved with this order. If the actual kilograms differ from the quoted kilograms, explain that separately. Do not use admin pricing simulations or change any price, payment, refund, or policy.`}
+            />
           </Card>
 
           <View style={styles.actions}>
