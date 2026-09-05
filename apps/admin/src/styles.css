@@ -735,14 +735,365 @@
   gap: 5px;
 }
 
+
+/* SKIMA Intelligence */
+
+.admin-ai-layout {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(420px, 0.85fr);
+}
+
+.admin-ai-copilot,
+.admin-ai-routing {
+  align-content: start;
+  min-width: 0;
+}
+
+.admin-ai-panel-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.admin-ai-panel-head h2 {
+  color: #14262b;
+  font-size: 1.22rem;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+.admin-ai-panel-head p:not(.admin-section-kicker) {
+  color: #718087;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  margin: 5px 0 0;
+  max-width: 640px;
+}
+
+.admin-ai-thread {
+  display: grid;
+  gap: 12px;
+  min-height: 280px;
+  padding: 8px 0;
+}
+
+.admin-ai-empty {
+  align-items: center;
+  color: #718087;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 260px;
+  padding: 26px;
+  text-align: center;
+}
+
+.admin-ai-empty > span {
+  align-items: center;
+  background: linear-gradient(145deg, #e9f9f4, #dff2ee);
+  border-radius: 18px;
+  color: #0d8f79;
+  display: flex;
+  height: 54px;
+  justify-content: center;
+  margin-bottom: 13px;
+  width: 54px;
+}
+
+.admin-ai-empty svg {
+  height: 24px;
+  width: 24px;
+}
+
+.admin-ai-empty strong {
+  color: #14262b;
+  font-size: 1rem;
+}
+
+.admin-ai-empty p {
+  font-size: 0.84rem;
+  line-height: 1.5;
+  margin: 7px 0 0;
+  max-width: 470px;
+}
+
+.admin-ai-message {
+  align-items: flex-end;
+  display: flex;
+  gap: 8px;
+}
+
+.admin-ai-message > svg {
+  background: #e8f7f3;
+  border-radius: 10px;
+  color: #0d8f79;
+  flex: 0 0 auto;
+  height: 30px;
+  padding: 7px;
+  width: 30px;
+}
+
+.admin-ai-message > div {
+  border: 1px solid #e1e7e9;
+  border-radius: 16px 16px 16px 5px;
+  color: #183036;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  max-width: min(82%, 680px);
+  padding: 12px 14px;
+  white-space: pre-wrap;
+}
+
+.admin-ai-message.is-user {
+  justify-content: flex-end;
+}
+
+.admin-ai-message.is-user > div {
+  background: #14262b;
+  border-color: #14262b;
+  border-radius: 16px 16px 5px 16px;
+  color: #ffffff;
+}
+
+.admin-ai-message.is-assistant > div {
+  background: #f9fbfb;
+}
+
+.admin-ai-message.is-thinking > div {
+  color: #718087;
+  font-size: 0.82rem;
+}
+
+.admin-ai-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-ai-suggestions button {
+  background: #f8fafb;
+  border: 1px solid #dfe7e9;
+  border-radius: 999px;
+  color: #294047;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 750;
+  padding: 8px 11px;
+}
+
+.admin-ai-suggestions button:hover:not(:disabled) {
+  background: #eef8f5;
+  border-color: #b9ddd4;
+  color: #0c7565;
+}
+
+.admin-ai-suggestions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.admin-ai-composer {
+  align-items: flex-end;
+  background: #f8fafb;
+  border: 1px solid #dce4e7;
+  border-radius: 16px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 8px;
+}
+
+.admin-ai-composer textarea {
+  background: transparent;
+  border: 0;
+  color: #14262b;
+  font: inherit;
+  line-height: 1.45;
+  min-height: 56px;
+  outline: none;
+  padding: 8px 9px;
+  resize: vertical;
+  width: 100%;
+}
+
+.admin-ai-guardrail,
+.admin-ai-provider-note {
+  align-items: flex-start;
+  background: #eef8f5;
+  border-radius: 12px;
+  color: #42635c;
+  display: flex;
+  font-size: 0.78rem;
+  gap: 9px;
+  line-height: 1.45;
+  padding: 11px 13px;
+}
+
+.admin-ai-guardrail svg,
+.admin-ai-provider-note svg {
+  color: #0d8f79;
+  flex: 0 0 auto;
+  height: 17px;
+  margin-top: 1px;
+  width: 17px;
+}
+
+.admin-ai-provider-note code {
+  color: #0b6f60;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.admin-ai-provider-setup {
+  background: #f8fafb;
+  border: 1px solid #e0e7e9;
+  border-radius: 14px;
+  display: grid;
+  gap: 14px;
+  padding: 15px;
+}
+
+.admin-ai-provider-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.admin-ai-route-list {
+  display: grid;
+  gap: 0;
+}
+
+.admin-ai-route-row {
+  align-items: center;
+  border-bottom: 1px solid #e7ecee;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(160px, 0.72fr) auto;
+  padding: 15px 0;
+}
+
+.admin-ai-route-row:last-child {
+  border-bottom: 0;
+}
+
+.admin-ai-route-copy {
+  align-items: center;
+  display: grid;
+  gap: 11px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+}
+
+.admin-ai-route-icon {
+  align-items: center;
+  background: #eef8f5;
+  border-radius: 11px;
+  color: #0d8f79;
+  display: flex;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.admin-ai-route-icon svg {
+  height: 18px;
+  width: 18px;
+}
+
+.admin-ai-route-copy strong,
+.admin-ai-route-copy small,
+.admin-ai-route-current strong,
+.admin-ai-route-current small {
+  display: block;
+}
+
+.admin-ai-route-copy strong {
+  color: #17282d;
+  font-size: 0.88rem;
+}
+
+.admin-ai-route-copy small {
+  color: #718087;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  margin-top: 3px;
+}
+
+.admin-ai-route-current {
+  min-width: 0;
+}
+
+.admin-ai-route-current strong {
+  color: #20353b;
+  font-size: 0.8rem;
+  margin-top: 5px;
+}
+
+.admin-ai-route-current small {
+  color: #7c898e;
+  font-size: 0.72rem;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.admin-ai-route-editor {
+  grid-column: 1 / -1;
+}
+
+.admin-ai-editor-grid {
+  background: #f8fafb;
+  border: 1px solid #e1e8ea;
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(160px, 0.9fr) minmax(220px, 1.2fr) auto;
+  padding: 13px;
+}
+
+.admin-ai-field {
+  color: #50656b;
+  display: grid;
+  font-size: 0.78rem;
+  font-weight: 750;
+  gap: 6px;
+}
+
+.admin-ai-field select,
+.admin-ai-editor-grid select {
+  background: #ffffff;
+  border: 1px solid #d7e0e3;
+  border-radius: 9px;
+  color: #183036;
+  font: inherit;
+  min-height: 40px;
+  padding: 0 10px;
+  width: 100%;
+}
+
+.admin-ai-editor-action {
+  align-self: end;
+}
+
+.admin-ai-editor-grid .admin-notice {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 1120px) {
   .skima-grid--compact {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .admin-command-grid,
-  .admin-master-detail {
+  .admin-master-detail,
+  .admin-ai-layout {
     grid-template-columns: 1fr;
+  }
+
+  .admin-ai-editor-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -774,6 +1125,24 @@
   .admin-system-posture {
     align-items: flex-start;
     grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .admin-ai-panel-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-ai-route-row,
+  .admin-ai-editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-ai-route-editor {
+    grid-column: 1;
+  }
+
+  .admin-ai-composer {
+    grid-template-columns: 1fr;
   }
 
   .admin-system-posture > .sk-badge {
