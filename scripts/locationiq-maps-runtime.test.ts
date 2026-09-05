@@ -398,6 +398,21 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
   assertIncludes(adminCoverage, 'supabase.rpc("read_application_coverage_requests_admin"');
 });
 
+Deno.test("mobile basemap falls back before a public API-key tile URL can blank the map", async () => {
+  const runtime = await readRepositoryFile("apps/lpg-mobile/src/native/domains/maps/index.ts");
+  const webMap = await readRepositoryFile("apps/lpg-mobile/src/native/maps/OperationalMap.web.tsx");
+
+  assertIncludes(runtime, "KEYLESS_RASTER_TILE_TEMPLATE");
+  assertIncludes(runtime, "requiresPublicMapCredential");
+  assertIncludes(runtime, '"locationiq.com"');
+  assertIncludes(runtime, '"api.mapbox.com"');
+  assertIncludes(runtime, '"maps.googleapis.com"');
+  assertIncludes(runtime, '"keyless_raster_fallback"');
+  assertIncludes(webMap, "EMERGENCY_RASTER_TILE_TEMPLATE");
+  assertIncludes(webMap, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+  assertIncludes(webMap, "onError={() => setUseEmergencyTiles(true)}");
+});
+
 function testAdapter(fetcher: typeof fetch, retryCount = 0) {
   return createLocationIqMapsAdapter({
     accessToken: testSecret,
