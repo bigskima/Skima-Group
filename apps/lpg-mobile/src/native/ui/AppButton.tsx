@@ -8,7 +8,7 @@ import {
   type PressableProps,
 } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { controlHeights, radii, spacing, typography } from "../theme/tokens";
+import { controlHeights, radii, shadows, spacing, typography } from "../theme/tokens";
 
 export function AppButton({
   label,
@@ -66,7 +66,13 @@ export function AppButton({
         size === "md" && styles.md,
         size === "lg" && styles.lg,
         fullWidth && styles.fullWidth,
-        { backgroundColor, borderColor, opacity: inactive ? 0.48 : pressed ? 0.82 : 1 },
+        variant !== "ghost" && shadows.soft,
+        {
+          backgroundColor: pressed && variant === "ghost" ? palette.brandSoft : backgroundColor,
+          borderColor,
+          opacity: inactive ? 0.46 : 1,
+          transform: [{ scale: pressed && !inactive ? 0.985 : 1 }],
+        },
       ]}
     >
       {loading ? (
@@ -85,16 +91,16 @@ export function AppButton({
 const styles = StyleSheet.create({
   base: {
     borderWidth: 1,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: spacing.md,
   },
-  sm: { minHeight: controlHeights.sm },
-  md: { minHeight: controlHeights.md },
-  lg: { minHeight: controlHeights.lg, paddingHorizontal: spacing.lg },
+  sm: { minHeight: controlHeights.sm + 2, paddingHorizontal: 14 },
+  md: { minHeight: controlHeights.md + 2, paddingHorizontal: 18 },
+  lg: { minHeight: controlHeights.lg + 2, paddingHorizontal: spacing.lg },
   fullWidth: { width: "100%" },
   content: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm },
   icon: { alignItems: "center", justifyContent: "center" },
-  label: { ...typography.bodyStrong, fontSize: 14 },
+  label: { ...typography.bodyStrong, fontSize: 13, letterSpacing: -0.08 },
 });
