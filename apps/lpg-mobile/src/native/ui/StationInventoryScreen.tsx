@@ -179,7 +179,7 @@ export function StationInventoryScreen() {
           <AiContextAction
             workspace="station"
             label="Explain inventory status"
-            prompt={`Explain my station inventory status using the live SKIMA station context. Current inventory status: ${inventoryStatus}. Dispatchable stock shown here: ${dispatchable === null ? "not reported" : String(dispatchable) + " kg"}. ${dispatchBlockReason ? "Dispatch block reason shown here: " + dispatchBlockReason + "." : ""} Tell me what needs attention, including source freshness or demand outlook if available. Do not change stock, availability, capacity, provider settings or dispatch.`}
+            prompt={`Explain my station inventory status using the live SKIMA station context. Current inventory status: ${inventoryStatus}. Dispatchable stock shown here: ${dispatchable === null ? "not reported" : String(dispatchable) + " kg"}. ${dispatchBlockReason ? "Dispatch pause shown here: " + friendlyLabel(dispatchBlockReason) + "." : ""} Tell me what needs attention, including source freshness or demand outlook if available. Do not change stock, availability, capacity, provider settings or dispatch.`}
           />
 
           {needsSetup ? (
