@@ -104,6 +104,7 @@ export function DriverApplicationScreen() {
   const [selectedServiceAreaIds, setSelectedServiceAreaIds] = useState<readonly string[]>([]);
 
   const draftAttemptKey = useRef(`${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+  const candidateLookupKey = useRef<string | null>(null);
 
   const type = useMemo(
     () =>
@@ -273,10 +274,12 @@ export function DriverApplicationScreen() {
       contact: { ...existingContact, phone: phone.trim() },
       licence: { ...existingLicence, number: licenceNumber.trim() },
       location: operatingLocation ?? existingLocation ?? null,
-      service: {
-        ...existingService,
-        coverageRequests,
-      },
+      service: coverageRequests.length > 0
+        ? {
+            ...existingService,
+            coverageRequests,
+          }
+        : existingService,
     };
   };
 
@@ -354,8 +357,10 @@ export function DriverApplicationScreen() {
     try {
       const location = await maps.resolveOperationalLocation(await readOperationalLocation());
       setOperatingLocation(location);
+      candidateLookupKey.current = null;
       try {
         await resolveCandidateCoverage(location);
+        candidateLookupKey.current = `${location.latitude.toFixed(6)}:${location.longitude.toFixed(6)}`;
       } catch {
         setCandidateCoverage(null);
       }
@@ -370,6 +375,16 @@ export function DriverApplicationScreen() {
       setDetectingLocation(false);
     }
   };
+
+  useEffect(() => {
+    if (!operatingLocation || selectedServiceAreaIds.length > 0 || candidateCoverage) return;
+    const key = `${operatingLocation.latitude.toFixed(6)}:${operatingLocation.longitude.toFixed(6)}`;
+    if (candidateLookupKey.current === key) return;
+    candidateLookupKey.current = key;
+    void resolveCandidateCoverage(operatingLocation).catch(() => {
+      setCandidateCoverage(null);
+    });
+  }, [operatingLocation, selectedServiceAreaIds.length, candidateCoverage]);
 
   const toggleServiceArea = (areaId: string) => {
     setSelectedServiceAreaIds((currentIds) => {
