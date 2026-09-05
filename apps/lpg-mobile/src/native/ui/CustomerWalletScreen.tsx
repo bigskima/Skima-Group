@@ -17,6 +17,7 @@ import {
 } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, shadows, spacing, typography } from "../theme/tokens";
+import { selectWorkspaceWallet } from "../utilities/financeWallet";
 import { AppButton } from "./AppButton";
 import { Card } from "./Card";
 import { EmptyState } from "./EmptyState";
@@ -28,7 +29,7 @@ export function CustomerWalletScreen() {
   const { palette } = useAppTheme();
   const wallets = domainQueries.wallets();
   const transactions = domainQueries.transactions();
-  const wallet = wallets.data?.[0];
+  const wallet = selectWorkspaceWallet(wallets.data ?? [], "customer");
   const currency = firstString(wallet, ["currency_code", "currencyCode"]) ?? "NGN";
   const available = firstNumber(wallet, ["available_balance", "availableBalance", "balance"]) ?? 0;
   const pending = firstNumber(wallet, ["pending_balance", "pendingBalance", "reserved_balance", "reservedBalance"]) ?? 0;
