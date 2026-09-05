@@ -14,7 +14,7 @@ import {
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { useStationInventory } from "../api/domains";
+import { useStationInventory, useStationInventoryOutlook } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
   ActionResponseSchema,
@@ -60,12 +60,22 @@ export function StationInventoryScreen() {
   const alerts = nestedRecords(runtime.data, "alerts");
   const reconciliationCases = nestedRecords(runtime.data, "reconciliationCases");
   const stationBranchId = firstString(station, ["stationBranchId"]);
+  const outlookQuery = useStationInventoryOutlook(stationBranchId);
+  const outlook = outlookQuery.data?.[0] ?? null;
+  const outlookDemand = nestedRecord(outlook, "demand");
   const physical = firstNumber(inventory, ["physicalStockKg"]);
   const allocation = firstNumber(inventory, ["skimaAllocationKg"]);
   const reserved = firstNumber(inventory, ["reservedKg"]);
   const dispatchable = firstNumber(inventory, ["dispatchableKg"]);
   const installed = firstNumber(station, ["installedCapacityKg"]);
   const inventoryStatus = firstString(inventory, ["inventoryStatus"]) ?? "UNKNOWN";
+  const outlookPressure = firstString(outlook, ["pressureLevel"]);
+  const outlookCoverageDays = firstNumber(outlook, ["coverageDays"]);
+  const outlookDailyKg = firstNumber(outlookDemand, ["predictedDailyKg"]);
+  const outlookShortfall7DayKg = firstNumber(outlook, ["projectedShortfall7DayKg"]);
+  const outlookRecommendation = firstString(outlook, ["recommendedAction"]);
+  const outlookForecastConfidence = firstString(outlookDemand, ["forecastConfidence"]);
+  const depletionEstimateAvailable = outlook?.depletionEstimateAvailable === true;
   const rolloutStatus = firstString(inventory, ["rolloutStatus"]);
   const inventoryVersion = firstNumber(inventory, ["version"]);
   const configurationVersion = firstNumber(configuration, ["version"]);
@@ -179,8 +189,67 @@ export function StationInventoryScreen() {
           <AiContextAction
             workspace="station"
             label="Explain inventory status"
-            prompt={`Explain my station inventory status using the live SKIMA station context. Current inventory status: ${inventoryStatus}. Dispatchable stock shown here: ${dispatchable === null ? "not reported" : String(dispatchable) + " kg"}. ${dispatchBlockReason ? "Dispatch pause shown here: " + friendlyLabel(dispatchBlockReason) + "." : ""} Tell me what needs attention, including source freshness or demand outlook if available. Do not change stock, availability, capacity, provider settings or dispatch.`}
+            prompt={`Explain my station inventory status using the live SKIMA station context. Current inventory status: ${inventoryStatus}. Dispatchable stock shown here: ${dispatchable === null ? "not reported" : String(dispatchable) + " kg"}. ${dispatchBlockReason ? "Dispatch pause shown here: " + friendlyLabel(dispatchBlockReason) + "." : ""} Tell me what needs attention, including source freshness and inventoryOutlook if available. Treat stock coverage as an estimate that assumes no replenishment. Do not change stock, availability, capacity, provider settings or dispatch.`}
           />
+
+          {outlook ? (
+            <View style={[styles.outlookCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.rowBetween}>
+                <View style={styles.iconTitle}>
+                  <View style={[styles.smallIcon, { backgroundColor: palette.brandSoft }]}>
+                    <Gauge color={palette.brand} size={19} />
+                  </View>
+                  <View style={styles.flexCopy}>
+                    <Text style={[styles.cardTitle, { color: palette.ink }]}>Stock outlook</Text>
+                    <Text style={[styles.caption, { color: palette.muted }]}>
+                      Current dispatchable stock vs recent demand · assumes no replenishment
+                    </Text>
+                  </View>
+                </View>
+                <StatusPill
+                  label={friendlyLabel(outlookPressure ?? "Normal")}
+                  tone={outlookPressure === "critical"
+                    ? "danger"
+                    : outlookPressure === "urgent" || outlookPressure === "elevated" || outlookPressure === "attention"
+                    ? "warning"
+                    : "success"}
+                />
+              </View>
+
+              <View style={styles.outlookMetrics}>
+                <View style={styles.outlookMetric}>
+                  <Text style={[styles.outlookMetricLabel, { color: palette.muted }]}>Estimated coverage</Text>
+                  <Text style={[styles.outlookMetricValue, { color: palette.ink }]}>
+                    {depletionEstimateAvailable && outlookCoverageDays !== null
+                      ? `${outlookCoverageDays.toFixed(1)} days`
+                      : "Not available"}
+                  </Text>
+                </View>
+                <View style={styles.outlookMetric}>
+                  <Text style={[styles.outlookMetricLabel, { color: palette.muted }]}>Estimated daily demand</Text>
+                  <Text style={[styles.outlookMetricValue, { color: palette.ink }]}>
+                    {outlookDailyKg === null ? "Not available" : kg(outlookDailyKg)}
+                  </Text>
+                </View>
+                <View style={styles.outlookMetric}>
+                  <Text style={[styles.outlookMetricLabel, { color: palette.muted }]}>7-day shortfall</Text>
+                  <Text style={[styles.outlookMetricValue, { color: palette.ink }]}>
+                    {outlookShortfall7DayKg === null ? "Not available" : kg(outlookShortfall7DayKg)}
+                  </Text>
+                </View>
+              </View>
+
+              {outlookRecommendation ? (
+                <Text style={[styles.outlookRecommendation, { color: palette.mutedStrong }]}>
+                  {outlookRecommendation}
+                </Text>
+              ) : null}
+
+              <Text style={[styles.outlookDisclaimer, { color: palette.muted }]}>
+                Estimate only{outlookForecastConfidence ? ` · ${friendlyLabel(outlookForecastConfidence)} demand confidence` : ""}. SKIMA does not use this card to change stock, reservations or dispatch.
+              </Text>
+            </View>
+          ) : null}
 
           {needsSetup ? (
             <View style={[styles.attention, { backgroundColor: palette.warningSoft, borderColor: palette.warning }]}>
@@ -755,6 +824,41 @@ const styles = StyleSheet.create({
   flexCopy: { flex: 1 }, rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md }, iconTitle: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   hero: { gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl }, heroTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md }, heroCopy: { flex: 1 }, heroEyebrow: { color: "rgba(255,255,255,.72)", ...typography.eyebrow, fontSize: 9 }, heroValue: { color: "#FFFFFF", fontSize: 35, lineHeight: 43, fontWeight: "900", letterSpacing: -1, marginTop: 4 }, heroBody: { color: "rgba(255,255,255,.84)", ...typography.caption }, heroIcon: { width: 50, height: 50, borderRadius: 17, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" }, heroFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm }, heroFooterText: { flex: 1, textAlign: "right", color: "rgba(255,255,255,.82)", ...typography.caption },
   attention: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md }, metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, metric: { width: "48%", flexGrow: 1, gap: 4, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md }, metricValue: { ...typography.subheading, fontSize: 18 },
+  outlookCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.xl,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  outlookMetrics: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  outlookMetric: {
+    minWidth: 112,
+    flexGrow: 1,
+    flexBasis: 0,
+    gap: 2,
+  },
+  outlookMetricLabel: {
+    ...typography.caption,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  outlookMetricValue: {
+    ...typography.bodyStrong,
+    fontSize: 14,
+  },
+  outlookRecommendation: {
+    ...typography.caption,
+    lineHeight: 17,
+  },
+  outlookDisclaimer: {
+    ...typography.caption,
+    fontSize: 10,
+    lineHeight: 15,
+  },
   sourceCard: { gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md }, smallIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" }, cardTitle: { ...typography.bodyStrong, fontSize: 14 }, body: { ...typography.caption, lineHeight: 18 }, caption: { ...typography.caption }, actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   editor: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg }, fieldGroup: { gap: spacing.sm }, fieldLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" }, input: { minHeight: 52, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: 16 }, choices: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, choice: { borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }, choiceText: { ...typography.caption, fontWeight: "800" },
   list: { gap: spacing.sm }, listCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md }, notice: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md }, noticeText: { flex: 1, ...typography.caption, fontWeight: "800", lineHeight: 18 }, readOnly: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
