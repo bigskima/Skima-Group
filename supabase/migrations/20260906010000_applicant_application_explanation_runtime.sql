@@ -225,8 +225,14 @@ begin
           count(submission.id) filter (
             where submission.status = 'approved'
           )::integer as approved_count,
-          coalesce(bool_or(submission.status in ('rejected','correction_required')), false)
-            as needs_correction,
+          coalesce((
+            select latest_submission.status in ('rejected','correction_required')
+            from public.document_submissions latest_submission
+            where latest_submission.application_id = application_record.id
+              and latest_submission.requirement_id = requirement.id
+            order by latest_submission.created_at desc, latest_submission.id desc
+            limit 1
+          ), false) as needs_correction,
           (
             select latest_submission.status
             from public.document_submissions latest_submission
