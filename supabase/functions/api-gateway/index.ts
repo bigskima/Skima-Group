@@ -10729,7 +10729,7 @@ async function buildAiAssistantContext(
   }
 
   if (workspace === "driver") {
-    const [driver, jobs, commissions] = await Promise.all([
+    const [driver, jobs, commissions, earningsExplanations] = await Promise.all([
       supabase
         .from("driver_profiles")
         .select("id,verification_status,operational_status,updated_at")
@@ -10741,6 +10741,10 @@ async function buildAiAssistantContext(
         .select("id,public_reference,order_id,currency_code,amount,status,created_at,updated_at")
         .order("created_at", { ascending: false })
         .limit(10),
+      supabase.rpc("read_my_lpg_driver_earnings_explanations", {
+        target_lpg_order_id: null,
+        target_limit: 10,
+      }),
     ]);
     assertAiContextQuery(driver.error);
     assertAiContextQuery(jobs.error);
@@ -10750,6 +10754,9 @@ async function buildAiAssistantContext(
       driver: driver.data ?? null,
       activeJobs: Array.isArray(jobs.data) ? jobs.data : [],
       recentEarnings: commissions.data ?? [],
+      earningsExplanations: earningsExplanations.error
+        ? []
+        : Array.isArray(earningsExplanations.data) ? earningsExplanations.data : [],
       myApplications: ownApplications,
     };
   }
@@ -11117,6 +11124,8 @@ function aiSystemPrompt(workspace: string): string {
     "Do not claim to have changed an order, payment, wallet, dispatch assignment, inventory value, approval or permission. This assistant is read-only. A separate user-confirmed support action may create a normal complaint record, but you cannot submit it yourself.",
     "Demand forecasts are statistical estimates from recent SKIMA order history. Never present them as guaranteed demand, authoritative inventory, a price instruction, or a dispatch decision.",
     "Customer refill outlooks are estimates from that customer's historical refill intervals. They do not measure remaining gas, cylinder pressure or safety and must never be described as a gas gauge.",
+    "Driver earningsExplanations come from the assigned driver's immutable locked LPG payout snapshot and canonical commission execution. A locked payout that is pending delivery or awaiting posting is not yet posted earnings. Only say money was credited when walletPostingRecorded is true and the canonical execution status is posted.",
+    "Never estimate a driver's earned amount, change a payout, trigger commission release, move wallet money, or substitute another driver's financial records.",
     "Customer support case context contains only that customer's complaint status and public support history. Never invent internal review notes, private moderation decisions, or a resolution that is not present.",
     "Customer priceExplanations come from that customer's immutable accepted LPG order snapshot. Use those accepted station price, SKIMA markup, delivery components, quantity, tax, total, actual kg and posted adjustment values when explaining a customer's price. Never substitute admin pricing simulations, current station prices, or a newly calculated scenario for the accepted order price.",
     "A customer price explanation is descriptive only. Never claim that Ask SKIMA changed the station price, SKIMA markup, delivery fee, tax, total, refund or financial policy.",
