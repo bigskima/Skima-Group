@@ -28,6 +28,10 @@ const [
   adminAiWorkspace,
   mobileAssistant,
   mobileAiLauncher,
+  mobileAiContextAction,
+  customerOrderScreen,
+  jobDetailScreen,
+  stationInventoryScreen,
   customerLayout,
   driverLayout,
   stationLayout,
@@ -59,6 +63,10 @@ const [
   readRepositoryFile("apps/admin/src/admin-ai-workspace.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/AiAssistantScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/AiAssistantLauncher.tsx"),
+  readRepositoryFile("apps/lpg-mobile/src/native/ui/AiContextAction.tsx"),
+  readRepositoryFile("apps/lpg-mobile/src/native/ui/CustomerOrdersScreen.tsx"),
+  readRepositoryFile("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+  readRepositoryFile("apps/lpg-mobile/src/native/ui/StationInventoryScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/app/(customer)/_layout.tsx"),
   readRepositoryFile("apps/lpg-mobile/app/(driver)/_layout.tsx"),
   readRepositoryFile("apps/lpg-mobile/app/(station)/_layout.tsx"),
@@ -421,6 +429,54 @@ Deno.test("home intelligence is deterministic and reuses the existing Ask SKIMA 
     mobileAiLauncher,
     /GEMINI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|SUPABASE_SERVICE_ROLE/,
     "home intelligence UI must not contain server credentials",
+  );
+});
+
+Deno.test("contextual AI actions prefill questions but never auto-send them", () => {
+  assertIncludes(
+    mobileAiContextAction,
+    "assistant?prompt=",
+    "contextual explain actions must open the existing assistant with a prepared question",
+  );
+  assertIncludes(
+    mobileAiContextAction,
+    "Nothing is sent until you choose Send.",
+    "contextual action copy must explain the user confirmation boundary",
+  );
+  assertIncludes(
+    mobileAssistant,
+    "const [draft, setDraft] = useState(initialPrompt.slice(0, 3000));",
+    "assistant should prefill the contextual prompt as editable draft text",
+  );
+  assertNotIncludes(
+    mobileAssistant,
+    "send(initialPrompt)",
+    "contextual prompts must not automatically consume AI quota",
+  );
+  assertIncludes(
+    mobileAssistant,
+    "Contextual questions are prepared here but never sent automatically.",
+    "assistant must communicate that contextual prompts are not auto-submitted",
+  );
+  assertIncludes(
+    customerOrderScreen,
+    'label="Explain this refill"',
+    "customer order details should offer a contextual explanation action",
+  );
+  assertIncludes(
+    jobDetailScreen,
+    'label={workspace === "driver" ? "What should I do next?" : "Explain this station job"}',
+    "driver and station job details should offer contextual workflow guidance",
+  );
+  assertIncludes(
+    stationInventoryScreen,
+    'label="Explain inventory status"',
+    "station inventory should offer contextual explanation without changing stock",
+  );
+  assertNotMatch(
+    mobileAiContextAction,
+    /mutateAsync|invokeAiText|GEMINI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY/,
+    "contextual action component must only navigate and must never execute AI or expose credentials",
   );
 });
 
