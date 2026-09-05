@@ -12,6 +12,8 @@ const [
   complaintStatusSql,
   partnerRiskSql,
   partnerRiskGuardSql,
+  dispatchShadowSql,
+  dispatchShadowGuardSql,
   providerRuntime,
   workerSource,
   gatewaySource,
@@ -32,6 +34,8 @@ const [
   readRepositoryFile("supabase/migrations/20260905230500_customer_complaint_status_read_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233000_ai_partner_trust_risk_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233500_ai_partner_risk_configuration_guard.sql"),
+  readRepositoryFile("supabase/migrations/20260905235000_ai_dispatch_shadow_intelligence.sql"),
+  readRepositoryFile("supabase/migrations/20260905235500_ai_dispatch_shadow_configuration_guard.sql"),
   readRepositoryFile("supabase/functions/_shared/ai-provider-runtime.ts"),
   readRepositoryFile("supabase/functions/runtime-worker/index.ts"),
   readRepositoryFile("supabase/functions/api-gateway/index.ts"),
@@ -354,10 +358,10 @@ Deno.test("forecast runtime is fail-soft and clearly labelled as an estimate", (
     'reason: "forecast_runtime_not_ready"',
     "worker must tolerate an undeployed forecast migration",
   );
-  assertMatch(
+  assertIncludes(
     workerSource,
-    /data:\s*\{\s*aiForecasts,\s*aiInsights,\s*aiRisk,\s*aiTasks,/,
-    "worker response must expose forecast refresh health",
+    "aiForecasts,",
+    "worker response/health payload must expose forecast refresh health",
   );
   assertIncludes(
     gatewaySource,
@@ -652,17 +656,173 @@ Deno.test("partner risk is exposed only to authorized admin intelligence", () =>
   );
 });
 
+Deno.test("dispatch intelligence stays deterministic and shadow-only", () => {
+  const sql = normalizeWhitespace(dispatchShadowSql);
+
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_dispatch_run_assessments",
+    "dispatch shadow runs must be persisted separately from canonical dispatch",
+  );
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_dispatch_candidate_assessments",
+    "shadow candidate comparisons must have their own audit records",
+  );
+  assertIncludes(
+    sql,
+    '"control": "shadow_only"',
+    "dispatch intelligence must be seeded in shadow-only mode",
+  );
+  assertIncludes(
+    sql,
+    '"risk_does_not_change_rank": true',
+    "partner risk must not change the shadow dispatch rank",
+  );
+  assertIncludes(
+    sql,
+    "'rankingeffect', 'none'",
+    "risk evidence in shadow dispatch must explicitly have zero ranking effect",
+  );
+  assertIncludes(
+    sql,
+    "'canonicaldispatchremainsauthoritative', true",
+    "shadow assessment evidence must identify canonical dispatch as authoritative",
+  );
+  assertIncludes(
+    sql,
+    "'doesnotassigndriver', true",
+    "shadow candidate evidence must state that it does not assign a driver",
+  );
+  assertNotMatch(
+    dispatchShadowSql,
+    /provider\.ai\.|resolve_ai_provider_route|executeAiText|generativelanguage|chat\/completions/,
+    "shadow ranking must not require an LLM provider",
+  );
+  assertNotMatch(
+    dispatchShadowSql,
+    /\b(?:update|insert\s+into|delete\s+from)\s+public\.(?:dispatch_candidates|dispatch_requests|lpg_refill_orders|lpg_station_branches|lpg_station_capacity_reservations)\b/i,
+    "shadow intelligence must never mutate canonical dispatch/order/capacity tables",
+  );
+  assertIncludes(
+    sql,
+    "revoke all on function public.refresh_ai_dispatch_shadow_assessments() from public, anon, authenticated",
+    "shadow refresh must remain unavailable to normal clients",
+  );
+  assertIncludes(
+    sql,
+    "grant execute on function public.refresh_ai_dispatch_shadow_assessments() to service_role",
+    "shadow refresh must remain a backend worker operation",
+  );
+});
+
+Deno.test("shadow dispatch configuration cannot be promoted into assignment authority", () => {
+  const sql = normalizeWhitespace(dispatchShadowGuardSql);
+
+  assertIncludes(
+    sql,
+    "create or replace function public.validate_ai_dispatch_rule_config",
+    "dispatch intelligence configuration needs a database guard",
+  );
+  assertIncludes(
+    sql,
+    "dispatch intelligence control must remain shadow_only",
+    "configuration must reject non-shadow control modes",
+  );
+  assertIncludes(
+    sql,
+    "partner risk must remain review-only and must not change dispatch rank",
+    "configuration must forbid risk from changing the rank",
+  );
+  assertIncludes(
+    sql,
+    "recent assignment fairness penalty must be between 0 and 5000 meters",
+    "fairness adjustment must be bounded",
+  );
+  assertIncludes(
+    sql,
+    "maximum dispatch fairness penalty must be between 0 and 20000 meters",
+    "maximum fairness adjustment must be bounded",
+  );
+});
+
+Deno.test("shadow dispatch comparisons remain admin-only and visibly non-authoritative", () => {
+  assertIncludes(
+    gatewaySource,
+    "dispatchShadowAssessments:",
+    "admin Ask SKIMA context must receive shadow dispatch comparisons",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Canonical SKIMA dispatch remains authoritative",
+    "assistant prompt must preserve canonical dispatch authority",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Risk signals in shadow dispatch are review-only and have no ranking effect.",
+    "assistant prompt must preserve the risk review-only boundary",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Never disclose dispatch shadow assessments to customer, driver or station workspaces.",
+    "shadow comparisons must not leak into partner/customer workspaces",
+  );
+  assertNotIncludes(
+    mobileAssistant,
+    "dispatchShadowAssessments",
+    "mobile Ask SKIMA must not receive internal shadow dispatch data",
+  );
+  assertNotIncludes(
+    mobileAssistant,
+    "Shadow dispatch review",
+    "shadow dispatch administration must not appear in partner/customer UI",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "Shadow dispatch review",
+    "admin SKIMA Intelligence must surface the shadow comparison",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "The production dispatcher still assigns drivers.",
+    "admin UI must explain which dispatcher has authority",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "No comparison on this screen can assign, reject, block or make a driver ineligible.",
+    "admin UI must expose the non-enforcement boundary",
+  );
+  assertIncludes(
+    workerSource,
+    'source: "runtime-worker.ai-dispatch-shadow"',
+    "worker must isolate shadow dispatch refresh failures",
+  );
+  assertIncludes(
+    workerSource,
+    'reason: "dispatch_shadow_runtime_not_ready"',
+    "worker must fail soft when shadow dispatch migrations are not deployed",
+  );
+});
+
 Deno.test("worker reports exception refresh exactly once per response section", () => {
   assertNotIncludes(
     workerSource,
     "aiInsights,\n        aiInsights,",
     "worker health details must not duplicate the AI insight result",
   );
-  assertMatch(
-    workerSource,
-    /data:\s*\{\s*aiForecasts,\s*aiInsights,\s*aiRisk,\s*aiTasks,/,
-    "worker response must expose the AI insight refresh result",
-  );
+  for (const workerResult of [
+    "aiInsights,",
+    "aiForecasts,",
+    "aiRisk,",
+    "aiDispatch,",
+    "aiTasks,",
+  ]) {
+    assertIncludes(
+      workerSource,
+      workerResult,
+      `worker response/health payload must expose ${workerResult.replace(",", "")}`,
+    );
+  }
 });
 
 async function readRepositoryFile(path: string): Promise<string> {
