@@ -72,6 +72,17 @@
     "20260826183151_stabilize_pricing_fees_and_team_invitations.sql",
     "20260827033417_repair_station_pricing_and_invitation_notifications.sql",
     "20260829082943_station_inventory_runtime_foundation.sql",
-    "20260829143051_station_inventory_operations_runtime.sql"
+    "20260829143051_station_inventory_operations_runtime.sql",
+    "20260905013500_complete_geography_cutover_review_workflow.sql",
+    "20260905014400_universal_partner_application_geography_reconciliation.sql",
+    "20260905014900_station_universal_coverage_lifecycle_sync.sql",
+    "20260905015800_partner_onboarding_policy_cutover.sql",
+    "20260905020200_universal_partner_candidate_coverage_runtime.sql",
+    "20260905230500_customer_complaint_status_read_runtime.sql",
+    "20260906005000_customer_price_explanation_runtime.sql",
+    "20260906006000_driver_earnings_explanation_runtime.sql",
+    "20260906007000_station_settlement_explanation_runtime.sql",
+    "20260906008000_customer_serviceability_explanation_runtime.sql",
+    "20260906013000_ai_driver_daily_brief.sql"
   ]
 }
