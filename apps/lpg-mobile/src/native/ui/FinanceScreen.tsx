@@ -88,7 +88,14 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
               detail="Ask why recent delivery pay is pending or posted. Nothing is sent until you choose Send."
               prompt="Explain my recent LPG delivery earnings using my locked payout records. Show which payouts are still pending delivery or posting and which are actually posted to my driver wallet. For each relevant payout, explain the base, distance, load and route surcharge components when they are available. Do not estimate earnings, release commission, move wallet money or change a payout."
             />
-          ) : null}
+          ) : (
+            <AiContextAction
+              workspace="station"
+              label="Explain station earnings"
+              detail="Ask why recent LPG settlement amounts changed or posted. Nothing is sent until you choose Send."
+              prompt="Explain my recent station LPG settlements using only the branch settlement records I can access. Show the accepted station gas amount, actual fulfilled kilograms, any reduction to the station principal, and whether the settlement is actually posted. Do not expose platform margin, driver payout or escrow internals, and do not release settlement, move money or change a station balance."
+            />
+          )}
 
           <SectionHeader
             title="Recent activity"
