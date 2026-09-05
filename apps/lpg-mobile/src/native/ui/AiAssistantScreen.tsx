@@ -269,8 +269,8 @@ function workspaceCopy(workspace: AiAssistantWorkspace) {
   if (workspace === "station") {
     return {
       title: "Station operations assistant",
-      subtitle: "Understand your reception queue and active LPG work without changing operational records.",
-      body: "A concise view of the work already available to your station account.",
+      subtitle: "Understand your reception queue, active LPG work and demand outlook without changing operational records.",
+      body: "Live station facts plus clearly labelled demand estimates from recent SKIMA order history.",
       placeholder: "Ask what needs attention",
     };
   }
@@ -287,9 +287,9 @@ function initialSuggestions(workspace: AiAssistantWorkspace): string[] {
     return ["What do I do next?", "Summarize my active jobs", "Explain my recent earnings"];
   }
   if (workspace === "station") {
-    return ["What needs attention?", "Summarize my current queue", "What work is active right now?"];
+    return ["What needs attention?", "How busy could the next 7 days be?", "Summarize my current queue"];
   }
-  return ["Where is my refill?", "Explain my latest order", "Which cylinder did I use last?"];
+  return ["Where is my refill?", "What's happening with my application?", "Explain my latest order"];
 }
 
 const styles = StyleSheet.create({
