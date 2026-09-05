@@ -21,6 +21,8 @@ export default function Layout() {
           "withdraw",
           "profile",
           "service-zone",
+          "account-tools",
+          "account-settings",
         ]}
       />
     </WorkspaceGate>
