@@ -322,6 +322,7 @@ export function AdminAiWorkspace() {
                       <RouteEditor
                         api={api}
                         capabilityKey={capabilityKey}
+                        capabilityResponseMode={recordString(capability, "response_mode") ?? "text"}
                         providers={providers}
                         currentProviderKey={recordString(provider, "key")}
                         currentModel={recordString(route, "model_key")}
@@ -462,6 +463,7 @@ function OperationalInsightsPanel(props: {
 function RouteEditor(props: {
   readonly api: ReturnType<typeof useSessionState>["api"];
   readonly capabilityKey: string;
+  readonly capabilityResponseMode: string;
   readonly providers: readonly PlatformRecord[];
   readonly currentProviderKey: string | null;
   readonly currentModel: string | null;
@@ -469,9 +471,10 @@ function RouteEditor(props: {
 }) {
   const activeProviders = useMemo(
     () => props.providers.filter((provider) =>
-      ["active", "degraded"].includes(recordString(provider, "status") ?? "")
+      ["active", "degraded"].includes(recordString(provider, "status") ?? "") &&
+      providerSupportsResponseMode(provider, props.capabilityResponseMode)
     ),
-    [props.providers],
+    [props.capabilityResponseMode, props.providers],
   );
   const [providerKey, setProviderKey] = useState(
     props.currentProviderKey ?? recordString(activeProviders[0], "key") ?? "",
@@ -670,6 +673,21 @@ function ProviderSetupForm(props: {
       </div>
     </form>
   );
+}
+
+function providerSupportsResponseMode(provider: PlatformRecord, responseMode: string): boolean {
+  const config = recordObject(provider, "config");
+  const supports = config.supports;
+  return Array.isArray(supports) && supports.some(
+    (value) => typeof value === "string" && value === responseMode,
+  );
+}
+
+function recordObject(record: PlatformRecord | null | undefined, key: string): Readonly<Record<string, unknown>> {
+  const value = record?.[key];
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Readonly<Record<string, unknown>>
+    : {};
 }
 
 function severityRank(value: string | null): number {
