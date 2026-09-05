@@ -61,12 +61,12 @@ export function NotificationsScreen() {
 
   return (
     <Screen
-      eyebrow="Activity & updates"
+      eyebrow="Updates"
       title="Notifications"
-      subtitle="Payment, refill, delivery, and partner updates from SKIMA in one place."
+      subtitle="The SKIMA updates that need your attention."
       action={
         <AppButton
-          label="Enable"
+          label="Alerts"
           size="sm"
           icon={<BellRing color="#FFFFFF" size={15} />}
           onPress={() => void enable()}
@@ -153,17 +153,20 @@ export function NotificationsScreen() {
                   {
                     backgroundColor: palette.surface,
                     borderColor: palette.border,
-                    opacity: target && pressed ? 0.72 : 1,
+                    opacity: target && pressed ? 0.78 : 1,
+                    transform: [{ scale: target && pressed ? 0.99 : 1 }],
                   },
                 ]}
               >
                 <View style={[styles.iconBox, { backgroundColor: iconBackground }]}>{icon}</View>
                 <View style={styles.itemCopy}>
-                  <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
-                  <Text style={[styles.body, { color: palette.mutedStrong }]}>{body}</Text>
-                  <Text style={[styles.time, { color: palette.muted }]}>{formatDate(created)}</Text>
+                  <View style={styles.titleRow}>
+                    <Text numberOfLines={1} style={[styles.title, { color: palette.ink }]}>{title}</Text>
+                    <Text numberOfLines={1} style={[styles.time, { color: palette.muted }]}>{formatDate(created)}</Text>
+                  </View>
+                  <Text numberOfLines={2} style={[styles.body, { color: palette.mutedStrong }]}>{body}</Text>
                 </View>
-                {target ? <ChevronRight color={palette.muted} size={18} /> : null}
+                {target ? <ChevronRight color={palette.muted} size={17} /> : null}
               </Pressable>
             );
           })}
@@ -242,19 +245,20 @@ function formatDate(value: string | null) {
 }
 
 const styles = StyleSheet.create({
-  tabBar: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginBottom: spacing.xs },
-  tab: { minHeight: 38, justifyContent: "center", paddingHorizontal: 13, paddingVertical: 7, borderRadius: radii.pill, borderWidth: StyleSheet.hairlineWidth },
-  tabText: { ...typography.caption, fontSize: 12, fontWeight: "800" },
+  tabBar: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: spacing.xs },
+  tab: { minHeight: 36, justifyContent: "center", paddingHorizontal: 12, paddingVertical: 6, borderRadius: radii.pill, borderWidth: StyleSheet.hairlineWidth },
+  tabText: { ...typography.caption, fontSize: 10, fontWeight: "900" },
   notice: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth },
   noticeText: { ...typography.caption, flex: 1 },
   loading: { minHeight: 160, alignItems: "center", justifyContent: "center" },
   list: { gap: spacing.sm },
-  item: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg },
-  iconBox: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  itemCopy: { flex: 1, gap: 3 },
-  title: { ...typography.bodyStrong, fontSize: 14 },
-  body: { ...typography.caption, fontSize: 12, lineHeight: 18 },
-  time: { ...typography.caption, fontSize: 10, marginTop: 2 },
+  item: { minHeight: 82, flexDirection: "row", alignItems: "center", gap: 12, padding: 13, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl },
+  iconBox: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  itemCopy: { flex: 1, minWidth: 0, gap: 4 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  title: { flex: 1, minWidth: 0, ...typography.bodyStrong, fontSize: 13 },
+  body: { ...typography.caption, fontSize: 11, lineHeight: 16 },
+  time: { flexShrink: 0, ...typography.caption, fontSize: 9 },
   errorTitle: { ...typography.subheading, fontSize: 15 },
   errorBody: { ...typography.caption, lineHeight: 18 },
   retryButton: { alignSelf: "flex-start", minWidth: 130, marginTop: spacing.xs },
