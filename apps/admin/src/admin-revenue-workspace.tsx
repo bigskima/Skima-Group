@@ -590,7 +590,7 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
             label="Paystack transfer balance"
             value={providerBalance.data?.balance === null || providerBalance.data?.balance === undefined
               ? "Unavailable"
-              : money(providerBalance.data.balance, providerBalance.data.currencyCode)}
+              : money(providerBalance.data.balance, (providerBalance.data.currencyCode ?? "NGN"))}
             icon={Landmark}
             tone={providerBalance.data?.available ? "info" : "neutral"}
           />
@@ -731,7 +731,7 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
               <div className="skima-grid skima-grid--compact">
                 <MetricTile
                   label="Ledger available for company withdrawal"
-                  value={money(payoutContext.data.availableBalance, payoutContext.data.currencyCode)}
+                  value={money(payoutContext.data.availableBalance, (payoutContext.data.currencyCode ?? "NGN"))}
                   icon={WalletCards}
                   tone="success"
                 />
@@ -739,7 +739,7 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
                   label="Paystack available for transfers"
                   value={providerBalance.data?.balance === null || providerBalance.data?.balance === undefined
                     ? "Unavailable"
-                    : money(providerBalance.data.balance, providerBalance.data.currencyCode)}
+                    : money(providerBalance.data.balance, (providerBalance.data.currencyCode ?? "NGN"))}
                   icon={Landmark}
                   tone="info"
                 />

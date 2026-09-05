@@ -173,7 +173,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
         conversationId: conversationId ?? undefined,
       });
       setConversationId(result.conversationId);
-      setSuggestions(result.suggestions);
+      setSuggestions(result.suggestions ?? initialSuggestions(workspace));
       setMessages((current) => [
         ...current,
         {

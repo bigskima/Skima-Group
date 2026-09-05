@@ -75,10 +75,8 @@ describe("prepareLocationSave", () => {
     [{ label: "Home", selected: { ...selected, formattedAddress: "No" } }, "Add a street"],
   ])("rejects a payload that would fail the database contract", (overrides, expected) => {
     const result = prepareLocationSave({
-      label: "Home",
       landmark: "",
       manualAddress: "",
-      selected,
       ...overrides,
     });
 

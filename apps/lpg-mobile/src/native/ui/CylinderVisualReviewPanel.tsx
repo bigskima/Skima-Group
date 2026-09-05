@@ -45,6 +45,10 @@ export function CylinderVisualReviewPanel({
   });
 
   const review = reviews.data?.[0] ?? null;
+  const visibleMarkings = review?.visibleMarkings ?? [];
+  const appearanceObservations = review?.appearanceObservations ?? [];
+  const retakeSuggestions = review?.retakeSuggestions ?? [];
+  const primaryRetakeSuggestion = retakeSuggestions[0] ?? null;
   const mutation = useGatewayMutation({
     path: "/runtime/ai/cylinder-visual-review",
     schema: CylinderVisualReviewSchema,
@@ -123,11 +127,11 @@ export function CylinderVisualReviewPanel({
             />
           </View>
 
-          {review.visibleMarkings.length ? (
+          {visibleMarkings.length ? (
             <View style={styles.section}>
               <Text style={[styles.sectionLabel, { color: palette.muted }]}>VISIBLE MARKINGS</Text>
               <View style={styles.chips}>
-                {review.visibleMarkings.slice(0, 4).map((item) => (
+                {visibleMarkings.slice(0, 4).map((item) => (
                   <View
                     key={item}
                     style={[
@@ -145,20 +149,20 @@ export function CylinderVisualReviewPanel({
             </View>
           ) : null}
 
-          {review.appearanceObservations.length ? (
+          {appearanceObservations.length ? (
             <View style={styles.section}>
               <Text style={[styles.sectionLabel, { color: palette.muted }]}>VISIBLE APPEARANCE</Text>
               <Text style={[styles.observation, { color: palette.ink }]}>
-                {review.appearanceObservations.slice(0, 3).join(" · ")}
+                {appearanceObservations.slice(0, 3).join(" · ")}
               </Text>
             </View>
           ) : null}
 
-          {review.retakeSuggestions.length ? (
+          {primaryRetakeSuggestion ? (
             <View style={[styles.retake, { backgroundColor: palette.surfaceSubtle }]}>
               <RefreshCw color={palette.mutedStrong} size={15} />
               <Text style={[styles.retakeText, { color: palette.mutedStrong }]}>
-                {review.retakeSuggestions[0]}
+                {primaryRetakeSuggestion}
               </Text>
             </View>
           ) : null}
