@@ -54,6 +54,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const aiFinance = await refreshAiFinanceReconciliationFindings(supabase);
     const aiPricing = await refreshAiPricingIntelligence(supabase);
     const aiExpansion = await refreshAiExpansionOpportunities(supabase);
+    const aiSupportTriage = await refreshAiSupportTriageAssessments(supabase);
     const webhooks = await processWebhooks(supabase, limit);
     const jobs = await processBackgroundJobs(supabase, limit);
     const expirations = await expireEscrowHolds(supabase, limit);
@@ -70,6 +71,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         aiForecasts,
         aiInsights,
         aiRisk,
+        aiSupportTriage,
         aiTasks,
         communications,
         expirations,
@@ -94,6 +96,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         aiForecasts,
         aiInsights,
         aiRisk,
+        aiSupportTriage,
         aiTasks,
         communications,
         expirations,
@@ -483,6 +486,28 @@ async function refreshAiExpansionOpportunities(
     return {
       status: "unavailable",
       reason: "expansion_intelligence_runtime_not_ready",
+    };
+  }
+
+  return optionalRecord(result.data) ?? {
+    status: "completed",
+  };
+}
+
+async function refreshAiSupportTriageAssessments(
+  supabase: RuntimeSupabaseClient,
+): Promise<Readonly<Record<string, unknown>>> {
+  const result = await supabase.rpc("refresh_ai_support_triage_assessments");
+
+  if (result.error) {
+    console.warn(JSON.stringify({
+      severity: "warning",
+      source: "runtime-worker.ai-support-triage",
+      message: result.error.message,
+    }));
+    return {
+      status: "unavailable",
+      reason: "support_triage_runtime_not_ready",
     };
   }
 
