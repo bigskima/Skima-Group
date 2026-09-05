@@ -13,6 +13,7 @@ const [
   cylinderVisualReviewSql,
   customerPriceExplanationSql,
   driverEarningsExplanationSql,
+  stationSettlementExplanationSql,
   partnerRiskSql,
   partnerRiskGuardSql,
   dispatchShadowSql,
@@ -54,6 +55,7 @@ const [
   readRepositoryFile("supabase/migrations/20260905234000_ai_cylinder_visual_review_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906005000_customer_price_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906006000_driver_earnings_explanation_runtime.sql"),
+  readRepositoryFile("supabase/migrations/20260906007000_station_settlement_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233000_ai_partner_trust_risk_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233500_ai_partner_risk_configuration_guard.sql"),
   readRepositoryFile("supabase/migrations/20260905235000_ai_dispatch_shadow_intelligence.sql"),
@@ -1763,6 +1765,81 @@ Deno.test("driver earnings explanations use locked assigned-driver payout record
   );
 });
 
+Deno.test("station settlement explanations are branch-finance-scoped and canonical", () => {
+  const sql = normalizeWhitespace(stationSettlementExplanationSql);
+
+  assertIncludes(
+    sql,
+    "public.can_operate_lpg_station_branch( target_station_branch_id, 'lpg.orders.finance' )",
+    "explicit station settlement reads must require branch finance permission",
+  );
+  assertIncludes(
+    sql,
+    "public.can_operate_lpg_station_branch( target_order.station_branch_id, 'lpg.orders.finance' )",
+    "all station settlement rows must remain branch-finance-scoped",
+  );
+  assertIncludes(
+    sql,
+    "'acceptedstationamount'",
+    "station explanation must expose the accepted station principal",
+  );
+  assertIncludes(
+    sql,
+    "'fulfilledstationamount', target_order.station_amount",
+    "station explanation must expose the actual fulfilled station principal",
+  );
+  assertIncludes(
+    sql,
+    "'stationprincipalreduction'",
+    "station explanation must show quantity-related principal reduction without exposing platform margin",
+  );
+  assertIncludes(
+    sql,
+    "'walletpostingrecorded'",
+    "station explanation must distinguish true posted settlement from pending state",
+  );
+  assertIncludes(
+    sql,
+    "'estimatedbyai', false",
+    "station settlement values must not be AI estimates",
+  );
+  assertNotIncludes(
+    sql,
+    "platformlogisticsmargin",
+    "station settlement projection must not expose platform logistics margin",
+  );
+  assertNotIncludes(
+    sql,
+    "driverpayout",
+    "station settlement projection must not expose driver payout",
+  );
+  assertIncludes(
+    gatewaySource,
+    "settlementExplanations:",
+    "Station Ask SKIMA context must include branch-safe settlement explanations",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Only say station earnings were posted when walletPostingRecorded is true.",
+    "assistant must not claim station earnings before canonical posting",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Never expose platform logistics margin, driver payout or escrow internals in a station settlement explanation",
+    "station copilot must preserve financial data boundaries",
+  );
+  assertIncludes(
+    financeScreen,
+    'label="Explain station earnings"',
+    "station Earnings screen must surface contextual settlement explanation",
+  );
+  assertIncludes(
+    mobileAssistant,
+    "Explain my recent settlement",
+    "station assistant should expose settlement explanation as a suggestion",
+  );
+});
+
 Deno.test("AI workspace context keeps internal intelligence out of station/customer/driver surfaces", () => {
   const customerContext = sectionBetween(
     gatewaySource,
@@ -1816,6 +1893,11 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     gatewaySource,
     'if (workspace === "station")',
     'if (workspace === "admin")',
+  );
+  assertIncludes(
+    stationContext,
+    "read_my_lpg_station_settlement_explanations",
+    "station assistant must ground finance questions in branch-scoped settlement records",
   );
   assertNotIncludes(
     stationContext,
