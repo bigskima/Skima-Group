@@ -5011,6 +5011,31 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const idempotencyKey = requireString(payload.idempotencyKey, "idempotencyKey");
     const orderId = requireUuid(payload.orderId, "orderId");
 
+    const existingComplaints = await supabase.rpc("read_my_lpg_service_complaints", {
+      target_limit: 50,
+    });
+    if (!existingComplaints.error && Array.isArray(existingComplaints.data)) {
+      const duplicate = existingComplaints.data.find((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+        const record = item as Record<string, unknown>;
+        return stringOrNull(record.orderId) === orderId
+          && stringOrNull(record.subjectType) === subjectType
+          && stringOrNull(record.category) === category
+          && ["open", "triaged", "under_review"].includes(stringOrNull(record.status) ?? "");
+      });
+      if (duplicate && typeof duplicate === "object" && !Array.isArray(duplicate)) {
+        return jsonResponse({
+          ok: true,
+          data: {
+            complaintId: stringOrNull((duplicate as Record<string, unknown>).complaintId),
+            existing: true,
+            status: stringOrNull((duplicate as Record<string, unknown>).status),
+          },
+          requestId: id,
+        });
+      }
+    }
+
     return rpcResponse(
       supabase.rpc("create_lpg_service_complaint", {
         target_order_id: orderId,
