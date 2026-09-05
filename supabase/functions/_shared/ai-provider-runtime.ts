@@ -12,10 +12,16 @@ export interface AiProviderRoute {
   readonly secretRef: string | null;
 }
 
+export interface AiImageInput {
+  readonly base64: string;
+  readonly mediaType: string;
+}
+
 export interface AiTextRequest {
   readonly system: string;
   readonly message: string;
   readonly context?: Readonly<Record<string, unknown>>;
+  readonly images?: readonly AiImageInput[];
   readonly history?: readonly {
     readonly role: "user" | "assistant";
     readonly content: string;
@@ -120,6 +126,21 @@ function parseAiProviderRoute(value: unknown): AiProviderRoute | null {
   };
 }
 
+export function aiProviderRouteSupportsInputMode(
+  route: AiProviderRoute,
+  inputMode: "text" | "image",
+): boolean {
+  const configured = arrayValue(route.providerConfig.input_modes)
+    .map((value) => stringValue(value))
+    .filter((value): value is string => Boolean(value));
+
+  if (configured.length === 0) {
+    return inputMode === "text";
+  }
+
+  return configured.includes(inputMode);
+}
+
 export async function invokeAiText(
   route: AiProviderRoute,
   request: AiTextRequest,
@@ -128,6 +149,20 @@ export async function invokeAiText(
     throw new AiProviderRuntimeError(
       "unsupported_response_mode",
       "The configured AI route does not support text responses.",
+    );
+  }
+
+  if ((request.images?.length ?? 0) > 0 && !aiProviderRouteSupportsInputMode(route, "image")) {
+    throw new AiProviderRuntimeError(
+      "unsupported_input_mode",
+      "The configured AI route does not accept image input.",
+    );
+  }
+
+  if ((request.images?.length ?? 0) > 4) {
+    throw new AiProviderRuntimeError(
+      "invalid_multimodal_request",
+      "A maximum of four images can be supplied to one AI request.",
     );
   }
 
@@ -168,9 +203,17 @@ async function invokeGoogleGenerateContent(
     })),
     {
       role: "user",
-      parts: [{
-        text: composeUserMessage(request.message, request.context),
-      }],
+      parts: [
+        {
+          text: composeUserMessage(request.message, request.context),
+        },
+        ...(request.images ?? []).map((image) => ({
+          inlineData: {
+            mimeType: image.mediaType,
+            data: image.base64,
+          },
+        })),
+      ],
     },
   ];
 
@@ -253,7 +296,20 @@ async function invokeOpenAiCompatibleChat(
         })),
         {
           role: "user",
-          content: composeUserMessage(request.message, request.context),
+          content: (request.images?.length ?? 0) > 0
+            ? [
+              {
+                type: "text",
+                text: composeUserMessage(request.message, request.context),
+              },
+              ...(request.images ?? []).map((image) => ({
+                type: "image_url",
+                image_url: {
+                  url: "data:" + image.mediaType + ";base64," + image.base64,
+                },
+              })),
+            ]
+            : composeUserMessage(request.message, request.context),
         },
       ],
     }),
@@ -336,7 +392,22 @@ async function invokeAnthropicMessages(
         })),
         {
           role: "user",
-          content: composeUserMessage(request.message, request.context),
+          content: (request.images?.length ?? 0) > 0
+            ? [
+              {
+                type: "text",
+                text: composeUserMessage(request.message, request.context),
+              },
+              ...(request.images ?? []).map((image) => ({
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: image.mediaType,
+                  data: image.base64,
+                },
+              })),
+            ]
+            : composeUserMessage(request.message, request.context),
         },
       ],
     }),
