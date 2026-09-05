@@ -111,7 +111,7 @@ values
     'active',
     '{
       "threshold_minutes": 60,
-      "statuses": ["created","quoted","payment_pending","payment_authorized","assigned","pickup_en_route","picked_up","station_en_route","station_verified","refill_started","refill_in_progress","return_en_route"],
+      "statuses": ["awaiting_payment","payment_reserved","matching_station","matching_driver","driver_offered","driver_accepted","pickup_en_route","pickup_verified","station_en_route","station_verified","refill_in_progress","refill_confirmed","station_settled","return_en_route","delivery_verification_pending"],
       "recommended_action": "Review the order timeline, current assignment and latest tracking event before contacting the affected party."
     }'::jsonb
   ),
