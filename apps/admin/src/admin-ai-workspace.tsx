@@ -8,6 +8,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  TrendingUp,
   WandSparkles,
 } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
@@ -36,6 +37,7 @@ const AdminAiRuntimeSchema = z.object({
   routes: z.array(PlatformRecordSchema),
   providers: z.array(PlatformRecordSchema),
   insights: z.array(PlatformRecordSchema).default([]),
+  forecasts: z.array(PlatformRecordSchema).default([]),
   userId: z.string().uuid().optional(),
 });
 const AiAssistantResponseSchema = z.object({
@@ -102,6 +104,7 @@ export function AdminAiWorkspace() {
   const routes = runtime.data?.routes ?? [];
   const providers = runtime.data?.providers ?? [];
   const insights = runtime.data?.insights ?? [];
+  const forecasts = runtime.data?.forecasts ?? [];
   const activeCapabilities = capabilities.filter((item) => recordString(item, "status") === "active");
   const activeProviders = providers.filter((item) =>
     ["active", "degraded"].includes(recordString(item, "status") ?? "")
@@ -206,7 +209,7 @@ export function AdminAiWorkspace() {
           <div className="admin-ai-suggestions">
             {[
               "What needs attention right now?",
-              "Summarize current LPG operations",
+              "Where is LPG demand likely to be highest?",
               "Are any AI tasks failing?",
             ].map((suggestion) => (
               <button
@@ -344,6 +347,8 @@ export function AdminAiWorkspace() {
         </div>
       </section>
 
+      <DemandForecastPanel forecasts={forecasts} />
+
       <OperationalInsightsPanel
         api={api}
         insights={insights}
@@ -352,6 +357,81 @@ export function AdminAiWorkspace() {
         }}
       />
     </>
+  );
+}
+
+function DemandForecastPanel(props: {
+  readonly forecasts: readonly PlatformRecord[];
+}) {
+  const sorted = [...props.forecasts]
+    .filter((item) => recordString(item, "subject_type") === "lpg_station_branch")
+    .sort((left, right) => {
+      const horizonDifference = recordNumber(left, "horizon_days") - recordNumber(right, "horizon_days");
+      if (horizonDifference !== 0) return horizonDifference;
+      return recordNumber(right, "predicted_orders") - recordNumber(left, "predicted_orders");
+    });
+  const stationCount = new Set(
+    sorted.map((item) => recordString(item, "subject_id")).filter(Boolean),
+  ).size;
+
+  return (
+    <section className="sk-panel admin-ai-forecasts">
+      <div className="sk-panel__header admin-ai-panel-head">
+        <div>
+          <p className="admin-section-kicker">Demand intelligence</p>
+          <h2>Demand outlook</h2>
+          <p>
+            Statistical estimates from recent valid SKIMA LPG orders. These numbers do not change
+            inventory, pricing, station selection or driver dispatch.
+          </p>
+        </div>
+        <StatusBadge tone="info">
+          {stationCount ? String(stationCount) + " station" + (stationCount === 1 ? "" : "s") : "No history yet"}
+        </StatusBadge>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="admin-ai-forecast-empty">
+          <TrendingUp aria-hidden="true" />
+          <div>
+            <strong>No demand forecast is available yet</strong>
+            <span>Forecasts appear after the runtime has enough station order history to evaluate.</span>
+          </div>
+        </div>
+      ) : (
+        <div className="admin-ai-forecast-grid">
+          {sorted.slice(0, 12).map((forecast) => {
+            const evidence = recordObject(forecast, "evidence");
+            const horizonDays = Math.max(1, Math.round(recordNumber(forecast, "horizon_days")));
+            const confidence = recordString(forecast, "confidence") ?? "low";
+            const stationName = recordString(evidence, "stationDisplayName") ??
+              shortReference(recordString(forecast, "subject_id"));
+            return (
+              <article className="admin-ai-forecast-card" key={recordString(forecast, "id") ?? stationName + horizonDays}>
+                <div className="admin-ai-forecast-card__top">
+                  <span><TrendingUp aria-hidden="true" /></span>
+                  <StatusBadge tone={forecastConfidenceTone(confidence)}>
+                    {normalizeStatusLabel(confidence)} confidence
+                  </StatusBadge>
+                </div>
+                <strong>{stationName}</strong>
+                <small>Next {horizonDays} day{horizonDays === 1 ? "" : "s"} · estimate</small>
+                <div className="admin-ai-forecast-values">
+                  <span>
+                    <b>{formatForecastNumber(recordNumber(forecast, "predicted_orders"), 1)}</b>
+                    <small>orders</small>
+                  </span>
+                  <span>
+                    <b>{formatForecastNumber(recordNumber(forecast, "predicted_kg"), 1)} kg</b>
+                    <small>LPG demand</small>
+                  </span>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -688,6 +768,36 @@ function recordObject(record: PlatformRecord | null | undefined, key: string): R
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Readonly<Record<string, unknown>>
     : {};
+}
+
+function recordNumber(record: PlatformRecord | null | undefined, key: string): number {
+  const value = record?.[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function shortReference(value: string | null): string {
+  if (!value) return "Station";
+  return "Station " + value.slice(0, 8);
+}
+
+function formatForecastNumber(value: number, fractionDigits: number): string {
+  return new Intl.NumberFormat("en-NG", {
+    maximumFractionDigits: fractionDigits,
+    minimumFractionDigits: 0,
+  }).format(Math.max(0, value));
+}
+
+function forecastConfidenceTone(
+  value: string,
+): "neutral" | "success" | "warning" | "danger" | "info" {
+  if (value === "high") return "success";
+  if (value === "medium") return "info";
+  return "warning";
 }
 
 function severityRank(value: string | null): number {
