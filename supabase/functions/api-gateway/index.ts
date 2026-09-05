@@ -10682,7 +10682,7 @@ async function buildAiAssistantContext(
   }
 
   if (workspace === "customer") {
-    const [orders, cylinders, locations, refillOutlook, complaints] = await Promise.all([
+    const [orders, cylinders, locations, refillOutlook, complaints, priceExplanations] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
         .select("id,public_reference,cylinder_id,station_branch_id,driver_profile_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,delivery_fee_amount,platform_fee_amount,status,payment_status,assignment_status,created_at,updated_at")
@@ -10702,6 +10702,10 @@ async function buildAiAssistantContext(
         .limit(5),
       supabase.rpc("read_customer_refill_outlook"),
       supabase.rpc("read_my_lpg_service_complaints", { target_limit: 10 }),
+      supabase.rpc("read_my_lpg_price_explanations", {
+        target_lpg_order_id: null,
+        target_limit: 8,
+      }),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(cylinders.error);
@@ -10717,6 +10721,9 @@ async function buildAiAssistantContext(
       supportCases: complaints.error
         ? []
         : Array.isArray(complaints.data) ? complaints.data : [],
+      priceExplanations: priceExplanations.error
+        ? []
+        : Array.isArray(priceExplanations.data) ? priceExplanations.data : [],
       myApplications: ownApplications,
     };
   }
@@ -11111,6 +11118,8 @@ function aiSystemPrompt(workspace: string): string {
     "Demand forecasts are statistical estimates from recent SKIMA order history. Never present them as guaranteed demand, authoritative inventory, a price instruction, or a dispatch decision.",
     "Customer refill outlooks are estimates from that customer's historical refill intervals. They do not measure remaining gas, cylinder pressure or safety and must never be described as a gas gauge.",
     "Customer support case context contains only that customer's complaint status and public support history. Never invent internal review notes, private moderation decisions, or a resolution that is not present.",
+    "Customer priceExplanations come from that customer's immutable accepted LPG order snapshot. Use those accepted station price, SKIMA markup, delivery components, quantity, tax, total, actual kg and posted adjustment values when explaining a customer's price. Never substitute admin pricing simulations, current station prices, or a newly calculated scenario for the accepted order price.",
+    "A customer price explanation is descriptive only. Never claim that Ask SKIMA changed the station price, SKIMA markup, delivery fee, tax, total, refund or financial policy.",
     "Partner risk assessments are internal advisory signals for authorized administrators only. They are derived from configured SKIMA evidence, are not proof of fraud, and must never be described as an automatic suspension, fund hold, dispatch block, verification decision or public reputation score.",
     "Never disclose internal partner risk assessments to customer, driver or station workspaces.",
     "Dispatch shadow assessments are admin-only comparisons. Canonical SKIMA dispatch remains authoritative; a shadow advisory rank never means a driver was assigned, rejected, blocked or made ineligible. Risk signals in shadow dispatch are review-only and have no ranking effect.",
@@ -11127,7 +11136,7 @@ function aiSystemPrompt(workspace: string): string {
 
 function aiWorkspaceSuggestions(workspace: string): readonly string[] {
   if (workspace === "customer") {
-    return ["Where is my refill?", "When might I need another refill?", "What's happening with my application?"];
+    return ["Where is my refill?", "Explain my latest refill price", "When might I need another refill?"];
   }
   if (workspace === "driver") {
     return ["What do I do next?", "Summarize my active jobs", "Explain my recent earnings"];
