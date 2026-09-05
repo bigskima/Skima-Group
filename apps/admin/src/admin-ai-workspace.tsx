@@ -4,6 +4,7 @@ import {
   Bot,
   CheckCircle2,
   Cpu,
+  MapPinned,
   RefreshCcw,
   Route,
   Send,
@@ -44,6 +45,7 @@ const AdminAiRuntimeSchema = z.object({
   dispatchAssessments: z.array(PlatformRecordSchema).default([]),
   financeFindings: z.array(PlatformRecordSchema).default([]),
   pricingIntelligence: PlatformRecordSchema.nullable().default(null),
+  expansionOpportunities: z.array(PlatformRecordSchema).default([]),
   userId: z.string().uuid().optional(),
 });
 const AiAssistantResponseSchema = z.object({
@@ -115,6 +117,7 @@ export function AdminAiWorkspace() {
   const dispatchAssessments = runtime.data?.dispatchAssessments ?? [];
   const financeFindings = runtime.data?.financeFindings ?? [];
   const pricingIntelligence = runtime.data?.pricingIntelligence ?? null;
+  const expansionOpportunities = runtime.data?.expansionOpportunities ?? [];
   const activeCapabilities = capabilities.filter((item) => recordString(item, "status") === "active");
   const activeProviders = providers.filter((item) =>
     ["active", "degraded"].includes(recordString(item, "status") ?? "")
@@ -359,6 +362,8 @@ export function AdminAiWorkspace() {
 
       <DemandForecastPanel forecasts={forecasts} />
 
+      <ExpansionOpportunitiesPanel opportunities={expansionOpportunities} />
+
       <PricingIntelligencePanel snapshot={pricingIntelligence} />
 
       <DispatchShadowPanel assessments={dispatchAssessments} />
@@ -449,6 +454,131 @@ function DemandForecastPanel(props: {
           })}
         </div>
       )}
+    </section>
+  );
+}
+
+function ExpansionOpportunitiesPanel(props: {
+  readonly opportunities: readonly PlatformRecord[];
+}) {
+  const priorityRank = (value: string | null) => {
+    if (value === "high") return 4;
+    if (value === "medium") return 3;
+    if (value === "low") return 2;
+    return 1;
+  };
+  const sorted = [...props.opportunities].sort((left, right) => {
+    const priorityDifference =
+      priorityRank(recordString(right, "reviewPriority")) -
+      priorityRank(recordString(left, "reviewPriority"));
+    if (priorityDifference !== 0) return priorityDifference;
+    return recordNumber(right, "score") - recordNumber(left, "score");
+  });
+  const highPriority = sorted.filter((item) => recordString(item, "reviewPriority") === "high").length;
+
+  return (
+    <section className="sk-panel admin-ai-expansion">
+      <div className="sk-panel__header admin-ai-panel-head">
+        <div>
+          <p className="admin-section-kicker">Expansion intelligence</p>
+          <h2>Expansion opportunities</h2>
+          <p>
+            Review canonical customer interest together with real driver and station coverage
+            requests. Scores are prioritization aids only; service coverage remains controlled by
+            the Geography & Service Coverage workspace.
+          </p>
+        </div>
+        <div className="admin-ai-expansion-head-actions">
+          <StatusBadge tone={highPriority ? "warning" : sorted.length ? "info" : "success"}>
+            {sorted.length ? String(sorted.length) + " area" + (sorted.length === 1 ? "" : "s") : "No review queue"}
+          </StatusBadge>
+          <Button
+            icon={MapPinned}
+            size="sm"
+            variant="outline"
+            requiredPermission="platform.coverage.read"
+            onClick={() => {
+              window.location.hash = "/coverage";
+            }}
+          >
+            Open coverage workspace
+          </Button>
+        </div>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="admin-ai-expansion-empty">
+          <MapPinned aria-hidden="true" />
+          <div>
+            <strong>No expansion opportunity needs review yet</strong>
+            <span>
+              Customer launch-interest and partner coverage requests will appear here when the
+              worker has enough canonical evidence to rank.
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="admin-ai-expansion-list">
+          {sorted.slice(0, 16).map((opportunity) => {
+            const type = recordString(opportunity, "opportunityType") ?? "monitor";
+            const priority = recordString(opportunity, "reviewPriority") ?? "monitor";
+            const notLaunched = recordNumber(opportunity, "customerNotLaunchedUserCount");
+            const excluded = recordNumber(opportunity, "customerExcludedUserCount");
+            const conflicts = recordNumber(opportunity, "customerPolicyConflictUserCount");
+            const pendingDrivers = recordNumber(opportunity, "pendingDriverApplicantCount");
+            const pendingStations = recordNumber(opportunity, "pendingStationApplicantCount");
+
+            return (
+              <article
+                className={"admin-ai-expansion-row is-" + type}
+                key={recordString(opportunity, "id") ?? recordString(opportunity, "opportunityKey") ?? type}
+              >
+                <div className="admin-ai-expansion-pin">
+                  <MapPinned aria-hidden="true" />
+                </div>
+                <div className="admin-ai-expansion-copy">
+                  <div className="admin-ai-expansion-title">
+                    <strong>{recordString(opportunity, "geographyName") ?? "Unmapped area"}</strong>
+                    <StatusBadge tone={expansionPriorityTone(priority)}>
+                      {normalizeStatusLabel(priority)} priority
+                    </StatusBadge>
+                    <span>{normalizeStatusLabel(type)}</span>
+                  </div>
+                  <div className="admin-ai-expansion-signals">
+                    <span><small>Unlaunched customer interest</small><b>{Math.round(notLaunched)}</b></span>
+                    <span><small>Pending drivers</small><b>{Math.round(pendingDrivers)}</b></span>
+                    <span><small>Pending stations</small><b>{Math.round(pendingStations)}</b></span>
+                    <span><small>Review score</small><b>{formatForecastNumber(recordNumber(opportunity, "score"), 1)}</b></span>
+                  </div>
+                  {excluded > 0 || conflicts > 0 ? (
+                    <div className="admin-ai-expansion-cautions">
+                      {excluded > 0 ? <span>{Math.round(excluded)} interested user{excluded === 1 ? "" : "s"} in intentionally excluded coverage</span> : null}
+                      {conflicts > 0 ? <span>{Math.round(conflicts)} user{conflicts === 1 ? "" : "s"} affected by policy conflict</span> : null}
+                    </div>
+                  ) : null}
+                  <p>
+                    {recordString(opportunity, "recommendedAction") ??
+                      "Review the canonical coverage evidence before making any service-area decision."}
+                  </p>
+                </div>
+                <div className="admin-ai-expansion-mode">
+                  <small>Control</small>
+                  <b>Review only</b>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="admin-ai-expansion-guardrail">
+        <ShieldCheck aria-hidden="true" />
+        <span>
+          SKIMA Intelligence cannot enable a town/LGA, override an exclusion, approve a partner,
+          change operational coverage, or alter dispatch. Coverage changes stay human-approved in
+          the existing geography controls.
+        </span>
+      </div>
     </section>
   );
 }
@@ -1279,6 +1409,15 @@ function riskTone(
 ): "neutral" | "success" | "warning" | "danger" | "info" {
   if (value === "critical" || value === "high") return "danger";
   if (value === "medium") return "warning";
+  return "success";
+}
+
+function expansionPriorityTone(
+  value: string,
+): "neutral" | "success" | "warning" | "danger" | "info" {
+  if (value === "high") return "warning";
+  if (value === "medium") return "info";
+  if (value === "low") return "neutral";
   return "success";
 }
 
