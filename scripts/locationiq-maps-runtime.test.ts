@@ -415,7 +415,7 @@ Deno.test("mobile basemap falls back before a public API-key tile URL can blank 
   assertIncludes(webMap, "EMERGENCY_RASTER_TILE_TEMPLATE");
   assertIncludes(webMap, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
   assertIncludes(webMap, "onError={() => setUseEmergencyTiles(true)}");
-  assertIncludes(webMap, "onSelectPoint ? DEFAULT_MAP_CENTER : null");
+  assertIncludes(webMap, "interactive ? DEFAULT_MAP_CENTER : null");
   assertIncludes(nativeMap, "onSelectPoint ? DEFAULT_MAP_CENTER : null");
   assertIncludes(webMap, "points.length ? initialZoom : 6");
   assertIncludes(nativeMap, "points.length ? initialZoom : 6");
