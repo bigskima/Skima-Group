@@ -191,6 +191,7 @@ function DriverGeographyStep(props: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hydratedKey = useRef<string | null>(null);
+  const candidateLookupKey = useRef<string | null>(null);
 
   useEffect(() => {
     const key = `${props.applicationId ?? "new"}:${props.initialAreaIds.join(",")}`;
@@ -270,8 +271,10 @@ function DriverGeographyStep(props: {
     try {
       const nextLocation = await maps.resolveOperationalLocation(await readOperationalLocation());
       setLocation(nextLocation);
+      candidateLookupKey.current = null;
       try {
         await resolveCandidateCoverage(nextLocation);
+        candidateLookupKey.current = `${nextLocation.latitude.toFixed(6)}:${nextLocation.longitude.toFixed(6)}`;
       } catch {
         setCandidateCoverage(null);
       }
@@ -281,6 +284,16 @@ function DriverGeographyStep(props: {
       setDetectingLocation(false);
     }
   };
+
+  useEffect(() => {
+    if (!location || selectedIds.length > 0 || candidateCoverage) return;
+    const key = `${location.latitude.toFixed(6)}:${location.longitude.toFixed(6)}`;
+    if (candidateLookupKey.current === key) return;
+    candidateLookupKey.current = key;
+    void resolveCandidateCoverage(location).catch(() => {
+      setCandidateCoverage(null);
+    });
+  }, [location, selectedIds.length, candidateCoverage]);
 
   const toggleArea = (areaId: string) => {
     setSelectedIds((current) => {
