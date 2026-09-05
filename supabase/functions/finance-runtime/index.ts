@@ -50,6 +50,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
     if (path === "/beneficiaries/resolve" && request.method === "POST") {
       return resolveBeneficiaryAccount(
+        userClient,
         serviceClient,
         await readBody(request),
         requestId,
@@ -282,12 +283,29 @@ async function payoutBanks(
 }
 
 async function resolveBeneficiaryAccount(
+  userClient: SupabaseClient,
   serviceClient: SupabaseClient,
   body: Body,
   requestId: string,
 ): Promise<Response> {
+  const walletId = requireString(body.walletId, "walletId");
   const bankCode = requireString(body.bankCode, "bankCode");
   const accountNumber = requireString(body.accountNumber, "accountNumber");
+
+  const walletAccess = await userClient.rpc("can_access_wallet_account", {
+    target_wallet_id: walletId,
+  });
+  if (walletAccess.error) {
+    throw new FinanceError("database_error", walletAccess.error.message);
+  }
+  if (walletAccess.data !== true) {
+    throw new FinanceError(
+      "forbidden",
+      "You can only verify a payout account for a wallet you are allowed to use.",
+      403,
+    );
+  }
+
   const providerKey = await activePaymentProvider(serviceClient);
 
   if (providerKey !== "provider.payment.paystack") {
