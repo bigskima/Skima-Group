@@ -40,6 +40,7 @@ const AdminAiRuntimeSchema = z.object({
   insights: z.array(PlatformRecordSchema).default([]),
   forecasts: z.array(PlatformRecordSchema).default([]),
   riskAssessments: z.array(PlatformRecordSchema).default([]),
+  dispatchAssessments: z.array(PlatformRecordSchema).default([]),
   userId: z.string().uuid().optional(),
 });
 const AiAssistantResponseSchema = z.object({
@@ -108,6 +109,7 @@ export function AdminAiWorkspace() {
   const insights = runtime.data?.insights ?? [];
   const forecasts = runtime.data?.forecasts ?? [];
   const riskAssessments = runtime.data?.riskAssessments ?? [];
+  const dispatchAssessments = runtime.data?.dispatchAssessments ?? [];
   const activeCapabilities = capabilities.filter((item) => recordString(item, "status") === "active");
   const activeProviders = providers.filter((item) =>
     ["active", "degraded"].includes(recordString(item, "status") ?? "")
@@ -211,7 +213,7 @@ export function AdminAiWorkspace() {
 
           <div className="admin-ai-suggestions">
             {[
-              "What needs attention right now?",
+              "Where does shadow dispatch disagree?",
               "Which partner risks need review?",
               "Where is LPG demand likely to be highest?",
             ].map((suggestion) => (
@@ -352,6 +354,8 @@ export function AdminAiWorkspace() {
 
       <DemandForecastPanel forecasts={forecasts} />
 
+      <DispatchShadowPanel assessments={dispatchAssessments} />
+
       <PartnerRiskPanel assessments={riskAssessments} />
 
       <OperationalInsightsPanel
@@ -436,6 +440,99 @@ function DemandForecastPanel(props: {
           })}
         </div>
       )}
+    </section>
+  );
+}
+
+function DispatchShadowPanel(props: {
+  readonly assessments: readonly PlatformRecord[];
+}) {
+  const sorted = [...props.assessments].sort((left, right) => {
+    const leftAgreement = recordBoolean(left, "selectionAgreement");
+    const rightAgreement = recordBoolean(right, "selectionAgreement");
+    if (leftAgreement !== rightAgreement) return leftAgreement ? 1 : -1;
+    return (recordString(right, "generatedAt") ?? "").localeCompare(
+      recordString(left, "generatedAt") ?? "",
+    );
+  });
+  const evaluated = sorted.filter((item) => recordBoolean(item, "selectionAgreement") !== null);
+  const agreements = evaluated.filter((item) => recordBoolean(item, "selectionAgreement") === true).length;
+  const disagreements = evaluated.length - agreements;
+  const agreementRate = evaluated.length ? Math.round((agreements / evaluated.length) * 100) : null;
+
+  return (
+    <section className="sk-panel admin-ai-dispatch-shadow">
+      <div className="sk-panel__header admin-ai-panel-head">
+        <div>
+          <p className="admin-section-kicker">Dispatch intelligence</p>
+          <h2>Shadow dispatch review</h2>
+          <p>
+            The production dispatcher still assigns drivers. This shadow model only compares a
+            fairness-aware advisory rank against the canonical selection so SKIMA can evaluate it safely.
+          </p>
+        </div>
+        <StatusBadge tone={disagreements ? "warning" : "success"}>
+          {agreementRate === null ? "No comparisons yet" : String(agreementRate) + "% agreement"}
+        </StatusBadge>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="admin-ai-dispatch-empty">
+          <Route aria-hidden="true" />
+          <div>
+            <strong>No shadow dispatch comparisons yet</strong>
+            <span>Comparisons appear after canonical LPG dispatch has produced eligible driver candidates.</span>
+          </div>
+        </div>
+      ) : (
+        <div className="admin-ai-dispatch-list">
+          {sorted.slice(0, 12).map((assessment) => {
+            const agreement = recordBoolean(assessment, "selectionAgreement");
+            const evidence = recordObject(assessment, "evidence");
+            const canonical = shortReference(recordString(assessment, "canonicalSelectedDriverId"));
+            const advisory = shortReference(recordString(assessment, "advisorySelectedDriverId"));
+            const candidateCount = recordNumber(assessment, "candidateCount");
+            return (
+              <article
+                className={"admin-ai-dispatch-row " + (agreement === false ? "is-disagreement" : "")}
+                key={recordString(assessment, "id") ?? canonical + advisory}
+              >
+                <div className="admin-ai-dispatch-route">
+                  <Route aria-hidden="true" />
+                </div>
+                <div className="admin-ai-dispatch-copy">
+                  <div className="admin-ai-dispatch-title">
+                    <strong>{agreement === false ? "Ranking difference" : "Ranking agreement"}</strong>
+                    <StatusBadge tone={agreement === false ? "warning" : "success"}>
+                      {agreement === false ? "Review" : "Aligned"}
+                    </StatusBadge>
+                    <span>{Math.round(candidateCount)} candidate{candidateCount === 1 ? "" : "s"}</span>
+                  </div>
+                  <div className="admin-ai-dispatch-selection">
+                    <span><small>Canonical</small><b>{canonical}</b></span>
+                    <span><small>Shadow advisory</small><b>{advisory}</b></span>
+                  </div>
+                  <p>
+                    Recent-assignment fairness window: {formatForecastNumber(recordNumber(evidence, "fairnessWindowHours"), 0)}h.
+                    Risk signals are review-only and have no ranking effect.
+                  </p>
+                </div>
+                <div className="admin-ai-dispatch-mode">
+                  <small>Mode</small>
+                  <b>Shadow only</b>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="admin-ai-dispatch-guardrail">
+        <ShieldCheck aria-hidden="true" />
+        <span>
+          No comparison on this screen can assign, reject, block or make a driver ineligible.
+        </span>
+      </div>
     </section>
   );
 }
@@ -848,6 +945,14 @@ function recordObject(record: PlatformRecord | null | undefined, key: string): R
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Readonly<Record<string, unknown>>
     : {};
+}
+
+function recordBoolean(
+  record: PlatformRecord | null | undefined,
+  key: string,
+): boolean | null {
+  const value = record?.[key];
+  return typeof value === "boolean" ? value : null;
 }
 
 function recordNumber(record: PlatformRecord | null | undefined, key: string): number {
