@@ -241,6 +241,19 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
     },
   });
 
+  const migratePolicies = useMutation({
+    mutationFn: async () => {
+      setNotice(null);
+      const { data, error } = await supabase.rpc("migrate_verified_legacy_lpg_coverage_policies");
+      if (error) throw error;
+      return data as { inserted?: number } | null;
+    },
+    onSuccess: async (result) => {
+      setNotice(`Verified LPG coverage migrated: ${result?.inserted ?? 0} new universal policy record(s).`);
+      await refresh();
+    },
+  });
+
   const activateAuthority = useMutation({
     mutationFn: async () => {
       if (!reason.trim()) throw new Error("Enter an activation reason before switching geography authority.");
@@ -292,6 +305,15 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
         </div>
         <div className="skima-action-row">
           <Button variant="outline" icon={RefreshCcw} disabled={importLegacy.isPending} onClick={() => importLegacy.mutate()}>Import existing areas</Button>
+          <Button
+            variant="outline"
+            icon={ShieldCheck}
+            disabled={migratePolicies.isPending || (readiness?.verifiedCount ?? 0) === 0}
+            isLoading={migratePolicies.isPending}
+            onClick={() => migratePolicies.mutate()}
+          >
+            Migrate verified LPG policies
+          </Button>
           {readiness?.authorityMode === "preparing"
             ? <Button icon={ShieldCheck} disabled={!readiness.ready || !reason.trim()} isLoading={activateAuthority.isPending} onClick={() => activateAuthority.mutate()}>Activate universal geography</Button>
             : null}
