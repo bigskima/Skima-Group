@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowUpRight, Building2, CheckCircle2, ShieldCheck, X } from "lucide-react-native";
+import { AlertCircle, ArrowUpRight, Building2, CheckCircle2, RefreshCcw, ShieldCheck, X } from "lucide-react-native";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -14,9 +14,11 @@ export interface WithdrawalModalProps {
   accountNumber: string;
   bankName: string;
   isSubmitting: boolean;
+  isRetrying: boolean;
   submittedResult: { id?: string; reference?: string; status?: string } | null;
   error: string | null;
   onConfirm: () => void;
+  onRetry: () => void;
   onClose: () => void;
 }
 
@@ -30,9 +32,11 @@ export function WithdrawalModal({
   accountNumber,
   bankName,
   isSubmitting,
+  isRetrying,
   submittedResult,
   error,
   onConfirm,
+  onRetry,
   onClose,
 }: WithdrawalModalProps) {
   const { palette } = useAppTheme();
@@ -42,7 +46,21 @@ export function WithdrawalModal({
   const formattedFee = money(feeAmount, currency);
   const formattedTotal = money(totalDebitAmount, currency);
   const maskedAccount = accountNumber.length >= 4 ? `•••• ${accountNumber.slice(-4)}` : accountNumber;
-  const isSuccess = Boolean(submittedResult);
+  const isSubmitted = Boolean(submittedResult);
+  const submittedStatus = submittedResult?.status?.toLowerCase() ?? "";
+  const transferNeedsRetry = submittedStatus === "approved";
+  const transferFailed = submittedStatus === "failed";
+  const transferSucceeded = submittedStatus === "succeeded";
+  const transferProcessing = submittedStatus === "processing";
+  const resultTitle = transferSucceeded
+    ? "Withdrawal sent"
+    : transferProcessing
+    ? "Transfer processing"
+    : transferNeedsRetry
+    ? "Transfer needs another attempt"
+    : transferFailed
+    ? "Transfer failed"
+    : "Withdrawal submitted";
 
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
@@ -55,7 +73,7 @@ export function WithdrawalModal({
               </View>
               <View>
                 <Text style={[styles.headerTitle, { color: palette.ink }]}>
-                  {isSuccess ? "Withdrawal submitted" : "Confirm withdrawal"}
+                  {isSubmitted ? resultTitle : "Confirm withdrawal"}
                 </Text>
                 <Text style={[styles.headerSub, { color: palette.muted }]}>Secure SKIMA payout request</Text>
               </View>
@@ -65,20 +83,47 @@ export function WithdrawalModal({
             </Pressable>
           </View>
 
-          {isSuccess ? (
+          {isSubmitted ? (
             <View style={styles.successContainer}>
-              <View style={[styles.iconCircle, { backgroundColor: palette.success }]}>
-                <CheckCircle2 color="#FFFFFF" size={42} />
+              <View style={[styles.iconCircle, { backgroundColor: transferFailed || transferNeedsRetry ? palette.warning : palette.success }]}>
+                {transferFailed || transferNeedsRetry
+                  ? <AlertCircle color="#FFFFFF" size={42} />
+                  : <CheckCircle2 color="#FFFFFF" size={42} />}
               </View>
-              <Text style={[styles.successTitle, { color: palette.ink }]}>Request received</Text>
+              <Text style={[styles.successTitle, { color: palette.ink }]}>{resultTitle}</Text>
               <Text style={[styles.successSub, { color: palette.muted }]}>
-                <Text style={{ fontWeight: "900", color: palette.ink }}>{formattedAmount}</Text> is being sent to your payout account. Your wallet was debited {formattedTotal}, including the {formattedFee} SKIMA fee shown before confirmation.
+                {transferSucceeded ? (
+                  <>
+                    <Text style={{ fontWeight: "900", color: palette.ink }}>{formattedAmount}</Text> was sent to your payout account.
+                    The total wallet debit was {formattedTotal}, including the {formattedFee} SKIMA fee.
+                  </>
+                ) : transferProcessing ? (
+                  <>
+                    Paystack accepted the transfer of <Text style={{ fontWeight: "900", color: palette.ink }}>{formattedAmount}</Text>.
+                    SKIMA is waiting for the final bank transfer result.
+                  </>
+                ) : transferNeedsRetry ? (
+                  <>
+                    SKIMA reserved {formattedTotal} from your wallet, but the bank transfer could not be confirmed because the provider connection was interrupted.
+                    Your request is safe to retry with the same reference.
+                  </>
+                ) : transferFailed ? (
+                  <>
+                    The bank transfer of <Text style={{ fontWeight: "900", color: palette.ink }}>{formattedAmount}</Text> did not complete.
+                    SKIMA restored the reserved wallet amount automatically.
+                  </>
+                ) : (
+                  <>
+                    Your withdrawal request for <Text style={{ fontWeight: "900", color: palette.ink }}>{formattedAmount}</Text> was received.
+                  </>
+                )}
               </Text>
 
               <View style={[styles.receiptCard, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
                 <ReceiptRow label="Amount to bank" value={formattedAmount} />
                 <ReceiptRow label="SKIMA fee" value={formattedFee} />
                 <ReceiptRow label="Wallet debit" value={formattedTotal} />
+                <ReceiptRow label="Status" value={friendlyTransferStatus(submittedStatus)} />
                 <ReceiptRow label="Destination" value={accountName || "Payout account"} />
                 <ReceiptRow label="Institution" value={bankName || "Bank / institution"} />
                 <ReceiptRow label="Account" value={maskedAccount} />
@@ -87,7 +132,24 @@ export function WithdrawalModal({
                 ) : null}
               </View>
 
-              <AppButton label="Done" fullWidth onPress={onClose} />
+              {error ? (
+                <View style={[styles.errorBox, { backgroundColor: palette.dangerSoft }]}>
+                  <AlertCircle color={palette.danger} size={18} />
+                  <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text>
+                </View>
+              ) : null}
+
+              {transferNeedsRetry ? (
+                <AppButton
+                  label={isRetrying ? "Retrying transfer…" : "Retry bank transfer"}
+                  icon={<RefreshCcw color="#FFFFFF" size={16} />}
+                  fullWidth
+                  loading={isRetrying}
+                  disabled={isRetrying}
+                  onPress={onRetry}
+                />
+              ) : null}
+              <AppButton label="Done" variant={transferNeedsRetry ? "ghost" : "primary"} fullWidth onPress={onClose} />
             </View>
           ) : (
             <View style={styles.confirmContainer}>
@@ -115,7 +177,7 @@ export function WithdrawalModal({
                 </View>
                 <View style={[styles.securityRow, { borderTopColor: palette.border }]}>
                   <ShieldCheck color={palette.success} size={16} />
-                  <Text style={[styles.securityText, { color: palette.muted }]}>The amount shown for your bank excludes the SKIMA fee. You will be charged only after the transfer succeeds.</Text>
+                  <Text style={[styles.securityText, { color: palette.muted }]}>The amount shown for your bank excludes the SKIMA fee. SKIMA reserves the wallet debit when you submit; if the bank transfer fails, the reserved amount is restored automatically.</Text>
                 </View>
               </View>
 
@@ -143,6 +205,17 @@ export function WithdrawalModal({
       </View>
     </Modal>
   );
+}
+
+function friendlyTransferStatus(status: string) {
+  const labels: Record<string, string> = {
+    approved: "Ready to retry",
+    processing: "Processing",
+    succeeded: "Sent",
+    failed: "Failed · funds restored",
+    reversed: "Reversed",
+  };
+  return labels[status] ?? (status ? status.replace(/_/g, " ") : "Submitted");
 }
 
 function ReceiptRow({ label, value }: { label: string; value: string }) {
