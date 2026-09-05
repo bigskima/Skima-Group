@@ -11,6 +11,7 @@ import {
 } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { selectWorkspaceWallet, walletRecordId } from "../utilities/financeWallet";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
@@ -23,11 +24,14 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
   const wallets = domainQueries.wallets();
   const entries = workspace === "driver" ? domainQueries.commissions() : domainQueries.settlements();
   const withdrawals = domainQueries.withdrawals();
-  const wallet = wallets.data?.[0];
+  const wallet = selectWorkspaceWallet(wallets.data ?? [], workspace);
+  const walletId = walletRecordId(wallet);
   const currency = firstString(wallet, ["currency_code", "currencyCode"]) ?? "NGN";
   const available = firstNumber(wallet, ["available_balance", "availableBalance", "balance"]) ?? 0;
   const activity = entries.data ?? [];
-  const withdrawalRows = withdrawals.data ?? [];
+  const withdrawalRows = (withdrawals.data ?? []).filter(
+    (item) => firstString(item, ["wallet_id", "walletId"]) === walletId,
+  );
   const pendingCount = activity.filter((item) => {
     const status = (displayStatus(item) ?? "").toLowerCase();
     return ["pending", "processing", "reserved", "earned_pending", "queued"].includes(status);
