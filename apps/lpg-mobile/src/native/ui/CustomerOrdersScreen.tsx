@@ -13,6 +13,7 @@ import {
 } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { AiContextAction } from "./AiContextAction";
 import { AppButton } from "./AppButton";
 import { Card } from "./Card";
 import { EmptyState } from "./EmptyState";
@@ -172,6 +173,7 @@ export function CustomerOrderDetailScreen() {
   const trackable = TRACKABLE_ORDER_STATES.has(normalized);
   const canVerifyDelivery = DELIVERY_CONFIRMATION_STATES.has(normalized);
   const canShowReceipt = FINAL_ORDER_STATES.has(normalized) || ["paid", "settled"].includes(normalizeStatus(paymentStatus));
+  const aiOrderReference = order ? (displayReference(order) ?? id ?? "this refill") : "this refill";
 
   return (
     <Screen
@@ -216,6 +218,12 @@ export function CustomerOrderDetailScreen() {
               <Text style={styles.heroBody}>Updated {formatDate(firstString(order, ["updated_at", "updatedAt", "created_at"]))}</Text>
             </View>
           </View>
+
+          <AiContextAction
+            workspace="customer"
+            label="Explain this refill"
+            prompt={`Explain my refill order ${aiOrderReference}. Its current SKIMA stage is ${status} and payment status is ${paymentStatus}. Tell me what these mean and what normally happens next. Do not change the order or payment.`}
+          />
 
           <Card padding="lg">
             <View style={styles.detailStatusRow}>
