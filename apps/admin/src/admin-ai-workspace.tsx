@@ -46,6 +46,7 @@ const AdminAiRuntimeSchema = z.object({
   financeFindings: z.array(PlatformRecordSchema).default([]),
   pricingIntelligence: PlatformRecordSchema.nullable().default(null),
   expansionOpportunities: z.array(PlatformRecordSchema).default([]),
+  usageGovernor: PlatformRecordSchema.nullable().default(null),
   userId: z.string().uuid().optional(),
 });
 const AiAssistantResponseSchema = z.object({
@@ -118,6 +119,7 @@ export function AdminAiWorkspace() {
   const financeFindings = runtime.data?.financeFindings ?? [];
   const pricingIntelligence = runtime.data?.pricingIntelligence ?? null;
   const expansionOpportunities = runtime.data?.expansionOpportunities ?? [];
+  const usageGovernor = runtime.data?.usageGovernor ?? null;
   const activeCapabilities = capabilities.filter((item) => recordString(item, "status") === "active");
   const activeProviders = providers.filter((item) =>
     ["active", "degraded"].includes(recordString(item, "status") ?? "")
@@ -306,6 +308,14 @@ export function AdminAiWorkspace() {
               const provider = providers.find((item) =>
                 recordString(item, "id") === recordString(route, "provider_adapter_id")
               );
+              const fallbackRoute = routes.find((item) =>
+                recordString(item, "capability_id") === capabilityId &&
+                recordString(item, "status") === "active" &&
+                recordObject(item, "config").fallback_only === true
+              );
+              const fallbackProvider = providers.find((item) =>
+                recordString(item, "id") === recordString(fallbackRoute, "provider_adapter_id")
+              );
               const isEditing = routeEditor === capabilityKey;
 
               return (
@@ -323,6 +333,10 @@ export function AdminAiWorkspace() {
                     </StatusBadge>
                     <strong>{recordString(provider, "display_name") ?? "No provider"}</strong>
                     <small>{recordString(route, "model_key") ?? "No model selected"}</small>
+                    <small>
+                      Free fallback: {recordString(fallbackProvider, "display_name") ?? "Not configured"}
+                      {fallbackRoute ? " · " + (recordString(fallbackRoute, "model_key") ?? "model") : ""}
+                    </small>
                   </div>
                   <Button
                     size="sm"
@@ -342,6 +356,7 @@ export function AdminAiWorkspace() {
                         providers={providers}
                         currentProviderKey={recordString(provider, "key")}
                         currentModel={recordString(route, "model_key")}
+                        currentFallbackRoute={fallbackRoute ?? null}
                         onSaved={async () => {
                           setRouteEditor(null);
                           setNotice(
@@ -359,6 +374,15 @@ export function AdminAiWorkspace() {
           </div>
         </div>
       </section>
+
+      <AiUsageGovernorPanel
+        api={api}
+        governor={usageGovernor}
+        onChanged={async (message) => {
+          setNotice(message);
+          await queryClient.invalidateQueries({ queryKey: ["admin-ai-runtime"] });
+        }}
+      />
 
       <DemandForecastPanel forecasts={forecasts} />
 
@@ -380,6 +404,168 @@ export function AdminAiWorkspace() {
         }}
       />
     </>
+  );
+}
+
+function AiUsageGovernorPanel(props: {
+  readonly api: ReturnType<typeof useSessionState>["api"];
+  readonly governor: PlatformRecord | null;
+  readonly onChanged: (message: string) => Promise<void>;
+}) {
+  const policies = recordArray(props.governor, "policies");
+  const usage = recordArray(props.governor, "usageByProvider");
+  const policy = policies.find((item) => recordString(item, "status") === "active") ?? policies[0] ?? null;
+  const policyKey = recordString(policy, "key") ?? "ai.usage.free-tier.default";
+  const totalRequests = usage.reduce((sum, item) => sum + recordNumber(item, "requests"), 0);
+  const blockedToday = recordNumber(props.governor, "blockedToday");
+  const [dailyRequests, setDailyRequests] = useState(
+    String(Math.max(1, recordNumber(policy, "dailyRequestLimit") || 500)),
+  );
+  const [perUserDailyRequests, setPerUserDailyRequests] = useState(
+    String(Math.max(1, recordNumber(policy, "perUserDailyRequestLimit") || 40)),
+  );
+  const [dailyInputUnits, setDailyInputUnits] = useState(
+    recordNullableNumber(policy, "dailyInputUnitLimit")?.toString() ?? "",
+  );
+  const [dailyOutputUnits, setDailyOutputUnits] = useState(
+    recordNullableNumber(policy, "dailyOutputUnitLimit")?.toString() ?? "",
+  );
+  const [automaticFreeFailover, setAutomaticFreeFailover] = useState(
+    recordBoolean(policy, "automaticFreeFailover", true),
+  );
+  const [reason, setReason] = useState("Update SKIMA free-tier AI guard.");
+  const [error, setError] = useState<string | null>(null);
+
+  const save = useMutation({
+    mutationFn: () =>
+      props.api.post(
+        "/admin/ai/usage-policy",
+        {
+          policyKey,
+          dailyRequestLimit: Number(dailyRequests),
+          perUserDailyRequestLimit: Number(perUserDailyRequests),
+          dailyInputUnitLimit: dailyInputUnits.trim() ? Number(dailyInputUnits) : undefined,
+          dailyOutputUnitLimit: dailyOutputUnits.trim() ? Number(dailyOutputUnits) : undefined,
+          automaticFreeFailover,
+          reason,
+          idempotencyKey: createClientIdempotencyKey(
+            "admin.ai.usage-policy",
+            [
+              policyKey,
+              dailyRequests,
+              perUserDailyRequests,
+              dailyInputUnits,
+              dailyOutputUnits,
+              String(automaticFreeFailover),
+            ].join(":"),
+          ),
+        },
+        MutationSchema,
+      ),
+    onSuccess: async () => {
+      setError(null);
+      await props.onChanged("SKIMA AI free-tier guard updated.");
+    },
+    onError: (cause) => setError(readError(cause)),
+  });
+
+  return (
+    <section className="sk-panel admin-ai-usage-guard">
+      <div className="sk-panel__header admin-ai-panel-head">
+        <div>
+          <p className="admin-section-kicker">Free-tier protection</p>
+          <h2>AI usage guard</h2>
+          <p>
+            Limit AI consumption before a provider rejects traffic. Automatic failover can use only
+            providers explicitly marked free; paid fallback is disabled.
+          </p>
+        </div>
+        <div className="admin-ai-usage-summary">
+          <StatusBadge tone={blockedToday > 0 ? "warning" : "success"}>
+            {formatForecastNumber(totalRequests, 0)} requests today
+          </StatusBadge>
+          <StatusBadge tone={blockedToday > 0 ? "warning" : "neutral"}>
+            {formatForecastNumber(blockedToday, 0)} blocked
+          </StatusBadge>
+        </div>
+      </div>
+
+      <form
+        className="admin-ai-usage-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setError(null);
+          save.mutate();
+        }}
+      >
+        <div className="admin-form-grid">
+          <TextInput
+            label="Platform requests / day"
+            value={dailyRequests}
+            onChange={(event) => setDailyRequests(event.currentTarget.value)}
+            required
+          />
+          <TextInput
+            label="Requests / user / day"
+            value={perUserDailyRequests}
+            onChange={(event) => setPerUserDailyRequests(event.currentTarget.value)}
+            required
+          />
+          <TextInput
+            label="Input units / day (optional)"
+            value={dailyInputUnits}
+            onChange={(event) => setDailyInputUnits(event.currentTarget.value)}
+            placeholder="No unit cap"
+          />
+          <TextInput
+            label="Output units / day (optional)"
+            value={dailyOutputUnits}
+            onChange={(event) => setDailyOutputUnits(event.currentTarget.value)}
+            placeholder="No unit cap"
+          />
+        </div>
+
+        <label className="admin-ai-toggle-row">
+          <input
+            type="checkbox"
+            checked={automaticFreeFailover}
+            onChange={(event) => setAutomaticFreeFailover(event.currentTarget.checked)}
+          />
+          <span>
+            <strong>Automatic free-provider failover</strong>
+            <small>Retry a configured secondary route only when it is explicitly marked free.</small>
+          </span>
+        </label>
+
+        <TextAreaInput
+          label="Change reason"
+          value={reason}
+          onChange={(event) => setReason(event.currentTarget.value)}
+          required
+        />
+
+        <div className="admin-ai-provider-note">
+          <ShieldCheck aria-hidden="true" />
+          <span>
+            Automatic paid fallback is disabled by the database runtime. These limits are SKIMA safety
+            guards, not promises about any provider&apos;s published quota.
+          </span>
+        </div>
+
+        {error ? <div className="admin-notice is-error" role="alert">{error}</div> : null}
+
+        <div className="admin-ai-provider-actions">
+          <Button
+            icon={CheckCircle2}
+            type="submit"
+            isLoading={save.isPending}
+            requiredPermission="platform.ai.manage"
+          >
+            Save usage guard
+          </Button>
+        </div>
+      </form>
+    </section>
   );
 }
 
@@ -1085,6 +1271,7 @@ function RouteEditor(props: {
   readonly providers: readonly PlatformRecord[];
   readonly currentProviderKey: string | null;
   readonly currentModel: string | null;
+  readonly currentFallbackRoute: PlatformRecord | null;
   readonly onSaved: () => Promise<void>;
 }) {
   const activeProviders = useMemo(
@@ -1094,12 +1281,54 @@ function RouteEditor(props: {
     ),
     [props.capabilityResponseMode, props.providers],
   );
+  const freeProviders = useMemo(
+    () => activeProviders.filter((provider) =>
+      recordString(recordObject(provider, "config"), "billing_tier") === "free"
+    ),
+    [activeProviders],
+  );
+  const fallbackProviderId = recordString(props.currentFallbackRoute, "provider_adapter_id");
+  const currentFallbackProvider = props.providers.find((provider) =>
+    recordString(provider, "id") === fallbackProviderId
+  );
   const [providerKey, setProviderKey] = useState(
     props.currentProviderKey ?? recordString(activeProviders[0], "key") ?? "",
   );
   const [modelKey, setModelKey] = useState(props.currentModel ?? "");
   const [reason, setReason] = useState("Update SKIMA AI capability route.");
+  const [fallbackProviderKey, setFallbackProviderKey] = useState(
+    recordString(currentFallbackProvider, "key") ?? recordString(freeProviders[0], "key") ?? "",
+  );
+  const [fallbackModelKey, setFallbackModelKey] = useState(
+    recordString(props.currentFallbackRoute, "model_key") ?? "",
+  );
+  const [fallbackPriority, setFallbackPriority] = useState(
+    String(Math.max(2, recordNumber(props.currentFallbackRoute, "priority") || 100)),
+  );
+  const [fallbackError, setFallbackError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const fallbackSave = useMutation({
+    mutationFn: () =>
+      props.api.post(
+        "/admin/ai/free-fallback-route",
+        {
+          capabilityKey: props.capabilityKey,
+          providerAdapterKey: fallbackProviderKey,
+          modelKey: fallbackModelKey,
+          priority: Number(fallbackPriority),
+          enabled: true,
+          reason: "Configure free fallback for " + props.capabilityKey + ".",
+          idempotencyKey: createClientIdempotencyKey(
+            "admin.ai.free-fallback",
+            props.capabilityKey + ":" + fallbackProviderKey + ":" + fallbackModelKey + ":" + fallbackPriority,
+          ),
+        },
+        MutationSchema,
+      ),
+    onSuccess: props.onSaved,
+    onError: (cause) => setFallbackError(readError(cause)),
+  });
 
   const save = useMutation({
     mutationFn: () =>
@@ -1165,6 +1394,63 @@ function RouteEditor(props: {
           Activate route
         </Button>
       </div>
+
+      <div className="admin-ai-fallback-editor">
+        <div>
+          <strong>Free fallback</strong>
+          <small>Used automatically only after quota/rate-limit/retryable provider failure.</small>
+        </div>
+        {freeProviders.length ? (
+          <>
+            <label className="admin-ai-field">
+              <span>Fallback provider</span>
+              <select
+                value={fallbackProviderKey}
+                onChange={(event) => setFallbackProviderKey(event.currentTarget.value)}
+              >
+                <option value="" disabled>Select free provider</option>
+                {freeProviders.map((provider) => {
+                  const key = recordString(provider, "key") ?? "";
+                  return <option key={key} value={key}>{recordString(provider, "display_name") ?? key}</option>;
+                })}
+              </select>
+            </label>
+            <TextInput
+              label="Fallback model"
+              value={fallbackModelKey}
+              onChange={(event) => setFallbackModelKey(event.currentTarget.value)}
+              placeholder="Free-tier model identifier"
+            />
+            <TextInput
+              label="Priority"
+              value={fallbackPriority}
+              onChange={(event) => setFallbackPriority(event.currentTarget.value)}
+            />
+            <div className="admin-ai-editor-action">
+              <Button
+                type="button"
+                variant="outline"
+                isLoading={fallbackSave.isPending}
+                disabled={!fallbackProviderKey || !fallbackModelKey.trim()}
+                requiredPermission="platform.ai.manage"
+                onClick={() => {
+                  setFallbackError(null);
+                  fallbackSave.mutate();
+                }}
+              >
+                Save free fallback
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="admin-ai-provider-note">
+            <ShieldCheck aria-hidden="true" />
+            <span>Mark another configured AI provider as Free before it can be used automatically.</span>
+          </div>
+        )}
+        {fallbackError ? <div className="admin-notice is-error" role="alert">{fallbackError}</div> : null}
+      </div>
+
       {error ? <div className="admin-notice is-error" role="alert">{error}</div> : null}
     </form>
   );
@@ -1180,6 +1466,7 @@ function ProviderSetupForm(props: {
   const [apiBaseUrl, setApiBaseUrl] = useState("");
   const [secretRef, setSecretRef] = useState("");
   const [statusValue, setStatusValue] = useState("inactive");
+  const [billingTier, setBillingTier] = useState("unknown");
   const [reason, setReason] = useState("Configure SKIMA AI provider.");
   const [error, setError] = useState<string | null>(null);
 
@@ -1194,7 +1481,7 @@ function ProviderSetupForm(props: {
           apiBaseUrl: apiBaseUrl.trim() || undefined,
           secretRef: secretRef.trim() || undefined,
           status: statusValue,
-          config: {},
+          config: { billing_tier: billingTier },
           reason,
           idempotencyKey: createClientIdempotencyKey(
             "admin.ai.provider-config",
@@ -1256,6 +1543,14 @@ function ProviderSetupForm(props: {
             <option value="active">Active</option>
             <option value="degraded">Degraded</option>
             <option value="disabled">Disabled</option>
+          </select>
+        </label>
+        <label className="admin-ai-field">
+          <span>Billing tier</span>
+          <select value={billingTier} onChange={(event) => setBillingTier(event.currentTarget.value)}>
+            <option value="unknown">Unknown / manual only</option>
+            <option value="free">Free tier eligible</option>
+            <option value="paid">Paid / never automatic fallback</option>
           </select>
         </label>
         <TextInput
@@ -1325,6 +1620,32 @@ function recordBoolean(
 ): boolean | null {
   const value = record?.[key];
   return typeof value === "boolean" ? value : null;
+}
+
+function recordArray(record: PlatformRecord | null | undefined, key: string): PlatformRecord[] {
+  const value = record?.[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is PlatformRecord => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+}
+
+function recordBoolean(
+  record: PlatformRecord | null | undefined,
+  key: string,
+  fallback = false,
+): boolean {
+  const value = record?.[key];
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function recordNullableNumber(
+  record: PlatformRecord | null | undefined,
+  key: string,
+): number | null {
+  const value = record?.[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return null;
 }
 
 function recordNumber(record: PlatformRecord | null | undefined, key: string): number {
