@@ -38,7 +38,7 @@ export function CustomerWalletScreen() {
     <Screen
       eyebrow="Your money"
       title="Wallet"
-      subtitle="One SKIMA balance for payments, refunds, and eligible withdrawals."
+      subtitle="Your SKIMA balance, recent activity and withdrawals."
       action={
         <AppButton
           label="Top up"
@@ -71,16 +71,11 @@ export function CustomerWalletScreen() {
                 <Text style={styles.heroMeta}>Pending or reserved</Text>
                 <Text style={styles.heroPending}>{money(pending, currency)}</Text>
               </View>
-              <Text style={styles.heroTrust}>Protected by SKIMA payment controls</Text>
+              <Text style={styles.heroTrust}>Protected SKIMA wallet</Text>
             </View>
           </View>
 
           <View style={styles.actions}>
-            <WalletAction
-              icon={<Plus color={palette.brand} size={20} />}
-              label="Top up"
-              onPress={() => router.push("/(customer)/wallet/top-up" as never)}
-            />
             <WalletAction
               icon={<ArrowUpRight color={palette.brand} size={20} />}
               label="Withdraw"
@@ -95,7 +90,7 @@ export function CustomerWalletScreen() {
 
           <SectionHeader
             title="Recent top-ups"
-            description="Latest wallet top-up attempts and their current status."
+            description="Latest wallet funding activity."
             action={
               <Pressable onPress={() => router.push("/(customer)/transactions" as never)}>
                 <Text style={[styles.link, { color: palette.brand }]}>See all</Text>
@@ -162,7 +157,12 @@ function WalletAction({ icon, label, onPress }: { icon: React.ReactNode; label: 
       onPress={onPress}
       style={({ pressed }) => [
         styles.action,
-        { backgroundColor: palette.surface, borderColor: palette.border, opacity: pressed ? 0.76 : 1 },
+        {
+          backgroundColor: palette.surface,
+          borderColor: palette.border,
+          opacity: pressed ? 0.8 : 1,
+          transform: [{ scale: pressed ? 0.985 : 1 }],
+        },
       ]}
     >
       <View style={[styles.actionIcon, { backgroundColor: palette.brandSoft }]}>{icon}</View>
@@ -207,13 +207,13 @@ const styles = StyleSheet.create({
   heroPending: { color: "#FFFFFF", ...typography.bodyStrong, marginTop: 2 },
   heroTrust: { color: "rgba(255,255,255,.78)", ...typography.caption, textAlign: "right", maxWidth: 170 },
   actions: { flexDirection: "row", gap: spacing.sm },
-  action: { flex: 1, alignItems: "center", gap: 7, paddingVertical: 13, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg },
+  action: { flex: 1, minHeight: 76, alignItems: "center", justifyContent: "center", gap: 7, paddingVertical: 11, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl },
   actionIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   actionText: { ...typography.caption, fontWeight: "800" },
   link: { ...typography.caption, fontWeight: "900" },
   transactionList: { gap: spacing.sm },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  txIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  txIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   txCopy: { flex: 1, minWidth: 0 },
   txTitle: { ...typography.bodyStrong },
   meta: { ...typography.caption, marginTop: 3 },
