@@ -56,6 +56,7 @@ const ROUTES = new Set([
   "/admin/ai/runtime",
   "/admin/ai/provider-route",
   "/admin/ai/provider-config",
+  "/admin/ai/insight-action",
   "/admin/system/overview",
   "/admin/system/health",
   "/admin/system/jobs",
@@ -392,6 +393,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_config: optionalRecord(payload.config) ?? {},
         target_reason: requireString(payload.reason, "reason"),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/ai/insight-action" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(
+      supabase.rpc("acknowledge_ai_operational_insight", {
+        target_insight_id: requireUuid(body.value.insightId, "insightId"),
+        target_action: requireString(body.value.action, "action"),
       }),
       id,
     );
@@ -9699,7 +9712,7 @@ async function buildAiAssistantContext(
     if (access.data !== true) {
       throw new AiProviderRuntimeError("forbidden", "Admin AI access is not available.");
     }
-    const [orders, applications, aiRuns] = await Promise.all([
+    const [orders, applications, aiRuns, insights] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
         .select("id,public_reference,status,payment_status,assignment_status,station_branch_id,driver_profile_id,created_at,updated_at")
@@ -9715,15 +9728,23 @@ async function buildAiAssistantContext(
         .select("id,status,subject_type,source,created_at,started_at,completed_at,failed_at")
         .order("created_at", { ascending: false })
         .limit(30),
+      supabase
+        .from("ai_operational_insights")
+        .select("id,insight_key,subject_type,subject_id,severity,status,title,summary,evidence,recommended_action,first_detected_at,last_detected_at")
+        .in("status", ["open", "acknowledged"])
+        .order("last_detected_at", { ascending: false })
+        .limit(40),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(applications.error);
     assertAiContextQuery(aiRuns.error);
+    const insightRows = insights.error ? [] : insights.data ?? [];
     return {
       ...base,
       recentOrders: orders.data ?? [],
       applications: applications.data ?? [],
       aiRuns: aiRuns.data ?? [],
+      operationalInsights: insightRows,
     };
   }
 
@@ -9789,7 +9810,7 @@ async function adminAiRuntimeResponse(
     return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
   }
   const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
-  const [capabilities, routes, providers] = await Promise.all([
+  const [capabilities, routes, providers, insights] = await Promise.all([
     serviceClient
       .from("ai_capabilities")
       .select("id,key,display_name,description,category,response_mode,control_mode,status,config,updated_at")
@@ -9803,6 +9824,13 @@ async function adminAiRuntimeResponse(
       .select("id,key,display_name,status,config,updated_at")
       .eq("provider_kind", "ai")
       .order("display_name", { ascending: true }),
+    serviceClient
+      .from("ai_operational_insights")
+      .select("id,insight_key,subject_type,subject_id,severity,status,title,summary,evidence,recommended_action,first_detected_at,last_detected_at")
+      .in("status", ["open", "acknowledged"])
+      .order("severity", { ascending: false })
+      .order("last_detected_at", { ascending: false })
+      .limit(100),
   ]);
 
   if (capabilities.error) return databaseError(capabilities.error, id);
@@ -9815,6 +9843,7 @@ async function adminAiRuntimeResponse(
       capabilities: capabilities.data ?? [],
       routes: routes.data ?? [],
       providers: providers.data ?? [],
+      insights: insights.error ? [] : insights.data ?? [],
       userId: user.id,
     },
     requestId: id,
