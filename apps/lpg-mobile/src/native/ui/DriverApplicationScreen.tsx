@@ -191,11 +191,13 @@ export function DriverApplicationScreen() {
     };
   }, [session.supabase]);
 
+  const activeVersion = payloadVersions.data?.[0];
+  const activePayload = nestedRecord(activeVersion, "payload") ?? activeVersion ?? null;
+
   const hydratedApplication = useRef<string | null>(null);
   useEffect(() => {
     if (!currentId || hydratedApplication.current === currentId) return;
-    const version = payloadVersions.data?.[0];
-    const payload = nestedRecord(version, "payload") ?? version;
+    const payload = activePayload;
     if (!payload) return;
 
     const contact = nestedRecord(payload, "contact");
@@ -224,19 +226,38 @@ export function DriverApplicationScreen() {
     hydratedApplication.current = currentId;
   }, [currentId, payloadVersions.data]);
 
-  const buildPayload = () => ({
-    identity: {
-      fullName: name.trim(),
-      driverDisplayName: driverDisplayName.trim() || name.trim(),
-      address: address.trim(),
-    },
-    contact: { phone: phone.trim() },
-    licence: { number: licenceNumber.trim() },
-    location: operatingLocation,
-    service: {
-      coverageRequests: selectedServiceAreaIds.map((geographyId) => ({ type: "ADMIN_GEOGRAPHY", geographyId })),
-    },
-  });
+  const buildPayload = () => {
+    // update_application_payload replaces the whole version payload. Merge the
+    // latest version so this driver-workspace route cannot erase geography,
+    // policy acceptance, media/application metadata, or fields written from the
+    // customer-side application route.
+    const basePayload = activePayload ?? {};
+    const existingIdentity = nestedRecord(basePayload, "identity") ?? {};
+    const existingContact = nestedRecord(basePayload, "contact") ?? {};
+    const existingLicence = nestedRecord(basePayload, "licence") ?? {};
+    const existingService = nestedRecord(basePayload, "service") ?? {};
+    const existingLocation = nestedRecord(basePayload, "location");
+
+    return {
+      ...basePayload,
+      identity: {
+        ...existingIdentity,
+        fullName: name.trim(),
+        driverDisplayName: driverDisplayName.trim() || name.trim(),
+        address: address.trim(),
+      },
+      contact: { ...existingContact, phone: phone.trim() },
+      licence: { ...existingLicence, number: licenceNumber.trim() },
+      location: operatingLocation ?? existingLocation ?? null,
+      service: {
+        ...existingService,
+        coverageRequests: selectedServiceAreaIds.map((geographyId) => ({
+          type: "ADMIN_GEOGRAPHY",
+          geographyId,
+        })),
+      },
+    };
+  };
 
   const ensureApplicationId = async (): Promise<string> => {
     if (currentId) return currentId;
