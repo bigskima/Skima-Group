@@ -18,6 +18,9 @@ const [
   financeReconciliationScopeSql,
   pricingIntelligenceSql,
   expansionIntelligenceSql,
+  usageGovernorSql,
+  freeFallbackSql,
+  primaryRoutePreservationSql,
   providerRuntime,
   workerSource,
   gatewaySource,
@@ -44,6 +47,9 @@ const [
   readRepositoryFile("supabase/migrations/20260906000500_ai_finance_reconciliation_scope_hardening.sql"),
   readRepositoryFile("supabase/migrations/20260906002000_ai_pricing_intelligence.sql"),
   readRepositoryFile("supabase/migrations/20260906004000_ai_service_area_expansion_intelligence.sql"),
+  readRepositoryFile("supabase/migrations/20260905231500_ai_usage_quota_and_free_failover_runtime.sql"),
+  readRepositoryFile("supabase/migrations/20260905232000_ai_free_fallback_and_quota_management.sql"),
+  readRepositoryFile("supabase/migrations/20260905232500_ai_primary_route_preserve_free_fallback.sql"),
   readRepositoryFile("supabase/functions/_shared/ai-provider-runtime.ts"),
   readRepositoryFile("supabase/functions/runtime-worker/index.ts"),
   readRepositoryFile("supabase/functions/api-gateway/index.ts"),
@@ -86,6 +92,158 @@ Deno.test("AI capabilities resolve providers from database routes", () => {
     sql,
     "public.has_permission('platform.ai.manage', null)",
     "provider changes must require AI management permission",
+  );
+});
+
+Deno.test("AI free-tier governor blocks usage before provider calls and forbids paid automatic fallback", () => {
+  const sql = normalizeWhitespace(usageGovernorSql);
+
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_usage_policies",
+    "AI usage limits must be database configuration",
+  );
+  assertIncludes(
+    sql,
+    "create table if not exists public.ai_quota_decisions",
+    "quota decisions must be auditable",
+  );
+  assertIncludes(
+    sql,
+    "automatic_paid_fallback boolean not null default false check (automatic_paid_fallback = false)",
+    "database policy must make automatic paid fallback impossible",
+  );
+  assertIncludes(
+    sql,
+    "create or replace function public.reserve_ai_usage",
+    "provider calls need a quota reservation boundary",
+  );
+  assertIncludes(
+    sql,
+    "if auth.role() <> 'service_role' then raise exception 'ai quota reservation is backend-only'",
+    "quota reservation must remain backend-only",
+  );
+  assertIncludes(
+    sql,
+    "revoke all on function public.reserve_ai_usage(text,text,text,uuid,text,text) from public, anon, authenticated",
+    "clients must not bypass quota reservation",
+  );
+  assertIncludes(
+    sql,
+    "create or replace function public.resolve_ai_provider_routes",
+    "runtime must be able to inspect ordered configured fallback routes",
+  );
+  assertIncludes(
+    sql,
+    "revoke all on function public.resolve_ai_provider_routes(text) from public, anon, authenticated",
+    "ordered route resolution includes secrets and must remain backend-only",
+  );
+
+  const reserveIndex = gatewaySource.indexOf("reserveAiQuotaOrLegacyPassThrough");
+  const invokeIndex = gatewaySource.indexOf("const result = await invokeAiText(route");
+  if (reserveIndex < 0 || invokeIndex < 0 || reserveIndex > invokeIndex) {
+    throw new Error("Ask SKIMA must reserve quota before invoking an AI provider");
+  }
+
+  assertIncludes(
+    gatewaySource,
+    'stringOrNull(getRecordValue(route.routeConfig, "cost_tier")) === "free"',
+    "automatic failover must require a route explicitly marked free",
+  );
+  assertIncludes(
+    gatewaySource,
+    'getRecordValue(route.routeConfig, "automatic_failover_eligible") === true',
+    "automatic failover must require explicit route eligibility",
+  );
+  assertIncludes(
+    gatewaySource,
+    'error.code === "ai_quota_exhausted"',
+    "quota exhaustion needs a stable user-facing error path",
+  );
+});
+
+Deno.test("AI fallback configuration is admin-governed, free-only, and auditable", () => {
+  const sql = normalizeWhitespace(freeFallbackSql);
+
+  assertIncludes(
+    sql,
+    "billing_tier not in ('free','paid','unknown')",
+    "AI provider billing metadata must be validated",
+  );
+  assertIncludes(
+    sql,
+    "automatic fallback is allowed only for providers marked free",
+    "backend must reject paid or unknown automatic fallback providers",
+  );
+  assertIncludes(
+    sql,
+    "'automatic_failover_eligible', true",
+    "fallback route must be explicitly marked failover eligible",
+  );
+  assertIncludes(
+    sql,
+    "'fallback_only', true",
+    "automatic backup route must be distinguished from the primary route",
+  );
+  assertIncludes(
+    sql,
+    "automatic_paid_fallback = false",
+    "usage policy updates must keep paid fallback disabled",
+  );
+  assertIncludes(
+    sql,
+    "insert into public.ai_usage_policy_events",
+    "quota policy changes must be audited",
+  );
+  assertIncludes(
+    gatewaySource,
+    'routePath === "/admin/ai/free-fallback-route"',
+    "admin gateway must expose the governed fallback configuration endpoint",
+  );
+  assertIncludes(
+    gatewaySource,
+    'routePath === "/admin/ai/usage-policy"',
+    "admin gateway must expose quota policy controls",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "AI usage guard",
+    "admin Intelligence must expose free-tier usage controls",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "Paid / never automatic fallback",
+    "admin provider setup must make the paid fallback restriction visible",
+  );
+  assertIncludes(
+    adminAiWorkspace,
+    "Save free fallback",
+    "admin route editor must support a secondary free fallback route",
+  );
+});
+
+Deno.test("changing the primary AI route preserves configured fallback routes", () => {
+  const sql = normalizeWhitespace(primaryRoutePreservationSql);
+
+  assertIncludes(
+    sql,
+    "coalesce((config ->> 'fallback_only')::boolean, false) = false",
+    "primary route activation must only pause previous primary routes",
+  );
+  assertIncludes(
+    sql,
+    "'fallback_only', false",
+    "the manually activated route must be explicitly primary",
+  );
+  assertIncludes(
+    sql,
+    "'automatic_failover_eligible', false",
+    "a primary route must not accidentally identify itself as a fallback",
+  );
+  assertNotIncludes(
+    sql,
+    "where capability_id = capability_record.id and status = 'active';",
+    "primary route changes must not blanket-pause all active fallback routes",
   );
 });
 
