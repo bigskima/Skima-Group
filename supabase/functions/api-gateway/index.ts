@@ -19,6 +19,9 @@ import {
   AiProviderRuntimeError,
   invokeAiText,
   resolveAiProviderRoute,
+  resolveAiProviderRoutes,
+  type AiProviderRoute,
+  type AiTextResponse,
 } from "../_shared/ai-provider-runtime.ts";
 
 const ROUTES = new Set([
@@ -9526,8 +9529,21 @@ async function aiAssistantResponse(params: AiAssistantParams): Promise<Response>
     throw new AiProviderRuntimeError("server_misconfigured", "AI server runtime is not configured.");
   }
   const serviceClient = createServiceClient(params.supabaseUrl, serviceRoleKey);
-  const route = await resolveAiProviderRoute(serviceClient, capabilityKey);
-  if (!route) {
+  let routes: readonly AiProviderRoute[];
+  try {
+    routes = await resolveAiProviderRoutes(serviceClient, capabilityKey);
+  } catch (error) {
+    if (
+      error instanceof AiProviderRuntimeError &&
+      error.code === "route_resolution_failed"
+    ) {
+      const legacyRoute = await resolveAiProviderRoute(serviceClient, capabilityKey);
+      routes = legacyRoute ? [legacyRoute] : [];
+    } else {
+      throw error;
+    }
+  }
+  if (!routes.length) {
     throw new AiProviderRuntimeError("ai_not_configured", "No active AI provider route is configured.");
   }
 
@@ -9580,82 +9596,271 @@ async function aiAssistantResponse(params: AiAssistantParams): Promise<Response>
     workspace,
   );
 
-  try {
-    const result = await invokeAiText(route, {
-      system: aiSystemPrompt(workspace),
-      message,
-      context,
-      history,
-    });
+  const execution = await invokeAiAssistantWithGovernedFailover({
+    capabilityKey,
+    context,
+    conversationId: conversation.id,
+    history,
+    message,
+    requestId: params.id,
+    routes,
+    serviceClient,
+    system: aiSystemPrompt(workspace),
+    userId: params.authUser.id,
+    workspace,
+  });
+  const route = execution.route;
+  const result = execution.result;
 
-    const assistantInsert = await serviceClient.from("ai_messages").insert({
-      conversation_id: conversation.id,
-      role: "assistant",
-      content: result.text,
-      provider_adapter_key: route.providerAdapterKey,
-      model_key: route.modelKey,
-      metadata: {
-        controlMode: route.controlMode,
-        provider: route.providerDisplayName,
-        providerMetadata: result.providerMetadata,
-      },
-    });
-    if (assistantInsert.error) {
-      throw new AiProviderRuntimeError("conversation_write_failed", assistantInsert.error.message);
+  const assistantInsert = await serviceClient.from("ai_messages").insert({
+    conversation_id: conversation.id,
+    role: "assistant",
+    content: result.text,
+    provider_adapter_key: route.providerAdapterKey,
+    model_key: route.modelKey,
+    metadata: {
+      controlMode: route.controlMode,
+      provider: route.providerDisplayName,
+      providerMetadata: result.providerMetadata,
+      failoverAttempt: execution.attempt,
+      failoverUsed: execution.attempt > 1,
+    },
+  });
+  if (assistantInsert.error) {
+    throw new AiProviderRuntimeError("conversation_write_failed", assistantInsert.error.message);
+  }
+
+  await serviceClient
+    .from("ai_conversations")
+    .update({
+      last_message_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", conversation.id);
+
+  await serviceClient.from("ai_usage_events").insert({
+    capability_key: capabilityKey,
+    provider_adapter_key: route.providerAdapterKey,
+    model_key: route.modelKey,
+    user_id: params.authUser.id,
+    workspace,
+    conversation_id: conversation.id,
+    input_units: result.inputUnits,
+    output_units: result.outputUnits,
+    request_count: 1,
+    status: "succeeded",
+    metadata: {
+      transport: getRecordValue(result.providerMetadata, "transport"),
+      failoverAttempt: execution.attempt,
+      failoverUsed: execution.attempt > 1,
+      quotaPolicyKey: execution.quotaPolicyKey,
+    },
+  });
+
+  return jsonResponse({
+    ok: true,
+    data: {
+      conversationId: conversation.id,
+      reply: result.text,
+      capabilityKey,
+      suggestions: aiWorkspaceSuggestions(workspace),
+    },
+    requestId: params.id,
+  });
+}
+
+async function invokeAiAssistantWithGovernedFailover(input: {
+  readonly capabilityKey: string;
+  readonly context: Readonly<Record<string, unknown>>;
+  readonly conversationId: string;
+  readonly history: readonly {
+    readonly role: "user" | "assistant";
+    readonly content: string;
+  }[];
+  readonly message: string;
+  readonly requestId: string;
+  readonly routes: readonly AiProviderRoute[];
+  readonly serviceClient: SupabaseClient;
+  readonly system: string;
+  readonly userId: string;
+  readonly workspace: string;
+}): Promise<{
+  readonly attempt: number;
+  readonly quotaPolicyKey: string | null;
+  readonly result: AiTextResponse;
+  readonly route: AiProviderRoute;
+}> {
+  let lastError: unknown = null;
+  let automaticFreeFailover = false;
+  let attemptedRoutes = 0;
+
+  for (let index = 0; index < input.routes.length; index += 1) {
+    const route = input.routes[index];
+
+    if (index > 0 && (!automaticFreeFailover || !isFreeFailoverRoute(route))) {
+      continue;
     }
 
-    await serviceClient
-      .from("ai_conversations")
-      .update({
-        last_message_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", conversation.id);
-
-    await serviceClient.from("ai_usage_events").insert({
-      capability_key: capabilityKey,
-      provider_adapter_key: route.providerAdapterKey,
-      model_key: route.modelKey,
-      user_id: params.authUser.id,
-      workspace,
-      conversation_id: conversation.id,
-      input_units: result.inputUnits,
-      output_units: result.outputUnits,
-      request_count: 1,
-      status: "succeeded",
-      metadata: {
-        transport: getRecordValue(result.providerMetadata, "transport"),
-      },
+    attemptedRoutes += 1;
+    const quota = await reserveAiQuotaOrLegacyPassThrough({
+      capabilityKey: input.capabilityKey,
+      idempotencyKey: input.requestId + ":quota:" + String(index + 1),
+      modelKey: route.modelKey,
+      providerAdapterKey: route.providerAdapterKey,
+      serviceClient: input.serviceClient,
+      userId: input.userId,
+      workspace: input.workspace,
     });
 
-    return jsonResponse({
-      ok: true,
-      data: {
-        conversationId: conversation.id,
-        reply: result.text,
-        capabilityKey,
-        suggestions: aiWorkspaceSuggestions(workspace),
-      },
-      requestId: params.id,
-    });
-  } catch (error) {
-    await serviceClient.from("ai_usage_events").insert({
-      capability_key: capabilityKey,
-      provider_adapter_key: route.providerAdapterKey,
-      model_key: route.modelKey,
-      user_id: params.authUser.id,
-      workspace,
-      conversation_id: conversation.id,
-      request_count: 1,
-      status: error instanceof AiProviderRuntimeError && error.code === "provider_rate_limited"
-        ? "rate_limited"
-        : "failed",
-      metadata: {
-        errorCode: error instanceof AiProviderRuntimeError ? error.code : "unknown",
-      },
-    });
-    throw error;
+    automaticFreeFailover = quota.automaticFreeFailover;
+
+    if (!quota.allowed) {
+      const quotaError = new AiProviderRuntimeError(
+        "ai_quota_exhausted",
+        "SKIMA AI has reached its configured free-tier usage limit.",
+      );
+      lastError = quotaError;
+
+      await input.serviceClient.from("ai_usage_events").insert({
+        capability_key: input.capabilityKey,
+        provider_adapter_key: route.providerAdapterKey,
+        model_key: route.modelKey,
+        user_id: input.userId,
+        workspace: input.workspace,
+        conversation_id: input.conversationId,
+        request_count: 1,
+        status: "failed",
+        metadata: {
+          errorCode: quotaError.code,
+          quotaReason: quota.reason,
+          quotaPolicyKey: quota.policyKey,
+          providerCalled: false,
+        },
+      });
+
+      if (automaticFreeFailover && hasLaterFreeFailoverRoute(input.routes, index)) {
+        continue;
+      }
+
+      throw quotaError;
+    }
+
+    try {
+      const result = await invokeAiText(route, {
+        system: input.system,
+        message: input.message,
+        context: input.context,
+        history: input.history,
+      });
+
+      return {
+        attempt: attemptedRoutes,
+        quotaPolicyKey: quota.policyKey,
+        result,
+        route,
+      };
+    } catch (error) {
+      lastError = error;
+      const providerError = error instanceof AiProviderRuntimeError ? error : null;
+
+      await input.serviceClient.from("ai_usage_events").insert({
+        capability_key: input.capabilityKey,
+        provider_adapter_key: route.providerAdapterKey,
+        model_key: route.modelKey,
+        user_id: input.userId,
+        workspace: input.workspace,
+        conversation_id: input.conversationId,
+        request_count: 1,
+        status: providerError?.code === "provider_rate_limited" ? "rate_limited" : "failed",
+        metadata: {
+          errorCode: providerError?.code ?? "unknown",
+          failoverAttempt: attemptedRoutes,
+          quotaPolicyKey: quota.policyKey,
+        },
+      });
+
+      if (
+        providerError?.retryable === true &&
+        automaticFreeFailover &&
+        hasLaterFreeFailoverRoute(input.routes, index)
+      ) {
+        continue;
+      }
+
+      throw error;
+    }
   }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new AiProviderRuntimeError(
+      "ai_not_configured",
+      "No eligible SKIMA AI provider route is available.",
+    );
+}
+
+async function reserveAiQuotaOrLegacyPassThrough(input: {
+  readonly capabilityKey: string;
+  readonly idempotencyKey: string;
+  readonly modelKey: string;
+  readonly providerAdapterKey: string;
+  readonly serviceClient: SupabaseClient;
+  readonly userId: string;
+  readonly workspace: string;
+}): Promise<{
+  readonly allowed: boolean;
+  readonly automaticFreeFailover: boolean;
+  readonly policyKey: string | null;
+  readonly reason: string;
+}> {
+  const result = await input.serviceClient.rpc("reserve_ai_usage", {
+    target_capability_key: input.capabilityKey,
+    target_provider_adapter_key: input.providerAdapterKey,
+    target_model_key: input.modelKey,
+    target_user_id: input.userId,
+    target_workspace: input.workspace,
+    target_idempotency_key: input.idempotencyKey,
+  });
+
+  if (result.error) {
+    if (isMissingAiGovernorError(result.error.message)) {
+      return {
+        allowed: true,
+        automaticFreeFailover: false,
+        policyKey: null,
+        reason: "governor_not_deployed",
+      };
+    }
+
+    throw new AiProviderRuntimeError(
+      "quota_check_failed",
+      result.error.message,
+    );
+  }
+
+  return {
+    allowed: getRecordValue(result.data, "allowed") === true,
+    automaticFreeFailover:
+      getRecordValue(result.data, "automaticFreeFailover") === true,
+    policyKey: stringOrNull(getRecordValue(result.data, "policyKey")),
+    reason: stringOrNull(getRecordValue(result.data, "reason")) ?? "unknown",
+  };
+}
+
+function isMissingAiGovernorError(message: string): boolean {
+  return /reserve_ai_usage|function.*does not exist|could not find the function/i.test(message);
+}
+
+function isFreeFailoverRoute(route: AiProviderRoute): boolean {
+  return stringOrNull(getRecordValue(route.routeConfig, "cost_tier")) === "free"
+    && getRecordValue(route.routeConfig, "automatic_failover_eligible") === true;
+}
+
+function hasLaterFreeFailoverRoute(
+  routes: readonly AiProviderRoute[],
+  currentIndex: number,
+): boolean {
+  return routes.slice(currentIndex + 1).some(isFreeFailoverRoute);
 }
 
 async function resolveAiConversation(input: {
