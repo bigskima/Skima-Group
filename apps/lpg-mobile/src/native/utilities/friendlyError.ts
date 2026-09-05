@@ -77,7 +77,10 @@ export function friendlyError(
   if (
     message.includes("maps adapter") ||
     message.includes("map provider") ||
-    message.includes("server secret")
+    message.includes("server secret") ||
+    message.includes("api key") ||
+    message.includes("access token") ||
+    message.includes("provider authentication")
   )
     return "Address search is temporarily unavailable. You can still use your current location or place the pin manually.";
 
