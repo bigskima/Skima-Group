@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import {
   averageCoordinate,
+  DEFAULT_MAP_CENTER,
   getMapsRuntimeConfig,
   type MapPoint,
 } from "../domains/maps";
@@ -56,9 +57,13 @@ export function OperationalMap({
   const attribution = useEmergencyTiles
     ? EMERGENCY_ATTRIBUTION
     : mapConfig.tile.attribution;
-  const derivedCenter = useMemo(() => averageCoordinate(points), [points]);
+  const derivedCenter = useMemo(
+    () => averageCoordinate(points) ?? (onSelectPoint ? DEFAULT_MAP_CENTER : null),
+    [points, onSelectPoint],
+  );
+  const automaticZoom = points.length ? initialZoom : 6;
   const [center, setCenter] = useState(derivedCenter);
-  const [zoom, setZoom] = useState(() => clamp(initialZoom, minZoom, effectiveMaxZoom));
+  const [zoom, setZoom] = useState(() => clamp(automaticZoom, minZoom, effectiveMaxZoom));
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
 
   useEffect(() => {
@@ -70,8 +75,8 @@ export function OperationalMap({
     setCenter(derivedCenter);
     setZoom(points.length > 1
       ? fitZoom(points, width, height, minZoom, effectiveMaxZoom)
-      : clamp(initialZoom, minZoom, effectiveMaxZoom));
-  }, [pointKey, width, height, initialZoom, effectiveMaxZoom, minZoom]);
+      : clamp(points.length ? initialZoom : 6, minZoom, effectiveMaxZoom));
+  }, [derivedCenter, pointKey, width, height, initialZoom, effectiveMaxZoom, minZoom]);
 
   const layout = center
     ? createLayout(center, points, width, height, zoom, tileTemplate, providerTileMaxZoom)
@@ -83,7 +88,7 @@ export function OperationalMap({
     setCenter(derivedCenter);
     setZoom(points.length > 1
       ? fitZoom(points, width, height, minZoom, effectiveMaxZoom)
-      : clamp(initialZoom, minZoom, effectiveMaxZoom));
+      : clamp(points.length ? initialZoom : 6, minZoom, effectiveMaxZoom));
   };
   const select = (event: GestureResponderEvent) => {
     if (!center || !onSelectPoint) return;
