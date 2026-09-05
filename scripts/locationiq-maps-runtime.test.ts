@@ -204,6 +204,9 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
     partnerGeographyReconciliation,
     stationCoverageLifecycle,
     driverCoverageProfile,
+    partnerReviewReadModel,
+    partnerOnboardingCutover,
+    candidateCoverageRuntime,
   ] =
     await Promise.all([
       readRepositoryFile("supabase/migrations/20260901204813_locationiq_maps_provider_runtime.sql"),
@@ -235,6 +238,15 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
       ),
       readRepositoryFile(
         "supabase/migrations/20260905015200_driver_universal_coverage_profile_reconciliation.sql",
+      ),
+      readRepositoryFile(
+        "supabase/migrations/20260905015500_partner_location_review_universal_coverage_read_model.sql",
+      ),
+      readRepositoryFile(
+        "supabase/migrations/20260905015800_partner_onboarding_policy_cutover.sql",
+      ),
+      readRepositoryFile(
+        "supabase/migrations/20260905020200_universal_partner_candidate_coverage_runtime.sql",
       ),
     ]);
 
@@ -347,6 +359,29 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
     "create or replace function public.refresh_driver_universal_service_profile(",
   );
   assertIncludes(driverCoverageProfile, "'coverageRuntime', 'universal'");
+
+  // Admin review and partner expansion must use the same universal request
+  // model, while candidate areas remain separate from customer service launch.
+  assertIncludes(partnerReviewReadModel, "application_operational_coverage_requests");
+  assertIncludes(partnerReviewReadModel, "universal_coverage.service_areas");
+  assertIncludes(partnerOnboardingCutover, "'driver_onboarding'");
+  assertIncludes(partnerOnboardingCutover, "'station_onboarding'");
+  assertIncludes(partnerOnboardingCutover, "service_areas.partnerSelectable");
+  assertIncludes(
+    candidateCoverageRuntime,
+    "create or replace function public.resolve_lpg_partner_candidate_coverage(",
+  );
+  assertIncludes(
+    candidateCoverageRuntime,
+    "'universal_candidate_coverage'",
+  );
+  assertIncludes(candidateCoverageRuntime, "'UNCONFIGURED_CANDIDATE_AREA'");
+  assertIncludes(candidateCoverageRuntime, "'AREA_EXCLUDED'");
+  assertIncludes(candidateCoverageRuntime, "'customer_ordering'");
+  assertIncludes(driverApplication, "resolve_lpg_partner_candidate_coverage");
+  assertIncludes(driverApplication, "Candidate operating area");
+  assertIncludes(driverWorkspaceApplication, "resolve_lpg_partner_candidate_coverage");
+  assertIncludes(driverWorkspaceApplication, "candidateCoverage");
 });
 
 function testAdapter(fetcher: typeof fetch, retryCount = 0) {
