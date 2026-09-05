@@ -9,6 +9,7 @@ const [
   forecastSql,
   forecastGuardSql,
   refillOutlookSql,
+  complaintStatusSql,
   providerRuntime,
   workerSource,
   gatewaySource,
@@ -26,6 +27,7 @@ const [
   readRepositoryFile("supabase/migrations/20260905223000_ai_demand_forecast_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905223500_ai_demand_forecast_configuration_guard.sql"),
   readRepositoryFile("supabase/migrations/20260905225000_customer_refill_outlook_runtime.sql"),
+  readRepositoryFile("supabase/migrations/20260905230500_customer_complaint_status_read_runtime.sql"),
   readRepositoryFile("supabase/functions/_shared/ai-provider-runtime.ts"),
   readRepositoryFile("supabase/functions/runtime-worker/index.ts"),
   readRepositoryFile("supabase/functions/api-gateway/index.ts"),
@@ -417,6 +419,84 @@ Deno.test("customer refill outlook is personal, deterministic, and never a gas g
     mobileAssistant,
     "When might I need another refill?",
     "customer assistant should expose the refill outlook question",
+  );
+});
+
+Deno.test("Ask SKIMA support escalation requires explicit user action and reuses complaints runtime", () => {
+  assertIncludes(
+    gatewaySource,
+    'routePath === "/runtime/ai/support-case"',
+    "Ask SKIMA must expose a dedicated support action boundary",
+  );
+  assertIncludes(
+    gatewaySource,
+    "if (payload.confirmed !== true)",
+    "support escalation must require explicit user confirmation",
+  );
+  assertIncludes(
+    gatewaySource,
+    'target_source: "skima.ai.customer_assistant"',
+    "AI-originated support cases must be auditable by source",
+  );
+  assertIncludes(
+    gatewaySource,
+    'supabase.rpc("create_lpg_service_complaint"',
+    "Ask SKIMA must reuse the canonical LPG complaint runtime",
+  );
+  assertIncludes(
+    gatewaySource,
+    'confirmation: "explicit"',
+    "support case metadata must record the confirmation boundary",
+  );
+  assertIncludes(
+    gatewaySource,
+    'supabase.rpc("read_my_lpg_service_complaints"',
+    "support action must inspect the customer's existing cases before creating another",
+  );
+  assertIncludes(
+    mobileAssistant,
+    "Ask SKIMA cannot submit this form by itself.",
+    "mobile support UI must explain that the model cannot submit the action",
+  );
+  assertIncludes(
+    mobileAssistant,
+    "User controlled",
+    "support UI must label the action as user-controlled before submission",
+  );
+  assertIncludes(
+    mobileAssistant,
+    "Creating this case does not cancel the order, refund money, change dispatch, or edit a payment.",
+    "support action must state its non-authoritative effect",
+  );
+});
+
+Deno.test("customer support case status projection never exposes internal moderation notes", () => {
+  const sql = normalizeWhitespace(complaintStatusSql);
+
+  assertIncludes(
+    sql,
+    "where complaint.customer_user_id = auth.uid()",
+    "customer complaint projection must scope every row to the signed-in customer",
+  );
+  assertIncludes(
+    sql,
+    "'publichistory'",
+    "customer complaint projection should expose public status history",
+  );
+  assertNotIncludes(
+    sql,
+    "internal_note",
+    "customer complaint projection must never expose internal moderation notes",
+  );
+  assertIncludes(
+    gatewaySource,
+    "supportCases:",
+    "customer Ask SKIMA grounding must include support case status",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Never invent internal review notes",
+    "assistant prompt must forbid invented private moderation context",
   );
 });
 
