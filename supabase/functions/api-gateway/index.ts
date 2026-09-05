@@ -9720,7 +9720,7 @@ async function buildAiAssistantContext(
   }
 
   if (workspace === "customer") {
-    const [orders, cylinders, locations, refillOutlook] = await Promise.all([
+    const [orders, cylinders, locations, refillOutlook, complaints] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
         .select("id,public_reference,cylinder_id,station_branch_id,driver_profile_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,delivery_fee_amount,platform_fee_amount,status,payment_status,assignment_status,created_at,updated_at")
@@ -9739,6 +9739,7 @@ async function buildAiAssistantContext(
         .order("updated_at", { ascending: false })
         .limit(5),
       supabase.rpc("read_customer_refill_outlook"),
+      supabase.rpc("read_my_lpg_service_complaints", { target_limit: 10 }),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(cylinders.error);
@@ -9751,6 +9752,9 @@ async function buildAiAssistantContext(
       refillOutlook: refillOutlook.error
         ? []
         : Array.isArray(refillOutlook.data) ? refillOutlook.data : [],
+      supportCases: complaints.error
+        ? []
+        : Array.isArray(complaints.data) ? complaints.data : [],
       myApplications: ownApplications,
     };
   }
@@ -9873,6 +9877,7 @@ function aiSystemPrompt(workspace: string): string {
     "Do not claim to have changed an order, payment, wallet, dispatch assignment, inventory value, approval or permission. This assistant is read-only. A separate user-confirmed support action may create a normal complaint record, but you cannot submit it yourself.",
     "Demand forecasts are statistical estimates from recent SKIMA order history. Never present them as guaranteed demand, authoritative inventory, a price instruction, or a dispatch decision.",
     "Customer refill outlooks are estimates from that customer's historical refill intervals. They do not measure remaining gas, cylinder pressure or safety and must never be described as a gas gauge.",
+    "Customer support case context contains only that customer's complaint status and public support history. Never invent internal review notes, private moderation decisions, or a resolution that is not present.",
     "Be concise, practical and use normal customer-facing language. Do not expose internal database field names unless the user explicitly asks for technical detail.",
   ].join("\n");
 }
