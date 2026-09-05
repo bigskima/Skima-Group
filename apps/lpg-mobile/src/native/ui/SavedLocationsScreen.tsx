@@ -1,6 +1,6 @@
 import { router } from "expo-router";
-import { ChevronRight, MapPin, Plus, ShieldCheck } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Check, MapPin, Plus, ShieldCheck } from "lucide-react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { displaySubtitle, displayTitle, recordId } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -74,19 +74,12 @@ export function SavedLocationsScreen() {
             const title = displayTitle(item) || "Saved place";
             const address = displaySubtitle(item) ?? "Saved pickup and return point";
             return (
-              <Pressable
+              <View
                 key={id ?? String(index)}
-                accessibilityRole="button"
-                onPress={() => router.push("/(customer)/location-editor" as never)}
-                style={({ pressed }) => [
+                style={[
                   styles.place,
                   shadows.soft,
-                  {
-                    backgroundColor: palette.surface,
-                    borderColor: palette.border,
-                    opacity: pressed ? 0.72 : 1,
-                    transform: [{ scale: pressed ? 0.988 : 1 }],
-                  },
+                  { backgroundColor: palette.surface, borderColor: palette.border },
                 ]}
               >
                 <View style={[styles.pin, { backgroundColor: palette.brandSoft }]}>
@@ -96,8 +89,11 @@ export function SavedLocationsScreen() {
                   <Text numberOfLines={1} style={[styles.title, { color: palette.ink }]}>{title}</Text>
                   <Text numberOfLines={2} style={[styles.address, { color: palette.muted }]}>{address}</Text>
                 </View>
-                <ChevronRight color={palette.muted} size={18} />
-              </Pressable>
+                <View style={[styles.savedBadge, { backgroundColor: palette.successSoft }]}>
+                  <Check color={palette.success} size={13} />
+                  <Text style={[styles.savedBadgeText, { color: palette.success }]}>Saved</Text>
+                </View>
+              </View>
             );
           })}
         </View>
@@ -136,4 +132,6 @@ const styles = StyleSheet.create({
   copy: { flex: 1, minWidth: 0, gap: 3 },
   title: { ...typography.bodyStrong, fontSize: 14 },
   address: { ...typography.caption, fontSize: 11, lineHeight: 16 },
+  savedBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 5, borderRadius: radii.pill },
+  savedBadgeText: { ...typography.caption, fontSize: 9, fontWeight: "900" },
 });
