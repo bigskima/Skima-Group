@@ -637,7 +637,7 @@ function initialSuggestions(workspace: AiAssistantWorkspace): string[] {
     return ["What do I do next?", "Summarize my active jobs", "Explain my recent earnings"];
   }
   if (workspace === "station") {
-    return ["What needs attention?", "How busy could the next 7 days be?", "Summarize my current queue"];
+    return ["What needs attention?", "Explain my recent settlement", "How busy could the next 7 days be?"];
   }
   return ["Where is my refill?", "Explain my latest refill price", "When might I need another refill?"];
 }
