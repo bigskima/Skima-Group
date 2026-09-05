@@ -529,7 +529,7 @@ Deno.test("partner trust risk is deterministic, internal, and advisory-only", ()
   );
   assertIncludes(
     sql,
-    "'control': 'advisory_only'".replace(":", ","),
+    '"control": "advisory_only"',
     "risk configuration must identify advisory-only control",
   );
   assertNotMatch(
