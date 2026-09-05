@@ -14,6 +14,7 @@ const [
   customerPriceExplanationSql,
   driverEarningsExplanationSql,
   stationSettlementExplanationSql,
+  customerServiceabilitySql,
   partnerRiskSql,
   partnerRiskGuardSql,
   dispatchShadowSql,
@@ -37,6 +38,7 @@ const [
   cylinderDetailScreen,
   customerOrderScreen,
   financeScreen,
+  savedLocationsScreen,
   jobDetailScreen,
   stationInventoryScreen,
   customerLayout,
@@ -56,6 +58,7 @@ const [
   readRepositoryFile("supabase/migrations/20260906005000_customer_price_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906006000_driver_earnings_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906007000_station_settlement_explanation_runtime.sql"),
+  readRepositoryFile("supabase/migrations/20260906008000_customer_serviceability_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233000_ai_partner_trust_risk_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233500_ai_partner_risk_configuration_guard.sql"),
   readRepositoryFile("supabase/migrations/20260905235000_ai_dispatch_shadow_intelligence.sql"),
@@ -79,6 +82,7 @@ const [
   readRepositoryFile("apps/lpg-mobile/src/native/ui/CylinderDetailScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/CustomerOrdersScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/FinanceScreen.tsx"),
+  readRepositoryFile("apps/lpg-mobile/src/native/ui/SavedLocationsScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/StationInventoryScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/app/(customer)/_layout.tsx"),
@@ -1840,6 +1844,86 @@ Deno.test("station settlement explanations are branch-finance-scoped and canonic
   );
 });
 
+Deno.test("customer serviceability explanations use canonical coordinate coverage only", () => {
+  const sql = normalizeWhitespace(customerServiceabilitySql);
+
+  assertIncludes(
+    sql,
+    "where owned_location.id = target_location_id and owned_location.owner_user_id = auth.uid()",
+    "specific saved-location reads must prove customer ownership",
+  );
+  assertIncludes(
+    sql,
+    "where customer_location.owner_user_id = auth.uid()",
+    "all customer serviceability rows must stay scoped to the signed-in owner",
+  );
+  assertIncludes(
+    sql,
+    "public.resolve_service_availability( 'lpg', 'customer_ordering', customer_location.longitude::double precision, customer_location.latitude::double precision",
+    "customer serviceability must call the same canonical LPG customer-ordering resolver",
+  );
+  assertIncludes(
+    sql,
+    "'addresstextusedfordecision', false",
+    "customer serviceability must explicitly reject address-text inference",
+  );
+  assertIncludes(
+    sql,
+    "'futurelaunchpromised', false",
+    "SERVICE_NOT_LAUNCHED must never become a future launch promise",
+  );
+  assertIncludes(
+    sql,
+    "when 'service_not_launched' then 'service_not_currently_launched_here'",
+    "not-launched serviceability must use a current-state explanation",
+  );
+  assertIncludes(
+    sql,
+    "when 'area_excluded' then 'location_outside_current_enabled_coverage'",
+    "intentional coverage exclusions must be distinguished from not-yet-launched areas",
+  );
+  assertIncludes(
+    sql,
+    "when 'policy_configuration_conflict' then 'coverage_configuration_needs_review'",
+    "coverage configuration conflicts must be explained as a SKIMA configuration issue",
+  );
+  assertNotIncludes(
+    sql,
+    "'matchedpolicyid'",
+    "customer-safe serviceability rows must not expose internal coverage policy IDs",
+  );
+  assertIncludes(
+    gatewaySource,
+    "locationServiceability:",
+    "Customer Ask SKIMA context must include saved-location serviceability",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Never infer serviceability from the city name, address text, or general knowledge.",
+    "assistant prompt must preserve coordinate-based authority",
+  );
+  assertIncludes(
+    gatewaySource,
+    "SERVICE_NOT_LAUNCHED means no active customer-ordering service zone currently covers it and is not a promise of a future launch",
+    "assistant prompt must not promise expansion",
+  );
+  assertIncludes(
+    savedLocationsScreen,
+    'label="Check service availability"',
+    "saved locations screen must expose a compact contextual serviceability action",
+  );
+  assertIncludes(
+    savedLocationsScreen,
+    "Nothing is sent until you choose Send.",
+    "serviceability action must remain prefill-only",
+  );
+  assertIncludes(
+    mobileAssistant,
+    "Can SKIMA serve my saved location?",
+    "customer assistant should surface saved-location availability",
+  );
+});
+
 Deno.test("AI workspace context keeps internal intelligence out of station/customer/driver surfaces", () => {
   const customerContext = sectionBetween(
     gatewaySource,
@@ -1850,6 +1934,11 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
     customerContext,
     "read_my_lpg_price_explanations",
     "customer assistant must ground price questions in the customer-safe accepted snapshot",
+  );
+  assertIncludes(
+    customerContext,
+    "read_my_lpg_location_serviceability",
+    "customer assistant must ground location questions in canonical service coverage",
   );
   for (const internalRpc of [
     "read_ai_partner_risk_assessments",
