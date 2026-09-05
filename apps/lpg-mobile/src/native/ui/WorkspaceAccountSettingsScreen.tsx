@@ -27,7 +27,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
     <Screen
       eyebrow="Account"
       title="Settings"
-      subtitle="Keep preferences separate from operational tools."
+      subtitle="Appearance, privacy and account access."
       action={<AppButton label="Back" size="sm" variant="ghost" onPress={() => router.back()} />}
     >
       <View style={styles.group}>
