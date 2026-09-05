@@ -135,7 +135,9 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
     const key = `${bankCode}:${accountNumber.trim()}`;
     const timer = setTimeout(() => {
       setMessage(null);
+      if (!walletId) return;
       void resolveAccount.mutateAsync({
+        walletId,
         bankCode,
         accountNumber: accountNumber.trim(),
       }).then((result) => {
@@ -158,7 +160,7 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [bankCode, accountNumber, isValidNuban]);
+  }, [bankCode, accountNumber, isValidNuban, walletId]);
 
   const requestedAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
   const feeAmount = firstNumber(feePreview, ["calculatedFeeAmount", "calculated_fee_amount"]) ?? 0;
