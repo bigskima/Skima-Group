@@ -63,21 +63,47 @@ export async function resolveAiProviderRoute(
     );
   }
 
-  if (!isRecord(data)) {
+  return parseAiProviderRoute(data);
+}
+
+export async function resolveAiProviderRoutes(
+  client: RpcClient,
+  capabilityKey: string,
+): Promise<readonly AiProviderRoute[]> {
+  const { data, error } = await client.rpc("resolve_ai_provider_routes", {
+    target_capability_key: capabilityKey,
+  });
+
+  if (error) {
+    throw new AiProviderRuntimeError(
+      "route_resolution_failed",
+      error.message ?? "AI provider routes could not be resolved.",
+    );
+  }
+
+  if (!Array.isArray(data)) return [];
+
+  return data
+    .map((item) => parseAiProviderRoute(item))
+    .filter((item): item is AiProviderRoute => item !== null);
+}
+
+function parseAiProviderRoute(value: unknown): AiProviderRoute | null {
+  if (!isRecord(value)) {
     return null;
   }
 
-  const modelKey = stringValue(data.modelKey);
-  const providerAdapterId = stringValue(data.providerAdapterId);
-  const providerAdapterKey = stringValue(data.providerAdapterKey);
-  const capability = stringValue(data.capabilityKey);
+  const modelKey = stringValue(value.modelKey);
+  const providerAdapterId = stringValue(value.providerAdapterId);
+  const providerAdapterKey = stringValue(value.providerAdapterKey);
+  const capability = stringValue(value.capabilityKey);
 
   if (!modelKey || !providerAdapterId || !providerAdapterKey || !capability) {
     return null;
   }
 
-  const responseMode = stringValue(data.responseMode);
-  const controlMode = stringValue(data.controlMode);
+  const responseMode = stringValue(value.responseMode);
+  const controlMode = stringValue(value.controlMode);
 
   return {
     capabilityKey: capability,
@@ -86,11 +112,11 @@ export async function resolveAiProviderRoute(
     modelKey,
     providerAdapterId,
     providerAdapterKey,
-    providerDisplayName: stringValue(data.providerDisplayName) ?? "Configured AI provider",
-    providerConfig: recordValue(data.providerConfig),
-    routeConfig: recordValue(data.routeConfig),
-    capabilityConfig: recordValue(data.capabilityConfig),
-    secretRef: stringValue(data.secretRef),
+    providerDisplayName: stringValue(value.providerDisplayName) ?? "Configured AI provider",
+    providerConfig: recordValue(value.providerConfig),
+    routeConfig: recordValue(value.routeConfig),
+    capabilityConfig: recordValue(value.capabilityConfig),
+    secretRef: stringValue(value.secretRef),
   };
 }
 
