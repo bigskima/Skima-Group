@@ -5,6 +5,7 @@ import { domainQueries } from "../api/domains";
 import { displaySubtitle, displayTitle, recordId } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { AiContextAction } from "./AiContextAction";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
@@ -44,6 +45,15 @@ export function SavedLocationsScreen() {
           <Text style={[styles.safeText, { color: palette.success }]}>Reusable</Text>
         </View>
       </View>
+
+      {records.length ? (
+        <AiContextAction
+          workspace="customer"
+          label="Check service availability"
+          detail="Ask SKIMA which saved places can currently order LPG and why. Nothing is sent until you choose Send."
+          prompt="Check LPG ordering availability for my saved delivery locations using SKIMA's current coordinate-based coverage decisions. For each saved place, tell me whether it is currently available and explain the exact reason in normal language. Do not infer from the address name, do not show coverage policy IDs or internal expansion scores, and do not promise a future launch if service is not launched there yet."
+        />
+      ) : null}
 
       {locations.isPending ? (
         <ScreenSkeleton cards={2} />
