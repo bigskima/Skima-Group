@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { Building2, CheckCircle2, ChevronRight, Plus, Search, ShieldCheck } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { useFinanceMutation, useFinanceQuery } from "../api/finance";
@@ -67,8 +67,9 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
   const [destination, setDestination] = useState("");
   const [amount, setAmount] = useState("");
   const [adding, setAdding] = useState(false);
-  const [accountName, setAccountName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
+  const [resolvedAccountName, setResolvedAccountName] = useState("");
+  const [resolvedAccountKey, setResolvedAccountKey] = useState("");
   const [bankSearch, setBankSearch] = useState("");
   const [bankCode, setBankCode] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -77,6 +78,10 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
   const [withdrawalResult, setWithdrawalResult] = useState<{ id?: string; reference?: string; status?: string } | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
 
+  const resolveAccount = useFinanceMutation({
+    path: "/beneficiaries/resolve",
+    schema: RecordObjectSchema,
+  });
   const addBeneficiary = useFinanceMutation({
     path: "/beneficiaries",
     schema: RecordObjectSchema,
@@ -106,7 +111,49 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
   const selectedBeneficiaryName = firstString(selectedBeneficiary, ["account_name", "accountName"]) ?? "Payout account";
   const selectedBeneficiaryLast4 = firstString(selectedBeneficiary, ["account_number_last4", "accountNumberLast4"]) ?? "";
   const isValidNuban = /^\d{10}$/.test(accountNumber.trim());
-  const canAddAccount = Boolean(walletId && bankCode && accountName.trim() && isValidNuban);
+  const currentAccountKey = bankCode && isValidNuban
+    ? `${bankCode}:${accountNumber.trim()}`
+    : "";
+  const canAddAccount = Boolean(
+    walletId &&
+    bankCode &&
+    isValidNuban &&
+    resolvedAccountName &&
+    resolvedAccountKey === currentAccountKey,
+  );
+
+  useEffect(() => {
+    setResolvedAccountName("");
+    setResolvedAccountKey("");
+    if (!bankCode || !isValidNuban) return;
+
+    const key = `${bankCode}:${accountNumber.trim()}`;
+    const timer = setTimeout(() => {
+      setMessage(null);
+      void resolveAccount.mutateAsync({
+        bankCode,
+        accountNumber: accountNumber.trim(),
+      }).then((result) => {
+        const resolvedName = firstString(result, ["accountName", "account_name"]);
+        const resolvedNumber = firstString(result, ["accountNumber", "account_number"]);
+        const resolvedBankCode = firstString(result, ["bankCode", "bank_code"]);
+        if (
+          !resolvedName ||
+          resolvedNumber !== accountNumber.trim() ||
+          resolvedBankCode !== bankCode
+        ) {
+          setMessage("The bank account could not be confirmed. Check the bank and account number.");
+          return;
+        }
+        setResolvedAccountName(resolvedName);
+        setResolvedAccountKey(key);
+      }).catch((cause) => {
+        setMessage(friendlyError(cause, "The bank account could not be confirmed."));
+      });
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [bankCode, accountNumber, isValidNuban]);
 
   const requestedAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
   const feeAmount = firstNumber(feePreview, ["calculatedFeeAmount", "calculated_fee_amount"]) ?? 0;
@@ -115,19 +162,19 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
   const addAccount = async () => {
     setMessage(null);
     if (!canAddAccount || !walletId) {
-      setMessage("Complete the account name, 10-digit account number, and bank selection.");
+      setMessage("Choose a bank and enter a valid account number, then wait for SKIMA to confirm the account name.");
       return;
     }
     try {
       const created = await addBeneficiary.mutateAsync({
         walletId,
-        accountName: accountName.trim(),
         accountNumber: accountNumber.trim(),
         bankCode,
         idempotencyKey: idempotencyKey(`${workspace}-beneficiary`, walletId),
       });
-      setAccountName("");
       setAccountNumber("");
+      setResolvedAccountName("");
+      setResolvedAccountKey("");
       setBankCode("");
       setBankSearch("");
       setAdding(false);
@@ -216,9 +263,21 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
         />
       ) : adding ? (
         <Card padding="lg">
-          <SectionHeader title="Add payout account" description="We will confirm your bank details before you can receive funds." />
-          <AppField label="Account holder name" value={accountName} onChangeText={setAccountName} placeholder="Full account name" autoCapitalize="words" />
-          <AppField label="Account number" value={accountNumber} onChangeText={setAccountNumber} placeholder="10-digit NUBAN" keyboardType="number-pad" maxLength={10} error={accountNumber.length > 0 && !isValidNuban ? "Enter a valid 10-digit account number." : null} />
+          <SectionHeader title="Add payout account" description="Choose your bank and enter the account number. SKIMA confirms the registered account name automatically before saving it." />
+          <AppField
+            label="Account number"
+            value={accountNumber}
+            onChangeText={(value) => {
+              setAccountNumber(value.replace(/\D/g, "").slice(0, 10));
+              setResolvedAccountName("");
+              setResolvedAccountKey("");
+              setMessage(null);
+            }}
+            placeholder="10-digit NUBAN"
+            keyboardType="number-pad"
+            maxLength={10}
+            error={accountNumber.length > 0 && !isValidNuban ? "Enter a valid 10-digit account number." : null}
+          />
 
           {bankDirectory.length ? (
             <View style={styles.bankSection}>
@@ -240,7 +299,12 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
                     <Pressable
                       key={bank.code}
                       accessibilityRole="button"
-                      onPress={() => setBankCode(bank.code)}
+                      onPress={() => {
+                        setBankCode(bank.code);
+                        setResolvedAccountName("");
+                        setResolvedAccountKey("");
+                        setMessage(null);
+                      }}
                       style={({ pressed }) => [
                         styles.bankOption,
                         {
@@ -267,7 +331,40 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
             </View>
           )}
 
-          <AppButton label="Verify payout account" fullWidth loading={addBeneficiary.isPending} disabled={!canAddAccount} onPress={() => void addAccount()} />
+          {bankCode && isValidNuban ? (
+            <View style={[styles.resolvedAccount, { backgroundColor: resolvedAccountName ? palette.successSoft : palette.soft, borderColor: resolvedAccountName ? palette.success : palette.border }]}>
+              {resolveAccount.isPending ? (
+                <>
+                  <ShieldCheck color={palette.mutedStrong} size={19} />
+                  <View style={styles.resolvedAccountCopy}>
+                    <Text style={[styles.resolvedAccountLabel, { color: palette.muted }]}>CONFIRMING ACCOUNT</Text>
+                    <Text style={[styles.resolvedAccountName, { color: palette.ink }]}>Checking with your bank…</Text>
+                  </View>
+                </>
+              ) : resolvedAccountName ? (
+                <>
+                  <CheckCircle2 color={palette.success} size={20} />
+                  <View style={styles.resolvedAccountCopy}>
+                    <Text style={[styles.resolvedAccountLabel, { color: palette.success }]}>ACCOUNT CONFIRMED</Text>
+                    <Text style={[styles.resolvedAccountName, { color: palette.ink }]}>{resolvedAccountName}</Text>
+                    <Text style={[styles.resolvedAccountMeta, { color: palette.muted }]}>
+                      {bankNameByCode.get(bankCode) ?? "Selected bank"} · •••• {accountNumber.slice(-4)}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck color={palette.mutedStrong} size={19} />
+                  <View style={styles.resolvedAccountCopy}>
+                    <Text style={[styles.resolvedAccountLabel, { color: palette.muted }]}>ACCOUNT NAME</Text>
+                    <Text style={[styles.resolvedAccountName, { color: palette.ink }]}>Waiting for confirmation</Text>
+                  </View>
+                </>
+              )}
+            </View>
+          ) : null}
+
+          <AppButton label="Add verified payout account" fullWidth loading={addBeneficiary.isPending} disabled={!canAddAccount} onPress={() => void addAccount()} />
           {beneficiaries.length ? <AppButton label="Use an existing account" variant="ghost" fullWidth onPress={() => setAdding(false)} /> : null}
         </Card>
       ) : (
@@ -414,6 +511,11 @@ const styles = StyleSheet.create({
   bankCodeText: { ...typography.caption, fontSize: 10 },
   configurationNotice: { padding: spacing.md, borderRadius: radii.md, marginBottom: spacing.md },
   configurationText: { ...typography.caption, lineHeight: 18 },
+  resolvedAccount: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.md, marginBottom: spacing.md },
+  resolvedAccountCopy: { flex: 1, gap: 2 },
+  resolvedAccountLabel: { ...typography.eyebrow, fontSize: 9 },
+  resolvedAccountName: { ...typography.bodyStrong, fontSize: 14 },
+  resolvedAccountMeta: { ...typography.caption, fontSize: 11 },
   message: { padding: spacing.md, borderRadius: radii.md },
   messageText: { ...typography.caption, fontWeight: "700", lineHeight: 18 },
 });
