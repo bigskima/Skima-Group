@@ -43,6 +43,7 @@ const AdminAiRuntimeSchema = z.object({
   riskAssessments: z.array(PlatformRecordSchema).default([]),
   dispatchAssessments: z.array(PlatformRecordSchema).default([]),
   financeFindings: z.array(PlatformRecordSchema).default([]),
+  pricingIntelligence: PlatformRecordSchema.nullable().default(null),
   userId: z.string().uuid().optional(),
 });
 const AiAssistantResponseSchema = z.object({
@@ -113,6 +114,7 @@ export function AdminAiWorkspace() {
   const riskAssessments = runtime.data?.riskAssessments ?? [];
   const dispatchAssessments = runtime.data?.dispatchAssessments ?? [];
   const financeFindings = runtime.data?.financeFindings ?? [];
+  const pricingIntelligence = runtime.data?.pricingIntelligence ?? null;
   const activeCapabilities = capabilities.filter((item) => recordString(item, "status") === "active");
   const activeProviders = providers.filter((item) =>
     ["active", "degraded"].includes(recordString(item, "status") ?? "")
@@ -357,6 +359,8 @@ export function AdminAiWorkspace() {
 
       <DemandForecastPanel forecasts={forecasts} />
 
+      <PricingIntelligencePanel snapshot={pricingIntelligence} />
+
       <DispatchShadowPanel assessments={dispatchAssessments} />
 
       <FinanceReconciliationPanel findings={financeFindings} />
@@ -445,6 +449,127 @@ function DemandForecastPanel(props: {
           })}
         </div>
       )}
+    </section>
+  );
+}
+
+function PricingIntelligencePanel(props: {
+  readonly snapshot: PlatformRecord | null;
+}) {
+  const available = props.snapshot?.available === true;
+  const distribution = recordObject(props.snapshot, "stationPriceDistribution");
+  const historical = recordObject(props.snapshot, "historicalVolume");
+  const assumptions = recordObject(props.snapshot, "assumptions");
+  const scenarios = recordArray(props.snapshot, "scenarioProjections");
+  const reviews = recordArray(props.snapshot, "stationPriceReviews");
+  const currency = recordString(props.snapshot, "currencyCode") ?? "NGN";
+  const currentMarkup = nullableRecordNumber(props.snapshot, "currentPlatformMarkupPerKg") ?? 0;
+  const approvedStations = recordNumber(props.snapshot, "approvedStationCount");
+  const pricedStations = recordNumber(props.snapshot, "pricedStationCount");
+
+  return (
+    <section className="sk-panel admin-ai-pricing">
+      <div className="sk-panel__header admin-ai-panel-head">
+        <div>
+          <p className="admin-section-kicker">Pricing intelligence</p>
+          <h2>Pricing simulation</h2>
+          <p>
+            Review governed station prices and simple fee scenarios using recent historical kg.
+            Scenarios assume the same volume and do not model how customers would react to a price change.
+          </p>
+        </div>
+        <StatusBadge tone={available ? "info" : "neutral"}>
+          {available ? Math.round(pricedStations) + " / " + Math.round(approvedStations) + " stations priced" : "No snapshot yet"}
+        </StatusBadge>
+      </div>
+
+      {!available ? (
+        <div className="admin-ai-pricing-empty">
+          <BadgeDollarSign aria-hidden="true" />
+          <div>
+            <strong>Pricing intelligence is not available yet</strong>
+            <span>The worker will create a snapshot from governed SKIMA pricing and recent fulfilled LPG volume.</span>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="admin-ai-pricing-summary">
+            <span>
+              <small>Current SKIMA fee</small>
+              <b>{formatFinanceAmount(currentMarkup, currency)} / kg</b>
+            </span>
+            <span>
+              <small>Station median</small>
+              <b>{formatOptionalFinanceAmount(nullableRecordNumber(distribution, "medianPerKg"), currency)}</b>
+            </span>
+            <span>
+              <small>Station range</small>
+              <b>
+                {formatOptionalFinanceAmount(nullableRecordNumber(distribution, "minimumPerKg"), currency)}
+                {" – "}
+                {formatOptionalFinanceAmount(nullableRecordNumber(distribution, "maximumPerKg"), currency)}
+              </b>
+            </span>
+            <span>
+              <small>Recent volume basis</small>
+              <b>{formatForecastNumber(recordNumber(historical, "kg"), 1)} kg</b>
+            </span>
+          </div>
+
+          <div className="admin-ai-pricing-scenarios">
+            {scenarios.slice(0, 7).map((scenario, index) => {
+              const proposed = nullableRecordNumber(scenario, "proposedPlatformMarkupPerKg") ?? 0;
+              const projected = nullableRecordNumber(scenario, "projectedPlatformRevenue") ?? 0;
+              const difference = nullableRecordNumber(scenario, "differenceFromCurrent") ?? 0;
+              const isCurrent = Math.abs(proposed - currentMarkup) < 0.005;
+              return (
+                <article className={"admin-ai-pricing-scenario " + (isCurrent ? "is-current" : "")} key={recordString(scenario, "multiplier") ?? String(index)}>
+                  <div>
+                    <small>{isCurrent ? "Current reference" : "Scenario only"}</small>
+                    <strong>{formatFinanceAmount(proposed, currency)} / kg</strong>
+                  </div>
+                  <span>
+                    <small>Same-volume revenue</small>
+                    <b>{formatFinanceAmount(projected, currency)}</b>
+                  </span>
+                  <span className={difference > 0 ? "is-positive" : difference < 0 ? "is-negative" : undefined}>
+                    <small>vs current</small>
+                    <b>{formatSignedFinanceAmount(difference, currency)}</b>
+                  </span>
+                </article>
+              );
+            })}
+          </div>
+
+          {reviews.length ? (
+            <div className="admin-ai-pricing-reviews">
+              <div className="admin-ai-pricing-reviews__head">
+                <strong>Station price review</strong>
+                <small>
+                  Outside the configured {formatForecastNumber(recordNumber(assumptions, "stationReviewDeviationPercent"), 0)}% median band · review only
+                </small>
+              </div>
+              {reviews.slice(0, 6).map((review, index) => (
+                <div className="admin-ai-pricing-review-row" key={recordString(review, "stationBranchId") ?? String(index)}>
+                  <div>
+                    <strong>{recordString(review, "stationDisplayName") ?? "Station"}</strong>
+                    <small>{normalizeStatusLabel(recordString(review, "direction") ?? "review")}</small>
+                  </div>
+                  <span>{formatFinanceAmount(recordNumber(review, "pricePerKg"), currency)} / kg</span>
+                  <b>{formatForecastNumber(recordNumber(review, "deviationPercent"), 1)}%</b>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </>
+      )}
+
+      <div className="admin-ai-pricing-guardrail">
+        <ShieldCheck aria-hidden="true" />
+        <span>
+          Simulation only. This panel cannot set a station price, change the SKIMA fee, activate a financial policy, change a quote, or change dispatch.
+        </span>
+      </div>
     </section>
   );
 }
@@ -1053,6 +1178,17 @@ function recordObject(record: PlatformRecord | null | undefined, key: string): R
     : {};
 }
 
+function recordArray(
+  record: PlatformRecord | null | undefined,
+  key: string,
+): readonly PlatformRecord[] {
+  const value = record?.[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is PlatformRecord =>
+      Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+}
+
 function recordBoolean(
   record: PlatformRecord | null | undefined,
   key: string,
@@ -1107,6 +1243,15 @@ function formatFinanceAmount(value: number, currency: string): string {
       maximumFractionDigits: 2,
     }).format(value);
   }
+}
+
+function formatOptionalFinanceAmount(value: number | null, currency: string): string {
+  return value === null ? "—" : formatFinanceAmount(value, currency);
+}
+
+function formatSignedFinanceAmount(value: number, currency: string): string {
+  if (Math.abs(value) < 0.005) return formatFinanceAmount(0, currency);
+  return (value > 0 ? "+" : "−") + formatFinanceAmount(Math.abs(value), currency);
 }
 
 function shortReference(value: string | null): string {
