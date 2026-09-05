@@ -229,10 +229,12 @@ function OperationAction({
       onPress={onPress}
       style={({ pressed }) => [
         styles.action,
+        primary ? shadows.raised : shadows.soft,
         {
           backgroundColor: primary ? palette.brand : palette.surface,
           borderColor: primary ? palette.brand : palette.border,
-          opacity: pressed ? 0.84 : 1,
+          opacity: pressed ? 0.9 : 1,
+          transform: [{ scale: pressed ? 0.985 : 1 }],
         },
       ]}
     >
