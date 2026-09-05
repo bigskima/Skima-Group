@@ -21,6 +21,7 @@ import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
+import { RuntimeMediaImage } from "./RuntimeMediaImage";
 import { Screen } from "./Screen";
 
 const TYPE = "customer-refill-request";
@@ -38,6 +39,8 @@ export function NewRefillScreen() {
   const [deliveryLocationId, setDeliveryLocationId] = useState("");
   const [stationId, setStationId] = useState("");
   const [requestedKg, setRequestedKg] = useState("");
+  const [purchaseMode, setPurchaseMode] = useState<"kg" | "amount">("kg");
+  const [requestedAmount, setRequestedAmount] = useState("");
   const [instructions, setInstructions] = useState("");
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [quoteRecord, setQuoteRecord] = useState<PlatformRecord | null>(null);
@@ -110,6 +113,14 @@ export function NewRefillScreen() {
     enabled: stationEligibilityReady,
     limit: 10,
   });
+  const selectedStation = (eligibleStations.data ?? []).find((station) => station.station_branch_id === stationId) ?? null;
+
+  useEffect(() => {
+    if (purchaseMode !== "amount" || !selectedStation?.price_per_kg) return;
+    const amount = Number(requestedAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    setRequestedKg(formatKg(Math.floor((amount / selectedStation.price_per_kg) * 1000) / 1000));
+  }, [purchaseMode, requestedAmount, selectedStation?.price_per_kg]);
 
   const quote = useGatewayMutation({
     path: "/lpg/quotes",
@@ -261,6 +272,7 @@ export function NewRefillScreen() {
         deliveryLocationId,
         stationBranchId: stationId,
         requestedKg: kilograms,
+        requestedAmount: purchaseMode === "amount" ? Number(requestedAmount) : undefined,
         deliveryInstructions: instructions.trim() || undefined,
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey("create-quote", cylinderId),
@@ -448,6 +460,7 @@ export function NewRefillScreen() {
             selected={cylinderId}
             onSelect={selectCylinder}
             emptyText="No cylinder is registered yet."
+            showImages
           />
 
           <SelectionSection
@@ -541,7 +554,12 @@ export function NewRefillScreen() {
           ) : null}
 
           <View style={[styles.formCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <SectionLead step="4" icon={<Scale color={palette.brand} size={20} />} title="Refill amount" description="Enter the kilograms you want added to the selected cylinder." />
+            <SectionLead step="4" icon={<Scale color={palette.brand} size={20} />} title="Choose how much gas you need" description="Order by weight or enter the amount you want to spend. SKIMA converts money to kilograms using the selected station's live price." />
+
+            <View style={styles.modeSwitch}>
+              <AppButton label="Buy by kg" size="sm" variant={purchaseMode === "kg" ? "primary" : "secondary"} onPress={() => setPurchaseMode("kg")} />
+              <AppButton label="Buy by amount" size="sm" variant={purchaseMode === "amount" ? "primary" : "secondary"} onPress={() => setPurchaseMode("amount")} />
+            </View>
 
             {cylinderCapacityKg !== null ? (
               <View
@@ -569,11 +587,13 @@ export function NewRefillScreen() {
               </View>
             ) : null}
 
-            <View style={styles.fieldGroup}>
+            {purchaseMode === "kg" ? <View style={styles.fieldGroup}>
               <Text style={[styles.fieldLabel, { color: palette.ink }]}>Kilograms to refill</Text>
-              <TextInput
-                value={requestedKg}
-                onChangeText={(value) => {
+              <View style={styles.quantityControl}>
+                <AppButton accessibilityLabel="Reduce refill kilograms" label="−" variant="secondary" onPress={() => setRequestedKg(formatKg(Math.max(0.5, (Number(requestedKg) || 0.5) - 0.5)))} />
+                <TextInput
+                  value={requestedKg}
+                  onChangeText={(value) => {
                   setRequestedKg(value);
                   setStationId("");
                   setQuoteId(null);
@@ -583,16 +603,23 @@ export function NewRefillScreen() {
                 keyboardType="decimal-pad"
                 placeholder="e.g. 6"
                 placeholderTextColor={palette.muted}
-                style={[
-                  styles.input,
+                  style={[
+                  styles.input, styles.quantityInput,
                   {
                     backgroundColor: palette.input,
                     borderColor: exceedsCylinderCapacity ? palette.danger : palette.borderStrong,
                     color: palette.ink,
                   },
                 ]}
-              />
-            </View>
+                />
+                <AppButton accessibilityLabel="Add refill kilograms" label="+" variant="secondary" onPress={() => setRequestedKg(formatKg(Math.min(cylinderCapacityKg ?? 1000, (Number(requestedKg) || 0) + 0.5)))} />
+              </View>
+            </View> : <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, { color: palette.ink }]}>Amount to spend (NGN)</Text>
+              <TextInput value={requestedAmount} onChangeText={setRequestedAmount} keyboardType="decimal-pad" placeholder="e.g. 5000" placeholderTextColor={palette.muted} style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]} />
+              <View style={styles.amountPresets}>{[2000, 5000, 10000].map((amount) => <AppButton key={amount} label={`₦${amount.toLocaleString()}`} size="sm" variant={requestedAmount === String(amount) ? "primary" : "secondary"} onPress={() => setRequestedAmount(String(amount))} />)}</View>
+              <Text style={[styles.capacityBody, { color: palette.muted }]}>{selectedStation?.price_per_kg ? `${money(Number(requestedAmount) || 0, "NGN")} buys approximately ${requestedKg || "0"} kg at ${selectedStation.display_name}.` : "Choose a station below to calculate the exact kilograms its current price can provide."}</Text>
+            </View>}
 
             {exceedsCylinderCapacity && cylinderCapacityKg !== null ? (
               <View style={styles.capacityActions}>
@@ -684,6 +711,7 @@ function SelectionSection({
   selected,
   onSelect,
   emptyText,
+  showImages = false,
 }: {
   step: string;
   icon: ReactNode;
@@ -693,6 +721,7 @@ function SelectionSection({
   selected: string;
   onSelect(id: string): void;
   emptyText: string;
+  showImages?: boolean;
 }) {
   const { palette } = useAppTheme();
   return (
@@ -704,13 +733,11 @@ function SelectionSection({
             const id = recordId(item) ?? String(index);
             const active = id === selected;
             return (
-              <AppButton
-                key={id}
-                label={displayTitle(item)}
-                variant={active ? "primary" : "secondary"}
-                size="sm"
-                onPress={() => onSelect(id)}
-              />
+              <Pressable key={id} accessibilityRole="button" accessibilityState={{ selected: active }} onPress={() => onSelect(id)} style={[styles.recordChoice, { backgroundColor: active ? palette.brandSoft : palette.surfaceSubtle, borderColor: active ? palette.brand : palette.border }]}>
+                {showImages ? <RuntimeMediaImage assetId={firstAssetId(item.image_asset_ids ?? item.imageAssetIds)} label={displayTitle(item)} variant="thumbnail" /> : null}
+                <Text style={[styles.recordChoiceText, { color: palette.ink }]}>{displayTitle(item)}</Text>
+                {active ? <CheckCircle2 color={palette.brand} size={20} /> : null}
+              </Pressable>
             );
           })}
         </View>
@@ -844,6 +871,10 @@ function formatKg(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
 }
 
+function firstAssetId(value: unknown): string | null {
+  return Array.isArray(value) && typeof value[0] === "string" ? value[0] : null;
+}
+
 function formatDistance(distanceMeters: number) {
   if (!Number.isFinite(distanceMeters)) return "—";
   if (distanceMeters < 1000) return `${Math.max(1, Math.round(distanceMeters))} m`;
@@ -909,6 +940,8 @@ const styles = StyleSheet.create({
   sectionTitle: { ...typography.subheading, fontSize: 15 },
   sectionDescription: { ...typography.caption, lineHeight: 17 },
   choices: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  recordChoice: { minWidth: 150, flexGrow: 1, flexBasis: 160, flexDirection: "row", alignItems: "center", gap: spacing.sm, borderWidth: 1, borderRadius: radii.lg, padding: spacing.sm },
+  recordChoiceText: { flex: 1, ...typography.bodyStrong, fontSize: 13 },
   emptyText: { ...typography.caption, paddingVertical: spacing.xs },
   stationQueryState: { gap: spacing.sm },
   stationEmptyTitle: { ...typography.bodyStrong, fontSize: 14 },
@@ -930,6 +963,10 @@ const styles = StyleSheet.create({
   capacityBody: { ...typography.caption, lineHeight: 17 },
   capacityActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   fieldGroup: { gap: spacing.sm },
+  modeSwitch: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  quantityControl: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  quantityInput: { flex: 1, textAlign: "center", fontSize: 22, fontWeight: "900" },
+  amountPresets: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   fieldLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" },
   input: { minHeight: 54, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: 16 },
   multiline: { minHeight: 92, paddingTop: spacing.md, textAlignVertical: "top" },

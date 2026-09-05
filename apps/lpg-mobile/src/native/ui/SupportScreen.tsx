@@ -1,10 +1,12 @@
 import { AlertTriangle, FileWarning, ShieldAlert, ShieldCheck } from "lucide-react-native";
+import { useSegments } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries, useLpgConfig } from "../api/domains";
-import { useGatewayMutation } from "../api/gateway";
+import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
 import {
   ActionResponseSchema,
+  RecordArraySchema,
   displayReference,
   firstString,
   nestedRecords,
@@ -20,6 +22,8 @@ import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 
 export function SupportScreen() {
+  const segments = useSegments();
+  const workspace = String(segments[0] ?? "customer").replace(/[()]/g, "");
   const { palette } = useAppTheme();
   const orders = domainQueries.orders();
   const config = useLpgConfig();
@@ -37,6 +41,16 @@ export function SupportScreen() {
     schema: ActionResponseSchema,
     invalidate: [["safety-incidents"]],
   });
+  const inbox = useGatewayQuery({
+    key: ["support", "threads"],
+    path: "/runtime/support/threads",
+    schema: RecordArraySchema,
+  });
+  const supportMutation = useGatewayMutation({
+    path: "/runtime/support/threads",
+    schema: ActionResponseSchema,
+    invalidate: [["support", "threads"]],
+  });
 
   const submit = async () => {
     setMessage(null);
@@ -46,14 +60,27 @@ export function SupportScreen() {
       return;
     }
     try {
-      await mutation.mutateAsync({
-        lpgOrderId: orderId || undefined,
-        incidentType: type,
-        severity,
-        description: description.trim(),
-        source: "skima.lpg.mobile",
-        idempotencyKey: idempotencyKey("safety-incident", orderId || type),
-      });
+      const requestKey = idempotencyKey("support", `${workspace}:${orderId || type}`);
+      await Promise.all([
+        mutation.mutateAsync({
+          lpgOrderId: orderId || undefined,
+          incidentType: type,
+          severity,
+          description: description.trim(),
+          source: "skima.lpg.mobile",
+          idempotencyKey: `${requestKey}:incident`,
+        }),
+        supportMutation.mutateAsync({
+          workspace,
+          category: type,
+          subject: orderId ? `Issue with order ${orderId.slice(0, 8)}` : "Service support request",
+          message: description.trim(),
+          priority: severity === "critical" ? "urgent" : severity === "high" ? "high" : "normal",
+          source: "skima.mobile.support",
+          idempotencyKey: requestKey,
+          metadata: { orderId: orderId || null, incidentType: type, severity },
+        }),
+      ]);
       setDescription("");
       setMessageSuccess(true);
       setMessage("Your safety report has been sent to SKIMA.");
@@ -178,7 +205,7 @@ export function SupportScreen() {
               label="Submit safety report"
               fullWidth
               size="lg"
-              loading={mutation.isPending}
+              loading={mutation.isPending || supportMutation.isPending}
               disabled={policiesUnavailable || !type || !severity || !description.trim()}
               icon={<AlertTriangle color="#FFFFFF" size={18} />}
               onPress={() => void submit()}
@@ -196,6 +223,23 @@ export function SupportScreen() {
       {message ? (
         <View style={[styles.message, { backgroundColor: messageSuccess ? palette.successSoft : palette.dangerSoft }]}>
           <Text accessibilityRole="alert" style={[styles.messageText, { color: messageSuccess ? palette.success : palette.danger }]}>{message}</Text>
+        </View>
+      ) : null}
+
+      {(inbox.data ?? []).length ? (
+        <View style={[styles.form, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <Text style={[styles.sectionTitle, { color: palette.ink }]}>Your support conversations</Text>
+          {(inbox.data ?? []).slice(0, 5).map((thread) => (
+            <View key={recordId(thread) ?? JSON.stringify(thread)} style={[styles.thread, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+              <Text style={[styles.threadTitle, { color: palette.ink }]}>{firstString(thread, ["subject"]) ?? "Support request"}</Text>
+              <Text style={[styles.threadStatus, { color: palette.brand }]}>{(firstString(thread, ["status"]) ?? "open").replace(/_/g, " ")}</Text>
+              {nestedRecords(thread, "messages").slice(-2).map((entry, index) => (
+                <Text key={firstString(entry, ["id"]) ?? index} style={[styles.threadMessage, { color: palette.muted }]}>
+                  {firstString(entry, ["authorKind"]) === "admin" ? "SKIMA: " : "You: "}{firstString(entry, ["body"]) ?? ""}
+                </Text>
+              ))}
+            </View>
+          ))}
         </View>
       ) : null}
     </Screen>
@@ -242,4 +286,8 @@ const styles = StyleSheet.create({
   policyErrorText: { ...typography.caption, fontWeight: "800", textAlign: "center" },
   message: { borderRadius: radii.md, padding: spacing.md },
   messageText: { ...typography.caption, fontWeight: "800", textAlign: "center" },
+  thread: { gap: 4, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.md },
+  threadTitle: { ...typography.bodyStrong },
+  threadStatus: { ...typography.eyebrow, textTransform: "capitalize" },
+  threadMessage: { ...typography.caption, lineHeight: 18 },
 });

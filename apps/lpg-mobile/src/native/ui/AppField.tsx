@@ -22,7 +22,9 @@ export function AppField({
 }) {
   const { palette } = useAppTheme();
   const [focused, setFocused] = useState(false);
-  const { onFocus, onBlur, style: inputStyle, ...inputProps } = props;
+  const [uncontrolledValue, setUncontrolledValue] = useState(String(props.defaultValue ?? ""));
+  const { onFocus, onBlur, onChangeText, style: inputStyle, ...inputProps } = props;
+  const characterCount = props.value === undefined ? uncontrolledValue.length : String(props.value).length;
 
   return (
     <View style={styles.group}>
@@ -54,6 +56,10 @@ export function AppField({
             setFocused(false);
             onBlur?.(event);
           }}
+          onChangeText={(value) => {
+            if (props.value === undefined) setUncontrolledValue(value);
+            onChangeText?.(value);
+          }}
           placeholderTextColor={palette.muted}
           selectionColor={palette.brand}
           accessibilityLabel={props.accessibilityLabel ?? label}
@@ -70,7 +76,7 @@ export function AppField({
           {error ? <Text accessibilityRole="alert" style={[styles.support, { color: palette.danger }]}>{error}</Text>
             : hint ? <Text style={[styles.support, { color: palette.muted }]}>{hint}</Text> : <View />}
           {showCharacterCount && props.maxLength ? (
-            <Text style={[styles.counter, { color: palette.muted }]}>{String(props.value ?? "").length}/{props.maxLength}</Text>
+            <Text style={[styles.counter, { color: palette.muted }]}>{characterCount}/{props.maxLength}</Text>
           ) : null}
         </View>
       ) : null}

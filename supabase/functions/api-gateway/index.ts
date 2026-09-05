@@ -230,6 +230,9 @@ const ROUTES = new Set([
   "/runtime/order-settlements/execute",
   "/runtime/settlement-statements",
   "/runtime/communications/messages",
+  "/runtime/support/threads",
+  "/admin/support/threads",
+  "/admin/support/respond",
   "/runtime/communications/sync",
   "/runtime/otp/challenges",
   "/runtime/otp/delivery",
@@ -1647,6 +1650,17 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       const stationBranchId = requireUuid(payload.stationBranchId, "stationBranchId");
       const pickupLocationId = requireUuid(payload.pickupLocationId, "pickupLocationId");
       const deliveryLocationId = requireUuid(payload.deliveryLocationId, "deliveryLocationId");
+      let requestedKg = payload.requestedAmount === undefined || payload.requestedAmount === null
+        ? requireNumber(payload.requestedKg, "requestedKg")
+        : null;
+      if (requestedKg === null) {
+        const resolved = await supabase.rpc("resolve_lpg_refill_quantity_from_amount", {
+          target_station_branch_id: stationBranchId,
+          target_amount: requireNumber(payload.requestedAmount, "requestedAmount"),
+        });
+        if (resolved.error) return databaseError(resolved.error, id);
+        requestedKg = requireNumber(resolved.data, "resolvedRequestedKg");
+      }
       const routeSnapshotResult = await buildLpgCommercialRouteSnapshot(
         supabase,
         supabaseUrl,
@@ -1670,7 +1684,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           target_metadata: optionalRecord(payload.metadata) ?? {},
           target_pickup_location_id: pickupLocationId,
           target_preferred_time: optionalString(payload.preferredTime),
-          target_requested_kg: requireNumber(payload.requestedKg, "requestedKg"),
+          target_requested_kg: requestedKg,
           target_route_snapshot: routeSnapshotResult.data,
           target_source: optionalString(payload.source) ?? "skima.lpg.quote_api",
           target_station_branch_id: stationBranchId,
@@ -4646,6 +4660,62 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         id,
       );
     }
+  }
+
+  if (routePath === "/runtime/support/threads") {
+    if (request.method === "GET") {
+      return rpcResponse(
+        supabase.rpc("read_my_support_threads", {
+          target_limit: optionalIntegerQuery(url.searchParams.get("limit")) ?? 50,
+        }),
+        id,
+      );
+    }
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("create_support_thread", {
+          target_workspace: requireString(payload.workspace, "workspace"),
+          target_category: requireString(payload.category, "category"),
+          target_subject: requireString(payload.subject, "subject"),
+          target_body: requireString(payload.message, "message"),
+          target_priority: optionalString(payload.priority) ?? "normal",
+          target_source: optionalString(payload.source) ?? "skima.mobile",
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/admin/support/threads" && request.method === "GET") {
+    return rpcResponse(
+      supabase.rpc("read_support_admin_queue", {
+        target_status: optionalString(url.searchParams.get("status")),
+        target_limit: optionalIntegerQuery(url.searchParams.get("limit")) ?? 200,
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/support/respond" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("respond_to_support_thread", {
+        target_thread_id: requireUuid(payload.threadId, "threadId"),
+        target_body: requireString(payload.message, "message"),
+        target_status: optionalString(payload.status) ?? "in_progress",
+        target_source: optionalString(payload.source) ?? "skima.admin",
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
   }
 
   if (routePath === "/runtime/communications/sync" && request.method === "POST") {

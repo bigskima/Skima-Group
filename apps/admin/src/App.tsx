@@ -14,6 +14,7 @@ import {
   Megaphone,
   type LucideIcon,
   MessageSquareWarning,
+  LifeBuoy,
   Play,
   PlugZap,
   PowerOff,
@@ -75,6 +76,7 @@ import { AdminFleetWorkspace } from "./admin-fleet-workspace";
 import { AdminStartupBrandingWorkspace } from "./admin-startup-branding-workspace";
 import { AdminStationPricingWorkspace } from "./admin-station-pricing-workspace";
 import { AdminStationInventoryWorkspace } from "./admin-station-inventory-workspace";
+import { AdminSupportWorkspace } from "./admin-support-workspace";
 import {
   catalogConsoleConfig,
   financeConsoleConfig,
@@ -183,6 +185,7 @@ const navIconMap = {
   catalog: Boxes,
   providers: PlugZap,
   system: ServerCog,
+  support: LifeBuoy,
 } as const;
 
 const foundationNavigation: readonly NavigationItem[] = [
@@ -233,6 +236,13 @@ const foundationNavigation: readonly NavigationItem[] = [
     href: "/station-inventory",
     icon: "inventory",
     requiredPermissions: ["platform.inventory.manage"],
+  },
+  {
+    key: "support",
+    label: "Support Inbox",
+    href: "/support",
+    icon: "support",
+    requiredPermissions: ["platform.support.read"],
   },
   {
     key: "operations",
@@ -468,6 +478,8 @@ function Workspace(props: { readonly route: string; readonly onNavigate: (href: 
   if (props.route === "/operations") {
     return <AdminResourceConsole config={operationsConsoleConfig} />;
   }
+
+  if (props.route === "/support") return <AdminSupportWorkspace />;
 
   if (props.route === "/finance") {
     return <AdminResourceConsole config={financeConsoleConfig} />;
