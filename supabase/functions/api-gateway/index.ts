@@ -37,6 +37,14 @@ const ROUTES = new Set([
   "/admin/financial-policies/deactivate",
   "/admin/financial-policies/rollback",
   "/admin/payments/bank-transfer-config",
+  "/admin/revenue/provider-balance",
+  "/admin/revenue/payout-context",
+  "/admin/revenue/payout-banks",
+  "/admin/revenue/payout-account/resolve",
+  "/admin/revenue/payout-account",
+  "/admin/revenue/payout",
+  "/runtime/payout-banks",
+  "/runtime/payout-bank-account/resolve",
   "/admin/maps/location/status",
   "/admin/maps/location/providers",
   "/admin/maps/location/audit",
@@ -2074,6 +2082,208 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         }),
         id,
       );
+    }
+  }
+
+  if (routePath === "/runtime/payout-banks" && request.method === "GET") {
+    return payoutBankDirectoryResponse(supabase, id, false);
+  }
+
+  if (routePath === "/runtime/payout-bank-account/resolve" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return payoutBankResolveResponse(
+      supabase,
+      id,
+      requireString(body.value.accountNumber, "accountNumber"),
+      requireString(body.value.bankCode, "bankCode"),
+      false,
+    );
+  }
+
+  if (routePath.startsWith("/admin/revenue/")) {
+    const superAdminResult = await supabase.rpc("is_platform_super_admin");
+    if (superAdminResult.error) return databaseError(superAdminResult.error, id);
+
+    if (routePath === "/admin/revenue/provider-balance" && request.method === "GET") {
+      const revenueRead = superAdminResult.data === true
+        ? { data: true, error: null }
+        : await supabase.rpc("has_permission", {
+          target_permission: "platform.revenue.read",
+          target_organization_id: null,
+        });
+      const revenueManage = superAdminResult.data === true
+        ? { data: true, error: null }
+        : await supabase.rpc("has_permission", {
+          target_permission: "platform.revenue.manage",
+          target_organization_id: null,
+        });
+      if (revenueRead.error) return databaseError(revenueRead.error, id);
+      if (revenueManage.error) return databaseError(revenueManage.error, id);
+      if (revenueRead.data !== true && revenueManage.data !== true) {
+        return jsonResponse({
+          ok: false,
+          error: "forbidden",
+          message: "SKIMA Revenue access is required.",
+          requestId: id,
+        }, 403);
+      }
+
+      const secret = Deno.env.get("PAYSTACK_SECRET_KEY");
+      if (!secret) {
+        return jsonResponse({
+          ok: true,
+          data: {
+            provider: "provider.payment.paystack",
+            available: false,
+            currencyCode: "NGN",
+            balance: null,
+            balanceMinor: null,
+            reason: "PAYSTACK_NOT_CONFIGURED",
+          },
+          requestId: id,
+        });
+      }
+
+      try {
+        const balances = await readPaystackBalances(secret);
+        const ngn = balances.find((balance) => balance.currency === "NGN") ?? null;
+        return jsonResponse({
+          ok: true,
+          data: {
+            provider: "provider.payment.paystack",
+            available: Boolean(ngn),
+            currencyCode: "NGN",
+            balance: ngn?.balance ?? null,
+            balanceMinor: ngn?.balanceMinor ?? null,
+            balances,
+          },
+          requestId: id,
+        });
+      } catch (error) {
+        return paystackGatewayError(error, id);
+      }
+    }
+
+    if (superAdminResult.data !== true) {
+      return jsonResponse({
+        ok: false,
+        error: "forbidden",
+        message: "Only an active Super Admin can manage SKIMA revenue payouts.",
+        requestId: id,
+      }, 403);
+    }
+
+    if (routePath === "/admin/revenue/payout-context" && request.method === "GET") {
+      return rpcDataResponse(
+        supabase.rpc("read_platform_revenue_payout_context", {
+          target_currency_code: url.searchParams.get("currency") ?? "NGN",
+        }),
+        id,
+      );
+    }
+
+    if (routePath === "/admin/revenue/payout-banks" && request.method === "GET") {
+      return payoutBankDirectoryResponse(supabase, id, true);
+    }
+
+    if (routePath === "/admin/revenue/payout-account/resolve" && request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      return payoutBankResolveResponse(
+        supabase,
+        id,
+        requireString(body.value.accountNumber, "accountNumber"),
+        requireString(body.value.bankCode, "bankCode"),
+        true,
+      );
+    }
+
+    if (routePath === "/admin/revenue/payout-account" && request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      const contextResult = await supabase.rpc("read_platform_revenue_payout_context", {
+        target_currency_code: "NGN",
+      });
+      if (contextResult.error) return databaseError(contextResult.error, id);
+      const context = requireRecord(contextResult.data, "platform revenue payout context");
+      const walletId = requireUuid(context.walletId, "SKIMA revenue wallet");
+      return configurePaystackWithdrawalBeneficiary({
+        accountNumber: requireString(body.value.accountNumber, "accountNumber"),
+        bankCode: requireString(body.value.bankCode, "bankCode"),
+        beneficiaryType: "bank_account",
+        id,
+        idempotencyKey: requireString(body.value.idempotencyKey, "idempotencyKey"),
+        metadata: {
+          ...(optionalRecord(body.value.metadata) ?? {}),
+          payoutKind: "platform_revenue_treasury",
+        },
+        source: "platform.revenue_payout_beneficiary",
+        supabase,
+        supabaseUrl,
+        walletId,
+      });
+    }
+
+    if (routePath === "/admin/revenue/payout" && request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      const payoutIdempotencyKey = requireString(body.value.idempotencyKey, "idempotencyKey");
+      const requestResult = await supabase.rpc("request_platform_revenue_withdrawal", {
+        target_amount: requireNumber(body.value.amount, "amount"),
+        target_beneficiary_id: requireUuid(body.value.beneficiaryId, "beneficiaryId"),
+        target_currency_code: "NGN",
+        target_idempotency_key: payoutIdempotencyKey,
+        target_metadata: {
+          ...(optionalRecord(body.value.metadata) ?? {}),
+          requestedThrough: "admin.money_revenue",
+        },
+      });
+      if (requestResult.error) return databaseError(requestResult.error, id);
+
+      const withdrawalId = requireUuid(requestResult.data, "withdrawal id");
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!serviceRoleKey) {
+        return jsonResponse({
+          ok: false,
+          error: "server_misconfigured",
+          message: "SKIMA payout execution is not configured.",
+          requestId: id,
+        }, 503);
+      }
+      const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+      const approveResult = await serviceClient.rpc("approve_wallet_withdrawal", {
+        target_idempotency_key: `${payoutIdempotencyKey}:approve`,
+        target_metadata: {
+          payoutKind: "platform_revenue_treasury",
+          requestedThrough: "admin.money_revenue",
+        },
+        target_source: "platform.revenue_payout",
+        target_withdrawal_request_id: withdrawalId,
+      });
+      if (approveResult.error) return databaseError(approveResult.error, id);
+
+      const transferResult = await executePaystackWithdrawalTransfer(
+        serviceClient,
+        withdrawalId,
+        `${payoutIdempotencyKey}:transfer`,
+      );
+
+      const payout = await serviceClient
+        .from("withdrawal_requests")
+        .select("id,public_reference,beneficiary_id,currency_code,amount,fee_amount,total_debit_amount,status,provider_reference,requested_at,approved_at,processed_at,failed_at,reversed_at")
+        .eq("id", withdrawalId)
+        .single();
+      if (payout.error) return databaseError(payout.error, id);
+
+      return jsonResponse({
+        ok: true,
+        data: {
+          ...payout.data,
+          transfer: transferResult,
+        },
+        requestId: id,
+      });
     }
   }
 
@@ -9582,6 +9792,258 @@ function databaseError(
     },
     400,
   );
+}
+
+async function payoutBankDirectoryResponse(
+  supabase: SupabaseClient,
+  id: string,
+  requireSuperAdmin: boolean,
+): Promise<Response> {
+  if (requireSuperAdmin) {
+    const admin = await supabase.rpc("is_platform_super_admin");
+    if (admin.error) return databaseError(admin.error, id);
+    if (admin.data !== true) {
+      return jsonResponse({
+        ok: false,
+        error: "forbidden",
+        message: "Only an active Super Admin can manage SKIMA revenue payout accounts.",
+        requestId: id,
+      }, 403);
+    }
+  }
+
+  const providerKey = await resolveActivePaymentProviderKey(supabase);
+  if (providerKey === "provider.payment.paystack") {
+    const secret = Deno.env.get("PAYSTACK_SECRET_KEY");
+    if (secret) {
+      try {
+        const banks = await listPaystackBanks(secret);
+        if (banks.length > 0) {
+          return jsonResponse({
+            ok: true,
+            data: {
+              currencyCode: "NGN",
+              provider: providerKey,
+              source: "paystack",
+              banks,
+            },
+            requestId: id,
+          });
+        }
+      } catch (error) {
+        if (!(error instanceof PaystackPayoutError)) throw error;
+      }
+    }
+  }
+
+  const directory = await supabase
+    .from("currency_definitions")
+    .select("metadata")
+    .eq("code", "NGN")
+    .eq("status", "enabled")
+    .maybeSingle();
+  if (directory.error) return databaseError(directory.error, id);
+  const publicPayout = optionalRecord(optionalRecord(directory.data?.metadata)?.public_payout) ?? {};
+  return jsonResponse({
+    ok: true,
+    data: {
+      currencyCode: "NGN",
+      provider: providerKey,
+      source: "configured-fallback",
+      banks: Array.isArray(publicPayout.banks) ? publicPayout.banks : [],
+    },
+    requestId: id,
+  });
+}
+
+async function payoutBankResolveResponse(
+  supabase: SupabaseClient,
+  id: string,
+  accountNumber: string,
+  bankCode: string,
+  requireSuperAdmin: boolean,
+): Promise<Response> {
+  if (requireSuperAdmin) {
+    const admin = await supabase.rpc("is_platform_super_admin");
+    if (admin.error) return databaseError(admin.error, id);
+    if (admin.data !== true) {
+      return jsonResponse({
+        ok: false,
+        error: "forbidden",
+        message: "Only an active Super Admin can manage SKIMA revenue payout accounts.",
+        requestId: id,
+      }, 403);
+    }
+  }
+
+  const providerKey = await resolveActivePaymentProviderKey(supabase);
+  if (providerKey !== "provider.payment.paystack") {
+    return jsonResponse({
+      ok: true,
+      data: {
+        accountName: `Sandbox payout account •••• ${accountNumber.slice(-4)}`,
+        accountNumber,
+        bankCode,
+        provider: providerKey,
+        verified: true,
+      },
+      requestId: id,
+    });
+  }
+
+  const secret = Deno.env.get("PAYSTACK_SECRET_KEY");
+  if (!secret) {
+    return jsonResponse({
+      ok: false,
+      error: "payment_provider_unavailable",
+      message: "Paystack payouts are not configured.",
+      requestId: id,
+    }, 503);
+  }
+
+  try {
+    const resolved = await resolvePaystackBankAccount(secret, accountNumber, bankCode);
+    return jsonResponse({
+      ok: true,
+      data: {
+        ...resolved,
+        provider: providerKey,
+        verified: true,
+      },
+      requestId: id,
+    });
+  } catch (error) {
+    return paystackGatewayError(error, id);
+  }
+}
+
+function paystackGatewayError(error: unknown, id: string): Response {
+  if (error instanceof PaystackPayoutError) {
+    return jsonResponse({
+      ok: false,
+      error: error.code,
+      message: error.message,
+      requestId: id,
+    }, error.status);
+  }
+  throw error;
+}
+
+async function executePaystackWithdrawalTransfer(
+  serviceClient: SupabaseClient,
+  withdrawalId: string,
+  idempotencyKey: string,
+): Promise<Record<string, unknown>> {
+  const withdrawal = await serviceClient
+    .from("withdrawal_requests")
+    .select("id,public_reference,amount,fee_amount,beneficiary_id,provider_adapter_id,status")
+    .eq("id", withdrawalId)
+    .single();
+  if (withdrawal.error || !withdrawal.data) {
+    throw new RequestValidationError(withdrawal.error?.message ?? "Withdrawal was not found.");
+  }
+
+  const adapter = await serviceClient
+    .from("provider_adapters")
+    .select("key")
+    .eq("id", withdrawal.data.provider_adapter_id)
+    .single();
+  if (adapter.error || !adapter.data) {
+    throw new RequestValidationError(adapter.error?.message ?? "Payment provider was not found.");
+  }
+
+  if (adapter.data.key !== "provider.payment.paystack") {
+    const sandboxReference = String(withdrawal.data.public_reference ?? withdrawalId);
+    const sandbox = await serviceClient.rpc("process_wallet_withdrawal_transfer", {
+      target_idempotency_key: `${idempotencyKey}:sandbox`,
+      target_metadata: { automaticGatewayTransfer: true },
+      target_provider_reference: sandboxReference,
+      target_provider_status: "succeeded",
+      target_response_payload: { sandbox: true },
+      target_source: "platform.revenue_payout",
+      target_withdrawal_request_id: withdrawalId,
+    });
+    if (sandbox.error) throw new RequestValidationError(sandbox.error.message);
+    return { provider: adapter.data.key, status: "succeeded", providerReference: sandboxReference };
+  }
+
+  const beneficiary = await serviceClient
+    .from("withdrawal_beneficiaries")
+    .select("provider_recipient_code,status")
+    .eq("id", withdrawal.data.beneficiary_id)
+    .single();
+  if (beneficiary.error || !beneficiary.data?.provider_recipient_code || beneficiary.data.status !== "verified") {
+    throw new RequestValidationError("A verified Paystack payout account is required.");
+  }
+
+  const secret = Deno.env.get("PAYSTACK_SECRET_KEY");
+  if (!secret) throw new RequestValidationError("Paystack payouts are not configured.");
+  const reference = String(withdrawal.data.public_reference ?? withdrawalId);
+
+  try {
+    const transfer = await initiatePaystackTransfer(secret, {
+      amountMajor: Number(withdrawal.data.amount),
+      recipientCode: beneficiary.data.provider_recipient_code,
+      reason: "SKIMA revenue withdrawal",
+      reference,
+    });
+    const processed = await serviceClient.rpc("process_wallet_withdrawal_transfer", {
+      target_idempotency_key: `${idempotencyKey}:${transfer.providerStatus}`,
+      target_metadata: {
+        payoutKind: "platform_revenue_treasury",
+        principalSentToProvider: withdrawal.data.amount,
+        skimaFeeRetained: withdrawal.data.fee_amount,
+      },
+      target_provider_reference: transfer.providerReference,
+      target_provider_status: transfer.providerStatus,
+      target_response_payload: transfer.response,
+      target_source: "platform.revenue_payout",
+      target_withdrawal_request_id: withdrawalId,
+    });
+    if (processed.error) throw new RequestValidationError(processed.error.message);
+    return {
+      provider: "provider.payment.paystack",
+      status: transfer.providerStatus,
+      providerReference: transfer.providerReference,
+    };
+  } catch (error) {
+    if (error instanceof PaystackPayoutError && error.code === "paystack_unreachable") {
+      return {
+        provider: "provider.payment.paystack",
+        status: "approved",
+        retryable: true,
+        message: error.message,
+      };
+    }
+
+    if (error instanceof PaystackPayoutError) {
+      const failed = await serviceClient.rpc("process_wallet_withdrawal_transfer", {
+        target_idempotency_key: `${idempotencyKey}:failed`,
+        target_metadata: {
+          payoutKind: "platform_revenue_treasury",
+          paystackErrorCode: error.code,
+          paystackErrorMessage: error.message,
+        },
+        target_provider_reference: reference,
+        target_provider_status: "failed",
+        target_response_payload: {
+          status: false,
+          error: error.code,
+          message: error.message,
+        },
+        target_source: "platform.revenue_payout",
+        target_withdrawal_request_id: withdrawalId,
+      });
+      if (failed.error) throw new RequestValidationError(failed.error.message);
+      return {
+        provider: "provider.payment.paystack",
+        status: "failed",
+        providerReference: reference,
+        message: error.message,
+      };
+    }
+    throw error;
+  }
 }
 
 async function resolveActivePaymentProviderKey(supabase: SupabaseClient): Promise<string> {
