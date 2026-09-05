@@ -193,6 +193,7 @@ export async function initiatePaystackTransfer(
   if (!input.recipientCode.trim() || !input.reference.trim()) {
     throw new PaystackPayoutError("invalid_transfer_request", "Transfer recipient and reference are required.", 400);
   }
+  const transferReference = normalizePaystackTransferReference(input.reference);
 
   const body = await paystackRequest(
     secretKey,
@@ -205,13 +206,13 @@ export async function initiatePaystackTransfer(
         amount: Math.round(input.amountMajor * 100),
         recipient: input.recipientCode.trim(),
         reason: input.reason.trim() || "SKIMA payout",
-        reference: input.reference.trim(),
+        reference: transferReference,
       }),
     },
     fetcher,
   );
   const data = record(body.data);
-  const providerReference = text(data.reference) ?? input.reference;
+  const providerReference = text(data.reference) ?? transferReference;
   const rawStatus = text(data.status);
   return {
     providerReference,
@@ -219,6 +220,31 @@ export async function initiatePaystackTransfer(
     rawStatus,
     response: body,
   };
+}
+
+export function normalizePaystackTransferReference(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 50);
+
+  if (normalized.length < 16 || normalized.length > 50) {
+    throw new PaystackPayoutError(
+      "invalid_transfer_reference",
+      "Transfer reference must be between 16 and 50 supported characters.",
+      400,
+    );
+  }
+  if (!/^[a-z0-9_-]+$/.test(normalized)) {
+    throw new PaystackPayoutError(
+      "invalid_transfer_reference",
+      "Transfer reference contains unsupported characters.",
+      400,
+    );
+  }
+  return normalized;
 }
 
 async function paystackRequest(
