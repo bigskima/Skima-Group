@@ -12,6 +12,7 @@ const [
   complaintStatusSql,
   cylinderVisualReviewSql,
   customerPriceExplanationSql,
+  driverEarningsExplanationSql,
   partnerRiskSql,
   partnerRiskGuardSql,
   dispatchShadowSql,
@@ -34,6 +35,7 @@ const [
   cylinderVisualReviewPanel,
   cylinderDetailScreen,
   customerOrderScreen,
+  financeScreen,
   jobDetailScreen,
   stationInventoryScreen,
   customerLayout,
@@ -51,6 +53,7 @@ const [
   readRepositoryFile("supabase/migrations/20260905230500_customer_complaint_status_read_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905234000_ai_cylinder_visual_review_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260906005000_customer_price_explanation_runtime.sql"),
+  readRepositoryFile("supabase/migrations/20260906006000_driver_earnings_explanation_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233000_ai_partner_trust_risk_runtime.sql"),
   readRepositoryFile("supabase/migrations/20260905233500_ai_partner_risk_configuration_guard.sql"),
   readRepositoryFile("supabase/migrations/20260905235000_ai_dispatch_shadow_intelligence.sql"),
@@ -73,6 +76,7 @@ const [
   readRepositoryFile("apps/lpg-mobile/src/native/ui/CylinderVisualReviewPanel.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/CylinderDetailScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/CustomerOrdersScreen.tsx"),
+  readRepositoryFile("apps/lpg-mobile/src/native/ui/FinanceScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/StationInventoryScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/app/(customer)/_layout.tsx"),
@@ -1694,6 +1698,71 @@ Deno.test("customer price explanations use immutable accepted order snapshots on
   );
 });
 
+Deno.test("driver earnings explanations use locked assigned-driver payout records", () => {
+  const sql = normalizeWhitespace(driverEarningsExplanationSql);
+
+  assertIncludes(
+    sql,
+    "where driver.user_id = auth.uid()",
+    "driver earnings projection must resolve only the signed-in driver's profile",
+  );
+  assertIncludes(
+    sql,
+    "and owned_order.driver_profile_id = driver_id",
+    "specific earnings reads must prove the order belongs to the assigned driver",
+  );
+  assertIncludes(
+    sql,
+    "where target_order.driver_profile_id = driver_id",
+    "all earnings rows must stay scoped to the assigned driver",
+  );
+  assertIncludes(
+    sql,
+    "'lockedpayoutamount', target_order.driver_commission_amount",
+    "driver explanation must use the locked order payout amount",
+  );
+  assertIncludes(
+    sql,
+    "'walletpostingrecorded'",
+    "driver explanation must distinguish a posted wallet credit from a pending payout",
+  );
+  assertIncludes(
+    sql,
+    "'estimatedbyai', false",
+    "driver earnings projection must explicitly reject AI-estimated earnings",
+  );
+  assertIncludes(
+    sql,
+    "'mutablebyai', false",
+    "driver earnings projection must be read-only",
+  );
+  assertIncludes(
+    gatewaySource,
+    "earningsExplanations:",
+    "Driver Ask SKIMA context must include driver-safe payout explanations",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Only say money was credited when walletPostingRecorded is true and the canonical execution status is posted.",
+    "assistant must not claim a credit before canonical posting",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Never estimate a driver's earned amount, change a payout, trigger commission release, move wallet money, or substitute another driver's financial records.",
+    "driver copilot must preserve payout authority",
+  );
+  assertIncludes(
+    financeScreen,
+    'label="Explain my earnings"',
+    "driver Earnings screen must surface contextual earnings explanation",
+  );
+  assertIncludes(
+    financeScreen,
+    "Nothing is sent until you choose Send.",
+    "earnings explanation must remain a prefill-only user action",
+  );
+});
+
 Deno.test("AI workspace context keeps internal intelligence out of station/customer/driver surfaces", () => {
   const customerContext = sectionBetween(
     gatewaySource,
@@ -1716,6 +1785,30 @@ Deno.test("AI workspace context keeps internal intelligence out of station/custo
       customerContext,
       internalRpc,
       "customer assistant must not query internal intelligence with " + internalRpc,
+    );
+  }
+
+  const driverContext = sectionBetween(
+    gatewaySource,
+    'if (workspace === "driver")',
+    'if (workspace === "station")',
+  );
+  assertIncludes(
+    driverContext,
+    "read_my_lpg_driver_earnings_explanations",
+    "driver assistant must ground earnings questions in assigned-driver payout records",
+  );
+  for (const internalRpc of [
+    "read_ai_partner_risk_assessments",
+    "read_ai_dispatch_shadow_assessments",
+    "read_ai_finance_reconciliation_findings",
+    "read_ai_pricing_intelligence",
+    "read_ai_expansion_opportunities",
+  ]) {
+    assertNotIncludes(
+      driverContext,
+      internalRpc,
+      "driver assistant must not query internal intelligence with " + internalRpc,
     );
   }
 
