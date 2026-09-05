@@ -680,11 +680,11 @@ export function DriverApplicationScreen() {
               Choose where you normally start work. SKIMA uses this to review the areas you request, and it is never shown as your live public location.
             </Text>
             <Pressable
-              disabled={detectingLocation}
+              disabled={detectingLocation || resolvingCandidateCoverage}
               onPress={() => void detectOperatingLocation()}
               style={styles.locationBtn}
             >
-              {detectingLocation ? (
+              {detectingLocation || resolvingCandidateCoverage ? (
                 <ActivityIndicator color={colors.brand} />
               ) : (
                 <>
