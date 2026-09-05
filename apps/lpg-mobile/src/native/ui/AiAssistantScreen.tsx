@@ -1,4 +1,4 @@
-import { ArrowUp, Bot, ShieldCheck, Sparkles } from "lucide-react-native";
+import { ArrowUp, Bot, CircleAlert, ShieldCheck, Sparkles, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,7 +12,9 @@ import {
 } from "react-native";
 import { z } from "zod";
 
-import { useGatewayMutation } from "../api/gateway";
+import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
+import { ActionResponseSchema, RecordArraySchema, firstString, recordId } from "../api/records";
+import { idempotencyKey } from "../utilities/idempotency";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
@@ -27,6 +29,36 @@ const AiAssistantResponseSchema = z.object({
   suggestions: z.array(z.string()).default([]),
 });
 
+const supportSubjectTypes = [
+  { key: "order", label: "Order" },
+  { key: "payment", label: "Payment" },
+  { key: "cylinder", label: "Cylinder" },
+  { key: "driver", label: "Driver" },
+  { key: "station", label: "Station" },
+] as const;
+
+const supportCategories = [
+  { key: "delivery", label: "Delivery" },
+  { key: "payment", label: "Payment" },
+  { key: "pricing", label: "Pricing" },
+  { key: "underfill", label: "Underfill" },
+  { key: "safety", label: "Safety" },
+  { key: "damaged_cylinder", label: "Cylinder damage" },
+  { key: "switched_cylinder", label: "Cylinder mix-up" },
+  { key: "conduct", label: "Conduct" },
+  { key: "other", label: "Other" },
+] as const;
+
+const supportSeverities = [
+  { key: "standard", label: "Standard" },
+  { key: "high", label: "High" },
+  { key: "critical", label: "Critical" },
+] as const;
+
+type SupportSubjectType = (typeof supportSubjectTypes)[number]["key"];
+type SupportCategory = (typeof supportCategories)[number]["key"];
+type SupportSeverity = (typeof supportSeverities)[number]["key"];
+
 type ChatMessage = {
   readonly id: string;
   readonly role: "user" | "assistant";
@@ -40,13 +72,78 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
   const [draft, setDraft] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>(() => initialSuggestions(workspace));
   const [error, setError] = useState<string | null>(null);
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [supportOrderId, setSupportOrderId] = useState<string | null>(null);
+  const [supportSubjectType, setSupportSubjectType] = useState<SupportSubjectType>("order");
+  const [supportCategory, setSupportCategory] = useState<SupportCategory>("other");
+  const [supportSeverity, setSupportSeverity] = useState<SupportSeverity>("standard");
+  const [supportDescription, setSupportDescription] = useState("");
+  const [supportNotice, setSupportNotice] = useState<string | null>(null);
+  const [supportError, setSupportError] = useState<string | null>(null);
 
   const mutation = useGatewayMutation({
     path: "/runtime/ai/assistant",
     schema: AiAssistantResponseSchema,
   });
 
+  const supportOrders = useGatewayQuery({
+    key: ["ai-support-orders"],
+    path: "/lpg/orders",
+    schema: RecordArraySchema,
+    enabled: workspace === "customer" && supportOpen,
+  });
+
+  const supportMutation = useGatewayMutation({
+    path: "/runtime/ai/support-case",
+    schema: ActionResponseSchema,
+  });
+
   const copy = useMemo(() => workspaceCopy(workspace), [workspace]);
+
+  const submitSupportCase = async () => {
+    if (
+      workspace !== "customer" ||
+      !supportOrderId ||
+      supportDescription.trim().length < 10 ||
+      supportMutation.isPending
+    ) {
+      return;
+    }
+
+    setSupportError(null);
+    setSupportNotice(null);
+
+    try {
+      await supportMutation.mutateAsync({
+        orderId: supportOrderId,
+        subjectType: supportSubjectType,
+        category: supportCategory,
+        severity: supportSeverity,
+        description: supportDescription.trim(),
+        confirmed: true,
+        conversationId: conversationId ?? undefined,
+        idempotencyKey: idempotencyKey(
+          "ask-skima-support",
+          `${supportOrderId}:${supportSubjectType}:${supportCategory}:${Date.now()}`,
+        ),
+      });
+
+      setSupportDescription("");
+      setSupportOrderId(null);
+      setSupportSubjectType("order");
+      setSupportCategory("other");
+      setSupportSeverity("standard");
+      setSupportOpen(false);
+      setSupportNotice("Support case created. SKIMA support can now review the issue.");
+    } catch (cause) {
+      setSupportError(
+        friendlyError(
+          cause,
+          "The support case could not be created. Your order and payment were not changed.",
+        ),
+      );
+    }
+  };
 
   const send = async (value = draft) => {
     const message = value.trim();
@@ -204,6 +301,251 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
           </View>
         ) : null}
 
+        {workspace === "customer" ? (
+          <View style={styles.supportArea}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                setSupportOpen((current) => !current);
+                setSupportError(null);
+                setSupportNotice(null);
+              }}
+              style={({ pressed }) => [
+                styles.supportToggle,
+                {
+                  backgroundColor: pressed ? palette.surfaceSubtle : palette.surface,
+                  borderColor: palette.border,
+                },
+              ]}
+            >
+              <View style={[styles.supportToggleIcon, { backgroundColor: palette.dangerSoft }]}>
+                <CircleAlert color={palette.danger} size={17} />
+              </View>
+              <View style={styles.supportToggleCopy}>
+                <Text style={[styles.supportToggleTitle, { color: palette.ink }]}>Report an issue</Text>
+                <Text style={[styles.supportToggleBody, { color: palette.muted }]}>
+                  Create a normal SKIMA support case from one of your refill orders.
+                </Text>
+              </View>
+              {supportOpen ? <X color={palette.muted} size={18} /> : null}
+            </Pressable>
+
+            {supportOpen ? (
+              <View
+                style={[
+                  styles.supportForm,
+                  {
+                    backgroundColor: palette.surface,
+                    borderColor: palette.border,
+                  },
+                ]}
+              >
+                <View style={styles.supportFormHead}>
+                  <View>
+                    <Text style={[styles.supportFormTitle, { color: palette.ink }]}>Create support case</Text>
+                    <Text style={[styles.supportFormBody, { color: palette.muted }]}>
+                      You choose what gets submitted. Ask SKIMA cannot submit this form by itself.
+                    </Text>
+                  </View>
+                  <View style={[styles.confirmBadge, { backgroundColor: palette.successSoft }]}>
+                    <ShieldCheck color={palette.success} size={13} />
+                    <Text style={[styles.confirmBadgeText, { color: palette.success }]}>User confirmed</Text>
+                  </View>
+                </View>
+
+                <Text style={[styles.supportLabel, { color: palette.mutedStrong }]}>Refill order</Text>
+                {supportOrders.isLoading ? (
+                  <View style={styles.supportLoading}>
+                    <ActivityIndicator color={palette.brand} size="small" />
+                    <Text style={[styles.supportLoadingText, { color: palette.muted }]}>Loading your orders…</Text>
+                  </View>
+                ) : supportOrders.data?.length ? (
+                  <View style={styles.supportChoiceWrap}>
+                    {supportOrders.data.slice(0, 5).map((order) => {
+                      const id = recordId(order);
+                      if (!id) return null;
+                      const reference = firstString(order, ["public_reference", "publicReference", "id"]) ?? "Refill order";
+                      const status = firstString(order, ["status", "workflow_state", "workflowState"]);
+                      const selected = supportOrderId === id;
+                      return (
+                        <Pressable
+                          accessibilityRole="button"
+                          key={id}
+                          onPress={() => setSupportOrderId(id)}
+                          style={[
+                            styles.orderChoice,
+                            {
+                              backgroundColor: selected ? palette.brandSoft : palette.surfaceSubtle,
+                              borderColor: selected ? palette.brand : palette.border,
+                            },
+                          ]}
+                        >
+                          <Text style={[styles.orderChoiceTitle, { color: palette.ink }]}>{reference}</Text>
+                          {status ? (
+                            <Text style={[styles.orderChoiceStatus, { color: palette.muted }]}>{status.replaceAll("_", " ")}</Text>
+                          ) : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <Text style={[styles.supportEmptyText, { color: palette.muted }]}>
+                    No refill order is available for a support case yet.
+                  </Text>
+                )}
+
+                <Text style={[styles.supportLabel, { color: palette.mutedStrong }]}>Issue is about</Text>
+                <View style={styles.supportChoiceWrap}>
+                  {supportSubjectTypes.map((item) => {
+                    const selected = supportSubjectType === item.key;
+                    return (
+                      <Pressable
+                        accessibilityRole="button"
+                        key={item.key}
+                        onPress={() => setSupportSubjectType(item.key)}
+                        style={[
+                          styles.supportChip,
+                          {
+                            backgroundColor: selected ? palette.brandSoft : palette.surfaceSubtle,
+                            borderColor: selected ? palette.brand : palette.border,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.supportChipText, { color: palette.ink }]}>{item.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text style={[styles.supportLabel, { color: palette.mutedStrong }]}>Category</Text>
+                <View style={styles.supportChoiceWrap}>
+                  {supportCategories.map((item) => {
+                    const selected = supportCategory === item.key;
+                    return (
+                      <Pressable
+                        accessibilityRole="button"
+                        key={item.key}
+                        onPress={() => setSupportCategory(item.key)}
+                        style={[
+                          styles.supportChip,
+                          {
+                            backgroundColor: selected ? palette.brandSoft : palette.surfaceSubtle,
+                            borderColor: selected ? palette.brand : palette.border,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.supportChipText, { color: palette.ink }]}>{item.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text style={[styles.supportLabel, { color: palette.mutedStrong }]}>Priority</Text>
+                <View style={styles.supportChoiceWrap}>
+                  {supportSeverities.map((item) => {
+                    const selected = supportSeverity === item.key;
+                    return (
+                      <Pressable
+                        accessibilityRole="button"
+                        key={item.key}
+                        onPress={() => setSupportSeverity(item.key)}
+                        style={[
+                          styles.supportChip,
+                          {
+                            backgroundColor: selected ? palette.brandSoft : palette.surfaceSubtle,
+                            borderColor: selected ? palette.brand : palette.border,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.supportChipText, { color: palette.ink }]}>{item.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <Text style={[styles.supportLabel, { color: palette.mutedStrong }]}>Describe the issue</Text>
+                <TextInput
+                  accessibilityLabel="Describe support issue"
+                  maxLength={4000}
+                  multiline
+                  onChangeText={setSupportDescription}
+                  placeholder="Tell SKIMA support what happened and what you need help with."
+                  placeholderTextColor={palette.muted}
+                  style={[
+                    styles.supportInput,
+                    {
+                      backgroundColor: palette.surfaceSubtle,
+                      borderColor: palette.border,
+                      color: palette.ink,
+                    },
+                  ]}
+                  value={supportDescription}
+                />
+
+                <View style={[styles.supportGuardrail, { backgroundColor: palette.surfaceSubtle }]}>
+                  <ShieldCheck color={palette.success} size={16} />
+                  <Text style={[styles.supportGuardrailText, { color: palette.mutedStrong }]}>
+                    Creating this case does not cancel the order, refund money, change dispatch, or edit a payment.
+                  </Text>
+                </View>
+
+                {supportError ? (
+                  <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}>
+                    <Text accessibilityRole="alert" style={[styles.errorText, { color: palette.danger }]}>{supportError}</Text>
+                  </View>
+                ) : null}
+
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={
+                    !supportOrderId ||
+                    supportDescription.trim().length < 10 ||
+                    supportMutation.isPending
+                  }
+                  onPress={() => void submitSupportCase()}
+                  style={[
+                    styles.supportSubmit,
+                    {
+                      backgroundColor:
+                        supportOrderId &&
+                        supportDescription.trim().length >= 10 &&
+                        !supportMutation.isPending
+                          ? palette.brand
+                          : palette.surfaceSubtle,
+                    },
+                  ]}
+                >
+                  {supportMutation.isPending ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : null}
+                  <Text
+                    style={[
+                      styles.supportSubmitText,
+                      {
+                        color:
+                          supportOrderId &&
+                          supportDescription.trim().length >= 10 &&
+                          !supportMutation.isPending
+                            ? "#FFFFFF"
+                            : palette.muted,
+                      },
+                    ]}
+                  >
+                    Create support case
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {supportNotice ? (
+              <View style={[styles.supportNotice, { backgroundColor: palette.successSoft }]}>
+                <ShieldCheck color={palette.success} size={16} />
+                <Text style={[styles.supportNoticeText, { color: palette.success }]}>{supportNotice}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
         {error ? (
           <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}>
             <Text accessibilityRole="alert" style={[styles.errorText, { color: palette.danger }]}>{error}</Text>
@@ -326,6 +668,43 @@ const styles = StyleSheet.create({
   suggestions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   suggestion: { maxWidth: "100%", minHeight: 38, justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.pill, paddingHorizontal: 13, paddingVertical: 8 },
   suggestionText: { ...typography.caption, fontWeight: "800" },
+  supportArea: { gap: spacing.sm },
+  supportToggle: {
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.xl,
+    padding: spacing.md,
+  },
+  supportToggleIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  supportToggleCopy: { flex: 1, gap: 2 },
+  supportToggleTitle: { ...typography.bodyStrong, fontSize: 13 },
+  supportToggleBody: { ...typography.caption, lineHeight: 16 },
+  supportForm: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  supportFormHead: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md },
+  supportFormTitle: { ...typography.subheading, fontSize: 17 },
+  supportFormBody: { ...typography.caption, lineHeight: 17, maxWidth: 420, marginTop: 3 },
+  confirmBadge: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: radii.pill, paddingHorizontal: 8, paddingVertical: 5 },
+  confirmBadgeText: { ...typography.caption, fontSize: 9, fontWeight: "900" },
+  supportLabel: { ...typography.caption, fontWeight: "900", marginBottom: -6 },
+  supportChoiceWrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  supportChip: { minHeight: 36, justifyContent: "center", borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.pill, paddingHorizontal: 12, paddingVertical: 7 },
+  supportChipText: { ...typography.caption, fontWeight: "800" },
+  orderChoice: { minWidth: 120, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, paddingHorizontal: 12, paddingVertical: 9 },
+  orderChoiceTitle: { ...typography.caption, fontWeight: "900" },
+  orderChoiceStatus: { ...typography.caption, fontSize: 9, marginTop: 2, textTransform: "capitalize" },
+  supportInput: { minHeight: 108, maxHeight: 180, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.md, textAlignVertical: "top", ...typography.body },
+  supportGuardrail: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, borderRadius: radii.md, padding: spacing.md },
+  supportGuardrailText: { flex: 1, ...typography.caption, lineHeight: 17 },
+  supportSubmit: { minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.md, paddingHorizontal: spacing.lg },
+  supportSubmitText: { ...typography.bodyStrong, fontSize: 13 },
+  supportNotice: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderRadius: radii.md, padding: spacing.md },
+  supportNoticeText: { flex: 1, ...typography.caption, fontWeight: "800" },
+  supportLoading: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm },
+  supportLoadingText: { ...typography.caption, fontWeight: "700" },
+  supportEmptyText: { ...typography.caption, lineHeight: 17 },
   error: { borderRadius: radii.md, padding: spacing.md },
   errorText: { ...typography.caption, fontWeight: "800", textAlign: "center" },
   composer: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm, borderWidth: 1, borderRadius: 22, padding: 7, paddingLeft: 15 },
