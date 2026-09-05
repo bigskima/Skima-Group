@@ -925,26 +925,23 @@ function financeErrorFromPaystack(error: unknown): FinanceError {
 }
 
 async function activePaymentProvider(serviceClient: SupabaseClient): Promise<string> {
-  const paystack = await serviceClient
-    .from("provider_adapters")
-    .select("key")
-    .eq("provider_kind", "payment")
-    .eq("key", "provider.payment.paystack")
-    .eq("status", "active")
-    .maybeSingle();
-  if (paystack.error) throw new FinanceError("database_error", paystack.error.message);
-  if (paystack.data) return paystack.data.key;
-
-  const sandbox = await serviceClient
-    .from("provider_adapters")
-    .select("key")
-    .eq("provider_kind", "payment")
-    .eq("key", "provider.payment.sandbox")
-    .eq("status", "active")
-    .maybeSingle();
-  if (sandbox.error) throw new FinanceError("database_error", sandbox.error.message);
-  if (sandbox.data) return sandbox.data.key;
-  throw new FinanceError("payment_provider_unavailable", "No active payment provider is configured.", 503);
+  const result = await serviceClient.rpc("resolve_active_payment_provider");
+  if (result.error) {
+    throw new FinanceError(
+      "payment_provider_unavailable",
+      result.error.message,
+      503,
+    );
+  }
+  const key = optionalString(result.data);
+  if (!key) {
+    throw new FinanceError(
+      "payment_provider_unavailable",
+      "No active payment provider is configured.",
+      503,
+    );
+  }
+  return key;
 }
 
 async function assertConfiguredBank(serviceClient: SupabaseClient, bankCode: string): Promise<void> {
