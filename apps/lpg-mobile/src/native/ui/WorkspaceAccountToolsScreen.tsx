@@ -102,7 +102,7 @@ export function WorkspaceAccountToolsScreen({ workspace }: { workspace: Workspac
     <Screen
       eyebrow="Account"
       title={label}
-      subtitle="Open only the area you need. Each tool has its own focused screen."
+      subtitle="Everything for this workspace, organised by what you want to do."
       action={<AppButton label="Back" size="sm" variant="ghost" onPress={() => router.back()} />}
     >
       {toolGroups[workspace].map((group) => (
