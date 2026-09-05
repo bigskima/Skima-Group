@@ -289,7 +289,7 @@ function initialSuggestions(workspace: AiAssistantWorkspace): string[] {
   if (workspace === "station") {
     return ["What needs attention?", "How busy could the next 7 days be?", "Summarize my current queue"];
   }
-  return ["Where is my refill?", "What's happening with my application?", "Explain my latest order"];
+  return ["Where is my refill?", "When might I need another refill?", "What's happening with my application?"];
 }
 
 const styles = StyleSheet.create({
