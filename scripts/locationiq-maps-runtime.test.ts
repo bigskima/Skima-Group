@@ -200,6 +200,7 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
     customerLocationSave,
     partnerApplication,
     driverApplication,
+    driverWorkspaceApplication,
   ] =
     await Promise.all([
       readRepositoryFile("supabase/migrations/20260901204813_locationiq_maps_provider_runtime.sql"),
@@ -222,6 +223,7 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
       readRepositoryFile("apps/lpg-mobile/src/native/ui/locationSave.ts"),
       readRepositoryFile("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx"),
       readRepositoryFile("apps/lpg-mobile/src/native/ui/DriverApplicationEntryScreen.tsx"),
+      readRepositoryFile("apps/lpg-mobile/src/native/ui/DriverApplicationScreen.tsx"),
     ]);
 
   for (const route of ["autocomplete", "geocode", "reverse-geocode", "route-estimate"]) {
@@ -272,6 +274,10 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
   assertIncludes(geographyCutover, "create or replace function public.verify_geography_migration_mapping(");
   assertIncludes(geographyCutover, "migration_status = 'verified'");
   assertIncludes(geographyCutover, "VERIFIED_BY_ADMIN");
+  assertIncludes(
+    geographyCutover,
+    "create or replace function public.migrate_verified_legacy_lpg_coverage_policies()",
+  );
 
   // Admin rendering must not require an env-only basemap to be usable.
   assertIncludes(adminGeometry, 'supabase.rpc("read_maps_renderer_configuration")');
@@ -288,6 +294,8 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
   assertIncludes(partnerApplication, "...basePayload");
   assertIncludes(partnerApplication, "location: lastLocation ?? existingLocation ?? null");
   assertIncludes(driverApplication, "...existingService");
+  assertIncludes(driverWorkspaceApplication, "...basePayload");
+  assertIncludes(driverWorkspaceApplication, "...existingService");
 });
 
 function testAdapter(fetcher: typeof fetch, retryCount = 0) {
