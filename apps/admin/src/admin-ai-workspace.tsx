@@ -425,13 +425,13 @@ function AiUsageGovernorPanel(props: {
     String(Math.max(1, recordNumber(policy, "perUserDailyRequestLimit") || 40)),
   );
   const [dailyInputUnits, setDailyInputUnits] = useState(
-    recordNullableNumber(policy, "dailyInputUnitLimit")?.toString() ?? "",
+    nullableRecordNumber(policy, "dailyInputUnitLimit")?.toString() ?? "",
   );
   const [dailyOutputUnits, setDailyOutputUnits] = useState(
-    recordNullableNumber(policy, "dailyOutputUnitLimit")?.toString() ?? "",
+    nullableRecordNumber(policy, "dailyOutputUnitLimit")?.toString() ?? "",
   );
   const [automaticFreeFailover, setAutomaticFreeFailover] = useState(
-    recordBoolean(policy, "automaticFreeFailover", true),
+    recordBoolean(policy, "automaticFreeFailover") ?? true,
   );
   const [reason, setReason] = useState("Update SKIMA free-tier AI guard.");
   const [error, setError] = useState<string | null>(null);
@@ -1620,32 +1620,6 @@ function recordBoolean(
 ): boolean | null {
   const value = record?.[key];
   return typeof value === "boolean" ? value : null;
-}
-
-function recordArray(record: PlatformRecord | null | undefined, key: string): PlatformRecord[] {
-  const value = record?.[key];
-  return Array.isArray(value)
-    ? value.filter((item): item is PlatformRecord => Boolean(item) && typeof item === "object" && !Array.isArray(item))
-    : [];
-}
-
-function recordBoolean(
-  record: PlatformRecord | null | undefined,
-  key: string,
-  fallback = false,
-): boolean {
-  const value = record?.[key];
-  return typeof value === "boolean" ? value : fallback;
-}
-
-function recordNullableNumber(
-  record: PlatformRecord | null | undefined,
-  key: string,
-): number | null {
-  const value = record?.[key];
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
-  return null;
 }
 
 function recordNumber(record: PlatformRecord | null | undefined, key: string): number {
