@@ -27,10 +27,10 @@ export function AuthShell({
   readonly children: ReactNode;
   readonly footer?: ReactNode;
 }) {
-  const { palette } = useAppTheme();
+  const { palette, scheme } = useAppTheme();
   const { width } = useWindowDimensions();
   const wide = width >= 900;
-  const dark = palette.scheme === "dark";
+  const dark = scheme === "dark";
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: dark ? "#0A0B0D" : "#F8F8F7" }]}>
