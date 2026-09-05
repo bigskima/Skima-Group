@@ -39,6 +39,7 @@ import {
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors } from "../theme/tokens";
+import { AiAssistantLauncher } from "./AiAssistantLauncher";
 import { BrandMark } from "./BrandMark";
 import { PromotionBanner } from "./PromotionBanner";
 import { RuntimeMediaImage } from "./RuntimeMediaImage";
@@ -117,6 +118,8 @@ export function CustomerDashboard() {
             <CustomerPrimaryAction {...primary} />
           </GuideTarget>
 
+          <AiAssistantLauncher workspace="customer" />
+
           {order && orderId ? (
             <ActiveOrder record={order} href={`/(customer)/orders/${orderId}`} />
           ) : null}
@@ -180,6 +183,8 @@ export function DriverDashboard() {
       ) : (
         <>
           <DriverCockpit record={active} />
+
+          <AiAssistantLauncher workspace="driver" />
 
           <GuideTarget targetKey="driver.operations" style={styles.driverActions}>
             <OperationalAction
