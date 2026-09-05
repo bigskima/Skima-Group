@@ -438,7 +438,8 @@ Deno.test("home intelligence is deterministic and reuses the existing Ask SKIMA 
     "home insight must derive from already authorized SKIMA context",
   );
   assertIncludes(gatewaySource, 'kind: "refill_outlook"', "customer home intelligence should surface deterministic refill outlooks");
-  assertIncludes(gatewaySource, 'kind: "driver_next_step"', "driver home intelligence should surface the current workflow stage");
+  assertIncludes(gatewaySource, 'kind: "driver_daily_brief"', "driver home intelligence should prefer the deterministic Driver Daily Brief");
+  assertIncludes(gatewaySource, 'kind: "driver_next_step"', "driver home intelligence should retain the canonical active-job fallback");
   assertIncludes(gatewaySource, 'kind: "station_demand_outlook"', "station home intelligence should surface deterministic demand estimates");
   assertIncludes(
     mobileAiLauncher,
@@ -459,6 +460,70 @@ Deno.test("home intelligence is deterministic and reuses the existing Ask SKIMA 
     mobileAiLauncher,
     /GEMINI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|SUPABASE_SERVICE_ROLE/,
     "home intelligence UI must not contain server credentials",
+  );
+});
+
+Deno.test("Driver Daily Brief is first-class in Ask SKIMA without gaining operational authority", () => {
+  const driverContext = sectionBetween(
+    gatewaySource,
+    'if (workspace === "driver")',
+    'if (workspace === "station")',
+  );
+
+  assertIncludes(
+    driverContext,
+    'supabase.rpc("read_my_lpg_driver_daily_brief")',
+    "driver Ask SKIMA context must load the signed-in driver's deterministic daily brief",
+  );
+  assertIncludes(
+    driverContext,
+    "driverDailyBrief:",
+    "driver Ask SKIMA context must expose the daily brief under a dedicated key",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Use driverDailyBrief as the primary source for what the driver should do next",
+    "driver copilot role instructions must prioritize the deterministic brief",
+  );
+  assertIncludes(
+    gatewaySource,
+    "use driverDailyBrief.nextStep as the primary guidance",
+    "what-next answers must ground themselves in the brief's canonical next step",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Never claim that Driver Daily Brief or Ask SKIMA assigned, accepted or re-ranked a job; changed driver availability or location; advanced an LPG order state; posted commission; or moved wallet funds.",
+    "driver copilot must preserve dispatch, lifecycle and finance authority boundaries",
+  );
+  assertIncludes(
+    gatewaySource,
+    'kind: "driver_daily_brief"',
+    "the deterministic home intelligence card must surface Driver Daily Brief first",
+  );
+  assertIncludes(
+    mobileAiLauncher,
+    "prompt: z.string().max(3000).optional()",
+    "home insight may provide a safe prefilled Ask SKIMA question",
+  );
+  assertIncludes(
+    mobileAiLauncher,
+    '"?prompt=" + encodeURIComponent(prompt)',
+    "tapping a grounded driver insight must prefill the assistant instead of auto-submitting AI",
+  );
+  assertIncludes(
+    mobileAssistant,
+    "What should I do next?",
+    "driver assistant should present the daily brief question as a primary action",
+  );
+  assertNotIncludes(
+    mobileAiLauncher,
+    "mutateAsync",
+    "home Driver Daily Brief must remain deterministic and must not execute a mutation or AI call",
+  );
+  assertNotIncludes(
+    mobileAiLauncher,
+    "invokeAiText",
+    "opening Driver Daily Brief from home must not consume an LLM call",
   );
 });
 
