@@ -47,6 +47,7 @@ import { useSession } from "../session/SessionProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
+import { AiContextAction } from "./AiContextAction";
 import { Card } from "./Card";
 import { Screen } from "./Screen";
 
@@ -600,6 +601,12 @@ export function ApplicationOverviewScreen({
           activatedAt={firstString(current, ["activated_at", "activatedAt"])}
           onFixRequestedChanges={() => setCurrentStep(3)}
         />
+        <AiContextAction
+          workspace={workspace}
+          label="Explain my application"
+          prompt={`Explain my ${workspace} application status and tell me whether I need to do anything next. Use only my application progress and applicant-facing SKIMA messages.`}
+          detail="Ask SKIMA can explain the current stage and next action. Nothing is sent until you choose Send."
+        />
       </Screen>
     );
   }
@@ -1036,6 +1043,15 @@ export function ApplicationOverviewScreen({
           ) : null}
         </>
       )}
+
+      {currentStep === totalSteps ? (
+        <AiContextAction
+          workspace={workspace}
+          label="Check what is still missing"
+          prompt={`Check my ${workspace} application progress. Tell me which required details or documents are still missing before I can submit. Do not submit or change anything.`}
+          detail="Ask SKIMA checks your saved application progress. Nothing is sent until you choose Send."
+        />
+      ) : null}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
