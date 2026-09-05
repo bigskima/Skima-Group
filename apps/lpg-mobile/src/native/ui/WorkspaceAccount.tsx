@@ -54,7 +54,7 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
       <View style={styles.sectionHeading}>
         <Text style={[styles.sectionTitle, { color: theme.palette.ink }]}>Manage</Text>
         <Text style={[styles.sectionDescription, { color: theme.palette.muted }]}>
-          Open a focused page instead of packing everything into one long screen.
+          Choose what you want to manage.
         </Text>
       </View>
 
