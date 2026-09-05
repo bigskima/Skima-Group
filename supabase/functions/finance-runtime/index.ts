@@ -746,6 +746,17 @@ async function initiateWithdrawalTransfer(
   }
 
   const reference = `skima-wdl-${withdrawalId.replaceAll("-", "")}`;
+  const referenceReservation = await serviceClient
+    .from("withdrawal_requests")
+    .update({
+      provider_reference: reference,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", withdrawalId);
+  if (referenceReservation.error) {
+    throw new FinanceError("database_error", referenceReservation.error.message);
+  }
+
   let transfer;
   try {
     transfer = await initiatePaystackTransfer(paystackSecret, {
