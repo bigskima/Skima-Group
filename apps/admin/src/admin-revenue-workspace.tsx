@@ -298,6 +298,30 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
     onError: (error) => setPayoutNotice(readError(error)),
   });
 
+  const retryRevenuePayout = useMutation({
+    mutationFn: (withdrawalRequestId: string) =>
+      api.post(
+        "/admin/revenue/payout/retry",
+        {
+          withdrawalRequestId,
+          idempotencyKey: revenuePayoutKey("retry"),
+        },
+        RevenuePayoutResultSchema,
+      ),
+    onSuccess: async (result) => {
+      const reference = result.publicReference ?? result.public_reference ?? result.id;
+      setPayoutNotice(
+        `SKIMA revenue withdrawal ${reference} is ${label(result.status).toLowerCase()}.`,
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin-revenue"] }),
+        payoutContext.refetch(),
+        providerBalance.refetch(),
+      ]);
+    },
+    onError: (error) => setPayoutNotice(readError(error)),
+  });
+
   const withdrawRevenue = useMutation({
     mutationFn: (payload: { beneficiaryId: string; amount: number }) =>
       api.post(
@@ -894,9 +918,23 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
                             <br />
                             <small>{formatDate(payout.requestedAt)}</small>
                           </span>
-                          <strong>
-                            {money(payout.amount, payout.currencyCode)} · {label(payout.status)}
-                          </strong>
+                          <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                            <strong>
+                              {money(payout.amount, payout.currencyCode)} · {label(payout.status)}
+                            </strong>
+                            {payout.status === "approved" ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                icon={RefreshCcw}
+                                disabled={retryRevenuePayout.isPending}
+                                isLoading={retryRevenuePayout.isPending}
+                                onClick={() => retryRevenuePayout.mutate(payout.id)}
+                              >
+                                Retry transfer
+                              </Button>
+                            ) : null}
+                          </span>
                         </div>
                       ))}
                     </div>
