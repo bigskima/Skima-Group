@@ -30,6 +30,16 @@ Deno.test("all LPG workspaces retain module safety evidence", async () => {
   assertNotIncludes(support, 'if (workspace === "customer")');
 });
 
+Deno.test("customer location save uses an unambiguous module record identifier", async () => {
+  const repair = await read(
+    "supabase/migrations/20260906060000_customer_location_ambiguous_identifier_repair.sql",
+  );
+  assertIncludes(repair, "module_location_id uuid");
+  assertIncludes(repair, "mapping.legacy_id = module_location_id");
+  assertNotIncludes(repair, "mapping.legacy_id = legacy_id");
+  assertNotIncludes(repair, "mapping.module_location_id");
+});
+
 function assertIncludes(value: string, expected: string) {
   if (!value.includes(expected)) throw new Error(`Expected source to include: ${expected}`);
 }
