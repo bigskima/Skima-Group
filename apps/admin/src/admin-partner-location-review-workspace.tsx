@@ -402,8 +402,8 @@ export function AdminPartnerLocationReviewWorkspace() {
       <section className="sk-panel">
         <div className="sk-panel__header">
           <div>
-            <h2>Station location changes</h2>
-            <p className="skima-muted">Stations can correct their main physical address or submit another location. Main-location changes do not affect dispatch until you approve them.</p>
+            <h2>Station location review</h2>
+            <p className="skima-muted">Approved stations submit changes from Account → Station locations. Check the map point and readable address here before approving. A main-location change affects dispatch only after approval; an additional location remains a reviewed reference until a separate operating branch is configured.</p>
           </div>
           <StatusBadge tone={pendingStationChanges ? "warning" : "success"}>
             {pendingStationChanges ? `${pendingStationChanges} waiting` : "Up to date"}
@@ -421,8 +421,8 @@ export function AdminPartnerLocationReviewWorkspace() {
             columns={stationColumns}
             records={stationRequests}
             getRowKey={(record) => record.request_id}
-            emptyTitle="No station location changes"
-            emptyMessage="When an approved station updates its main location or adds another location, the request will appear here."
+            emptyTitle="No station location requests waiting"
+            emptyMessage="When a station corrects its main address or submits another physical location, the request will appear here for review."
           />
         ) : null}
       </section>
