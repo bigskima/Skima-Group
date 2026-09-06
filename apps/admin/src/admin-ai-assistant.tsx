@@ -37,7 +37,7 @@ export function AdminAiAssistant(props: { readonly pageLabel: string; readonly p
     onSuccess: (result) => {
       setConversationId(result.conversationId);
       setReply(result.reply);
-      setSuggestions(result.suggestions);
+      setSuggestions(result.suggestions ?? []);
     },
   });
 
