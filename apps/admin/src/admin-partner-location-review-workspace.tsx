@@ -84,11 +84,44 @@ const LocationReviewsSchema = z.array(LocationReviewSchema);
 type LocationReview = z.infer<typeof LocationReviewSchema>;
 type LocationDecision = "verified" | "rejected";
 
+const StationLocationRequestSchema = z.object({
+  request_id: z.string().uuid(),
+  station_branch_id: z.string().uuid(),
+  station_display_name: z.string(),
+  request_kind: z.enum(["PRIMARY_UPDATE","ADDITIONAL_LOCATION"]),
+  label: z.string(),
+  status: z.enum(["pending","approved","rejected","cancelled","superseded"]),
+  formatted_address: z.string().nullable(),
+  country: z.string().nullable(),
+  country_code: z.string().nullable(),
+  state: z.string().nullable(),
+  lga: z.string().nullable(),
+  city: z.string().nullable(),
+  locality: z.string().nullable(),
+  street: z.string().nullable(),
+  landmark: z.string().nullable(),
+  latitude: z.coerce.number(),
+  longitude: z.coerce.number(),
+  accuracy_meters: z.coerce.number().nullable(),
+  provider_source: z.string().nullable(),
+  submitted_by: z.string().uuid(),
+  reviewed_by: z.string().uuid().nullable(),
+  reviewed_at: z.string().nullable(),
+  review_reason: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+const StationLocationRequestsSchema = z.array(StationLocationRequestSchema);
+type StationLocationRequest = z.infer<typeof StationLocationRequestSchema>;
+type StationLocationDecision = "approved" | "rejected";
+
 export function AdminPartnerLocationReviewWorkspace() {
   const { supabase, status } = useSessionState();
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogDecision, setDialogDecision] = useState<LocationDecision | null>(null);
+  const [selectedStationRequestId, setSelectedStationRequestId] = useState<string | null>(null);
+  const [stationDecision, setStationDecision] = useState<StationLocationDecision | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const reviewsQuery = useQuery({
@@ -108,7 +141,25 @@ export function AdminPartnerLocationReviewWorkspace() {
     },
   });
 
+  const stationRequestsQuery = useQuery({
+    queryKey: ["station-location-requests-admin"],
+    enabled: status === "authenticated",
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("read_lpg_station_location_requests_admin", {
+        target_status: null,
+        target_limit: 200,
+      });
+      if (error) throw error;
+      return StationLocationRequestsSchema.parse(data ?? []);
+    },
+  });
+
   const records = reviewsQuery.data ?? [];
+  const stationRequests = stationRequestsQuery.data ?? [];
+  const selectedStationRequest = stationRequests.find((record) => record.request_id === selectedStationRequestId)
+    ?? stationRequests.find((record) => record.status === "pending")
+    ?? null;
   const selected = useMemo(
     () => records.find((record) => record.application_id === selectedId) ?? records[0] ?? null,
     [records, selectedId],
@@ -117,6 +168,7 @@ export function AdminPartnerLocationReviewWorkspace() {
   const verified = records.filter((record) => record.verification_status === "verified").length;
   const rejected = records.filter((record) => record.verification_status === "rejected").length;
   const missingEvidence = records.filter((record) => !hasCoordinates(record)).length;
+  const pendingStationChanges = stationRequests.filter((record) => record.status === "pending").length;
 
   const reviewMutation = useMutation({
     mutationFn: async ({
@@ -156,6 +208,79 @@ export function AdminPartnerLocationReviewWorkspace() {
       await queryClient.invalidateQueries({ queryKey: ["gateway", "applications"] });
     },
   });
+
+  const stationReviewMutation = useMutation({
+    mutationFn: async ({
+      record,
+      decision,
+      reason,
+    }: {
+      readonly record: StationLocationRequest;
+      readonly decision: StationLocationDecision;
+      readonly reason: string;
+    }) => {
+      const { data, error } = await supabase.rpc("review_lpg_station_location_request", {
+        target_request_id: record.request_id,
+        target_decision: decision,
+        target_reason: reason.trim() || null,
+        target_idempotency_key: createClientIdempotencyKey(
+          `admin.station-location.${decision}`,
+          record.request_id,
+        ),
+        target_metadata: { sourceSurface: "partner_location_review" },
+        target_source: "skima.admin.station_location",
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async (_data, variables) => {
+      setStationDecision(null);
+      setNotice(
+        variables.decision === "approved"
+          ? variables.record.request_kind === "PRIMARY_UPDATE"
+            ? "Station main location approved and made current."
+            : "Additional station location verified. It remains non-operational until a separate branch is configured."
+          : "Station location change rejected.",
+      );
+      await queryClient.invalidateQueries({ queryKey: ["station-location-requests-admin"] });
+      await queryClient.invalidateQueries({ queryKey: ["partner-location-reviews"] });
+    },
+  });
+
+  const stationColumns = useMemo<TableColumn<StationLocationRequest>[]>(() => [
+    {
+      key: "station",
+      header: "Station",
+      render: (record) => <><strong>{record.station_display_name}</strong><br/><small>{record.label}</small></>,
+    },
+    {
+      key: "change",
+      header: "Requested change",
+      render: (record) => record.request_kind === "PRIMARY_UPDATE" ? "Update main station location" : "Add another station location",
+    },
+    {
+      key: "address",
+      header: "Submitted address",
+      render: (record) => record.formatted_address ?? "Address not resolved",
+    },
+    {
+      key: "status",
+      header: "Review",
+      render: (record) => <StatusBadge tone={stationRequestTone(record.status)}>{stationRequestLabel(record.status)}</StatusBadge>,
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (record) => <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          setNotice(null);
+          setSelectedStationRequestId(record.request_id);
+        }}
+      >Review change</Button>,
+    },
+  ], []);
 
   const columns = useMemo<TableColumn<LocationReview>[]>(() => [
     {
@@ -242,6 +367,7 @@ export function AdminPartnerLocationReviewWorkspace() {
         <MetricTile label="Verified locations" value={verified} icon={CheckCircle2} tone="success" />
         <MetricTile label="Rejected locations" value={rejected} icon={XCircle} tone={rejected ? "danger" : "neutral"} />
         <MetricTile label="Evidence missing" value={missingEvidence} icon={ShieldCheck} tone={missingEvidence ? "warning" : "success"} />
+        <MetricTile label="Station changes" value={pendingStationChanges} icon={MapPinned} tone={pendingStationChanges ? "warning" : "success"} />
       </section>
 
       {reviewsQuery.isLoading ? <LoadingState label="Loading partner location evidence" /> : null}
@@ -273,6 +399,49 @@ export function AdminPartnerLocationReviewWorkspace() {
         </section>
       ) : null}
 
+      <section className="sk-panel">
+        <div className="sk-panel__header">
+          <div>
+            <h2>Station location changes</h2>
+            <p className="skima-muted">Stations can correct their main physical address or submit another location. Main-location changes do not affect dispatch until you approve them.</p>
+          </div>
+          <StatusBadge tone={pendingStationChanges ? "warning" : "success"}>
+            {pendingStationChanges ? `${pendingStationChanges} waiting` : "Up to date"}
+          </StatusBadge>
+        </div>
+        {stationRequestsQuery.isLoading ? <LoadingState label="Loading station location changes"/> : null}
+        {stationRequestsQuery.error ? <ErrorState
+          title="Station location changes unavailable"
+          message={readError(stationRequestsQuery.error)}
+          onRetry={() => void stationRequestsQuery.refetch()}
+        /> : null}
+        {!stationRequestsQuery.isLoading && !stationRequestsQuery.error ? (
+          <DataTable
+            caption="Station location change requests"
+            columns={stationColumns}
+            records={stationRequests}
+            getRowKey={(record) => record.request_id}
+            emptyTitle="No station location changes"
+            emptyMessage="When an approved station updates its main location or adds another location, the request will appear here."
+          />
+        ) : null}
+      </section>
+
+      {selectedStationRequest ? (
+        <StationLocationRequestPanel
+          record={selectedStationRequest}
+          isSubmitting={stationReviewMutation.isPending}
+          onApprove={() => {
+            stationReviewMutation.reset();
+            setStationDecision("approved");
+          }}
+          onReject={() => {
+            stationReviewMutation.reset();
+            setStationDecision("rejected");
+          }}
+        />
+      ) : null}
+
       {selected ? (
         <LocationEvidencePanel
           record={selected}
@@ -287,6 +456,24 @@ export function AdminPartnerLocationReviewWorkspace() {
           }}
         />
       ) : null}
+
+      <StationLocationDecisionDialog
+        record={selectedStationRequest}
+        decision={stationDecision}
+        error={stationReviewMutation.error}
+        isSubmitting={stationReviewMutation.isPending}
+        onClose={() => {
+          if (!stationReviewMutation.isPending) {
+            setStationDecision(null);
+            stationReviewMutation.reset();
+          }
+        }}
+        onSubmit={(reason) => {
+          if (selectedStationRequest && stationDecision) {
+            stationReviewMutation.mutate({ record: selectedStationRequest, decision: stationDecision, reason });
+          }
+        }}
+      />
 
       <LocationDecisionDialog
         record={selected}
@@ -307,6 +494,110 @@ export function AdminPartnerLocationReviewWorkspace() {
       />
     </>
   );
+}
+
+function StationLocationRequestPanel(props: {
+  readonly record: StationLocationRequest;
+  readonly isSubmitting: boolean;
+  readonly onApprove: () => void;
+  readonly onReject: () => void;
+}) {
+  const record=props.record;
+  const pending=record.status==="pending";
+  return <section className="sk-panel">
+    <div className="sk-panel__header">
+      <div>
+        <p className="admin-section-kicker">Station-submitted change</p>
+        <h2>{record.station_display_name}</h2>
+        <p className="skima-muted">{record.request_kind==="PRIMARY_UPDATE" ? "Main station location update" : "Additional station location"}</p>
+      </div>
+      <StatusBadge tone={stationRequestTone(record.status)}>{stationRequestLabel(record.status)}</StatusBadge>
+    </div>
+    <div style={{display:"grid",gap:20,gridTemplateColumns:"minmax(0,1.4fr) minmax(280px,.6fr)"}}>
+      <div style={{minWidth:0}}>
+        <iframe
+          title={`Map showing ${record.formatted_address ?? record.station_display_name}`}
+          src={openStreetMapEmbedUrl(record.latitude,record.longitude)}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          style={{width:"100%",minHeight:360,border:0,borderRadius:16}}
+        />
+        <p className="skima-muted" style={{marginTop:10}}>
+          {record.request_kind==="PRIMARY_UPDATE"
+            ? "Approving this change replaces the station's current physical point used by station discovery and dispatch."
+            : "Approving this verifies the additional location only. It does not create or activate another dispatch branch."}
+        </p>
+      </div>
+      <DetailList items={[
+        {label:"Submitted address",value:record.formatted_address ?? "Not resolved"},
+        {label:"Country",value:record.country ?? "Not recorded"},
+        {label:"State",value:record.state ?? "Not recorded"},
+        {label:"LGA",value:record.lga ?? "Not recorded"},
+        {label:"City / town",value:record.city ?? record.locality ?? "Not recorded"},
+        {label:"Street",value:record.street ?? "Not recorded"},
+        {label:"Coordinates",value:`${record.latitude.toFixed(6)}, ${record.longitude.toFixed(6)}`},
+        {label:"GPS accuracy",value:formatAccuracy(record.accuracy_meters)},
+        {label:"Submitted",value:formatDate(record.created_at)},
+        {label:"Last reviewed",value:formatDate(record.reviewed_at)},
+        {label:"Review note",value:record.review_reason ?? "No review note"},
+      ]}/>
+    </div>
+    {pending ? <div className="skima-action-row" style={{marginTop:22}}>
+      <Button icon={CheckCircle2} requiredPermission="platform.applications.review" disabled={props.isSubmitting} onClick={props.onApprove}>Approve location</Button>
+      <Button icon={XCircle} variant="destructive" requiredPermission="platform.applications.review" disabled={props.isSubmitting} onClick={props.onReject}>Reject location</Button>
+    </div> : null}
+  </section>;
+}
+
+function StationLocationDecisionDialog(props: {
+  readonly record: StationLocationRequest | null;
+  readonly decision: StationLocationDecision | null;
+  readonly error: unknown;
+  readonly isSubmitting: boolean;
+  readonly onClose: () => void;
+  readonly onSubmit: (reason: string) => void;
+}) {
+  const [reason,setReason]=useState("");
+  if(!props.record || !props.decision) return null;
+  const rejecting=props.decision==="rejected";
+  const submit=(event:FormEvent<HTMLFormElement>)=>{
+    event.preventDefault();
+    if(rejecting && !reason.trim()) return;
+    props.onSubmit(reason.trim());
+  };
+  return <Dialog
+    title={rejecting ? "Reject station location" : "Approve station location"}
+    isOpen
+    onClose={props.onClose}
+    footer={<>
+      <Button variant="ghost" disabled={props.isSubmitting} onClick={props.onClose}>Cancel</Button>
+      <Button
+        type="submit"
+        form="station-location-review-form"
+        variant={rejecting ? "destructive" : "primary"}
+        icon={rejecting ? XCircle : CheckCircle2}
+        isLoading={props.isSubmitting}
+        disabled={rejecting && !reason.trim()}
+      >{rejecting ? "Reject location" : "Approve location"}</Button>
+    </>}
+  >
+    <form id="station-location-review-form" className="skima-form-grid" onSubmit={submit}>
+      <p className="admin-dialog-guidance">
+        {rejecting
+          ? "Explain what the station must correct before submitting again."
+          : props.record.request_kind==="PRIMARY_UPDATE"
+            ? "Confirm that the submitted map point and address belong to this station. Approval makes it the station's current physical location."
+            : "Confirm this additional station location. Approval verifies the location but does not create a new operating branch."}
+      </p>
+      <TextAreaInput
+        label={rejecting ? "Reason for rejection" : "Approval note (optional)"}
+        value={reason}
+        onChange={(event)=>setReason(event.currentTarget.value)}
+        required={rejecting}
+      />
+      {props.error ? <StatusBadge tone="danger">{readError(props.error)}</StatusBadge> : null}
+    </form>
+  </Dialog>;
 }
 
 function LocationEvidencePanel(props: {
@@ -530,6 +821,21 @@ function isMissingRpcError(error: unknown): boolean {
   const message = typeof record.message === "string" ? record.message.toLowerCase() : "";
   return code === "42883" || code === "PGRST202" ||
     message.includes("read_partner_application_location_reviews_v2");
+}
+
+function stationRequestLabel(status: StationLocationRequest["status"]) {
+  if(status==="pending") return "Waiting for review";
+  if(status==="approved") return "Approved";
+  if(status==="rejected") return "Rejected";
+  if(status==="cancelled") return "Cancelled";
+  return "Replaced";
+}
+
+function stationRequestTone(status: StationLocationRequest["status"]): "neutral" | "success" | "warning" | "danger" {
+  if(status==="approved") return "success";
+  if(status==="pending") return "warning";
+  if(status==="rejected") return "danger";
+  return "neutral";
 }
 
 function verificationTone(status: LocationReview["verification_status"]): "neutral" | "success" | "warning" | "danger" {
