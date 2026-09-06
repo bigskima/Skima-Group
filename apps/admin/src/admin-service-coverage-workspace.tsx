@@ -216,7 +216,7 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
       return data as { imported?: number; blocked?: number } | null;
     },
     onSuccess: async (result) => {
-      setNotice(`Spatial import completed: ${result?.imported ?? 0} imported, ${result?.blocked ?? 0} blocked for correction.`);
+      setNotice(`Existing areas checked: ${result?.imported ?? 0} ready to review, ${result?.blocked ?? 0} need correction.`);
       await refresh();
     },
   });
@@ -225,7 +225,7 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
     mutationFn: async (mappingId: string) => {
       const geographyId = linkTargets[mappingId];
       if (!geographyId) throw new Error("Choose the mapped service area that replaces this older area.");
-      if (!reason.trim()) throw new Error("Enter a review reason before linking a legacy area.");
+      if (!reason.trim()) throw new Error("Enter a reason before linking this older area.");
       const { data, error } = await supabase.rpc("link_geography_migration_mapping", {
         p_mapping_id: mappingId,
         p_geography_id: geographyId,
@@ -247,7 +247,7 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
 
   const verifyMapping = useMutation({
     mutationFn: async (mappingId: string) => {
-      if (!reason.trim()) throw new Error("Enter a review reason before verifying a geography.");
+      if (!reason.trim()) throw new Error("Enter a reason before confirming this service area link.");
       const { data, error } = await supabase.rpc("verify_geography_migration_mapping", {
         p_mapping_id: mappingId,
         p_reason: reason.trim(),
@@ -256,7 +256,7 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
       return data;
     },
     onSuccess: async () => {
-      setNotice("Geography mapping verified.");
+      setNotice("Service area link confirmed.");
       await refresh();
     },
   });
@@ -269,7 +269,7 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
       return data as { inserted?: number } | null;
     },
     onSuccess: async (result) => {
-      setNotice(`Verified LPG coverage migrated: ${result?.inserted ?? 0} new universal policy record(s).`);
+      setNotice(`LPG availability rules moved: ${result?.inserted ?? 0} rule(s) added to the map-based system.`);
       await refresh();
     },
   });
@@ -283,7 +283,7 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
     },
     onSuccess: async (result) => {
       setNotice(
-        `Operational coverage migrated: ${result?.driverAssignmentsMigrated ?? 0} driver assignment(s), ${result?.stationAssignmentsMigrated ?? 0} station assignment(s).`,
+        `Partner operating areas moved: ${result?.driverAssignmentsMigrated ?? 0} driver area(s), ${result?.stationAssignmentsMigrated ?? 0} station area(s).`,
       );
       await refresh();
     },
@@ -291,7 +291,7 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
 
   const activateAuthority = useMutation({
     mutationFn: async () => {
-      if (!reason.trim()) throw new Error("Enter an activation reason before switching geography authority.");
+      if (!reason.trim()) throw new Error("Enter a reason before making the map-based service-area system active.");
       const { data, error } = await supabase.rpc("set_universal_geography_authority", {
         p_mode: "universal",
         p_reason: reason.trim(),
@@ -300,7 +300,7 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
       return data;
     },
     onSuccess: async () => {
-      setNotice("Universal geography authority activated.");
+      setNotice("Map-based service-area coverage is now active.");
       await refresh();
     },
   });
@@ -311,10 +311,10 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
   const columns: TableColumn<GeographyMigration>[] = [
     { key: "legacy", header: "Existing area", render: (item) => <><strong>{item.legacy_display_name}</strong><br /><small>{item.legacy_area_type ?? item.legacy_source}</small></> },
     { key: "canonical", header: "Mapped service area", render: (item) => item.geography_name ?? "Not imported" },
-    { key: "state", header: "Review state", render: (item) => <><StatusBadge tone={item.migration_status === "verified" ? "success" : item.migration_status === "blocked" ? "danger" : "warning"}>{item.migration_status}</StatusBadge><br /><small>{item.validation_code}</small></> },
+    { key: "state", header: "Review state", render: (item) => <><StatusBadge tone={item.migration_status === "verified" ? "success" : item.migration_status === "blocked" ? "danger" : "warning"}>{friendlyMigrationStatus(item.migration_status)}</StatusBadge><br /><small>{friendlyMigrationCheck(item.validation_code)}</small></> },
     { key: "boundary", header: "Boundary", render: (item) => <StatusBadge tone={item.boundary_ready ? "success" : "danger"}>{item.boundary_ready ? "Valid" : "Needs correction"}</StatusBadge> },
     { key: "action", header: "Review", render: (item) => item.migration_status === "migrated"
-      ? <Button size="sm" variant="outline" disabled={!item.boundary_ready || !reason.trim()} isLoading={verifyMapping.isPending && verifyMapping.variables === item.id} onClick={() => verifyMapping.mutate(item.id)}>Verify mapping</Button>
+      ? <Button size="sm" variant="outline" disabled={!item.boundary_ready || !reason.trim()} isLoading={verifyMapping.isPending && verifyMapping.variables === item.id} onClick={() => verifyMapping.mutate(item.id)}>Confirm area link</Button>
       : item.migration_status === "verified"
         ? <small>Reviewed</small>
         : item.migration_status === "blocked" || item.migration_status === "pending"
@@ -375,17 +375,17 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
       </div>
       <div className="skima-grid skima-grid--compact">
         <MetricTile label="Awaiting review" value={needsReview} icon={MapPinned} tone={needsReview ? "warning" : "success"} />
-        <MetricTile label="Blocked imports" value={blocked} icon={ShieldCheck} tone={blocked ? "warning" : "success"} />
+        <MetricTile label="Needs correction" value={blocked} icon={ShieldCheck} tone={blocked ? "warning" : "success"} />
         <MetricTile label="Verified area links" value={readiness?.verifiedCount ?? 0} icon={ShieldCheck} tone="success" />
         <MetricTile label="Active service rules" value={readiness?.activeUniversalPolicyCount ?? 0} icon={ShieldCheck} tone={(readiness?.activeUniversalPolicyCount ?? 0) > 0 ? "success" : "warning"} />
         <MetricTile label="Approved drivers missing coverage" value={readiness?.approvedDriversWithoutCoverage ?? 0} icon={MapPinned} tone={(readiness?.approvedDriversWithoutCoverage ?? 0) > 0 ? "warning" : "success"} />
         <MetricTile label="Approved stations missing coverage" value={readiness?.approvedStationsWithoutCoverage ?? 0} icon={MapPinned} tone={(readiness?.approvedStationsWithoutCoverage ?? 0) > 0 ? "warning" : "success"} />
       </div>
-      <TextAreaInput label="Reason for this change" helperText="Explain why you are making this change. SKIMA keeps this note in the audit history." value={reason} onChange={(event) => setReason(event.currentTarget.value)} />
+      <TextAreaInput label="Why are you making this change?" helperText="Explain why you are making this change. SKIMA keeps this note in the permanent change history." value={reason} onChange={(event) => setReason(event.currentTarget.value)} />
       {notice ? <StatusBadge tone="success">{notice}</StatusBadge> : null}
       {actionError ? <StatusBadge tone="danger">{readError(actionError)}</StatusBadge> : null}
       {mappings.isLoading
-        ? <LoadingState label="Loading geography migration review" />
+        ? <LoadingState label="Loading older service areas" />
         : <DataTable caption="Existing service-area review" columns={columns} records={records} getRowKey={(item) => item.id} emptyTitle="No older service areas to review" emptyMessage="Import older areas if they exist, or add a new mapped service area." />}
     </section>
   );
@@ -400,7 +400,7 @@ function ExpansionDemandPanel() {
   }});
   const columns: TableColumn<ExpansionDemand>[] = [
     { key: "area", header: "Demand area", render: (item) => item.geography_name },
-    { key: "service", header: "Service / interest", render: (item) => <><strong>{item.service_key}</strong><br /><small>{item.interest_type}</small></> },
+    { key: "service", header: "Who is asking", render: (item) => <><strong>{friendlyServiceName(item.service_key)}</strong><br /><small>{friendlyInterestName(item.interest_type)}</small></> },
     { key: "requests", header: "Requests", render: (item) => item.request_count },
     { key: "people", header: "People", render: (item) => item.distinct_user_count },
     { key: "latest", header: "Latest", render: (item) => new Date(item.last_requested_at).toLocaleString() },
@@ -605,7 +605,7 @@ function PolicyDialog({ open, geographies, onClose, onSaved }: { open: boolean; 
     <SelectInput label="Turn this rule on?" value={form.status} onChange={(e) => setForm({ ...form, status: e.currentTarget.value as "draft" | "active" })} options={[{ label: "Save for review", value: "draft" }, { label: "Turn on now", value: "active" }]} />
     <TextInput label="Starts on (optional)" type="datetime-local" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.currentTarget.value })} />
     <TextInput label="Ends on (optional)" type="datetime-local" value={form.endsAt} onChange={(e) => setForm({ ...form, endsAt: e.currentTarget.value })} />
-    <TextAreaInput label="Why are you making this change?" helperText="Required when turning the rule on. SKIMA keeps this note in the audit history." value={form.reason} onChange={(e) => setForm({ ...form, reason: e.currentTarget.value })} required={form.status === "active"} />
+    <TextAreaInput label="Why are you making this change?" helperText="Required when turning the rule on. SKIMA keeps this note in the permanent change history." value={form.reason} onChange={(e) => setForm({ ...form, reason: e.currentTarget.value })} required={form.status === "active"} />
     {preview?.signature === signature ? <PolicyPreview result={preview.result} /> : null}
     {error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}
   </form></Dialog>;
@@ -652,6 +652,28 @@ function operatorLevelName(level: z.infer<typeof LevelSchema>, countryCode: stri
 }
 function countryDisplayName(code: string) {
   return code.toUpperCase() === "NG" ? "Nigeria" : code || "Set by map search";
+}
+function friendlyMigrationStatus(status: string) {
+  if (status === "verified") return "Confirmed";
+  if (status === "migrated") return "Ready for review";
+  if (status === "blocked") return "Needs correction";
+  if (status === "pending") return "Waiting";
+  if (status === "retired") return "No longer used";
+  return status.replaceAll("_", " ");
+}
+function friendlyMigrationCheck(code: string) {
+  const value = code.toUpperCase();
+  if (value.includes("VALID") || value.includes("READY")) return "Map boundary is ready";
+  if (value.includes("BOUNDARY")) return "Map boundary needs attention";
+  if (value.includes("MISSING")) return "Required information is missing";
+  if (value.includes("MATCH")) return "Area match needs review";
+  return code.replaceAll("_", " ").toLowerCase();
+}
+function friendlyInterestName(value: string) {
+  if (value === "CUSTOMER") return "Customers";
+  if (value === "DRIVER") return "Drivers";
+  if (value === "STATION") return "Stations";
+  return value.replaceAll("_", " ").toLowerCase();
 }
 function friendlyServiceName(key: string) {
   return key === "lpg" ? "LPG refill service" : key.replaceAll("_", " ");
@@ -1041,7 +1063,113 @@ function ProductionReadinessAlerts({readiness,error}:{readiness:z.infer<typeof P
         </p>)}
   </section>;
 }
-function GeometryDraftRecoveryPanel(){const{supabase,status}=useSessionState();const client=useQueryClient();const[abandoning,setAbandoning]=useState<z.infer<typeof GeometryDraftSchema>|null>(null);const[reason,setReason]=useState("");const query=useQuery({queryKey:["recoverable-geometry-drafts"],enabled:status==="authenticated",queryFn:async()=>{const{data,error}=await supabase.rpc("read_recoverable_geometry_drafts",{p_limit:100});if(error)throw error;return z.array(GeometryDraftSchema).parse(data??[]);}});const abandon=useMutation({mutationFn:async()=>{if(!abandoning||!reason.trim())throw new Error("An abandonment reason is required.");const{error}=await supabase.rpc("abandon_coverage_geometry_draft",{p_draft_id:abandoning.id,p_reason:reason.trim()});if(error)throw error;},onSuccess:async()=>{setAbandoning(null);setReason("");await client.invalidateQueries({queryKey:["recoverable-geometry-drafts"]});}});const columns:TableColumn<z.infer<typeof GeometryDraftSchema>>[]=[{key:"type",header:"Draft type",render:(item)=>item.draft_type.replaceAll("_"," ")},{key:"status",header:"Status",render:(item)=><StatusBadge tone="warning">{item.status}</StatusBadge>},{key:"validation",header:"Validation",render:(item)=>String(item.validation_snapshot.code??"UNKNOWN")},{key:"updated",header:"Updated",render:(item)=>new Date(item.updated_at).toLocaleString()},{key:"actions",header:"Recovery",render:(item)=><div className="skima-action-row"><Button size="sm" variant="outline" onClick={()=>navigator.clipboard.writeText(JSON.stringify(item.geometry_geojson,null,2))}>Copy geometry</Button><Button size="sm" variant="destructive" onClick={()=>setAbandoning(item)}>Abandon</Button></div>}];return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Recoverable geometry drafts</h2><p className="skima-muted">Resume a preserved boundary by copying its validated GeoJSON into the editor, or explicitly abandon it with an audited reason.</p></div></div>{query.isLoading?<LoadingState label="Loading geometry drafts"/>:query.error?<ErrorState title="Geometry drafts unavailable" message={readError(query.error)} onRetry={()=>void query.refetch()}/>:<DataTable caption="Recoverable geometry drafts" columns={columns} records={query.data??[]} getRowKey={(item)=>item.id} emptyTitle="No recoverable drafts" emptyMessage="Previewed and unfinished geometry will appear here."/>}<Dialog isOpen={Boolean(abandoning)} title="Abandon geometry draft" onClose={()=>setAbandoning(null)} footer={<><Button variant="ghost" onClick={()=>setAbandoning(null)}>Cancel</Button><Button variant="destructive" isLoading={abandon.isPending} onClick={()=>abandon.mutate()}>Abandon draft</Button></>}><TextAreaInput label="Abandonment reason" value={reason} onChange={(event)=>setReason(event.currentTarget.value)} required/>{abandon.error?<StatusBadge tone="danger">{readError(abandon.error)}</StatusBadge>:null}</Dialog></section>;}
+function GeometryDraftRecoveryPanel() {
+  const { supabase, status } = useSessionState();
+  const client = useQueryClient();
+  const [abandoning, setAbandoning] = useState<z.infer<typeof GeometryDraftSchema> | null>(null);
+  const [reason, setReason] = useState("");
+  const query = useQuery({
+    queryKey: ["recoverable-geometry-drafts"],
+    enabled: status === "authenticated",
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("read_recoverable_geometry_drafts", { p_limit: 100 });
+      if (error) throw error;
+      return z.array(GeometryDraftSchema).parse(data ?? []);
+    },
+  });
+  const abandon = useMutation({
+    mutationFn: async () => {
+      if (!abandoning || !reason.trim()) throw new Error("Explain why this unfinished map area should be discarded.");
+      const { error } = await supabase.rpc("abandon_coverage_geometry_draft", {
+        p_draft_id: abandoning.id,
+        p_reason: reason.trim(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      setAbandoning(null);
+      setReason("");
+      await client.invalidateQueries({ queryKey: ["recoverable-geometry-drafts"] });
+    },
+  });
+  const columns: TableColumn<z.infer<typeof GeometryDraftSchema>>[] = [
+    {
+      key: "type",
+      header: "Area being edited",
+      render: (item) => item.draft_type === "GEOGRAPHY_BOUNDARY" ? "Service area boundary" : "Driver / station operating area",
+    },
+    { key: "status", header: "Progress", render: () => <StatusBadge tone="warning">Unfinished</StatusBadge> },
+    {
+      key: "validation",
+      header: "Map check",
+      render: (item) => {
+        const code = String(item.validation_snapshot.code ?? "UNKNOWN");
+        return <span>{friendlyGeometryCheck(code)}</span>;
+      },
+    },
+    { key: "updated", header: "Last edited", render: (item) => new Date(item.updated_at).toLocaleString() },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (item) => <div className="skima-action-row">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigator.clipboard.writeText(JSON.stringify(item.geometry_geojson, null, 2))}
+        >
+          Copy map data for support
+        </Button>
+        <Button size="sm" variant="destructive" onClick={() => setAbandoning(item)}>Discard unfinished area</Button>
+      </div>,
+    },
+  ];
+  return <section className="sk-panel">
+    <div className="sk-panel__header">
+      <div>
+        <h2>Unfinished map areas</h2>
+        <p className="skima-muted">SKIMA keeps unfinished boundary work so an operator can return to it safely. The map-data button is only for support or engineering help.</p>
+      </div>
+    </div>
+    {query.isLoading
+      ? <LoadingState label="Loading unfinished map areas"/>
+      : query.error
+        ? <ErrorState title="Unfinished map areas unavailable" message={readError(query.error)} onRetry={() => void query.refetch()}/>
+        : <DataTable
+            caption="Unfinished map areas"
+            columns={columns}
+            records={query.data ?? []}
+            getRowKey={(item) => item.id}
+            emptyTitle="No unfinished map areas"
+            emptyMessage="Any boundary you leave unfinished will appear here so it can be recovered or discarded."
+          />}
+    <Dialog
+      isOpen={Boolean(abandoning)}
+      title="Discard unfinished map area?"
+      onClose={() => setAbandoning(null)}
+      footer={<>
+        <Button variant="ghost" onClick={() => setAbandoning(null)}>Keep it</Button>
+        <Button variant="destructive" isLoading={abandon.isPending} onClick={() => abandon.mutate()}>Discard area</Button>
+      </>}
+    >
+      <TextAreaInput
+        label="Why are you discarding this area?"
+        value={reason}
+        onChange={(event) => setReason(event.currentTarget.value)}
+        required
+      />
+      {abandon.error ? <StatusBadge tone="danger">{readError(abandon.error)}</StatusBadge> : null}
+    </Dialog>
+  </section>;
+}
+
+function friendlyGeometryCheck(code: string) {
+  const normalized = code.toUpperCase();
+  if (normalized.includes("VALID")) return "Ready";
+  if (normalized.includes("EMPTY")) return "No boundary drawn";
+  if (normalized.includes("PARENT")) return "Outside its larger area";
+  if (normalized.includes("SELF")) return "Boundary crosses itself";
+  return normalized === "UNKNOWN" ? "Needs checking" : "Needs attention";
+}
 
 
 const CoverageRequestSchema = z.object({
