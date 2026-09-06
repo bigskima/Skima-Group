@@ -401,21 +401,22 @@ function LoginView() {
 
   return (
     <main className="skima-auth-page">
-      <section className="skima-auth-panel">
+      <section className="skima-auth-panel skima-auth-panel--admin">
         <div className="admin-login-brand">
-          <span aria-hidden="true">S</span>
+          <AdminBrandLogo className="admin-login-brand__logo" />
           <div>
-            <h1>Skima</h1>
-            <p>Company administration</p>
+            <h1>SKIMA</h1>
+            <p>Operations & company control</p>
           </div>
         </div>
         <div className="admin-login-copy">
+          <span className="admin-login-copy__eyebrow">Secure admin access</span>
           <h2>Welcome back</h2>
-          <p>Sign in with an approved administrator account.</p>
+          <p>Sign in to manage SKIMA operations, service areas, partners, support, money, and platform settings.</p>
         </div>
         <form className="skima-form" onSubmit={submit}>
           <TextInput
-            label="Email"
+            label="Email address"
             name="email"
             type="email"
             autoComplete="email"
@@ -434,8 +435,9 @@ function LoginView() {
           />
           {error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}
           <Button icon={ShieldCheck} isLoading={isSubmitting} type="submit">
-            Sign in
+            Continue to SKIMA Admin
           </Button>
+          <small className="admin-login-security-note">Your permissions decide which tools you can access after sign-in.</small>
         </form>
       </section>
     </main>
