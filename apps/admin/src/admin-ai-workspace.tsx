@@ -913,7 +913,7 @@ function DispatchShadowPanel(props: {
           <p className="admin-section-kicker">Dispatch intelligence</p>
           <h2>Shadow dispatch review</h2>
           <p>
-            The live dispatcher still assigns drivers. This AI comparison checks whether a fairness-aware ranking would choose differently, without changing the real assignment.
+            The production dispatcher still assigns drivers. This AI comparison checks whether a fairness-aware ranking would choose differently, without changing the real assignment.
           </p>
         </div>
         <StatusBadge tone={disagreements ? "warning" : "success"}>
@@ -1004,7 +1004,7 @@ function FinanceReconciliationPanel(props: {
           <p className="admin-section-kicker">Finance intelligence</p>
           <h2>Reconciliation review</h2>
           <p>
-            SKIMA checks its official finance records for mismatches and shows anything that needs review. This screen cannot move money, refund a payment, release escrow, reverse a transaction, or approve a correction.
+            SKIMA checks its official finance records for mismatches and shows anything that needs review. This screen cannot post ledger entries, move funds, refund, release escrow, reverse a transaction, or approve a correction.
           </p>
         </div>
         <StatusBadge tone={elevated ? "danger" : sorted.length ? "warning" : "success"}>
