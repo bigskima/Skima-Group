@@ -279,6 +279,15 @@ export function useStationRuntime() {
     refetchInterval: 30000,
   });
 }
+export function useStationLocations(stationBranchId: string | null) {
+  return useGatewayQuery({
+    key: ["station-locations", stationBranchId ?? "current"],
+    path: `/lpg/stations/locations?stationBranchId=${encodeURIComponent(stationBranchId ?? "")}`,
+    schema: RecordObjectSchema,
+    enabled: Boolean(stationBranchId),
+    refetchInterval: 30000,
+  });
+}
 export function useStationInventoryOutlook(stationBranchId: string | null) {
   return useGatewayQuery({
     key: ["station-inventory-outlook", stationBranchId ?? "current"],
