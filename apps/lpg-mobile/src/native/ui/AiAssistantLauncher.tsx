@@ -1,12 +1,13 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { ArrowUpRight, Sparkles } from "lucide-react-native";
+import { ArrowUpRight } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 
 import { useGatewayQuery } from "../api/gateway";
 import { spacing, typography } from "../theme/tokens";
 import type { AiAssistantWorkspace } from "./AiAssistantScreen";
+import { BrandMark } from "./BrandMark";
 
 const AiHomeInsightSchema = z.object({
   kind: z.string(),
@@ -30,7 +31,7 @@ export function AiAssistantLauncher({ workspace }: { readonly workspace: AiAssis
   const fallback = workspace === "driver"
     ? {
         eyebrow: "SKIMA INTELLIGENCE",
-        title: "Ask SKIMA",
+        title: "Ask Matty",
         body: "Ask what to do next or understand your current work.",
         actionLabel: "Ask copilot",
         prompt: "What should I do next? Use my current SKIMA driver readiness and assigned LPG work, and explain the next safe operational action without changing anything.",
@@ -38,23 +39,25 @@ export function AiAssistantLauncher({ workspace }: { readonly workspace: AiAssis
     : workspace === "station"
     ? {
         eyebrow: "SKIMA INTELLIGENCE",
-        title: "Ask SKIMA",
+        title: "Ask Matty",
         body: "See what needs attention across your station queue.",
-        actionLabel: "Ask SKIMA",
+        actionLabel: "Ask Matty",
       }
     : {
         eyebrow: "SKIMA INTELLIGENCE",
-        title: "Ask SKIMA",
+        title: "Ask Matty",
         body: "Ask about your refill, cylinder or latest order.",
-        actionLabel: "Ask SKIMA",
+        actionLabel: "Ask Matty",
       };
 
   const copy = insight.data ?? fallback;
+  const brandedTitle = copy.title.replace(/Ask SKIMA/gi, "Ask Matty");
+  const brandedAction = copy.actionLabel.replace(/Ask SKIMA/gi, "Ask Matty");
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={copy.actionLabel}
+      accessibilityLabel={brandedAction}
       onPress={() => {
         const prompt = "prompt" in copy && typeof copy.prompt === "string" ? copy.prompt : null;
         router.push(
@@ -74,18 +77,18 @@ export function AiAssistantLauncher({ workspace }: { readonly workspace: AiAssis
       />
       <View style={styles.glow} />
       <View style={styles.icon}>
-        <Sparkles color="#FFFFFF" size={19} />
+        <BrandMark compact inverse />
       </View>
       <View style={styles.copy}>
         <Text style={styles.eyebrow}>{copy.eyebrow}</Text>
-        <Text numberOfLines={1} style={styles.title}>{copy.title}</Text>
+        <Text numberOfLines={1} style={styles.title}>{brandedTitle}</Text>
         <Text numberOfLines={2} style={styles.body}>{copy.body}</Text>
         {"estimateOnly" in copy && copy.estimateOnly ? (
           <Text style={styles.estimate}>History-based estimate</Text>
         ) : null}
       </View>
       <View style={styles.action}>
-        <Text numberOfLines={1} style={styles.actionText}>{copy.actionLabel}</Text>
+        <Text numberOfLines={1} style={styles.actionText}>{brandedAction}</Text>
         <View style={styles.arrow}>
           <ArrowUpRight color="#FFFFFF" size={17} strokeWidth={2.5} />
         </View>
@@ -121,6 +124,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,.12)",
+    overflow: "hidden",
   },
   copy: { flex: 1, gap: 1, minWidth: 0 },
   eyebrow: {

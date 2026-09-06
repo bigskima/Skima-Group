@@ -9,8 +9,8 @@ import type { AiAssistantWorkspace } from "./AiAssistantScreen";
 export function AiContextAction({
   workspace,
   prompt,
-  label = "Explain with Ask SKIMA",
-  detail = "Opens Ask SKIMA with this question ready. Nothing is sent until you choose Send.",
+  label = "Explain with Matty",
+  detail = "Opens Matty with this question ready. Nothing is sent until you choose Send.",
 }: {
   readonly workspace: AiAssistantWorkspace;
   readonly prompt: string;

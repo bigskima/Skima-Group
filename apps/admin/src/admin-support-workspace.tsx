@@ -26,8 +26,9 @@ export function AdminSupportWorkspace() {
     queryKey: ["admin-support", filter],
     enabled: status === "authenticated",
     queryFn: async () => {
-      const rows = await api.get("/admin/support/threads?limit=200", ThreadsSchema);
-      return filter === "active" ? rows.filter((row) => !["resolved", "closed"].includes(row.status)) : rows.filter((row) => row.status === filter);
+      const statusFilter = filter === "active" ? "" : `&status=${encodeURIComponent(filter)}`;
+      const rows = await api.get(`/admin/support/threads?limit=200${statusFilter}`, ThreadsSchema);
+      return filter === "active" ? rows.filter((row) => !["resolved", "closed"].includes(row.status)) : rows;
     },
   });
   const respond = useMutation({

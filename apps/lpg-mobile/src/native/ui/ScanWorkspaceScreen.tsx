@@ -23,8 +23,10 @@ import { StatusPill } from "./StatusPill";
 
 export function ScanWorkspaceScreen({
   jobs,
+  workspace = "driver",
 }: {
   jobs: UseQueryResult<PlatformRecord[], Error>;
+  workspace?: "driver" | "station";
 }) {
   const { palette } = useAppTheme();
   const session = useSession();
@@ -47,7 +49,7 @@ export function ScanWorkspaceScreen({
   const detected = (value: string) => {
     if (!jobId) return;
     router.push(
-      `/(driver)/job/${encodeURIComponent(jobId)}?scannedToken=${encodeURIComponent(value)}` as never,
+      `/(${workspace})/job/${encodeURIComponent(jobId)}?scannedToken=${encodeURIComponent(value)}` as never,
     );
   };
 

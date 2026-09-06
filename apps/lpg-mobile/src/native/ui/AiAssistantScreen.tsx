@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
-import { ArrowUp, Bot, CircleAlert, ShieldCheck, Sparkles, X } from "lucide-react-native";
+import { ArrowUp, CircleAlert, ShieldCheck, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -20,6 +20,9 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { Screen } from "./Screen";
+import { BrandMark } from "./BrandMark";
+import { AiRichText } from "./AiRichText";
+import { AppModal } from "./AppModal";
 
 export type AiAssistantWorkspace = "customer" | "driver" | "station";
 
@@ -185,7 +188,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
     } catch (cause) {
       setError(friendlyError(
         cause,
-        "Ask SKIMA is unavailable right now. Your account and LPG activity are not affected.",
+        "Matty is unavailable right now. Your account and LPG activity are not affected.",
       ));
     }
   };
@@ -193,7 +196,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
   return (
     <Screen
       eyebrow="SKIMA intelligence"
-      title="Ask SKIMA"
+      title="Chat with Matty"
       subtitle={copy.subtitle}
     >
       <KeyboardAvoidingView
@@ -211,7 +214,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
           ]}
         >
           <View style={[styles.identityIcon, { backgroundColor: palette.brandSoft }]}>
-            <Sparkles color={palette.brand} size={21} />
+            <BrandMark compact />
           </View>
           <View style={styles.identityCopy}>
             <Text style={[styles.identityTitle, { color: palette.ink }]}>{copy.title}</Text>
@@ -227,7 +230,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
           {messages.length === 0 ? (
             <View style={styles.empty}>
               <View style={[styles.emptyIcon, { backgroundColor: palette.surfaceSubtle }]}>
-                <Bot color={palette.ink} size={27} />
+                <BrandMark compact />
               </View>
               <Text style={[styles.emptyTitle, { color: palette.ink }]}>What can I help you understand?</Text>
               <Text style={[styles.emptyBody, { color: palette.muted }]}>
@@ -245,7 +248,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
               >
                 {message.role === "assistant" ? (
                   <View style={[styles.avatar, { backgroundColor: palette.brandSoft }]}>
-                    <Sparkles color={palette.brand} size={15} />
+                    <BrandMark compact />
                   </View>
                 ) : null}
                 <View
@@ -253,20 +256,14 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
                     styles.bubble,
                     message.role === "user" ? styles.userBubble : styles.assistantBubble,
                     {
-                      backgroundColor: message.role === "user" ? palette.ink : palette.surface,
-                      borderColor: message.role === "user" ? palette.ink : palette.border,
+                      backgroundColor: message.role === "user" ? palette.brand : palette.elevated,
+                      borderColor: message.role === "user" ? palette.brand : palette.borderStrong,
                     },
                   ]}
                 >
-                  <Text
-                    selectable
-                    style={[
-                      styles.messageText,
-                      { color: message.role === "user" ? "#FFFFFF" : palette.ink },
-                    ]}
-                  >
-                    {message.content}
-                  </Text>
+                  {message.role === "assistant" ? <AiRichText content={message.content} /> : (
+                    <Text selectable style={[styles.messageText, { color: "#FFFFFF" }]}>{message.content}</Text>
+                  )}
                 </View>
               </View>
             ))
@@ -275,7 +272,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
           {mutation.isPending ? (
             <View style={styles.messageRow}>
               <View style={[styles.avatar, { backgroundColor: palette.brandSoft }]}>
-                <Sparkles color={palette.brand} size={15} />
+                <BrandMark compact />
               </View>
               <View style={[styles.thinking, { backgroundColor: palette.surface, borderColor: palette.border }]}>
                 <ActivityIndicator color={palette.brand} size="small" />
@@ -554,11 +551,10 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
           </View>
         ) : null}
 
-        {error ? (
-          <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}>
-            <Text accessibilityRole="alert" style={[styles.errorText, { color: palette.danger }]}>{error}</Text>
-          </View>
-        ) : null}
+        <AppModal visible={Boolean(error)} title="Matty couldn't answer" tone="danger" onClose={() => setError(null)}>
+          <Text accessibilityRole="alert" style={[styles.errorText, { color: palette.ink }]}>{error}</Text>
+          <Pressable accessibilityRole="button" onPress={() => setError(null)} style={[styles.supportSubmit, { backgroundColor: palette.brand }]}><Text style={styles.supportSubmitText}>Try another question</Text></Pressable>
+        </AppModal>
 
         <View
           style={[
@@ -571,7 +567,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
           ]}
         >
           <TextInput
-            accessibilityLabel="Message Ask SKIMA"
+            accessibilityLabel="Message Matty"
             editable={!mutation.isPending}
             maxLength={3000}
             multiline
@@ -600,7 +596,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
         </View>
 
         <Text style={[styles.disclaimer, { color: palette.muted }]}>
-          Ask SKIMA can explain available platform information. It does not replace emergency LPG assistance or make safety certifications.
+          Matty explains information available to your account. It does not replace emergency LPG assistance or make safety certifications.
         </Text>
       </KeyboardAvoidingView>
     </Screen>
@@ -610,7 +606,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
 function workspaceCopy(workspace: AiAssistantWorkspace) {
   if (workspace === "driver") {
     return {
-      title: "Driver copilot",
+      title: "Matty for drivers",
       subtitle: "Understand your jobs, next steps and earnings using your live SKIMA workspace.",
       body: "Practical guidance grounded in your Driver Daily Brief, assigned jobs and records visible to you.",
       placeholder: "Ask about your current job or earnings",
@@ -618,14 +614,14 @@ function workspaceCopy(workspace: AiAssistantWorkspace) {
   }
   if (workspace === "station") {
     return {
-      title: "Station operations assistant",
+      title: "Matty for stations",
       subtitle: "Understand your reception queue, active LPG work and demand outlook without changing operational records.",
       body: "Live station facts plus clearly labelled demand estimates from recent SKIMA order history.",
       placeholder: "Ask what needs attention",
     };
   }
   return {
-    title: "Customer assistant",
+    title: "Matty, your SKIMA assistant",
     subtitle: "Ask about your refills, cylinders and account activity using your SKIMA records.",
     body: "Clear answers grounded in the information already available to your account.",
     placeholder: "Ask about your refill or cylinder",
@@ -653,7 +649,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     padding: spacing.md,
   },
-  identityIcon: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  identityIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   identityCopy: { flex: 1, gap: 2 },
   identityTitle: { ...typography.bodyStrong, fontSize: 14 },
   identityBody: { ...typography.caption, lineHeight: 17 },
@@ -666,7 +662,7 @@ const styles = StyleSheet.create({
   emptyBody: { ...typography.body, fontSize: 12, lineHeight: 18, textAlign: "center", maxWidth: 420 },
   messageRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm },
   messageRowUser: { justifyContent: "flex-end" },
-  avatar: { width: 30, height: 30, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  avatar: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", overflow: "hidden", transform: [{ scale: 0.75 }] },
   bubble: { maxWidth: "84%", borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14, paddingVertical: 11 },
   userBubble: { borderRadius: 18, borderBottomRightRadius: 6 },
   assistantBubble: { borderRadius: 18, borderBottomLeftRadius: 6 },

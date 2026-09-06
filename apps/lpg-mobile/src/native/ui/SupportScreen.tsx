@@ -17,6 +17,7 @@ import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
+import { AppModal } from "./AppModal";
 import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
@@ -35,6 +36,8 @@ export function SupportScreen() {
   const [description, setDescription] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [messageSuccess, setMessageSuccess] = useState(false);
+  const [replyThreadId, setReplyThreadId] = useState<string | null>(null);
+  const [reply, setReply] = useState("");
 
   const mutation = useGatewayMutation({
     path: "/lpg/safety-incidents",
@@ -48,6 +51,11 @@ export function SupportScreen() {
   });
   const supportMutation = useGatewayMutation({
     path: "/runtime/support/threads",
+    schema: ActionResponseSchema,
+    invalidate: [["support", "threads"]],
+  });
+  const replyMutation = useGatewayMutation({
+    path: "/runtime/support/reply",
     schema: ActionResponseSchema,
     invalidate: [["support", "threads"]],
   });
@@ -220,11 +228,10 @@ export function SupportScreen() {
         </>
       )}
 
-      {message ? (
-        <View style={[styles.message, { backgroundColor: messageSuccess ? palette.successSoft : palette.dangerSoft }]}>
-          <Text accessibilityRole="alert" style={[styles.messageText, { color: messageSuccess ? palette.success : palette.danger }]}>{message}</Text>
-        </View>
-      ) : null}
+      <AppModal visible={Boolean(message)} title={messageSuccess ? "Report sent" : "We couldn't send that"} tone={messageSuccess ? "success" : "danger"} onClose={() => setMessage(null)}>
+        <Text accessibilityRole="alert" style={[styles.messageText, { color: palette.ink }]}>{message}</Text>
+        <AppButton label="Okay" fullWidth onPress={() => setMessage(null)} />
+      </AppModal>
 
       {(inbox.data ?? []).length ? (
         <View style={[styles.form, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -238,6 +245,10 @@ export function SupportScreen() {
                   {firstString(entry, ["authorKind"]) === "admin" ? "SKIMA: " : "You: "}{firstString(entry, ["body"]) ?? ""}
                 </Text>
               ))}
+              {replyThreadId === recordId(thread) ? <>
+                <TextInput value={reply} onChangeText={setReply} multiline maxLength={4000} placeholder="Write your reply" placeholderTextColor={palette.muted} style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]} />
+                <View style={styles.options}><AppButton label="Cancel" size="sm" variant="secondary" onPress={() => { setReplyThreadId(null); setReply(""); }} /><AppButton label="Send reply" size="sm" loading={replyMutation.isPending} disabled={!reply.trim()} onPress={() => void replyMutation.mutateAsync({ threadId: recordId(thread), message: reply.trim(), source: "skima.mobile.support", idempotencyKey: idempotencyKey("support-reply", recordId(thread) ?? "thread") }).then(() => { setReply(""); setReplyThreadId(null); })} /></View>
+              </> : <AppButton label="Reply" size="sm" variant="secondary" onPress={() => setReplyThreadId(recordId(thread))} />}
             </View>
           ))}
         </View>

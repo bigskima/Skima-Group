@@ -141,7 +141,7 @@ export function aiProviderRouteSupportsInputMode(
   return configured.includes(inputMode);
 }
 
-export async function invokeAiText(
+export function invokeAiText(
   route: AiProviderRoute,
   request: AiTextRequest,
 ): Promise<AiTextResponse> {

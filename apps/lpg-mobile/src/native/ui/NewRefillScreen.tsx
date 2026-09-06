@@ -21,6 +21,7 @@ import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
+import { AppModal } from "./AppModal";
 import { RuntimeMediaImage } from "./RuntimeMediaImage";
 import { Screen } from "./Screen";
 
@@ -41,6 +42,8 @@ export function NewRefillScreen() {
   const [requestedKg, setRequestedKg] = useState("");
   const [purchaseMode, setPurchaseMode] = useState<"kg" | "amount">("kg");
   const [requestedAmount, setRequestedAmount] = useState("");
+  const [refillStep, setRefillStep] = useState(1);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [instructions, setInstructions] = useState("");
   const [quoteId, setQuoteId] = useState<string | null>(null);
   const [quoteRecord, setQuoteRecord] = useState<PlatformRecord | null>(null);
@@ -54,6 +57,8 @@ export function NewRefillScreen() {
   const selectedDeliveryLocation = (locations.data ?? []).find((item) => recordId(item) === deliveryLocationId) ?? null;
   const cylinderCapacityKg = firstNumber(selectedCylinder, ["max_capacity_kg", "maxCapacityKg"]);
   const requestedKgNumber = requestedKg.trim() ? Number(requestedKg) : null;
+  const requestedAmountNumber = requestedAmount.trim() ? Number(requestedAmount) : null;
+  const validRequestedAmount = Boolean(requestedAmountNumber !== null && Number.isFinite(requestedAmountNumber) && requestedAmountNumber > 0);
   const validRequestedKg = Boolean(
     requestedKgNumber !== null && Number.isFinite(requestedKgNumber) && requestedKgNumber > 0,
   );
@@ -102,14 +107,14 @@ export function NewRefillScreen() {
       pickupServiceability.data?.serviceable === true &&
       deliveryServiceability.data?.serviceable === true,
   );
-  const stationEligibilityReady = Boolean(
-    tripServiceable && validRequestedKg && !exceedsCylinderCapacity && cylinderId,
-  );
+  const validPurchase = purchaseMode === "kg" ? validRequestedKg : validRequestedAmount;
+  const stationDiscoveryKg = purchaseMode === "amount" ? 0.5 : requestedKgNumber;
+  const stationEligibilityReady = Boolean(tripServiceable && validPurchase && !exceedsCylinderCapacity && cylinderId);
   const eligibleStations = useEligibleLpgStations({
     pickupLocationId: pickupLocationId || null,
     deliveryLocationId: deliveryLocationId || null,
     cylinderId: cylinderId || null,
-    requestedKg: validRequestedKg ? requestedKgNumber : null,
+    requestedKg: stationEligibilityReady ? stationDiscoveryKg : null,
     enabled: stationEligibilityReady,
     limit: 10,
   });
@@ -226,6 +231,10 @@ export function NewRefillScreen() {
   const requestQuote = async () => {
     setError(null);
     const kilograms = Number(requestedKg);
+    if (purchaseMode === "amount" && !validRequestedAmount) {
+      setError("Enter a valid amount greater than zero.");
+      return;
+    }
     if (!cylinderId || !pickupLocationId || !deliveryLocationId) {
       setError("Choose a cylinder, pickup location and delivery location.");
       return;
@@ -272,7 +281,7 @@ export function NewRefillScreen() {
         deliveryLocationId,
         stationBranchId: stationId,
         requestedKg: kilograms,
-        requestedAmount: purchaseMode === "amount" ? Number(requestedAmount) : undefined,
+        requestedAmount: purchaseMode === "amount" ? requestedAmountNumber : undefined,
         deliveryInstructions: instructions.trim() || undefined,
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey("create-quote", cylinderId),
@@ -400,6 +409,10 @@ export function NewRefillScreen() {
     >
       {quoteId ? (
         <>
+          <View style={styles.progressCard} accessibilityLabel={`Refill step ${refillStep} of 4`}>
+            {[1, 2, 3, 4].map((stepNumber) => <View key={stepNumber} style={[styles.progressSegment, { backgroundColor: stepNumber <= refillStep ? palette.brand : palette.border }]} />)}
+            <Text style={[styles.progressText, { color: palette.muted }]}>Step {refillStep} of 4</Text>
+          </View>
           <View style={[styles.quoteHero, shadows.raised, { backgroundColor: palette.brand }]}>
             <View style={styles.quoteHeroTop}>
               <View>
@@ -451,7 +464,7 @@ export function NewRefillScreen() {
             </View>
           ) : null}
 
-          <SelectionSection
+          {refillStep === 1 ? <><SelectionSection
             step="1"
             icon={<Scale color={palette.brand} size={20} />}
             title="Choose your cylinder"
@@ -461,9 +474,9 @@ export function NewRefillScreen() {
             onSelect={selectCylinder}
             emptyText="No cylinder is registered yet."
             showImages
-          />
+          /><AppButton label="Continue to locations" fullWidth disabled={!cylinderId} onPress={() => setRefillStep(2)} /></> : null}
 
-          <SelectionSection
+          {refillStep === 2 ? <><SelectionSection
             step="2"
             icon={<MapPin color={palette.brand} size={20} />}
             title="Pickup location"
@@ -483,9 +496,9 @@ export function NewRefillScreen() {
             selected={deliveryLocationId}
             onSelect={selectDeliveryLocation}
             emptyText="Add a saved location to continue."
-          />
+          /><View style={styles.stepActions}><AppButton label="Back" variant="secondary" onPress={() => setRefillStep(1)} /><AppButton label="Continue" disabled={!pickupLocationId || !deliveryLocationId || !tripServiceable || serviceabilityPending || serviceabilityError || locationNeedsMapPosition} onPress={() => setRefillStep(3)} /></View></> : null}
 
-          {hasSelectedTrip ? (
+          {refillStep === 2 && hasSelectedTrip ? (
             locationNeedsMapPosition ? (
               <View style={[styles.availabilityCard, { backgroundColor: palette.warningSoft, borderColor: palette.warning }]}>
                 <View style={styles.availabilityLead}>
@@ -553,7 +566,7 @@ export function NewRefillScreen() {
             ) : null
           ) : null}
 
-          <View style={[styles.formCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          {refillStep === 3 ? <View style={[styles.formCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <SectionLead step="4" icon={<Scale color={palette.brand} size={20} />} title="Choose how much gas you need" description="Order by weight or enter the amount you want to spend. SKIMA converts money to kilograms using the selected station's live price." />
 
             <View style={styles.modeSwitch}>
@@ -652,9 +665,10 @@ export function NewRefillScreen() {
                 style={[styles.input, styles.multiline, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
               />
             </View>
-          </View>
+            <View style={styles.stepActions}><AppButton label="Back" variant="secondary" onPress={() => setRefillStep(2)} /><AppButton label="Find stations" disabled={!validPurchase || exceedsCylinderCapacity} onPress={() => setRefillStep(4)} /></View>
+          </View> : null}
 
-          {tripServiceable ? (
+          {refillStep === 4 && tripServiceable ? (
             <StationSelectionSection
               stations={eligibleStations.data ?? []}
               selected={stationId}
@@ -671,23 +685,34 @@ export function NewRefillScreen() {
             />
           ) : null}
 
-          <AppButton
-            label={quoteButtonLabel}
+          {refillStep === 4 ? <><AppButton
+            label="Review refill"
             fullWidth
             size="lg"
             disabled={
               !tripServiceable ||
               serviceabilityError ||
               locationNeedsMapPosition ||
-              !validRequestedKg ||
+              !validPurchase ||
               exceedsCylinderCapacity ||
               eligibleStations.isError ||
               stationUnavailable ||
               !stationId
             }
             loading={quote.isPending || serviceabilityPending || eligibleStations.isPending}
-            onPress={() => void requestQuote()}
-          />
+            onPress={() => setReviewOpen(true)}
+          /><AppButton label="Back" variant="ghost" onPress={() => setRefillStep(3)} /></> : null}
+
+          <AppModal visible={reviewOpen} title="Review your refill" description="Confirm every detail before SKIMA prepares your protected quote." onClose={() => setReviewOpen(false)}>
+              <View style={styles.reviewContent}>
+                <Text style={[styles.reviewLine, { color: palette.muted }]}>{displayTitle(selectedCylinder ?? {})} • {requestedKg || "—"} kg</Text>
+                <Text style={[styles.reviewLine, { color: palette.muted }]}>{selectedStation?.display_name ?? "Selected station"}</Text>
+                <Text style={[styles.reviewLine, { color: palette.muted }]}>Pickup and return: {displayTitle(selectedPickupLocation ?? {})} → {displayTitle(selectedDeliveryLocation ?? {})}</Text>
+                <Text style={[styles.reviewHint, { color: palette.muted }]}>Next, Matty’s pricing safeguards prepare a quote. No payment is taken until you confirm the quote.</Text>
+                <AppButton label={quoteButtonLabel} fullWidth loading={quote.isPending} onPress={() => { setReviewOpen(false); void requestQuote(); }} />
+                <AppButton label="Make changes" fullWidth variant="secondary" onPress={() => setReviewOpen(false)} />
+              </View>
+          </AppModal>
         </>
       )}
 
@@ -904,6 +929,13 @@ function quoteExpired(quote: PlatformRecord) {
 }
 
 const styles = StyleSheet.create({
+  progressCard: { flexDirection: "row", alignItems: "center", gap: spacing.xs, paddingHorizontal: 2 },
+  progressSegment: { flex: 1, height: 5, borderRadius: radii.pill },
+  progressText: { ...typography.caption, marginLeft: spacing.sm, fontWeight: "900" },
+  stepActions: { flexDirection: "row", justifyContent: "space-between", gap: spacing.sm },
+  reviewContent: { gap: spacing.md },
+  reviewLine: { ...typography.bodyStrong },
+  reviewHint: { ...typography.caption, lineHeight: 18 },
   quoteHero: { gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
   quoteHeroTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md },
   quoteEyebrow: { color: "rgba(255,255,255,.76)", ...typography.eyebrow, fontSize: 9 },

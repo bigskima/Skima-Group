@@ -935,7 +935,7 @@ function resolveLegacyImageProvider(): ImageProviderConfig {
   };
 }
 
-async function generateWithConfiguredImageProvider(
+function generateWithConfiguredImageProvider(
   provider: ImageProviderConfig,
   prompt: string,
   sourceImage: SourceImage | null,
