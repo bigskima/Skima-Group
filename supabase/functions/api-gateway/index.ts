@@ -4816,10 +4816,22 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     if (request.method === "POST") {
       const body = await readJsonBody(request, id);
       if ("response" in body) return body.response;
+      const kind = requireString(body.value.kind, "kind");
+      const configuration = optionalRecord(body.value.configuration) ?? {};
+      if (kind === "route") {
+        return rpcResponse(supabase.rpc("configure_utility_provider_route", {
+          target_product_key: requireString(configuration.productKey, "productKey"),
+          target_provider_adapter_key: requireString(configuration.providerAdapterKey, "providerAdapterKey"),
+          target_provider_product_code: requireString(configuration.providerProductCode, "providerProductCode"),
+          target_priority: optionalInteger(configuration.priority) ?? 100,
+          target_status: optionalString(configuration.status) ?? "inactive",
+          target_fixed_fee: optionalNumber(configuration.fixedFee, "fixedFee") ?? 0,
+        }), id);
+      }
       return rpcResponse(supabase.rpc("configure_utility_catalog_item", {
-        target_kind: requireString(body.value.kind, "kind"),
+        target_kind: kind,
         target_key: requireString(body.value.key, "key"),
-        target_configuration: optionalRecord(body.value.configuration) ?? {},
+        target_configuration: configuration,
       }), id);
     }
   }
