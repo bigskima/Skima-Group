@@ -30,7 +30,8 @@
     "20260820204500_finance_runtime_legacy_safety_guards.sql": "20260820204130_finance_runtime_legacy_safety_guards.sql",
     "20260821103100_lpg_revenue_station_pricing_repair.sql": "20260821093119_revenue_station_pricing_repair.sql",
     "20260821104200_tighten_revenue_station_pricing_security.sql": "20260821093652_tighten_revenue_station_pricing_security.sql",
-    "20260906043000_awka_south_lpg_pilot_coverage.sql": "20260906034845_awka_south_lpg_pilot_coverage.sql"
+    "20260906043000_awka_south_lpg_pilot_coverage.sql": "20260906034845_awka_south_lpg_pilot_coverage.sql",
+    "20260906050000_station_location_management.sql": "20260906053855_station_location_management.sql"
   },
   "businessModuleMigrations": [
     "20260810010000_phase_two_experience_runtime.sql",
@@ -91,6 +92,6 @@
     "20260906034845_awka_south_lpg_pilot_coverage.sql",
     "20260906035426_awka_legacy_area_mapping.sql",
     "20260906043158_super_admin_platform_permission_reconciliation.sql",
-    "20260906050000_station_location_management.sql"
+    "20260906053855_station_location_management.sql"
   ]
 }
