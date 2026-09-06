@@ -669,9 +669,9 @@ function ExpansionOpportunitiesPanel(props: {
           <p className="admin-section-kicker">Expansion intelligence</p>
           <h2>Expansion opportunities</h2>
           <p>
-            Review canonical customer interest together with real driver and station coverage
-            requests. Scores are prioritization aids only; service coverage remains controlled by
-            the Geography & Service Coverage workspace.
+            Review verified customer interest together with real driver and station area requests.
+            The scores only help operators decide what to review first; the Service Areas & Availability
+            page still decides where SKIMA can operate.
           </p>
         </div>
         <div className="admin-ai-expansion-head-actions">
