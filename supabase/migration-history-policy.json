@@ -83,6 +83,7 @@
     "20260906006000_driver_earnings_explanation_runtime.sql",
     "20260906007000_station_settlement_explanation_runtime.sql",
     "20260906008000_customer_serviceability_explanation_runtime.sql",
-    "20260906013000_ai_driver_daily_brief.sql"
+    "20260906013000_ai_driver_daily_brief.sql",
+    "20260906043000_awka_south_lpg_pilot_coverage.sql"
   ]
 }
