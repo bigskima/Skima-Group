@@ -66,6 +66,7 @@ import {
 } from "@skima/ui";
 
 import { AdminShell } from "./AdminShell";
+import { AdminBrandLogo } from "./admin-brand-logo";
 import { AdminResourceConsole } from "./admin-resource-console";
 import { AdminCompanyWorkspace } from "./admin-company-workspace";
 import { AdminSystemWorkspace } from "./admin-system-workspace";
