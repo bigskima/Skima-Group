@@ -896,9 +896,127 @@ function geometryPoints(value: unknown): [number, number][] { if (!Array.isArray
 function geometryPath(value: unknown, project: (point: [number, number]) => readonly [number, number]): string { if (!Array.isArray(value)) return ""; if (value.length > 0 && Array.isArray(value[0]) && typeof value[0][0] === "number") { const ring = geometryPoints(value); return ring.map((point, index) => { const [x, y] = project(point); return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`; }).join(" ") + " Z"; } return value.map((part) => geometryPath(part, project)).join(" "); }
 
 function PointDiagnosticPanel() {
-  const { supabase } = useSessionState(); const [serviceKey,setServiceKey]=useState(""); const [capabilityKey,setCapabilityKey]=useState(""); const [longitude,setLongitude]=useState(""); const [latitude,setLatitude]=useState(""); const [entityType,setEntityType]=useState(""); const [entityId,setEntityId]=useState(""); const [result,setResult]=useState<z.infer<typeof PointDiagnosticSchema>|null>(null); const [error,setError]=useState<string|null>(null); const [loading,setLoading]=useState(false);
-  const diagnose=async(event:FormEvent)=>{event.preventDefault();setLoading(true);setError(null);try{const{data,error:rpcError}=await supabase.rpc("diagnose_coverage_point",{p_service_key:serviceKey.trim(),p_capability_key:capabilityKey.trim(),p_longitude:Number(longitude),p_latitude:Number(latitude),p_entity_type:entityType.trim().toUpperCase()||null,p_entity_id:entityId.trim()||null,p_at:new Date().toISOString()});if(rpcError)throw rpcError;setResult(PointDiagnosticSchema.parse(data));}catch(cause){setError(readError(cause));setResult(null);}finally{setLoading(false);}};
-  const available=result?.availability.available===true; return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Point coverage diagnostic</h2><p className="skima-muted">Inspect the authoritative result for an exact coordinate, including boundary-edge handling, service policy, approved coverage, requested coverage and current entity evidence.</p></div></div><form className="skima-form-grid" onSubmit={(event)=>void diagnose(event)}><TextInput label="Service key" value={serviceKey} onChange={(event)=>setServiceKey(event.currentTarget.value)} required/><TextInput label="Capability key" value={capabilityKey} onChange={(event)=>setCapabilityKey(event.currentTarget.value)} required/><TextInput label="Longitude" type="number" value={longitude} onChange={(event)=>setLongitude(event.currentTarget.value)} required/><TextInput label="Latitude" type="number" value={latitude} onChange={(event)=>setLatitude(event.currentTarget.value)} required/><TextInput label="Entity type filter" helperText="Optional, such as DRIVER or STATION." value={entityType} onChange={(event)=>setEntityType(event.currentTarget.value)}/><TextInput label="Entity ID filter" value={entityId} onChange={(event)=>setEntityId(event.currentTarget.value)}/><Button type="submit" isLoading={loading}>Run server diagnostic</Button></form>{error?<StatusBadge tone="danger">{error}</StatusBadge>:null}{result?<div className="skima-grid skima-grid--compact"><MetricTile label="Service result" value={available?"AVAILABLE":String(result.availability.reason??"UNAVAILABLE")} icon={ShieldCheck} tone={available?"success":"warning"}/><MetricTile label="Matched geographies" value={result.matchedGeographies.length} icon={MapPinned} tone="info"/><MetricTile label="Approved assignments" value={result.approvedAssignments.length} icon={ShieldCheck} tone="success"/><MetricTile label="Requested assignments" value={result.requestedCoverage.length} icon={MapPinned} tone="warning"/><section className="sk-panel"><h3>Boundary behavior</h3><p>{result.boundaryStrategy}</p><p className="skima-muted">Points on polygon edges are included consistently through PostGIS ST_Covers.</p></section><section className="sk-panel"><h3>Diagnostic evidence</h3><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify({matchedGeographies:result.matchedGeographies,approvedAssignments:result.approvedAssignments,requestedCoverage:result.requestedCoverage,currentLocationEvidence:result.currentLocationEvidence},null,2)}</pre></section></div>:null}</section>;
+  const { supabase } = useSessionState();
+  const [serviceKey,setServiceKey]=useState("lpg");
+  const [capabilityKey,setCapabilityKey]=useState("customer_ordering");
+  const [longitude,setLongitude]=useState("");
+  const [latitude,setLatitude]=useState("");
+  const [entityType,setEntityType]=useState("");
+  const [entityId,setEntityId]=useState("");
+  const [result,setResult]=useState<z.infer<typeof PointDiagnosticSchema>|null>(null);
+  const [error,setError]=useState<string|null>(null);
+  const [loading,setLoading]=useState(false);
+  const point = longitude && latitude ? [Number(longitude), Number(latitude)] as const : null;
+
+  const diagnose=async(event:FormEvent)=>{
+    event.preventDefault();
+    if (!longitude || !latitude) {
+      setError("Tap the map to choose the location you want to check.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const{data,error:rpcError}=await supabase.rpc("diagnose_coverage_point",{
+        p_service_key:serviceKey.trim(),
+        p_capability_key:capabilityKey.trim(),
+        p_longitude:Number(longitude),
+        p_latitude:Number(latitude),
+        p_entity_type:entityType.trim().toUpperCase()||null,
+        p_entity_id:entityId.trim()||null,
+        p_at:new Date().toISOString()
+      });
+      if(rpcError)throw rpcError;
+      setResult(PointDiagnosticSchema.parse(data));
+    } catch(cause) {
+      setError(readError(cause));
+      setResult(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const available=result?.availability.available===true;
+  return <section className="sk-panel">
+    <div className="sk-panel__header">
+      <div>
+        <h2>Check a location</h2>
+        <p className="skima-muted">Tap an exact point on the map to see whether the selected SKIMA activity is allowed there and which mapped area or partner coverage affected the result.</p>
+      </div>
+    </div>
+    <form className="skima-form-grid" onSubmit={(event)=>void diagnose(event)}>
+      <SelectInput
+        label="SKIMA service"
+        value={serviceKey}
+        onChange={(event)=>setServiceKey(event.currentTarget.value)}
+        options={[{label:"LPG refill service",value:"lpg"}]}
+        required
+      />
+      <SelectInput
+        label="What do you want to check?"
+        value={capabilityKey}
+        onChange={(event)=>setCapabilityKey(event.currentTarget.value)}
+        options={[
+          {label:"Can customers place refill orders here?",value:"customer_ordering"},
+          {label:"Can drivers register and operate here?",value:"driver_onboarding"},
+          {label:"Can stations register and operate here?",value:"station_onboarding"},
+        ]}
+        required
+      />
+      <div className="skima-form-help">
+        <strong>Choose the test location</strong>
+        <p>Click the map. SKIMA will use the exact map point automatically; you do not need to type coordinates.</p>
+      </div>
+      <AdminGeometryEditor
+        mode="point"
+        point={point}
+        onPointChange={([nextLongitude,nextLatitude])=>{
+          setLongitude(String(nextLongitude));
+          setLatitude(String(nextLatitude));
+        }}
+      />
+      <details className="skima-advanced-options">
+        <summary>Optional partner-specific check</summary>
+        <div className="skima-form-grid">
+          <SelectInput
+            label="Partner type"
+            value={entityType}
+            onChange={(event)=>setEntityType(event.currentTarget.value)}
+            options={[{label:"No specific partner",value:""},{label:"Driver",value:"DRIVER"},{label:"Station",value:"STATION"}]}
+          />
+          <TextInput
+            label="Partner record ID"
+            helperText="Only use this when you need to test one specific driver or station."
+            value={entityId}
+            onChange={(event)=>setEntityId(event.currentTarget.value)}
+          />
+        </div>
+      </details>
+      <Button type="submit" isLoading={loading}>Check this location</Button>
+    </form>
+    {error?<StatusBadge tone="danger">{error}</StatusBadge>:null}
+    {result?<div className="skima-grid skima-grid--compact">
+      <MetricTile label="Availability" value={available?"Allowed":"Not allowed"} icon={ShieldCheck} tone={available?"success":"warning"}/>
+      <MetricTile label="Mapped areas found" value={result.matchedGeographies.length} icon={MapPinned} tone="info"/>
+      <MetricTile label="Approved partner areas" value={result.approvedAssignments.length} icon={ShieldCheck} tone="success"/>
+      <MetricTile label="Partner requests waiting" value={result.requestedCoverage.length} icon={MapPinned} tone="warning"/>
+      <section className="sk-panel">
+        <h3>How the boundary was handled</h3>
+        <p className="skima-muted">A point exactly on the edge of a mapped area is treated consistently as part of that area.</p>
+      </section>
+      <details className="sk-panel">
+        <summary><strong>Technical evidence</strong></summary>
+        <p className="skima-muted">Use this only when an engineer or support specialist asks for the detailed location evidence.</p>
+        <pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify({
+          matchedAreas:result.matchedGeographies,
+          approvedPartnerAreas:result.approvedAssignments,
+          requestedPartnerAreas:result.requestedCoverage,
+          currentLocationEvidence:result.currentLocationEvidence,
+          boundaryStrategy:result.boundaryStrategy
+        },null,2)}</pre>
+      </details>
+    </div>:null}
+  </section>;
 }
 
 type DispatchDiagnostic=z.infer<typeof DispatchDiagnosticSchema>;
