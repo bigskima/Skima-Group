@@ -262,7 +262,7 @@ export function AdminShell(props: AdminShellProps) {
           <aside id="admin-mobile-menu" className="admin-mobile-nav__drawer" aria-label="Administration menu">
             <div className="admin-mobile-nav__header">
               <div className="admin-shell__brand admin-shell__brand--mobile">
-                <span className="admin-shell__brand-mark" aria-hidden="true">S</span>
+                <AdminBrandLogo compact className="admin-shell__brand-mark" />
                 <div>
                   <strong>{props.brand}</strong>
                   <small>Company administration</small>
