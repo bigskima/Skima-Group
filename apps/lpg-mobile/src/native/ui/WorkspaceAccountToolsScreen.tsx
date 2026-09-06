@@ -74,6 +74,7 @@ const toolGroups: Record<Workspace, readonly ToolGroup[]> = {
       title: "Station operations",
       items: [
         { label: "Branch profile", detail: "Station profile and status", href: "/(station)/profile", icon: Building2 },
+        { label: "Station locations", detail: "Main address and reviewed locations", href: "/(station)/locations", icon: MapPin },
         { label: "LPG stock", detail: "Availability and incoming cylinders", href: "/(station)/inventory", icon: Settings2 },
         { label: "Station reports", detail: "Completed orders and earnings", href: "/(station)/reports", icon: ReceiptText },
         { label: "Settings & pricing", detail: "Hours, availability and price", href: "/(station)/settings", icon: Settings2 },
