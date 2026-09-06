@@ -13,6 +13,7 @@ import {
 import {
   domainQueries,
   useOrganizationRoles,
+  useStationLocations,
   useStationRuntime,
 } from "../api/domains";
 import {
@@ -204,6 +205,8 @@ export function StationProfileScreen() {
   const runtime = useStationRuntime();
   const branch = nestedRecord(runtime.data, "branch");
   const id = branch ? recordId(branch) : null;
+  const locations = useStationLocations(id);
+  const currentLocation = nestedRecord(locations.data, "currentLocation");
   const hours = nestedRecord(branch, "operatingHours") ?? nestedRecord(branch, "operating_hours");
   const sizes = numberValues(branch?.supportedCylinderSizesKg ?? branch?.supported_cylinder_sizes_kg);
 
@@ -214,14 +217,14 @@ export function StationProfileScreen() {
       subtitle="Your station profile and current branch information."
       action={<BackButton />}
     >
-      {runtime.isPending ? (
+      {runtime.isPending || (Boolean(id) && locations.isPending) ? (
         <ScreenSkeleton cards={3} />
-      ) : runtime.error ? (
+      ) : runtime.error || locations.error ? (
         <EmptyState
           icon={<Building2 color={palette.brand} size={27} />}
           title="Station profile could not be loaded"
           description="Check your connection and refresh the station workspace."
-          action={<AppButton label="Retry" onPress={() => void runtime.refetch()} />}
+          action={<AppButton label="Retry" onPress={() => void Promise.all([runtime.refetch(), locations.refetch()])} />}
         />
       ) : !branch ? (
         <StationAwaitingActivation />
@@ -257,6 +260,29 @@ export function StationProfileScreen() {
             <Divider />
             <InfoField label="Supported cylinders" value={sizes.length ? sizes.map((size) => `${size} kg`).join(", ") : "Not available"} />
           </View>
+
+          <SectionHeader
+            title="Station location"
+            description="Your verified physical station address. Updates are reviewed before they affect dispatch or public station discovery."
+          />
+          <View style={[styles.detailCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <InfoField label="Address" value={firstString(currentLocation, ["formattedAddress"]) ?? firstString(branch, ["formattedAddress", "formatted_address"]) ?? "Not recorded"} />
+            <Divider />
+            <InfoField label="Country" value={firstString(currentLocation, ["country"]) ?? "Not recorded"} />
+            <Divider />
+            <InfoField label="State" value={firstString(currentLocation, ["state"]) ?? "Not recorded"} />
+            <Divider />
+            <InfoField label="LGA" value={firstString(currentLocation, ["lga"]) ?? "Not recorded"} />
+            <Divider />
+            <InfoField label="City / town" value={firstString(currentLocation, ["city"]) ?? "Not recorded"} />
+          </View>
+          <AppButton
+            label="Manage station locations"
+            fullWidth
+            size="lg"
+            icon={<MapPin color="#FFFFFF" size={19} />}
+            onPress={() => router.push("/(station)/locations" as never)}
+          />
 
           {id ? <PresentationMediaPanel subjectId={id} subjectType="station" /> : null}
         </>
