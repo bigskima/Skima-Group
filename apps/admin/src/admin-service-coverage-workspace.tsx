@@ -98,12 +98,24 @@ const DispatchDiagnosticSchema=z.object({id:z.string().uuid(),dispatch_request_i
 const RetentionHealthSchema=z.object({healthy:z.boolean(),activePolicies:z.coerce.number(),lastCompletedAt:z.string().nullable(),lastDeletedCounts:z.record(z.unknown()).nullable(),queuedJobs:z.coerce.number(),runningJobs:z.coerce.number(),failedJobs:z.coerce.number(),overdue:z.boolean()});
 const ProductionReadinessSchema=z.object({ready:z.boolean(),checkedAt:z.string(),configuration:z.record(z.unknown()),alerts:z.array(z.object({code:z.string(),severity:z.enum(["BLOCKER","WARNING"]),count:z.coerce.number().optional()})),metrics:z.record(z.unknown())});
 const GeometryDraftSchema=z.object({id:z.string().uuid(),draft_type:z.enum(["GEOGRAPHY_BOUNDARY","OPERATIONAL_COVERAGE"]),target_id:z.string().uuid().nullable(),parent_geography_id:z.string().uuid().nullable(),status:z.enum(["DRAFT","PREVIEWED"]),geometry_geojson:z.record(z.unknown()),validation_snapshot:z.record(z.unknown()),created_at:z.string(),updated_at:z.string()});
+const PlaceSearchSchema = z.object({
+  provider: z.string(),
+  predictions: z.array(z.object({
+    description: z.string(),
+    placeId: z.string().nullable().optional(),
+    addressComponents: z.record(z.unknown()).nullable().optional(),
+    structuredFormatting: z.object({
+      mainText: z.string().optional(),
+      secondaryText: z.string().optional(),
+    }).partial().optional(),
+  }).passthrough()),
+}).passthrough();
 type Geography = z.infer<typeof GeographySchema>;
 type Policy = z.infer<typeof PolicySchema>;
 
-interface GeographyForm { name: string; countryCode: string; levelId: string; parentId: string; boundary: string; source: string }
+interface GeographyForm { name: string; countryCode: string; levelId: string; parentId: string; boundary: string; source: string; externalReference: string }
 interface PolicyForm { serviceKey: string; capabilityKey: string; geographyId: string; effect: "ALLOW" | "DENY"; priority: string; status: "draft" | "active"; startsAt: string; endsAt: string; reason: string }
-const EMPTY_GEOGRAPHY: GeographyForm = { name: "", countryCode: "", levelId: "", parentId: "", boundary: "", source: "admin.boundary" };
+const EMPTY_GEOGRAPHY: GeographyForm = { name: "", countryCode: "", levelId: "", parentId: "", boundary: "", source: "maps.provider", externalReference: "" };
 const EMPTY_POLICY: PolicyForm = { serviceKey: "", capabilityKey: "", geographyId: "", effect: "ALLOW", priority: "0", status: "draft", startsAt: "", endsAt: "", reason: "" };
 
 export function AdminServiceCoverageWorkspace() {
@@ -134,28 +146,28 @@ export function AdminServiceCoverageWorkspace() {
     await Promise.all([adminSetup.refetch(), productionReadiness.refetch()]);
   };
   const columns = useMemo<TableColumn<Policy>[]>(() => [
-    { key: "geography", header: "Geography", render: (p) => p.geographies?.canonical_name ?? "Unavailable geography" },
-    { key: "capability", header: "Service / capability", render: (p) => <><strong>{p.service_key}</strong><br /><small>{p.capability_key}</small></> },
-    { key: "effect", header: "Decision", render: (p) => <StatusBadge tone={p.effect === "ALLOW" ? "success" : "danger"}>{p.effect}</StatusBadge> },
+    { key: "geography", header: "Service area", render: (p) => p.geographies?.canonical_name ?? "Area unavailable" },
+    { key: "capability", header: "What this rule controls", render: (p) => <><strong>{friendlyServiceName(p.service_key)}</strong><br /><small>{friendlyCapabilityName(p.capability_key)}</small></> },
+    { key: "effect", header: "Availability", render: (p) => <StatusBadge tone={p.effect === "ALLOW" ? "success" : "danger"}>{p.effect === "ALLOW" ? "Allowed" : "Blocked"}</StatusBadge> },
     { key: "priority", header: "Priority", render: (p) => p.priority },
     { key: "status", header: "Status", render: (p) => <StatusBadge tone={p.status === "active" ? "success" : "warning"}>{p.status}</StatusBadge> },
   ], []);
   const loading = adminSetup.isLoading;
   const error = adminSetup.error;
   return <>
-    <PageHeader eyebrow="Platform geography" title="Geography & Service Coverage" description="Manage canonical boundaries and capability-specific policies. Coordinates and PostGIS boundaries—not place names—determine availability." actions={<div className="skima-action-row"><Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button><Button icon={MapPinned} disabled={!adminSetup.data?.permissions.canManageGeographies} onClick={() => setGeographyOpen(true)}>Add geography</Button><Button icon={Plus} disabled={!adminSetup.data?.permissions.canManageCoverage} onClick={() => setPolicyOpen(true)}>Add policy</Button></div>} />
+    <PageHeader eyebrow="Service availability" title="Service Areas & Availability" description="Choose where SKIMA can operate. Areas are checked by their real map boundary, so customers, drivers, stations and refill orders use the same location rules." actions={<div className="skima-action-row"><Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button><Button icon={MapPinned} disabled={!adminSetup.data?.permissions.canManageGeographies} onClick={() => setGeographyOpen(true)}>Add service area</Button><Button icon={Plus} disabled={!adminSetup.data?.permissions.canManageCoverage} onClick={() => setPolicyOpen(true)}>Add availability rule</Button></div>} />
     <ProductionReadinessAlerts readiness={productionReadiness.data} error={productionReadiness.error}/>
     {notice ? <StatusBadge tone="success">{notice}</StatusBadge> : null}
     <section className="skima-grid skima-grid--compact">
-      <MetricTile label="Canonical geographies" value={geographies.length} icon={MapPinned} tone="info" />
-      <MetricTile label="Active policies" value={records.filter((p) => p.status === "active").length} icon={ShieldCheck} tone="success" />
-      <MetricTile label="Blocked legacy areas" value={readiness?.blockedCount ?? 0} icon={ShieldCheck} tone={(readiness?.blockedCount ?? 0) > 0 ? "warning" : "success"} />
-      <MetricTile label="Authority mode" value={readiness?.authorityMode ?? "Loading"} icon={MapPinned} tone={readiness?.ready ? "success" : "warning"} />
+      <MetricTile label="Mapped service areas" value={geographies.length} icon={MapPinned} tone="info" />
+      <MetricTile label="Active service rules" value={records.filter((p) => p.status === "active").length} icon={ShieldCheck} tone="success" />
+      <MetricTile label="Existing areas needing attention" value={readiness?.blockedCount ?? 0} icon={ShieldCheck} tone={(readiness?.blockedCount ?? 0) > 0 ? "warning" : "success"} />
+      <MetricTile label="Coverage setup" value={readiness?.authorityMode === "universal" ? "Active" : readiness?.authorityMode === "preparing" ? "Setup in progress" : readiness?.authorityMode ?? "Loading"} icon={MapPinned} tone={readiness?.ready ? "success" : "warning"} />
     </section>
     <GeographyCutoverPanel readiness={readiness} geographies={geographies.filter((geography) => geography.status === "active")} />
-    {loading ? <LoadingState label="Loading universal geography" /> : null}
-    {error ? <ErrorState title="Geography unavailable" message={readError(error)} onRetry={() => void refresh()} /> : null}
-    {!loading && !error ? <section className="sk-panel"><div className="sk-panel__header"><div><h2>Service policies</h2><p className="skima-muted">More-specific configured levels override broader levels. Equal specificity and priority fail closed as a conflict.</p></div></div><DataTable caption="Universal service coverage policies" columns={columns} records={records} getRowKey={(p) => p.id} emptyTitle="No universal policies" emptyMessage="Import or draw a bounded geography, then add a capability policy." /></section> : null}
+    {loading ? <LoadingState label="Loading service areas" /> : null}
+    {error ? <ErrorState title="Service areas unavailable" message={readError(error)} onRetry={() => void refresh()} /> : null}
+    {!loading && !error ? <section className="sk-panel"><div className="sk-panel__header"><div><h2>Availability rules</h2><p className="skima-muted">These rules decide which SKIMA service is allowed or blocked inside each mapped area. A smaller local area can override a broader area.</p></div></div><DataTable caption="Service availability rules" columns={columns} records={records} getRowKey={(p) => p.id} emptyTitle="No service rules yet" emptyMessage="Add or import a mapped service area, then choose which SKIMA services are allowed there." /></section> : null}
     <CoverageRequestsPanel />
     <OperationalCoveragePanel geographies={geographies} />
     <CoverageMapPanel />
@@ -164,8 +176,8 @@ export function AdminServiceCoverageWorkspace() {
     <RetentionHealthPanel />
     <GeometryDraftRecoveryPanel />
     <ExpansionDemandPanel />
-    <GeographyDialog open={geographyOpen} levels={levels} geographies={geographies} defaultCountryCode={adminSetup.data?.defaultCountryCode ?? ""} onClose={() => setGeographyOpen(false)} onSaved={async () => { setGeographyOpen(false); setNotice("Canonical geography saved."); await refresh(); }} />
-    <PolicyDialog open={policyOpen} geographies={geographies.filter((g) => g.status === "active")} onClose={() => setPolicyOpen(false)} onSaved={async () => { setPolicyOpen(false); setNotice("Coverage policy saved."); await refresh(); }} />
+    <GeographyDialog open={geographyOpen} levels={levels} geographies={geographies} defaultCountryCode={adminSetup.data?.defaultCountryCode ?? ""} onClose={() => setGeographyOpen(false)} onSaved={async () => { setGeographyOpen(false); setNotice("Service area saved."); await refresh(); }} />
+    <PolicyDialog open={policyOpen} geographies={geographies.filter((g) => g.status === "active")} onClose={() => setPolicyOpen(false)} onSaved={async () => { setPolicyOpen(false); setNotice("Availability rule saved."); await refresh(); }} />
   </>;
 }
 
@@ -298,7 +310,7 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
   const blocked = records.filter((item) => item.migration_status === "blocked").length;
   const columns: TableColumn<GeographyMigration>[] = [
     { key: "legacy", header: "Existing area", render: (item) => <><strong>{item.legacy_display_name}</strong><br /><small>{item.legacy_area_type ?? item.legacy_source}</small></> },
-    { key: "canonical", header: "Canonical geography", render: (item) => item.geography_name ?? "Not imported" },
+    { key: "canonical", header: "Mapped service area", render: (item) => item.geography_name ?? "Not imported" },
     { key: "state", header: "Review state", render: (item) => <><StatusBadge tone={item.migration_status === "verified" ? "success" : item.migration_status === "blocked" ? "danger" : "warning"}>{item.migration_status}</StatusBadge><br /><small>{item.validation_code}</small></> },
     { key: "boundary", header: "Boundary", render: (item) => <StatusBadge tone={item.boundary_ready ? "success" : "danger"}>{item.boundary_ready ? "Valid" : "Needs correction"}</StatusBadge> },
     { key: "action", header: "Review", render: (item) => item.migration_status === "migrated"
@@ -308,13 +320,13 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
         : item.migration_status === "blocked" || item.migration_status === "pending"
           ? <div className="skima-form-grid">
               <SelectInput
-                label="Canonical geography"
+                label="Mapped service area"
                 value={linkTargets[item.id] ?? ""}
                 onChange={(event) => {
                   const nextValue = event.currentTarget.value;
                   setLinkTargets((current) => ({ ...current, [item.id]: nextValue }));
                 }}
-                options={[{ label: "Choose bounded geography", value: "" }, ...geographies.map((geography) => ({ label: geography.canonical_name, value: geography.id }))]}
+                options={[{ label: "Choose mapped service area", value: "" }, ...geographies.map((geography) => ({ label: geography.canonical_name, value: geography.id }))]}
               />
               <Button size="sm" variant="outline" disabled={!linkTargets[item.id] || !reason.trim()} isLoading={linkMapping.isPending && linkMapping.variables === item.id} onClick={() => linkMapping.mutate(item.id)}>Link for review</Button>
             </div>
@@ -333,8 +345,8 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
     <section className="sk-panel">
       <div className="sk-panel__header">
         <div>
-          <h2>Geography cutover setup</h2>
-          <p className="skima-muted">Import existing spatial areas. For older name-only rows, explicitly link them to a real bounded canonical geography instead of guessing a boundary. Verify every mapping, create the required service policies, then switch authority only when the readiness guard passes.</p>
+          <h2>Existing location setup</h2>
+          <p className="skima-muted">Bring older service-area records into the new map-based location system. Review anything that cannot be matched safely, then activate the new coverage system only when every required check passes.</p>
         </div>
         <div className="skima-action-row">
           <Button variant="outline" icon={RefreshCcw} disabled={importLegacy.isPending} onClick={() => importLegacy.mutate()}>Import existing areas</Button>
@@ -345,7 +357,7 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
             isLoading={migratePolicies.isPending}
             onClick={() => migratePolicies.mutate()}
           >
-            Migrate verified LPG policies
+            Move verified LPG rules
           </Button>
           <Button
             variant="outline"
@@ -354,27 +366,27 @@ function GeographyCutoverPanel({ readiness, geographies }: { readiness: z.infer<
             isLoading={migrateOperationalCoverage.isPending}
             onClick={() => migrateOperationalCoverage.mutate()}
           >
-            Migrate driver & station coverage
+            Move driver & station areas
           </Button>
           {readiness?.authorityMode === "preparing"
-            ? <Button icon={ShieldCheck} disabled={!readiness.ready || !reason.trim()} isLoading={activateAuthority.isPending} onClick={() => activateAuthority.mutate()}>Activate universal geography</Button>
+            ? <Button icon={ShieldCheck} disabled={!readiness.ready || !reason.trim()} isLoading={activateAuthority.isPending} onClick={() => activateAuthority.mutate()}>Activate map-based coverage</Button>
             : null}
         </div>
       </div>
       <div className="skima-grid skima-grid--compact">
         <MetricTile label="Awaiting review" value={needsReview} icon={MapPinned} tone={needsReview ? "warning" : "success"} />
         <MetricTile label="Blocked imports" value={blocked} icon={ShieldCheck} tone={blocked ? "warning" : "success"} />
-        <MetricTile label="Verified mappings" value={readiness?.verifiedCount ?? 0} icon={ShieldCheck} tone="success" />
-        <MetricTile label="Active policies required" value={readiness?.activeUniversalPolicyCount ?? 0} icon={ShieldCheck} tone={(readiness?.activeUniversalPolicyCount ?? 0) > 0 ? "success" : "warning"} />
+        <MetricTile label="Verified area links" value={readiness?.verifiedCount ?? 0} icon={ShieldCheck} tone="success" />
+        <MetricTile label="Active service rules" value={readiness?.activeUniversalPolicyCount ?? 0} icon={ShieldCheck} tone={(readiness?.activeUniversalPolicyCount ?? 0) > 0 ? "success" : "warning"} />
         <MetricTile label="Approved drivers missing coverage" value={readiness?.approvedDriversWithoutCoverage ?? 0} icon={MapPinned} tone={(readiness?.approvedDriversWithoutCoverage ?? 0) > 0 ? "warning" : "success"} />
         <MetricTile label="Approved stations missing coverage" value={readiness?.approvedStationsWithoutCoverage ?? 0} icon={MapPinned} tone={(readiness?.approvedStationsWithoutCoverage ?? 0) > 0 ? "warning" : "success"} />
       </div>
-      <TextAreaInput label="Review / activation reason" helperText="Required for mapping verification and the final authority switch. The reason is preserved in audit history." value={reason} onChange={(event) => setReason(event.currentTarget.value)} />
+      <TextAreaInput label="Reason for this change" helperText="Explain why you are making this change. SKIMA keeps this note in the audit history." value={reason} onChange={(event) => setReason(event.currentTarget.value)} />
       {notice ? <StatusBadge tone="success">{notice}</StatusBadge> : null}
       {actionError ? <StatusBadge tone="danger">{readError(actionError)}</StatusBadge> : null}
       {mappings.isLoading
         ? <LoadingState label="Loading geography migration review" />
-        : <DataTable caption="Legacy geography migration review" columns={columns} records={records} getRowKey={(item) => item.id} emptyTitle="No legacy geography mappings" emptyMessage="Use Import existing areas if legacy service areas exist, or add canonical geographies manually." />}
+        : <DataTable caption="Existing service-area review" columns={columns} records={records} getRowKey={(item) => item.id} emptyTitle="No older service areas to review" emptyMessage="Import older areas if they exist, or add a new mapped service area." />}
     </section>
   );
 }
@@ -393,23 +405,183 @@ function ExpansionDemandPanel() {
     { key: "people", header: "People", render: (item) => item.distinct_user_count },
     { key: "latest", header: "Latest", render: (item) => new Date(item.last_requested_at).toLocaleString() },
   ];
-  return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Expansion demand</h2><p className="skima-muted">Customer and partner interest is grouped by the most-specific configured boundary containing each canonical point.</p></div></div>{query.isLoading ? <LoadingState label="Loading expansion demand" /> : query.error ? <ErrorState title="Expansion demand unavailable" message={readError(query.error)} onRetry={() => void query.refetch()} /> : <DataTable caption="Expansion demand by canonical geography" columns={columns} records={query.data ?? []} getRowKey={(item) => `${item.service_key}:${item.interest_type}:${item.geography_id ?? "unmapped"}`} emptyTitle="No expansion demand yet" emptyMessage="Launch notification and partner-interest requests will appear here." />}</section>;
+  return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Expansion demand</h2><p className="skima-muted">Customer and partner interest is grouped by the mapped area that contains their location.</p></div></div>{query.isLoading ? <LoadingState label="Loading expansion demand" /> : query.error ? <ErrorState title="Expansion demand unavailable" message={readError(query.error)} onRetry={() => void query.refetch()} /> : <DataTable caption="Expansion demand by mapped service area" columns={columns} records={query.data ?? []} getRowKey={(item) => `${item.service_key}:${item.interest_type}:${item.geography_id ?? "unmapped"}`} emptyTitle="No expansion demand yet" emptyMessage="Launch notification and partner-interest requests will appear here." />}</section>;
 }
 
 function GeographyDialog({ open, levels, geographies, defaultCountryCode, onClose, onSaved }: { open: boolean; levels: z.infer<typeof LevelSchema>[]; geographies: Geography[]; defaultCountryCode: string; onClose: () => void; onSaved: () => Promise<void> }) {
-  const { supabase } = useSessionState(); const [form, setForm] = useState(EMPTY_GEOGRAPHY); const [error, setError] = useState<string | null>(null); const [saving, setSaving] = useState(false); const [draftId,setDraftId]=useState<string|null>(null);
+  const { supabase, api } = useSessionState();
+  const [form, setForm] = useState(EMPTY_GEOGRAPHY);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [draftId,setDraftId]=useState<string|null>(null);
+  const placeSearch = useMutation({
+    mutationFn: (input: string) => api.post(
+      "/lpg/maps/autocomplete",
+      { input },
+      PlaceSearchSchema,
+    ),
+  });
+
   useEffect(() => {
     if (!open) return;
-    setForm((current) => current.countryCode ? current : { ...current, countryCode: defaultCountryCode });
+    setForm((current) => current.countryCode ? current : { ...current, countryCode: defaultCountryCode || "NG" });
   }, [open, defaultCountryCode]);
+
   if (!open) return null;
   const selectedLevel = levels.find((level) => level.id === form.levelId);
   const requiredParentLevelId = selectedLevel?.parent_level_id ?? null;
   const parentOptions = requiredParentLevelId
     ? geographies.filter((geography) => geography.status === "active" && geography.geography_level_id === requiredParentLevelId)
     : [];
-  const submit = async (event: FormEvent) => { event.preventDefault(); setSaving(true); setError(null); try { const boundary = JSON.parse(form.boundary) as unknown; const { data:savedDraft,error:draftError}=await supabase.rpc("save_coverage_geometry_draft",{p_draft_id:draftId,p_draft_type:"GEOGRAPHY_BOUNDARY",p_target_id:null,p_parent_geography_id:form.parentId||null,p_geojson:boundary});if(draftError)throw draftError;setDraftId(savedDraft as string); const { data:geographyId,error: rpcError } = await supabase.rpc("configure_universal_geography", { p_geography_id: null, p_parent_id: form.parentId || null, p_level_id: form.levelId, p_canonical_name: form.name.trim(), p_country_code: form.countryCode.trim().toUpperCase(), p_boundary_geojson: boundary, p_source: form.source.trim(), p_external_reference: null, p_status: "active", p_aliases: [], p_metadata: { sourceSurface: "admin_geography",geometryDraftId:savedDraft } }); if (rpcError) throw rpcError; const{error:activationError}=await supabase.rpc("activate_coverage_geometry_draft",{p_draft_id:savedDraft,p_target_id:geographyId,p_reason:`Activated canonical geography: ${form.name.trim()}`});if(activationError)throw activationError; setForm(EMPTY_GEOGRAPHY);setDraftId(null); await onSaved(); } catch (cause) { setError(readError(cause)); } finally { setSaving(false); } };
-  return <Dialog isOpen title="Add bounded geography" onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" form="geography-form" isLoading={saving}>Preview and activate geography</Button></>}><form id="geography-form" className="skima-form-grid" onSubmit={(e) => void submit(e)}><TextInput label="Canonical name" value={form.name} onChange={(e) => setForm({ ...form, name: e.currentTarget.value })} required /><TextInput label="ISO country code" value={form.countryCode} onChange={(e) => setForm({ ...form, countryCode: e.currentTarget.value })} required /><SelectInput label="Configured level" value={form.levelId} onChange={(e) => { const levelId=e.currentTarget.value; const nextLevel=levels.find((level)=>level.id===levelId); const requiredParent=nextLevel?.parent_level_id ?? null; const parentStillValid=Boolean(requiredParent && geographies.some((geography)=>geography.id===form.parentId && geography.geography_level_id===requiredParent)); setForm({ ...form, levelId, parentId: parentStillValid ? form.parentId : "" }); }} options={[{ label: "Select level", value: "" }, ...levels.map((l) => ({ label: l.display_name, value: l.id }))]} required /><SelectInput label="Parent geography" value={form.parentId} onChange={(e) => setForm({ ...form, parentId: e.currentTarget.value })} options={[{ label: requiredParentLevelId ? "Select parent" : "No parent required", value: "" }, ...parentOptions.map((g) => ({ label: g.canonical_name, value: g.id }))]} required={Boolean(requiredParentLevelId)} disabled={!requiredParentLevelId} /><AdminGeometryEditor mode="polygon" value={form.boundary} onChange={(boundary)=>setForm({...form,boundary})}/><TextAreaInput label="Boundary GeoJSON" helperText="Synchronized with the interactive editor for provider imports and diagnostics." value={form.boundary} onChange={(e) => setForm({ ...form, boundary: e.currentTarget.value })} required /><TextInput label="Boundary source" value={form.source} onChange={(e) => setForm({ ...form, source: e.currentTarget.value })} required />{draftId?<StatusBadge tone="info">Geometry draft preserved</StatusBadge>:null}{error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}</form></Dialog>;
+
+  const selectPlace = (prediction: z.infer<typeof PlaceSearchSchema>["predictions"][number]) => {
+    const name = placeNameForLevel(prediction, selectedLevel?.key);
+    const countryCode = readRecordString(prediction.addressComponents, "countryCode")?.toUpperCase() || form.countryCode || "NG";
+    setForm({
+      ...form,
+      name,
+      countryCode,
+      source: `maps.${placeSearch.data?.provider ?? "provider"}`,
+      externalReference: prediction.placeId ?? "",
+    });
+    setSearchTerm(prediction.description);
+    setError(null);
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!form.name.trim()) {
+      setError("Search for the place and choose the correct result before saving.");
+      return;
+    }
+    if (requiredParentLevelId && !form.parentId) {
+      setError("Choose the larger area this place belongs to first.");
+      return;
+    }
+    if (!form.boundary.trim()) {
+      setError("Draw or import the real map boundary before saving this service area.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const boundary = JSON.parse(form.boundary) as unknown;
+      const { data:savedDraft,error:draftError}=await supabase.rpc("save_coverage_geometry_draft",{p_draft_id:draftId,p_draft_type:"GEOGRAPHY_BOUNDARY",p_target_id:null,p_parent_geography_id:form.parentId||null,p_geojson:boundary});
+      if(draftError)throw draftError;
+      setDraftId(savedDraft as string);
+      const { data:geographyId,error: rpcError } = await supabase.rpc("configure_universal_geography", {
+        p_geography_id: null,
+        p_parent_id: form.parentId || null,
+        p_level_id: form.levelId,
+        p_canonical_name: form.name.trim(),
+        p_country_code: form.countryCode.trim().toUpperCase(),
+        p_boundary_geojson: boundary,
+        p_source: form.source.trim(),
+        p_external_reference: form.externalReference || null,
+        p_status: "active",
+        p_aliases: [],
+        p_metadata: { sourceSurface: "admin_geography", geometryDraftId:savedDraft, operatorSelectedPlace: searchTerm },
+      });
+      if (rpcError) throw rpcError;
+      const{error:activationError}=await supabase.rpc("activate_coverage_geometry_draft",{p_draft_id:savedDraft,p_target_id:geographyId,p_reason:`Activated mapped service area: ${form.name.trim()}`});
+      if(activationError)throw activationError;
+      setForm(EMPTY_GEOGRAPHY);
+      setSearchTerm("");
+      setDraftId(null);
+      await onSaved();
+    } catch (cause) {
+      setError(readError(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <Dialog
+    isOpen
+    title="Add service area"
+    onClose={onClose}
+    footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" form="geography-form" isLoading={saving}>Save service area</Button></>}
+  >
+    <form id="geography-form" className="skima-form-grid" onSubmit={(e) => void submit(e)}>
+      <div className="skima-form-help">
+        <strong>1. Choose the kind of area</strong>
+        <p>For Nigeria, use State for Anambra, LGA for Awka South, and City / town for a specific town. You do not need to know database terms.</p>
+      </div>
+      <TextInput label="Country" value={countryDisplayName(form.countryCode)} disabled />
+      <SelectInput
+        label="Area type"
+        value={form.levelId}
+        onChange={(e) => {
+          const levelId=e.currentTarget.value;
+          const nextLevel=levels.find((level)=>level.id===levelId);
+          const requiredParent=nextLevel?.parent_level_id ?? null;
+          const parentStillValid=Boolean(requiredParent && geographies.some((geography)=>geography.id===form.parentId && geography.geography_level_id===requiredParent));
+          setForm({ ...form, levelId, parentId: parentStillValid ? form.parentId : "", name: "", externalReference: "" });
+          setSearchTerm("");
+          placeSearch.reset();
+        }}
+        options={[{ label: "Choose area type", value: "" }, ...levels.map((level) => ({ label: operatorLevelName(level, form.countryCode), value: level.id }))]}
+        required
+      />
+      {requiredParentLevelId ? <SelectInput
+        label="Inside"
+        value={form.parentId}
+        onChange={(e) => setForm({ ...form, parentId: e.currentTarget.value })}
+        options={[{ label: parentOptions.length ? "Choose the larger area" : "Add the larger area first", value: "" }, ...parentOptions.map((geography) => ({ label: geography.canonical_name, value: geography.id }))]}
+        required
+        disabled={!parentOptions.length}
+      /> : null}
+      {requiredParentLevelId && parentOptions.length === 0 ? <StatusBadge tone="warning">This area needs its larger parent area first. For example: add Nigeria before Anambra, then Anambra before Awka South.</StatusBadge> : null}
+
+      <div className="skima-form-help">
+        <strong>2. Find the place</strong>
+        <p>Search and select a result. SKIMA fills the official place name for you; operators do not type an internal name.</p>
+      </div>
+      <div className="skima-inline-search">
+        <TextInput
+          label="Search place"
+          placeholder={selectedLevel ? "Example: Awka South, Anambra" : "Choose an area type first"}
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.currentTarget.value)}
+          disabled={!selectedLevel}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!selectedLevel || searchTerm.trim().length < 3}
+          isLoading={placeSearch.isPending}
+          onClick={() => placeSearch.mutate(searchTerm.trim())}
+        >
+          Search map
+        </Button>
+      </div>
+      {placeSearch.error ? <StatusBadge tone="danger">{readError(placeSearch.error)}</StatusBadge> : null}
+      {placeSearch.data?.predictions.length ? <div className="skima-place-results" role="list">
+        {placeSearch.data.predictions.slice(0, 6).map((prediction) => <button
+          type="button"
+          key={prediction.placeId ?? prediction.description}
+          onClick={() => selectPlace(prediction)}
+        >
+          <strong>{prediction.structuredFormatting?.mainText ?? prediction.description.split(",")[0]}</strong>
+          <span>{prediction.structuredFormatting?.secondaryText ?? prediction.description}</span>
+        </button>)}
+      </div> : null}
+      <div className="skima-selected-place">
+        <small>Selected place</small>
+        <strong>{form.name || "No place selected yet"}</strong>
+        {form.name ? <span>{searchTerm}</span> : null}
+      </div>
+
+      <div className="skima-form-help">
+        <strong>3. Confirm the real boundary</strong>
+        <p>Use the map to outline the service area. This boundary—not the typed address—is what SKIMA uses to decide availability.</p>
+      </div>
+      <AdminGeometryEditor mode="polygon" value={form.boundary} onChange={(boundary)=>setForm({...form,boundary})}/>
+      {draftId?<StatusBadge tone="info">Your boundary draft is saved while you finish.</StatusBadge>:null}
+      {error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}
+    </form>
+  </Dialog>;
 }
 
 function PolicyDialog({ open, geographies, onClose, onSaved }: { open: boolean; geographies: Geography[]; onClose: () => void; onSaved: () => Promise<void> }) {
@@ -421,7 +593,59 @@ function PolicyDialog({ open, geographies, onClose, onSaved }: { open: boolean; 
   return <Dialog isOpen title="Add service coverage policy" onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" form="policy-form" isLoading={saving} disabled={Boolean(preview?.signature === signature && !preview.result.canActivate)}>{form.status === "active" && !reviewed ? "Preview activation" : "Save policy"}</Button></>}><form id="policy-form" className="skima-form-grid" onSubmit={(e) => void submit(e)}><TextInput label="Service key" helperText="A configured platform key, such as a module service key." value={form.serviceKey} onChange={(e) => setForm({ ...form, serviceKey: e.currentTarget.value })} required /><TextInput label="Capability key" value={form.capabilityKey} onChange={(e) => setForm({ ...form, capabilityKey: e.currentTarget.value })} required /><SelectInput label="Geography" value={form.geographyId} onChange={(e) => setForm({ ...form, geographyId: e.currentTarget.value })} options={[{ label: "Select geography", value: "" }, ...geographies.map((g) => ({ label: g.canonical_name, value: g.id }))]} required /><SelectInput label="Effect" value={form.effect} onChange={(e) => setForm({ ...form, effect: e.currentTarget.value as "ALLOW" | "DENY" })} options={[{ label: "Allow", value: "ALLOW" }, { label: "Deny", value: "DENY" }]} /><TextInput label="Priority" type="number" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.currentTarget.value })} /><SelectInput label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.currentTarget.value as "draft" | "active" })} options={[{ label: "Draft", value: "draft" }, { label: "Active", value: "active" }]} /><TextInput label="Starts at" type="datetime-local" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.currentTarget.value })} /><TextInput label="Ends at" type="datetime-local" value={form.endsAt} onChange={(e) => setForm({ ...form, endsAt: e.currentTarget.value })} /><TextAreaInput label="Reason" helperText="Required before activation and written to the immutable audit trail." value={form.reason} onChange={(e) => setForm({ ...form, reason: e.currentTarget.value })} required={form.status === "active"} />{preview?.signature === signature ? <PolicyPreview result={preview.result} /> : null}{error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}</form></Dialog>;
 }
 function PolicyPreview({ result }: { result: z.infer<typeof PolicyPreviewSchema> }) { return <section className="sk-panel"><h3>Activation preview</h3><p className="skima-muted">Target: {result.target.geographyName}. Broader policies: {result.broaderPolicies.length}. Nested overrides: {result.narrowerPolicies.length}.</p><StatusBadge tone={result.canActivate ? "success" : "danger"}>{result.canActivate ? "No deterministic conflict detected" : `${result.conflicts.length} activation conflict(s)`}</StatusBadge>{result.conflicts.map((item) => <p key={item.policyId}><strong>{item.geographyName}</strong> — {item.effect}, priority {item.priority}</p>)}</section>; }
-function readError(error: unknown) { return error instanceof Error && error.message.trim() ? error.message : "The geography action could not be completed."; }
+function readError(error: unknown) {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    const message = [record.message, record.details, record.hint, record.code]
+      .find((value) => typeof value === "string" && value.trim());
+    if (typeof message === "string") return message;
+  }
+  return "The service-area action could not be completed. Refresh and try again.";
+}
+function readRecordString(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+function placeNameForLevel(prediction: z.infer<typeof PlaceSearchSchema>["predictions"][number], levelKey?: string) {
+  const address = prediction.addressComponents;
+  const byLevel: Record<string, string | null> = {
+    country: readRecordString(address, "country"),
+    admin_level_1: readRecordString(address, "state") ?? readRecordString(address, "region"),
+    admin_level_2: readRecordString(address, "lga") ?? readRecordString(address, "district"),
+    locality: readRecordString(address, "city") ?? readRecordString(address, "town") ?? readRecordString(address, "locality"),
+    sublocality: readRecordString(address, "subLocality") ?? readRecordString(address, "neighbourhood"),
+  };
+  return (levelKey ? byLevel[levelKey] : null)
+    ?? prediction.structuredFormatting?.mainText?.trim()
+    ?? prediction.description.split(",")[0]?.trim()
+    ?? prediction.description;
+}
+function operatorLevelName(level: z.infer<typeof LevelSchema>, countryCode: string) {
+  if ((countryCode || "NG").toUpperCase() === "NG") {
+    if (level.key === "country") return "Country";
+    if (level.key === "admin_level_1") return "State";
+    if (level.key === "admin_level_2") return "Local Government Area (LGA)";
+    if (level.key === "locality") return "City / town";
+    if (level.key === "sublocality") return "Community / neighbourhood";
+    if (level.key === "custom_zone") return "Custom service area";
+  }
+  return level.display_name;
+}
+function countryDisplayName(code: string) {
+  return code.toUpperCase() === "NG" ? "Nigeria" : code || "Set by map search";
+}
+function friendlyServiceName(key: string) {
+  return key === "lpg" ? "LPG refill service" : key.replaceAll("_", " ");
+}
+function friendlyCapabilityName(key: string) {
+  const labels: Record<string, string> = {
+    customer_ordering: "Customers can place refill orders",
+    driver_onboarding: "Drivers can register and operate",
+    station_onboarding: "Stations can register and operate",
+  };
+  return labels[key] ?? key.replaceAll("_", " ");
+}
 
 type OperationalCoverage = z.infer<typeof OperationalCoverageSchema>;
 interface OperationalCoverageForm { entityType: string; entityId: string; serviceKey: string; coverageType: "ADMIN_GEOGRAPHY" | "RADIUS" | "CUSTOM_ZONE"; geographyId: string; longitude: string; latitude: string; radius: string; geometry: string; status: "active" | "paused" | "retired"; validFrom: string; validTo: string; reason: string }
@@ -480,7 +704,25 @@ function PointDiagnosticPanel() {
 type DispatchDiagnostic=z.infer<typeof DispatchDiagnosticSchema>;
 function DispatchDiagnosticPanel(){const{supabase,status}=useSessionState();const[dispatchId,setDispatchId]=useState("");const[subjectType,setSubjectType]=useState("");const[subjectId,setSubjectId]=useState("");const valid=(!dispatchId.trim()||isUuid(dispatchId))&&(!subjectId.trim()||isUuid(subjectId));const query=useQuery({queryKey:["dispatch-location-diagnostics",dispatchId,subjectType,subjectId],enabled:status==="authenticated"&&valid,queryFn:async()=>{const{data,error}=await supabase.rpc("read_dispatch_location_diagnostics",{p_dispatch_request_id:uuidOrNull(dispatchId),p_subject_type:subjectType.trim()||null,p_subject_id:uuidOrNull(subjectId),p_limit:100});if(error)throw error;return z.array(DispatchDiagnosticSchema).parse(data??[]);}});const columns:TableColumn<DispatchDiagnostic>[]=[{key:"decision",header:"Dispatch decision",render:(item)=><><strong>{item.subject_type}</strong><br/><small>{item.dispatch_request_id}</small></>},{key:"selected",header:"Selected entity",render:(item)=><><strong>{item.selected_entity_type}</strong><br/><small>{item.selected_entity_id}</small></>},{key:"distance",header:"Distance",render:(item)=>`${Math.round(item.distance_meters)} m`},{key:"evidence",header:"Frozen evidence",render:(item)=>`${item.coverage_assignment_snapshots.length} coverage · ${item.candidate_decision_snapshots.length} candidates`},{key:"time",header:"Decided",render:(item)=>new Date(item.decided_at).toLocaleString()}];return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Dispatch location audit</h2><p className="skima-muted">Immutable assignment-time policy, coverage, candidate, pickup and selected-driver evidence explains why a dispatch decision was valid at that time.</p></div><Button variant="outline" disabled={!valid} onClick={()=>void query.refetch()}>Refresh audit</Button></div><div className="skima-form-grid"><TextInput label="Dispatch request ID" value={dispatchId} onChange={(event)=>setDispatchId(event.currentTarget.value)}/><TextInput label="Subject type" value={subjectType} onChange={(event)=>setSubjectType(event.currentTarget.value)}/><TextInput label="Subject ID" value={subjectId} onChange={(event)=>setSubjectId(event.currentTarget.value)}/></div>{!valid?<StatusBadge tone="warning">Dispatch and subject identifiers must be complete UUIDs.</StatusBadge>:query.isLoading?<LoadingState label="Loading dispatch audit evidence"/>:query.error?<ErrorState title="Dispatch audit unavailable" message={readError(query.error)} onRetry={()=>void query.refetch()}/>:<><DataTable caption="Immutable dispatch location decisions" columns={columns} records={query.data??[]} getRowKey={(item)=>item.id} emptyTitle="No dispatch decisions found" emptyMessage="Assignment-time location snapshots will appear here after dispatch."/>{(query.data??[]).map((item)=><details key={`${item.id}:detail`}><summary>{item.dispatch_request_id} evidence detail</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify({pickup:item.pickup_geojson,selectedEntityPoint:item.selected_entity_geojson,servicePolicy:item.service_policy_snapshot,coverageAssignments:item.coverage_assignment_snapshots,candidates:item.candidate_decision_snapshots,decision:item.decision_metadata},null,2)}</pre></details>)}</>}</section>;}
 function RetentionHealthPanel(){const{supabase,status}=useSessionState();const query=useQuery({queryKey:["location-retention-health"],enabled:status==="authenticated",refetchInterval:60_000,queryFn:async()=>{const{data,error}=await supabase.rpc("read_location_retention_health");if(error)throw error;return RetentionHealthSchema.parse(data);}});if(query.isLoading)return <LoadingState label="Checking location retention operations"/>;if(query.error)return <ErrorState title="Retention health unavailable" message={readError(query.error)} onRetry={()=>void query.refetch()}/>;const health=query.data;return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Location retention operations</h2><p className="skima-muted">Scheduled service-authority cleanup limits driver sample growth and removes abandoned geometry drafts without deleting activated evidence.</p></div><StatusBadge tone={health?.healthy?"success":"danger"}>{health?.healthy?"Healthy":"Action required"}</StatusBadge></div><div className="skima-grid skima-grid--compact"><MetricTile label="Active policies" value={health?.activePolicies??0} icon={ShieldCheck} tone="info"/><MetricTile label="Queued / running" value={`${health?.queuedJobs??0} / ${health?.runningJobs??0}`} icon={RefreshCcw} tone="info"/><MetricTile label="Failed jobs" value={health?.failedJobs??0} icon={ShieldCheck} tone={(health?.failedJobs??0)>0?"warning":"success"}/><MetricTile label="Last completed" value={health?.lastCompletedAt?new Date(health.lastCompletedAt).toLocaleString():"Awaiting first run"} icon={RefreshCcw} tone={health?.overdue?"warning":"success"}/></div>{health?.lastDeletedCounts?<p className="skima-muted">Last cleanup: {JSON.stringify(health.lastDeletedCounts)}</p>:null}</section>;}
-function ProductionReadinessAlerts({readiness,error}:{readiness:z.infer<typeof ProductionReadinessSchema>|undefined;error:unknown}){if(error)return <StatusBadge tone="danger">Production readiness could not be evaluated: {readError(error)}</StatusBadge>;if(!readiness)return <LoadingState label="Evaluating location production readiness"/>;return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Production readiness gate</h2><p className="skima-muted">Deployment is blocked when authoritative location, policy, coverage or retention invariants fail.</p></div><StatusBadge tone={readiness.ready?"success":"danger"}>{readiness.ready?"READY":"BLOCKED"}</StatusBadge></div>{readiness.alerts.length===0?<p>No readiness alerts.</p>:readiness.alerts.map((alert)=><p key={alert.code}><StatusBadge tone={alert.severity==="BLOCKER"?"danger":"warning"}>{alert.severity}</StatusBadge> <strong>{alert.code.replaceAll("_"," ")}</strong>{alert.count!==undefined?` — ${alert.count}`:""}</p>)}</section>;}
+function ProductionReadinessAlerts({readiness,error}:{readiness:z.infer<typeof ProductionReadinessSchema>|undefined;error:unknown}) {
+  if (error) return <StatusBadge tone="danger">Location system check failed: {readError(error)}</StatusBadge>;
+  if (!readiness) return <LoadingState label="Checking the location system"/>;
+  return <section className="sk-panel">
+    <div className="sk-panel__header">
+      <div>
+        <h2>Location system check</h2>
+        <p className="skima-muted">SKIMA checks map boundaries, service rules, partner coverage and cleanup jobs before the location system is treated as fully ready.</p>
+      </div>
+      <StatusBadge tone={readiness.ready?"success":"warning"}>{readiness.ready?"Ready":"Needs attention"}</StatusBadge>
+    </div>
+    {readiness.alerts.length===0
+      ? <p>All location checks passed.</p>
+      : readiness.alerts.map((alert)=><p key={alert.code}>
+          <StatusBadge tone={alert.severity==="BLOCKER"?"danger":"warning"}>{alert.severity==="BLOCKER"?"Action required":"Check"}</StatusBadge>{" "}
+          <strong>{alert.code.replaceAll("_"," ").toLowerCase()}</strong>{alert.count!==undefined?` — ${alert.count}`:""}
+        </p>)}
+  </section>;
+}
 function GeometryDraftRecoveryPanel(){const{supabase,status}=useSessionState();const client=useQueryClient();const[abandoning,setAbandoning]=useState<z.infer<typeof GeometryDraftSchema>|null>(null);const[reason,setReason]=useState("");const query=useQuery({queryKey:["recoverable-geometry-drafts"],enabled:status==="authenticated",queryFn:async()=>{const{data,error}=await supabase.rpc("read_recoverable_geometry_drafts",{p_limit:100});if(error)throw error;return z.array(GeometryDraftSchema).parse(data??[]);}});const abandon=useMutation({mutationFn:async()=>{if(!abandoning||!reason.trim())throw new Error("An abandonment reason is required.");const{error}=await supabase.rpc("abandon_coverage_geometry_draft",{p_draft_id:abandoning.id,p_reason:reason.trim()});if(error)throw error;},onSuccess:async()=>{setAbandoning(null);setReason("");await client.invalidateQueries({queryKey:["recoverable-geometry-drafts"]});}});const columns:TableColumn<z.infer<typeof GeometryDraftSchema>>[]=[{key:"type",header:"Draft type",render:(item)=>item.draft_type.replaceAll("_"," ")},{key:"status",header:"Status",render:(item)=><StatusBadge tone="warning">{item.status}</StatusBadge>},{key:"validation",header:"Validation",render:(item)=>String(item.validation_snapshot.code??"UNKNOWN")},{key:"updated",header:"Updated",render:(item)=>new Date(item.updated_at).toLocaleString()},{key:"actions",header:"Recovery",render:(item)=><div className="skima-action-row"><Button size="sm" variant="outline" onClick={()=>navigator.clipboard.writeText(JSON.stringify(item.geometry_geojson,null,2))}>Copy geometry</Button><Button size="sm" variant="destructive" onClick={()=>setAbandoning(item)}>Abandon</Button></div>}];return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Recoverable geometry drafts</h2><p className="skima-muted">Resume a preserved boundary by copying its validated GeoJSON into the editor, or explicitly abandon it with an audited reason.</p></div></div>{query.isLoading?<LoadingState label="Loading geometry drafts"/>:query.error?<ErrorState title="Geometry drafts unavailable" message={readError(query.error)} onRetry={()=>void query.refetch()}/>:<DataTable caption="Recoverable geometry drafts" columns={columns} records={query.data??[]} getRowKey={(item)=>item.id} emptyTitle="No recoverable drafts" emptyMessage="Previewed and unfinished geometry will appear here."/>}<Dialog isOpen={Boolean(abandoning)} title="Abandon geometry draft" onClose={()=>setAbandoning(null)} footer={<><Button variant="ghost" onClick={()=>setAbandoning(null)}>Cancel</Button><Button variant="destructive" isLoading={abandon.isPending} onClick={()=>abandon.mutate()}>Abandon draft</Button></>}><TextAreaInput label="Abandonment reason" value={reason} onChange={(event)=>setReason(event.currentTarget.value)} required/>{abandon.error?<StatusBadge tone="danger">{readError(abandon.error)}</StatusBadge>:null}</Dialog></section>;}
 
 
