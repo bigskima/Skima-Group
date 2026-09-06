@@ -2,6 +2,8 @@ import { ChevronRight, Circle, FileText, LogOut, MapPinned, Menu, UserCircle, Wa
 import { useMemo, useState, type ReactNode } from "react";
 import type { NavItem } from "@skima/ui";
 
+import { AdminAiAssistant } from "./admin-ai-assistant";
+import { AdminBrandLogo } from "./admin-brand-logo";
 import { useSessionState } from "./session";
 
 interface AdminShellProps {
@@ -160,7 +162,7 @@ export function AdminShell(props: AdminShellProps) {
     <div className="admin-shell">
       <aside className="admin-shell__sidebar" aria-label="Administration navigation">
         <div className="admin-shell__brand">
-          <span className="admin-shell__brand-mark" aria-hidden="true">S</span>
+          <AdminBrandLogo compact className="admin-shell__brand-mark" />
           <div>
             <strong>{props.brand}</strong>
             <small>Company administration</small>
@@ -205,7 +207,7 @@ export function AdminShell(props: AdminShellProps) {
           </button>
 
           <div className="admin-shell__page-context">
-            <small>SKIMA company administration</small>
+            <small>SKIMA operations</small>
             <strong>{activeItem?.label ?? "Overview"}</strong>
           </div>
 
@@ -244,6 +246,11 @@ export function AdminShell(props: AdminShellProps) {
         </nav>
       </div>
 
+      <AdminAiAssistant
+        pageLabel={activeItem?.label ?? "Overview"}
+        pageHref={props.activeHref}
+      />
+
       {mobileMenuOpen ? (
         <div className="admin-mobile-nav" role="presentation">
           <button
@@ -255,7 +262,7 @@ export function AdminShell(props: AdminShellProps) {
           <aside id="admin-mobile-menu" className="admin-mobile-nav__drawer" aria-label="Administration menu">
             <div className="admin-mobile-nav__header">
               <div className="admin-shell__brand admin-shell__brand--mobile">
-                <span className="admin-shell__brand-mark" aria-hidden="true">S</span>
+                <AdminBrandLogo compact className="admin-shell__brand-mark" />
                 <div>
                   <strong>{props.brand}</strong>
                   <small>Company administration</small>
