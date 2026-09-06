@@ -1514,7 +1514,7 @@ export const integrationConsoleConfig: AdminResourceConsoleConfig = {
     {
       key: "providers",
       label: "Provider Connections",
-      description: "Inspect swappable payment, map, notification, AI, queue, and cache adapters.",
+      description: "Inspect swappable payment, utility, map, notification, AI, queue, and cache adapters.",
       resources: [
         resource("providers", "Connections", "/engines/provider-adapters", [
           "provider_kind",

@@ -78,6 +78,7 @@ import { AdminStartupBrandingWorkspace } from "./admin-startup-branding-workspac
 import { AdminStationPricingWorkspace } from "./admin-station-pricing-workspace";
 import { AdminStationInventoryWorkspace } from "./admin-station-inventory-workspace";
 import { AdminSupportWorkspace } from "./admin-support-workspace";
+import { AdminUtilityBillingWorkspace } from "./admin-utility-billing-workspace";
 import {
   catalogConsoleConfig,
   financeConsoleConfig,
@@ -187,6 +188,7 @@ const navIconMap = {
   providers: PlugZap,
   system: ServerCog,
   support: LifeBuoy,
+  billing: BadgeDollarSign,
 } as const;
 
 const foundationNavigation: readonly NavigationItem[] = [
@@ -244,6 +246,13 @@ const foundationNavigation: readonly NavigationItem[] = [
     href: "/support",
     icon: "support",
     requiredPermissions: ["platform.support.read"],
+  },
+  {
+    key: "billing",
+    label: "Utility Billing",
+    href: "/utility-billing",
+    icon: "billing",
+    requiredPermissions: ["platform.billing.read"],
   },
   {
     key: "operations",
@@ -483,6 +492,7 @@ function Workspace(props: { readonly route: string; readonly onNavigate: (href: 
   }
 
   if (props.route === "/support") return <AdminSupportWorkspace />;
+  if (props.route === "/utility-billing") return <AdminUtilityBillingWorkspace />;
 
   if (props.route === "/finance") {
     return <AdminResourceConsole config={financeConsoleConfig} />;
