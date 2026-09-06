@@ -6,6 +6,7 @@ import { useGatewayMutation } from "../api/gateway";
 import { ActionResponseSchema } from "../api/records";
 import {
   readOperationalLocation,
+  geocodeOperationalAddress,
   resolveOperationalAddress,
   type OperationalAddress,
   type OperationalLocation,
@@ -174,7 +175,13 @@ export function LocationsScreen() {
       });
       acceptPoint(locationFromLookup(result, address));
     } catch (cause) {
-      showNotice(friendlyError(cause, "We couldn't find that address. Add an area or nearby landmark, or choose the place on the map."));
+      const deviceResult = await geocodeOperationalAddress(address);
+      if (deviceResult) {
+        acceptPoint(deviceResult);
+        showNotice("Address located with your device map service.", true);
+      } else {
+        showNotice(friendlyError(cause, "We couldn't find that address. Add an area or nearby landmark, or choose the place on the map."));
+      }
     } finally {
       setResolving(false);
     }
@@ -588,4 +595,3 @@ const styles = StyleSheet.create({
   savedAddress: { marginTop: 2, fontSize: 12, lineHeight: 17 },
   savedEmpty: { paddingVertical: spacing.md, fontSize: 13 },
 });
-

@@ -30,7 +30,7 @@ export function ScanWorkspaceScreen({
 }) {
   const { palette } = useAppTheme();
   const session = useSession();
-  const actionable = (jobs.data ?? []).filter((job) => scanReady(displayStatus(job) ?? ""));
+  const actionable = (jobs.data ?? []).filter((job) => scanReady(displayStatus(job) ?? "", workspace));
   const [selectedId, setSelectedId] = useState("");
   const [manualCylinderId, setManualCylinderId] = useState("");
   const [physicalTagReference, setPhysicalTagReference] = useState("");
@@ -263,8 +263,9 @@ export function ScanWorkspaceScreen({
   );
 }
 
-function scanReady(status: string) {
+function scanReady(status: string, workspace: "driver" | "station") {
   const value = status.toLowerCase().replace(/[\s-]+/g, "_");
+  if (workspace === "station") return ["refill_confirmed", "station_settled"].includes(value);
   return [
     "driver_accepted",
     "pickup_pending",
