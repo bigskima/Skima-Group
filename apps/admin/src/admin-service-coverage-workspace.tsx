@@ -667,7 +667,7 @@ function friendlyCapabilityName(key: string) {
 
 type OperationalCoverage = z.infer<typeof OperationalCoverageSchema>;
 interface OperationalCoverageForm { entityType: string; entityId: string; serviceKey: string; coverageType: "ADMIN_GEOGRAPHY" | "RADIUS" | "CUSTOM_ZONE"; geographyId: string; longitude: string; latitude: string; radius: string; geometry: string; status: "active" | "paused" | "retired"; validFrom: string; validTo: string; reason: string }
-const EMPTY_OPERATIONAL_COVERAGE: OperationalCoverageForm = { entityType: "DRIVER", entityId: "", serviceKey: "", coverageType: "ADMIN_GEOGRAPHY", geographyId: "", longitude: "", latitude: "", radius: "", geometry: "", status: "active", validFrom: "", validTo: "", reason: "" };
+const EMPTY_OPERATIONAL_COVERAGE: OperationalCoverageForm = { entityType: "DRIVER", entityId: "", serviceKey: "lpg", coverageType: "ADMIN_GEOGRAPHY", geographyId: "", longitude: "", latitude: "", radius: "", geometry: "", status: "active", validFrom: "", validTo: "", reason: "" };
 function OperationalCoveragePanel({ geographies }: { geographies: Geography[] }) {
   const { supabase, status } = useSessionState(); const client = useQueryClient(); const [editing, setEditing] = useState<OperationalCoverage | "new" | null>(null);
   const query = useQuery({ queryKey: ["universal-operational-coverage"], enabled: status === "authenticated", queryFn: async () => { const { data, error } = await supabase.rpc("read_operational_coverage_admin", { p_entity_type: null, p_entity_id: null, p_service_key: null }); if (error) throw error; return z.array(OperationalCoverageSchema).parse(data ?? []); }});
@@ -678,16 +678,198 @@ function OperationalCoveragePanel({ geographies }: { geographies: Geography[] })
     { key: "status", header: "Status", render: (item) => <StatusBadge tone={item.status === "active" ? "success" : "warning"}>{item.status}</StatusBadge> },
     { key: "actions", header: "Manage", render: (item) => <Button size="sm" variant="outline" onClick={() => setEditing(item)}>Edit coverage</Button> },
   ];
-  return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Approved operational coverage</h2><p className="skima-muted">Multiple administrative areas, radii and cross-boundary custom zones are independent approved assignments.</p></div><Button icon={Plus} onClick={() => setEditing("new")}>Add assignment</Button></div>{query.isLoading ? <LoadingState label="Loading approved operational coverage" /> : query.error ? <ErrorState title="Operational coverage unavailable" message={readError(query.error)} onRetry={() => void query.refetch()} /> : <DataTable caption="Approved operational coverage assignments" columns={columns} records={query.data ?? []} getRowKey={(item) => item.id} emptyTitle="No approved assignments" emptyMessage="Approved driver, station and future operational entities will appear here." />}<OperationalCoverageDialog record={editing} geographies={geographies} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await client.invalidateQueries({ queryKey: ["universal-operational-coverage"] }); }} /></section>;
+  return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Driver & station operating areas</h2><p className="skima-muted">Control where an approved driver or station is allowed to operate. Choose a mapped service area, a distance around a point, or draw a custom area on the map.</p></div><Button icon={Plus} onClick={() => setEditing("new")}>Add operating area</Button></div>{query.isLoading ? <LoadingState label="Loading approved operational coverage" /> : query.error ? <ErrorState title="Operational coverage unavailable" message={readError(query.error)} onRetry={() => void query.refetch()} /> : <DataTable caption="Driver and station operating areas" columns={columns} records={query.data ?? []} getRowKey={(item) => item.id} emptyTitle="No operating areas yet" emptyMessage="Approved driver and station operating areas will appear here after you add them." />}<OperationalCoverageDialog record={editing} geographies={geographies} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await client.invalidateQueries({ queryKey: ["universal-operational-coverage"] }); }} /></section>;
 }
 function OperationalCoverageDialog({ record, geographies, onClose, onSaved }: { record: OperationalCoverage | "new" | null; geographies: Geography[]; onClose: () => void; onSaved: () => Promise<void> }) {
-  const { supabase } = useSessionState(); const [form, setForm] = useState(EMPTY_OPERATIONAL_COVERAGE); const [error, setError] = useState<string | null>(null); const [saving, setSaving] = useState(false);
-  useEffect(() => { setForm(record && record !== "new" ? operationalCoverageForm(record) : EMPTY_OPERATIONAL_COVERAGE); setError(null); }, [record]);
+  const { supabase } = useSessionState();
+  const [form, setForm] = useState(EMPTY_OPERATIONAL_COVERAGE);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(record && record !== "new" ? operationalCoverageForm(record) : EMPTY_OPERATIONAL_COVERAGE);
+    setError(null);
+  }, [record]);
+
   if (!record) return null;
-  const submit = async (event: FormEvent) => { event.preventDefault(); setSaving(true); setError(null); try { let geometry: unknown = null; let geometryDraftId:string|null=null; if (form.coverageType === "CUSTOM_ZONE") { geometry = JSON.parse(form.geometry); const{data,error:draftError}=await supabase.rpc("save_coverage_geometry_draft",{p_draft_id:null,p_draft_type:"OPERATIONAL_COVERAGE",p_target_id:record==="new"?null:record.id,p_parent_geography_id:null,p_geojson:geometry});if(draftError)throw draftError;geometryDraftId=data as string; } const { data:assignmentId,error: rpcError } = await supabase.rpc("configure_operational_coverage_assignment", { p_assignment_id: record === "new" ? null : record.id, p_entity_type: form.entityType.trim().toUpperCase(), p_entity_id: form.entityId, p_service_key: form.serviceKey.trim(), p_coverage_type: form.coverageType, p_geography_id: form.coverageType === "ADMIN_GEOGRAPHY" ? form.geographyId : null, p_center_longitude: form.coverageType === "RADIUS" ? Number(form.longitude) : null, p_center_latitude: form.coverageType === "RADIUS" ? Number(form.latitude) : null, p_radius_meters: form.coverageType === "RADIUS" ? Number(form.radius) : null, p_coverage_geojson: geometry, p_status: form.status, p_valid_from: form.validFrom || null, p_valid_to: form.validTo || null, p_reason: form.reason.trim(), p_metadata: { sourceSurface: "admin_operational_coverage",geometryDraftId } }); if (rpcError) throw rpcError; if(geometryDraftId){const{error:activationError}=await supabase.rpc("activate_coverage_geometry_draft",{p_draft_id:geometryDraftId,p_target_id:assignmentId,p_reason:form.reason.trim()});if(activationError)throw activationError;} await onSaved(); } catch (cause) { setError(readError(cause)); } finally { setSaving(false); } };
-  const radiusPoint=form.longitude&&form.latitude?[Number(form.longitude),Number(form.latitude)] as const:null;
-  return <Dialog isOpen title={record === "new" ? "Add operational coverage" : "Edit operational coverage"} onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" form="operational-coverage-form" isLoading={saving}>Save approved coverage</Button></>}><form id="operational-coverage-form" className="skima-form-grid" onSubmit={(event) => void submit(event)}><TextInput label="Entity type" helperText="A reusable platform entity key, such as DRIVER or STATION." value={form.entityType} onChange={(event) => setForm({ ...form, entityType: event.currentTarget.value })} required /><TextInput label="Entity ID" value={form.entityId} onChange={(event) => setForm({ ...form, entityId: event.currentTarget.value })} required /><TextInput label="Service key" value={form.serviceKey} onChange={(event) => setForm({ ...form, serviceKey: event.currentTarget.value })} required /><SelectInput label="Coverage type" value={form.coverageType} onChange={(event) => setForm({ ...form, coverageType: event.currentTarget.value as OperationalCoverageForm["coverageType"] })} options={[{ label: "Administrative geography", value: "ADMIN_GEOGRAPHY" }, { label: "Radius", value: "RADIUS" }, { label: "Custom mapped zone", value: "CUSTOM_ZONE" }]} />{form.coverageType === "ADMIN_GEOGRAPHY" ? <SelectInput label="Approved geography" value={form.geographyId} onChange={(event) => setForm({ ...form, geographyId: event.currentTarget.value })} options={[{ label: "Select geography", value: "" }, ...geographies.filter((item) => item.status === "active").map((item) => ({ label: item.canonical_name, value: item.id }))]} required /> : null}{form.coverageType === "RADIUS" ? <><AdminGeometryEditor mode="point" point={radiusPoint} onPointChange={([longitude,latitude])=>setForm({...form,longitude:String(longitude),latitude:String(latitude)})}/><TextInput label="Center longitude" type="number" value={form.longitude} onChange={(event) => setForm({ ...form, longitude: event.currentTarget.value })} required /><TextInput label="Center latitude" type="number" value={form.latitude} onChange={(event) => setForm({ ...form, latitude: event.currentTarget.value })} required /><TextInput label="Radius in meters" type="number" value={form.radius} onChange={(event) => setForm({ ...form, radius: event.currentTarget.value })} required /></> : null}{form.coverageType === "CUSTOM_ZONE" ? <><AdminGeometryEditor mode="polygon" value={form.geometry} onChange={(geometry)=>setForm({...form,geometry})}/><TextAreaInput label="Coverage Polygon or MultiPolygon GeoJSON" value={form.geometry} onChange={(event) => setForm({ ...form, geometry: event.currentTarget.value })} required /></> : null}<SelectInput label="Status" value={form.status} onChange={(event) => setForm({ ...form, status: event.currentTarget.value as OperationalCoverageForm["status"] })} options={[{ label: "Active", value: "active" }, { label: "Paused", value: "paused" }, { label: "Retired", value: "retired" }]} /><TextInput label="Valid from" type="datetime-local" value={form.validFrom} onChange={(event) => setForm({ ...form, validFrom: event.currentTarget.value })} /><TextInput label="Valid until" type="datetime-local" value={form.validTo} onChange={(event) => setForm({ ...form, validTo: event.currentTarget.value })} /><TextAreaInput label="Change reason" helperText="Required and preserved in the immutable coverage history." value={form.reason} onChange={(event) => setForm({ ...form, reason: event.currentTarget.value })} required />{error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}</form></Dialog>;
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      if (!form.entityId.trim()) throw new Error("Choose or enter the driver or station record this operating area belongs to.");
+      if (form.coverageType === "ADMIN_GEOGRAPHY" && !form.geographyId) {
+        throw new Error("Choose a mapped service area.");
+      }
+      if (form.coverageType === "RADIUS" && (!form.longitude || !form.latitude || !form.radius || Number(form.radius) <= 0)) {
+        throw new Error("Tap the map to choose the centre point, then enter how far this operating area should extend.");
+      }
+      if (form.coverageType === "CUSTOM_ZONE" && !form.geometry.trim()) {
+        throw new Error("Draw the custom operating area on the map before saving.");
+      }
+
+      let geometry: unknown = null;
+      let geometryDraftId: string | null = null;
+      if (form.coverageType === "CUSTOM_ZONE") {
+        geometry = JSON.parse(form.geometry);
+        const { data, error: draftError } = await supabase.rpc("save_coverage_geometry_draft", {
+          p_draft_id: null,
+          p_draft_type: "OPERATIONAL_COVERAGE",
+          p_target_id: record === "new" ? null : record.id,
+          p_parent_geography_id: null,
+          p_geojson: geometry,
+        });
+        if (draftError) throw draftError;
+        geometryDraftId = data as string;
+      }
+
+      const { data: assignmentId, error: rpcError } = await supabase.rpc("configure_operational_coverage_assignment", {
+        p_assignment_id: record === "new" ? null : record.id,
+        p_entity_type: form.entityType.trim().toUpperCase(),
+        p_entity_id: form.entityId.trim(),
+        p_service_key: form.serviceKey.trim(),
+        p_coverage_type: form.coverageType,
+        p_geography_id: form.coverageType === "ADMIN_GEOGRAPHY" ? form.geographyId : null,
+        p_center_longitude: form.coverageType === "RADIUS" ? Number(form.longitude) : null,
+        p_center_latitude: form.coverageType === "RADIUS" ? Number(form.latitude) : null,
+        p_radius_meters: form.coverageType === "RADIUS" ? Number(form.radius) : null,
+        p_coverage_geojson: geometry,
+        p_status: form.status,
+        p_valid_from: form.validFrom || null,
+        p_valid_to: form.validTo || null,
+        p_reason: form.reason.trim(),
+        p_metadata: { sourceSurface: "admin_operational_coverage", geometryDraftId },
+      });
+      if (rpcError) throw rpcError;
+
+      if (geometryDraftId) {
+        const { error: activationError } = await supabase.rpc("activate_coverage_geometry_draft", {
+          p_draft_id: geometryDraftId,
+          p_target_id: assignmentId,
+          p_reason: form.reason.trim(),
+        });
+        if (activationError) throw activationError;
+      }
+      await onSaved();
+    } catch (cause) {
+      setError(readError(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const radiusPoint = form.longitude && form.latitude
+    ? [Number(form.longitude), Number(form.latitude)] as const
+    : null;
+
+  return <Dialog
+    isOpen
+    title={record === "new" ? "Add driver or station operating area" : "Edit operating area"}
+    onClose={onClose}
+    footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" form="operational-coverage-form" isLoading={saving}>Save operating area</Button></>}
+  >
+    <form id="operational-coverage-form" className="skima-form-grid" onSubmit={(event) => void submit(event)}>
+      <div className="skima-form-help">
+        <strong>Who is this operating area for?</strong>
+        <p>Choose whether this belongs to a driver or station, then enter the record ID shown on that partner's admin profile.</p>
+      </div>
+      <SelectInput
+        label="Partner type"
+        value={form.entityType}
+        onChange={(event) => setForm({ ...form, entityType: event.currentTarget.value })}
+        options={[{ label: "Driver", value: "DRIVER" }, { label: "Station", value: "STATION" }]}
+        required
+      />
+      <TextInput
+        label={form.entityType === "STATION" ? "Station record ID" : "Driver record ID"}
+        helperText="Copy this from the partner's admin details. SKIMA uses it to attach the area to the correct account."
+        value={form.entityId}
+        onChange={(event) => setForm({ ...form, entityId: event.currentTarget.value })}
+        required
+      />
+      <SelectInput
+        label="SKIMA service"
+        value={form.serviceKey}
+        onChange={(event) => setForm({ ...form, serviceKey: event.currentTarget.value })}
+        options={[{ label: "LPG refill service", value: "lpg" }]}
+        required
+      />
+
+      <div className="skima-form-help">
+        <strong>How should the area be defined?</strong>
+        <p>Use a mapped service area when possible. Use a distance for nearby coverage, or draw a custom area only when the operating boundary crosses normal map areas.</p>
+      </div>
+      <SelectInput
+        label="Area method"
+        value={form.coverageType}
+        onChange={(event) => setForm({ ...form, coverageType: event.currentTarget.value as OperationalCoverageForm["coverageType"] })}
+        options={[
+          { label: "Use a mapped service area", value: "ADMIN_GEOGRAPHY" },
+          { label: "Use a distance around a point", value: "RADIUS" },
+          { label: "Draw a custom area", value: "CUSTOM_ZONE" },
+        ]}
+      />
+
+      {form.coverageType === "ADMIN_GEOGRAPHY" ? <SelectInput
+        label="Mapped service area"
+        value={form.geographyId}
+        onChange={(event) => setForm({ ...form, geographyId: event.currentTarget.value })}
+        options={[{ label: "Choose service area", value: "" }, ...geographies.filter((item) => item.status === "active").map((item) => ({ label: item.canonical_name, value: item.id }))]}
+        required
+      /> : null}
+
+      {form.coverageType === "RADIUS" ? <>
+        <div className="skima-form-help">
+          <strong>Tap the map to set the centre</strong>
+          <p>Then enter the distance from that point. You do not need to type latitude or longitude.</p>
+        </div>
+        <AdminGeometryEditor
+          mode="point"
+          point={radiusPoint}
+          onPointChange={([longitude, latitude]) => setForm({ ...form, longitude: String(longitude), latitude: String(latitude) })}
+        />
+        <TextInput
+          label="Distance from the centre (metres)"
+          type="number"
+          value={form.radius}
+          onChange={(event) => setForm({ ...form, radius: event.currentTarget.value })}
+          required
+        />
+      </> : null}
+
+      {form.coverageType === "CUSTOM_ZONE" ? <>
+        <div className="skima-form-help">
+          <strong>Draw the operating boundary</strong>
+          <p>Click the map to outline the area. SKIMA stores the map shape automatically; no map code needs to be typed.</p>
+        </div>
+        <AdminGeometryEditor mode="polygon" value={form.geometry} onChange={(geometry) => setForm({ ...form, geometry })} />
+      </> : null}
+
+      <SelectInput
+        label="Operating status"
+        value={form.status}
+        onChange={(event) => setForm({ ...form, status: event.currentTarget.value as OperationalCoverageForm["status"] })}
+        options={[
+          { label: "Active — can operate now", value: "active" },
+          { label: "Paused — temporarily unavailable", value: "paused" },
+          { label: "Retired — no longer used", value: "retired" },
+        ]}
+      />
+      <TextInput label="Starts on (optional)" type="datetime-local" value={form.validFrom} onChange={(event) => setForm({ ...form, validFrom: event.currentTarget.value })} />
+      <TextInput label="Ends on (optional)" type="datetime-local" value={form.validTo} onChange={(event) => setForm({ ...form, validTo: event.currentTarget.value })} />
+      <TextAreaInput
+        label="Why are you making this change?"
+        helperText="Required. SKIMA keeps this note in the permanent change history."
+        value={form.reason}
+        onChange={(event) => setForm({ ...form, reason: event.currentTarget.value })}
+        required
+      />
+      {error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}
+    </form>
+  </Dialog>;
 }
+
 function operationalCoverageForm(record: OperationalCoverage): OperationalCoverageForm { return { entityType: record.entity_type, entityId: record.entity_id, serviceKey: record.service_key, coverageType: record.coverage_type, geographyId: record.geography_id ?? "", longitude: record.center_longitude?.toString() ?? "", latitude: record.center_latitude?.toString() ?? "", radius: record.radius_meters?.toString() ?? "", geometry: record.coverage_geojson ? JSON.stringify(record.coverage_geojson, null, 2) : "", status: record.status === "paused" || record.status === "retired" ? record.status : "active", validFrom: toLocalDateTime(record.valid_from), validTo: toLocalDateTime(record.valid_to), reason: "" }; }
 function toLocalDateTime(value: string | null) { if (!value) return ""; const date = new Date(value); if (Number.isNaN(date.getTime())) return ""; const offset = date.getTimezoneOffset() * 60_000; return new Date(date.getTime() - offset).toISOString().slice(0, 16); }
 
