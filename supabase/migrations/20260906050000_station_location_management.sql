@@ -39,6 +39,14 @@ after insert or update or delete on public.lpg_station_location_requests
 for each row execute function public.record_table_audit();
 
 alter table public.lpg_station_location_requests enable row level security;
+
+drop policy if exists lpg_station_location_requests_branch_read
+on public.lpg_station_location_requests;
+create policy lpg_station_location_requests_branch_read
+on public.lpg_station_location_requests
+for select to authenticated
+using (public.can_read_lpg_station_branch(station_branch_id));
+
 revoke all on table public.lpg_station_location_requests from public, anon, authenticated;
 grant all on table public.lpg_station_location_requests to service_role;
 
