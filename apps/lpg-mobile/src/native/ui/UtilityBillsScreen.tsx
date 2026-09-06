@@ -1,6 +1,6 @@
 import { createClientIdempotencyKey, formatMoney } from "@skima/frontend-core";
 import { router } from "expo-router";
-import { CheckCircle2, Phone, ReceiptText, Wifi, Zap } from "lucide-react-native";
+import { Phone, ReceiptText, Wifi, Zap } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
