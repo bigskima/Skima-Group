@@ -201,7 +201,7 @@ export function AdminPolicyWorkspace() {
       <PageHeader
         eyebrow="Company policy"
         title="Terms & Policies"
-        description="Manage short policy summaries separately from the complete in-app terms. Published versions are immutable and each acceptance stays linked to the exact version shown."
+        description="Manage the short policy summary and the complete in-app terms separately. Once a version is published, SKIMA keeps it permanently so every acceptance remains linked to exactly what the user saw."
         actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void query.refetch()}>Refresh policies</Button>}
       />
 
@@ -337,11 +337,11 @@ function PublishDialog({ target, isSubmitting, error, onClose, onSubmit }: { tar
   return (
     <Dialog title={`Publish version ${target.version.versionLabel}`} isOpen onClose={onClose} footer={<><Button variant="ghost" disabled={isSubmitting} onClick={onClose}>Cancel</Button><Button type="submit" form="policy-publish-form" isLoading={isSubmitting}>Publish version</Button></>}>
       <form id="policy-publish-form" className="skima-form-grid" onSubmit={(event) => { event.preventDefault(); onSubmit({ effectiveFrom, reason, requiresReacceptance }); }}>
-        <p className="admin-dialog-guidance">Publishing makes this exact text the current SKIMA in-app policy and preserves any previous published version as immutable history.</p>
+        <p className="admin-dialog-guidance">Publishing makes this exact text the current SKIMA in-app policy. Older published versions are kept permanently for audit and acceptance records.</p>
         <TextInput label="Effective from" type="datetime-local" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.currentTarget.value)} />
         <TextAreaInput label="Publication reason" value={reason} onChange={(event) => setReason(event.currentTarget.value)} required />
         <label className="skima-checkbox-row"><input type="checkbox" checked={requiresReacceptance} onChange={(event) => setRequiresReacceptance(event.currentTarget.checked)} /><span>Require re-acceptance for this published version</span></label>
-        <p className="skima-muted">Content length: {target.version.content.length.toLocaleString()} characters. {target.version.contentHash ? `Draft hash: ${target.version.contentHash}` : "A hash will be calculated at publication."}</p>
+        <p className="skima-muted">Content length: {target.version.content.length.toLocaleString()} characters. SKIMA will verify and record this exact version when you publish it.</p>
         {error ? <StatusBadge tone="danger">{readError(error)}</StatusBadge> : null}
       </form>
     </Dialog>
