@@ -85,6 +85,7 @@
     "20260906008000_customer_serviceability_explanation_runtime.sql",
     "20260906013000_ai_driver_daily_brief.sql",
     "20260906042500_geometry_preview_trigger_table_branching_fix.sql",
+    "20260906042600_geography_hierarchy_parent_record_guard.sql",
     "20260906043000_awka_south_lpg_pilot_coverage.sql"
   ]
 }
