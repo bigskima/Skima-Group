@@ -165,7 +165,7 @@ export function AdminAiWorkspace() {
       <PageHeader
         eyebrow="Intelligence"
         title="SKIMA Intelligence"
-        description="Ask grounded operational questions and control which AI provider and model serves each capability. Business records, permissions and financial ledgers remain authoritative."
+        description="Ask operational questions and choose which configured AI provider handles each type of AI task. SKIMA business records, permissions and financial records remain the source of truth."
         actions={<Button icon={RefreshCcw} variant="outline" onClick={refresh}>Refresh</Button>}
       />
 
@@ -274,8 +274,8 @@ export function AdminAiWorkspace() {
           <div className="sk-panel__header admin-ai-panel-head">
             <div>
               <p className="admin-section-kicker">Provider routing</p>
-              <h2>Capability routes</h2>
-              <p>Switch a capability to another configured provider/model without deploying the app.</p>
+              <h2>AI task routing</h2>
+              <p>Choose which configured AI provider and model handles each type of AI task without redeploying the app.</p>
             </div>
             <Button
               icon={Cpu}
@@ -669,9 +669,9 @@ function ExpansionOpportunitiesPanel(props: {
           <p className="admin-section-kicker">Expansion intelligence</p>
           <h2>Expansion opportunities</h2>
           <p>
-            Review canonical customer interest together with real driver and station coverage
-            requests. Scores are prioritization aids only; service coverage remains controlled by
-            the Geography & Service Coverage workspace.
+            Review verified customer interest together with real driver and station area requests.
+            The scores only help operators decide what to review first; the Service Areas & Availability
+            page still decides where SKIMA can operate.
           </p>
         </div>
         <div className="admin-ai-expansion-head-actions">
@@ -699,7 +699,7 @@ function ExpansionOpportunitiesPanel(props: {
             <strong>No expansion opportunity needs review yet</strong>
             <span>
               Customer launch-interest and partner coverage requests will appear here when the
-              worker has enough canonical evidence to rank.
+              system has enough verified location information to rank them.
             </span>
           </div>
         </div>
@@ -1077,7 +1077,7 @@ function FinanceReconciliationPanel(props: {
       <div className="admin-ai-finance-guardrail">
         <ShieldCheck aria-hidden="true" />
         <span>
-          The immutable ledger and existing reconciliation engine remain authoritative. SKIMA Intelligence only explains what should be reviewed.
+          SKIMA financial records and reconciliation checks remain the source of truth. SKIMA Intelligence only explains what operators should review.
         </span>
       </div>
     </section>

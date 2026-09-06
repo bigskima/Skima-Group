@@ -667,7 +667,7 @@ function friendlyCapabilityName(key: string) {
 
 type OperationalCoverage = z.infer<typeof OperationalCoverageSchema>;
 interface OperationalCoverageForm { entityType: string; entityId: string; serviceKey: string; coverageType: "ADMIN_GEOGRAPHY" | "RADIUS" | "CUSTOM_ZONE"; geographyId: string; longitude: string; latitude: string; radius: string; geometry: string; status: "active" | "paused" | "retired"; validFrom: string; validTo: string; reason: string }
-const EMPTY_OPERATIONAL_COVERAGE: OperationalCoverageForm = { entityType: "DRIVER", entityId: "", serviceKey: "", coverageType: "ADMIN_GEOGRAPHY", geographyId: "", longitude: "", latitude: "", radius: "", geometry: "", status: "active", validFrom: "", validTo: "", reason: "" };
+const EMPTY_OPERATIONAL_COVERAGE: OperationalCoverageForm = { entityType: "DRIVER", entityId: "", serviceKey: "lpg", coverageType: "ADMIN_GEOGRAPHY", geographyId: "", longitude: "", latitude: "", radius: "", geometry: "", status: "active", validFrom: "", validTo: "", reason: "" };
 function OperationalCoveragePanel({ geographies }: { geographies: Geography[] }) {
   const { supabase, status } = useSessionState(); const client = useQueryClient(); const [editing, setEditing] = useState<OperationalCoverage | "new" | null>(null);
   const query = useQuery({ queryKey: ["universal-operational-coverage"], enabled: status === "authenticated", queryFn: async () => { const { data, error } = await supabase.rpc("read_operational_coverage_admin", { p_entity_type: null, p_entity_id: null, p_service_key: null }); if (error) throw error; return z.array(OperationalCoverageSchema).parse(data ?? []); }});
@@ -678,16 +678,198 @@ function OperationalCoveragePanel({ geographies }: { geographies: Geography[] })
     { key: "status", header: "Status", render: (item) => <StatusBadge tone={item.status === "active" ? "success" : "warning"}>{item.status}</StatusBadge> },
     { key: "actions", header: "Manage", render: (item) => <Button size="sm" variant="outline" onClick={() => setEditing(item)}>Edit coverage</Button> },
   ];
-  return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Approved operational coverage</h2><p className="skima-muted">Multiple administrative areas, radii and cross-boundary custom zones are independent approved assignments.</p></div><Button icon={Plus} onClick={() => setEditing("new")}>Add assignment</Button></div>{query.isLoading ? <LoadingState label="Loading approved operational coverage" /> : query.error ? <ErrorState title="Operational coverage unavailable" message={readError(query.error)} onRetry={() => void query.refetch()} /> : <DataTable caption="Approved operational coverage assignments" columns={columns} records={query.data ?? []} getRowKey={(item) => item.id} emptyTitle="No approved assignments" emptyMessage="Approved driver, station and future operational entities will appear here." />}<OperationalCoverageDialog record={editing} geographies={geographies} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await client.invalidateQueries({ queryKey: ["universal-operational-coverage"] }); }} /></section>;
+  return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Driver & station operating areas</h2><p className="skima-muted">Control where an approved driver or station is allowed to operate. Choose a mapped service area, a distance around a point, or draw a custom area on the map.</p></div><Button icon={Plus} onClick={() => setEditing("new")}>Add operating area</Button></div>{query.isLoading ? <LoadingState label="Loading approved operational coverage" /> : query.error ? <ErrorState title="Operational coverage unavailable" message={readError(query.error)} onRetry={() => void query.refetch()} /> : <DataTable caption="Driver and station operating areas" columns={columns} records={query.data ?? []} getRowKey={(item) => item.id} emptyTitle="No operating areas yet" emptyMessage="Approved driver and station operating areas will appear here after you add them." />}<OperationalCoverageDialog record={editing} geographies={geographies} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await client.invalidateQueries({ queryKey: ["universal-operational-coverage"] }); }} /></section>;
 }
 function OperationalCoverageDialog({ record, geographies, onClose, onSaved }: { record: OperationalCoverage | "new" | null; geographies: Geography[]; onClose: () => void; onSaved: () => Promise<void> }) {
-  const { supabase } = useSessionState(); const [form, setForm] = useState(EMPTY_OPERATIONAL_COVERAGE); const [error, setError] = useState<string | null>(null); const [saving, setSaving] = useState(false);
-  useEffect(() => { setForm(record && record !== "new" ? operationalCoverageForm(record) : EMPTY_OPERATIONAL_COVERAGE); setError(null); }, [record]);
+  const { supabase } = useSessionState();
+  const [form, setForm] = useState(EMPTY_OPERATIONAL_COVERAGE);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(record && record !== "new" ? operationalCoverageForm(record) : EMPTY_OPERATIONAL_COVERAGE);
+    setError(null);
+  }, [record]);
+
   if (!record) return null;
-  const submit = async (event: FormEvent) => { event.preventDefault(); setSaving(true); setError(null); try { let geometry: unknown = null; let geometryDraftId:string|null=null; if (form.coverageType === "CUSTOM_ZONE") { geometry = JSON.parse(form.geometry); const{data,error:draftError}=await supabase.rpc("save_coverage_geometry_draft",{p_draft_id:null,p_draft_type:"OPERATIONAL_COVERAGE",p_target_id:record==="new"?null:record.id,p_parent_geography_id:null,p_geojson:geometry});if(draftError)throw draftError;geometryDraftId=data as string; } const { data:assignmentId,error: rpcError } = await supabase.rpc("configure_operational_coverage_assignment", { p_assignment_id: record === "new" ? null : record.id, p_entity_type: form.entityType.trim().toUpperCase(), p_entity_id: form.entityId, p_service_key: form.serviceKey.trim(), p_coverage_type: form.coverageType, p_geography_id: form.coverageType === "ADMIN_GEOGRAPHY" ? form.geographyId : null, p_center_longitude: form.coverageType === "RADIUS" ? Number(form.longitude) : null, p_center_latitude: form.coverageType === "RADIUS" ? Number(form.latitude) : null, p_radius_meters: form.coverageType === "RADIUS" ? Number(form.radius) : null, p_coverage_geojson: geometry, p_status: form.status, p_valid_from: form.validFrom || null, p_valid_to: form.validTo || null, p_reason: form.reason.trim(), p_metadata: { sourceSurface: "admin_operational_coverage",geometryDraftId } }); if (rpcError) throw rpcError; if(geometryDraftId){const{error:activationError}=await supabase.rpc("activate_coverage_geometry_draft",{p_draft_id:geometryDraftId,p_target_id:assignmentId,p_reason:form.reason.trim()});if(activationError)throw activationError;} await onSaved(); } catch (cause) { setError(readError(cause)); } finally { setSaving(false); } };
-  const radiusPoint=form.longitude&&form.latitude?[Number(form.longitude),Number(form.latitude)] as const:null;
-  return <Dialog isOpen title={record === "new" ? "Add operational coverage" : "Edit operational coverage"} onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" form="operational-coverage-form" isLoading={saving}>Save approved coverage</Button></>}><form id="operational-coverage-form" className="skima-form-grid" onSubmit={(event) => void submit(event)}><TextInput label="Entity type" helperText="A reusable platform entity key, such as DRIVER or STATION." value={form.entityType} onChange={(event) => setForm({ ...form, entityType: event.currentTarget.value })} required /><TextInput label="Entity ID" value={form.entityId} onChange={(event) => setForm({ ...form, entityId: event.currentTarget.value })} required /><TextInput label="Service key" value={form.serviceKey} onChange={(event) => setForm({ ...form, serviceKey: event.currentTarget.value })} required /><SelectInput label="Coverage type" value={form.coverageType} onChange={(event) => setForm({ ...form, coverageType: event.currentTarget.value as OperationalCoverageForm["coverageType"] })} options={[{ label: "Administrative geography", value: "ADMIN_GEOGRAPHY" }, { label: "Radius", value: "RADIUS" }, { label: "Custom mapped zone", value: "CUSTOM_ZONE" }]} />{form.coverageType === "ADMIN_GEOGRAPHY" ? <SelectInput label="Approved geography" value={form.geographyId} onChange={(event) => setForm({ ...form, geographyId: event.currentTarget.value })} options={[{ label: "Select geography", value: "" }, ...geographies.filter((item) => item.status === "active").map((item) => ({ label: item.canonical_name, value: item.id }))]} required /> : null}{form.coverageType === "RADIUS" ? <><AdminGeometryEditor mode="point" point={radiusPoint} onPointChange={([longitude,latitude])=>setForm({...form,longitude:String(longitude),latitude:String(latitude)})}/><TextInput label="Center longitude" type="number" value={form.longitude} onChange={(event) => setForm({ ...form, longitude: event.currentTarget.value })} required /><TextInput label="Center latitude" type="number" value={form.latitude} onChange={(event) => setForm({ ...form, latitude: event.currentTarget.value })} required /><TextInput label="Radius in meters" type="number" value={form.radius} onChange={(event) => setForm({ ...form, radius: event.currentTarget.value })} required /></> : null}{form.coverageType === "CUSTOM_ZONE" ? <><AdminGeometryEditor mode="polygon" value={form.geometry} onChange={(geometry)=>setForm({...form,geometry})}/><TextAreaInput label="Coverage Polygon or MultiPolygon GeoJSON" value={form.geometry} onChange={(event) => setForm({ ...form, geometry: event.currentTarget.value })} required /></> : null}<SelectInput label="Status" value={form.status} onChange={(event) => setForm({ ...form, status: event.currentTarget.value as OperationalCoverageForm["status"] })} options={[{ label: "Active", value: "active" }, { label: "Paused", value: "paused" }, { label: "Retired", value: "retired" }]} /><TextInput label="Valid from" type="datetime-local" value={form.validFrom} onChange={(event) => setForm({ ...form, validFrom: event.currentTarget.value })} /><TextInput label="Valid until" type="datetime-local" value={form.validTo} onChange={(event) => setForm({ ...form, validTo: event.currentTarget.value })} /><TextAreaInput label="Change reason" helperText="Required and preserved in the immutable coverage history." value={form.reason} onChange={(event) => setForm({ ...form, reason: event.currentTarget.value })} required />{error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}</form></Dialog>;
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      if (!form.entityId.trim()) throw new Error("Choose or enter the driver or station record this operating area belongs to.");
+      if (form.coverageType === "ADMIN_GEOGRAPHY" && !form.geographyId) {
+        throw new Error("Choose a mapped service area.");
+      }
+      if (form.coverageType === "RADIUS" && (!form.longitude || !form.latitude || !form.radius || Number(form.radius) <= 0)) {
+        throw new Error("Tap the map to choose the centre point, then enter how far this operating area should extend.");
+      }
+      if (form.coverageType === "CUSTOM_ZONE" && !form.geometry.trim()) {
+        throw new Error("Draw the custom operating area on the map before saving.");
+      }
+
+      let geometry: unknown = null;
+      let geometryDraftId: string | null = null;
+      if (form.coverageType === "CUSTOM_ZONE") {
+        geometry = JSON.parse(form.geometry);
+        const { data, error: draftError } = await supabase.rpc("save_coverage_geometry_draft", {
+          p_draft_id: null,
+          p_draft_type: "OPERATIONAL_COVERAGE",
+          p_target_id: record === "new" ? null : record.id,
+          p_parent_geography_id: null,
+          p_geojson: geometry,
+        });
+        if (draftError) throw draftError;
+        geometryDraftId = data as string;
+      }
+
+      const { data: assignmentId, error: rpcError } = await supabase.rpc("configure_operational_coverage_assignment", {
+        p_assignment_id: record === "new" ? null : record.id,
+        p_entity_type: form.entityType.trim().toUpperCase(),
+        p_entity_id: form.entityId.trim(),
+        p_service_key: form.serviceKey.trim(),
+        p_coverage_type: form.coverageType,
+        p_geography_id: form.coverageType === "ADMIN_GEOGRAPHY" ? form.geographyId : null,
+        p_center_longitude: form.coverageType === "RADIUS" ? Number(form.longitude) : null,
+        p_center_latitude: form.coverageType === "RADIUS" ? Number(form.latitude) : null,
+        p_radius_meters: form.coverageType === "RADIUS" ? Number(form.radius) : null,
+        p_coverage_geojson: geometry,
+        p_status: form.status,
+        p_valid_from: form.validFrom || null,
+        p_valid_to: form.validTo || null,
+        p_reason: form.reason.trim(),
+        p_metadata: { sourceSurface: "admin_operational_coverage", geometryDraftId },
+      });
+      if (rpcError) throw rpcError;
+
+      if (geometryDraftId) {
+        const { error: activationError } = await supabase.rpc("activate_coverage_geometry_draft", {
+          p_draft_id: geometryDraftId,
+          p_target_id: assignmentId,
+          p_reason: form.reason.trim(),
+        });
+        if (activationError) throw activationError;
+      }
+      await onSaved();
+    } catch (cause) {
+      setError(readError(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const radiusPoint = form.longitude && form.latitude
+    ? [Number(form.longitude), Number(form.latitude)] as const
+    : null;
+
+  return <Dialog
+    isOpen
+    title={record === "new" ? "Add driver or station operating area" : "Edit operating area"}
+    onClose={onClose}
+    footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" form="operational-coverage-form" isLoading={saving}>Save operating area</Button></>}
+  >
+    <form id="operational-coverage-form" className="skima-form-grid" onSubmit={(event) => void submit(event)}>
+      <div className="skima-form-help">
+        <strong>Who is this operating area for?</strong>
+        <p>Choose whether this belongs to a driver or station, then enter the record ID shown on that partner's admin profile.</p>
+      </div>
+      <SelectInput
+        label="Partner type"
+        value={form.entityType}
+        onChange={(event) => setForm({ ...form, entityType: event.currentTarget.value })}
+        options={[{ label: "Driver", value: "DRIVER" }, { label: "Station", value: "STATION" }]}
+        required
+      />
+      <TextInput
+        label={form.entityType === "STATION" ? "Station record ID" : "Driver record ID"}
+        helperText="Copy this from the partner's admin details. SKIMA uses it to attach the area to the correct account."
+        value={form.entityId}
+        onChange={(event) => setForm({ ...form, entityId: event.currentTarget.value })}
+        required
+      />
+      <SelectInput
+        label="SKIMA service"
+        value={form.serviceKey}
+        onChange={(event) => setForm({ ...form, serviceKey: event.currentTarget.value })}
+        options={[{ label: "LPG refill service", value: "lpg" }]}
+        required
+      />
+
+      <div className="skima-form-help">
+        <strong>How should the area be defined?</strong>
+        <p>Use a mapped service area when possible. Use a distance for nearby coverage, or draw a custom area only when the operating boundary crosses normal map areas.</p>
+      </div>
+      <SelectInput
+        label="Area method"
+        value={form.coverageType}
+        onChange={(event) => setForm({ ...form, coverageType: event.currentTarget.value as OperationalCoverageForm["coverageType"] })}
+        options={[
+          { label: "Use a mapped service area", value: "ADMIN_GEOGRAPHY" },
+          { label: "Use a distance around a point", value: "RADIUS" },
+          { label: "Draw a custom area", value: "CUSTOM_ZONE" },
+        ]}
+      />
+
+      {form.coverageType === "ADMIN_GEOGRAPHY" ? <SelectInput
+        label="Mapped service area"
+        value={form.geographyId}
+        onChange={(event) => setForm({ ...form, geographyId: event.currentTarget.value })}
+        options={[{ label: "Choose service area", value: "" }, ...geographies.filter((item) => item.status === "active").map((item) => ({ label: item.canonical_name, value: item.id }))]}
+        required
+      /> : null}
+
+      {form.coverageType === "RADIUS" ? <>
+        <div className="skima-form-help">
+          <strong>Tap the map to set the centre</strong>
+          <p>Then enter the distance from that point. You do not need to type latitude or longitude.</p>
+        </div>
+        <AdminGeometryEditor
+          mode="point"
+          point={radiusPoint}
+          onPointChange={([longitude, latitude]) => setForm({ ...form, longitude: String(longitude), latitude: String(latitude) })}
+        />
+        <TextInput
+          label="Distance from the centre (metres)"
+          type="number"
+          value={form.radius}
+          onChange={(event) => setForm({ ...form, radius: event.currentTarget.value })}
+          required
+        />
+      </> : null}
+
+      {form.coverageType === "CUSTOM_ZONE" ? <>
+        <div className="skima-form-help">
+          <strong>Draw the operating boundary</strong>
+          <p>Click the map to outline the area. SKIMA stores the map shape automatically; no map code needs to be typed.</p>
+        </div>
+        <AdminGeometryEditor mode="polygon" value={form.geometry} onChange={(geometry) => setForm({ ...form, geometry })} />
+      </> : null}
+
+      <SelectInput
+        label="Operating status"
+        value={form.status}
+        onChange={(event) => setForm({ ...form, status: event.currentTarget.value as OperationalCoverageForm["status"] })}
+        options={[
+          { label: "Active — can operate now", value: "active" },
+          { label: "Paused — temporarily unavailable", value: "paused" },
+          { label: "Retired — no longer used", value: "retired" },
+        ]}
+      />
+      <TextInput label="Starts on (optional)" type="datetime-local" value={form.validFrom} onChange={(event) => setForm({ ...form, validFrom: event.currentTarget.value })} />
+      <TextInput label="Ends on (optional)" type="datetime-local" value={form.validTo} onChange={(event) => setForm({ ...form, validTo: event.currentTarget.value })} />
+      <TextAreaInput
+        label="Why are you making this change?"
+        helperText="Required. SKIMA keeps this note in the permanent change history."
+        value={form.reason}
+        onChange={(event) => setForm({ ...form, reason: event.currentTarget.value })}
+        required
+      />
+      {error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}
+    </form>
+  </Dialog>;
 }
+
 function operationalCoverageForm(record: OperationalCoverage): OperationalCoverageForm { return { entityType: record.entity_type, entityId: record.entity_id, serviceKey: record.service_key, coverageType: record.coverage_type, geographyId: record.geography_id ?? "", longitude: record.center_longitude?.toString() ?? "", latitude: record.center_latitude?.toString() ?? "", radius: record.radius_meters?.toString() ?? "", geometry: record.coverage_geojson ? JSON.stringify(record.coverage_geojson, null, 2) : "", status: record.status === "paused" || record.status === "retired" ? record.status : "active", validFrom: toLocalDateTime(record.valid_from), validTo: toLocalDateTime(record.valid_to), reason: "" }; }
 function toLocalDateTime(value: string | null) { if (!value) return ""; const date = new Date(value); if (Number.isNaN(date.getTime())) return ""; const offset = date.getTimezoneOffset() * 60_000; return new Date(date.getTime() - offset).toISOString().slice(0, 16); }
 
@@ -697,15 +879,15 @@ function CoverageMapPanel() {
   const filters=[serviceKey,capabilityKey,entityType,entityId,applicationId] as const;
   const validFilters=(!entityId.trim()||isUuid(entityId))&&(!applicationId.trim()||isUuid(applicationId));
   const query = useQuery({ queryKey: ["universal-coverage-map", ...filters], enabled: status === "authenticated"&&validFilters, queryFn: async () => { const now=new Date().toISOString(); const [{data,error},{data:evidenceData,error:evidenceError}]=await Promise.all([supabase.rpc("read_coverage_map_features", { p_service_key: serviceKey.trim() || null, p_capability_key: capabilityKey.trim() || null, p_entity_type: entityType.trim().toUpperCase()||null, p_entity_id: uuidOrNull(entityId), p_at: now, p_limit: 500, p_simplify_tolerance: 0.00001 }),supabase.rpc("read_coverage_evidence_map_features",{p_service_key:serviceKey.trim()||null,p_entity_type:entityType.trim().toUpperCase()||null,p_entity_id:uuidOrNull(entityId),p_application_id:uuidOrNull(applicationId),p_at:now,p_limit:500,p_simplify_tolerance:0.00001})]); if (error) throw error;if(evidenceError)throw evidenceError;const effective=CoverageMapSchema.parse(data),evidence=CoverageMapSchema.parse(evidenceData);return{...effective,truncated:effective.truncated||evidence.truncated,features:[...effective.features,...evidence.features]}; }});
-  return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Effective coverage map</h2><p className="skima-muted">Service policy, requested coverage, approved coverage, operating base, application evidence and authorized live location are separate server-controlled layers.</p></div><Button variant="outline" disabled={!validFilters} onClick={() => void query.refetch()}>Refresh map</Button></div><div className="skima-form-grid"><TextInput label="Service filter" helperText="Leave empty to inspect all configured services." value={serviceKey} onChange={(event) => setServiceKey(event.currentTarget.value)} /><TextInput label="Capability filter" value={capabilityKey} onChange={(event) => setCapabilityKey(event.currentTarget.value)} /><TextInput label="Entity type" value={entityType} onChange={(event)=>setEntityType(event.currentTarget.value)}/><TextInput label="Entity ID" value={entityId} onChange={(event)=>setEntityId(event.currentTarget.value)}/><TextInput label="Application ID" value={applicationId} onChange={(event)=>setApplicationId(event.currentTarget.value)}/></div>{!validFilters?<StatusBadge tone="warning">Entity and application filters must be complete UUIDs.</StatusBadge>:query.isLoading ? <LoadingState label="Loading effective coverage geometry" /> : query.error ? <ErrorState title="Coverage map unavailable" message={readError(query.error)} onRetry={() => void query.refetch()} /> : <CoverageGeometryMap features={query.data?.features ?? []} truncated={query.data?.truncated ?? false} />}</section>;
+  return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Coverage map</h2><p className="skima-muted">See service rules, approved partner areas, requested partner areas, operating bases, application locations, and recent authorized live locations as separate map layers.</p></div><Button variant="outline" disabled={!validFilters} onClick={() => void query.refetch()}>Refresh map</Button></div><div className="skima-form-grid"><TextInput label="SKIMA service filter" helperText="Leave empty to show every configured service." value={serviceKey} onChange={(event) => setServiceKey(event.currentTarget.value)} /><TextInput label="Activity filter (advanced)" value={capabilityKey} onChange={(event) => setCapabilityKey(event.currentTarget.value)} /><TextInput label="Partner type" value={entityType} onChange={(event)=>setEntityType(event.currentTarget.value)}/><TextInput label="Partner record ID" value={entityId} onChange={(event)=>setEntityId(event.currentTarget.value)}/><TextInput label="Application record ID" value={applicationId} onChange={(event)=>setApplicationId(event.currentTarget.value)}/></div>{!validFilters?<StatusBadge tone="warning">Partner and application record IDs are incomplete. Copy the full ID from the relevant admin record.</StatusBadge>:query.isLoading ? <LoadingState label="Loading coverage map" /> : query.error ? <ErrorState title="Coverage map unavailable" message={readError(query.error)} onRetry={() => void query.refetch()} /> : <CoverageGeometryMap features={query.data?.features ?? []} truncated={query.data?.truncated ?? false} />}</section>;
 }
 function CoverageGeometryMap({ features, truncated }: { features: CoverageMapFeature[]; truncated: boolean }) {
   const layerNames=[...new Set(features.map((feature)=>feature.properties.layer))];const[hiddenLayers,setHiddenLayers]=useState<string[]>([]);const visibleFeatures=features.filter((feature)=>!hiddenLayers.includes(feature.properties.layer));
   const points = visibleFeatures.flatMap((feature) => geometryPoints(feature.geometry.coordinates));
-  if (features.length === 0) return <ErrorState title="No mapped coverage" message="No active service policies or approved operational coverage matched these filters." />;
+  if (features.length === 0) return <ErrorState title="No coverage found" message="No active service rules or approved partner operating areas match these filters." />;
   if (points.length === 0) return <div><div className="skima-action-row">{layerNames.map((layer)=><Button key={layer} size="sm" variant="outline" aria-pressed={false} onClick={()=>setHiddenLayers((current)=>current.filter((item)=>item!==layer))}>{layer.replaceAll("_"," ")}</Button>)}</div><p className="skima-muted">All map layers are hidden. Select a layer to show it.</p></div>;
   const longitudes = points.map(([longitude]) => longitude); const latitudes = points.map(([, latitude]) => latitude); const minLongitude = Math.min(...longitudes); const maxLongitude = Math.max(...longitudes); const minLatitude = Math.min(...latitudes); const maxLatitude = Math.max(...latitudes); const longitudeSpan = Math.max(maxLongitude - minLongitude, 0.001); const latitudeSpan = Math.max(maxLatitude - minLatitude, 0.001); const project = ([longitude, latitude]: [number, number]) => [24 + ((longitude - minLongitude) / longitudeSpan) * 852, 436 - ((latitude - minLatitude) / latitudeSpan) * 412] as const;
-  return <div><div className="skima-action-row">{layerNames.map((layer)=><Button key={layer} size="sm" variant={hiddenLayers.includes(layer)?"outline":"primary"} aria-pressed={!hiddenLayers.includes(layer)} onClick={()=>setHiddenLayers((current)=>current.includes(layer)?current.filter((item)=>item!==layer):[...current,layer])}>{layer.replaceAll("_"," ")}</Button>)}{truncated ? <StatusBadge tone="warning">Map feature limit reached—apply filters</StatusBadge> : null}</div><svg role="img" aria-label="Effective service and operational coverage geometry" viewBox="0 0 900 460" style={{ width: "100%", minHeight: 360, background: "#f5f7f8", border: "1px solid #d9e0e3", borderRadius: 16 }}><defs><pattern id="coverage-grid" width="45" height="45" patternUnits="userSpaceOnUse"><path d="M 45 0 L 0 0 0 45" fill="none" stroke="#dce4e7" strokeWidth="1" /></pattern></defs><rect width="900" height="460" fill="url(#coverage-grid)" />{visibleFeatures.map((feature) => feature.geometry.type==="Point"?<MapEvidencePoint key={`${feature.properties.layer}:${feature.id}`} feature={feature} project={project}/>:<path key={`${feature.properties.layer}:${feature.id}`} d={geometryPath(feature.geometry.coordinates, project)} fill={feature.properties.layer === "OPERATIONAL_COVERAGE" ? "#246bdb55" : feature.properties.layer==="REQUESTED_COVERAGE"?"#d98b2455":feature.properties.effect === "DENY" ? "#d9383855" : "#1d9b6255"} stroke={feature.properties.layer === "OPERATIONAL_COVERAGE" ? "#246bdb" : feature.properties.layer==="REQUESTED_COVERAGE"?"#b86a10":feature.properties.effect === "DENY" ? "#b42323" : "#157a4c"} strokeWidth="2" strokeDasharray={feature.properties.layer==="REQUESTED_COVERAGE"?"8 5":undefined} fillRule="evenodd"><title>{feature.properties.name} — {feature.properties.layer}</title></path>)}</svg><p className="skima-muted">Toggle dense layers above. Live driver points appear only with tracking-admin permission and recent operational data.</p></div>;
+  return <div><div className="skima-action-row">{layerNames.map((layer)=><Button key={layer} size="sm" variant={hiddenLayers.includes(layer)?"outline":"primary"} aria-pressed={!hiddenLayers.includes(layer)} onClick={()=>setHiddenLayers((current)=>current.includes(layer)?current.filter((item)=>item!==layer):[...current,layer])}>{layer.replaceAll("_"," ")}</Button>)}{truncated ? <StatusBadge tone="warning">Too many map items — narrow the filters</StatusBadge> : null}</div><svg role="img" aria-label="Effective service and operational coverage geometry" viewBox="0 0 900 460" style={{ width: "100%", minHeight: 360, background: "#f5f7f8", border: "1px solid #d9e0e3", borderRadius: 16 }}><defs><pattern id="coverage-grid" width="45" height="45" patternUnits="userSpaceOnUse"><path d="M 45 0 L 0 0 0 45" fill="none" stroke="#dce4e7" strokeWidth="1" /></pattern></defs><rect width="900" height="460" fill="url(#coverage-grid)" />{visibleFeatures.map((feature) => feature.geometry.type==="Point"?<MapEvidencePoint key={`${feature.properties.layer}:${feature.id}`} feature={feature} project={project}/>:<path key={`${feature.properties.layer}:${feature.id}`} d={geometryPath(feature.geometry.coordinates, project)} fill={feature.properties.layer === "OPERATIONAL_COVERAGE" ? "#246bdb55" : feature.properties.layer==="REQUESTED_COVERAGE"?"#d98b2455":feature.properties.effect === "DENY" ? "#d9383855" : "#1d9b6255"} stroke={feature.properties.layer === "OPERATIONAL_COVERAGE" ? "#246bdb" : feature.properties.layer==="REQUESTED_COVERAGE"?"#b86a10":feature.properties.effect === "DENY" ? "#b42323" : "#157a4c"} strokeWidth="2" strokeDasharray={feature.properties.layer==="REQUESTED_COVERAGE"?"8 5":undefined} fillRule="evenodd"><title>{feature.properties.name} — {feature.properties.layer}</title></path>)}</svg><p className="skima-muted">Use the buttons above to show or hide map layers. Recent driver locations appear only for admins with tracking permission.</p></div>;
 }
 function MapEvidencePoint({feature,project}:{feature:CoverageMapFeature;project:(point:[number,number])=>readonly[number,number]}){const points=geometryPoints(feature.geometry.coordinates);if(!points[0])return null;const[x,y]=project(points[0]);const color=feature.properties.layer==="LIVE_LOCATION"?"#d93838":feature.properties.layer==="OPERATING_BASE"?"#6b3fd1":"#334e68";return <g><circle cx={x} cy={y} r={feature.properties.layer==="LIVE_LOCATION"?9:7} fill={color} stroke="white" strokeWidth="3"/><title>{feature.properties.name} — {feature.properties.layer}</title></g>;}
 function isUuid(value:string){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim());}
@@ -714,13 +896,131 @@ function geometryPoints(value: unknown): [number, number][] { if (!Array.isArray
 function geometryPath(value: unknown, project: (point: [number, number]) => readonly [number, number]): string { if (!Array.isArray(value)) return ""; if (value.length > 0 && Array.isArray(value[0]) && typeof value[0][0] === "number") { const ring = geometryPoints(value); return ring.map((point, index) => { const [x, y] = project(point); return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`; }).join(" ") + " Z"; } return value.map((part) => geometryPath(part, project)).join(" "); }
 
 function PointDiagnosticPanel() {
-  const { supabase } = useSessionState(); const [serviceKey,setServiceKey]=useState(""); const [capabilityKey,setCapabilityKey]=useState(""); const [longitude,setLongitude]=useState(""); const [latitude,setLatitude]=useState(""); const [entityType,setEntityType]=useState(""); const [entityId,setEntityId]=useState(""); const [result,setResult]=useState<z.infer<typeof PointDiagnosticSchema>|null>(null); const [error,setError]=useState<string|null>(null); const [loading,setLoading]=useState(false);
-  const diagnose=async(event:FormEvent)=>{event.preventDefault();setLoading(true);setError(null);try{const{data,error:rpcError}=await supabase.rpc("diagnose_coverage_point",{p_service_key:serviceKey.trim(),p_capability_key:capabilityKey.trim(),p_longitude:Number(longitude),p_latitude:Number(latitude),p_entity_type:entityType.trim().toUpperCase()||null,p_entity_id:entityId.trim()||null,p_at:new Date().toISOString()});if(rpcError)throw rpcError;setResult(PointDiagnosticSchema.parse(data));}catch(cause){setError(readError(cause));setResult(null);}finally{setLoading(false);}};
-  const available=result?.availability.available===true; return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Point coverage diagnostic</h2><p className="skima-muted">Inspect the authoritative result for an exact coordinate, including boundary-edge handling, service policy, approved coverage, requested coverage and current entity evidence.</p></div></div><form className="skima-form-grid" onSubmit={(event)=>void diagnose(event)}><TextInput label="Service key" value={serviceKey} onChange={(event)=>setServiceKey(event.currentTarget.value)} required/><TextInput label="Capability key" value={capabilityKey} onChange={(event)=>setCapabilityKey(event.currentTarget.value)} required/><TextInput label="Longitude" type="number" value={longitude} onChange={(event)=>setLongitude(event.currentTarget.value)} required/><TextInput label="Latitude" type="number" value={latitude} onChange={(event)=>setLatitude(event.currentTarget.value)} required/><TextInput label="Entity type filter" helperText="Optional, such as DRIVER or STATION." value={entityType} onChange={(event)=>setEntityType(event.currentTarget.value)}/><TextInput label="Entity ID filter" value={entityId} onChange={(event)=>setEntityId(event.currentTarget.value)}/><Button type="submit" isLoading={loading}>Run server diagnostic</Button></form>{error?<StatusBadge tone="danger">{error}</StatusBadge>:null}{result?<div className="skima-grid skima-grid--compact"><MetricTile label="Service result" value={available?"AVAILABLE":String(result.availability.reason??"UNAVAILABLE")} icon={ShieldCheck} tone={available?"success":"warning"}/><MetricTile label="Matched geographies" value={result.matchedGeographies.length} icon={MapPinned} tone="info"/><MetricTile label="Approved assignments" value={result.approvedAssignments.length} icon={ShieldCheck} tone="success"/><MetricTile label="Requested assignments" value={result.requestedCoverage.length} icon={MapPinned} tone="warning"/><section className="sk-panel"><h3>Boundary behavior</h3><p>{result.boundaryStrategy}</p><p className="skima-muted">Points on polygon edges are included consistently through PostGIS ST_Covers.</p></section><section className="sk-panel"><h3>Diagnostic evidence</h3><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify({matchedGeographies:result.matchedGeographies,approvedAssignments:result.approvedAssignments,requestedCoverage:result.requestedCoverage,currentLocationEvidence:result.currentLocationEvidence},null,2)}</pre></section></div>:null}</section>;
+  const { supabase } = useSessionState();
+  const [serviceKey,setServiceKey]=useState("lpg");
+  const [capabilityKey,setCapabilityKey]=useState("customer_ordering");
+  const [longitude,setLongitude]=useState("");
+  const [latitude,setLatitude]=useState("");
+  const [entityType,setEntityType]=useState("");
+  const [entityId,setEntityId]=useState("");
+  const [result,setResult]=useState<z.infer<typeof PointDiagnosticSchema>|null>(null);
+  const [error,setError]=useState<string|null>(null);
+  const [loading,setLoading]=useState(false);
+  const point = longitude && latitude ? [Number(longitude), Number(latitude)] as const : null;
+
+  const diagnose=async(event:FormEvent)=>{
+    event.preventDefault();
+    if (!longitude || !latitude) {
+      setError("Tap the map to choose the location you want to check.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const{data,error:rpcError}=await supabase.rpc("diagnose_coverage_point",{
+        p_service_key:serviceKey.trim(),
+        p_capability_key:capabilityKey.trim(),
+        p_longitude:Number(longitude),
+        p_latitude:Number(latitude),
+        p_entity_type:entityType.trim().toUpperCase()||null,
+        p_entity_id:entityId.trim()||null,
+        p_at:new Date().toISOString()
+      });
+      if(rpcError)throw rpcError;
+      setResult(PointDiagnosticSchema.parse(data));
+    } catch(cause) {
+      setError(readError(cause));
+      setResult(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const available=result?.availability.available===true;
+  return <section className="sk-panel">
+    <div className="sk-panel__header">
+      <div>
+        <h2>Check a location</h2>
+        <p className="skima-muted">Tap an exact point on the map to see whether the selected SKIMA activity is allowed there and which mapped area or partner coverage affected the result.</p>
+      </div>
+    </div>
+    <form className="skima-form-grid" onSubmit={(event)=>void diagnose(event)}>
+      <SelectInput
+        label="SKIMA service"
+        value={serviceKey}
+        onChange={(event)=>setServiceKey(event.currentTarget.value)}
+        options={[{label:"LPG refill service",value:"lpg"}]}
+        required
+      />
+      <SelectInput
+        label="What do you want to check?"
+        value={capabilityKey}
+        onChange={(event)=>setCapabilityKey(event.currentTarget.value)}
+        options={[
+          {label:"Can customers place refill orders here?",value:"customer_ordering"},
+          {label:"Can drivers register and operate here?",value:"driver_onboarding"},
+          {label:"Can stations register and operate here?",value:"station_onboarding"},
+        ]}
+        required
+      />
+      <div className="skima-form-help">
+        <strong>Choose the test location</strong>
+        <p>Click the map. SKIMA will use the exact map point automatically; you do not need to type coordinates.</p>
+      </div>
+      <AdminGeometryEditor
+        mode="point"
+        point={point}
+        onPointChange={([nextLongitude,nextLatitude])=>{
+          setLongitude(String(nextLongitude));
+          setLatitude(String(nextLatitude));
+        }}
+      />
+      <details className="skima-advanced-options">
+        <summary>Optional partner-specific check</summary>
+        <div className="skima-form-grid">
+          <SelectInput
+            label="Partner type"
+            value={entityType}
+            onChange={(event)=>setEntityType(event.currentTarget.value)}
+            options={[{label:"No specific partner",value:""},{label:"Driver",value:"DRIVER"},{label:"Station",value:"STATION"}]}
+          />
+          <TextInput
+            label="Partner record ID"
+            helperText="Only use this when you need to test one specific driver or station."
+            value={entityId}
+            onChange={(event)=>setEntityId(event.currentTarget.value)}
+          />
+        </div>
+      </details>
+      <Button type="submit" isLoading={loading}>Check this location</Button>
+    </form>
+    {error?<StatusBadge tone="danger">{error}</StatusBadge>:null}
+    {result?<div className="skima-grid skima-grid--compact">
+      <MetricTile label="Availability" value={available?"Allowed":"Not allowed"} icon={ShieldCheck} tone={available?"success":"warning"}/>
+      <MetricTile label="Mapped areas found" value={result.matchedGeographies.length} icon={MapPinned} tone="info"/>
+      <MetricTile label="Approved partner areas" value={result.approvedAssignments.length} icon={ShieldCheck} tone="success"/>
+      <MetricTile label="Partner requests waiting" value={result.requestedCoverage.length} icon={MapPinned} tone="warning"/>
+      <section className="sk-panel">
+        <h3>How the boundary was handled</h3>
+        <p className="skima-muted">A point exactly on the edge of a mapped area is treated consistently as part of that area.</p>
+      </section>
+      <details className="sk-panel">
+        <summary><strong>Technical evidence</strong></summary>
+        <p className="skima-muted">Use this only when an engineer or support specialist asks for the detailed location evidence.</p>
+        <pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify({
+          matchedAreas:result.matchedGeographies,
+          approvedPartnerAreas:result.approvedAssignments,
+          requestedPartnerAreas:result.requestedCoverage,
+          currentLocationEvidence:result.currentLocationEvidence,
+          boundaryStrategy:result.boundaryStrategy
+        },null,2)}</pre>
+      </details>
+    </div>:null}
+  </section>;
 }
 
 type DispatchDiagnostic=z.infer<typeof DispatchDiagnosticSchema>;
-function DispatchDiagnosticPanel(){const{supabase,status}=useSessionState();const[dispatchId,setDispatchId]=useState("");const[subjectType,setSubjectType]=useState("");const[subjectId,setSubjectId]=useState("");const valid=(!dispatchId.trim()||isUuid(dispatchId))&&(!subjectId.trim()||isUuid(subjectId));const query=useQuery({queryKey:["dispatch-location-diagnostics",dispatchId,subjectType,subjectId],enabled:status==="authenticated"&&valid,queryFn:async()=>{const{data,error}=await supabase.rpc("read_dispatch_location_diagnostics",{p_dispatch_request_id:uuidOrNull(dispatchId),p_subject_type:subjectType.trim()||null,p_subject_id:uuidOrNull(subjectId),p_limit:100});if(error)throw error;return z.array(DispatchDiagnosticSchema).parse(data??[]);}});const columns:TableColumn<DispatchDiagnostic>[]=[{key:"decision",header:"Dispatch decision",render:(item)=><><strong>{item.subject_type}</strong><br/><small>{item.dispatch_request_id}</small></>},{key:"selected",header:"Selected entity",render:(item)=><><strong>{item.selected_entity_type}</strong><br/><small>{item.selected_entity_id}</small></>},{key:"distance",header:"Distance",render:(item)=>`${Math.round(item.distance_meters)} m`},{key:"evidence",header:"Frozen evidence",render:(item)=>`${item.coverage_assignment_snapshots.length} coverage · ${item.candidate_decision_snapshots.length} candidates`},{key:"time",header:"Decided",render:(item)=>new Date(item.decided_at).toLocaleString()}];return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Dispatch location audit</h2><p className="skima-muted">Immutable assignment-time policy, coverage, candidate, pickup and selected-driver evidence explains why a dispatch decision was valid at that time.</p></div><Button variant="outline" disabled={!valid} onClick={()=>void query.refetch()}>Refresh audit</Button></div><div className="skima-form-grid"><TextInput label="Dispatch request ID" value={dispatchId} onChange={(event)=>setDispatchId(event.currentTarget.value)}/><TextInput label="Subject type" value={subjectType} onChange={(event)=>setSubjectType(event.currentTarget.value)}/><TextInput label="Subject ID" value={subjectId} onChange={(event)=>setSubjectId(event.currentTarget.value)}/></div>{!valid?<StatusBadge tone="warning">Dispatch and subject identifiers must be complete UUIDs.</StatusBadge>:query.isLoading?<LoadingState label="Loading dispatch audit evidence"/>:query.error?<ErrorState title="Dispatch audit unavailable" message={readError(query.error)} onRetry={()=>void query.refetch()}/>:<><DataTable caption="Immutable dispatch location decisions" columns={columns} records={query.data??[]} getRowKey={(item)=>item.id} emptyTitle="No dispatch decisions found" emptyMessage="Assignment-time location snapshots will appear here after dispatch."/>{(query.data??[]).map((item)=><details key={`${item.id}:detail`}><summary>{item.dispatch_request_id} evidence detail</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify({pickup:item.pickup_geojson,selectedEntityPoint:item.selected_entity_geojson,servicePolicy:item.service_policy_snapshot,coverageAssignments:item.coverage_assignment_snapshots,candidates:item.candidate_decision_snapshots,decision:item.decision_metadata},null,2)}</pre></details>)}</>}</section>;}
+function DispatchDiagnosticPanel(){const{supabase,status}=useSessionState();const[dispatchId,setDispatchId]=useState("");const[subjectType,setSubjectType]=useState("");const[subjectId,setSubjectId]=useState("");const valid=(!dispatchId.trim()||isUuid(dispatchId))&&(!subjectId.trim()||isUuid(subjectId));const query=useQuery({queryKey:["dispatch-location-diagnostics",dispatchId,subjectType,subjectId],enabled:status==="authenticated"&&valid,queryFn:async()=>{const{data,error}=await supabase.rpc("read_dispatch_location_diagnostics",{p_dispatch_request_id:uuidOrNull(dispatchId),p_subject_type:subjectType.trim()||null,p_subject_id:uuidOrNull(subjectId),p_limit:100});if(error)throw error;return z.array(DispatchDiagnosticSchema).parse(data??[]);}});const columns:TableColumn<DispatchDiagnostic>[]=[{key:"decision",header:"Dispatch decision",render:(item)=><><strong>{item.subject_type}</strong><br/><small>{item.dispatch_request_id}</small></>},{key:"selected",header:"Selected entity",render:(item)=><><strong>{item.selected_entity_type}</strong><br/><small>{item.selected_entity_id}</small></>},{key:"distance",header:"Distance",render:(item)=>`${Math.round(item.distance_meters)} m`},{key:"evidence",header:"Recorded evidence",render:(item)=>`${item.coverage_assignment_snapshots.length} coverage · ${item.candidate_decision_snapshots.length} candidates`},{key:"time",header:"Decided",render:(item)=>new Date(item.decided_at).toLocaleString()}];return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Why a driver was assigned</h2><p className="skima-muted">Review the service rules, partner coverage, pickup location and driver information SKIMA used at the moment an assignment was made.</p></div><Button variant="outline" disabled={!valid} onClick={()=>void query.refetch()}>Refresh records</Button></div><div className="skima-form-grid"><TextInput label="Dispatch request ID" value={dispatchId} onChange={(event)=>setDispatchId(event.currentTarget.value)}/><TextInput label="Subject type" value={subjectType} onChange={(event)=>setSubjectType(event.currentTarget.value)}/><TextInput label="Subject ID" value={subjectId} onChange={(event)=>setSubjectId(event.currentTarget.value)}/></div>{!valid?<StatusBadge tone="warning">The dispatch or record ID is incomplete. Copy the full ID from the related admin record.</StatusBadge>:query.isLoading?<LoadingState label="Loading dispatch records"/>:query.error?<ErrorState title="Dispatch audit unavailable" message={readError(query.error)} onRetry={()=>void query.refetch()}/>:<><DataTable caption="Recorded dispatch location decisions" columns={columns} records={query.data??[]} getRowKey={(item)=>item.id} emptyTitle="No dispatch decisions found" emptyMessage="Assignment-time location snapshots will appear here after dispatch."/>{(query.data??[]).map((item)=><details key={`${item.id}:detail`}><summary>{item.dispatch_request_id} evidence detail</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify({pickup:item.pickup_geojson,selectedEntityPoint:item.selected_entity_geojson,servicePolicy:item.service_policy_snapshot,coverageAssignments:item.coverage_assignment_snapshots,candidates:item.candidate_decision_snapshots,decision:item.decision_metadata},null,2)}</pre></details>)}</>}</section>;}
 function RetentionHealthPanel(){const{supabase,status}=useSessionState();const query=useQuery({queryKey:["location-retention-health"],enabled:status==="authenticated",refetchInterval:60_000,queryFn:async()=>{const{data,error}=await supabase.rpc("read_location_retention_health");if(error)throw error;return RetentionHealthSchema.parse(data);}});if(query.isLoading)return <LoadingState label="Checking location retention operations"/>;if(query.error)return <ErrorState title="Retention health unavailable" message={readError(query.error)} onRetry={()=>void query.refetch()}/>;const health=query.data;return <section className="sk-panel"><div className="sk-panel__header"><div><h2>Location retention operations</h2><p className="skima-muted">Scheduled service-authority cleanup limits driver sample growth and removes abandoned geometry drafts without deleting activated evidence.</p></div><StatusBadge tone={health?.healthy?"success":"danger"}>{health?.healthy?"Healthy":"Action required"}</StatusBadge></div><div className="skima-grid skima-grid--compact"><MetricTile label="Active policies" value={health?.activePolicies??0} icon={ShieldCheck} tone="info"/><MetricTile label="Queued / running" value={`${health?.queuedJobs??0} / ${health?.runningJobs??0}`} icon={RefreshCcw} tone="info"/><MetricTile label="Failed jobs" value={health?.failedJobs??0} icon={ShieldCheck} tone={(health?.failedJobs??0)>0?"warning":"success"}/><MetricTile label="Last completed" value={health?.lastCompletedAt?new Date(health.lastCompletedAt).toLocaleString():"Awaiting first run"} icon={RefreshCcw} tone={health?.overdue?"warning":"success"}/></div>{health?.lastDeletedCounts?<p className="skima-muted">Last cleanup: {JSON.stringify(health.lastDeletedCounts)}</p>:null}</section>;}
 function ProductionReadinessAlerts({readiness,error}:{readiness:z.infer<typeof ProductionReadinessSchema>|undefined;error:unknown}) {
   if (error) return <StatusBadge tone="danger">Location system check failed: {readError(error)}</StatusBadge>;
