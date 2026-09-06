@@ -1,6 +1,7 @@
 import { useLocalSearchParams } from "expo-router";
-import { ArrowUp, CircleAlert, ShieldCheck, X } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import * as Speech from "expo-speech";
+import { ArrowUp, CircleAlert, ShieldCheck, Volume2, VolumeX, X } from "lucide-react-native";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -22,6 +23,7 @@ import { friendlyError } from "../utilities/friendlyError";
 import { Screen } from "./Screen";
 import { BrandMark } from "./BrandMark";
 import { AiRichText } from "./AiRichText";
+import { speechText } from "./AiMarkdown";
 import { AppModal } from "./AppModal";
 
 export type AiAssistantWorkspace = "customer" | "driver" | "station";
@@ -78,6 +80,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
   const [draft, setDraft] = useState(initialPrompt.slice(0, 3000));
   const [suggestions, setSuggestions] = useState<string[]>(() => initialSuggestions(workspace));
   const [error, setError] = useState<string | null>(null);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [supportOpen, setSupportOpen] = useState(false);
   const [supportOrderId, setSupportOrderId] = useState<string | null>(null);
   const [supportSubjectType, setSupportSubjectType] = useState<SupportSubjectType>("order");
@@ -105,6 +108,27 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
   });
 
   const copy = useMemo(() => workspaceCopy(workspace), [workspace]);
+
+  useEffect(() => () => {
+    void Speech.stop();
+  }, []);
+
+  const toggleReadAloud = async (message: ChatMessage) => {
+    if (speakingMessageId === message.id) {
+      await Speech.stop();
+      setSpeakingMessageId(null);
+      return;
+    }
+    await Speech.stop();
+    setSpeakingMessageId(message.id);
+    Speech.speak(speechText(message.content), {
+      language: "en-NG",
+      rate: 0.92,
+      onDone: () => setSpeakingMessageId(null),
+      onError: () => setSpeakingMessageId(null),
+      onStopped: () => setSpeakingMessageId(null),
+    });
+  };
 
   const submitSupportCase = async () => {
     if (
@@ -261,7 +285,18 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
                     },
                   ]}
                 >
-                  {message.role === "assistant" ? <AiRichText content={message.content} /> : (
+                  {message.role === "assistant" ? <>
+                    <AiRichText content={message.content} />
+                    <Pressable
+                      accessibilityLabel={speakingMessageId === message.id ? "Stop reading Matty's response" : "Read Matty's response aloud"}
+                      accessibilityRole="button"
+                      onPress={() => void toggleReadAloud(message)}
+                      style={({ pressed }) => [styles.readAloud, { backgroundColor: pressed ? palette.brandSoft : palette.surfaceSubtle }]}
+                    >
+                      {speakingMessageId === message.id ? <VolumeX color={palette.brand} size={15} /> : <Volume2 color={palette.brand} size={15} />}
+                      <Text style={[styles.readAloudText, { color: palette.brand }]}>{speakingMessageId === message.id ? "Stop" : "Read aloud"}</Text>
+                    </Pressable>
+                  </> : (
                     <Text selectable style={[styles.messageText, { color: "#FFFFFF" }]}>{message.content}</Text>
                   )}
                 </View>
@@ -667,6 +702,8 @@ const styles = StyleSheet.create({
   userBubble: { borderRadius: 18, borderBottomRightRadius: 6 },
   assistantBubble: { borderRadius: 18, borderBottomLeftRadius: 6 },
   messageText: { ...typography.body, fontSize: 13, lineHeight: 20 },
+  readAloud: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 5, borderRadius: radii.pill, marginTop: spacing.sm, paddingHorizontal: 9, paddingVertical: 6 },
+  readAloudText: { ...typography.caption, fontSize: 10, fontWeight: "900" },
   thinking: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, borderBottomLeftRadius: 6, paddingHorizontal: 14 },
   thinkingText: { ...typography.caption, fontWeight: "700" },
   suggestions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },

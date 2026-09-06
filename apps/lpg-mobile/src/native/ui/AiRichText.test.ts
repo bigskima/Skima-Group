@@ -1,4 +1,4 @@
-import { inlineMarkdown } from "./AiMarkdown";
+import { inlineMarkdown, speechText } from "./AiMarkdown";
 
 describe("Matty response formatting", () => {
   it("turns supported emphasis into presentation spans without exposing markers", () => {
@@ -13,5 +13,11 @@ describe("Matty response formatting", () => {
       { text: "Status " },
       { text: "in progress", code: true },
     ]);
+  });
+});
+
+describe("speechText", () => {
+  it("removes visual markdown before reading a Matty response", () => {
+    expect(speechText("**Refill ready**\n- Bring `SK-12`.")).toBe("Refill ready Bring SK-12.");
   });
 });

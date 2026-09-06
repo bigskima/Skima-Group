@@ -112,8 +112,9 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const cylinder = nestedRecord(root, "cylinder") ?? nestedRecord(order, "cylinder");
   const driver = nestedRecord(root, "driver") ?? nestedRecord(order, "driver");
   const station = nestedRecord(root, "station") ?? nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
-  const pickup = nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location");
-  const delivery = nestedRecord(order, "deliveryLocation") ?? nestedRecord(order, "delivery_location");
+  const pickup = nestedRecord(root, "pickupLocation") ?? nestedRecord(root, "pickup_location") ?? nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location");
+  const delivery = nestedRecord(root, "deliveryLocation") ?? nestedRecord(root, "delivery_location") ?? nestedRecord(order, "deliveryLocation") ?? nestedRecord(order, "delivery_location");
+  const customer = nestedRecord(root, "customer") ?? nestedRecord(order, "customer");
   const latestDriver = nestedRecord(root, "latestDriverLocation") ?? nestedRecord(root, "driverLocation");
 
   const routePoints = [
@@ -144,7 +145,9 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const stationCanPump = Boolean(session.context?.platformAdmin || permissions.has("lpg.stations.pump"));
 
   const driverScanType = driverScanTypeForStatus(status);
+  const stationScanType = stationScanTypeForStatus(status);
   const canDriverScan = workspace === "driver" && Boolean(driverScanType);
+  const canStationScan = workspace === "station" && stationCanInspect && Boolean(stationScanType);
   const driverAction = workspace === "driver" ? driverActionForStatus(status) : null;
   const navigationTarget = workspace === "driver" ? navigationPointForStatus(status, routePoints) : null;
   const stationWaitingForDriverScan = workspace === "station" && ["pickup_verified", "station_en_route"].includes(status);
@@ -179,6 +182,26 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
     } catch (cause) {
       setNoticeSuccess(false);
       setNotice(friendlyError(cause, "SKIMA could not verify this cylinder. Scan the code again."));
+    }
+  };
+
+  const submitStationScan = async () => {
+    if (!id || !token || !stationScanType) return;
+    setNotice(null);
+    try {
+      await scan.mutateAsync({
+        idempotencyKey: operationIdempotencyKey(`station-${stationScanType}`, id),
+        lpgOrderId: id,
+        scanType: stationScanType,
+        source: "skima.lpg.mobile",
+        payload: { scannedCylinderId: recordId(cylinder ?? {}), scannedToken: token },
+      });
+      setToken("");
+      setNoticeSuccess(true);
+      setNotice("Cylinder release verified. The filled cylinder is ready for the assigned driver.");
+    } catch (cause) {
+      setNoticeSuccess(false);
+      setNotice(friendlyError(cause, "SKIMA could not verify this cylinder release. Scan the code again."));
     }
   };
 
@@ -330,6 +353,9 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             {requestedKg !== null ? <><Divider /><SummaryField label="Requested refill" value={`${requestedKg} kg`} /></> : null}
             {filledKg !== null ? <><Divider /><SummaryField label="Actual refill" value={`${filledKg} kg`} /></> : null}
             {workspace === "station" && driver ? <><Divider /><SummaryField label="Assigned driver" value={firstString(driver, ["displayName", "display_name", "name"]) ?? displayTitle(driver)} /></> : null}
+            {workspace === "driver" && customer ? <><Divider /><SummaryField label="Customer" value={firstString(customer, ["displayName", "display_name"]) ?? "Customer"} /></> : null}
+            {workspace === "driver" && firstString(pickup, ["contactPhone", "contact_phone"]) ? <><Divider /><SummaryField label="Customer phone" value={firstString(pickup, ["contactPhone", "contact_phone"]) ?? "Not available"} /></> : null}
+            {workspace === "driver" && firstString(customer, ["email"]) ? <><Divider /><SummaryField label="Customer email" value={firstString(customer, ["email"]) ?? "Not available"} /></> : null}
           </View>
 
           {workspace === "driver" && (routeDistance !== null || routeDuration !== null) ? (
@@ -383,6 +409,20 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
               ) : (
                 <Text style={[styles.scannerHint, { color: palette.muted }]}>Align the SKIMA cylinder code inside the scanner to continue.</Text>
               )}
+            </View>
+          ) : null}
+
+          {canStationScan && stationScanType ? (
+            <View style={[styles.scanCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.sectionLead}>
+                <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
+                <View style={styles.sectionCopy}>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>Verify cylinder release</Text>
+                  <Text style={[styles.sectionBody, { color: palette.muted }]}>Scan the filled cylinder before handing it back to the assigned driver.</Text>
+                </View>
+              </View>
+              {!token ? <Scanner enabled onDetected={setToken} /> : null}
+              {token ? <AppButton label="Confirm cylinder release" fullWidth loading={scan.isPending} onPress={() => void submitStationScan()} /> : null}
             </View>
           ) : null}
 
@@ -607,6 +647,10 @@ function driverScanTypeForStatus(status: string): "customer_pickup" | "station_r
   if (["pickup_verified", "station_en_route"].includes(status)) return "station_receipt";
   if (["return_en_route", "delivery_verification_pending"].includes(status)) return "customer_delivery";
   return null;
+}
+
+function stationScanTypeForStatus(status: string): "station_release" | null {
+  return ["refill_confirmed", "station_settled"].includes(status) ? "station_release" : null;
 }
 
 function driverActionForStatus(status: string) {

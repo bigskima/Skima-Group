@@ -69,29 +69,32 @@ export function SupportScreen() {
     }
     try {
       const requestKey = idempotencyKey("support", `${workspace}:${orderId || type}`);
-      await Promise.all([
-        mutation.mutateAsync({
+      await supportMutation.mutateAsync({
+        workspace,
+        category: type,
+        subject: orderId ? `Issue with order ${orderId.slice(0, 8)}` : "Service support request",
+        message: description.trim(),
+        priority: severity === "critical" ? "urgent" : severity === "high" ? "high" : "normal",
+        source: "skima.mobile.support",
+        idempotencyKey: requestKey,
+        metadata: { orderId: orderId || null, incidentType: type, severity },
+      });
+      // Safety incidents are module evidence in addition to the platform support
+      // conversation. They must never prevent a customer, driver or station from
+      // reaching the support inbox.
+      if (workspace === "customer") {
+        await mutation.mutateAsync({
           lpgOrderId: orderId || undefined,
           incidentType: type,
           severity,
           description: description.trim(),
           source: "skima.lpg.mobile",
           idempotencyKey: `${requestKey}:incident`,
-        }),
-        supportMutation.mutateAsync({
-          workspace,
-          category: type,
-          subject: orderId ? `Issue with order ${orderId.slice(0, 8)}` : "Service support request",
-          message: description.trim(),
-          priority: severity === "critical" ? "urgent" : severity === "high" ? "high" : "normal",
-          source: "skima.mobile.support",
-          idempotencyKey: requestKey,
-          metadata: { orderId: orderId || null, incidentType: type, severity },
-        }),
-      ]);
+        }).catch(() => undefined);
+      }
       setDescription("");
       setMessageSuccess(true);
-      setMessage("Your safety report has been sent to SKIMA.");
+      setMessage("Your support request has been sent to SKIMA. You can continue the conversation below.");
     } catch (cause) {
       setMessageSuccess(false);
       setMessage(friendlyError(cause, "Your safety report could not be submitted."));
@@ -106,14 +109,14 @@ export function SupportScreen() {
       title="Report an LPG issue"
       subtitle="Tell SKIMA about a safety concern or problem with an order."
     >
-      {config.isPending || orders.isPending ? (
+      {config.isPending ? (
         <ScreenSkeleton cards={3} />
-      ) : config.error || orders.error ? (
+      ) : config.error ? (
         <EmptyState
           icon={<FileWarning color={palette.brand} size={27} />}
           title="Support form could not be loaded"
           description="Check your connection and try again."
-          action={<AppButton label="Retry" onPress={() => void Promise.all([config.refetch(), orders.refetch()])} />}
+          action={<AppButton label="Retry" onPress={() => void config.refetch()} />}
         />
       ) : (
         <>
@@ -210,7 +213,7 @@ export function SupportScreen() {
             </View>
 
             <AppButton
-              label="Submit safety report"
+              label="Send to SKIMA support"
               fullWidth
               size="lg"
               loading={mutation.isPending || supportMutation.isPending}
@@ -247,7 +250,7 @@ export function SupportScreen() {
               ))}
               {replyThreadId === recordId(thread) ? <>
                 <TextInput value={reply} onChangeText={setReply} multiline maxLength={4000} placeholder="Write your reply" placeholderTextColor={palette.muted} style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]} />
-                <View style={styles.options}><AppButton label="Cancel" size="sm" variant="secondary" onPress={() => { setReplyThreadId(null); setReply(""); }} /><AppButton label="Send reply" size="sm" loading={replyMutation.isPending} disabled={!reply.trim()} onPress={() => void replyMutation.mutateAsync({ threadId: recordId(thread), message: reply.trim(), source: "skima.mobile.support", idempotencyKey: idempotencyKey("support-reply", recordId(thread) ?? "thread") }).then(() => { setReply(""); setReplyThreadId(null); })} /></View>
+                <View style={styles.options}><AppButton label="Cancel" size="sm" variant="secondary" onPress={() => { setReplyThreadId(null); setReply(""); }} /><AppButton label="Send reply" size="sm" loading={replyMutation.isPending} disabled={!reply.trim()} onPress={() => void replyMutation.mutateAsync({ threadId: recordId(thread), message: reply.trim(), source: "skima.mobile.support", idempotencyKey: idempotencyKey("support-reply", recordId(thread) ?? "thread") }).then(() => { setReply(""); setReplyThreadId(null); setMessageSuccess(true); setMessage("Your reply was sent to SKIMA support."); }).catch((cause) => { setMessageSuccess(false); setMessage(friendlyError(cause, "Your reply could not be sent. Try again.")); })} /></View>
               </> : <AppButton label="Reply" size="sm" variant="secondary" onPress={() => setReplyThreadId(recordId(thread))} />}
             </View>
           ))}

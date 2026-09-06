@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { AlertTriangle, CheckCircle2, MapPin, Scale, ShieldCheck, Store, WalletCards } from "lucide-react-native";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
@@ -108,7 +108,7 @@ export function NewRefillScreen() {
       deliveryServiceability.data?.serviceable === true,
   );
   const validPurchase = purchaseMode === "kg" ? validRequestedKg : validRequestedAmount;
-  const stationDiscoveryKg = purchaseMode === "amount" ? 0.5 : requestedKgNumber;
+  const stationDiscoveryKg = purchaseMode === "amount" ? 0.001 : requestedKgNumber;
   const stationEligibilityReady = Boolean(tripServiceable && validPurchase && !exceedsCylinderCapacity && cylinderId);
   const eligibleStations = useEligibleLpgStations({
     pickupLocationId: pickupLocationId || null,
@@ -118,7 +118,13 @@ export function NewRefillScreen() {
     enabled: stationEligibilityReady,
     limit: 10,
   });
-  const selectedStation = (eligibleStations.data ?? []).find((station) => station.station_branch_id === stationId) ?? null;
+  const displayedStations = useMemo(() => (eligibleStations.data ?? []).filter((station) => {
+    if (purchaseMode !== "amount") return true;
+    const amount = Number(requestedAmount);
+    const resolvedKg = amount / station.price_per_kg;
+    return Number.isFinite(resolvedKg) && resolvedKg > 0 && resolvedKg <= station.current_available_kg && resolvedKg <= station.cylinder_size_kg;
+  }), [eligibleStations.data, purchaseMode, requestedAmount]);
+  const selectedStation = displayedStations.find((station) => station.station_branch_id === stationId) ?? null;
 
   useEffect(() => {
     if (purchaseMode !== "amount" || !selectedStation?.price_per_kg) return;
@@ -184,11 +190,11 @@ export function NewRefillScreen() {
   }, [cylinderCapacityKg, cylinderId, hydrated, requestedKg]);
 
   useEffect(() => {
-    const options = eligibleStations.data;
+    const options = displayedStations;
     if (!options) return;
     if (stationId && options.some((station) => station.station_branch_id === stationId)) return;
     setStationId(options[0]?.station_branch_id ?? "");
-  }, [eligibleStations.data, stationId]);
+  }, [displayedStations, stationId]);
 
   useEffect(() => {
     if (!owner || !hydrated) return;
@@ -269,7 +275,7 @@ export function NewRefillScreen() {
       setError("SKIMA couldn't check station availability right now. Try the station check again.");
       return;
     }
-    if (!stationId || !(eligibleStations.data ?? []).some((station) => station.station_branch_id === stationId)) {
+    if (!stationId || !displayedStations.some((station) => station.station_branch_id === stationId)) {
       setError("No eligible SKIMA station is selected for this refill. Check the station options and try again.");
       return;
     }
@@ -360,7 +366,7 @@ export function NewRefillScreen() {
 
   const currency = firstString(quoteRecord, ["currencyCode", "currency_code"]) ?? "NGN";
   const total = firstNumber(quoteRecord, ["totalAmount", "total_amount", "quotedTotal"]);
-  const stationUnavailable = stationEligibilityReady && !eligibleStations.isPending && !eligibleStations.isError && (eligibleStations.data ?? []).length === 0;
+  const stationUnavailable = stationEligibilityReady && !eligibleStations.isPending && !eligibleStations.isError && displayedStations.length === 0;
   const quoteButtonLabel = !hasSelectedTrip
     ? "Choose locations to continue"
     : locationNeedsMapPosition
@@ -670,7 +676,7 @@ export function NewRefillScreen() {
 
           {refillStep === 4 && tripServiceable ? (
             <StationSelectionSection
-              stations={eligibleStations.data ?? []}
+              stations={displayedStations}
               selected={stationId}
               onSelect={(id) => {
                 setStationId(id);

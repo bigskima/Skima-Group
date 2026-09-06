@@ -12,3 +12,12 @@ export function inlineMarkdown(value: string): Array<{ text: string; bold?: bool
   if (cursor < value.length) parts.push({ text: value.slice(cursor) });
   return parts.length ? parts : [{ text: value }];
 }
+
+export function speechText(value: string) {
+  return value
+    .replace(/```[\s\S]*?```/g, " omitted technical detail ")
+    .replace(/\*\*([^*]+)\*\*|__([^_]+)__|`([^`]+)`/g, "$1$2$3")
+    .replace(/^\s*[-*#]+\s*/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}

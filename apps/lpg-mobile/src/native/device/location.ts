@@ -80,6 +80,29 @@ export async function resolveOperationalAddress(latitude: number, longitude: num
   return { address, formattedAddress: formattedAddress ?? formatOperationalAddress(address) };
 }
 
+export async function geocodeOperationalAddress(value: string): Promise<OperationalLocation | null> {
+  const query = value.trim();
+  if (!query) return null;
+  try {
+    const points = await Location.geocodeAsync(query);
+    const point = points.find((candidate) => validCoordinate(candidate.latitude, candidate.longitude));
+    if (!point) return null;
+    const resolved = await resolveOperationalAddress(point.latitude, point.longitude);
+    return {
+      latitude: point.latitude,
+      longitude: point.longitude,
+      accuracyMeters: finiteAccuracy(point.accuracy ?? null),
+      recordedAt: new Date().toISOString(),
+      formattedAddress: resolved.formattedAddress ?? query,
+      providerSource: "device_geocoder",
+      providerPlaceId: null,
+      address: resolved.address,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function emptyOperationalAddress(): OperationalAddress {
   return {
     name: null,

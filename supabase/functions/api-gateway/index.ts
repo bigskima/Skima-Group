@@ -1484,6 +1484,11 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       const latitude = requireNumber(payload.latitude, "latitude");
       const longitude = requireNumber(payload.longitude, "longitude");
       const accuracyMeters = optionalNumber(payload.accuracyMeters, "accuracyMeters");
+      const contactName = optionalString(payload.contactName) ??
+        optionalString(authResult.user.user_metadata?.display_name) ??
+        optionalString(authResult.user.user_metadata?.full_name);
+      const contactPhone = optionalString(payload.contactPhone) ?? optionalString(authResult.user.phone);
+      const locationMetadata = optionalRecord(payload.metadata) ?? {};
 
       if (label.length < 2) {
         throw new RequestValidationError("label must contain at least 2 characters.");
@@ -1504,8 +1509,8 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           target_address: optionalRecord(payload.address) ?? {},
           target_capture_source: optionalString(payload.captureSource) ?? "DEVICE_GPS",
           target_captured_at: optionalString(payload.capturedAt),
-          target_contact_name: optionalString(payload.contactName),
-          target_contact_phone: optionalString(payload.contactPhone),
+          target_contact_name: contactName,
+          target_contact_phone: contactPhone,
           target_delivery_instructions: optionalString(payload.deliveryInstructions),
           target_formatted_address: formattedAddress,
           target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
@@ -1513,7 +1518,14 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           target_landmark: optionalString(payload.landmark),
           target_latitude: latitude,
           target_longitude: longitude,
-          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_metadata: {
+            ...locationMetadata,
+            deliveryContact: {
+              email: authResult.user.email ?? null,
+              name: contactName,
+              phone: contactPhone,
+            },
+          },
           target_provider_place_id: optionalString(payload.providerPlaceId),
           target_provider_source: optionalString(payload.providerSource),
           target_source: optionalString(payload.source) ?? "skima.lpg.location_api",
@@ -1674,8 +1686,8 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           target_metadata: optionalRecord(payload.metadata) ?? {},
           target_pickup_location_id: pickupLocationId,
           target_preferred_time: optionalString(payload.preferredTime),
-          target_requested_amount: payload.requestedAmount === undefined ? null : requireNumber(payload.requestedAmount, "requestedAmount"),
-          target_requested_kg: payload.requestedAmount === undefined ? requireNumber(payload.requestedKg, "requestedKg") : null,
+          target_requested_amount: payload.requestedAmount == null ? null : requireNumber(payload.requestedAmount, "requestedAmount"),
+          target_requested_kg: payload.requestedAmount == null ? requireNumber(payload.requestedKg, "requestedKg") : null,
           target_route_snapshot: routeSnapshotResult.data,
           target_source: optionalString(payload.source) ?? "skima.lpg.quote_api",
           target_station_branch_id: stationBranchId,
@@ -9235,6 +9247,17 @@ async function estimateCommercialRouteLeg(
   | { readonly data: { readonly distanceMeters: number; readonly durationSeconds: number; readonly provider: string } }
   | { readonly response: Response }
 > {
+  if (!mapsProviderSecretConfigured(providerResult.providerKey)) {
+    const distanceMeters = Math.round(haversineDistanceMeters(origin, destination));
+    const speedKph = mapsConfigNumber(providerResult.policy, "fallback_route_speed_kph", 30, 5, 120);
+    return {
+      data: {
+        distanceMeters,
+        durationSeconds: Math.max(1, Math.round(distanceMeters / (speedKph * 1000 / 3600))),
+        provider: "geodesic_fallback",
+      },
+    };
+  }
   if (providerResult.providerKey === "provider.maps.sandbox") {
     const distanceMeters = Math.round(haversineDistanceMeters(origin, destination));
     const speedKph = requireNumber(
