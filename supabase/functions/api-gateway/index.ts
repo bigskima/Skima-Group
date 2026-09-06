@@ -9247,17 +9247,6 @@ async function estimateCommercialRouteLeg(
   | { readonly data: { readonly distanceMeters: number; readonly durationSeconds: number; readonly provider: string } }
   | { readonly response: Response }
 > {
-  if (!mapsProviderSecretConfigured(providerResult.providerKey)) {
-    const distanceMeters = Math.round(haversineDistanceMeters(origin, destination));
-    const speedKph = mapsConfigNumber(providerResult.policy, "fallback_route_speed_kph", 30, 5, 120);
-    return {
-      data: {
-        distanceMeters,
-        durationSeconds: Math.max(1, Math.round(distanceMeters / (speedKph * 1000 / 3600))),
-        provider: "geodesic_fallback",
-      },
-    };
-  }
   if (providerResult.providerKey === "provider.maps.sandbox") {
     const distanceMeters = Math.round(haversineDistanceMeters(origin, destination));
     const speedKph = requireNumber(

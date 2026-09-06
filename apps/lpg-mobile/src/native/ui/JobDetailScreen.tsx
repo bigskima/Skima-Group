@@ -127,6 +127,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const routeDistance = firstNumber(root, ["routeDistanceMeters", "route_distance_meters", "distanceMeters"]);
   const routeDuration = firstNumber(root, ["routeDurationSeconds", "route_duration_seconds", "durationSeconds"]);
   const status = displayStatus(order ?? {}) ?? "unknown";
+  const contactLocation = usesDeliveryContact(status) ? delivery : pickup;
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
   const filledKg = firstNumber(order, ["actualKg", "actual_kg"]);
   const existingInspection = (inspections.data ?? []).find(
@@ -354,8 +355,9 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             {filledKg !== null ? <><Divider /><SummaryField label="Actual refill" value={`${filledKg} kg`} /></> : null}
             {workspace === "station" && driver ? <><Divider /><SummaryField label="Assigned driver" value={firstString(driver, ["displayName", "display_name", "name"]) ?? displayTitle(driver)} /></> : null}
             {workspace === "driver" && customer ? <><Divider /><SummaryField label="Customer" value={firstString(customer, ["displayName", "display_name"]) ?? "Customer"} /></> : null}
-            {workspace === "driver" && firstString(pickup, ["contactPhone", "contact_phone"]) ? <><Divider /><SummaryField label="Customer phone" value={firstString(pickup, ["contactPhone", "contact_phone"]) ?? "Not available"} /></> : null}
-            {workspace === "driver" && firstString(customer, ["email"]) ? <><Divider /><SummaryField label="Customer email" value={firstString(customer, ["email"]) ?? "Not available"} /></> : null}
+            {workspace === "driver" && firstString(contactLocation, ["contactName", "contact_name"]) ? <><Divider /><SummaryField label={usesDeliveryContact(status) ? "Delivery contact" : "Pickup contact"} value={firstString(contactLocation, ["contactName", "contact_name"]) ?? "Customer"} /></> : null}
+            {workspace === "driver" && firstString(contactLocation, ["contactPhone", "contact_phone"]) ? <><Divider /><SummaryField label="Contact phone" value={firstString(contactLocation, ["contactPhone", "contact_phone"]) ?? "Not available"} /></> : null}
+            {workspace === "driver" && (firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"])) ? <><Divider /><SummaryField label="Contact email" value={firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"]) ?? "Not available"} /></> : null}
           </View>
 
           {workspace === "driver" && (routeDistance !== null || routeDuration !== null) ? (
@@ -640,6 +642,17 @@ function navigationPointForStatus(status: string, points: MapPoint[]) {
   if (["pickup_verified", "station_en_route"].includes(status)) return points.find((point) => point.label === "Station") ?? null;
   if (["refill_confirmed", "station_settled", "return_en_route", "delivery_verification_pending"].includes(status)) return points.find((point) => point.label === "Delivery") ?? null;
   return points.find((point) => point.label === "Customer") ?? null;
+}
+
+function usesDeliveryContact(status: string) {
+  return [
+    "refill_confirmed",
+    "station_settled",
+    "return_en_route",
+    "delivery_verification_pending",
+    "delivered",
+    "completed",
+  ].includes(status);
 }
 
 function driverScanTypeForStatus(status: string): "customer_pickup" | "station_receipt" | "customer_delivery" | null {

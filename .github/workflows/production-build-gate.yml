@@ -62,6 +62,8 @@ jobs:
         run: npm run validate
       - name: Verify AI runtime contracts
         run: npm run ai-runtime:contract
+      - name: Verify LPG refill production contracts
+        run: npm run lpg-refill:contract
 
   admin-web:
     name: Admin production build

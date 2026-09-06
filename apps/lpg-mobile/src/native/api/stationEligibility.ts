@@ -29,6 +29,7 @@ interface EligibleStationParams {
   deliveryLocationId: string | null;
   cylinderId: string | null;
   requestedKg: number | null;
+  requestedAmount?: number | null;
   enabled?: boolean;
   limit?: number;
 }
@@ -38,6 +39,7 @@ export function useEligibleLpgStations({
   deliveryLocationId,
   cylinderId,
   requestedKg,
+  requestedAmount = null,
   enabled = true,
   limit = 10,
 }: EligibleStationParams) {
@@ -48,9 +50,8 @@ export function useEligibleLpgStations({
       pickupLocationId &&
       deliveryLocationId &&
       cylinderId &&
-      requestedKg !== null &&
-      Number.isFinite(requestedKg) &&
-      requestedKg > 0,
+      ((requestedKg !== null && Number.isFinite(requestedKg) && requestedKg > 0) ||
+        (requestedAmount !== null && Number.isFinite(requestedAmount) && requestedAmount > 0)),
   );
 
   return useQuery({
@@ -60,18 +61,27 @@ export function useEligibleLpgStations({
       deliveryLocationId,
       cylinderId,
       requestedKg,
+      requestedAmount,
       limit,
     ],
     enabled: canLoad,
     staleTime: 15_000,
     queryFn: async () => {
-      const { data, error } = await session.supabase.rpc("read_lpg_eligible_stations", {
-        target_pickup_location_id: pickupLocationId,
-        target_delivery_location_id: deliveryLocationId,
-        target_cylinder_id: cylinderId,
-        target_requested_kg: requestedKg,
-        target_limit: limit,
-      });
+      const { data, error } = requestedAmount !== null
+        ? await session.supabase.rpc("read_lpg_eligible_stations_for_amount", {
+            target_pickup_location_id: pickupLocationId,
+            target_delivery_location_id: deliveryLocationId,
+            target_cylinder_id: cylinderId,
+            target_requested_amount: requestedAmount,
+            target_limit: limit,
+          })
+        : await session.supabase.rpc("read_lpg_eligible_stations", {
+            target_pickup_location_id: pickupLocationId,
+            target_delivery_location_id: deliveryLocationId,
+            target_cylinder_id: cylinderId,
+            target_requested_kg: requestedKg,
+            target_limit: limit,
+          });
 
       if (error) throw error;
       return EligibleStationsSchema.parse(data ?? []);

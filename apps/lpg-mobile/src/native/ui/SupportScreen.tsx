@@ -82,16 +82,14 @@ export function SupportScreen() {
       // Safety incidents are module evidence in addition to the platform support
       // conversation. They must never prevent a customer, driver or station from
       // reaching the support inbox.
-      if (workspace === "customer") {
-        await mutation.mutateAsync({
-          lpgOrderId: orderId || undefined,
-          incidentType: type,
-          severity,
-          description: description.trim(),
-          source: "skima.lpg.mobile",
-          idempotencyKey: `${requestKey}:incident`,
-        }).catch(() => undefined);
-      }
+      await mutation.mutateAsync({
+        lpgOrderId: orderId || undefined,
+        incidentType: type,
+        severity,
+        description: description.trim(),
+        source: "skima.lpg.mobile",
+        idempotencyKey: `${requestKey}:incident`,
+      }).catch(() => undefined);
       setDescription("");
       setMessageSuccess(true);
       setMessage("Your support request has been sent to SKIMA. You can continue the conversation below.");
