@@ -209,7 +209,7 @@ const contentSurfacePresets: readonly ContentSurfacePreset[] = [
     key: "primary-logo",
     label: "App logo",
     surface: "Header brand logo",
-    description: "Shown on welcome, sign in, create account, forgot password, reset password, and full app headers.",
+    description: "Shown on customer/driver/station welcome and sign-in screens, full app headers, and the SKIMA Admin sign-in screen.",
     recommendedSize: "Transparent PNG/WebP/SVG, 900×300px or 3:1",
     icon: ImagePlus,
     placementKey: "mobile.brand.logo.primary",
@@ -230,9 +230,9 @@ const contentSurfacePresets: readonly ContentSurfacePreset[] = [
   },
   {
     key: "compact-logo",
-    label: "Small app icon",
-    surface: "Compact in-app logo",
-    description: "Shown in the customer, driver, and station top header where the red S fallback currently appears.",
+    label: "Compact SKIMA logo",
+    surface: "Compact SKIMA logo",
+    description: "Shown in compact customer, driver, station, and SKIMA Admin headers when the smaller logo is needed.",
     recommendedSize: "Transparent PNG/WebP/SVG, 512×512px or 1:1",
     icon: MonitorSmartphone,
     placementKey: "mobile.brand.logo.compact",
@@ -683,8 +683,8 @@ export function AdminContentWorkspace() {
     <>
       <PageHeader
         eyebrow="Brand, onboarding & promotions"
-        title="Content operations"
-        description="Control app logos, promotion banners, onboarding panels, empty states, and targeted product content from governed placements."
+        title="Brand & App Content"
+        description="Manage the SKIMA logos, banners, onboarding screens, empty-state messages, and other app content without changing code."
         actions={
           <>
             <Button icon={RefreshCcw} variant="outline" onClick={refresh}>Refresh</Button>

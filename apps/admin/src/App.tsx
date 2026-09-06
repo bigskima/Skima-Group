@@ -303,7 +303,7 @@ const foundationNavigation: readonly NavigationItem[] = [
   },
   {
     key: "system",
-    label: "Systems & Audit",
+    label: "System Health & History",
     href: "/system",
     icon: "system",
     requiredPermissions: ["platform.health.read"],
@@ -619,8 +619,8 @@ function OverviewWorkspace(props: { readonly onNavigate: (href: string) => void 
             />
             <CommandLaunch
               icon={ServerCog}
-              title="Systems & audit"
-              description="Health, jobs, incidents, service logs, and audit history."
+              title="System health & history"
+              description="Check service health, failed work, incidents, activity history, and important changes."
               onClick={() => props.onNavigate("/system")}
             />
           </div>
@@ -1878,25 +1878,25 @@ function ProvidersWorkspace() {
       <PageHeader
         eyebrow="Connections"
         title="Integrations"
-        description="Inspect provider adapters, payment events, communication delivery, and webhook processing."
+        description="Check connected service providers, payment updates, message delivery, and whether external connections are working."
       />
       <section className="skima-grid">
         <MetricTile label="Connections" value={providers.data?.length ?? 0} icon={PlugZap} />
         <MetricTile
-          label="Webhook Deliveries"
+          label="Connection Updates"
           value={deliveries.data?.length ?? 0}
           icon={Activity}
           tone="warning"
         />
         <MetricTile
-          label="Payment Events"
+          label="Payment Updates"
           value={paymentEvents.data?.length ?? 0}
           icon={WalletCards}
           tone="success"
         />
       </section>
       <RecordsTable
-        title="Integration Connections"
+        title="Connected Services"
         query={providers}
         preferredKeys={["provider_kind", "key", "display_name", "status"]}
       />

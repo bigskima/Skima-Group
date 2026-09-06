@@ -34,10 +34,10 @@ type SystemArea = "health" | "jobs" | "errors" | "logs" | "audit";
 
 const systemAreas: readonly { readonly key: SystemArea; readonly label: string }[] = [
   { key: "health", label: "Health" },
-  { key: "jobs", label: "Background jobs" },
+  { key: "jobs", label: "Background work" },
   { key: "errors", label: "Incidents" },
-  { key: "logs", label: "Service logs" },
-  { key: "audit", label: "Audit trail" },
+  { key: "logs", label: "Service activity" },
+  { key: "audit", label: "Change history" },
 ];
 
 export function AdminSystemWorkspace() {
@@ -67,7 +67,7 @@ export function AdminSystemWorkspace() {
         MutationSchema,
       ),
     onSuccess: async (_data, variables) => {
-      setNotice(variables.action === "retry" ? "Job returned to the queue." : "Job cancelled.");
+      setNotice(variables.action === "retry" ? "Background work will be tried again." : "Background work cancelled.");
       await queryClient.invalidateQueries({ queryKey: ["admin-system"] });
     },
   });
@@ -96,8 +96,8 @@ export function AdminSystemWorkspace() {
     <>
       <PageHeader
         eyebrow="Platform control"
-        title="Systems & audit"
-        description="Monitor platform health, govern background work, investigate incidents, review sensitive changes, and control LPG cylinder identity."
+        title="System Health & History"
+        description="Check whether SKIMA services are healthy, review failed background work and incidents, see important changes, and manage LPG cylinder identity."
         actions={<Button icon={RefreshCcw} variant="outline" onClick={refreshAll}>Refresh all</Button>}
       />
 

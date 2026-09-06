@@ -189,7 +189,7 @@ export function AdminAiWorkspace() {
             <div>
               <p className="admin-section-kicker">Operations copilot</p>
               <h2>Ask SKIMA</h2>
-              <p>Ask about visible LPG operations, applications and AI runtime health.</p>
+              <p>Ask about visible LPG operations, applications, service areas, and whether SKIMA AI is working normally.</p>
             </div>
             <StatusBadge tone="success">Read only</StatusBadge>
           </div>
@@ -744,7 +744,7 @@ function ExpansionOpportunitiesPanel(props: {
                   ) : null}
                   <p>
                     {recordString(opportunity, "recommendedAction") ??
-                      "Review the canonical coverage evidence before making any service-area decision."}
+                      "Review the confirmed map and service-area evidence before making a decision."}
                   </p>
                 </div>
                 <div className="admin-ai-expansion-mode">
@@ -913,8 +913,7 @@ function DispatchShadowPanel(props: {
           <p className="admin-section-kicker">Dispatch intelligence</p>
           <h2>Shadow dispatch review</h2>
           <p>
-            The production dispatcher still assigns drivers. This shadow model only compares a
-            fairness-aware advisory rank against the canonical selection so SKIMA can evaluate it safely.
+            The production dispatcher still assigns drivers. This AI comparison checks whether a fairness-aware ranking would choose differently, without changing the real assignment.
           </p>
         </div>
         <StatusBadge tone={disagreements ? "warning" : "success"}>
@@ -926,8 +925,8 @@ function DispatchShadowPanel(props: {
         <div className="admin-ai-dispatch-empty">
           <Route aria-hidden="true" />
           <div>
-            <strong>No shadow dispatch comparisons yet</strong>
-            <span>Comparisons appear after canonical LPG dispatch has produced eligible driver candidates.</span>
+            <strong>No AI dispatch comparisons yet</strong>
+            <span>Comparisons appear after the live LPG dispatcher has had eligible drivers to choose from.</span>
           </div>
         </div>
       ) : (
@@ -955,17 +954,17 @@ function DispatchShadowPanel(props: {
                     <span>{Math.round(candidateCount)} candidate{candidateCount === 1 ? "" : "s"}</span>
                   </div>
                   <div className="admin-ai-dispatch-selection">
-                    <span><small>Canonical</small><b>{canonical}</b></span>
-                    <span><small>Shadow advisory</small><b>{advisory}</b></span>
+                    <span><small>Live selection</small><b>{canonical}</b></span>
+                    <span><small>AI comparison</small><b>{advisory}</b></span>
                   </div>
                   <p>
-                    Recent-assignment fairness window: {formatForecastNumber(recordNumber(evidence, "fairnessWindowHours"), 0)}h.
+                    Recent-work fairness window: {formatForecastNumber(recordNumber(evidence, "fairnessWindowHours"), 0)}h.
                     Risk signals are review-only and have no ranking effect.
                   </p>
                 </div>
                 <div className="admin-ai-dispatch-mode">
                   <small>Mode</small>
-                  <b>Shadow only</b>
+                  <b>Review only</b>
                 </div>
               </article>
             );
@@ -1005,9 +1004,7 @@ function FinanceReconciliationPanel(props: {
           <p className="admin-section-kicker">Finance intelligence</p>
           <h2>Reconciliation review</h2>
           <p>
-            Deterministic checks compare authoritative SKIMA finance records and surface mismatches
-            for review. This screen cannot post ledger entries, move funds, refund, release escrow,
-            reverse a transaction or authorize a correction.
+            SKIMA checks its official finance records for mismatches and shows anything that needs review. This screen cannot post ledger entries, move funds, refund, release escrow, reverse a transaction, or approve a correction.
           </p>
         </div>
         <StatusBadge tone={elevated ? "danger" : sorted.length ? "warning" : "success"}>
@@ -1020,7 +1017,7 @@ function FinanceReconciliationPanel(props: {
           <CheckCircle2 aria-hidden="true" />
           <div>
             <strong>No reconciliation finding needs review</strong>
-            <span>Configured checks have not found an open ledger, settlement or deposit mismatch.</span>
+            <span>The current checks have not found an open balance, settlement, or deposit mismatch.</span>
           </div>
         </div>
       ) : (
@@ -1647,8 +1644,8 @@ function nullableRecordNumber(
 
 function financeFindingTitle(value: string): string {
   if (value === "service_request_unbalanced") return "Service request is out of balance";
-  if (value === "settlement_missing_transaction") return "Posted settlement has no ledger transaction";
-  if (value === "deposit_missing_transaction") return "Successful deposit has no ledger transaction";
+  if (value === "settlement_missing_transaction") return "Posted settlement has no matching accounting entry";
+  if (value === "deposit_missing_transaction") return "Successful deposit has no matching accounting entry";
   return "Finance record needs review";
 }
 

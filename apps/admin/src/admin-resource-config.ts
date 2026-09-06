@@ -63,7 +63,7 @@ const requiredJson = (
   key: string,
   label: string,
   defaultValue: unknown,
-  helperText = "Use a valid JSON value.",
+  helperText = "Structured details used by SKIMA. Only edit this when you know the required fields.",
 ): AdminActionField => ({
   key,
   label,
@@ -81,7 +81,7 @@ const optionalJson = (
   key,
   label,
   defaultValue,
-  helperText: "Optional JSON object.",
+  helperText: "Optional structured details. Leave this unchanged unless the operation requires extra information.",
   type: "json",
 });
 
@@ -93,7 +93,7 @@ const optionalStringArray = (
   key,
   label,
   defaultValue,
-  helperText: "Use comma-separated values or a JSON array.",
+  helperText: "Enter multiple values separated by commas.",
   type: "stringArray",
 });
 
@@ -105,7 +105,7 @@ const requiredStringArray = (
   key,
   label,
   defaultValue,
-  helperText: "Use comma-separated values or a JSON array.",
+  helperText: "Enter multiple values separated by commas.",
   required: true,
   type: "stringArray",
 });
@@ -195,7 +195,7 @@ const resource = (
 export const governanceConsoleConfig: AdminResourceConsoleConfig = {
   eyebrow: "Platform setup",
   title: "Configuration",
-  description: "Configure service modules, reusable platform behavior, and governed webhooks.",
+  description: "Manage shared SKIMA settings, administrator access, service behavior, and connections to external systems.",
   groups: [
     {
       key: "access",
@@ -361,16 +361,16 @@ export const governanceConsoleConfig: AdminResourceConsoleConfig = {
     },
     {
       key: "webhooks",
-      label: "Webhooks",
-      description: "Manage outbound webhook subscriptions and delivery processing.",
+      label: "External system notifications",
+      description: "Control where SKIMA sends automatic updates to connected external systems and review delivery attempts.",
       resources: [
-        resource("webhook-endpoints", "Webhook Endpoints", "/admin/webhook-endpoints", [
+        resource("webhook-endpoints", "Notification Destinations", "/admin/webhook-endpoints", [
           "url",
           "status",
           "event_type_keys",
           "created_at",
         ]),
-        resource("webhook-deliveries", "Webhook Deliveries", "/admin/webhook-deliveries", [
+        resource("webhook-deliveries", "Notification Deliveries", "/admin/webhook-deliveries", [
           "endpoint_id",
           "status",
           "attempt_count",
@@ -386,7 +386,7 @@ export const governanceConsoleConfig: AdminResourceConsoleConfig = {
       actions: [
         action(
           "create-webhook-endpoint",
-          "Create Webhook Endpoint",
+          "Add External Notification Destination",
           "/admin/webhook-endpoints",
           [
             requiredText("url", "HTTPS URL"),
@@ -999,9 +999,9 @@ export const operationsConsoleConfig: AdminResourceConsoleConfig = {
           "Start Tracking Session",
           "/runtime/tracking/sessions",
           [
-            requiredText("subjectType", "Subject Type"),
-            requiredText("subjectId", "Subject ID"),
-            optionalText("providerAdapterId", "Provider Adapter ID"),
+            requiredText("subjectType", "Record Type"),
+            requiredText("subjectId", "Record ID"),
+            optionalText("providerAdapterId", "Service Provider Connection ID"),
             optionalJson(),
           ],
           "platform.events.manage",
@@ -1054,8 +1054,8 @@ export const operationsConsoleConfig: AdminResourceConsoleConfig = {
               options: communicationChannelOptions,
               required: true,
             },
-            optionalText("templateKey", "Template Key"),
-            optionalText("providerAdapterId", "Provider Adapter ID"),
+            optionalText("templateKey", "Message Template"),
+            optionalText("providerAdapterId", "Service Provider Connection ID"),
             optionalJson("payload", "Message Details", {}),
           ],
           "platform.events.manage",
@@ -1066,8 +1066,8 @@ export const operationsConsoleConfig: AdminResourceConsoleConfig = {
           "/runtime/ai/queue",
           [
             requiredText("taskKey", "Task Key"),
-            requiredText("subjectType", "Subject Type"),
-            optionalText("subjectId", "Subject ID"),
+            requiredText("subjectType", "Record Type"),
+            optionalText("subjectId", "Record ID"),
             optionalJson("input", "Input", {}),
           ],
           "platform.events.manage",
@@ -1081,13 +1081,13 @@ export const financeConsoleConfig: AdminResourceConsoleConfig = {
   eyebrow: "Money",
   title: "Finance",
   description:
-    "Govern company financial policy, then monitor ledger-backed wallets, withdrawals, commissions, and settlement.",
+    "Manage financial rules, then review wallets, withdrawals, commissions, settlements, and the official SKIMA accounting record.",
   groups: [
     {
       key: "policy-governance",
       label: "Financial Policy",
       description:
-        "Create immutable policy versions, enforce maker-checker approval, schedule effective dates, and roll back safely without changing accepted obligations.",
+        "Create protected financial-rule versions, require a second administrator to approve sensitive changes, schedule when they start, and roll back safely.",
       resources: [
         resource("financial-policies", "Policy Versions", "/admin/financial-policies", [
           "financial_policy_definitions",
@@ -1454,7 +1454,7 @@ export const integrationConsoleConfig: AdminResourceConsoleConfig = {
   eyebrow: "Connections",
   title: "Integrations",
   description:
-    "Review provider adapters, outbound deliveries, payment events, communications, and OTP operations.",
+    "Review connected service providers, outgoing updates, payment activity, messages, and one-time-code delivery.",
   groups: [
     {
       key: "maps-location",
@@ -1609,7 +1609,7 @@ export const integrationConsoleConfig: AdminResourceConsoleConfig = {
             requiredText("recipientEntityType", "Recipient Type"),
             optionalText("recipientEntityId", "Recipient ID"),
             optionalText("recipientAddress", "Recipient Address"),
-            optionalText("providerAdapterKey", "Provider Adapter Key"),
+            optionalText("providerAdapterKey", "Service Provider Connection"),
             optionalJson("payload", "Message Details", {}),
             optionalJson(),
           ],
