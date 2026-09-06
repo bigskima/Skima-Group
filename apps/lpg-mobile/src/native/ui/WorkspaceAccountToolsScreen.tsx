@@ -5,6 +5,7 @@ import {
   FileCheck2,
   MapPin,
   ReceiptText,
+  Zap,
   Settings2,
   ShieldCheck,
   Truck,
@@ -37,6 +38,7 @@ const toolGroups: Record<Workspace, readonly ToolGroup[]> = {
     {
       title: "Everyday services",
       items: [
+        { label: "Pay bills", detail: "Electricity, airtime, data and more", href: "/(customer)/bills", icon: Zap },
         { label: "Delivery locations", detail: "Pickup and return addresses", href: "/(customer)/locations", icon: MapPin },
         { label: "Stations near you", detail: "Approved LPG stations", href: "/(customer)/stations", icon: Building2 },
         { label: "Transactions", detail: "Wallet and payment activity", href: "/(customer)/transactions", icon: WalletCards },

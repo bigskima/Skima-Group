@@ -233,8 +233,11 @@ const ROUTES = new Set([
   "/runtime/communications/messages",
   "/runtime/support/threads",
   "/runtime/support/reply",
+  "/runtime/utility-billing/catalog",
+  "/runtime/utility-billing/requests",
   "/admin/support/threads",
   "/admin/support/respond",
+  "/admin/utility-billing/configuration",
   "/runtime/communications/sync",
   "/runtime/otp/challenges",
   "/runtime/otp/delivery",
@@ -4746,6 +4749,39 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }), id);
   }
 
+  if (routePath === "/runtime/utility-billing/catalog" && request.method === "GET") {
+    return rpcResponse(supabase.rpc("read_utility_catalog"), id);
+  }
+
+  if (routePath === "/runtime/utility-billing/requests") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("utility_payment_requests")
+          .select("id,public_reference,product_id,customer_identifier,recipient_phone,currency_code,subtotal_amount,discount_amount,fee_amount,total_amount,status,created_at,updated_at")
+          .order("created_at", { ascending: false })
+          .limit(100),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      const payload = body.value;
+      return rpcResponse(supabase.rpc("create_utility_payment_request", {
+        target_product_id: requireUuid(payload.productId, "productId"),
+        target_wallet_id: requireUuid(payload.walletId, "walletId"),
+        target_customer_identifier: requireString(payload.customerIdentifier, "customerIdentifier"),
+        target_amount: requireNumber(payload.amount, "amount"),
+        target_recipient_phone: optionalString(payload.recipientPhone),
+        target_promotion_key: optionalString(payload.promotionKey),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }), id);
+    }
+  }
+
   if (routePath === "/admin/support/threads" && request.method === "GET") {
     return rpcResponse(
       supabase.rpc("read_support_admin_queue", {
@@ -4771,6 +4807,21 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }),
       id,
     );
+  }
+
+  if (routePath === "/admin/utility-billing/configuration") {
+    if (request.method === "GET") {
+      return rpcResponse(supabase.rpc("read_utility_admin_configuration"), id);
+    }
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      return rpcResponse(supabase.rpc("configure_utility_catalog_item", {
+        target_kind: requireString(body.value.kind, "kind"),
+        target_key: requireString(body.value.key, "key"),
+        target_configuration: optionalRecord(body.value.configuration) ?? {},
+      }), id);
+    }
   }
 
   if (routePath === "/runtime/communications/sync" && request.method === "POST") {

@@ -75,6 +75,19 @@ export const domainQueries = {
       path: "/runtime/payments/deposits",
       schema: RecordArraySchema,
     }),
+  utilityCatalog: () =>
+    useGatewayQuery({
+      key: ["utility-billing", "catalog"],
+      path: "/runtime/utility-billing/catalog",
+      schema: RecordArraySchema,
+      persist: true,
+    }),
+  utilityPayments: () =>
+    useGatewayQuery({
+      key: ["utility-billing", "requests"],
+      path: "/runtime/utility-billing/requests",
+      schema: RecordArraySchema,
+    }),
   notifications: () =>
     useGatewayQuery({
       key: ["messages"],
