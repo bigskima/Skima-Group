@@ -231,6 +231,7 @@ const ROUTES = new Set([
   "/runtime/settlement-statements",
   "/runtime/communications/messages",
   "/runtime/support/threads",
+  "/runtime/support/reply",
   "/admin/support/threads",
   "/admin/support/respond",
   "/runtime/communications/sync",
@@ -1650,17 +1651,6 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       const stationBranchId = requireUuid(payload.stationBranchId, "stationBranchId");
       const pickupLocationId = requireUuid(payload.pickupLocationId, "pickupLocationId");
       const deliveryLocationId = requireUuid(payload.deliveryLocationId, "deliveryLocationId");
-      let requestedKg = payload.requestedAmount === undefined || payload.requestedAmount === null
-        ? requireNumber(payload.requestedKg, "requestedKg")
-        : null;
-      if (requestedKg === null) {
-        const resolved = await supabase.rpc("resolve_lpg_refill_quantity_from_amount", {
-          target_station_branch_id: stationBranchId,
-          target_amount: requireNumber(payload.requestedAmount, "requestedAmount"),
-        });
-        if (resolved.error) return databaseError(resolved.error, id);
-        requestedKg = requireNumber(resolved.data, "resolvedRequestedKg");
-      }
       const routeSnapshotResult = await buildLpgCommercialRouteSnapshot(
         supabase,
         supabaseUrl,
@@ -1676,7 +1666,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }
 
       return rpcResponseWithPublicReference(
-        supabase.rpc("create_lpg_refill_quote_from_commercial_snapshot", {
+        supabase.rpc("create_lpg_refill_quote_from_purchase_input", {
           target_cylinder_id: requireUuid(payload.cylinderId, "cylinderId"),
           target_delivery_instructions: optionalString(payload.deliveryInstructions),
           target_delivery_location_id: deliveryLocationId,
@@ -1684,7 +1674,8 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           target_metadata: optionalRecord(payload.metadata) ?? {},
           target_pickup_location_id: pickupLocationId,
           target_preferred_time: optionalString(payload.preferredTime),
-          target_requested_kg: requestedKg,
+          target_requested_amount: payload.requestedAmount === undefined ? null : requireNumber(payload.requestedAmount, "requestedAmount"),
+          target_requested_kg: payload.requestedAmount === undefined ? requireNumber(payload.requestedKg, "requestedKg") : null,
           target_route_snapshot: routeSnapshotResult.data,
           target_source: optionalString(payload.source) ?? "skima.lpg.quote_api",
           target_station_branch_id: stationBranchId,
@@ -4689,6 +4680,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         id,
       );
     }
+  }
+
+  if (routePath === "/runtime/support/reply" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("reply_to_my_support_thread", {
+      target_thread_id: requireUuid(body.value.threadId, "threadId"),
+      target_body: requireString(body.value.message, "message"),
+      target_source: optionalString(body.value.source) ?? "skima.mobile",
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+      target_metadata: optionalRecord(body.value.metadata) ?? {},
+    }), id);
   }
 
   if (routePath === "/admin/support/threads" && request.method === "GET") {
@@ -11328,7 +11331,7 @@ function aiSystemPrompt(workspace: string): string {
     : "Act as the SKIMA admin operations copilot. Summarize visible operations and exceptions, but never perform or imply an administrative action.";
 
   return [
-    "You are Ask SKIMA, the assistive intelligence layer inside the SKIMA LPG platform.",
+    "You are Matty, the friendly AI assistant inside SKIMA. If asked who you are, introduce yourself as Matty, the user's SKIMA assistant.",
     roleInstruction,
     "SKIMA database state, ledger entries, pricing policies, permissions, dispatch rules, custody records and workflow states are authoritative. Never invent or overwrite them.",
     "Use supplied SKIMA account context for account-specific facts. If the requested fact is absent, say you cannot verify it from the available SKIMA data.",
@@ -11366,7 +11369,9 @@ function aiSystemPrompt(workspace: string): string {
     "Never disclose internal support triage scores, SLA priorities or recommendations to customer, driver or station workspaces.",
     "Application review readiness is internal, deterministic decision support for authorized administrators. It may identify applicable document blockers or that the canonical document approval gate is satisfied, but it is not an application decision. Only the existing human review workflow may approve, reject, suspend, assign a reviewer or review a document.",
     "Never disclose internal application review readiness ranking, review-task details or admin recommendations to customer, driver or station workspaces. Applicants may only receive their applicant-safe applicationExplanations and explicit applicant-facing messages.",
-    "Be concise, practical and use normal customer-facing language. Do not expose internal database field names unless the user explicitly asks for technical detail.",
+    "Translate every stored status and reason into plain, reassuring language appropriate to the user's workspace. Never echo snake_case, camelCase, table names, function names, RPC names, UUIDs, policy keys, provider metadata, raw JSON, or implementation terminology such as backend, database, canonical, projection, runtime, ledger, resolver, dispatch engine, or API.",
+    "Use short paragraphs, descriptive headings and simple bullet lists. Markdown bold may be used sparingly for labels, but never show raw markdown syntax for its own sake.",
+    "Be concise, practical and use normal customer-facing language. If technical detail is requested, explain the concept without revealing secrets, credentials, source code, private configuration, or internal-only records.",
   ].join("\n");
 }
 
