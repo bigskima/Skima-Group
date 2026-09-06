@@ -108,6 +108,7 @@ const ROUTES = new Set([
   "/lpg/stations",
   "/lpg/stations/activate",
   "/lpg/stations/runtime",
+  "/lpg/stations/locations",
   "/lpg/stations/catalog-prices",
   "/lpg/stations/settings",
   "/lpg/stations/capacity-adjustments",
@@ -984,6 +985,45 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }),
       id,
     );
+  }
+
+  if (routePath === "/lpg/stations/locations") {
+    if (request.method === "GET") {
+      return rpcDataResponse(
+        supabase.rpc("read_lpg_station_locations", {
+          target_station_branch_id: optionalUuid(
+            url.searchParams.get("stationBranchId"),
+            "stationBranchId",
+          ),
+        }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("submit_lpg_station_location_request", {
+          target_accuracy_meters: optionalNumber(payload.accuracyMeters, "accuracyMeters"),
+          target_address: optionalRecord(payload.address) ?? {},
+          target_captured_at: optionalString(payload.capturedAt),
+          target_formatted_address: requireString(payload.formattedAddress, "formattedAddress"),
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_label: requireString(payload.label, "label"),
+          target_latitude: requireNumber(payload.latitude, "latitude"),
+          target_longitude: requireNumber(payload.longitude, "longitude"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_provider_place_id: optionalString(payload.providerPlaceId),
+          target_provider_source: optionalString(payload.providerSource),
+          target_request_kind: requireString(payload.requestKind, "requestKind"),
+          target_source: optionalString(payload.source) ?? "skima.lpg.station_location",
+          target_station_branch_id: requireUuid(payload.stationBranchId, "stationBranchId"),
+        }),
+        id,
+      );
+    }
   }
 
   if (routePath === "/lpg/stations/catalog-prices" && request.method === "GET") {
