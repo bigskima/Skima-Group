@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { AlertTriangle, CheckCircle2, MapPin, Scale, ShieldCheck, Store, WalletCards } from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
@@ -108,22 +108,17 @@ export function NewRefillScreen() {
       deliveryServiceability.data?.serviceable === true,
   );
   const validPurchase = purchaseMode === "kg" ? validRequestedKg : validRequestedAmount;
-  const stationDiscoveryKg = purchaseMode === "amount" ? 0.001 : requestedKgNumber;
   const stationEligibilityReady = Boolean(tripServiceable && validPurchase && !exceedsCylinderCapacity && cylinderId);
   const eligibleStations = useEligibleLpgStations({
     pickupLocationId: pickupLocationId || null,
     deliveryLocationId: deliveryLocationId || null,
     cylinderId: cylinderId || null,
-    requestedKg: stationEligibilityReady ? stationDiscoveryKg : null,
+    requestedKg: stationEligibilityReady && purchaseMode === "kg" ? requestedKgNumber : null,
+    requestedAmount: stationEligibilityReady && purchaseMode === "amount" ? requestedAmountNumber : null,
     enabled: stationEligibilityReady,
     limit: 10,
   });
-  const displayedStations = useMemo(() => (eligibleStations.data ?? []).filter((station) => {
-    if (purchaseMode !== "amount") return true;
-    const amount = Number(requestedAmount);
-    const resolvedKg = amount / station.price_per_kg;
-    return Number.isFinite(resolvedKg) && resolvedKg > 0 && resolvedKg <= station.current_available_kg && resolvedKg <= station.cylinder_size_kg;
-  }), [eligibleStations.data, purchaseMode, requestedAmount]);
+  const displayedStations = eligibleStations.data ?? [];
   const selectedStation = displayedStations.find((station) => station.station_branch_id === stationId) ?? null;
 
   useEffect(() => {

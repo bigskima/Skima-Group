@@ -59,7 +59,8 @@
     "supabase:status": "supabase status",
     "supabase:start": "supabase start",
     "supabase:reset": "supabase db reset",
-    "ai-runtime:contract": "deno test --allow-read scripts/ai-runtime-contract.test.ts scripts/ai-driver-daily-brief-contract.test.ts"
+    "ai-runtime:contract": "deno test --allow-read scripts/ai-runtime-contract.test.ts scripts/ai-driver-daily-brief-contract.test.ts",
+    "lpg-refill:contract": "deno test --allow-read scripts/lpg-refill-production-contract.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.110.9",

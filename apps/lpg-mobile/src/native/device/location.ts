@@ -84,6 +84,11 @@ export async function geocodeOperationalAddress(value: string): Promise<Operatio
   const query = value.trim();
   if (!query) return null;
   try {
+    const permission = await Location.getForegroundPermissionsAsync();
+    const resolvedPermission = permission.granted
+      ? permission
+      : await Location.requestForegroundPermissionsAsync();
+    if (!resolvedPermission.granted) return null;
     const points = await Location.geocodeAsync(query);
     const point = points.find((candidate) => validCoordinate(candidate.latitude, candidate.longitude));
     if (!point) return null;
