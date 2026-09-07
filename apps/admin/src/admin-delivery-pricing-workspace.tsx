@@ -215,10 +215,10 @@ export function AdminDeliveryPricingWorkspace() {
   const activateVersion = useMutation({
     mutationFn: async (version: PolicyVersion) => {
       await api.post(
-        "/admin/financial-policies/activate",
+        "/admin/financial-policies/replace-active",
         {
           policyVersionId: version.id,
-          reason: "Activated from the SKIMA LPG delivery pricing workspace.",
+          reason: "Replaced the live LPG delivery pricing from the SKIMA admin workspace.",
           idempotencyKey: createClientIdempotencyKey("admin.delivery-pricing.activate", version.id),
         },
         MutationIdSchema,
