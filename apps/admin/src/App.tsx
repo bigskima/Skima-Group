@@ -11,6 +11,7 @@ import {
   FileText,
   Image,
   LayoutDashboard,
+  MapPinned,
   Megaphone,
   type LucideIcon,
   MessageSquareWarning,
@@ -74,6 +75,12 @@ import { AdminAccessWorkspace } from "./admin-access-workspace";
 import { AdminAiWorkspace } from "./admin-ai-workspace";
 import { AdminContentWorkspace } from "./admin-content-workspace";
 import { AdminFleetWorkspace } from "./admin-fleet-workspace";\nimport { AdminOperationsWorkspace } from "./admin-operations-workspace";
+import { AdminDriverParticipationWorkspace } from "./admin-driver-participation-workspace";
+import { AdminPartnerLocationReviewWorkspace } from "./admin-partner-location-review-workspace";
+import { AdminPolicyWorkspace } from "./admin-policy-workspace";
+import { AdminQualityWorkspace } from "./admin-quality-workspace";
+import { AdminRevenueWorkspace } from "./admin-revenue-workspace";
+import { AdminServiceCoverageWorkspace } from "./admin-service-coverage-workspace";
 import { AdminStartupBrandingWorkspace } from "./admin-startup-branding-workspace";
 import { AdminStationPricingWorkspace } from "./admin-station-pricing-workspace";
 import { AdminStationInventoryWorkspace } from "./admin-station-inventory-workspace";
@@ -84,7 +91,6 @@ import {
   financeConsoleConfig,
   governanceConsoleConfig,
   integrationConsoleConfig,
-  operationsConsoleConfig,
 } from "./admin-resource-config";
 import { useSessionState } from "./session";
 
@@ -177,6 +183,12 @@ const navIconMap = {
   applications: ClipboardList,
   organizations: Building2,
   operations: Activity,
+  coverage: MapPinned,
+  locationReview: MapPinned,
+  drivers: UsersRound,
+  quality: ShieldCheck,
+  revenue: WalletCards,
+  policies: FileText,
   ai: Sparkles,
   fleet: Truck,
   finance: WalletCards,
@@ -262,11 +274,46 @@ const foundationNavigation: readonly NavigationItem[] = [
     requiredPermissions: ["lpg.orders.manage"],
   },
   {
+    key: "coverage",
+    label: "Service Coverage",
+    href: "/coverage",
+    icon: "coverage",
+    requiredPermissions: ["platform.coverage.read"],
+  },
+  {
+    key: "location-review",
+    label: "Location Review",
+    href: "/location-review",
+    icon: "locationReview",
+    requiredPermissions: ["platform.applications.review"],
+  },
+  {
+    key: "drivers",
+    label: "Driver Participation",
+    href: "/drivers",
+    icon: "drivers",
+    requiredPermissions: ["platform.drivers.read"],
+  },
+  {
+    key: "quality",
+    label: "Service Quality",
+    href: "/quality",
+    icon: "quality",
+    requiredPermissions: ["lpg.quality.read"],
+  },
+  {
     key: "finance",
     label: "Finance",
     href: "/finance",
     icon: "finance",
     requiredPermissions: ["platform.financial.read"],
+  },
+  {
+    key: "revenue",
+    label: "Money & Revenue",
+    href: "/revenue",
+    icon: "revenue",
+    requiredPermissions: ["platform.revenue.read"],
   },
   {
     key: "ai",
@@ -281,6 +328,13 @@ const foundationNavigation: readonly NavigationItem[] = [
     href: "/content",
     icon: "content",
     requiredPermissions: ["platform.content.read"],
+  },
+  {
+    key: "policies",
+    label: "Terms & Policies",
+    href: "/policies",
+    icon: "policies",
+    requiredPermissions: ["platform.policy.read"],
   },
   {
     key: "branding",
@@ -488,7 +542,31 @@ function Workspace(props: { readonly route: string; readonly onNavigate: (href: 
   }
 
   if (props.route === "/operations") {
-    return <AdminResourceConsole config={operationsConsoleConfig} />;
+    return <AdminOperationsWorkspace />;
+  }
+
+  if (props.route === "/coverage") {
+    return <AdminServiceCoverageWorkspace />;
+  }
+
+  if (props.route === "/location-review") {
+    return <AdminPartnerLocationReviewWorkspace />;
+  }
+
+  if (props.route === "/drivers") {
+    return <AdminDriverParticipationWorkspace />;
+  }
+
+  if (props.route === "/quality") {
+    return <AdminQualityWorkspace />;
+  }
+
+  if (props.route === "/revenue") {
+    return <AdminRevenueWorkspace onOpenFinance={() => props.onNavigate("/finance")} />;
+  }
+
+  if (props.route === "/policies") {
+    return <AdminPolicyWorkspace />;
   }
 
   if (props.route === "/support") return <AdminSupportWorkspace />;
