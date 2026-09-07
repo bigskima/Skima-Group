@@ -1825,7 +1825,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
 
     return lpgPaymentReservationResponse(
-      serviceClient.rpc("reserve_lpg_refill_order_payment", {
+      serviceClient.rpc("reserve_and_dispatch_lpg_refill_order", {
         target_actor_user_id: authResult.user.id,
         target_customer_wallet_id: optionalUuid(payload.customerWalletId, "customerWalletId"),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),

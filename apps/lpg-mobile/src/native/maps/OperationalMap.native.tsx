@@ -96,7 +96,7 @@ export function OperationalMap({
         doubleTapZoom
         dragPan
         logo={false}
-        mapStyle={mapConfig.tile.styleUrl}
+        mapStyle={keylessRasterStyle(mapConfig.tile.rasterTileTemplate, mapConfig.tile.attribution)}
         onPress={(event) => {
           if (!onSelectPoint) return;
           onSelectPoint(fromLngLat(event.nativeEvent.lngLat));
@@ -181,6 +181,21 @@ export function OperationalMap({
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
+}
+
+function keylessRasterStyle(tileTemplate: string, attribution: string) {
+  return {
+    version: 8 as const,
+    sources: {
+      "skima-basemap": {
+        type: "raster" as const,
+        tiles: [tileTemplate],
+        tileSize: 256,
+        attribution,
+      },
+    },
+    layers: [{ id: "skima-basemap", type: "raster" as const, source: "skima-basemap" }],
+  };
 }
 
 const styles = StyleSheet.create({

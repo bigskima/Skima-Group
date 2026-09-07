@@ -40,6 +40,15 @@ Deno.test("customer location save uses an unambiguous module record identifier",
   assertNotIncludes(repair, "mapping.module_location_id");
 });
 
+Deno.test("payment reservation and automatic dispatch are one transaction", async () => {
+  const gateway = await read("supabase/functions/api-gateway/index.ts");
+  const migration = await read("supabase/migrations/20260907010000_atomic_refill_dispatch_and_station_access.sql");
+  assertIncludes(gateway, 'serviceClient.rpc("reserve_and_dispatch_lpg_refill_order"');
+  assertIncludes(migration, "public.reserve_lpg_refill_order_payment(");
+  assertIncludes(migration, "public.dispatch_lpg_order(");
+  assertIncludes(migration, "Your wallet was not charged");
+});
+
 function assertIncludes(value: string, expected: string) {
   if (!value.includes(expected)) throw new Error(`Expected source to include: ${expected}`);
 }

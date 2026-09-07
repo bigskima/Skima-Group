@@ -65,6 +65,7 @@ const toolGroups: Record<Workspace, readonly ToolGroup[]> = {
     {
       title: "Work setup",
       items: [
+        { label: "Availability & location", detail: "Update where you are ready to receive jobs", href: "/(driver)/availability", icon: MapPin },
         { label: "Service areas", detail: "Places where you can receive jobs", href: "/(driver)/service-zone", icon: MapPin },
         { label: "Vehicles", detail: "Vehicle details and approval", href: "/(driver)/vehicles", icon: Truck },
         { label: "Documents", detail: "Submitted driver documents", href: "/(driver)/documents", icon: FileCheck2 },
