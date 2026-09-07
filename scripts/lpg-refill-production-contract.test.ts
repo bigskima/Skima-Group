@@ -27,6 +27,7 @@ Deno.test("commercial quotes never use straight-line route pricing", async () =>
 Deno.test("all LPG workspaces retain module safety evidence", async () => {
   const support = await read("apps/lpg-mobile/src/native/ui/SupportScreen.tsx");
   assertIncludes(support, "await mutation.mutateAsync");
+  assertIncludes(support, 'firstString(order, ["lpgOrderId", "lpg_order_id", "id"])');
   assertNotIncludes(support, 'if (workspace === "customer")');
 });
 
