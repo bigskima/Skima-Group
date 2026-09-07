@@ -34,7 +34,7 @@ where provider_kind = 'verification'
   and key = 'provider.verification.didit';
 
 update public.verification_definitions
-set metadata = coalesce(metadata, '{}'::jsonb) || jsonb_build_object(
+set schema = coalesce(schema, '{}'::jsonb) || jsonb_build_object(
       'provider_workflow_kind', 'KYB',
       'business_registry_lookup', true,
       'business_profile_supported', true,
