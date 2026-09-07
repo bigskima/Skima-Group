@@ -121,9 +121,15 @@ Deno.test("admin exposes provider routing and exception-only review", () => {
   assertStringIncludes(adminVerification, "Exception-only review");
 });
 
-Deno.test("verification runtime accepts the SKIMA web client CORS header", () => {
-  assertStringIncludes(runtime, "x-skima-client");
-  assertStringIncludes(runtime, "Access-Control-Allow-Headers");
+Deno.test("mobile partner verification uses the canonical API gateway", () => {
+  assertStringIncludes(mobileVerification, "useGatewayQuery");
+  assertStringIncludes(mobileVerification, "useGatewayMutation");
+  assertStringIncludes(mobileVerification, "/runtime/partner-verification/");
+  assert(
+    !mobileVerification.includes("verificationBaseUrl") &&
+      !mobileVerification.includes("fetch("),
+    "The LPG app must not bypass the API gateway for partner verification.",
+  );
 });
 
 Deno.test("verification runtime is JWT protected", () => {
