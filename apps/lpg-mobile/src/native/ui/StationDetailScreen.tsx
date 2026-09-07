@@ -22,9 +22,13 @@ import { StatusPill } from "./StatusPill";
 
 export function StationDetailScreen({ id }: { id: string | null }) {
   const { palette } = useAppTheme();
-  const stations = domainQueries.stations();
-  const media = useEntityMediaLinks("station", id);
+  const locations = domainQueries.locations();
+  const deliveryLocation = locations.data?.[0];
+  const deliveryLatitude = firstNumber(deliveryLocation, ["latitude"]);
+  const deliveryLongitude = firstNumber(deliveryLocation, ["longitude"]);
+  const stations = domainQueries.nearbyStations(deliveryLatitude, deliveryLongitude);
   const station = (stations.data ?? []).find((item) => recordId(item) === id);
+  const media = useEntityMediaLinks("station", station ? id : null);
   const latitude = firstNumber(station, ["latitude", "lat"]);
   const longitude = firstNumber(station, ["longitude", "lng", "lon"]);
   const hours = nestedRecord(station, "operatingHours") ?? nestedRecord(station, "operating_hours");
@@ -54,14 +58,21 @@ export function StationDetailScreen({ id }: { id: string | null }) {
       subtitle="Public station information that helps customers and drivers confirm this SKIMA LPG location."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
-      {stations.isPending || media.isPending ? (
+      {locations.isPending || stations.isPending || (station && media.isPending) ? (
         <ScreenSkeleton cards={3} />
+      ) : deliveryLatitude === null || deliveryLongitude === null ? (
+        <EmptyState
+          icon={<MapPin color={palette.brand} size={28} />}
+          title="Choose a delivery location"
+          description="SKIMA checks your saved delivery location before showing a station profile, so you only open stations that can serve you."
+          action={<AppButton label="Choose location" onPress={() => router.push("/(customer)/locations")} />}
+        />
       ) : !station ? (
         <EmptyState
           icon={<Store color={palette.brand} size={28} />}
-          title="Station unavailable"
-          description="This station is not currently available in the public SKIMA station directory."
-          action={<AppButton label="Back to stations" onPress={() => router.replace("/(customer)/stations")} />}
+          title="Station not available for this location"
+          description="This station is outside your current delivery area, unavailable, or no longer eligible for this location."
+          action={<AppButton label="Back to nearby stations" onPress={() => router.replace("/(customer)/stations")} />}
         />
       ) : (
         <>
