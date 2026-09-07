@@ -605,29 +605,67 @@ export function NewRefillScreen() {
             {purchaseMode === "kg" ? <View style={styles.fieldGroup}>
               <Text style={[styles.fieldLabel, { color: palette.ink }]}>Kilograms to refill</Text>
               <View style={styles.quantityControl}>
-                <AppButton accessibilityLabel="Reduce refill kilograms" label="−" variant="secondary" onPress={() => setRequestedKg(formatKg(Math.max(0.5, (Number(requestedKg) || 0.5) - 0.5)))} />
+                <View style={styles.quantityButtonSlot}>
+                  <AppButton
+                    accessibilityLabel="Reduce refill kilograms"
+                    label="−"
+                    fullWidth
+                    variant="secondary"
+                    onPress={() =>
+                      setRequestedKg(
+                        formatKg(
+                          Math.max(
+                            0.5,
+                            (Number(requestedKg) || 0.5) - 0.5,
+                          ),
+                        ),
+                      )
+                    }
+                  />
+                </View>
                 <TextInput
                   value={requestedKg}
                   onChangeText={(value) => {
-                  setRequestedKg(value);
-                  setStationId("");
-                  setQuoteId(null);
-                  setQuoteRecord(null);
-                  if (error) setError(null);
-                }}
-                keyboardType="decimal-pad"
-                placeholder="e.g. 6"
-                placeholderTextColor={palette.muted}
+                    setRequestedKg(value);
+                    setStationId("");
+                    setQuoteId(null);
+                    setQuoteRecord(null);
+                    if (error) setError(null);
+                  }}
+                  keyboardType="decimal-pad"
+                  placeholder="e.g. 6"
+                  placeholderTextColor={palette.muted}
+                  selectTextOnFocus
                   style={[
-                  styles.input, styles.quantityInput,
-                  {
-                    backgroundColor: palette.input,
-                    borderColor: exceedsCylinderCapacity ? palette.danger : palette.borderStrong,
-                    color: palette.ink,
-                  },
-                ]}
+                    styles.input,
+                    styles.quantityInput,
+                    {
+                      backgroundColor: palette.input,
+                      borderColor: exceedsCylinderCapacity
+                        ? palette.danger
+                        : palette.borderStrong,
+                      color: palette.ink,
+                    },
+                  ]}
                 />
-                <AppButton accessibilityLabel="Add refill kilograms" label="+" variant="secondary" onPress={() => setRequestedKg(formatKg(Math.min(cylinderCapacityKg ?? 1000, (Number(requestedKg) || 0) + 0.5)))} />
+                <View style={styles.quantityButtonSlot}>
+                  <AppButton
+                    accessibilityLabel="Add refill kilograms"
+                    label="+"
+                    fullWidth
+                    variant="secondary"
+                    onPress={() =>
+                      setRequestedKg(
+                        formatKg(
+                          Math.min(
+                            cylinderCapacityKg ?? 1000,
+                            (Number(requestedKg) || 0) + 0.5,
+                          ),
+                        ),
+                      )
+                    }
+                  />
+                </View>
               </View>
             </View> : <View style={styles.fieldGroup}>
               <Text style={[styles.fieldLabel, { color: palette.ink }]}>Amount to spend (NGN)</Text>
@@ -998,8 +1036,9 @@ const styles = StyleSheet.create({
   capacityActions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   fieldGroup: { gap: spacing.sm },
   modeSwitch: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  quantityControl: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  quantityInput: { flex: 1, textAlign: "center", fontSize: 22, fontWeight: "900" },
+  quantityControl: { width: "100%", maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  quantityButtonSlot: { width: 56, flexShrink: 0 },
+  quantityInput: { flex: 1, minWidth: 0, flexShrink: 1, textAlign: "center", fontSize: 22, fontWeight: "900", paddingHorizontal: spacing.sm },
   amountPresets: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   fieldLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" },
   input: { minHeight: 54, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: 16 },
