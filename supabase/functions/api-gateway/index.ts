@@ -101,7 +101,9 @@ const ROUTES = new Set([
   "/lpg/locations",
   "/lpg/cylinders",
   "/lpg/cylinders/name",
+  "/lpg/cylinders/update",
   "/lpg/cylinders/media",
+  "/lpg/cylinders/media/primary",
   "/lpg/cylinders/history",
   "/lpg/quotes",
   "/lpg/orders",
@@ -1813,6 +1815,28 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     );
   }
 
+  if (routePath === "/lpg/cylinders/update" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("update_customer_lpg_cylinder_details", {
+        target_brand: optionalString(payload.brand),
+        target_colour: optionalString(payload.colour),
+        target_condition_status: optionalString(payload.conditionStatus),
+        target_cylinder_id: requireUuid(payload.cylinderId, "cylinderId"),
+        target_display_name: optionalString(payload.displayName),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_manufacturer: optionalString(payload.manufacturer),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_notes: optionalString(payload.notes),
+        target_serial_number: optionalString(payload.serialNumber),
+        target_valve_type: optionalString(payload.valveType),
+      }),
+      id,
+    );
+  }
+
   if (routePath === "/lpg/cylinders/media" && request.method === "POST") {
     const body = await readJsonBody(request, id);
 
@@ -1829,6 +1853,22 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_media_role: optionalString(payload.mediaRole) ?? "image",
         target_metadata: optionalRecord(payload.metadata) ?? {},
         target_source: optionalString(payload.source) ?? "skima.lpg.mobile",
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/lpg/cylinders/media/primary" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("set_customer_lpg_cylinder_primary_media", {
+        target_cylinder_id: requireUuid(payload.cylinderId, "cylinderId"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_media_asset_id: requireUuid(payload.mediaAssetId, "mediaAssetId"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_source: optionalString(payload.source) ?? "skima.lpg.customer_media",
       }),
       id,
     );
