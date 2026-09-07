@@ -4436,6 +4436,46 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       const payload = body.value;
       const amount = requireNumber(payload.amount, "amount");
       const currencyCode = optionalString(payload.currencyCode) ?? "NGN";
+      const depositIdempotencyKey = requireString(payload.idempotencyKey, "idempotencyKey");
+      let customerWalletId = optionalUuid(payload.walletId, "walletId");
+
+      if (customerWalletId) {
+        const walletResult = await supabase
+          .from("wallet_accounts")
+          .select("id")
+          .eq("id", customerWalletId)
+          .eq("wallet_type", "customer")
+          .eq("owner_entity_type", "user")
+          .eq("owner_entity_id", authResult.user.id)
+          .maybeSingle();
+
+        if (walletResult.error) return databaseError(walletResult.error, id);
+        if (!walletResult.data) {
+          return jsonResponse({
+            ok: false,
+            error: "forbidden",
+            message: "Choose your personal customer wallet for this top up.",
+            requestId: id,
+          }, 403);
+        }
+      } else {
+        const walletResult = await supabase.rpc("ensure_wallet_account", {
+          target_wallet_type: "customer",
+          target_owner_entity_type: "user",
+          target_owner_entity_id: authResult.user.id,
+          target_currency_code: currencyCode,
+          target_source: "platform.api_gateway",
+          target_metadata: { wallet_purpose: "customer_deposit" },
+          target_idempotency_key: depositIdempotencyKey + ":wallet",
+        });
+        if (walletResult.error) return databaseError(walletResult.error, id);
+        customerWalletId = requireUuid(walletResult.data, "walletId");
+      }
+
+      const resolvedPayload = {
+        ...payload,
+        walletId: customerWalletId,
+      };
       let providerAdapterKey = optionalString(payload.providerAdapterKey);
       if (!providerAdapterKey) {
         providerAdapterKey = await resolveActivePaymentProviderKey(supabase);
@@ -4450,7 +4490,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           currencyCode,
           customerEmail: authResult.user.email,
           id,
-          payload,
+          payload: resolvedPayload,
           supabase,
           supabaseUrl,
         });
@@ -4460,11 +4500,11 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase.rpc("initialize_wallet_deposit", {
           target_amount: amount,
           target_currency_code: currencyCode,
-          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_idempotency_key: depositIdempotencyKey,
           target_metadata: optionalRecord(payload.metadata) ?? {},
           target_provider_adapter_key: providerAdapterKey,
           target_source: optionalString(payload.source) ?? "platform.payment_engine",
-          target_wallet_id: optionalUuid(payload.walletId, "walletId"),
+          target_wallet_id: customerWalletId,
         }),
         id,
         supabase,
