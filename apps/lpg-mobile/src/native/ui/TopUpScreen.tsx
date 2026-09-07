@@ -4,7 +4,7 @@ import { ShieldCheck, WalletCards } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
-import { useFinanceMutation } from "../api/finance";
+import { useGatewayMutation } from "../api/gateway";
 import {
   firstNumber,
   firstString,
@@ -49,12 +49,12 @@ export function TopUpScreen() {
     firstString(currencies.data?.[0], ["code"]) ??
     "NGN";
 
-  const preview = useFinanceMutation({
-    path: "/deposits/preview",
+  const preview = useGatewayMutation({
+    path: "/runtime/payments/deposits/preview",
     schema: RecordObjectSchema,
   });
-  const initialize = useFinanceMutation({
-    path: "/deposits",
+  const initialize = useGatewayMutation({
+    path: "/runtime/payments/deposits",
     schema: RecordObjectSchema,
     invalidate: [["deposits"], ["wallets"]],
   });
@@ -106,8 +106,8 @@ export function TopUpScreen() {
         firstString(response, ["checkout_url", "checkoutUrl", "authorization_url", "authorizationUrl", "url"]) ??
         firstString(nestedData, ["checkout_url", "checkoutUrl", "authorization_url", "authorizationUrl", "url"]);
       const depositId =
-        firstString(response, ["id", "deposit_id", "depositId"]) ??
-        firstString(nestedData, ["id", "deposit_id", "depositId"]);
+        firstString(response, ["id", "deposit_id", "depositId", "depositRequestId", "deposit_request_id"]) ??
+        firstString(nestedData, ["id", "deposit_id", "depositId", "depositRequestId", "deposit_request_id"]);
 
       if (!checkout && !depositId) {
         throw new Error("The payment session did not return a checkout or deposit reference.");
