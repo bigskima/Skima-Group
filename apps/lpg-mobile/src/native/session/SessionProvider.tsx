@@ -23,10 +23,6 @@ import { AppState, Platform } from "react-native";
 import { stopDriverTracking } from "../device/driverTracking";
 import { secureSessionStorage } from "../storage/secureStorage";
 import { friendlyError } from "../utilities/friendlyError";
-import {
-  verifySkimaAuthRuntime,
-  type AuthRuntimeState,
-} from "./authRuntime";
 
 type Status = "loading" | "authenticated" | "unauthenticated" | "error";
 
@@ -46,8 +42,6 @@ interface SessionValue {
   session: Session | null;
   context: SessionContext | null;
   error: string | null;
-  authRuntimeStatus: AuthRuntimeState;
-  authRuntimeMessage: string | null;
   api: ApiGatewayClient;
   supabase: SupabaseClient;
   clearAuthError(): void;
@@ -57,7 +51,6 @@ interface SessionValue {
   updatePassword(password: string): Promise<void>;
   signOut(): Promise<void>;
   refresh(): Promise<void>;
-  verifyAuthRuntime(): Promise<boolean>;
 }
 
 const Context = createContext<SessionValue | null>(null);
@@ -79,13 +72,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
   );
   const sessionRef = useRef<Session | null>(null);
   const applyVersionRef = useRef(0);
-  const authRuntimePromiseRef = useRef<Promise<void> | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [context, setContext] = useState<SessionContext | null>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
-  const [authRuntimeStatus, setAuthRuntimeStatus] = useState<AuthRuntimeState>("checking");
-  const [authRuntimeMessage, setAuthRuntimeMessage] = useState<string | null>(null);
   const api = useMemo(
     () =>
       new ApiGatewayClient({
@@ -96,36 +86,6 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }),
     [config],
   );
-
-  const ensureAuthRuntime = useCallback(async () => {
-    if (!authRuntimePromiseRef.current) {
-      setAuthRuntimeStatus("checking");
-      setAuthRuntimeMessage(null);
-      authRuntimePromiseRef.current = verifySkimaAuthRuntime({
-        supabaseUrl: config.url,
-        anonKey: config.anonKey,
-      });
-    }
-
-    try {
-      await authRuntimePromiseRef.current;
-      setAuthRuntimeStatus("ready");
-      setAuthRuntimeMessage(null);
-      return true;
-    } catch (cause) {
-      authRuntimePromiseRef.current = null;
-      const message =
-        cause instanceof Error && cause.message.trim()
-          ? cause.message
-          : friendlyError(
-              cause,
-              "SKIMA account access is temporarily unavailable. Please try again shortly.",
-            );
-      setAuthRuntimeStatus("unavailable");
-      setAuthRuntimeMessage(message);
-      return false;
-    }
-  }, [config.anonKey, config.url]);
 
   const apply = useCallback(
     async (next: Session | null) => {
@@ -170,10 +130,6 @@ export function SessionProvider({ children }: PropsWithChildren) {
   );
 
   useEffect(() => {
-    void ensureAuthRuntime();
-  }, [ensureAuthRuntime]);
-
-  useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => apply(data.session));
     const { data } = supabase.auth.onAuthStateChange(
       (_event, next) => void apply(next),
@@ -196,29 +152,17 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const value = useMemo<SessionValue>(
     () => ({
       api,
-      authRuntimeMessage,
-      authRuntimeStatus,
       context,
       error,
       session,
       status,
       supabase,
       clearAuthError: () => setError(null),
-      verifyAuthRuntime: ensureAuthRuntime,
       refresh: async () => {
         await apply(sessionRef.current);
       },
       signIn: async (email, password) => {
         setError(null);
-        if (!(await ensureAuthRuntime())) {
-          setError(
-            authRuntimeMessage ??
-              "SKIMA account access is temporarily unavailable. Please try again shortly.",
-          );
-          setStatus("unauthenticated");
-          return false;
-        }
-
         setStatus("loading");
         const { data, error: authError } =
           await supabase.auth.signInWithPassword({
@@ -251,12 +195,6 @@ export function SessionProvider({ children }: PropsWithChildren) {
       },
       signUp: async ({ displayName, email, password }) => {
         setError(null);
-        if (!(await ensureAuthRuntime())) {
-          throw new Error(
-            authRuntimeMessage ??
-              "SKIMA account access is temporarily unavailable. Please try again shortly.",
-          );
-        }
 
         const { data, error: authError } = await supabase.auth.signUp({
           email: email.trim().toLowerCase(),
@@ -292,12 +230,6 @@ export function SessionProvider({ children }: PropsWithChildren) {
       },
       requestPasswordReset: async (email, redirectTo) => {
         setError(null);
-        if (!(await ensureAuthRuntime())) {
-          throw new Error(
-            authRuntimeMessage ??
-              "SKIMA account access is temporarily unavailable. Please try again shortly.",
-          );
-        }
 
         const { error: authError } = await supabase.auth.resetPasswordForEmail(
           email.trim().toLowerCase(),
@@ -314,12 +246,6 @@ export function SessionProvider({ children }: PropsWithChildren) {
       },
       updatePassword: async (password) => {
         setError(null);
-        if (!(await ensureAuthRuntime())) {
-          throw new Error(
-            authRuntimeMessage ??
-              "SKIMA account access is temporarily unavailable. Please try again shortly.",
-          );
-        }
 
         const { error: authError } = await supabase.auth.updateUser({ password });
         if (authError) {
@@ -339,10 +265,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     [
       api,
       apply,
-      authRuntimeMessage,
-      authRuntimeStatus,
       context,
-      ensureAuthRuntime,
       error,
       session,
       status,
