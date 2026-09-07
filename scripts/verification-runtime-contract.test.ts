@@ -116,6 +116,11 @@ Deno.test("admin exposes provider routing and exception-only review", () => {
   assertStringIncludes(adminVerification, "Exception-only review");
 });
 
+Deno.test("verification runtime accepts the SKIMA web client CORS header", () => {
+  assertStringIncludes(runtime, "x-skima-client");
+  assertStringIncludes(runtime, "Access-Control-Allow-Headers");
+});
+
 Deno.test("verification runtime is JWT protected", () => {
   assertStringIncludes(supabaseConfig, "[functions.verification-runtime]");
   assertStringIncludes(supabaseConfig, "verify_jwt = true");
