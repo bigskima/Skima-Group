@@ -38,6 +38,7 @@ import {
   type PlatformRecord,
 } from "../api/records";
 import { useSession } from "../session/SessionProvider";
+import { selectWorkspaceWallet } from "../utilities/financeWallet";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors } from "../theme/tokens";
 import { AiAssistantLauncher } from "./AiAssistantLauncher";
@@ -66,11 +67,9 @@ export function CustomerDashboard() {
   const cylinder = cylinders.data?.[0];
   const order = active.data?.[0];
   const orderId = order ? recordId(order) : null;
-  const balance = (wallets.data ?? []).reduce(
-    (sum, item) => sum + (firstNumber(item, ["balance", "available_balance", "availableBalance"]) ?? 0),
-    0,
-  );
-  const currency = firstString(wallets.data?.[0], ["currency_code", "currencyCode"]) ?? "NGN";
+  const customerWallet = selectWorkspaceWallet(wallets.data ?? [], "customer");
+  const balance = firstNumber(customerWallet, ["balance", "available_balance", "availableBalance"]) ?? 0;
+  const currency = firstString(customerWallet, ["currency_code", "currencyCode"]) ?? "NGN";
   const primary = order && orderId
     ? {
         eyebrow: humanStatus(displayStatus(order) ?? "active"),
