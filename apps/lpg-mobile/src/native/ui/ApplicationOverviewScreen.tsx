@@ -69,7 +69,6 @@ const STATION_ROLES = [
 const DRIVER_DOCUMENT_KEYS = [
   "driver.licence",
   "driver.identity",
-  "driver.address-evidence",
 ] as const;
 
 const STATION_DOCUMENT_KEYS = [
@@ -77,7 +76,6 @@ const STATION_DOCUMENT_KEYS = [
   "station.business-permit",
   "station.fire-safety-certificate",
   "station.regulatory-certificate",
-  "station.settlement-evidence",
   "station.owner-identity",
   "station.authority-evidence",
   "station.representative-identity",
@@ -920,7 +918,7 @@ export function ApplicationOverviewScreen({
                 </View>
                 {stationRole !== "owner" ? (
                   <Text style={styles.helperText}>
-                    Because you are applying on behalf of the owner, proof of authority and your government ID will be required in the certificates step.
+                    SKIMA will first verify your identity automatically. If your authority cannot be confirmed automatically, only proof that you are authorized to register this station will be requested.
                   </Text>
                 ) : null}
               </View>
