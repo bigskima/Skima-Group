@@ -145,7 +145,7 @@ export function AdminShell(props: AdminShellProps) {
       ];
     }
 
-    return resolved;
+    return dedupeNavigationItems(resolved);
   }, [canManageCoverage, canReadPolicies, canReviewApplications, canSeeRevenue, props.navItems]);
 
   const activeItem = useMemo(
@@ -313,6 +313,28 @@ export function AdminShell(props: AdminShellProps) {
       ) : null}
     </div>
   );
+}
+
+export function dedupeNavigationItems(items: readonly NavItem[]): readonly NavItem[] {
+  const seenKeys = new Set<string>();
+  const seenHrefs = new Set<string>();
+
+  return items.filter((item) => {
+    const normalizedHref = normalizeNavigationHref(item.href);
+
+    if (seenKeys.has(item.key) || seenHrefs.has(normalizedHref)) {
+      return false;
+    }
+
+    seenKeys.add(item.key);
+    seenHrefs.add(normalizedHref);
+    return true;
+  });
+}
+
+function normalizeNavigationHref(href: string): string {
+  const normalized = href.trim().replace(/\/+$/, "");
+  return normalized || "/";
 }
 
 function groupNavigationItems(items: readonly NavItem[]): readonly NavigationGroup[] {
