@@ -1,8 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd ../.. && npm run frontend:build",
+  "installCommand": "cd ../.. && npm install --no-audit --no-fund",
+  "outputDirectory": "dist",
   "ignoreCommand": "node ../../scripts/vercel-ignore.mjs admin",
   "cleanUrls": true,
-  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/(.*)",
