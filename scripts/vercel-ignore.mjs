@@ -38,6 +38,7 @@ const repoRoot = repoRootResult.stdout.trim();
 
 const current = process.env.VERCEL_GIT_COMMIT_SHA || "HEAD";
 const previous = process.env.VERCEL_GIT_PREVIOUS_SHA?.trim();
+const commitRef = process.env.VERCEL_GIT_COMMIT_REF?.trim();
 
 const commitExists = (ref) => spawnSync(
   "git",
@@ -49,17 +50,28 @@ if (!commitExists(current)) {
   process.exit(1);
 }
 
-if (!previous || !commitExists(previous)) {
+let comparisonBase = previous;
+
+// On the production branch, compare the new commit with its first parent
+// (the previous main commit). Vercel can otherwise supply a PR-head SHA as
+// VERCEL_GIT_PREVIOUS_SHA for a merge commit. A merge commit often has the
+// same tree as that PR head, which would incorrectly skip the production
+// deployment even though main just gained relevant changes.
+if (commitRef === "main") {
+  const firstParent = `${current}^1`;
+  if (commitExists(firstParent)) comparisonBase = firstParent;
+}
+
+if (!comparisonBase || !commitExists(comparisonBase)) {
   // First deployment, manual redeploy, or unusually shallow clone: build once.
-  // Falling back to HEAD^ can incorrectly cancel a project's first deployment
-  // when the current commit did not touch that project's files.
+  // Failing open is safer than hiding a real production change.
   process.exit(1);
 }
 
 const topLevelPathspecs = relevantPaths.map((path) => `:(top)${path}`);
 const diff = spawnSync(
   "git",
-  ["diff", "--quiet", previous, current, "--", ...topLevelPathspecs],
+  ["diff", "--quiet", comparisonBase, current, "--", ...topLevelPathspecs],
   { cwd: repoRoot, stdio: "ignore" },
 );
 
