@@ -60,8 +60,6 @@ export default function Login() {
       eyebrow="Secure account access"
       title="Welcome back"
       body="Sign in once. SKIMA will unlock only the customer, driver or station workspaces your account is allowed to use."
-      runtimeMessage={session.authRuntimeMessage}
-      runtimeStatus={session.authRuntimeStatus}
       footer={
         <View style={styles.footerStack}>
           <Text style={[styles.footerText, { color: palette.muted }]}>
@@ -142,7 +140,7 @@ export default function Login() {
       {errorMessage ? <AuthFeedback message={errorMessage} tone="error" /> : null}
 
       <AuthPrimaryButton
-        disabled={!ready || session.authRuntimeStatus === "unavailable"}
+        disabled={!ready}
         label="Continue to SKIMA"
         onPress={() => void submit()}
         pending={pending}
