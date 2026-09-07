@@ -6,7 +6,16 @@ export const ClientEnvSchema = z.object({
   VITE_SUPABASE_ANON_KEY: z.string().min(20).optional(),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_ANON_KEY: z.string().min(20).optional(),
+  EXPO_PUBLIC_SUPABASE_URL: z.string().url().optional(),
+  EXPO_PUBLIC_SUPABASE_ANON_KEY: z.string().min(20).optional(),
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(20).optional(),
+  PUBLIC_SUPABASE_URL: z.string().url().optional(),
+  PUBLIC_SUPABASE_ANON_KEY: z.string().min(20).optional(),
   VITE_API_GATEWAY_URL: z.string().url().optional(),
+  EXPO_PUBLIC_API_GATEWAY_URL: z.string().url().optional(),
+  NEXT_PUBLIC_API_GATEWAY_URL: z.string().url().optional(),
+  PUBLIC_API_GATEWAY_URL: z.string().url().optional(),
 });
 
 export type ClientEnv = z.infer<typeof ClientEnvSchema>;
@@ -312,17 +321,33 @@ export function readClientRuntimeConfig(
     throw new Error(`Client Supabase configuration is missing or invalid: ${fields}`);
   }
 
-  const supabaseUrl = parsed.data.VITE_SUPABASE_URL ?? parsed.data.SUPABASE_URL;
-  const supabaseAnonKey = parsed.data.VITE_SUPABASE_ANON_KEY ?? parsed.data.SUPABASE_ANON_KEY;
+  const supabaseUrl =
+    parsed.data.VITE_SUPABASE_URL ??
+    parsed.data.SUPABASE_URL ??
+    parsed.data.EXPO_PUBLIC_SUPABASE_URL ??
+    parsed.data.NEXT_PUBLIC_SUPABASE_URL ??
+    parsed.data.PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey =
+    parsed.data.VITE_SUPABASE_ANON_KEY ??
+    parsed.data.SUPABASE_ANON_KEY ??
+    parsed.data.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+    parsed.data.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    parsed.data.PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error("Client Supabase URL and anon key are required.");
+    throw new Error(
+      "Client Supabase URL and anon key are required. Configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or an accepted public alias) for this deployment.",
+    );
   }
 
   return {
     supabaseUrl,
     supabaseAnonKey,
-    apiGatewayUrl: parsed.data.VITE_API_GATEWAY_URL ??
+    apiGatewayUrl:
+      parsed.data.VITE_API_GATEWAY_URL ??
+      parsed.data.EXPO_PUBLIC_API_GATEWAY_URL ??
+      parsed.data.NEXT_PUBLIC_API_GATEWAY_URL ??
+      parsed.data.PUBLIC_API_GATEWAY_URL ??
       `${supabaseUrl.replace(/\/$/, "")}/functions/v1/api-gateway`,
   };
 }
