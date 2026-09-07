@@ -24,6 +24,7 @@ on:
       - "scripts/validate-foundation.ts"
       - "scripts/verify-financial-policy-governance.ts"
       - "scripts/payout-runtime-production-contract.test.ts"
+      - "scripts/verification-runtime-contract.test.ts"
       - "scripts/ai-*.test.ts"
       - "package.json"
       - "vercel.json"
@@ -76,6 +77,8 @@ jobs:
         run: npm run vercel-ignore:test
       - name: Verify utility billing production contracts
         run: npm run utility-billing:contract
+      - name: Verify automatic verification production contracts
+        run: npm run verification-runtime:contract
 
   admin-web:
     name: Admin production build
