@@ -49,6 +49,81 @@ Deno.test("payment reservation and automatic dispatch are one transaction", asyn
   assertIncludes(migration, "Your wallet was not charged");
 });
 
+
+Deno.test("customer home keeps independent services visible in every refill state", async () => {
+  const dashboard = await read("apps/lpg-mobile/src/native/ui/PremiumDashboard.tsx");
+  assertIncludes(dashboard, "function CustomerBillsCard()");
+  assertIncludes(dashboard, "<CustomerBillsCard />");
+  assertIncludes(dashboard, 'selectWorkspaceWallet(wallets.data ?? [], "customer")');
+  assertIncludes(dashboard, "customerPrimaryStack");
+});
+
+Deno.test("customer reads remain user-scoped even when the same account has station roles", async () => {
+  const gateway = await read("supabase/functions/api-gateway/index.ts");
+  const customerOrderScopeMatches =
+    gateway.match(/\.eq\("customer_user_id", authResult\.user\.id\)/g) ?? [];
+  if (customerOrderScopeMatches.length < 3) {
+    throw new Error(
+      "Customer orders, active orders and deposit history must explicitly scope to the signed-in customer.",
+    );
+  }
+  assertIncludes(gateway, 'path === "/runtime/payments/deposits/preview"');
+});
+
+Deno.test("customer wallet top up uses the canonical gateway runtime", async () => {
+  const topUp = await read("apps/lpg-mobile/src/native/ui/TopUpScreen.tsx");
+  assertIncludes(topUp, 'useGatewayMutation');
+  assertIncludes(topUp, 'path: "/runtime/payments/deposits/preview"');
+  assertIncludes(topUp, 'path: "/runtime/payments/deposits"');
+  assertNotIncludes(topUp, 'useFinanceMutation');
+});
+
+Deno.test("nearby station discovery is location and service-radius authoritative", async () => {
+  const [migration, gateway, domains, stationsScreen] = await Promise.all([
+    read("supabase/migrations/20260907104500_customer_nearby_station_public_media.sql"),
+    read("supabase/functions/api-gateway/index.ts"),
+    read("apps/lpg-mobile/src/native/api/domains.ts"),
+    read("apps/lpg-mobile/src/native/ui/StationsScreen.tsx"),
+  ]);
+  assertIncludes(migration, "create or replace function public.read_nearby_lpg_stations");
+  assertIncludes(migration, "least(resolved_radius, station.service_radius_meters)");
+  assertIncludes(migration, "public.lpg_distance_meters(");
+  assertIncludes(migration, "station.approval_status = 'approved'");
+  assertIncludes(migration, "station.compliance_status = 'approved'");
+  assertIncludes(gateway, 'routePath === "/lpg/stations/nearby"');
+  assertIncludes(gateway, 'supabase.rpc("read_nearby_lpg_stations"');
+  assertIncludes(domains, "nearbyStations:");
+  assertIncludes(stationsScreen, "domainQueries.nearbyStations(latitude, longitude)");
+  assertNotIncludes(stationsScreen, "domainQueries.stations()");
+});
+
+Deno.test("cylinder presentation generation does not require an uploaded source photo", async () => {
+  const registration = await read("apps/lpg-mobile/src/native/ui/CylinderRegistrationScreen.tsx");
+  assertIncludes(registration, "if (cylinderId) {");
+  assertIncludes(registration, 'generationMode: assetId ? "source_guided" : "text_to_image"');
+  assertIncludes(registration, '...(assetId ? { sourceMediaAssetId: assetId } : {})');
+  assertNotIncludes(registration, "if (assetId && cylinderId)");
+});
+
+Deno.test("station activation publishes only public-safe premises media", async () => {
+  const [migration, onboarding, detail] = await Promise.all([
+    read("supabase/migrations/20260907104500_customer_nearby_station_public_media.sql"),
+    read("apps/lpg-mobile/src/native/application/MultiPhotoRequirement.tsx"),
+    read("apps/lpg-mobile/src/native/ui/StationDetailScreen.tsx"),
+  ]);
+  assertIncludes(migration, "publish_station_profile_media_for_application");
+  assertIncludes(migration, "application_records_publish_station_media");
+  assertIncludes(migration, "'PUBLIC_PROFILE_CANDIDATE'");
+  assertIncludes(migration, "'PUBLIC_APPROVED'");
+  for (const privateClass of ["'PRIVATE_KYC'", "'PRIVATE_VERIFICATION'", "'INTERNAL_ONLY'"]) {
+    assertIncludes(migration, privateClass);
+  }
+  assertIncludes(migration, "'station.photo.public'");
+  assertIncludes(onboarding, "Public-safe premises photos go live automatically when your station is activated.");
+  assertIncludes(detail, "Station photos");
+  assertIncludes(detail, 'role === "station.photo.public"');
+});
+
 function assertIncludes(value: string, expected: string) {
   if (!value.includes(expected)) throw new Error(`Expected source to include: ${expected}`);
 }
