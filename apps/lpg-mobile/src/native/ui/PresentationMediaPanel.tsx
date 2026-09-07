@@ -105,7 +105,7 @@ export function PresentationMediaPanel({
       await session.api.request("/runtime/ai/process", ActionResponseSchema, {
         method: "POST",
         body: {},
-        timeoutMs: 60_000,
+        timeoutMs: 120_000,
       });
       await links.refetch();
     } catch (cause) {
