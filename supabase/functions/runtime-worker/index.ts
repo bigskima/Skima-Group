@@ -908,30 +908,29 @@ function resolveLegacyImageProvider(): ImageProviderConfig {
     Deno.env.get("CLOUDFLARE_ACCOUNT_ID") && Deno.env.get("CLOUDFLARE_API_TOKEN"),
   );
 
-  if (preferred === "cloudflare" || (!preferred && cloudflareConfigured)) {
-    return {
-      transport: "cloudflare_workers_ai",
-      provider: "cloudflare",
-      adapter: "provider.ai.cloudflare-workers-ai",
-      model: Deno.env.get("CLOUDFLARE_AI_MODEL") ?? "@cf/black-forest-labs/flux-1-schnell",
-      providerConfig: {},
-      secretRef: "SUPABASE_SECRET:CLOUDFLARE_API_TOKEN",
-    };
+  if (preferred && preferred !== "cloudflare") {
+    throw new Error(
+      "The legacy image route is not allowed to silently change SKIMA cylinder generation away from Cloudflare. Configure the database provider route for an intentional provider switch.",
+    );
   }
-
-  if (preferred && preferred !== "gemini") {
-    throw new Error("legacy AI image provider is not supported");
+  if (!cloudflareConfigured) {
+    throw new Error(
+      "Cloudflare image generation is not configured. Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN or configure an active database image-provider route.",
+    );
   }
 
   return {
-    transport: "google_generate_content",
-    provider: "gemini",
-    adapter: "provider.ai.google-gemini",
-    model: Deno.env.get("GEMINI_IMAGE_MODEL") ?? "gemini-3.1-flash-image",
+    transport: "cloudflare_workers_ai",
+    provider: "cloudflare",
+    adapter: "provider.ai.cloudflare-workers-ai",
+    model: Deno.env.get("CLOUDFLARE_AI_MODEL") ?? "@cf/black-forest-labs/flux-1-schnell",
     providerConfig: {
-      api_base_url: "https://generativelanguage.googleapis.com/v1",
+      provider: "cloudflare",
+      product: "workers_ai",
+      transport: "cloudflare_workers_ai",
+      supports: ["image"],
     },
-    secretRef: "SUPABASE_SECRET:GEMINI_API_KEY",
+    secretRef: "SUPABASE_SECRET:CLOUDFLARE_API_TOKEN",
   };
 }
 
@@ -1095,9 +1094,13 @@ function postCloudflareMultipart(
 ): Promise<Response> {
   const form = new FormData();
   form.append("prompt", prompt);
-  form.append("steps", String(readIntegerEnv("CLOUDFLARE_AI_STEPS", 8, 1, 25)));
-  form.append("width", String(readIntegerEnv("CLOUDFLARE_AI_WIDTH", 1024, 512, 2048)));
-  form.append("height", String(readIntegerEnv("CLOUDFLARE_AI_HEIGHT", 1024, 512, 2048)));
+  // FLUX.2 klein models use a fixed distilled step count and reject custom
+  // step values. FLUX.2 dev still accepts a configurable inference step count.
+  if (!model.includes("flux-2-klein")) {
+    form.append("steps", String(readIntegerEnv("CLOUDFLARE_AI_STEPS", 8, 1, 25)));
+  }
+  form.append("width", String(readIntegerEnv("CLOUDFLARE_AI_WIDTH", 1024, 256, 1920)));
+  form.append("height", String(readIntegerEnv("CLOUDFLARE_AI_HEIGHT", 1024, 256, 1920)));
   if (sourceImage) {
     const imageBuffer = new ArrayBuffer(sourceImage.bytes.byteLength);
     new Uint8Array(imageBuffer).set(sourceImage.bytes);
