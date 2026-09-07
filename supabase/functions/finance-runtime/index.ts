@@ -253,7 +253,10 @@ async function payoutBanks(
   } catch (cause) {
     if (cause instanceof FinanceError) {
       providerIssueCode = cause.code;
-      providerIssueMessage = cause.message;
+      providerIssueMessage =
+        cause.code === "payment_provider_unavailable"
+          ? "SKIMA's live payout provider is not fully configured right now."
+          : "SKIMA could not confirm live payout-provider readiness.";
     } else {
       providerIssueCode = "payment_provider_unavailable";
       providerIssueMessage = "SKIMA's payout provider is temporarily unavailable.";
