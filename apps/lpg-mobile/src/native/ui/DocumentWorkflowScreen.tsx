@@ -12,6 +12,13 @@ import {
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
+  satisfiedVerificationDocumentKeys,
+  shouldShowVerificationFallback,
+  useApplicationVerification,
+  useReconcileApplicationVerification,
+  verificationForDocumentKey,
+} from "../api/verification";
+import {
   ActionResponseSchema,
   displayStatus,
   firstNumber,
@@ -24,6 +31,7 @@ import { useSession } from "../session/SessionProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { idempotencyKey } from "../utilities/idempotency";
 import { friendlyError } from "../utilities/friendlyError";
+import { AutomatedVerificationCard } from "./AutomatedVerificationCard";
 import { Card } from "./Card";
 import { Screen } from "./Screen";
 
@@ -69,6 +77,8 @@ export function DocumentWorkflowScreen({
     )
     .sort((a, b) => timestampOf(b) - timestampOf(a))[0];
   const applicationId = application ? recordId(application) : null;
+  const verification = useApplicationVerification(applicationId);
+  const reconcileVerification = useReconcileApplicationVerification();
   const requirementSetId = firstString(type, [
     "document_requirement_set_id",
     "documentRequirementSetId",
@@ -128,12 +138,35 @@ export function DocumentWorkflowScreen({
     return latest ? documentNeedsReplacement(latest) : false;
   };
 
+  const verificationChecks = verification.data ?? [];
+  const verifiedDocumentKeys = satisfiedVerificationDocumentKeys(verificationChecks);
+  const verificationCheckForDocument = (documentKey: string) =>
+    verificationForDocumentKey(verificationChecks, documentKey);
+  const visibleConfigured = configured.filter((requirement) => {
+    const key = requirementKeyOf(requirement);
+    if (verifiedDocumentKeys.has(key)) return false;
+    return shouldShowVerificationFallback(verificationCheckForDocument(key));
+  });
+  const pendingAutomaticChecks = verificationChecks.filter(
+    (check) =>
+      check.required &&
+      check.status !== "passed" &&
+      check.automaticAvailable &&
+      !shouldShowVerificationFallback(check),
+  );
+
   const requiredConfigured = configured.filter(
-    (requirement) => requirement.is_required === true,
+    (requirement) =>
+      requirement.is_required === true &&
+      !verifiedDocumentKeys.has(requirementKeyOf(requirement)),
   );
 
   const missingConfigured = requiredConfigured.filter((requirement) => {
     const requirementKey = requirementKeyOf(requirement);
+    const check = verificationCheckForDocument(requirementKey);
+    if (check && check.automaticAvailable && !shouldShowVerificationFallback(check)) {
+      return false;
+    }
     const minCount = firstNumber(requirement, ["min_count", "minCount"]) ?? 1;
     const existing = existingForRequirement(requirement);
     const latest = existing[0];
@@ -144,8 +177,8 @@ export function DocumentWorkflowScreen({
     return existingReadyCount + optimisticCount < minCount;
   });
 
-  const outstandingRequested = configured.filter(requirementNeedsReplacement);
-  const orderedConfigured = [...configured].sort((a, b) =>
+  const outstandingRequested = visibleConfigured.filter(requirementNeedsReplacement);
+  const orderedConfigured = [...visibleConfigured].sort((a, b) =>
     Number(requirementNeedsReplacement(b)) - Number(requirementNeedsReplacement(a))
   );
   const applicationStatus = firstString(application, ["status"]) ?? "draft";
@@ -153,8 +186,9 @@ export function DocumentWorkflowScreen({
     CORRECTION_APPLICATION_STATUSES.has(applicationStatus) || outstandingRequested.length > 0;
   const canSubmitApplication =
     Boolean(applicationId) &&
-    requiredConfigured.length > 0 &&
+    (requiredConfigured.length > 0 || verificationChecks.some((check) => check.required)) &&
     missingConfigured.length === 0 &&
+    pendingAutomaticChecks.length === 0 &&
     ["draft", "incomplete", "additional_info_required", "changes_requested", "resubmitted"].includes(applicationStatus);
 
   const choose = async (requirement: PlatformRecord) => {
@@ -224,7 +258,19 @@ export function DocumentWorkflowScreen({
           applicationId,
         ),
       });
-      setMessage(isCorrectionFlow ? "Updates submitted for review." : "Application submitted for review.");
+      try {
+        await reconcileVerification.mutateAsync({
+          applicationId,
+          idempotencyKey: idempotencyKey("verification-reconcile-documents", applicationId),
+        });
+      } catch (cause) {
+        if (__DEV__) console.info("SKIMA verification reconciliation remains pending", cause);
+      }
+      setMessage(
+        isCorrectionFlow
+          ? "Updates submitted. Automatic checks will reconcile before any remaining manual review."
+          : "Application submitted. SKIMA will automatically clear verified checks and send only exceptions for manual review.",
+      );
       router.replace(`/(customer)/${workspace}-application` as never);
     } catch (cause) {
       setMessage(friendlyError(cause, "The application could not be submitted. Please try again."));
@@ -239,8 +285,8 @@ export function DocumentWorkflowScreen({
 
   return (
     <Screen
-      eyebrow={isCorrectionFlow ? "Application update" : "Required documents"}
-      title={isCorrectionFlow ? "Requested Updates" : "Documents"}
+      eyebrow={isCorrectionFlow ? "Application update" : "Automatic verification"}
+      title={isCorrectionFlow ? "Requested Updates" : "Verification & Evidence"}
       action={
         <Pressable onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
@@ -279,17 +325,36 @@ export function DocumentWorkflowScreen({
             )}
             <View style={{ flex: 1 }}>
               <Text style={styles.heroTitle}>
-                {isCorrectionFlow ? "Reviewer requested an update" : "Verification documents"}
+                {isCorrectionFlow ? "Verification update required" : "Verification & evidence"}
               </Text>
               <Text style={styles.heroBody}>
                 {isCorrectionFlow
                   ? outstandingRequested.length > 0
                     ? `${outstandingRequested.length} item${outstandingRequested.length === 1 ? "" : "s"} still need attention. Requested items appear first.`
                     : "Your requested replacements are ready. Review them and resubmit when complete."
-                  : `${configured.length} active requirement${configured.length === 1 ? "" : "s"} for this application.`}
+                  : verificationChecks.length
+                    ? `${verificationChecks.length} automatic check${verificationChecks.length === 1 ? "" : "s"} plus only the fallback or regulatory evidence that still applies.`
+                    : `${visibleConfigured.length} evidence requirement${visibleConfigured.length === 1 ? "" : "s"} for this application.`}
               </Text>
             </View>
           </View>
+
+          {verificationChecks.map((check) => (
+            <AutomatedVerificationCard
+              key={check.id}
+              applicationId={applicationId}
+              verificationKey={check.verificationKey}
+              title={check.displayName}
+              description={
+                check.status === "passed"
+                  ? "This requirement is already satisfied automatically."
+                  : check.manualFallbackAllowed
+                    ? "Use automatic verification first. A fallback upload is shown only when the automatic route is unavailable or unsuccessful."
+                    : "This check must be completed through the configured secure verification provider."
+              }
+              check={check}
+            />
+          ))}
 
           {orderedConfigured.map((requirement, index) => {
             const existing = existingForRequirement(requirement);
@@ -378,14 +443,13 @@ export function DocumentWorkflowScreen({
             );
           })}
 
-          {configured.length === 0 ? (
+          {visibleConfigured.length === 0 && verificationChecks.length === 0 ? (
             <Text style={styles.body}>
-              No active document requirements were returned by the approval
-              policy.
+              No verification or evidence requirements apply to this application.
             </Text>
           ) : null}
 
-          {configured.length > 0 ? (
+          {visibleConfigured.length > 0 || verificationChecks.length > 0 ? (
             <Card>
               <View style={styles.row}>
                 <View style={{ flex: 1, gap: 4 }}>
@@ -405,7 +469,9 @@ export function DocumentWorkflowScreen({
                         : "All required files are present. Submit now without leaving this screen."
                       : outstandingRequested.length > 0
                         ? `${outstandingRequested.length} reviewer-requested item${outstandingRequested.length === 1 ? "" : "s"} still need to be replaced.`
-                        : `${missingConfigured.length} required item${missingConfigured.length === 1 ? "" : "s"} still needed before submission.`}
+                        : pendingAutomaticChecks.length > 0
+                          ? `${pendingAutomaticChecks.length} automatic verification check${pendingAutomaticChecks.length === 1 ? "" : "s"} still need to finish.`
+                          : `${missingConfigured.length} fallback or regulatory item${missingConfigured.length === 1 ? "" : "s"} still needed before submission.`}
                   </Text>
                 </View>
                 {canSubmitApplication ? <FileCheck2 color={colors.success} /> : null}

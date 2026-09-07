@@ -88,6 +88,7 @@ import { AdminStationPricingWorkspace } from "./admin-station-pricing-workspace"
 import { AdminStationInventoryWorkspace } from "./admin-station-inventory-workspace";
 import { AdminSupportWorkspace } from "./admin-support-workspace";
 import { AdminUtilityBillingWorkspace } from "./admin-utility-billing-workspace";
+import { AdminVerificationWorkspace } from "./admin-verification-workspace";
 import {
   catalogConsoleConfig,
   financeConsoleConfig,
@@ -183,6 +184,7 @@ const navIconMap = {
   access: UsersRound,
   governance: Settings2,
   applications: ClipboardList,
+  verification: ShieldCheck,
   organizations: Building2,
   operations: Activity,
   coverage: MapPinned,
@@ -234,6 +236,13 @@ const foundationNavigation: readonly NavigationItem[] = [
     href: "/applications",
     icon: "applications",
     requiredPermissions: ["platform.applications.read"],
+  },
+  {
+    key: "verification",
+    label: "Verification",
+    href: "/verification",
+    icon: "verification",
+    requiredPermissions: ["platform.verification.read"],
   },
   {
     key: "fleet",
@@ -436,6 +445,13 @@ export function App() {
   const filteredNavigation = sessionState.context.platformAdmin?.admin_kind === "super_admin"
     ? foundationNavigation
     : foundationNavigation.filter((item) => {
+      if (item.key === "verification") {
+        return hasAnyPermission([
+          "platform.verification.read",
+          "platform.verification.manage",
+          "platform.applications.review",
+        ]);
+      }
       if (item.key === "operations") {
         return hasAnyPermission([
           "lpg.orders.manage",
@@ -584,6 +600,10 @@ function Workspace(props: { readonly route: string; readonly onNavigate: (href: 
 
   if (props.route === "/applications") {
     return <ApplicationsWorkspace />;
+  }
+
+  if (props.route === "/verification") {
+    return <AdminVerificationWorkspace onOpenApplications={() => props.onNavigate("/applications")} />;
   }
 
   if (props.route === "/fleet") {

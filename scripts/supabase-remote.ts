@@ -75,6 +75,7 @@ async function deployFunctions(): Promise<void> {
   await deployFunction(projectRef, "health", true);
   await deployFunction(projectRef, "api-gateway", false);
   await deployFunction(projectRef, "finance-runtime", false);
+  await deployFunction(projectRef, "verification-runtime", false);
   await deployFunction(projectRef, "runtime-worker", true);
   await deployFunction(projectRef, "inventory-provider-webhook", true);
   await deployFunction(projectRef, "payment-webhook", true);
