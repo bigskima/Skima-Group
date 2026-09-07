@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { ChevronRight, ClipboardList, MapPin, PackageCheck, ShieldCheck, Truck } from "lucide-react-native";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
-import { domainQueries, useJobDetails } from "../api/domains";\nimport { useResolvedLocationLabel } from "../domains/maps/readableLocation";
+import { domainQueries, useJobDetails } from "../api/domains";
+import { useResolvedLocationLabel } from "../domains/maps/readableLocation";
 import {
   displayReference,
   displayStatus,
