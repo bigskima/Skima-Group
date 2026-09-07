@@ -708,6 +708,28 @@ const checks: Check[] = [
     ],
   },
   {
+    name: "approved financial policy replacement is atomic and conflict checked",
+    source: migrations,
+    required: [
+      /create or replace function public\.activate_financial_policy_replacement/i,
+      /predecessor\.lifecycle_status <> 'active'/i,
+      /set lifecycle_status = 'superseded'/i,
+      /set lifecycle_status = 'active'/i,
+      /perform public\.assert_financial_policy_no_conflict\(candidate\.id\)/i,
+      /target_idempotency_key \|\| ':superseded'/i,
+    ],
+  },
+  {
+    name: "admin gateway exposes atomic policy replacement",
+    source: gateway,
+    required: [
+      /\/admin\/financial-policies\/replace-active/i,
+      /activate_financial_policy_replacement/i,
+      /target_policy_version_id/i,
+      /target_idempotency_key/i,
+    ],
+  },
+  {
     name: "admin withdrawal does not submit a fee",
     source: actionSection(adminConfig, "request-withdrawal"),
     forbidden: [/feeAmount/i, /withdrawalFee/i],
