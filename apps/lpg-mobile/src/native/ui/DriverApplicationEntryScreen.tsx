@@ -378,11 +378,11 @@ function DriverGeographyStep(props: {
   return (
     <Screen
       eyebrow="Driver application"
-      title="Where can you provide service?"
-      subtitle="Confirm your operating location and choose every nearby area you can reliably cover. You can select more than one area."
+      title="Service area"
+      subtitle="Confirm where you operate and choose the nearby areas you can reliably cover."
       action={props.onCancel ? <AppButton label="Cancel" size="sm" variant="ghost" onPress={props.onCancel} /> : undefined}
     >
-      <Card variant="brandSoft">
+      <Card variant="brandSoft" padding="sm">
         <View style={styles.cardHeading}>
           <View style={[styles.iconBubble, { backgroundColor: palette.brandSoft }]}> 
             <LocateFixed size={20} color={palette.brand} />
@@ -415,7 +415,7 @@ function DriverGeographyStep(props: {
         />
       </Card>
 
-      <Card>
+      <Card padding="sm">
         <View style={styles.cardHeading}>
           <View style={[styles.iconBubble, { backgroundColor: palette.brandSoft }]}> 
             <MapPin size={20} color={palette.brand} />
@@ -630,15 +630,15 @@ const styles = StyleSheet.create({
   editBarSubtitle: { ...typography.caption },
   cardHeading: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   cardHeadingCopy: { flex: 1, gap: 4 },
-  iconBubble: { width: 38, height: 38, borderRadius: radii.md, alignItems: "center", justifyContent: "center" },
+  iconBubble: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   sectionTitle: { ...typography.sectionTitle },
-  helper: { ...typography.caption, lineHeight: 18 },
-  locationBox: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.md, flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
+  helper: { ...typography.caption, fontSize: 10, lineHeight: 15 },
+  locationBox: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.sm, flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   locationCopy: { flex: 1, gap: 3 },
   locationTitle: { ...typography.bodyStrong },
   loadingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: spacing.sm },
   areaList: { gap: spacing.sm },
-  areaRow: { borderWidth: 1, borderRadius: radii.md, padding: spacing.sm, gap: spacing.sm },
+  areaRow: { borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.sm, paddingVertical: 9, gap: 6 },
   areaSelect: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   checkBox: { width: 24, height: 24, borderRadius: 7, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   areaCopy: { flex: 1, gap: 2 },
