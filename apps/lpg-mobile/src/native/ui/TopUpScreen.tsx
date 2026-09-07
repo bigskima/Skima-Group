@@ -91,10 +91,13 @@ export function TopUpScreen() {
         return;
       }
 
+      const resolvedWalletId =
+        firstString(feePreview, ["walletId", "wallet_id"]) ?? walletId;
+
       const result = await initialize.mutateAsync({
         amount: value,
         currencyCode: currency,
-        walletId: walletId ?? undefined,
+        walletId: resolvedWalletId ?? undefined,
         callbackUrl: Linking.createURL("payment-return"),
         idempotencyKey: idempotencyKey("wallet-top-up", walletId ?? "wallet"),
         metadata: { returnUrl: Linking.createURL("payment-return") },
