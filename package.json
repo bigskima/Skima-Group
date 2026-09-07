@@ -62,6 +62,7 @@
     "ai-runtime:contract": "deno test --allow-read scripts/ai-runtime-contract.test.ts scripts/ai-driver-daily-brief-contract.test.ts",
     "lpg-refill:contract": "deno test --allow-read scripts/lpg-refill-production-contract.test.ts",
     "lpg-auth:contract": "deno test --allow-read scripts/lpg-auth-production-contract.test.ts",
+    "vercel-ignore:test": "node scripts/vercel-ignore.test.mjs",
     "utility-billing:contract": "deno test --allow-read scripts/utility-billing-production-contract.test.ts"
   },
   "dependencies": {
