@@ -366,6 +366,36 @@ async function paystackRequest(
         409,
       );
     }
+    if (
+      lowerMessage.includes("payout") &&
+      lowerMessage.includes("hold")
+    ) {
+      throw new PaystackPayoutError(
+        "paystack_payouts_on_hold",
+        "SKIMA's Paystack payouts are currently on hold. Complete the outstanding Paystack compliance review before retrying.",
+        409,
+      );
+    }
+    if (
+      lowerMessage.includes("transfer") &&
+      (
+        lowerMessage.includes("not enabled") ||
+        lowerMessage.includes("not available") ||
+        lowerMessage.includes("cannot make") ||
+        lowerMessage.includes("can't make") ||
+        lowerMessage.includes("not allowed") ||
+        lowerMessage.includes("business verification") ||
+        lowerMessage.includes("business profile") ||
+        lowerMessage.includes("complete verification") ||
+        lowerMessage.includes("complete your verification")
+      )
+    ) {
+      throw new PaystackPayoutError(
+        "paystack_transfers_unavailable",
+        "SKIMA's Paystack account is not yet enabled for live transfers. Complete the required Paystack business/compliance activation before retrying.",
+        409,
+      );
+    }
     if (lowerMessage.includes("otp") && lowerMessage.includes("disable")) {
       throw new PaystackPayoutError(
         "paystack_transfer_otp_configuration_required",
@@ -387,13 +417,23 @@ async function paystackRequest(
       );
     }
 
-    throw new PaystackPayoutError(
-      response.status === 401 || response.status === 403
+    const transferOperation = url.pathname.includes("/transfer");
+    const providerCode =
+      response.status === 403 && transferOperation
+        ? "paystack_transfers_unavailable"
+        : response.status === 401 || response.status === 403
         ? "paystack_authentication_failed"
         : response.status === 429
         ? "paystack_rate_limited"
-        : "paystack_request_failed",
-      safeMessage,
+        : "paystack_request_failed";
+    const providerSafeMessage =
+      providerCode === "paystack_transfers_unavailable"
+        ? "SKIMA's Paystack account is not currently permitted to make live transfers. Complete the required Paystack business/compliance activation before retrying."
+        : safeMessage;
+
+    throw new PaystackPayoutError(
+      providerCode,
+      providerSafeMessage,
       response.status >= 400 && response.status < 600 ? response.status : 502,
     );
   }

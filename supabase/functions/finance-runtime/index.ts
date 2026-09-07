@@ -243,7 +243,25 @@ async function payoutBanks(
   const metadata = optionalRecord(data?.metadata);
   const publicPayout = optionalRecord(metadata.public_payout);
   const configuredBanks = Array.isArray(publicPayout.banks) ? publicPayout.banks : [];
-  const providerKey = await activePaymentProvider(serviceClient);
+  const directoryAvailable = configuredBanks.length > 0;
+  let providerKey: string | null = null;
+  let providerIssueCode: string | null = null;
+  let providerIssueMessage: string | null = null;
+
+  try {
+    providerKey = await activePaymentProvider(serviceClient);
+  } catch (cause) {
+    if (cause instanceof FinanceError) {
+      providerIssueCode = cause.code;
+      providerIssueMessage =
+        cause.code === "payment_provider_unavailable"
+          ? "SKIMA's live payout provider is not fully configured right now."
+          : "SKIMA could not confirm live payout-provider readiness.";
+    } else {
+      providerIssueCode = "payment_provider_unavailable";
+      providerIssueMessage = "SKIMA's payout provider is temporarily unavailable.";
+    }
+  }
 
   if (providerKey === "provider.payment.paystack") {
     const secret = Deno.env.get("PAYSTACK_SECRET_KEY");
@@ -256,27 +274,53 @@ async function payoutBanks(
             data: {
               currencyCode: "NGN",
               available: true,
+              directoryAvailable: true,
+              providerConfigured: true,
+              beneficiaryVerificationAvailable: true,
               provider: providerKey,
               source: "paystack",
               banks,
+              providerIssueCode: null,
+              providerIssueMessage: null,
             },
             requestId,
           });
         }
-      } catch (error) {
-        if (!(error instanceof PaystackPayoutError)) throw error;
+        providerIssueCode = "paystack_bank_directory_empty";
+        providerIssueMessage = "Paystack returned an empty Nigerian bank directory.";
+      } catch (cause) {
+        if (cause instanceof PaystackPayoutError) {
+          providerIssueCode = cause.code;
+          providerIssueMessage = cause.message;
+        } else {
+          providerIssueCode = "paystack_bank_directory_unavailable";
+          providerIssueMessage = "Paystack's bank directory could not be loaded.";
+        }
       }
+    } else {
+      providerIssueCode = "payment_provider_unavailable";
+      providerIssueMessage = "Paystack payouts are not configured on the SKIMA backend.";
     }
+  } else if (providerKey) {
+    providerIssueCode = "payout_provider_not_live";
+    providerIssueMessage = "The active SKIMA payment provider does not support live Nigerian bank verification.";
   }
 
   return json({
     ok: true,
     data: {
       currencyCode: data?.code ?? "NGN",
-      available: publicPayout.available === true,
+      available: directoryAvailable,
+      directoryAvailable,
+      providerConfigured: Boolean(providerKey),
+      beneficiaryVerificationAvailable:
+        providerKey === "provider.payment.paystack" &&
+        Boolean(Deno.env.get("PAYSTACK_SECRET_KEY")),
       provider: providerKey,
       source: "configured-fallback",
       banks: configuredBanks,
+      providerIssueCode,
+      providerIssueMessage,
     },
     requestId,
   });
@@ -677,7 +721,14 @@ async function requestWithdrawal(
     .single();
   if (record.error) throw new FinanceError("database_error", record.error.message);
 
-  return json({ ok: true, data: record.data, transfer, requestId });
+  return json({
+    ok: true,
+    data: {
+      ...record.data,
+      transfer,
+    },
+    requestId,
+  });
 }
 
 async function retryWithdrawal(
