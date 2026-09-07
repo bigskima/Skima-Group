@@ -1248,7 +1248,7 @@ language plpgsql
 stable
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 declare
   result jsonb;
 begin
@@ -1323,7 +1323,7 @@ begin
 
   return result;
 end;
-$;
+$$;
 
 revoke all on function public.read_verification_provider_configuration()
   from public, anon;
@@ -1342,7 +1342,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 declare
   definition_id uuid;
   provider_id uuid;
@@ -1355,17 +1355,11 @@ begin
   end if;
 
   if target_verification_key is null
-     or target_verification_key !~ '^[a-z][a-z0-9_.:-]{2,120}
-
-commit;
- then
+     or target_verification_key !~ '^[a-z][a-z0-9_.:-]{2,120}$' then
     raise exception 'target_verification_key is invalid';
   end if;
   if target_provider_key is null
-     or target_provider_key !~ '^[a-z][a-z0-9_.:-]{2,120}
-
-commit;
- then
+     or target_provider_key !~ '^[a-z][a-z0-9_.:-]{2,120}$' then
     raise exception 'target_provider_key is invalid';
   end if;
   if target_status not in ('inactive','active','paused','retired') then
@@ -1382,17 +1376,25 @@ commit;
     raise exception 'target_config must be a JSON object';
   end if;
 
-  select definition.id into definition_id
+  select definition.id
+  into definition_id
   from public.verification_definitions definition
   where definition.key = target_verification_key
     and definition.status = 'active';
-  if definition_id is null then raise exception 'verification definition was not found'; end if;
 
-  select provider.id into provider_id
+  if definition_id is null then
+    raise exception 'verification definition was not found';
+  end if;
+
+  select provider.id
+  into provider_id
   from public.provider_adapters provider
   where provider.key = target_provider_key
     and provider.provider_kind = 'verification';
-  if provider_id is null then raise exception 'verification provider was not found'; end if;
+
+  if provider_id is null then
+    raise exception 'verification provider was not found';
+  end if;
 
   insert into public.verification_provider_routes (
     verification_definition_id,
@@ -1453,7 +1455,7 @@ commit;
 
   return route_id;
 end;
-$;
+$$;
 
 revoke all on function public.configure_verification_provider_route(
   text, text, text, text, integer, jsonb
@@ -1468,7 +1470,7 @@ language plpgsql
 stable
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 declare
   result jsonb;
 begin
@@ -1538,7 +1540,7 @@ begin
 
   return result;
 end;
-$;
+$$;
 
 revoke all on function public.read_verification_exception_queue()
   from public, anon;
