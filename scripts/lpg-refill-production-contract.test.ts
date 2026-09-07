@@ -88,7 +88,7 @@ Deno.test("customer wallet top up uses the canonical gateway runtime", async () 
 
 Deno.test("nearby station discovery is location and service-radius authoritative", async () => {
   const [migration, gateway, domains, stationsScreen] = await Promise.all([
-    read("supabase/migrations/20260907104500_customer_nearby_station_public_media.sql"),
+    read("supabase/migrations/20260907104500_lpg_customer_nearby_station_public_media.sql"),
     read("supabase/functions/api-gateway/index.ts"),
     read("apps/lpg-mobile/src/native/api/domains.ts"),
     read("apps/lpg-mobile/src/native/ui/StationsScreen.tsx"),
@@ -119,7 +119,7 @@ Deno.test("cylinder presentation generation does not require an uploaded source 
 
 Deno.test("station activation publishes only public-safe premises media", async () => {
   const [migration, onboarding, detail] = await Promise.all([
-    read("supabase/migrations/20260907104500_customer_nearby_station_public_media.sql"),
+    read("supabase/migrations/20260907104500_lpg_customer_nearby_station_public_media.sql"),
     read("apps/lpg-mobile/src/native/application/MultiPhotoRequirement.tsx"),
     read("apps/lpg-mobile/src/native/ui/StationDetailScreen.tsx"),
   ]);
