@@ -785,7 +785,10 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
                       aria-label="Search payout bank"
                       placeholder="Search bank"
                       value={payoutBankSearch}
-                      onChange={(event) => setPayoutBankSearch(event.currentTarget.value)}
+                      onChange={(event) => {
+                        const nextValue = event.currentTarget.value;
+                        setPayoutBankSearch(nextValue);
+                      }}
                       style={adminInputStyle}
                     />
                   </label>
@@ -876,7 +879,10 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
                       min="0"
                       step="1"
                       value={revenuePayoutAmount}
-                      onChange={(event) => setRevenuePayoutAmount(event.currentTarget.value)}
+                      onChange={(event) => {
+                        const nextValue = event.currentTarget.value;
+                        setRevenuePayoutAmount(nextValue);
+                      }}
                       style={adminInputStyle}
                     />
                   </label>
