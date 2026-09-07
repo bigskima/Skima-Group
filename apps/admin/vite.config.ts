@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 export default defineConfig({
   root: resolve(__dirname),
   envDir: resolve(__dirname, "../.."),
-  envPrefix: ["VITE_", "SUPABASE_URL", "SUPABASE_ANON_KEY"],
+  envPrefix: ["VITE_", "SUPABASE_", "EXPO_PUBLIC_", "NEXT_PUBLIC_", "PUBLIC_"],
   resolve: {
     alias: [
       {
