@@ -378,24 +378,28 @@ export class ApiGatewayClient {
     this.developmentLogger = options.developmentLogger;
   }
 
-  get<TData>(path: string, schema: z.ZodType<TData>, options: GatewayRequestOptions = {}) {
+  get<TSchema extends z.ZodTypeAny>(
+    path: string,
+    schema: TSchema,
+    options: GatewayRequestOptions = {},
+  ): Promise<z.output<TSchema>> {
     return this.request(path, schema, { ...options, method: "GET" });
   }
 
-  post<TData>(
+  post<TSchema extends z.ZodTypeAny>(
     path: string,
     body: unknown,
-    schema: z.ZodType<TData>,
+    schema: TSchema,
     options: GatewayRequestOptions = {},
-  ) {
+  ): Promise<z.output<TSchema>> {
     return this.request(path, schema, { ...options, body, method: "POST" });
   }
 
-  async request<TData>(
+  async request<TSchema extends z.ZodTypeAny>(
     path: string,
-    schema: z.ZodType<TData>,
+    schema: TSchema,
     options: GatewayRequestOptions = {},
-  ): Promise<TData> {
+  ): Promise<z.output<TSchema>> {
     const startedAt = performance.now();
     const requestId = crypto.randomUUID();
     const method = options.method ?? "GET";
