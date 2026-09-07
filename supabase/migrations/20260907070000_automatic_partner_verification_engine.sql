@@ -1242,6 +1242,293 @@ revoke all on function public.reconcile_application_verification(uuid, text)
 grant execute on function public.reconcile_application_verification(uuid, text)
   to service_role;
 
+create or replace function public.read_verification_provider_configuration()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $
+declare
+  result jsonb;
+begin
+  if auth.role() <> 'service_role'
+     and not public.has_permission('platform.verification.read', null)
+     and not public.has_permission('platform.verification.manage', null)
+     and not public.can_review_applications() then
+    raise exception using errcode = '42501',
+      message = 'verification configuration read permission is required';
+  end if;
+
+  select jsonb_build_object(
+    'providers',
+    coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', provider.id,
+          'key', provider.key,
+          'displayName', provider.display_name,
+          'status', provider.status,
+          'secretRef', provider.secret_ref,
+          'config', provider.config
+        )
+        order by provider.display_name
+      )
+      from public.provider_adapters provider
+      where provider.provider_kind = 'verification'
+    ), '[]'::jsonb),
+    'routes',
+    coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', route.id,
+          'verificationKey', definition.key,
+          'verificationDisplayName', definition.display_name,
+          'verificationMode', definition.verification_mode,
+          'providerKey', provider.key,
+          'providerDisplayName', provider.display_name,
+          'providerStatus', provider.status,
+          'workflowRef', route.workflow_ref,
+          'priority', route.priority,
+          'status', route.status,
+          'config', route.config
+        )
+        order by definition.display_name, route.priority
+      )
+      from public.verification_provider_routes route
+      join public.verification_definitions definition
+        on definition.id = route.verification_definition_id
+      join public.provider_adapters provider
+        on provider.id = route.provider_adapter_id
+      where route.status <> 'retired'
+    ), '[]'::jsonb)
+  )
+  into result;
+
+  return result;
+end;
+$;
+
+revoke all on function public.read_verification_provider_configuration()
+  from public, anon;
+grant execute on function public.read_verification_provider_configuration()
+  to authenticated, service_role;
+
+create or replace function public.configure_verification_provider_route(
+  target_verification_key text,
+  target_provider_key text,
+  target_workflow_ref text,
+  target_status text,
+  target_priority integer default 100,
+  target_config jsonb default '{}'::jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $
+declare
+  definition_id uuid;
+  provider_id uuid;
+  route_id uuid;
+begin
+  if auth.role() <> 'service_role'
+     and not public.has_permission('platform.verification.manage', null) then
+    raise exception using errcode = '42501',
+      message = 'verification management permission is required';
+  end if;
+
+  if target_verification_key is null
+     or target_verification_key !~ '^[a-z][a-z0-9_.:-]{2,120}
+
+commit;
+ then
+    raise exception 'target_verification_key is invalid';
+  end if;
+  if target_provider_key is null
+     or target_provider_key !~ '^[a-z][a-z0-9_.:-]{2,120}
+
+commit;
+ then
+    raise exception 'target_provider_key is invalid';
+  end if;
+  if target_status not in ('inactive','active','paused','retired') then
+    raise exception 'target_status is not supported';
+  end if;
+  if target_status = 'active'
+     and nullif(btrim(target_workflow_ref), '') is null then
+    raise exception 'an active verification route requires a workflow reference';
+  end if;
+  if target_priority is null or target_priority < 0 or target_priority > 10000 then
+    raise exception 'target_priority must be between 0 and 10000';
+  end if;
+  if target_config is null or jsonb_typeof(target_config) <> 'object' then
+    raise exception 'target_config must be a JSON object';
+  end if;
+
+  select definition.id into definition_id
+  from public.verification_definitions definition
+  where definition.key = target_verification_key
+    and definition.status = 'active';
+  if definition_id is null then raise exception 'verification definition was not found'; end if;
+
+  select provider.id into provider_id
+  from public.provider_adapters provider
+  where provider.key = target_provider_key
+    and provider.provider_kind = 'verification';
+  if provider_id is null then raise exception 'verification provider was not found'; end if;
+
+  insert into public.verification_provider_routes (
+    verification_definition_id,
+    provider_adapter_id,
+    workflow_ref,
+    priority,
+    status,
+    config,
+    created_by
+  )
+  values (
+    definition_id,
+    provider_id,
+    nullif(btrim(target_workflow_ref), ''),
+    target_priority,
+    target_status,
+    target_config,
+    auth.uid()
+  )
+  on conflict (verification_definition_id, provider_adapter_id) do update
+  set workflow_ref = excluded.workflow_ref,
+      priority = excluded.priority,
+      status = excluded.status,
+      config = public.verification_provider_routes.config || excluded.config,
+      updated_at = timezone('utc', now())
+  returning id into route_id;
+
+  if target_status = 'active' then
+    update public.provider_adapters
+    set status = 'active',
+        updated_at = timezone('utc', now())
+    where id = provider_id
+      and status <> 'disabled';
+  end if;
+
+  insert into public.audit_logs (
+    actor_user_id,
+    action,
+    entity_type,
+    entity_id,
+    after_state,
+    metadata
+  )
+  values (
+    auth.uid(),
+    'verification.provider_route.configured',
+    'verification_provider_route',
+    route_id,
+    jsonb_build_object(
+      'verificationKey', target_verification_key,
+      'providerKey', target_provider_key,
+      'workflowRefConfigured', nullif(btrim(target_workflow_ref), '') is not null,
+      'status', target_status,
+      'priority', target_priority
+    ),
+    jsonb_build_object('source', 'skima.admin.verification')
+  );
+
+  return route_id;
+end;
+$;
+
+revoke all on function public.configure_verification_provider_route(
+  text, text, text, text, integer, jsonb
+) from public, anon;
+grant execute on function public.configure_verification_provider_route(
+  text, text, text, text, integer, jsonb
+) to authenticated, service_role;
+
+create or replace function public.read_verification_exception_queue()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $
+declare
+  result jsonb;
+begin
+  if auth.role() <> 'service_role'
+     and not public.can_review_applications()
+     and not public.has_permission('platform.verification.read', null)
+     and not public.has_permission('platform.verification.manage', null) then
+    raise exception using errcode = '42501',
+      message = 'verification review permission is required';
+  end if;
+
+  select coalesce(jsonb_agg(item order by item ->> 'updatedAt' desc), '[]'::jsonb)
+  into result
+  from (
+    select jsonb_build_object(
+      'applicationId', application.id,
+      'publicReference', application.public_reference,
+      'applicationStatus', application.status,
+      'operationalStatus', application.operational_status,
+      'applicationTypeKey', application_type.key,
+      'applicationCategory', application_type.application_category,
+      'applicantUserId', application.applicant_user_id,
+      'applicantName', profile.display_name,
+      'unresolvedVerificationCount',
+        coalesce((application.metadata ->> 'verification_unresolved_count')::integer, 0),
+      'manualReviewCount',
+        coalesce((application.metadata ->> 'verification_manual_review_count')::integer, 0),
+      'latestVerificationStatus', latest_verification.status,
+      'latestVerificationKey', latest_verification.verification_key,
+      'latestFailureMessage', latest_verification.failure_message,
+      'updatedAt', application.updated_at
+    ) as item
+    from public.application_records application
+    join public.application_type_definitions application_type
+      on application_type.id = application.application_type_id
+    left join public.profiles profile
+      on profile.id = application.applicant_user_id
+    left join lateral (
+      select
+        session.status,
+        definition.key as verification_key,
+        session.failure_message
+      from public.application_verification_sessions session
+      join public.application_verification_requirements mapping
+        on mapping.id = session.application_verification_requirement_id
+      join public.verification_definitions definition
+        on definition.id = mapping.verification_definition_id
+      where session.application_id = application.id
+        and session.status in ('failed','manual_review','expired')
+      order by session.updated_at desc
+      limit 1
+    ) latest_verification on true
+    where application_type.key in (
+      'application.lpg.driver.phase-one',
+      'application.lpg.station.phase-one',
+      'application.lpg.vehicle.phase-one'
+    )
+      and application.status in (
+        'submitted','resubmitted','under_review','additional_info_required'
+      )
+      and (
+        coalesce((application.metadata ->> 'verification_unresolved_count')::integer, 0) > 0
+        or coalesce((application.metadata ->> 'verification_manual_review_count')::integer, 0) > 0
+        or latest_verification.status is not null
+      )
+  ) queue;
+
+  return result;
+end;
+$;
+
+revoke all on function public.read_verification_exception_queue()
+  from public, anon;
+grant execute on function public.read_verification_exception_queue()
+  to authenticated, service_role;
+
 notify pgrst, 'reload schema';
 
 commit;
