@@ -26,20 +26,32 @@ interface NavigationGroup extends NavigationGroupDefinition {
   readonly items: readonly NavItem[];
 }
 
-const mobilePriorityKeys = ["overview", "applications", "support", "location-review", "operations", "revenue", "finance"] as const;
+const mobilePriorityKeys = ["overview", "operations", "applications", "revenue", "support", "location-review"] as const;
 
 const navigationGroupDefinitions: readonly NavigationGroupDefinition[] = [
   {
-    label: "Daily work",
-    keys: ["overview", "applications", "support", "location-review", "operations", "revenue", "finance"],
+    label: "Command",
+    keys: ["overview"],
   },
   {
-    label: "Company management",
-    keys: ["company", "access", "content", "policies", "catalog"],
+    label: "People & partners",
+    keys: ["applications", "location-review", "company", "access", "drivers", "fleet", "stations"],
   },
   {
-    label: "Platform controls",
-    keys: ["coverage", "governance", "providers", "system"],
+    label: "Operations",
+    keys: ["operations", "coverage", "inventory", "quality", "support"],
+  },
+  {
+    label: "Money",
+    keys: ["revenue", "delivery-pricing", "driver-pricing", "finance", "billing"],
+  },
+  {
+    label: "Experience & policy",
+    keys: ["ai", "content", "policies", "branding", "catalog"],
+  },
+  {
+    label: "Platform",
+    keys: ["governance", "providers", "system"],
   },
 ];
 
