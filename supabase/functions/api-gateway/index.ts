@@ -109,6 +109,7 @@ const ROUTES = new Set([
   "/lpg/orders/refund",
   "/lpg/orders/financial-summary",
   "/lpg/stations",
+  "/lpg/stations/nearby",
   "/lpg/stations/activate",
   "/lpg/stations/runtime",
   "/lpg/stations/locations",
@@ -220,6 +221,7 @@ const ROUTES = new Set([
   "/runtime/pricing/quotes/accept",
   "/runtime/payments/reserve",
   "/runtime/payments/deposits",
+  "/runtime/payments/deposits/preview",
   "/runtime/payments/deposits/verify",
   "/runtime/payment-webhook-events",
   "/runtime/wallets",
@@ -990,6 +992,30 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
   if (routePath === "/lpg/workspace-access" && request.method === "GET") {
     return resolveLpgMobileWorkspaceAccess(supabase, authResult.user, id);
+  }
+
+  if (routePath === "/lpg/stations/nearby" && request.method === "GET") {
+    const latitude = requireNumber(url.searchParams.get("latitude"), "latitude");
+    const longitude = requireNumber(url.searchParams.get("longitude"), "longitude");
+    const radiusMeters = optionalNumber(url.searchParams.get("radiusMeters"), "radiusMeters") ?? 25000;
+    const limit = optionalIntegerQuery(url.searchParams.get("limit")) ?? 30;
+
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      throw new RequestValidationError("latitude and longitude must be valid coordinates.");
+    }
+    if (radiusMeters < 500 || radiusMeters > 100000) {
+      throw new RequestValidationError("radiusMeters must be between 500 and 100000.");
+    }
+
+    return rpcDataResponse(
+      supabase.rpc("read_nearby_lpg_stations", {
+        target_latitude: latitude,
+        target_longitude: longitude,
+        target_radius_meters: radiusMeters,
+        target_limit: limit,
+      }),
+      id,
+    );
   }
 
   if (routePath === "/lpg/stations") {
@@ -1799,6 +1825,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           .select(
             "id,public_reference,lpg_refill_quote_id,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,driver_profile_id,vehicle_id,tracking_session_id,escrow_hold_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,station_amount,delivery_fee_amount,platform_fee_amount,driver_commission_amount,status,payment_status,assignment_status,financial_policy_snapshot,metadata,created_at,updated_at",
           )
+          .eq("customer_user_id", authResult.user.id)
           .order("created_at", { ascending: false }),
         id,
       );
@@ -1912,6 +1939,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           "delivered",
           "disputed",
         ])
+        .eq("customer_user_id", authResult.user.id)
         .order("created_at", { ascending: false }),
       id,
     );
@@ -4212,6 +4240,63 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     return walletBalancesResponse(supabase, id);
   }
 
+  if (routePath === "/runtime/payments/deposits/preview" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+
+    const payload = body.value;
+    const amount = requireNumber(payload.amount, "amount");
+    const suppliedWalletId = optionalUuid(payload.walletId, "walletId");
+    let walletId = suppliedWalletId;
+
+    if (walletId) {
+      const walletResult = await supabase
+        .from("wallet_accounts")
+        .select("id")
+        .eq("id", walletId)
+        .eq("wallet_type", "customer")
+        .eq("owner_entity_type", "user")
+        .eq("owner_entity_id", authResult.user.id)
+        .maybeSingle();
+
+      if (walletResult.error) return databaseError(walletResult.error, id);
+      if (!walletResult.data) {
+        return jsonResponse({
+          ok: false,
+          error: "forbidden",
+          message: "Choose your personal customer wallet for this top up.",
+          requestId: id,
+        }, 403);
+      }
+    } else {
+      const walletResult = await supabase.rpc("ensure_wallet_account", {
+        target_wallet_type: "customer",
+        target_owner_entity_type: "user",
+        target_owner_entity_id: authResult.user.id,
+        target_currency_code: "NGN",
+        target_source: "platform.api_gateway",
+        target_metadata: { wallet_purpose: "customer_deposit" },
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey") + ":wallet",
+      });
+
+      if (walletResult.error) return databaseError(walletResult.error, id);
+      walletId = requireUuid(walletResult.data, "walletId");
+    }
+
+    const previewResult = await supabase.rpc("calculate_deposit_fee_from_policy", {
+      target_wallet_id: walletId,
+      target_amount: amount,
+    });
+    if (previewResult.error) return databaseError(previewResult.error, id);
+
+    return jsonResponse({
+      ok: true,
+      data: previewResult.data,
+      walletId,
+      requestId: id,
+    });
+  }
+
   if (routePath === "/runtime/payments/deposits") {
     if (request.method === "GET") {
       return selectRecords(
@@ -4220,6 +4305,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           .select(
             "id,public_reference,wallet_id,customer_user_id,provider_adapter_id,transaction_id,reversal_transaction_id,currency_code,amount,status,provider_reference,checkout_url,source,metadata,initialized_at,verified_at,failed_at,reversed_at,created_at,updated_at",
           )
+          .eq("customer_user_id", authResult.user.id)
           .order("created_at", { ascending: false }),
         id,
       );
