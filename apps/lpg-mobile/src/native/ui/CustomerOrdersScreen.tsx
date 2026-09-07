@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { ChevronRight, ClipboardList, MapPin, PackageCheck, ShieldCheck, Truck } from "lucide-react-native";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useJobDetails } from "../api/domains";
+import { useResolvedLocationLabel } from "../domains/maps/readableLocation";
 import {
   displayReference,
   displayStatus,
@@ -167,6 +168,16 @@ export function CustomerOrderDetailScreen() {
   const normalized = normalizeStatus(status);
   const currency = firstString(order, ["currency_code", "currencyCode"]) ?? "NGN";
   const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? "pending";
+  const pickupAddress = useResolvedLocationLabel(
+    pickup,
+    "Saved order location",
+    `order:${id ?? "unknown"}:pickup`,
+  );
+  const returnAddress = useResolvedLocationLabel(
+    delivery,
+    "Saved order location",
+    `order:${id ?? "unknown"}:return`,
+  );
   const total = firstNumber(order, ["total_amount", "totalAmount", "quoted_total", "quotedTotal"]);
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
   const actualKg = firstNumber(order, ["actualKg", "actual_kg"]);
@@ -233,8 +244,8 @@ export function CustomerOrderDetailScreen() {
             <View style={styles.infoGrid}>
               <InfoField label="Cylinder" value={cylinderSummary(cylinder)} />
               <InfoField label="Station" value={station ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned station") : "Finding the best station"} />
-              <InfoField label="Pickup" value={pickup ? (firstString(pickup, ["formattedAddress", "formatted_address", "label"]) ?? "Saved location") : "Saved order location"} />
-              <InfoField label="Return" value={delivery ? (firstString(delivery, ["formattedAddress", "formatted_address", "label"]) ?? "Saved location") : "Saved order location"} />
+              <InfoField label="Pickup" value={pickupAddress} />
+              <InfoField label="Return" value={returnAddress} />
             </View>
           </Card>
 
