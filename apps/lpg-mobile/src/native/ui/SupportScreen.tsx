@@ -145,7 +145,8 @@ export function SupportScreen() {
               <View style={styles.options}>
                 <AppButton label="No related order" variant={!orderId ? "primary" : "secondary"} size="sm" onPress={() => setOrderId("")} />
                 {relatedOrders.slice(0, 10).map((order) => {
-                  const id = recordId(order) ?? "";
+                  const id =
+                    firstString(order, ["lpgOrderId", "lpg_order_id", "id"]) ?? "";
                   return (
                     <AppButton
                       key={id}
