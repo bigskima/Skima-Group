@@ -135,7 +135,7 @@ export function isInternalLocationLabel(value: string): boolean {
   );
 }
 
-function cleanReadableLabel(value: string | null): string | null {
+function cleanReadableLabel(value: string | null | undefined): string | null {
   const normalized = value?.trim().replace(/\s+/g, " ");
   return normalized && !isInternalLocationLabel(normalized) ? normalized : null;
 }
