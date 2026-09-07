@@ -6,13 +6,14 @@ describe("SKIMA auth runtime verification", () => {
       verifySkimaAuthRuntime({
         supabaseUrl: "https://example.supabase.co",
         anonKey: "public-key",
-        fetchImpl: jest.fn(async () =>
-          new Response(JSON.stringify({
+        fetchImpl: jest.fn(async () => ({
+          ok: true,
+          json: async () => ({
             ok: true,
             service: "skima-platform",
             backend: "supabase",
-          }), { status: 200 })
-        ) as typeof fetch,
+          }),
+        })) as unknown as typeof fetch,
       }),
     ).resolves.toBeUndefined();
   });
@@ -22,13 +23,14 @@ describe("SKIMA auth runtime verification", () => {
       verifySkimaAuthRuntime({
         supabaseUrl: "https://wrong.supabase.co",
         anonKey: "public-key",
-        fetchImpl: jest.fn(async () =>
-          new Response(JSON.stringify({
+        fetchImpl: jest.fn(async () => ({
+          ok: true,
+          json: async () => ({
             ok: true,
             service: "another-product",
             backend: "supabase",
-          }), { status: 200 })
-        ) as typeof fetch,
+          }),
+        })) as unknown as typeof fetch,
       }),
     ).rejects.toMatchObject<AuthRuntimeError>({
       kind: "configuration",
