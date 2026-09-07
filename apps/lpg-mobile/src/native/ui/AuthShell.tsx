@@ -458,7 +458,22 @@ const styles = StyleSheet.create({
 
 
   body: { maxWidth: 430, fontSize: 12, lineHeight: 18, fontWeight: "500" },
-
+  title: {
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: "900",
+    letterSpacing: -0.9,
+  },
+  form: { gap: 15 },
+  footerDivider: { height: StyleSheet.hairlineWidth },
+  footer: { paddingTop: 1 },
+  privacyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+  },
 
   privacyText: { fontSize: 9, lineHeight: 13, fontWeight: "600", textAlign: "center" },
   pressed: { opacity: 0.76 },
