@@ -1200,8 +1200,8 @@ requireMatch(
 
 requireMatch(
   apiGatewaySql,
-  /reserve_lpg_refill_order_payment/,
-  "API gateway must route LPG payment reservation through the bounded-context RPC.",
+  /reserve_and_dispatch_lpg_refill_order/,
+  "API gateway must route LPG payment reservation through the atomic payment-and-dispatch bounded-context RPC.",
 );
 
 requireCondition(

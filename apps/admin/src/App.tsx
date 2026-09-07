@@ -77,7 +77,7 @@ import { AdminContentWorkspace } from "./admin-content-workspace";
 import { AdminFleetWorkspace } from "./admin-fleet-workspace";
 import { AdminOperationsWorkspace } from "./admin-operations-workspace";
 import { AdminDriverParticipationWorkspace } from "./admin-driver-participation-workspace";
-import { AdminDeliveryPricingWorkspace } from "./admin-delivery-pricing-workspace";
+import { AdminDeliveryPricingWorkspace, AdminDriverPricingWorkspace } from "./admin-delivery-pricing-workspace";
 import { AdminPartnerLocationReviewWorkspace } from "./admin-partner-location-review-workspace";
 import { AdminPolicyWorkspace } from "./admin-policy-workspace";
 import { AdminQualityWorkspace } from "./admin-quality-workspace";
@@ -189,6 +189,7 @@ const navIconMap = {
   locationReview: MapPinned,
   drivers: UsersRound,
   deliveryPricing: BadgeDollarSign,
+  driverPricing: BadgeDollarSign,
   quality: ShieldCheck,
   revenue: WalletCards,
   policies: FileText,
@@ -306,7 +307,7 @@ const foundationNavigation: readonly NavigationItem[] = [
   },
   {
     key: "finance",
-    label: "Finance",
+    label: "Wallets & Settlements",
     href: "/finance",
     icon: "finance",
     requiredPermissions: ["platform.financial.read"],
@@ -316,6 +317,13 @@ const foundationNavigation: readonly NavigationItem[] = [
     label: "Delivery Pricing",
     href: "/delivery-pricing",
     icon: "deliveryPricing",
+    requiredPermissions: ["platform.financial_policy.read"],
+  },
+  {
+    key: "driver-pricing",
+    label: "Driver Pricing",
+    href: "/driver-pricing",
+    icon: "driverPricing",
     requiredPermissions: ["platform.financial_policy.read"],
   },
   {
@@ -446,7 +454,7 @@ export function App() {
       if (item.key === "quality") {
         return hasAnyPermission(["lpg.quality.read", "lpg.quality.manage", "lpg.operations.manage"]);
       }
-      if (item.key === "delivery-pricing") {
+      if (item.key === "delivery-pricing" || item.key === "driver-pricing") {
         return hasAnyPermission([
           "platform.financial_policy.read",
           "platform.financial_policy.draft",
@@ -608,6 +616,10 @@ function Workspace(props: { readonly route: string; readonly onNavigate: (href: 
 
   if (props.route === "/delivery-pricing") {
     return <AdminDeliveryPricingWorkspace />;
+  }
+
+  if (props.route === "/driver-pricing") {
+    return <AdminDriverPricingWorkspace />;
   }
 
   if (props.route === "/policies") {

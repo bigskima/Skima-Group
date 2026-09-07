@@ -797,3 +797,157 @@
 
 .utility-setup-tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.65rem;margin:1rem 0 1.25rem}.utility-setup-tabs button{display:flex;flex-direction:column;gap:.25rem;text-align:left;padding:1rem;border:1px solid var(--sk-color-border);border-radius:14px;background:var(--sk-color-surface);color:inherit;cursor:pointer}.utility-setup-tabs button.is-active{border-color:var(--sk-color-primary);box-shadow:0 0 0 2px color-mix(in srgb,var(--sk-color-primary) 18%,transparent)}.utility-setup-tabs strong{font-size:.9rem}.utility-setup-tabs small{color:var(--sk-color-muted);line-height:1.35}.utility-guided-form{display:grid;grid-template-columns:minmax(220px,.65fr) minmax(300px,1.35fr);gap:2rem;padding-top:.5rem}.utility-guided-form h3{margin:0 0 .4rem}.utility-guided-form p{margin:0;color:var(--sk-color-muted);line-height:1.55}@media(max-width:760px){.utility-guided-form{grid-template-columns:1fr;gap:1rem}}
 .utility-guide{display:grid;gap:1.5rem}.utility-guide__hero{display:flex;justify-content:space-between;gap:1rem;padding:1.25rem;border-radius:18px;background:linear-gradient(135deg,color-mix(in srgb,var(--sk-color-primary) 10%,var(--sk-color-surface)),var(--sk-color-surface));border:1px solid var(--sk-color-border)}.utility-guide__hero h2,.utility-guide__hero p{margin:.25rem 0}.utility-guide__hero>svg{flex:0 0 auto;width:42px;height:42px;color:var(--sk-color-primary)}.utility-guide__steps{display:grid;gap:.7rem}.utility-guide__steps article{display:grid;grid-template-columns:28px 28px 1fr;align-items:start;gap:.75rem;padding:.9rem;border-bottom:1px solid var(--sk-color-border)}.utility-guide__steps article>span{display:grid;place-items:center;width:25px;height:25px;border-radius:50%;background:var(--sk-color-primary);color:#fff;font-size:.75rem;font-weight:900}.utility-guide__steps article>svg{color:var(--sk-color-primary);margin-top:2px}.utility-guide__steps p{margin:.25rem 0 0;color:var(--sk-color-muted)}.utility-provider-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem}.utility-provider-grid article{display:grid;gap:.8rem;padding:1rem;border:1px solid var(--sk-color-border);border-radius:16px;background:var(--sk-color-surface)}.utility-provider-grid article>div{display:flex;flex-wrap:wrap;justify-content:space-between;gap:.5rem}.utility-provider-grid span,.utility-provider-grid p{color:var(--sk-color-muted);margin:0}.utility-provider-grid a{display:inline-flex;align-items:center;gap:.25rem;color:var(--sk-color-primary);font-weight:800;text-decoration:none}.utility-offer-stack{display:grid;gap:2rem}.utility-offer-stack>.utility-guided-form+ .utility-guided-form{padding-top:2rem;border-top:1px solid var(--sk-color-border)}
+
+
+/* Money control center: keep pricing, revenue and settlement tools visually coherent. */
+.admin-shell__nav-group[data-section="Money"] {
+  padding: 10px 8px;
+  border: 1px solid rgba(237, 28, 46, .18);
+  border-radius: 16px;
+  background:
+    linear-gradient(145deg, rgba(237, 28, 46, .12), rgba(255, 255, 255, .025));
+}
+
+.admin-shell__nav-group[data-section="Money"] > p {
+  margin-inline: 4px;
+  color: rgba(255,255,255,.76);
+}
+
+.admin-shell__nav-group > button {
+  transition: background-color 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.admin-shell__nav-group > button:hover {
+  transform: translateX(2px);
+}
+
+.admin-money-editor {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--sk-color-primary) 18%, var(--sk-color-border));
+  box-shadow: 0 16px 44px rgba(18, 28, 45, .06);
+}
+
+.admin-money-editor::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--sk-color-primary), transparent 78%);
+}
+
+.admin-money-status-stack {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-money-price-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+  max-width: 1040px;
+}
+
+.admin-money-price-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--sk-color-border);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, var(--sk-color-surface-raised), var(--sk-color-surface));
+  box-shadow: 0 10px 26px rgba(18, 28, 45, .045);
+}
+
+.admin-money-price-card > div:first-child > strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.admin-money-price-card > div:first-child > p {
+  margin: 5px 0 0;
+  line-height: 1.45;
+}
+
+.admin-money-price-row {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-money-price-field {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+  flex: 1 1 260px;
+}
+
+.admin-money-price-field > span {
+  font-size: .86rem;
+  font-weight: 750;
+  color: var(--sk-color-muted);
+}
+
+.admin-money-active-price {
+  width: fit-content;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sk-color-success) 11%, transparent);
+  color: var(--sk-color-text);
+  font-size: .84rem;
+  font-weight: 700;
+}
+
+.admin-money-immediate-note,
+.admin-money-guardrail {
+  padding: 13px 15px;
+  border-radius: 14px;
+  line-height: 1.5;
+}
+
+.admin-money-immediate-note {
+  border: 1px solid color-mix(in srgb, var(--sk-color-success) 24%, var(--sk-color-border));
+  background: color-mix(in srgb, var(--sk-color-success) 7%, var(--sk-color-surface));
+}
+
+.admin-money-guardrail {
+  border: 1px solid color-mix(in srgb, var(--sk-color-primary) 20%, var(--sk-color-border));
+  background: color-mix(in srgb, var(--sk-color-primary-soft) 42%, var(--sk-color-surface));
+  color: var(--sk-color-muted);
+}
+
+.admin-money-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-money-form-actions > p {
+  margin: 0;
+}
+
+@media (max-width: 700px) {
+  .admin-money-status-stack {
+    justify-content: flex-start;
+  }
+
+  .admin-money-price-row,
+  .admin-money-form-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-money-price-field {
+    min-width: 0;
+  }
+
+  .admin-money-price-row .sk-button,
+  .admin-money-form-actions .sk-button {
+    width: 100%;
+  }
+}

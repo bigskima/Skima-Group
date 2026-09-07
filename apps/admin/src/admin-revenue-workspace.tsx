@@ -453,19 +453,23 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
         )}
       />
 
-      <section className="sk-panel">
+      <section className="sk-panel admin-money-editor">
         <div className="sk-panel__header">
           <div>
             <p className="admin-section-kicker">Revenue pricing</p>
             <h2>Platform fees</h2>
+            <p className="skima-muted">Each fee has one live value. Saving a permitted change replaces that value immediately for new transactions.</p>
           </div>
-          {configuration.isLoading ? (
-            <StatusBadge>Loading…</StatusBadge>
-          ) : configuration.error ? (
-            <StatusBadge tone="warning">Unavailable</StatusBadge>
-          ) : configuration.data ? (
-            <StatusBadge tone="success">{configuration.data.length} active fee controls</StatusBadge>
-          ) : null}
+          <div className="admin-money-status-stack">
+            {isSuperAdmin ? <StatusBadge tone="info">Super Admin · immediate</StatusBadge> : null}
+            {configuration.isLoading ? (
+              <StatusBadge>Loading…</StatusBadge>
+            ) : configuration.error ? (
+              <StatusBadge tone="warning">Unavailable</StatusBadge>
+            ) : configuration.data ? (
+              <StatusBadge tone="success">{configuration.data.length} live fee controls</StatusBadge>
+            ) : null}
+          </div>
         </div>
 
         {configuration.isLoading ? <LoadingState label="Loading current revenue price" /> : null}
@@ -478,11 +482,11 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
         ) : null}
 
         {configuration.data && !configuration.error ? (
-          <div style={{ display: "grid", gap: "1rem", maxWidth: 760 }}>
-            {configuration.data.map((fee) => <div key={fee.key} style={{display:"grid",gap:"0.75rem",padding:"1rem",border:"1px solid var(--sk-border, #d0d5dd)",borderRadius:14}}>
-              <div><strong>{fee.displayName}</strong><p style={{margin:"0.25rem 0 0",color:"var(--sk-muted, #667085)"}}>{fee.description}</p></div>
-              <div style={{ display: "flex", gap: "0.75rem", alignItems: "end", flexWrap: "wrap" }}>
-              <label style={{ display: "grid", gap: "0.4rem", minWidth: 220, flex: "1 1 260px" }}>
+          <div className="admin-money-price-grid">
+            {configuration.data.map((fee) => <div key={fee.key} className="admin-money-price-card">
+              <div><strong>{fee.displayName}</strong><p className="skima-muted">{fee.description}</p></div>
+              <div className="admin-money-price-row">
+              <label className="admin-money-price-field">
                 <span style={{ fontWeight: 700 }}>Amount ({fee.unitLabel})</span>
                 <input
                   aria-label={fee.displayName}
@@ -499,15 +503,7 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
                     const nextValue = event.currentTarget.value;
                     setFeeAmounts((current) => ({ ...current, [fee.key]: nextValue }));
                   }}
-                  style={{
-                    minHeight: 46,
-                    border: "1px solid var(--sk-border, #d0d5dd)",
-                    borderRadius: 12,
-                    padding: "0 0.85rem",
-                    font: "inherit",
-                    background: "var(--sk-surface, #fff)",
-                    color: "inherit",
-                  }}
+                  className="sk-input"
                 />
               </label>
               <Button
@@ -518,7 +514,7 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
                 {updateRevenueRate.isPending ? "Saving…" : "Save & apply now"}
               </Button>
               </div>
-              <span style={{color:"var(--sk-muted, #667085)"}}>Currently active: {money(fee.amount,fee.currencyCode)} {fee.unitLabel}</span>
+              <span className="admin-money-active-price">Live now: {money(fee.amount,fee.currencyCode)} {fee.unitLabel}</span>
             </div>)}
 
             {!canSubmitRevenueRate ? (
@@ -526,20 +522,15 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
                 You need platform revenue management access to change fees.
               </p>
             ) : (
-              <p style={{ margin: 0 }}>
-                Saving creates an audited financial-policy version and activates it immediately. No separate proposal or approval is required.
-              </p>
+              <div className="admin-money-immediate-note">
+                <strong>One save, one final price.</strong> SKIMA keeps the audit history in the background, but there is no second approval step for this direct fee control.
+              </div>
             )}
 
             {saveNotice ? (
               <div
                 role={saveSucceeded ? "status" : "alert"}
-                style={{
-                  borderRadius: 12,
-                  padding: "0.8rem 0.9rem",
-                  background: saveSucceeded ? "rgba(16, 185, 129, 0.10)" : "rgba(239, 68, 68, 0.10)",
-                  fontWeight: 650,
-                }}
+                className={saveSucceeded ? "admin-notice" : "admin-notice is-error"}
               >
                 {saveNotice}
               </div>
@@ -794,7 +785,10 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
                       aria-label="Search payout bank"
                       placeholder="Search bank"
                       value={payoutBankSearch}
-                      onChange={(event) => setPayoutBankSearch(event.currentTarget.value)}
+                      onChange={(event) => {
+                        const nextValue = event.currentTarget.value;
+                        setPayoutBankSearch(nextValue);
+                      }}
                       style={adminInputStyle}
                     />
                   </label>
@@ -885,7 +879,10 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
                       min="0"
                       step="1"
                       value={revenuePayoutAmount}
-                      onChange={(event) => setRevenuePayoutAmount(event.currentTarget.value)}
+                      onChange={(event) => {
+                        const nextValue = event.currentTarget.value;
+                        setRevenuePayoutAmount(nextValue);
+                      }}
                       style={adminInputStyle}
                     />
                   </label>
