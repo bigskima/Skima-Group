@@ -101,6 +101,7 @@ declare
   payout_currency text := 'NGN';
   payout_country text := 'NG';
   bank_directory jsonb;
+  provider_found boolean := false;
 begin
   select provider.key, provider.config
   into provider_record
@@ -115,7 +116,9 @@ begin
     provider.key
   limit 1;
 
-  if found then
+  provider_found := found;
+
+  if provider_found then
     payout_currency := coalesce(nullif(provider_record.config ->> 'public_payout_currency', ''), 'NGN');
     payout_country := coalesce(nullif(provider_record.config ->> 'public_payout_country', ''), 'NG');
     bank_directory := provider_record.config -> 'public_bank_directory';
@@ -138,7 +141,7 @@ begin
           'available', jsonb_typeof(bank_directory) = 'array' and jsonb_array_length(bank_directory) > 0,
           'country', payout_country,
           'currency', payout_currency,
-          'source', case when found then 'provider.config' else 'skima.configured_fallback' end,
+          'source', case when provider_found then 'provider.config' else 'skima.configured_fallback' end,
           'banks', bank_directory
         ),
         true
