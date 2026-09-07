@@ -97,7 +97,7 @@ export function AiAssistantScreen({ workspace }: { readonly workspace: AiAssista
 
   const supportOrders = useGatewayQuery({
     key: ["ai-support-orders"],
-    path: "/lpg/orders",
+    path: "/lpg/orders?scope=customer",
     schema: RecordArraySchema,
     enabled: workspace === "customer" && supportOpen,
   });
