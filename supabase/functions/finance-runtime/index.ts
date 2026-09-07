@@ -718,7 +718,14 @@ async function requestWithdrawal(
     .single();
   if (record.error) throw new FinanceError("database_error", record.error.message);
 
-  return json({ ok: true, data: record.data, transfer, requestId });
+  return json({
+    ok: true,
+    data: {
+      ...record.data,
+      transfer,
+    },
+    requestId,
+  });
 }
 
 async function retryWithdrawal(
