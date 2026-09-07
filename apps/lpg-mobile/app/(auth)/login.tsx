@@ -199,6 +199,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 9,
     lineHeight: 14,
-    fontWeight: "650",
+    fontWeight: "600",
   },
 });
