@@ -1261,6 +1261,22 @@ begin
   end if;
 
   select jsonb_build_object(
+    'definitions',
+    coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', definition.id,
+          'key', definition.key,
+          'displayName', definition.display_name,
+          'verificationMode', definition.verification_mode,
+          'status', definition.status,
+          'schema', definition.schema
+        )
+        order by definition.display_name
+      )
+      from public.verification_definitions definition
+      where definition.status = 'active'
+    ), '[]'::jsonb),
     'providers',
     coalesce((
       select jsonb_agg(
