@@ -680,6 +680,19 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     );
   }
 
+  if (routePath === "/admin/financial-policies/replace-active" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(
+      supabase.rpc("activate_financial_policy_replacement", {
+        target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+        target_policy_version_id: requireUuid(body.value.policyVersionId, "policyVersionId"),
+        target_reason: requireString(body.value.reason, "reason"),
+      }),
+      id,
+    );
+  }
+
   if (routePath === "/admin/financial-policies/deactivate" && request.method === "POST") {
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
