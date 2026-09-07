@@ -60,8 +60,6 @@ export default function ResetPassword() {
       eyebrow="Secure recovery"
       title="Choose a new password"
       body="Set the new password for your SKIMA account. The Supabase Auth policy configured for SKIMA remains the source of truth."
-      runtimeMessage={session.authRuntimeMessage}
-      runtimeStatus={session.authRuntimeStatus}
       footer={
         <Text style={[styles.footerText, { color: palette.muted }]}>
           Need to start again?{" "}
@@ -121,7 +119,7 @@ export default function ResetPassword() {
       {message ? <AuthFeedback message={message} tone={success ? "success" : "error"} /> : null}
 
       <AuthPrimaryButton
-        disabled={!ready || session.authRuntimeStatus === "unavailable"}
+        disabled={!ready}
         label="Update password"
         onPress={() => void submit()}
         pending={pending}
