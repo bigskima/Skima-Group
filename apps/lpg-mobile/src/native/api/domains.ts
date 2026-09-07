@@ -14,7 +14,7 @@ export const domainQueries = {
   orders: () =>
     useGatewayQuery({
       key: ["orders"],
-      path: "/lpg/orders",
+      path: "/lpg/orders?scope=customer",
       schema: RecordArraySchema,
     }),
   quotes: () =>
@@ -86,7 +86,7 @@ export const domainQueries = {
   transactions: () =>
     useGatewayQuery({
       key: ["deposits"],
-      path: "/runtime/payments/deposits",
+      path: "/runtime/payments/deposits?scope=customer",
       schema: RecordArraySchema,
     }),
   utilityCatalog: () =>
