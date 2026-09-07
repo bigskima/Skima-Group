@@ -37,10 +37,7 @@ if (repoRootResult.status !== 0 || !repoRootResult.stdout?.trim()) {
 const repoRoot = repoRootResult.stdout.trim();
 
 const current = process.env.VERCEL_GIT_COMMIT_SHA || "HEAD";
-const previousCandidates = [
-  process.env.VERCEL_GIT_PREVIOUS_SHA,
-  "HEAD^",
-].filter(Boolean);
+const previous = process.env.VERCEL_GIT_PREVIOUS_SHA?.trim();
 
 const commitExists = (ref) => spawnSync(
   "git",
@@ -52,10 +49,10 @@ if (!commitExists(current)) {
   process.exit(1);
 }
 
-const previous = previousCandidates.find(commitExists);
-if (!previous) {
-  // First deployment or unusually shallow clone: build once rather than risk
-  // skipping a project that has never produced this commit.
+if (!previous || !commitExists(previous)) {
+  // First deployment, manual redeploy, or unusually shallow clone: build once.
+  // Falling back to HEAD^ can incorrectly cancel a project's first deployment
+  // when the current commit did not touch that project's files.
   process.exit(1);
 }
 
