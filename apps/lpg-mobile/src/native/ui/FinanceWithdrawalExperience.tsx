@@ -7,6 +7,7 @@ import { useFinanceMutation, useFinanceQuery } from "../api/finance";
 import {
   firstNumber,
   firstString,
+  nestedRecord,
   nestedRecords,
   recordId,
   RecordArraySchema,
@@ -57,6 +58,13 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
     () => new Map(bankDirectory.map((bank) => [bank.code, bank.name])),
     [bankDirectory],
   );
+
+  const bankDirectorySource = firstString(bankQuery.data, ["source"]) ?? "";
+  const providerIssueMessage = firstString(bankQuery.data, ["providerIssueMessage", "provider_issue_message"]);
+  const providerIssueCode = firstString(bankQuery.data, ["providerIssueCode", "provider_issue_code"]);
+  const providerConfigured = bankQuery.data?.providerConfigured === true;
+  const beneficiaryVerificationAvailable = bankQuery.data?.beneficiaryVerificationAvailable === true;
+  const usingFallbackDirectory = bankDirectorySource === "configured-fallback";
 
   const beneficiaries = useMemo(
     () =>
@@ -125,6 +133,7 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
     : "";
   const canAddAccount = Boolean(
     walletId &&
+    beneficiaryVerificationAvailable &&
     bankCode &&
     isValidNuban &&
     resolvedAccountName &&
@@ -134,7 +143,7 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
   useEffect(() => {
     setResolvedAccountName("");
     setResolvedAccountKey("");
-    if (!bankCode || !isValidNuban) return;
+    if (!bankCode || !isValidNuban || !beneficiaryVerificationAvailable) return;
 
     const key = `${bankCode}:${accountNumber.trim()}`;
     const timer = setTimeout(() => {
@@ -164,7 +173,7 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [bankCode, accountNumber, isValidNuban, walletId]);
+  }, [bankCode, accountNumber, beneficiaryVerificationAvailable, isValidNuban, walletId]);
 
   const requestedAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
   const feeAmount = firstNumber(feePreview, ["calculatedFeeAmount", "calculated_fee_amount"]) ?? 0;
@@ -240,9 +249,17 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
       const reference = firstString(result, ["public_reference", "publicReference", "reference"]);
       const id = firstString(result, ["id"]);
       const status = firstString(result, ["status"]) ?? "processing";
+      const transfer = nestedRecord(result, "transfer");
+      const providerStatus = firstString(transfer, ["providerStatus", "provider_status", "status"]);
+      const providerMessage = firstString(transfer, ["message"]);
       setWithdrawalResult({ id: id ?? undefined, reference: reference ?? undefined, status });
-      if (status === "failed") {
-        setModalError("The bank transfer could not be completed. Your wallet balance was restored automatically.");
+      if (status === "failed" || providerStatus === "failed") {
+        setModalError(
+          providerMessage ??
+            "The bank transfer could not be completed. Your wallet balance was restored automatically.",
+        );
+      } else if (providerStatus === "approved" && providerMessage) {
+        setModalError(providerMessage);
       }
     } catch (cause) {
       setModalError(friendlyError(cause, "The withdrawal could not be processed."));
@@ -260,13 +277,21 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
       const reference = firstString(result, ["public_reference", "publicReference", "reference"]) ??
         withdrawalResult.reference;
       const status = firstString(result, ["status"]) ?? withdrawalResult.status ?? "approved";
+      const transfer = nestedRecord(result, "transfer");
+      const providerStatus = firstString(transfer, ["providerStatus", "provider_status", "status"]);
+      const providerMessage = firstString(transfer, ["message"]);
       setWithdrawalResult({
         id: withdrawalId,
         reference: reference ?? undefined,
         status,
       });
-      if (status === "failed") {
-        setModalError("The bank transfer could not be completed. Your wallet balance was restored automatically.");
+      if (status === "failed" || providerStatus === "failed") {
+        setModalError(
+          providerMessage ??
+            "The bank transfer could not be completed. Your wallet balance was restored automatically.",
+        );
+      } else if (providerMessage) {
+        setModalError(providerMessage);
       }
       await wallets.refetch();
     } catch (cause) {
@@ -318,55 +343,98 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
             error={accountNumber.length > 0 && !isValidNuban ? "Enter a valid 10-digit account number." : null}
           />
 
-          {bankDirectory.length ? (
-            <View style={styles.bankSection}>
-              <Text style={[styles.fieldLabel, { color: palette.ink }]}>Bank or financial institution</Text>
-              <View style={[styles.searchShell, { backgroundColor: palette.input, borderColor: palette.borderStrong }]}>
-                <Search color={palette.muted} size={17} />
-                <TextInput
-                  value={bankSearch}
-                  onChangeText={setBankSearch}
-                  placeholder="Search bank name or code"
-                  placeholderTextColor={palette.muted}
-                  style={[styles.searchInput, { color: palette.ink }]}
-                />
+          {bankQuery.isLoading ? (
+            <View style={[styles.configurationNotice, { backgroundColor: palette.soft }]}>
+              <Text style={[styles.configurationText, { color: palette.ink }]}>
+                Loading Nigerian payout banks…
+              </Text>
+            </View>
+          ) : bankDirectory.length ? (
+            <>
+              <View style={styles.bankSection}>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>Bank or financial institution</Text>
+                <View style={[styles.searchShell, { backgroundColor: palette.input, borderColor: palette.borderStrong }]}>
+                  <Search color={palette.muted} size={17} />
+                  <TextInput
+                    value={bankSearch}
+                    onChangeText={setBankSearch}
+                    placeholder="Search bank name or code"
+                    placeholderTextColor={palette.muted}
+                    style={[styles.searchInput, { color: palette.ink }]}
+                  />
+                </View>
+                <View style={styles.bankGrid}>
+                  {filteredBanks.map((bank) => {
+                    const selected = bank.code === bankCode;
+                    return (
+                      <Pressable
+                        key={bank.code}
+                        accessibilityRole="button"
+                        onPress={() => {
+                          setBankCode(bank.code);
+                          setResolvedAccountName("");
+                          setResolvedAccountKey("");
+                          setMessage(null);
+                        }}
+                        style={({ pressed }) => [
+                          styles.bankOption,
+                          {
+                            backgroundColor: selected ? palette.brandSoft : palette.surfaceSubtle,
+                            borderColor: selected ? palette.brand : palette.border,
+                            opacity: pressed ? 0.72 : 1,
+                          },
+                        ]}
+                      >
+                        <Building2 color={selected ? palette.brand : palette.mutedStrong} size={17} />
+                        <View style={styles.bankOptionCopy}>
+                          <Text numberOfLines={1} style={[styles.bankName, { color: palette.ink }]}>{bank.name}</Text>
+                          <Text style={[styles.bankCodeText, { color: palette.muted }]}>Code {bank.code}</Text>
+                        </View>
+                        {selected ? <CheckCircle2 color={palette.brand} size={17} /> : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </View>
-              <View style={styles.bankGrid}>
-                {filteredBanks.map((bank) => {
-                  const selected = bank.code === bankCode;
-                  return (
-                    <Pressable
-                      key={bank.code}
-                      accessibilityRole="button"
-                      onPress={() => {
-                        setBankCode(bank.code);
-                        setResolvedAccountName("");
-                        setResolvedAccountKey("");
-                        setMessage(null);
-                      }}
-                      style={({ pressed }) => [
-                        styles.bankOption,
-                        {
-                          backgroundColor: selected ? palette.brandSoft : palette.surfaceSubtle,
-                          borderColor: selected ? palette.brand : palette.border,
-                          opacity: pressed ? 0.72 : 1,
-                        },
-                      ]}
-                    >
-                      <Building2 color={selected ? palette.brand : palette.mutedStrong} size={17} />
-                      <View style={styles.bankOptionCopy}>
-                        <Text numberOfLines={1} style={[styles.bankName, { color: palette.ink }]}>{bank.name}</Text>
-                        <Text style={[styles.bankCodeText, { color: palette.muted }]}>Code {bank.code}</Text>
-                      </View>
-                      {selected ? <CheckCircle2 color={palette.brand} size={17} /> : null}
-                    </Pressable>
-                  );
-                })}
+
+              {usingFallbackDirectory ? (
+                <View style={[styles.configurationNotice, { backgroundColor: palette.soft }]}>
+                  <Text style={[styles.configurationText, { color: palette.ink }]}>
+                    SKIMA is using its configured Nigerian bank directory. Your account name will still be confirmed by the live payout provider before the account can be saved.
+                  </Text>
+                </View>
+              ) : null}
+
+              {!beneficiaryVerificationAvailable ? (
+                <View style={[styles.configurationNotice, { backgroundColor: palette.warningSoft }]}>
+                  <Text style={[styles.configurationText, { color: palette.ink }]}>
+                    {providerIssueMessage ??
+                      (providerConfigured
+                        ? "New payout account verification is temporarily unavailable. Existing verified accounts remain usable."
+                        : "SKIMA's live payout provider is not fully configured. Existing verified accounts remain visible, but a new account cannot be verified yet.")}
+                  </Text>
+                </View>
+              ) : null}
+            </>
+          ) : bankQuery.error ? (
+            <View style={styles.directoryFailure}>
+              <View style={[styles.configurationNotice, { backgroundColor: palette.warningSoft }]}>
+                <Text style={[styles.configurationText, { color: palette.ink }]}>
+                  {friendlyError(bankQuery.error, "SKIMA could not load the Nigerian payout bank directory.")}
+                </Text>
               </View>
+              <AppButton
+                label="Retry bank directory"
+                variant="ghost"
+                fullWidth
+                onPress={() => void bankQuery.refetch()}
+              />
             </View>
           ) : (
             <View style={[styles.configurationNotice, { backgroundColor: palette.warningSoft }]}>
-              <Text style={[styles.configurationText, { color: palette.ink }]}>The payout bank directory is temporarily unavailable. Existing verified accounts remain usable.</Text>
+              <Text style={[styles.configurationText, { color: palette.ink }]}>
+                No Nigerian payout banks are configured yet. This is a SKIMA payout configuration issue, not a KYC requirement for your account.
+              </Text>
             </View>
           )}
 
@@ -537,6 +605,7 @@ const styles = StyleSheet.create({
   bankOptionCopy: { flex: 1 },
   bankName: { ...typography.bodyStrong, fontSize: 13 },
   bankCodeText: { ...typography.caption, fontSize: 10 },
+  directoryFailure: { gap: spacing.sm },
   configurationNotice: { padding: spacing.md, borderRadius: radii.md, marginBottom: spacing.md },
   configurationText: { ...typography.caption, lineHeight: 18 },
   resolvedAccount: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.md, marginBottom: spacing.md },
