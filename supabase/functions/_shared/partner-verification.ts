@@ -145,9 +145,18 @@ export async function startPartnerVerificationSession(
   const providerRequest: Record<string, unknown> = {
     workflow_id: route.workflow_ref,
     vendor_data: vendorData,
+    metadata: {
+      skima_application_id: applicationId,
+      verification_key: verificationKey,
+      verification_scope: verificationKey === "verification.business.registry" ? "station_kyb" : "partner_kyc",
+    },
   };
   const callbackUrl = textValue(route.config.callback_url ?? route.config.callbackUrl);
-  if (callbackUrl) providerRequest.callback = callbackUrl;
+  if (callbackUrl) {
+    providerRequest.callback = callbackUrl;
+    providerRequest.callback_method =
+      textValue(route.config.callback_method ?? route.config.callbackMethod) ?? "both";
+  }
 
   let providerBody: Record<string, unknown>;
   try {
