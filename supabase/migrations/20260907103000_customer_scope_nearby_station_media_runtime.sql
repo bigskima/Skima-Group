@@ -244,7 +244,146 @@ begin
       ),
       'skima.station_activation',
       'station-public-media:' || target_station_branch_id::text || ':' || candidate.media_asset_id::text,
-      coalesce(auth.uid(), station_record.metadata ->> 'owner_user_id')::uuid
+      coalesce(
+        auth.uid(),
+        case
+          when coalesce(station_record.metadata ->> 'owner_user_id','') ~*
+            '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}    )
+    on conflict (entity_type, entity_id, media_asset_id, media_role)
+    do update set
+      is_primary = excluded.is_primary,
+      display_order = excluded.display_order,
+      status = 'active',
+      metadata = public.entity_media_links.metadata || excluded.metadata,
+      updated_at = timezone('utc', now());
+
+    published_count := published_count + 1;
+  end loop;
+
+  return published_count;
+end;
+$$;
+
+revoke all on function public.publish_active_station_public_media(uuid) from public, anon, authenticated;
+grant execute on function public.publish_active_station_public_media(uuid) to service_role;
+
+create or replace function public.sync_station_public_media_after_activation()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  station_id uuid;
+begin
+  if new.operational_status = 'active'
+     and old.operational_status is distinct from new.operational_status then
+    for station_id in
+      select station.id
+      from public.lpg_station_branches station
+      where station.metadata ->> 'source_application_id' = new.id::text
+         or station.metadata ->> 'activated_from_application_id' = new.id::text
+    loop
+      perform public.publish_active_station_public_media(station_id);
+    end loop;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists application_records_publish_station_media on public.application_records;
+create trigger application_records_publish_station_media
+after update of operational_status on public.application_records
+for each row execute function public.sync_station_public_media_after_activation();
+
+revoke all on function public.sync_station_public_media_after_activation() from public, anon, authenticated;
+
+create or replace function public.sync_station_public_media_after_document_approval()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  station_id uuid;
+  privacy_classification text;
+begin
+  if new.status <> 'approved'
+     or old.status is not distinct from new.status then
+    return new;
+  end if;
+
+  select coalesce(
+    nullif(requirement.metadata ->> 'privacy_classification',''),
+    nullif(requirement.metadata ->> 'privacy_tier',''),
+    nullif(requirement.metadata ->> 'classification','')
+  )
+  into privacy_classification
+  from public.document_requirements requirement
+  where requirement.id = new.requirement_id;
+
+  if privacy_classification <> 'PUBLIC_PROFILE_CANDIDATE' then
+    return new;
+  end if;
+
+  if not exists (
+    select 1
+    from public.application_records application
+    where application.id = new.application_id
+      and application.operational_status = 'active'
+  ) then
+    return new;
+  end if;
+
+  for station_id in
+    select station.id
+    from public.lpg_station_branches station
+    where station.metadata ->> 'source_application_id' = new.application_id::text
+       or station.metadata ->> 'activated_from_application_id' = new.application_id::text
+  loop
+    perform public.publish_active_station_public_media(station_id);
+  end loop;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists document_submissions_publish_station_media on public.document_submissions;
+create trigger document_submissions_publish_station_media
+after update of status on public.document_submissions
+for each row execute function public.sync_station_public_media_after_document_approval();
+
+revoke all on function public.sync_station_public_media_after_document_approval() from public, anon, authenticated;
+
+-- Backfill existing activated stations so their already-approved public-safe premises images appear immediately.
+do $$
+declare
+  station_id uuid;
+begin
+  for station_id in
+    select station.id
+    from public.lpg_station_branches station
+    join public.application_records application
+      on application.id::text = coalesce(
+        nullif(station.metadata ->> 'source_application_id',''),
+        nullif(station.metadata ->> 'activated_from_application_id','')
+      )
+    where application.operational_status = 'active'
+      and station.approval_status = 'approved'
+      and station.compliance_status = 'approved'
+  loop
+    perform public.publish_active_station_public_media(station_id);
+  end loop;
+end;
+$$;
+
+commit;
+
+            then (station_record.metadata ->> 'owner_user_id')::uuid
+          else null
+        end
+      )
     )
     on conflict (entity_type, entity_id, media_asset_id, media_role)
     do update set
