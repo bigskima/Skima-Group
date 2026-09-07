@@ -422,9 +422,40 @@ export function App() {
   const can = (permission: string) =>
     sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
     hasPermission(permissionContext, permission);
+  const grantedPermissions = new Set(sessionState.context.permissions);
+  const hasAnyPermission = (permissions: readonly string[]) =>
+    permissions.some((permission) => grantedPermissions.has(permission));
   const filteredNavigation = sessionState.context.platformAdmin?.admin_kind === "super_admin"
     ? foundationNavigation
-    : filterNavigationItems(foundationNavigation, permissionContext);
+    : foundationNavigation.filter((item) => {
+      if (item.key === "operations") {
+        return hasAnyPermission([
+          "lpg.orders.manage",
+          "lpg.dispatch.execute",
+          "lpg.cylinders.manage",
+          "lpg.safety.manage",
+          "lpg.config.manage",
+        ]);
+      }
+      if (item.key === "coverage") {
+        return hasAnyPermission(["platform.coverage.read", "platform.coverage.manage", "lpg.config.manage"]);
+      }
+      if (item.key === "drivers") {
+        return hasAnyPermission(["platform.drivers.read", "platform.drivers.manage", "platform.drivers.verify"]);
+      }
+      if (item.key === "quality") {
+        return hasAnyPermission(["lpg.quality.read", "lpg.quality.manage", "lpg.operations.manage"]);
+      }
+      if (item.key === "delivery-pricing") {
+        return hasAnyPermission([
+          "platform.financial_policy.read",
+          "platform.financial_policy.draft",
+          "platform.financial_policy.approve",
+          "platform.financial_policy.activate",
+        ]);
+      }
+      return filterNavigationItems([item], permissionContext).length > 0;
+    });
   const shellNavItems = filteredNavigation.map(toShellNavItem);
   const stationRoute = route === "/stations" || route.startsWith("/stations/");
   const activeRoute = stationRoute
