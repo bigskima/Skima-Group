@@ -8,6 +8,7 @@ async function read(path: string) {
 
 const [
   migration,
+  partnerMediaMigration,
   runtime,
   mobileVerification,
   applicationScreen,
@@ -17,6 +18,7 @@ const [
   supabaseConfig,
 ] = await Promise.all([
   read("supabase/migrations/20260907070000_automatic_partner_verification_engine.sql"),
+  read("supabase/migrations/20260819214411_lpg_granular_partner_media_privacy.sql"),
   read("supabase/functions/verification-runtime/index.ts"),
   read("apps/lpg-mobile/src/native/api/verification.ts"),
   read("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx"),
@@ -77,14 +79,14 @@ Deno.test("redundant partner paperwork is reduced without removing safety eviden
     "vehicle.insurance",
     "vehicle.roadworthiness",
   ]) {
-    assertStringIncludes(migration, key);
+    assertStringIncludes(partnerMediaMigration, key);
   }
 });
 
 Deno.test("verification runtime uses secure provider sessions and normalized decisions", () => {
   assertStringIncludes(runtime, 'Deno.env.get("DIDIT_API_KEY")');
   assertStringIncludes(runtime, '"https://verification.didit.me/v3/session/"');
-  assertStringIncludes(runtime, '"/decision/"');
+  assertStringIncludes(runtime, "/decision/");
   assertStringIncludes(runtime, '"x-api-key": apiKey');
   assertStringIncludes(runtime, 'if (status === "APPROVED") return "passed"');
   assertStringIncludes(runtime, 'if (status === "DECLINED") return "failed"');
