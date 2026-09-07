@@ -152,7 +152,15 @@ async function startSession(
   const idempotencyKey = requireString(body.idempotencyKey, "idempotencyKey");
 
   const application = await ownedApplication(serviceClient, user.id, applicationId);
-  const mapping = await applicationMapping(serviceClient, application.application_type_id, verificationKey);
+  const applicationTypeId = textValue(application.application_type_id);
+  if (!applicationTypeId) {
+    throw new VerificationRuntimeError(
+      "verification_application_invalid",
+      "The application type could not be resolved for verification.",
+      409,
+    );
+  }
+  const mapping = await applicationMapping(serviceClient, applicationTypeId, verificationKey);
 
   const appliesResult = await serviceClient.rpc("application_verification_mapping_applies", {
     target_mapping_id: mapping.id,
@@ -202,7 +210,15 @@ async function startSession(
     });
   }
 
-  const route = await activeRoute(serviceClient, mapping.verification_definition_id);
+  const verificationDefinitionId = textValue(mapping.verification_definition_id);
+  if (!verificationDefinitionId) {
+    throw new VerificationRuntimeError(
+      "verification_configuration_invalid",
+      "The verification definition could not be resolved.",
+      500,
+    );
+  }
+  const route = await activeRoute(serviceClient, verificationDefinitionId);
   if (!route) {
     throw new VerificationRuntimeError(
       "automatic_verification_unavailable",
