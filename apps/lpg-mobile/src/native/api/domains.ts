@@ -14,7 +14,7 @@ export const domainQueries = {
   orders: () =>
     useGatewayQuery({
       key: ["orders"],
-      path: "/lpg/orders",
+      path: "/lpg/orders?scope=customer",
       schema: RecordArraySchema,
     }),
   quotes: () =>
@@ -36,6 +36,20 @@ export const domainQueries = {
       path: "/lpg/stations",
       schema: RecordArraySchema,
     }),
+  nearbyStations: (latitude?: number | null, longitude?: number | null, radiusMeters = 25000) => {
+    const hasCoordinates =
+      typeof latitude === "number" && Number.isFinite(latitude) &&
+      typeof longitude === "number" && Number.isFinite(longitude);
+    const params = hasCoordinates
+      ? `?latitude=${encodeURIComponent(String(latitude))}&longitude=${encodeURIComponent(String(longitude))}&radiusMeters=${encodeURIComponent(String(radiusMeters))}`
+      : "";
+    return useGatewayQuery({
+      key: ["stations", "nearby", latitude ?? "no-latitude", longitude ?? "no-longitude", radiusMeters],
+      path: `/lpg/stations/nearby${params}`,
+      schema: RecordArraySchema,
+      enabled: hasCoordinates,
+    });
+  },
   stationCatalogPrices: (stationBranchId?: string | null) =>
     useGatewayQuery({
       key: ["station-catalog-prices", stationBranchId ?? "current"],
@@ -72,7 +86,7 @@ export const domainQueries = {
   transactions: () =>
     useGatewayQuery({
       key: ["deposits"],
-      path: "/runtime/payments/deposits",
+      path: "/runtime/payments/deposits?scope=customer",
       schema: RecordArraySchema,
     }),
   utilityCatalog: () =>

@@ -77,7 +77,7 @@ export function MultiPhotoRequirement({ views, onUploadView }: MultiPhotoRequire
       <View style={[styles.summaryBar, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={styles.summaryCopy}>
           <Text style={[styles.summaryTitle, { color: palette.ink }]}>Station premises photos</Text>
-          <Text style={[styles.summaryDescription, { color: palette.muted }]}>Capture each requested view so SKIMA can verify the physical facility.</Text>
+          <Text style={[styles.summaryDescription, { color: palette.muted }]}>Add the guided station views. You can provide five or more premises photos; public-safe views become part of the station profile after activation while private infrastructure evidence stays private.</Text>
         </View>
         <View style={[styles.countBadge, { backgroundColor: completedRequired === requiredCount ? palette.successSoft : palette.brandSoft }]}>
           <Text style={[styles.summaryCount, { color: completedRequired === requiredCount ? palette.success : palette.brand }]}>
@@ -91,7 +91,7 @@ export function MultiPhotoRequirement({ views, onUploadView }: MultiPhotoRequire
 
       <View style={[styles.privacyNote, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <LockKeyhole color={palette.mutedStrong} size={16} />
-        <Text style={[styles.privacyText, { color: palette.muted }]}>Application photos are private. A photo appears on a public station profile only after separate approval from SKIMA.</Text>
+        <Text style={[styles.privacyText, { color: palette.muted }]}>Public-safe premises photos go live automatically when your station is activated. Tank, identity, licence and other private verification evidence is never shown on the public station profile.</Text>
       </View>
 
       {error ? <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}

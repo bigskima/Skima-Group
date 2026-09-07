@@ -34,7 +34,7 @@ export function PaymentCheckoutModal({
   const [checking, setChecking] = useState(false);
   const deposits = useGatewayQuery({
     key: ["deposits", "checkout-modal", depositId],
-    path: "/runtime/payments/deposits",
+    path: "/runtime/payments/deposits?scope=customer",
     schema: RecordArraySchema,
     enabled: visible && Boolean(depositId),
     refetchInterval: visible ? 3000 : undefined,

@@ -2,17 +2,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { z } from "zod";
 import { useSession } from "../session/SessionProvider";
 
-export function useGatewayQuery<T>(input: {
+export function useGatewayQuery<TSchema extends z.ZodTypeAny>(input: {
   key: readonly unknown[];
   path: string;
-  schema: z.ZodType<T>;
+  schema: TSchema;
   enabled?: boolean;
   refetchInterval?: number;
   persist?: boolean;
   globalError?: boolean;
 }) {
   const session = useSession();
-  return useQuery({
+  return useQuery<z.output<TSchema>>({
     queryKey: [
       "lpg-expo",
       ...input.key,

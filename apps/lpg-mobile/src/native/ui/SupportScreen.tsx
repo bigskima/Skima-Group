@@ -26,7 +26,14 @@ export function SupportScreen() {
   const segments = useSegments();
   const workspace = String(segments[0] ?? "customer").replace(/[()]/g, "");
   const { palette } = useAppTheme();
-  const orders = domainQueries.orders();
+  const customerOrders = domainQueries.orders();
+  const driverJobs = domainQueries.driverJobs();
+  const stationJobs = domainQueries.stationJobs();
+  const relatedOrders = workspace === "driver"
+    ? driverJobs.data ?? []
+    : workspace === "station"
+      ? stationJobs.data ?? []
+      : customerOrders.data ?? [];
   const config = useLpgConfig();
   const incidentTypes = nestedRecords(config.data, "safetyIncidentTypes");
   const severities = nestedRecords(config.data, "safetySeverities");
@@ -137,8 +144,9 @@ export function SupportScreen() {
             >
               <View style={styles.options}>
                 <AppButton label="No related order" variant={!orderId ? "primary" : "secondary"} size="sm" onPress={() => setOrderId("")} />
-                {(orders.data ?? []).slice(0, 10).map((order) => {
-                  const id = recordId(order) ?? "";
+                {relatedOrders.slice(0, 10).map((order) => {
+                  const id =
+                    firstString(order, ["lpgOrderId", "lpg_order_id", "id"]) ?? "";
                   return (
                     <AppButton
                       key={id}

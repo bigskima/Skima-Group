@@ -24,6 +24,13 @@ import {
   type AiProviderRoute,
   type AiTextResponse,
 } from "../_shared/ai-provider-runtime.ts";
+import {
+  readPartnerVerificationRequirements,
+  reconcilePartnerVerificationApplication,
+  refreshPartnerVerificationSession,
+  startPartnerVerificationSession,
+  VerificationRuntimeError,
+} from "../_shared/partner-verification.ts";
 
 const ROUTES = new Set([
   "/health",
@@ -109,6 +116,7 @@ const ROUTES = new Set([
   "/lpg/orders/refund",
   "/lpg/orders/financial-summary",
   "/lpg/stations",
+  "/lpg/stations/nearby",
   "/lpg/stations/activate",
   "/lpg/stations/runtime",
   "/lpg/stations/locations",
@@ -220,6 +228,7 @@ const ROUTES = new Set([
   "/runtime/pricing/quotes/accept",
   "/runtime/payments/reserve",
   "/runtime/payments/deposits",
+  "/runtime/payments/deposits/preview",
   "/runtime/payments/deposits/verify",
   "/runtime/payment-webhook-events",
   "/runtime/wallets",
@@ -253,6 +262,10 @@ const ROUTES = new Set([
   "/runtime/tracking/sessions",
   "/runtime/tracking/points",
   "/runtime/verifications",
+  "/runtime/partner-verification/requirements",
+  "/runtime/partner-verification/sessions",
+  "/runtime/partner-verification/sessions/refresh",
+  "/runtime/partner-verification/applications/reconcile",
   "/runtime/notifications/queue",
   "/runtime/ai/assistant",
   "/runtime/ai/cylinder-visual-review",
@@ -301,6 +314,19 @@ async function handleRequest(request: Request): Promise<Response> {
           requestId: id,
         },
         400,
+      );
+    }
+
+    if (error instanceof VerificationRuntimeError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: error.code,
+          message: error.message,
+          details: error.details,
+          requestId: id,
+        },
+        error.status,
       );
     }
 
@@ -378,6 +404,84 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       timestamp: new Date().toISOString(),
       requestId: id,
     });
+  }
+
+  if (routePath === "/runtime/partner-verification/requirements" && request.method === "GET") {
+    const applicationId = requireUuid(
+      url.searchParams.get("applicationId"),
+      "applicationId",
+    );
+    const data = await readPartnerVerificationRequirements(supabase, applicationId);
+    return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (
+    routePath === "/runtime/partner-verification/sessions" &&
+    request.method === "POST"
+  ) {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "Automatic verification is not configured on this SKIMA backend.",
+        requestId: id,
+      }, 503);
+    }
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const data = await startPartnerVerificationSession(
+      createServiceClient(supabaseUrl, serviceRoleKey),
+      authResult.user,
+      body.value,
+    );
+    return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (
+    routePath === "/runtime/partner-verification/sessions/refresh" &&
+    request.method === "POST"
+  ) {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "Automatic verification is not configured on this SKIMA backend.",
+        requestId: id,
+      }, 503);
+    }
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const data = await refreshPartnerVerificationSession(
+      createServiceClient(supabaseUrl, serviceRoleKey),
+      authResult.user,
+      body.value,
+    );
+    return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (
+    routePath === "/runtime/partner-verification/applications/reconcile" &&
+    request.method === "POST"
+  ) {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "Automatic verification is not configured on this SKIMA backend.",
+        requestId: id,
+      }, 503);
+    }
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const data = await reconcilePartnerVerificationApplication(
+      createServiceClient(supabaseUrl, serviceRoleKey),
+      authResult.user,
+      body.value,
+    );
+    return jsonResponse({ ok: true, data, requestId: id });
   }
 
   if (routePath === "/admin/verification/configuration" && request.method === "GET") {
@@ -992,6 +1096,30 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     return resolveLpgMobileWorkspaceAccess(supabase, authResult.user, id);
   }
 
+  if (routePath === "/lpg/stations/nearby" && request.method === "GET") {
+    const latitude = requireNumber(url.searchParams.get("latitude"), "latitude");
+    const longitude = requireNumber(url.searchParams.get("longitude"), "longitude");
+    const radiusMeters = optionalNumber(url.searchParams.get("radiusMeters"), "radiusMeters") ?? 25000;
+    const limit = optionalIntegerQuery(url.searchParams.get("limit")) ?? 30;
+
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      throw new RequestValidationError("latitude and longitude must be valid coordinates.");
+    }
+    if (radiusMeters < 500 || radiusMeters > 100000) {
+      throw new RequestValidationError("radiusMeters must be between 500 and 100000.");
+    }
+
+    return rpcDataResponse(
+      supabase.rpc("read_nearby_lpg_stations", {
+        target_latitude: latitude,
+        target_longitude: longitude,
+        target_radius_meters: radiusMeters,
+        target_limit: limit,
+      }),
+      id,
+    );
+  }
+
   if (routePath === "/lpg/stations") {
     if (request.method === "GET") {
       return selectRecords(
@@ -1557,6 +1685,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           .select(
             "id,label,formatted_address,latitude,longitude,accuracy_meters,landmark,delivery_instructions,contact_name,contact_phone,verification_status,status,provider_source,provider_place_id,metadata,created_at,updated_at",
           )
+          .eq("owner_user_id", authResult.user.id)
           .neq("status", "deleted")
           .order("created_at", { ascending: false }),
         id,
@@ -1635,6 +1764,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           .select(
             "id,public_reference,display_name,cylinder_identifier,qr_payload,barcode_payload,size_kg,max_capacity_kg,manufacturer,brand,colour,serial_number,manufactured_at,last_inspection_at,next_inspection_at,condition_status,valve_type,ownership_proof_asset_id,ownership_proof_media_asset_id,image_asset_ids,status,safety_restriction,notes,metadata,created_at,updated_at",
           )
+          .eq("owner_user_id", authResult.user.id)
           .neq("status", "deactivated")
           .order("created_at", { ascending: false }),
         id,
@@ -1739,6 +1869,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           .select(
             "id,public_reference,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,pricing_id,requested_kg,quoted_kg,currency_code,lpg_amount,delivery_fee_amount,platform_fee_amount,tax_amount,driver_commission_amount,total_amount,status,expires_at,breakdown,financial_policy_snapshot,metadata,created_at,updated_at",
           )
+          .eq("created_by", authResult.user.id)
           .order("created_at", { ascending: false }),
         id,
       );
@@ -1793,13 +1924,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
   if (routePath === "/lpg/orders") {
     if (request.method === "GET") {
+      let orderQuery = supabase
+        .from("lpg_refill_orders")
+        .select(
+          "id,public_reference,lpg_refill_quote_id,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,driver_profile_id,vehicle_id,tracking_session_id,escrow_hold_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,station_amount,delivery_fee_amount,platform_fee_amount,driver_commission_amount,status,payment_status,assignment_status,financial_policy_snapshot,metadata,created_at,updated_at",
+        );
+
+      if (url.searchParams.get("scope") === "customer") {
+        orderQuery = orderQuery.eq("customer_user_id", authResult.user.id);
+      }
+
       return selectRecords(
-        supabase
-          .from("lpg_refill_orders")
-          .select(
-            "id,public_reference,lpg_refill_quote_id,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,driver_profile_id,vehicle_id,tracking_session_id,escrow_hold_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,station_amount,delivery_fee_amount,platform_fee_amount,driver_commission_amount,status,payment_status,assignment_status,financial_policy_snapshot,metadata,created_at,updated_at",
-          )
-          .order("created_at", { ascending: false }),
+        orderQuery.order("created_at", { ascending: false }),
         id,
       );
     }
@@ -1912,6 +2048,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           "delivered",
           "disputed",
         ])
+        .eq("customer_user_id", authResult.user.id)
         .order("created_at", { ascending: false }),
       id,
     );
@@ -4212,15 +4349,79 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     return walletBalancesResponse(supabase, id);
   }
 
+  if (routePath === "/runtime/payments/deposits/preview" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+
+    const payload = body.value;
+    const amount = requireNumber(payload.amount, "amount");
+    const suppliedWalletId = optionalUuid(payload.walletId, "walletId");
+    let walletId = suppliedWalletId;
+
+    if (walletId) {
+      const walletResult = await supabase
+        .from("wallet_accounts")
+        .select("id")
+        .eq("id", walletId)
+        .eq("wallet_type", "customer")
+        .eq("owner_entity_type", "user")
+        .eq("owner_entity_id", authResult.user.id)
+        .maybeSingle();
+
+      if (walletResult.error) return databaseError(walletResult.error, id);
+      if (!walletResult.data) {
+        return jsonResponse({
+          ok: false,
+          error: "forbidden",
+          message: "Choose your personal customer wallet for this top up.",
+          requestId: id,
+        }, 403);
+      }
+    } else {
+      const walletResult = await supabase.rpc("ensure_wallet_account", {
+        target_wallet_type: "customer",
+        target_owner_entity_type: "user",
+        target_owner_entity_id: authResult.user.id,
+        target_currency_code: "NGN",
+        target_source: "platform.api_gateway",
+        target_metadata: { wallet_purpose: "customer_deposit" },
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey") + ":wallet",
+      });
+
+      if (walletResult.error) return databaseError(walletResult.error, id);
+      walletId = requireUuid(walletResult.data, "walletId");
+    }
+
+    const previewResult = await supabase.rpc("calculate_deposit_fee_from_policy", {
+      target_wallet_id: walletId,
+      target_amount: amount,
+    });
+    if (previewResult.error) return databaseError(previewResult.error, id);
+
+    return jsonResponse({
+      ok: true,
+      data: {
+        ...requireRecordOrEmpty(previewResult.data),
+        walletId,
+      },
+      requestId: id,
+    });
+  }
+
   if (routePath === "/runtime/payments/deposits") {
     if (request.method === "GET") {
+      let depositQuery = supabase
+        .from("payment_deposit_requests")
+        .select(
+          "id,public_reference,wallet_id,customer_user_id,provider_adapter_id,transaction_id,reversal_transaction_id,currency_code,amount,status,provider_reference,checkout_url,source,metadata,initialized_at,verified_at,failed_at,reversed_at,created_at,updated_at",
+        );
+
+      if (url.searchParams.get("scope") === "customer") {
+        depositQuery = depositQuery.eq("customer_user_id", authResult.user.id);
+      }
+
       return selectRecords(
-        supabase
-          .from("payment_deposit_requests")
-          .select(
-            "id,public_reference,wallet_id,customer_user_id,provider_adapter_id,transaction_id,reversal_transaction_id,currency_code,amount,status,provider_reference,checkout_url,source,metadata,initialized_at,verified_at,failed_at,reversed_at,created_at,updated_at",
-          )
-          .order("created_at", { ascending: false }),
+        depositQuery.order("created_at", { ascending: false }),
         id,
       );
     }
@@ -4235,6 +4436,46 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       const payload = body.value;
       const amount = requireNumber(payload.amount, "amount");
       const currencyCode = optionalString(payload.currencyCode) ?? "NGN";
+      const depositIdempotencyKey = requireString(payload.idempotencyKey, "idempotencyKey");
+      let customerWalletId = optionalUuid(payload.walletId, "walletId");
+
+      if (customerWalletId) {
+        const walletResult = await supabase
+          .from("wallet_accounts")
+          .select("id")
+          .eq("id", customerWalletId)
+          .eq("wallet_type", "customer")
+          .eq("owner_entity_type", "user")
+          .eq("owner_entity_id", authResult.user.id)
+          .maybeSingle();
+
+        if (walletResult.error) return databaseError(walletResult.error, id);
+        if (!walletResult.data) {
+          return jsonResponse({
+            ok: false,
+            error: "forbidden",
+            message: "Choose your personal customer wallet for this top up.",
+            requestId: id,
+          }, 403);
+        }
+      } else {
+        const walletResult = await supabase.rpc("ensure_wallet_account", {
+          target_wallet_type: "customer",
+          target_owner_entity_type: "user",
+          target_owner_entity_id: authResult.user.id,
+          target_currency_code: currencyCode,
+          target_source: "platform.api_gateway",
+          target_metadata: { wallet_purpose: "customer_deposit" },
+          target_idempotency_key: depositIdempotencyKey + ":wallet",
+        });
+        if (walletResult.error) return databaseError(walletResult.error, id);
+        customerWalletId = requireUuid(walletResult.data, "walletId");
+      }
+
+      const resolvedPayload = {
+        ...payload,
+        walletId: customerWalletId,
+      };
       let providerAdapterKey = optionalString(payload.providerAdapterKey);
       if (!providerAdapterKey) {
         providerAdapterKey = await resolveActivePaymentProviderKey(supabase);
@@ -4249,7 +4490,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           currencyCode,
           customerEmail: authResult.user.email,
           id,
-          payload,
+          payload: resolvedPayload,
           supabase,
           supabaseUrl,
         });
@@ -4259,11 +4500,11 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase.rpc("initialize_wallet_deposit", {
           target_amount: amount,
           target_currency_code: currencyCode,
-          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_idempotency_key: depositIdempotencyKey,
           target_metadata: optionalRecord(payload.metadata) ?? {},
           target_provider_adapter_key: providerAdapterKey,
           target_source: optionalString(payload.source) ?? "platform.payment_engine",
-          target_wallet_id: optionalUuid(payload.walletId, "walletId"),
+          target_wallet_id: customerWalletId,
         }),
         id,
         supabase,
