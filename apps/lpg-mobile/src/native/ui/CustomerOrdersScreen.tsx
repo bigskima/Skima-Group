@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { ChevronRight, ClipboardList, MapPin, PackageCheck, ShieldCheck, Truck } from "lucide-react-native";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
-import { domainQueries, useJobDetails } from "../api/domains";
+import { domainQueries, useJobDetails } from "../api/domains";\nimport { useResolvedLocationLabel } from "../domains/maps/readableLocation";
 import {
   displayReference,
   displayStatus,
@@ -166,7 +166,7 @@ export function CustomerOrderDetailScreen() {
   const status = order ? (displayStatus(order) ?? "created") : "";
   const normalized = normalizeStatus(status);
   const currency = firstString(order, ["currency_code", "currencyCode"]) ?? "NGN";
-  const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? "pending";
+  const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? "pending";\n  const pickupAddress = useResolvedLocationLabel(\n    pickup,\n    "Saved order location",\n    `order:${id ?? "unknown"}:pickup`,\n  );\n  const returnAddress = useResolvedLocationLabel(\n    delivery,\n    "Saved order location",\n    `order:${id ?? "unknown"}:return`,\n  );
   const total = firstNumber(order, ["total_amount", "totalAmount", "quoted_total", "quotedTotal"]);
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
   const actualKg = firstNumber(order, ["actualKg", "actual_kg"]);
