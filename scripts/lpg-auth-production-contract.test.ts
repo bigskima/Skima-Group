@@ -8,53 +8,52 @@ async function read(path: string) {
 
 const [
   session,
-  authRuntime,
   authShell,
   login,
   register,
   forgot,
   reset,
   html,
-  health,
-  supabaseConfig,
 ] = await Promise.all([
   read("apps/lpg-mobile/src/native/session/SessionProvider.tsx"),
-  read("apps/lpg-mobile/src/native/session/authRuntime.ts"),
   read("apps/lpg-mobile/src/native/ui/AuthShell.tsx"),
   read("apps/lpg-mobile/app/(auth)/login.tsx"),
   read("apps/lpg-mobile/app/(auth)/register.tsx"),
   read("apps/lpg-mobile/app/(auth)/forgot-password.tsx"),
   read("apps/lpg-mobile/app/(auth)/reset-password.tsx"),
   read("apps/lpg-mobile/app/+html.tsx"),
-  read("supabase/functions/health/index.ts"),
-  read("supabase/config.toml"),
 ]);
 
-Deno.test("LPG auth verifies the SKIMA backend before credential operations", () => {
-  assertStringIncludes(authRuntime, 'service !== "skima-platform"');
-  assertStringIncludes(authRuntime, 'backend !== "supabase"');
-  assertStringIncludes(authRuntime, "/functions/v1/health");
-  assertStringIncludes(session, "verifySkimaAuthRuntime");
-  assertStringIncludes(session, "await ensureAuthRuntime()");
-  assertStringIncludes(health, 'service: "skima-platform"');
-  assert(
-    /\[functions\.health\][\s\S]*?verify_jwt\s*=\s*false/.test(supabaseConfig),
-    "The pre-auth SKIMA health identity must remain public and non-secret.",
-  );
-});
-
-Deno.test("LPG auth screens use centralized session actions", () => {
+Deno.test("LPG auth screens use one centralized Supabase session authority", () => {
   assertStringIncludes(session, "signInWithPassword");
   assertStringIncludes(session, "supabase.auth.signUp");
   assertStringIncludes(session, "resetPasswordForEmail");
   assertStringIncludes(session, "supabase.auth.updateUser");
+  assertStringIncludes(session, "persistSession: true");
+  assertStringIncludes(session, "autoRefreshToken: true");
+
   assertStringIncludes(login, "session.signIn(");
   assertStringIncludes(register, "session.signUp(");
   assertStringIncludes(forgot, "session.requestPasswordReset(");
   assertStringIncludes(reset, "session.updatePassword(");
+
   assert(
     !register.includes("session.supabase.auth.signUp"),
-    "Registration must not bypass the centralized SKIMA auth runtime.",
+    "Registration must not bypass the centralized SKIMA auth session.",
+  );
+  assert(
+    !forgot.includes("session.supabase.auth.resetPasswordForEmail"),
+    "Password recovery must not bypass the centralized SKIMA auth session.",
+  );
+});
+
+Deno.test("authenticated Supabase sessions are not rejected when role context is delayed", () => {
+  assertStringIncludes(session, 'setStatus("authenticated")');
+  assertStringIncludes(session, 'console.info("SKIMA session context refresh unavailable"');
+  assertStringIncludes(session, "setContext(null)");
+  assert(
+    !session.includes('setStatus("unauthenticated");\n        return false;\n      } catch'),
+    "A downstream context refresh failure must not invalidate a valid Supabase login.",
   );
 });
 
