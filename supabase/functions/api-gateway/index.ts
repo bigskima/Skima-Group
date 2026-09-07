@@ -234,6 +234,7 @@ const ROUTES = new Set([
   "/runtime/support/threads",
   "/runtime/support/reply",
   "/runtime/utility-billing/catalog",
+  "/runtime/utility-billing/offers",
   "/runtime/utility-billing/requests",
   "/admin/support/threads",
   "/admin/support/respond",
@@ -4751,6 +4752,10 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
   if (routePath === "/runtime/utility-billing/catalog" && request.method === "GET") {
     return rpcResponse(supabase.rpc("read_utility_catalog"), id);
+  }
+
+  if (routePath === "/runtime/utility-billing/offers" && request.method === "GET") {
+    return rpcResponse(supabase.rpc("read_active_utility_offers"), id);
   }
 
   if (routePath === "/runtime/utility-billing/requests") {

@@ -33,7 +33,7 @@ export function AiAssistantLauncher({ workspace }: { readonly workspace: AiAssis
         eyebrow: "SKIMA INTELLIGENCE",
         title: "Ask Matty",
         body: "Ask what to do next or understand your current work.",
-        actionLabel: "Ask copilot",
+        actionLabel: "Ask Matty",
         prompt: "What should I do next? Use my current SKIMA driver readiness and assigned LPG work, and explain the next safe operational action without changing anything.",
       }
     : workspace === "station"
@@ -51,8 +51,9 @@ export function AiAssistantLauncher({ workspace }: { readonly workspace: AiAssis
       };
 
   const copy = insight.data ?? fallback;
-  const brandedTitle = copy.title.replace(/Ask SKIMA/gi, "Ask Matty");
+  const brandedTitle = friendlyInsight(copy.title.replace(/Ask SKIMA/gi, "Ask Matty"));
   const brandedAction = copy.actionLabel.replace(/Ask SKIMA/gi, "Ask Matty");
+  const brandedBody = friendlyInsight(copy.body);
 
   return (
     <Pressable
@@ -82,7 +83,7 @@ export function AiAssistantLauncher({ workspace }: { readonly workspace: AiAssis
       <View style={styles.copy}>
         <Text style={styles.eyebrow}>{copy.eyebrow}</Text>
         <Text numberOfLines={1} style={styles.title}>{brandedTitle}</Text>
-        <Text numberOfLines={2} style={styles.body}>{copy.body}</Text>
+        <Text numberOfLines={2} style={styles.body}>{brandedBody}</Text>
         {"estimateOnly" in copy && copy.estimateOnly ? (
           <Text style={styles.estimate}>History-based estimate</Text>
         ) : null}
@@ -95,6 +96,14 @@ export function AiAssistantLauncher({ workspace }: { readonly workspace: AiAssis
       </View>
     </Pressable>
   );
+}
+
+function friendlyInsight(value: string) {
+  return value
+    .replace(/station runtime/gi, "station activity")
+    .replace(/runtime/gi, "activity")
+    .replace(/provider adapter/gi, "service connection")
+    .replace(/database record/gi, "saved information");
 }
 
 const styles = StyleSheet.create({

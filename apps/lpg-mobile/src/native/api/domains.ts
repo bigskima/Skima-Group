@@ -82,6 +82,12 @@ export const domainQueries = {
       schema: RecordArraySchema,
       persist: true,
     }),
+  utilityOffers: () =>
+    useGatewayQuery({
+      key: ["utility-billing", "offers"],
+      path: "/runtime/utility-billing/offers",
+      schema: RecordArraySchema,
+    }),
   utilityPayments: () =>
     useGatewayQuery({
       key: ["utility-billing", "requests"],

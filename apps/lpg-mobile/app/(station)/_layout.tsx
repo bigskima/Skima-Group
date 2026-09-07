@@ -10,6 +10,8 @@ export default function Layout() {
           "assistant",
           "job/[id]",
           "notifications",
+          "locations",
+          "location-editor",
           "application",
           "documents",
           "staff",

@@ -64,6 +64,8 @@ jobs:
         run: npm run ai-runtime:contract
       - name: Verify LPG refill production contracts
         run: npm run lpg-refill:contract
+      - name: Verify utility billing production contracts
+        run: npm run utility-billing:contract
 
   admin-web:
     name: Admin production build
