@@ -266,8 +266,7 @@ select
 from (
   values
     ('verification.person.identity', 10, 'identity'),
-    ('verification.driver.licence', 20, 'identity_document'),
-    ('verification.business.registry', 30, 'business')
+    ('verification.business.registry', 20, 'business')
 ) as route_seed(verification_key, priority, provider_operation)
 join public.verification_definitions definition
   on definition.key = route_seed.verification_key
