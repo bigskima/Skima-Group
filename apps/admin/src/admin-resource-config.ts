@@ -133,35 +133,6 @@ const optionalStatusSelect = (
   type: "select",
 });
 
-const financialPolicyFamilyOptions = [
-  { label: "Pricing", value: "pricing" },
-  { label: "Commission", value: "commission" },
-  { label: "Driver payout", value: "payout" },
-  { label: "Settlement", value: "settlement" },
-  { label: "Withdrawal fee", value: "withdrawal_fee" },
-  { label: "Payment fee", value: "payment_fee" },
-  { label: "Refund", value: "refund" },
-  { label: "Adjustment", value: "adjustment" },
-  { label: "Cancellation", value: "cancellation" },
-  { label: "Discount", value: "discount" },
-  { label: "Referral", value: "referral" },
-  { label: "Affiliate", value: "affiliate" },
-  { label: "Marketplace fee", value: "marketplace_fee" },
-  { label: "Service fee", value: "service_fee" },
-  { label: "Pricing guardrail", value: "pricing_guardrail" },
-  { label: "Promotion", value: "promotion" },
-] as const;
-
-const financialGeographyOptions = [
-  { label: "Global", value: "global" },
-  { label: "Country", value: "country" },
-  { label: "Region / state", value: "region" },
-  { label: "City", value: "city" },
-  { label: "Service area", value: "service_area" },
-  { label: "Organization", value: "organization" },
-  { label: "Branch", value: "branch" },
-] as const;
-
 const action = (
   key: string,
   label: string,
