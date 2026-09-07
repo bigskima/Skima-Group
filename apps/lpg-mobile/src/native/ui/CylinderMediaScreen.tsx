@@ -14,6 +14,7 @@ import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
+import { CylinderVisualReviewPanel } from "./CylinderVisualReviewPanel";
 import { PresentationMediaPanel } from "./PresentationMediaPanel";
 import { RuntimeMediaImage } from "./RuntimeMediaImage";
 import { Screen } from "./Screen";
@@ -167,6 +168,11 @@ export function CylinderMediaScreen() {
         subjectType="lpg_cylinder"
         colour={firstString(cylinder, ["colour", "color"])}
         originalAssetId={currentAssetId}
+      />
+
+      <CylinderVisualReviewPanel
+        cylinderId={cylinderId}
+        sourceMediaAssetId={currentAssetId}
       />
 
       {message ? (
