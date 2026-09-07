@@ -46,17 +46,18 @@ export function ApplicationProgress({
 
 const styles = StyleSheet.create({
   container: {
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
-    padding: spacing.md,
-    borderRadius: radii.lg,
+    gap: 6,
+    marginBottom: 2,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.sm },
-  stepBadge: { borderRadius: radii.pill, paddingHorizontal: 9, paddingVertical: 4 },
+  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 6 },
+  stepBadge: { borderRadius: radii.pill, paddingHorizontal: 8, paddingVertical: 3 },
   stepCounter: { ...typography.eyebrow, fontSize: 9, textTransform: "uppercase" },
-  percentText: { ...typography.caption, fontSize: 11 },
-  track: { height: 7, borderRadius: radii.pill, overflow: "hidden" },
+  percentText: { ...typography.caption, fontSize: 9.5 },
+  track: { height: 5, borderRadius: radii.pill, overflow: "hidden" },
   fill: { height: "100%", borderRadius: radii.pill },
-  stepTitle: { ...typography.heading, fontSize: 19, lineHeight: 25 },
+  stepTitle: { ...typography.subheading, fontSize: 15, lineHeight: 19 },
 });

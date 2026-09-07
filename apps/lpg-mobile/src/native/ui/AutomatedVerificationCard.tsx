@@ -269,27 +269,27 @@ export function AutomatedVerificationCard({
 
 const styles = StyleSheet.create({
   card: {
-    gap: spacing.md,
+    gap: spacing.sm,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radii.xl,
-    padding: spacing.lg,
+    borderRadius: radii.lg,
+    padding: spacing.md,
   },
   headingRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   iconTile: {
-    width: 46,
-    height: 46,
+    width: 38,
+    height: 38,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 16,
+    borderRadius: 13,
   },
   headingCopy: { flex: 1, minWidth: 0, gap: 3 },
   eyebrow: { ...typography.eyebrow, fontSize: 8 },
-  title: { ...typography.subheading, fontSize: 16 },
-  body: { ...typography.caption, lineHeight: 18 },
+  title: { ...typography.subheading, fontSize: 14 },
+  body: { ...typography.caption, fontSize: 10, lineHeight: 15 },
   providerPill: {
     alignSelf: "flex-start",
     flexDirection: "row",
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
   providerText: { ...typography.caption, fontSize: 9, fontWeight: "700" },
   actions: { gap: spacing.sm },
   primary: {
-    minHeight: 50,
+    minHeight: 42,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   },
   primaryText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
   secondary: {
-    minHeight: 46,
+    minHeight: 40,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 8,
     borderRadius: radii.md,
-    padding: spacing.sm,
+    padding: 9,
   },
   successText: { flex: 1, ...typography.caption, lineHeight: 17, fontWeight: "700" },
   fallbackBox: {
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 8,
     borderRadius: radii.md,
-    padding: spacing.sm,
+    padding: 9,
   },
   fallbackText: { flex: 1, ...typography.caption, lineHeight: 17, fontWeight: "700" },
   message: { ...typography.caption, lineHeight: 17, fontWeight: "700" },

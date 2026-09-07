@@ -117,14 +117,7 @@ export function CustomerDashboard() {
       ) : (
         <>
           <GuideTarget targetKey="customer.primary-action">
-            {cylinder && !order ? (
-              <CustomerServiceCards />
-            ) : (
-              <View style={styles.customerPrimaryStack}>
-                <CustomerPrimaryAction {...primary} />
-                <CustomerBillsCard />
-              </View>
-            )}
+            <CustomerServiceCards primary={primary} />
           </GuideTarget>
 
           <AiAssistantLauncher workspace="customer" />
@@ -428,21 +421,36 @@ function CustomerPrimaryAction({ eyebrow, title, body, label, href, icon: Icon }
   );
 }
 
-function CustomerServiceCards() {
+function CustomerServiceCards({
+  primary,
+}: {
+  primary: {
+    eyebrow: string;
+    title: string;
+    body: string;
+    label: string;
+    href: string;
+    icon: IconType;
+  };
+}) {
+  const Icon = primary.icon;
+  const live = primary.eyebrow.toLowerCase().includes("live") || primary.eyebrow.toLowerCase().includes("payment");
   return (
     <View style={styles.customerServiceGrid}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Start a gas refill"
-        onPress={() => router.push("/(customer)/orders/new")}
+        accessibilityLabel={primary.label}
+        onPress={() => router.push(primary.href as never)}
         style={[styles.customerServiceCard, { borderColor: colors.brand }]}
       >
-        <LinearGradient colors={["#F3283A", "#B40B1B"]} style={StyleSheet.absoluteFill} />
-        <View style={styles.customerServiceIcon}><PackageCheck color="#FFFFFF" size={25} /></View>
+        <LinearGradient colors={live ? ["#E7283A", "#A90A19"] : ["#F3283A", "#B40B1B"]} style={StyleSheet.absoluteFill} />
+        <View style={styles.customerServiceIcon}><Icon color="#FFFFFF" size={23} /></View>
         <View style={styles.customerServiceCopy}>
-          <Text style={styles.customerServiceEyebrow}>GAS REFILL</Text>
-          <Text style={styles.customerServiceTitle}>Refill a cylinder</Text>
-          <Text style={styles.customerServiceBody}>Pickup, refill and safe return.</Text>
+          <Text style={styles.customerServiceEyebrow}>{primary.eyebrow.toUpperCase()}</Text>
+          <Text numberOfLines={2} style={styles.customerServiceTitle}>{live ? "Track refill" : primary.title}</Text>
+          <Text numberOfLines={2} style={styles.customerServiceBody}>
+            {live ? "Follow pickup, refill and return." : primary.body}
+          </Text>
         </View>
         <View style={styles.customerServiceArrow}><ChevronRight color={colors.brandDark} size={17} /></View>
       </Pressable>
@@ -1019,14 +1027,14 @@ const styles = StyleSheet.create({
   customerActionButton: { minHeight: 38, flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8, paddingHorizontal: 13, borderRadius: 13, backgroundColor: "white" },
   customerActionButtonText: { color: colors.brandDark, fontSize: 12, fontWeight: "900" },
   customerActionIcon: { width: 64, height: 64, alignItems: "center", justifyContent: "center", marginLeft: 8, borderRadius: 32, backgroundColor: "rgba(255,255,255,.14)" },
-  customerPrimaryStack: { gap: 14 },
-  customerServiceGrid: { flexDirection: "row", gap: 12 },
-  customerServiceCard: { flex: 1, minHeight: 190, overflow: "hidden", padding: 15, borderRadius: 24, borderWidth: StyleSheet.hairlineWidth, justifyContent: "space-between" },
-  customerServiceIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,.16)" },
-  customerServiceCopy: { gap: 5, marginTop: 16 },
+  customerPrimaryStack: { gap: 10 },
+  customerServiceGrid: { flexDirection: "row", gap: 10 },
+  customerServiceCard: { flex: 1, minHeight: 154, overflow: "hidden", padding: 14, borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, justifyContent: "space-between" },
+  customerServiceIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,.16)" },
+  customerServiceCopy: { gap: 4, marginTop: 10 },
   customerServiceEyebrow: { color: "rgba(255,255,255,.68)", fontSize: 7.5, fontWeight: "900", letterSpacing: 1 },
-  customerServiceTitle: { color: "#FFFFFF", fontSize: 18, lineHeight: 22, fontWeight: "900", letterSpacing: -0.35 },
-  customerServiceBody: { color: "rgba(255,255,255,.76)", fontSize: 10.5, lineHeight: 15 },
+  customerServiceTitle: { color: "#FFFFFF", fontSize: 17, lineHeight: 20, fontWeight: "900", letterSpacing: -0.3 },
+  customerServiceBody: { color: "rgba(255,255,255,.76)", fontSize: 10, lineHeight: 14 },
   customerServiceArrow: { position: "absolute", right: 12, top: 12, width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF" },
 
   activeOrder: { minHeight: 132, gap: 17, padding: 16, borderRadius: 22, borderWidth: StyleSheet.hairlineWidth },

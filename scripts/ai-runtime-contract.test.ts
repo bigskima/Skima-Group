@@ -41,6 +41,7 @@ const [
   mobileAiContextAction,
   cylinderVisualReviewPanel,
   cylinderDetailScreen,
+  cylinderMediaScreen,
   customerOrderScreen,
   financeScreen,
   savedLocationsScreen,
@@ -91,6 +92,7 @@ const [
   readRepositoryFile("apps/lpg-mobile/src/native/ui/AiContextAction.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/CylinderVisualReviewPanel.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/CylinderDetailScreen.tsx"),
+  readRepositoryFile("apps/lpg-mobile/src/native/ui/CylinderMediaScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/CustomerOrdersScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/FinanceScreen.tsx"),
   readRepositoryFile("apps/lpg-mobile/src/native/ui/SavedLocationsScreen.tsx"),
@@ -1661,12 +1663,17 @@ Deno.test("cylinder visual review is owner-bound, opt-in, and non-authoritative"
   );
   assertIncludes(
     cylinderDetailScreen,
-    "<CylinderVisualReviewPanel",
-    "customer cylinder details must actually surface the visual review feature",
+    'title="Photo & AI image"',
+    "customer cylinder details must route visual media work into a focused sub-screen",
   );
   assertIncludes(
-    cylinderDetailScreen,
-    "sourceMediaAssetId={originalAssetId}",
+    cylinderMediaScreen,
+    "<CylinderVisualReviewPanel",
+    "customer cylinder media must surface the optional visual review feature",
+  );
+  assertIncludes(
+    cylinderMediaScreen,
+    "sourceMediaAssetId={currentAssetId}",
     "visual review UI must use the cylinder's existing original source photo",
   );
 });

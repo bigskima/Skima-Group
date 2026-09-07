@@ -93,7 +93,8 @@ export function PresentationMediaPanel({
         input: {
           purpose: "public_presentation",
           confirmedColour: colour ?? undefined,
-          sourceMediaAssetId: originalId ?? undefined,
+          ...(originalId ? { sourceMediaAssetId: originalId } : {}),
+          generationMode: originalId ? "source_guided" : "text_to_image",
           preserveOriginal: true,
           regenerationMode: mode,
           preferredStyle: style.key,
@@ -210,23 +211,23 @@ export function PresentationMediaPanel({
 
 const styles = StyleSheet.create({
   panel: {
-    gap: spacing.md,
-    padding: spacing.lg,
+    gap: spacing.sm,
+    padding: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radii.lg,
     backgroundColor: "#FAF7FF",
   },
   head: { flexDirection: "row", gap: spacing.md },
   icon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: "#EEE6FF",
     alignItems: "center",
     justifyContent: "center",
   },
-  title: { color: colors.ink, fontSize: 17, fontWeight: "900" },
-  body: { color: colors.muted, lineHeight: 20, marginTop: 4 },
+  title: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+  body: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: 3 },
   styleRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   styleChip: {
     minHeight: 36,
@@ -237,7 +238,7 @@ const styles = StyleSheet.create({
   },
   styleChipText: { fontSize: 11, fontWeight: "900" },
   button: {
-    minHeight: 50,
+    minHeight: 42,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
