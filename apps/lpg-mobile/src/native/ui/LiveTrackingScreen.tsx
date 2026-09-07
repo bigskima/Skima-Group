@@ -6,7 +6,8 @@ import {
   useTrackingPoints,
   useTrackingSessions,
 } from "../api/domains";
-import { firstNumber, firstString, nestedRecord, type PlatformRecord } from "../api/records";\nimport { useResolvedLocationLabel } from "../domains/maps/readableLocation";
+import { firstNumber, firstString, nestedRecord, type PlatformRecord } from "../api/records";
+import { useResolvedLocationLabel } from "../domains/maps/readableLocation";
 import { OperationalMap, type MapPoint } from "../maps/OperationalMap";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -35,7 +36,11 @@ export function LiveTrackingScreen() {
   const delivery =
     nestedRecord(details.data, "deliveryLocation") ??
     nestedRecord(details.data, "delivery_location");
-  const destinationLabel = useResolvedLocationLabel(\n    delivery,\n    "Your saved delivery location",\n    `tracking:${id ?? "unknown"}:delivery`,\n  );
+  const destinationLabel = useResolvedLocationLabel(
+    delivery,
+    "Your saved delivery location",
+    `tracking:${id ?? "unknown"}:delivery`,
+  );
   const destination = delivery ? locationPoint(delivery, destinationLabel, "destination") : null;
   const mapped = [...driverPath, ...(destination ? [destination] : [])];
   const latest = points.data?.[0];
