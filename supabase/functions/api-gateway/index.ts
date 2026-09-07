@@ -1895,14 +1895,20 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
-    return rpcResponse(
+    const dispatchIdempotencyKey = requireString(payload.idempotencyKey, "idempotencyKey");
+    const dispatchSource = optionalString(payload.source) ?? "skima.lpg.dispatch_api";
+    return lpgDispatchResponse(
       serviceClient.rpc("dispatch_lpg_order", {
         target_candidate_limit: optionalInteger(payload.candidateLimit),
-        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_idempotency_key: dispatchIdempotencyKey,
         target_lpg_order_id: lpgOrderId,
-        target_source: optionalString(payload.source) ?? "skima.lpg.dispatch_api",
+        target_source: dispatchSource,
       }),
+      lpgOrderId,
+      dispatchIdempotencyKey,
+      dispatchSource,
       id,
+      serviceClient,
     );
   }
 
@@ -6763,6 +6769,43 @@ async function resolveSessionContext(
           };
         }),
     },
+    requestId: id,
+  });
+}
+
+async function lpgDispatchResponse(
+  query: SelectQuery,
+  lpgOrderId: string,
+  dispatchIdempotencyKey: string,
+  dispatchSource: string,
+  id: string,
+  serviceClient: SupabaseClient,
+): Promise<Response> {
+  const { data, error } = await query;
+
+  if (error) {
+    return databaseError(error as { readonly message: string; readonly code?: string }, id);
+  }
+
+  const notificationResult = await serviceClient.rpc("queue_lpg_order_status_notifications", {
+    target_idempotency_key: dispatchIdempotencyKey + ":notifications",
+    target_lpg_order_id: lpgOrderId,
+    target_source: dispatchSource,
+  });
+
+  if (notificationResult.error) {
+    return jsonResponse({
+      ok: false,
+      error: "dispatch_notification_queue_failed",
+      message: "A driver was selected, but SKIMA could not queue the order notifications. Refresh Operations to confirm the assignment, then check Notification delivery.",
+      id: data,
+      requestId: id,
+    }, 500);
+  }
+
+  return jsonResponse({
+    ok: true,
+    id: data,
     requestId: id,
   });
 }
