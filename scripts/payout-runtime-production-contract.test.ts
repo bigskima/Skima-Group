@@ -22,6 +22,11 @@ const [financeRuntime, withdrawalUi, payoutMigration, paystackAdapter] = await P
   read("supabase/functions/_shared/paystack-payouts.ts"),
 ]);
 
+Deno.test("finance runtime accepts the SKIMA web client CORS header", () => {
+  assertStringIncludes(financeRuntime, "x-skima-client");
+  assertStringIncludes(financeRuntime, "Access-Control-Allow-Headers");
+});
+
 Deno.test("payout bank discovery survives payment-provider readiness failures", () => {
   assertStringIncludes(financeRuntime, 'source: "configured-fallback"');
   assertStringIncludes(financeRuntime, "directoryAvailable");
