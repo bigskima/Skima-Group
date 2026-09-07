@@ -95,10 +95,6 @@ function sqlFunctionSection(source: string, functionName: string): string {
   return source.slice(definition.index, bodyEnd + delimiter.length + 1);
 }
 
-function literalPattern(value: string): RegExp {
-  return new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-}
-
 function evaluate(check: Check): string[] {
   const failures: string[] = [];
 
