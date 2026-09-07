@@ -56,6 +56,7 @@ Deno.test("customer home keeps independent services visible in every refill stat
   assertIncludes(dashboard, "<CustomerBillsCard />");
   assertIncludes(dashboard, 'selectWorkspaceWallet(wallets.data ?? [], "customer")');
   assertIncludes(dashboard, "customerPrimaryStack");
+  assertIncludes(await read("apps/lpg-mobile/src/native/api/domains.ts"), 'path: "/lpg/orders?scope=customer"');
 });
 
 Deno.test("customer reads remain user-scoped even when the same account has station roles", async () => {
@@ -67,7 +68,7 @@ Deno.test("customer reads remain user-scoped even when the same account has stat
       "Customer orders, active orders and deposit history must explicitly scope to the signed-in customer.",
     );
   }
-  assertIncludes(gateway, 'path === "/runtime/payments/deposits/preview"');
+  assertIncludes(gateway, 'routePath === "/runtime/payments/deposits/preview"');
 });
 
 Deno.test("customer wallet top up uses the canonical gateway runtime", async () => {
