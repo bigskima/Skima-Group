@@ -77,6 +77,7 @@ import { AdminContentWorkspace } from "./admin-content-workspace";
 import { AdminFleetWorkspace } from "./admin-fleet-workspace";
 import { AdminOperationsWorkspace } from "./admin-operations-workspace";
 import { AdminDriverParticipationWorkspace } from "./admin-driver-participation-workspace";
+import { AdminDeliveryPricingWorkspace } from "./admin-delivery-pricing-workspace";
 import { AdminPartnerLocationReviewWorkspace } from "./admin-partner-location-review-workspace";
 import { AdminPolicyWorkspace } from "./admin-policy-workspace";
 import { AdminQualityWorkspace } from "./admin-quality-workspace";
@@ -187,6 +188,7 @@ const navIconMap = {
   coverage: MapPinned,
   locationReview: MapPinned,
   drivers: UsersRound,
+  deliveryPricing: BadgeDollarSign,
   quality: ShieldCheck,
   revenue: WalletCards,
   policies: FileText,
@@ -308,6 +310,13 @@ const foundationNavigation: readonly NavigationItem[] = [
     href: "/finance",
     icon: "finance",
     requiredPermissions: ["platform.financial.read"],
+  },
+  {
+    key: "delivery-pricing",
+    label: "Delivery Pricing",
+    href: "/delivery-pricing",
+    icon: "deliveryPricing",
+    requiredPermissions: ["platform.financial_policy.read"],
   },
   {
     key: "revenue",
@@ -564,6 +573,10 @@ function Workspace(props: { readonly route: string; readonly onNavigate: (href: 
 
   if (props.route === "/revenue") {
     return <AdminRevenueWorkspace onOpenFinance={() => props.onNavigate("/finance")} />;
+  }
+
+  if (props.route === "/delivery-pricing") {
+    return <AdminDeliveryPricingWorkspace />;
   }
 
   if (props.route === "/policies") {
