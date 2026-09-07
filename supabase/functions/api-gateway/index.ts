@@ -24,6 +24,13 @@ import {
   type AiProviderRoute,
   type AiTextResponse,
 } from "../_shared/ai-provider-runtime.ts";
+import {
+  readPartnerVerificationRequirements,
+  reconcilePartnerVerificationApplication,
+  refreshPartnerVerificationSession,
+  startPartnerVerificationSession,
+  VerificationRuntimeError,
+} from "../_shared/partner-verification.ts";
 
 const ROUTES = new Set([
   "/health",
@@ -255,6 +262,10 @@ const ROUTES = new Set([
   "/runtime/tracking/sessions",
   "/runtime/tracking/points",
   "/runtime/verifications",
+  "/runtime/partner-verification/requirements",
+  "/runtime/partner-verification/sessions",
+  "/runtime/partner-verification/sessions/refresh",
+  "/runtime/partner-verification/applications/reconcile",
   "/runtime/notifications/queue",
   "/runtime/ai/assistant",
   "/runtime/ai/cylinder-visual-review",
@@ -303,6 +314,19 @@ async function handleRequest(request: Request): Promise<Response> {
           requestId: id,
         },
         400,
+      );
+    }
+
+    if (error instanceof VerificationRuntimeError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: error.code,
+          message: error.message,
+          details: error.details,
+          requestId: id,
+        },
+        error.status,
       );
     }
 
@@ -380,6 +404,84 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       timestamp: new Date().toISOString(),
       requestId: id,
     });
+  }
+
+  if (routePath === "/runtime/partner-verification/requirements" && request.method === "GET") {
+    const applicationId = requireUuid(
+      url.searchParams.get("applicationId"),
+      "applicationId",
+    );
+    const data = await readPartnerVerificationRequirements(supabase, applicationId);
+    return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (
+    routePath === "/runtime/partner-verification/sessions" &&
+    request.method === "POST"
+  ) {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "Automatic verification is not configured on this SKIMA backend.",
+        requestId: id,
+      }, 503);
+    }
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const data = await startPartnerVerificationSession(
+      createServiceClient(supabaseUrl, serviceRoleKey),
+      authResult.user,
+      body.value,
+    );
+    return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (
+    routePath === "/runtime/partner-verification/sessions/refresh" &&
+    request.method === "POST"
+  ) {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "Automatic verification is not configured on this SKIMA backend.",
+        requestId: id,
+      }, 503);
+    }
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const data = await refreshPartnerVerificationSession(
+      createServiceClient(supabaseUrl, serviceRoleKey),
+      authResult.user,
+      body.value,
+    );
+    return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (
+    routePath === "/runtime/partner-verification/applications/reconcile" &&
+    request.method === "POST"
+  ) {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "Automatic verification is not configured on this SKIMA backend.",
+        requestId: id,
+      }, 503);
+    }
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const data = await reconcilePartnerVerificationApplication(
+      createServiceClient(supabaseUrl, serviceRoleKey),
+      authResult.user,
+      body.value,
+    );
+    return jsonResponse({ ok: true, data, requestId: id });
   }
 
   if (routePath === "/admin/verification/configuration" && request.method === "GET") {
@@ -1583,6 +1685,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           .select(
             "id,label,formatted_address,latitude,longitude,accuracy_meters,landmark,delivery_instructions,contact_name,contact_phone,verification_status,status,provider_source,provider_place_id,metadata,created_at,updated_at",
           )
+          .eq("owner_user_id", authResult.user.id)
           .neq("status", "deleted")
           .order("created_at", { ascending: false }),
         id,
@@ -1661,6 +1764,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           .select(
             "id,public_reference,display_name,cylinder_identifier,qr_payload,barcode_payload,size_kg,max_capacity_kg,manufacturer,brand,colour,serial_number,manufactured_at,last_inspection_at,next_inspection_at,condition_status,valve_type,ownership_proof_asset_id,ownership_proof_media_asset_id,image_asset_ids,status,safety_restriction,notes,metadata,created_at,updated_at",
           )
+          .eq("owner_user_id", authResult.user.id)
           .neq("status", "deactivated")
           .order("created_at", { ascending: false }),
         id,
@@ -1765,6 +1869,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           .select(
             "id,public_reference,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,pricing_id,requested_kg,quoted_kg,currency_code,lpg_amount,delivery_fee_amount,platform_fee_amount,tax_amount,driver_commission_amount,total_amount,status,expires_at,breakdown,financial_policy_snapshot,metadata,created_at,updated_at",
           )
+          .eq("created_by", authResult.user.id)
           .order("created_at", { ascending: false }),
         id,
       );
@@ -4295,8 +4400,10 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
     return jsonResponse({
       ok: true,
-      data: previewResult.data,
-      walletId,
+      data: {
+        ...requireRecordOrEmpty(previewResult.data),
+        walletId,
+      },
       requestId: id,
     });
   }
