@@ -165,7 +165,7 @@ export function CylinderRegistrationScreen() {
       const cylinderId = firstString(createdRecord, ["id"]);
       const cylinderReference = firstString(createdRecord, ["publicReference", "public_reference"]) ?? cylinderId;
 
-      if (assetId && cylinderId) {
+      if (cylinderId) {
         setSubmitLabel("Preparing cylinder image");
         try {
           await presentationMutation.mutateAsync({
@@ -177,7 +177,8 @@ export function CylinderRegistrationScreen() {
             input: {
               purpose: "public_presentation",
               confirmedColour: colour.trim() || undefined,
-              sourceMediaAssetId: assetId,
+              ...(assetId ? { sourceMediaAssetId: assetId } : {}),
+              generationMode: assetId ? "source_guided" : "text_to_image",
               preserveOriginal: true,
             },
           });
