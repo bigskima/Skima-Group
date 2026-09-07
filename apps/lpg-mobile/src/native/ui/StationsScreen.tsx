@@ -6,13 +6,18 @@ import { displayStatus, firstNumber, firstString, recordId } from "../api/record
 import { OperationalMap, type MapPoint } from "../maps/OperationalMap";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
 import { StatusPill } from "./StatusPill";
 
 export function StationsScreen() {
   const { palette } = useAppTheme();
-  const stations = domainQueries.stations();
+  const locations = domainQueries.locations();
+  const deliveryLocation = locations.data?.[0];
+  const latitude = firstNumber(deliveryLocation, ["latitude"]);
+  const longitude = firstNumber(deliveryLocation, ["longitude"]);
+  const stations = domainQueries.nearbyStations(latitude, longitude);
   const points = (stations.data ?? [])
     .map((item) => {
       const latitude = firstNumber(item, ["latitude", "lat"]);
@@ -33,15 +38,32 @@ export function StationsScreen() {
       title="Nearby stations"
       subtitle="Find verified LPG stations available through SKIMA in your area."
     >
-      {stations.isPending ? (
+      {locations.isPending ? (
         <View style={styles.loading}>
           <ActivityIndicator color={palette.brand} />
           <Text style={[styles.loadingText, { color: palette.muted }]}>Finding available stations…</Text>
         </View>
+      ) : locations.error ? (
+        <EmptyState
+          title="Your delivery location couldn't be loaded"
+          description="Refresh your saved locations, then try nearby stations again."
+        />
+      ) : latitude === null || longitude === null ? (
+        <EmptyState
+          icon={<MapPin color={palette.brand} size={27} />}
+          title="Choose a delivery location first"
+          description="SKIMA uses your saved delivery location to show only stations that can actually serve you."
+          action={<AppButton label="Choose location" onPress={() => router.push("/(customer)/locations")} />}
+        />
+      ) : stations.isPending ? (
+        <View style={styles.loading}>
+          <ActivityIndicator color={palette.brand} />
+          <Text style={[styles.loadingText, { color: palette.muted }]}>Finding stations that serve this location…</Text>
+        </View>
       ) : stations.error ? (
         <EmptyState
-          title="Stations couldn't be loaded"
-          description="Check your connection and try again."
+          title="Nearby stations couldn't be loaded"
+          description="We couldn't check stations for this delivery location. Try again."
         />
       ) : (stations.data ?? []).length === 0 ? (
         <EmptyState
@@ -64,6 +86,12 @@ export function StationsScreen() {
               const capacity = firstNumber(station, ["currentAvailableKg", "current_available_kg"]);
               const name = firstString(station, ["display_name", "displayName", "name"]) ?? "SKIMA station";
               const address = firstString(station, ["formatted_address", "formattedAddress", "address"]) ?? "Address will appear when available";
+              const distanceMeters = firstNumber(station, ["distance_meters", "distanceMeters"]);
+              const distanceLabel = distanceMeters === null
+                ? null
+                : distanceMeters < 1000
+                  ? `${Math.round(distanceMeters)} m away`
+                  : `${(distanceMeters / 1000).toFixed(distanceMeters < 10000 ? 1 : 0)} km away`;
 
               return (
                 <Pressable
@@ -90,6 +118,7 @@ export function StationsScreen() {
                       </View>
                     </View>
                     <Text numberOfLines={2} style={[styles.body, { color: palette.muted }]}>{address}</Text>
+                    {distanceLabel ? <Text style={[styles.distance, { color: palette.brand }]}>{distanceLabel}</Text> : null}
                     <StatusPill label={friendlyStationStatus(status)} tone={stationStatusTone(status)} />
                   </View>
 
@@ -150,6 +179,7 @@ const styles = StyleSheet.create({
   verified: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 4, borderRadius: radii.pill },
   verifiedText: { ...typography.caption, fontSize: 9, fontWeight: "900" },
   body: { ...typography.caption, fontSize: 12, lineHeight: 17 },
+  distance: { ...typography.caption, fontSize: 10, fontWeight: "900" },
   trailing: { alignItems: "center", gap: spacing.sm },
   capacity: { minWidth: 54, minHeight: 50, alignItems: "center", justifyContent: "center", borderRadius: 15, paddingHorizontal: spacing.sm },
   capacityText: { fontSize: 13, fontWeight: "900", marginTop: 2 },
