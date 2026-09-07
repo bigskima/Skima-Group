@@ -56,13 +56,15 @@ export function CustomerDashboard() {
   const active = domainQueries.activeOrders();
   const locations = domainQueries.locations();
   const wallets = domainQueries.wallets();
-  const stations = domainQueries.stations();
-  const sources = [cylinders, active, locations, wallets, stations];
+  const location = locations.data?.[0];
+  const locationLatitude = firstNumber(location, ["latitude"]);
+  const locationLongitude = firstNumber(location, ["longitude"]);
+  const stations = domainQueries.nearbyStations(locationLatitude, locationLongitude);
+  const sources = [cylinders, active, locations, wallets];
   const pending = sources.every((source) => source.isPending);
   const failed = sources.every((source) => Boolean(source.error));
   const cylinder = cylinders.data?.[0];
   const order = active.data?.[0];
-  const location = locations.data?.[0];
   const orderId = order ? recordId(order) : null;
   const balance = (wallets.data ?? []).reduce(
     (sum, item) => sum + (firstNumber(item, ["balance", "available_balance", "availableBalance"]) ?? 0),
@@ -115,15 +117,16 @@ export function CustomerDashboard() {
         />
       ) : (
         <>
-          {cylinder && !order ? (
-            <GuideTarget targetKey="customer.primary-action">
+          <GuideTarget targetKey="customer.primary-action">
+            {cylinder && !order ? (
               <CustomerServiceCards />
-            </GuideTarget>
-          ) : (
-            <GuideTarget targetKey="customer.primary-action">
-              <CustomerPrimaryAction {...primary} />
-            </GuideTarget>
-          )}
+            ) : (
+              <View style={styles.customerPrimaryStack}>
+                <CustomerPrimaryAction {...primary} />
+                <CustomerBillsCard />
+              </View>
+            )}
+          </GuideTarget>
 
           <AiAssistantLauncher workspace="customer" />
 
@@ -427,7 +430,6 @@ function CustomerPrimaryAction({ eyebrow, title, body, label, href, icon: Icon }
 }
 
 function CustomerServiceCards() {
-  const { palette } = useAppTheme();
   return (
     <View style={styles.customerServiceGrid}>
       <Pressable
@@ -445,21 +447,28 @@ function CustomerServiceCards() {
         </View>
         <View style={styles.customerServiceArrow}><ChevronRight color={colors.brandDark} size={17} /></View>
       </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Pay electricity, airtime and data bills"
-        onPress={() => router.push("/(customer)/bills")}
-        style={[styles.customerServiceCard, { backgroundColor: palette.surface, borderColor: palette.border }]}
-      >
-        <View style={[styles.customerServiceIcon, { backgroundColor: palette.brandSoft }]}><Zap color={colors.brand} size={25} /></View>
-        <View style={styles.customerServiceCopy}>
-          <Text style={[styles.customerServiceEyebrow, { color: colors.brand }]}>EVERYDAY BILLS</Text>
-          <Text style={[styles.customerServiceTitle, { color: palette.ink }]}>Pay bills</Text>
-          <Text style={[styles.customerServiceBody, { color: palette.muted }]}>Electricity, airtime, data and more.</Text>
-        </View>
-        <View style={[styles.customerServiceArrow, { backgroundColor: palette.soft }]}><ChevronRight color={palette.ink} size={17} /></View>
-      </Pressable>
+      <CustomerBillsCard />
     </View>
+  );
+}
+
+function CustomerBillsCard() {
+  const { palette } = useAppTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Pay electricity, airtime and data bills"
+      onPress={() => router.push("/(customer)/bills")}
+      style={[styles.customerServiceCard, { backgroundColor: palette.surface, borderColor: palette.border }]}
+    >
+      <View style={[styles.customerServiceIcon, { backgroundColor: palette.brandSoft }]}><Zap color={colors.brand} size={25} /></View>
+      <View style={styles.customerServiceCopy}>
+        <Text style={[styles.customerServiceEyebrow, { color: colors.brand }]}>EVERYDAY BILLS</Text>
+        <Text style={[styles.customerServiceTitle, { color: palette.ink }]}>Pay bills</Text>
+        <Text style={[styles.customerServiceBody, { color: palette.muted }]}>Electricity, airtime, data and more.</Text>
+      </View>
+      <View style={[styles.customerServiceArrow, { backgroundColor: palette.soft }]}><ChevronRight color={palette.ink} size={17} /></View>
+    </Pressable>
   );
 }
 
@@ -1011,6 +1020,7 @@ const styles = StyleSheet.create({
   customerActionButton: { minHeight: 38, flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8, paddingHorizontal: 13, borderRadius: 13, backgroundColor: "white" },
   customerActionButtonText: { color: colors.brandDark, fontSize: 12, fontWeight: "900" },
   customerActionIcon: { width: 64, height: 64, alignItems: "center", justifyContent: "center", marginLeft: 8, borderRadius: 32, backgroundColor: "rgba(255,255,255,.14)" },
+  customerPrimaryStack: { gap: 14 },
   customerServiceGrid: { flexDirection: "row", gap: 12 },
   customerServiceCard: { flex: 1, minHeight: 190, overflow: "hidden", padding: 15, borderRadius: 24, borderWidth: StyleSheet.hairlineWidth, justifyContent: "space-between" },
   customerServiceIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,.16)" },
