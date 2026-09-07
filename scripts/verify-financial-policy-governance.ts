@@ -137,6 +137,7 @@ const [
   paystackPayoutAdapter,
   adminConfig,
   adminRevenue,
+  adminMoneyPricing,
   mobileWithdrawal,
   withdrawalModal,
 ] = await Promise.all([
@@ -152,6 +153,7 @@ const [
   read("supabase/functions/_shared/paystack-payouts.ts"),
   read("apps/admin/src/admin-resource-config.ts"),
   read("apps/admin/src/admin-revenue-workspace.tsx"),
+  read("apps/admin/src/admin-delivery-pricing-workspace.tsx"),
   read("apps/lpg-mobile/src/native/ui/FinanceWithdrawalExperience.tsx"),
   read("apps/lpg-mobile/src/native/ui/WithdrawalModal.tsx"),
 ]);
@@ -183,44 +185,6 @@ const commissionRoute = routeSection(gateway, "/runtime/commissions/execute");
 const orderSettlementRoute = routeSection(gateway, "/runtime/order-settlements/execute");
 const rawSettlementRoute = routeSection(gateway, "/runtime/settlements/execute");
 const rawEscrowReleaseRoute = routeSection(gateway, "/runtime/escrow/release");
-const adminLifecycleActions: Array<[string, string, string]> = [
-  [
-    "create-financial-policy-version",
-    "/admin/financial-policies",
-    "platform.financial_policy.draft",
-  ],
-  [
-    "submit-financial-policy",
-    "/admin/financial-policies/submit",
-    "platform.financial_policy.draft",
-  ],
-  [
-    "review-financial-policy",
-    "/admin/financial-policies/review",
-    "platform.financial_policy.approve",
-  ],
-  [
-    "activate-financial-policy",
-    "/admin/financial-policies/activate",
-    "platform.financial_policy.activate",
-  ],
-  [
-    "deactivate-financial-policy",
-    "/admin/financial-policies/deactivate",
-    "platform.financial_policy.activate",
-  ],
-  [
-    "rollback-financial-policy",
-    "/admin/financial-policies/rollback",
-    "platform.financial_policy.rollback",
-  ],
-  [
-    "preview-financial-policy",
-    "/admin/financial-policies/resolve",
-    "platform.financial_policy.read",
-  ],
-];
-
 const checks: Check[] = [
   {
     name: "versioned policy schema and universal scope",
@@ -439,11 +403,45 @@ const checks: Check[] = [
     allowMissing: true,
     forbidden: [/payload\.distribution/i, /release_escrow_hold"\s*,/i],
   },
-  ...adminLifecycleActions.map(([actionKey, route, permission]): Check => ({
-    name: `admin ${actionKey} action`,
-    source: actionSection(adminConfig, actionKey),
-    required: [literalPattern(route), literalPattern(permission)],
-  })),
+  {
+    name: "normal Finance UI does not duplicate raw financial policy lifecycle controls",
+    source: adminConfig,
+    forbidden: [
+      /"submit-financial-policy"/i,
+      /"review-financial-policy"/i,
+      /"activate-financial-policy"/i,
+      /"deactivate-financial-policy"/i,
+      /"rollback-financial-policy"/i,
+      /"preview-financial-policy"/i,
+    ],
+  },
+  {
+    name: "guided money pricing keeps delegated governance without forcing it on Super Admin",
+    source: adminMoneyPricing,
+    required: [
+      /policyKey:\s*"pricing\.lpg\.delivery"/i,
+      /policyKey:\s*"payout\.lpg\.driver"/i,
+      /if\s*\(superAdmin\)\s*\{\s*applyImmediately\.mutate\(form\)/i,
+      /\/admin\/financial-policies\/submit/i,
+      /\/admin\/financial-policies\/review/i,
+      /\/admin\/financial-policies\/replace-active/i,
+      /Save & apply now/i,
+      /there is no second approval step/i,
+    ],
+  },
+  {
+    name: "guided money pricing captures input primitives before state updater callbacks",
+    source: adminMoneyPricing,
+    required: [
+      /const nextValue = event\.currentTarget\.value;/i,
+      /updateField\("baseAmount", nextValue\)/i,
+      /updateField\("perKmAmount", nextValue\)/i,
+      /updateField\("loadAmountPerKg", nextValue\)/i,
+    ],
+    forbidden: [
+      /setForm\(\(value\)\s*=>[\s\S]{0,140}event\.currentTarget\.value/i,
+    ],
+  },
   {
     name: "Paystack duplicate transfer retries verify the existing transfer first",
     source: paystackPayoutAdapter,
@@ -705,6 +703,21 @@ const checks: Check[] = [
     ],
     forbidden: [
       /setFeeAmounts\(\(current\)\s*=>[\s\S]{0,120}event\.currentTarget\.value/i,
+    ],
+  },
+  {
+    name: "Super Admin immediate financial pricing is atomic, audited, and final in one save",
+    source: migrations,
+    required: [
+      /create or replace function public\.set_active_financial_policy_configuration/i,
+      /not public\.is_platform_super_admin\(\)/i,
+      /set lifecycle_status = 'superseded'/i,
+      /'active'/i,
+      /submitted_by/i,
+      /approved_by/i,
+      /activated_by/i,
+      /perform public\.assert_financial_policy_no_conflict\(new_version_id\)/i,
+      /target_idempotency_key \|\| ':activated'/i,
     ],
   },
   {
