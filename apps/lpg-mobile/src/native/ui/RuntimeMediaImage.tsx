@@ -41,6 +41,19 @@ export function RuntimeMediaImage({
         ReadSchema,
       ),
   });
+  const activelyLoading =
+    Boolean(assetId) &&
+    session.status === "authenticated" &&
+    query.isPending &&
+    !query.error;
+  const placeholderLabel = !assetId
+    ? `${label} not uploaded yet`
+    : query.error
+      ? `${label} could not be loaded`
+      : activelyLoading
+        ? "Loading image…"
+        : `${label} unavailable`;
+
   return query.data?.signedUrl ? (
     <Image
       source={query.data.signedUrl}
@@ -52,9 +65,7 @@ export function RuntimeMediaImage({
   ) : (
     <View style={[styles.placeholder, variant === "avatar" && styles.avatar, variant === "hero" && styles.hero, variant === "thumbnail" && styles.thumbnail]}>
       <ImageOff color={colors.muted} size={28} />
-      <Text style={styles.label}>
-        {query.isPending ? "Loading image…" : `${label} unavailable`}
-      </Text>
+      <Text style={styles.label}>{placeholderLabel}</Text>
     </View>
   );
 }
