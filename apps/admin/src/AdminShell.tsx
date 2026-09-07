@@ -340,7 +340,7 @@ function AdminNavGroup(props: {
   readonly onNavigate: (href: string) => void;
 }) {
   return (
-    <section className="admin-shell__nav-group">
+    <section className="admin-shell__nav-group" data-section={props.label}>
       <p>{props.label}</p>
       {props.items.map((item) => {
         const Icon = item.icon ?? Circle;
@@ -369,7 +369,7 @@ function AdminMobileNavGroup(props: {
   readonly onNavigate: (href: string) => void;
 }) {
   return (
-    <section className="admin-mobile-nav__group">
+    <section className="admin-mobile-nav__group" data-section={props.group.label}>
       <p>{props.group.label}</p>
       {props.group.items.map((item) => {
         const Icon = item.icon ?? Circle;
