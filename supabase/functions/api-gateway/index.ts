@@ -1819,14 +1819,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
   if (routePath === "/lpg/orders") {
     if (request.method === "GET") {
+      let orderQuery = supabase
+        .from("lpg_refill_orders")
+        .select(
+          "id,public_reference,lpg_refill_quote_id,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,driver_profile_id,vehicle_id,tracking_session_id,escrow_hold_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,station_amount,delivery_fee_amount,platform_fee_amount,driver_commission_amount,status,payment_status,assignment_status,financial_policy_snapshot,metadata,created_at,updated_at",
+        );
+
+      if (url.searchParams.get("scope") === "customer") {
+        orderQuery = orderQuery.eq("customer_user_id", authResult.user.id);
+      }
+
       return selectRecords(
-        supabase
-          .from("lpg_refill_orders")
-          .select(
-            "id,public_reference,lpg_refill_quote_id,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,driver_profile_id,vehicle_id,tracking_session_id,escrow_hold_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,station_amount,delivery_fee_amount,platform_fee_amount,driver_commission_amount,status,payment_status,assignment_status,financial_policy_snapshot,metadata,created_at,updated_at",
-          )
-          .eq("customer_user_id", authResult.user.id)
-          .order("created_at", { ascending: false }),
+        orderQuery.order("created_at", { ascending: false }),
         id,
       );
     }
@@ -4299,14 +4303,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
   if (routePath === "/runtime/payments/deposits") {
     if (request.method === "GET") {
+      let depositQuery = supabase
+        .from("payment_deposit_requests")
+        .select(
+          "id,public_reference,wallet_id,customer_user_id,provider_adapter_id,transaction_id,reversal_transaction_id,currency_code,amount,status,provider_reference,checkout_url,source,metadata,initialized_at,verified_at,failed_at,reversed_at,created_at,updated_at",
+        );
+
+      if (url.searchParams.get("scope") === "customer") {
+        depositQuery = depositQuery.eq("customer_user_id", authResult.user.id);
+      }
+
       return selectRecords(
-        supabase
-          .from("payment_deposit_requests")
-          .select(
-            "id,public_reference,wallet_id,customer_user_id,provider_adapter_id,transaction_id,reversal_transaction_id,currency_code,amount,status,provider_reference,checkout_url,source,metadata,initialized_at,verified_at,failed_at,reversed_at,created_at,updated_at",
-          )
-          .eq("customer_user_id", authResult.user.id)
-          .order("created_at", { ascending: false }),
+        depositQuery.order("created_at", { ascending: false }),
         id,
       );
     }
