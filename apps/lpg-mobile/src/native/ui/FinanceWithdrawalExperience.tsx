@@ -61,7 +61,6 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
 
   const bankDirectorySource = firstString(bankQuery.data, ["source"]) ?? "";
   const providerIssueMessage = firstString(bankQuery.data, ["providerIssueMessage", "provider_issue_message"]);
-  const providerIssueCode = firstString(bankQuery.data, ["providerIssueCode", "provider_issue_code"]);
   const providerConfigured = bankQuery.data?.providerConfigured === true;
   const beneficiaryVerificationAvailable = bankQuery.data?.beneficiaryVerificationAvailable === true;
   const usingFallbackDirectory = bankDirectorySource === "configured-fallback";
