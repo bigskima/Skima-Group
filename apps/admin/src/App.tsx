@@ -611,11 +611,17 @@ function Workspace(props: { readonly route: string; readonly onNavigate: (href: 
 
 function OverviewWorkspace(props: { readonly onNavigate: (href: string) => void }) {
   const sessionState = useSessionState();
+  const canReadLpgOperations = sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
+    sessionState.context?.permissions.some((permission) =>
+      ["lpg.orders.manage", "lpg.dispatch.execute", "lpg.cylinders.manage", "lpg.safety.manage", "lpg.config.manage"].includes(permission)
+    ) ||
+    false;
   const administrators = useGatewayRecords("command-admins", "/admin/users");
   const companies = useGatewayRecords("command-companies", "/admin/organizations");
   const applications = useGatewayRecords("command-applications", "/runtime/applications");
   const jobs = useGatewayRecords("command-jobs", "/admin/system/jobs");
   const incidents = useGatewayRecords("command-incidents", "/admin/system/errors");
+  const lpgOrders = useGatewayRecords("command-lpg-orders", "/lpg/orders", canReadLpgOperations);
   const pendingApplications = (applications.data ?? []).filter((record) =>
     ["submitted", "resubmitted", "under_review", "additional_info_required"].includes(
       getRecordString(record, "status") ?? "",
@@ -630,7 +636,14 @@ function OverviewWorkspace(props: { readonly onNavigate: (href: string) => void 
   const activeAdmins = (administrators.data ?? []).filter((record) =>
     getRecordString(record, "status") === "active"
   ).length;
-  const requiresAttention = pendingApplications + failedJobs + openIncidents;
+  const lpgDriverRecovery = (lpgOrders.data ?? []).filter((record) => {
+    const status = getRecordString(record, "status") ?? "";
+    const paymentStatus = getRecordString(record, "payment_status") ?? "";
+    return !getRecordString(record, "driver_profile_id") &&
+      ["payment_reserved", "matching_station", "matching_driver"].includes(status) &&
+      ["reserved", "held", "payment_reserved"].includes(paymentStatus);
+  }).length;
+  const requiresAttention = pendingApplications + failedJobs + openIncidents + lpgDriverRecovery;
 
   return (
     <>
@@ -674,6 +687,12 @@ function OverviewWorkspace(props: { readonly onNavigate: (href: string) => void 
           tone={pendingApplications ? "warning" : "success"}
         />
         <MetricTile
+          label="Refills need driver"
+          value={lpgDriverRecovery}
+          icon={Truck}
+          tone={lpgDriverRecovery ? "warning" : "success"}
+        />
+        <MetricTile
           label="Platform incidents"
           value={openIncidents + failedJobs}
           icon={ServerCog}
@@ -708,6 +727,12 @@ function OverviewWorkspace(props: { readonly onNavigate: (href: string) => void 
               onClick={() => props.onNavigate("/finance")}
             />
             <CommandLaunch
+              icon={BadgeDollarSign}
+              title="Delivery pricing"
+              description="Set LPG base delivery fee, included distance, per-km fee and pricing approvals."
+              onClick={() => props.onNavigate("/delivery-pricing")}
+            />
+            <CommandLaunch
               icon={Megaphone}
               title="Brand & content"
               description="Logos, promotions, onboarding, messages, and publishing."
@@ -737,6 +762,12 @@ function OverviewWorkspace(props: { readonly onNavigate: (href: string) => void 
               {requiresAttention ? `${requiresAttention} open` : "Clear"}
             </StatusBadge>
           </div>
+          <AttentionRow
+            label="Driver recovery"
+            value={lpgDriverRecovery}
+            detail="Funded LPG refills left without an assigned driver"
+            onClick={() => props.onNavigate("/operations")}
+          />
           <AttentionRow
             label="Applications"
             value={pendingApplications}
@@ -2079,17 +2110,22 @@ function RecordsTable(props: {
   );
 }
 
-function useGatewayRecords(queryKey: string, path: string) {
-  return useGatewayData(queryKey, path, RecordArraySchema);
+function useGatewayRecords(queryKey: string, path: string, enabled = true) {
+  return useGatewayData(queryKey, path, RecordArraySchema, enabled);
 }
 
-function useGatewayData<TData>(queryKey: string, path: string, schema: z.ZodType<TData>) {
+function useGatewayData<TData>(
+  queryKey: string,
+  path: string,
+  schema: z.ZodType<TData>,
+  enabled = true,
+) {
   const { api, status } = useSessionState();
 
   return useQuery({
     queryKey: ["gateway", queryKey, path],
     queryFn: () => api.get(path, schema),
-    enabled: status === "authenticated",
+    enabled: status === "authenticated" && enabled,
   });
 }
 
