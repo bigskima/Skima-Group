@@ -10,6 +10,7 @@ const [
   migration,
   partnerMediaMigration,
   runtime,
+  sharedVerification,
   mobileVerification,
   applicationScreen,
   documentScreen,
@@ -20,6 +21,7 @@ const [
   read("supabase/migrations/20260907070000_automatic_partner_verification_engine.sql"),
   read("supabase/migrations/20260819214411_lpg_granular_partner_media_privacy.sql"),
   read("supabase/functions/verification-runtime/index.ts"),
+  read("supabase/functions/_shared/partner-verification.ts"),
   read("apps/lpg-mobile/src/native/api/verification.ts"),
   read("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx"),
   read("apps/lpg-mobile/src/native/ui/DocumentWorkflowScreen.tsx"),
@@ -84,19 +86,22 @@ Deno.test("redundant partner paperwork is reduced without removing safety eviden
 });
 
 Deno.test("verification runtime uses secure provider sessions and normalized decisions", () => {
-  assertStringIncludes(runtime, 'Deno.env.get("DIDIT_API_KEY")');
-  assertStringIncludes(runtime, '"https://verification.didit.me/v3/session/"');
-  assertStringIncludes(runtime, "/decision/");
-  assertStringIncludes(runtime, '"x-api-key": apiKey');
-  assertStringIncludes(runtime, 'if (status === "APPROVED") return "passed"');
-  assertStringIncludes(runtime, 'if (status === "DECLINED") return "failed"');
+  assertStringIncludes(runtime, "partner-verification.ts");
+  assertStringIncludes(sharedVerification, 'Deno.env.get("DIDIT_API_KEY")');
+  assertStringIncludes(sharedVerification, '"https://verification.didit.me/v3/session/"');
+  assertStringIncludes(sharedVerification, "/decision/");
+  assertStringIncludes(sharedVerification, '"x-api-key": apiKey');
+  assertStringIncludes(sharedVerification, 'if (status === "APPROVED") return "passed"');
+  assertStringIncludes(sharedVerification, 'if (status === "DECLINED") return "failed"');
   assert(
-    !/result_summary:\s*providerBody/.test(runtime),
+    !/result_summary:\s*providerBody/.test(sharedVerification),
     "Raw KYC provider responses must not be persisted as the normalized result summary.",
   );
 });
 
 Deno.test("mobile uses automatic verification first and controlled fallback evidence", () => {
+  assertStringIncludes(mobileVerification, "/runtime/partner-verification/requirements");
+  assertStringIncludes(mobileVerification, "/runtime/partner-verification/sessions");
   assertStringIncludes(mobileVerification, "shouldShowVerificationFallback");
   assertStringIncludes(mobileVerification, "satisfiedVerificationDocumentKeys");
   assertStringIncludes(applicationScreen, "AutomatedVerificationCard");
