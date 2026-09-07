@@ -293,7 +293,13 @@ export function AdminVerificationWorkspace(props: {
             <TextInput
               label="Provider workflow ID"
               name="workflow-ref"
-              helperText="This is the hosted verification workflow configured with the provider. It is not an API key."
+              helperText={
+                verificationKey === "verification.business.registry"
+                  ? "Use the Didit KYB workflow ID. A passed KYB check replaces duplicate business-registration evidence only; SKIMA still keeps separate safety and regulatory evidence where required."
+                  : verificationKey === "verification.person.identity"
+                    ? "Use the Didit KYC workflow that includes identity, liveness and face matching. It is not an API key."
+                    : "This is the hosted verification workflow configured with the provider. It is not an API key."
+              }
               value={workflowRef}
               onChange={(event) => setWorkflowRef(event.currentTarget.value)}
               disabled={!canManage}
