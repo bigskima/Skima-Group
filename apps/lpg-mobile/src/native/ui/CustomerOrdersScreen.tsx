@@ -166,7 +166,17 @@ export function CustomerOrderDetailScreen() {
   const status = order ? (displayStatus(order) ?? "created") : "";
   const normalized = normalizeStatus(status);
   const currency = firstString(order, ["currency_code", "currencyCode"]) ?? "NGN";
-  const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? "pending";\n  const pickupAddress = useResolvedLocationLabel(\n    pickup,\n    "Saved order location",\n    `order:${id ?? "unknown"}:pickup`,\n  );\n  const returnAddress = useResolvedLocationLabel(\n    delivery,\n    "Saved order location",\n    `order:${id ?? "unknown"}:return`,\n  );
+  const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? "pending";
+  const pickupAddress = useResolvedLocationLabel(
+    pickup,
+    "Saved order location",
+    `order:${id ?? "unknown"}:pickup`,
+  );
+  const returnAddress = useResolvedLocationLabel(
+    delivery,
+    "Saved order location",
+    `order:${id ?? "unknown"}:return`,
+  );
   const total = firstNumber(order, ["total_amount", "totalAmount", "quoted_total", "quotedTotal"]);
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
   const actualKg = firstNumber(order, ["actualKg", "actual_kg"]);
@@ -233,8 +243,8 @@ export function CustomerOrderDetailScreen() {
             <View style={styles.infoGrid}>
               <InfoField label="Cylinder" value={cylinderSummary(cylinder)} />
               <InfoField label="Station" value={station ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned station") : "Finding the best station"} />
-              <InfoField label="Pickup" value={pickup ? (firstString(pickup, ["formattedAddress", "formatted_address", "label"]) ?? "Saved location") : "Saved order location"} />
-              <InfoField label="Return" value={delivery ? (firstString(delivery, ["formattedAddress", "formatted_address", "label"]) ?? "Saved location") : "Saved order location"} />
+              <InfoField label="Pickup" value={pickupAddress} />
+              <InfoField label="Return" value={returnAddress} />
             </View>
           </Card>
 
