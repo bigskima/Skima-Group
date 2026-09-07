@@ -6,6 +6,10 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
+  satisfiedVerificationDocumentKeys,
+  useApplicationVerification,
+} from "../api/verification";
+import {
   ActionResponseSchema,
   displayReference,
   displayStatus,
@@ -57,6 +61,8 @@ export function VehicleWorkflowScreen() {
       !["approved", "rejected", "withdrawn", "expired"].includes(firstString(item, ["status"]) ?? ""),
   );
   const currentId = current ? recordId(current) : null;
+  const verification = useApplicationVerification(currentId);
+  const verifiedDocumentKeys = satisfiedVerificationDocumentKeys(verification.data);
   const requirementSetId = firstString(applicationType, ["document_requirement_set_id", "documentRequirementSetId"]);
   const required = (requirements.data ?? []).filter(
     (item) =>
@@ -65,13 +71,16 @@ export function VehicleWorkflowScreen() {
       firstString(item, ["status"]) === "active",
   );
   const missing = required.filter(
-    (requirement) =>
-      !(documents.data ?? []).some(
+    (requirement) => {
+      const requirementKey = firstString(requirement, ["key"]) ?? "";
+      if (verifiedDocumentKeys.has(requirementKey)) return false;
+      return !(documents.data ?? []).some(
         (document) =>
           firstString(document, ["application_id", "applicationId"]) === currentId &&
           (firstString(document, ["requirement_id", "requirementId"]) === recordId(requirement) ||
             firstString(document, ["requirement_key", "requirementKey"]) === firstString(requirement, ["key"])),
-      ),
+      );
+    },
   );
 
   const [showForm, setShowForm] = useState(false);
@@ -307,7 +316,7 @@ export function VehicleWorkflowScreen() {
                 <View style={[styles.formIcon, { backgroundColor: palette.brandSoft }]}><CarFront color={palette.brand} size={22} /></View>
                 <View style={styles.formCopy}>
                   <Text style={[styles.formTitle, { color: palette.ink }]}>Vehicle approval application</Text>
-                  <Text style={[styles.formBody, { color: palette.muted }]}>Add the vehicle you intend to use. SKIMA will review it before you can receive jobs with it.</Text>
+                  <Text style={[styles.formBody, { color: palette.muted }]}>Add the vehicle you intend to use. SKIMA will verify what it can automatically and request only the remaining legal or safety evidence.</Text>
                 </View>
               </View>
 
@@ -390,7 +399,7 @@ export function VehicleWorkflowScreen() {
               </View>
 
               <AppButton
-                label="Continue vehicle review"
+                label="Continue vehicle verification"
                 fullWidth
                 size="lg"
                 loading={create.isPending || update.isPending || submit.isPending}
