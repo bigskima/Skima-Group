@@ -435,6 +435,7 @@ export function NewRefillScreen() {
             </View>
             <QuoteLine label="Gas refill" value={money(firstNumber(quoteRecord, ["refillAmount", "refill_amount", "lpg_amount", "lpgAmount"]), currency)} />
             <QuoteLine label="Delivery" value={money(firstNumber(quoteRecord, ["deliveryAmount", "delivery_amount", "delivery_fee_amount", "deliveryFeeAmount"]), currency)} />
+            <QuoteLine label="SKIMA service fee" value={money(firstNumber(quoteRecord, ["platformFeeAmount", "platform_fee_amount", "platformAmount", "platform_amount"]), currency)} />
             <View style={[styles.quoteDivider, { backgroundColor: palette.border }]} />
             <QuoteLine label="Total" value={money(total, currency)} strong />
           </View>

@@ -35,9 +35,7 @@ export function LiveTrackingScreen() {
   const delivery =
     nestedRecord(details.data, "deliveryLocation") ??
     nestedRecord(details.data, "delivery_location");
-  const destinationLabel =
-    firstString(delivery, ["formattedAddress", "formatted_address", "label"]) ??
-    "Your delivery address";
+  const destinationLabel = readableLocationLabel(delivery);
   const destination = delivery ? locationPoint(delivery, destinationLabel, "destination") : null;
   const mapped = [...driverPath, ...(destination ? [destination] : [])];
   const latest = points.data?.[0];
@@ -165,6 +163,20 @@ function locationPoint(record: PlatformRecord, label: string, kind: MapPoint["ki
   const latitude = firstNumber(record, ["latitude", "lat"]);
   const longitude = firstNumber(record, ["longitude", "lng"]);
   return latitude !== null && longitude !== null ? { latitude, longitude, label, kind } : null;
+}
+
+function readableLocationLabel(record: PlatformRecord | null) {
+  if (!record) return "Your saved delivery location";
+  const candidates = [
+    firstString(record, ["formattedAddress", "formatted_address"]),
+    firstString(record, ["label"]),
+    firstString(record, ["landmark"]),
+  ];
+  return candidates.find((value) => value && !isInternalCoordinateLabel(value)) ?? "Your saved delivery location";
+}
+
+function isInternalCoordinateLabel(value: string) {
+  return /sandbox\s+location|(?:latitude|longitude)|^-?\d{1,3}\.\d+\s*[,/]\s*-?\d{1,3}\.\d+$/i.test(value.trim());
 }
 
 function formatTime(value: string) {

@@ -13,6 +13,7 @@ import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
+import { OperationalMap, type MapPoint } from "../maps/OperationalMap";
 import { Screen } from "./Screen";
 import { StatusPill } from "./StatusPill";
 
@@ -104,6 +105,7 @@ export function DriverAvailabilityScreen() {
   };
 
   const lastUpdated = firstString(latest, ["recorded_at", "recordedAt"]);
+  const latestPoint = latest ? driverPoint(latest) : null;
 
   return (
     <Screen
@@ -170,6 +172,8 @@ export function DriverAvailabilityScreen() {
         </View>
       </View>
 
+      {latestPoint ? <OperationalMap points={[latestPoint]} height={260} initialZoom={16} /> : null}
+
       <AppButton
         label={status === "offline" ? "Go offline" : status === "busy" ? "Set busy" : "Go online"}
         fullWidth
@@ -190,6 +194,14 @@ export function DriverAvailabilityScreen() {
       </View>
     </Screen>
   );
+}
+
+function driverPoint(record: Record<string, unknown>): MapPoint | null {
+  const latitude = Number(record.latitude);
+  const longitude = Number(record.longitude);
+  return Number.isFinite(latitude) && Number.isFinite(longitude)
+    ? { latitude, longitude, label: "Your latest location", kind: "driver" }
+    : null;
 }
 
 function AvailabilityChoice({
