@@ -114,10 +114,13 @@ export function SessionProvider({ children }: PropsWithChildren) {
       return true;
     } catch (cause) {
       authRuntimePromiseRef.current = null;
-      const message = friendlyError(
-        cause,
-        "SKIMA account access is temporarily unavailable. Please try again shortly.",
-      );
+      const message =
+        cause instanceof Error && cause.message.trim()
+          ? cause.message
+          : friendlyError(
+              cause,
+              "SKIMA account access is temporarily unavailable. Please try again shortly.",
+            );
       setAuthRuntimeStatus("unavailable");
       setAuthRuntimeMessage(message);
       return false;
