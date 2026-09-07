@@ -69,6 +69,8 @@ jobs:
         run: npm run lpg-refill:contract
       - name: Verify LPG auth production contracts
         run: npm run lpg-auth:contract
+      - name: Verify Vercel project routing
+        run: npm run vercel-ignore:test
       - name: Verify utility billing production contracts
         run: npm run utility-billing:contract
 
