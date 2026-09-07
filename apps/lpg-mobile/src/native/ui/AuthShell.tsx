@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
   brandName: {
     fontSize: 15,
     lineHeight: 18,
-    fontWeight: "950",
+    fontWeight: "900",
     letterSpacing: 1.2,
   },
   brandDescriptor: { fontSize: 10, lineHeight: 14, fontWeight: "700" },
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
     maxWidth: 600,
     fontSize: 47,
     lineHeight: 50,
-    fontWeight: "950",
+    fontWeight: "900",
     letterSpacing: -1.75,
   },
   promiseMobile: {
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
   },
   roleText: { flex: 1, minWidth: 0, gap: 1 },
   roleTitle: { fontSize: 10, lineHeight: 14, fontWeight: "900" },
-  roleBody: { fontSize: 8, lineHeight: 11, fontWeight: "650" },
+  roleBody: { fontSize: 8, lineHeight: 11, fontWeight: "600" },
   securityStrip: {
     maxWidth: 590,
     flexDirection: "row",
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingTop: 16,
   },
-  securityStripText: { flex: 1, fontSize: 10, lineHeight: 15, fontWeight: "650" },
+  securityStripText: { flex: 1, fontSize: 10, lineHeight: 15, fontWeight: "600" },
   formColumn: { width: "100%", gap: 11 },
   formColumnWide: { flex: 0.86, maxWidth: 480 },
   formCard: {
@@ -522,10 +522,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 30,
     lineHeight: 34,
-    fontWeight: "950",
+    fontWeight: "900",
     letterSpacing: -0.9,
   },
-  body: { maxWidth: 430, fontSize: 12, lineHeight: 18, fontWeight: "550" },
+  body: { maxWidth: 430, fontSize: 12, lineHeight: 18, fontWeight: "500" },
   runtimeAlert: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -534,7 +534,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     padding: 11,
   },
-  runtimeAlertText: { flex: 1, fontSize: 10, lineHeight: 16, fontWeight: "750" },
+  runtimeAlertText: { flex: 1, fontSize: 10, lineHeight: 16, fontWeight: "700" },
   form: { gap: 15 },
   footerDivider: { height: StyleSheet.hairlineWidth },
   footer: { paddingTop: 1 },
@@ -545,6 +545,6 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 8,
   },
-  privacyText: { fontSize: 9, lineHeight: 13, fontWeight: "650", textAlign: "center" },
+  privacyText: { fontSize: 9, lineHeight: 13, fontWeight: "600", textAlign: "center" },
   pressed: { opacity: 0.76 },
 });
