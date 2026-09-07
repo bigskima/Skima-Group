@@ -57,8 +57,6 @@ export default function ForgotPassword() {
       eyebrow="Protected account recovery"
       title="Recover access"
       body="Enter the email connected to your SKIMA account. For privacy, we never reveal whether an address is registered."
-      runtimeMessage={session.authRuntimeMessage}
-      runtimeStatus={session.authRuntimeStatus}
       footer={
         <Text style={[styles.footerText, { color: palette.muted }]}>
           Remembered your password?{" "}
@@ -89,7 +87,7 @@ export default function ForgotPassword() {
       {message ? <AuthFeedback message={message} tone={success ? "success" : "error"} /> : null}
 
       <AuthPrimaryButton
-        disabled={!ready || session.authRuntimeStatus === "unavailable"}
+        disabled={!ready}
         label="Send secure reset link"
         onPress={() => void submit()}
         pending={pending}
