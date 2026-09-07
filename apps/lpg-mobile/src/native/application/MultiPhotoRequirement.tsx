@@ -91,7 +91,7 @@ export function MultiPhotoRequirement({ views, onUploadView }: MultiPhotoRequire
 
       <View style={[styles.privacyNote, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <LockKeyhole color={palette.mutedStrong} size={16} />
-        <Text style={[styles.privacyText, { color: palette.muted }]}>Application photos are private. A photo appears on a public station profile only after separate approval from SKIMA.</Text>
+        <Text style={[styles.privacyText, { color: palette.muted }]}>Public-safe premises photos go live automatically when your station is activated. Tank, identity, licence and other private verification evidence is never shown on the public station profile.</Text>
       </View>
 
       {error ? <Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
