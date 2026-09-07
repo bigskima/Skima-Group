@@ -315,7 +315,7 @@ export function AdminShell(props: AdminShellProps) {
   );
 }
 
-function dedupeNavigationItems(items: readonly NavItem[]): readonly NavItem[] {
+export function dedupeNavigationItems(items: readonly NavItem[]): readonly NavItem[] {
   const seenKeys = new Set<string>();
   const seenHrefs = new Set<string>();
 
