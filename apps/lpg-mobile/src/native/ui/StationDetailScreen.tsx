@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { Clock3, Fuel, MapPin, ShieldCheck, Store } from "lucide-react-native";
 import { type ReactNode } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useEntityMediaLinks } from "../api/domains";
 import {
   displayStatus,
@@ -28,15 +28,18 @@ export function StationDetailScreen({ id }: { id: string | null }) {
   const latitude = firstNumber(station, ["latitude", "lat"]);
   const longitude = firstNumber(station, ["longitude", "lng", "lon"]);
   const hours = nestedRecord(station, "operatingHours") ?? nestedRecord(station, "operating_hours");
-  const presentation = (media.data ?? []).find((item) =>
-    (firstString(item, ["media_role", "mediaRole"]) ?? "").includes("presentation"),
-  );
-  const approvedPublic = (media.data ?? []).find((item) =>
-    ["public", "station.photo", "original", "photo"].some((role) =>
-      (firstString(item, ["media_role", "mediaRole"]) ?? "").includes(role),
-    ),
-  );
-  const assetId = firstString(presentation ?? approvedPublic, ["media_asset_id", "mediaAssetId"]);
+  const publicMedia = (media.data ?? [])
+    .filter((item) => {
+      const role = firstString(item, ["media_role", "mediaRole"]) ?? "";
+      return role === "station.photo.public" || role.includes("presentation");
+    })
+    .sort((left, right) => {
+      const leftPrimary = left.is_primary === true || left.isPrimary === true ? 0 : 1;
+      const rightPrimary = right.is_primary === true || right.isPrimary === true ? 0 : 1;
+      if (leftPrimary !== rightPrimary) return leftPrimary - rightPrimary;
+      return (firstNumber(left, ["display_order", "displayOrder"]) ?? 999) -
+        (firstNumber(right, ["display_order", "displayOrder"]) ?? 999);
+    });
   const stationName = firstString(station, ["display_name", "displayName", "name"]) ?? "SKIMA station";
   const status = (station ? displayStatus(station) : null) ??
     firstString(station, ["availability_status", "availabilityStatus"]) ??
@@ -62,9 +65,36 @@ export function StationDetailScreen({ id }: { id: string | null }) {
         />
       ) : (
         <>
-          {assetId ? (
-            <View style={[styles.media, shadows.soft, { backgroundColor: palette.surface }]}> 
-              <RuntimeMediaImage assetId={assetId} label={`${stationName} public station photo`} />
+          {publicMedia.length ? (
+            <View style={styles.galleryBlock}>
+              <View style={styles.galleryHeading}>
+                <Text style={[styles.galleryTitle, { color: palette.ink }]}>Station photos</Text>
+                <Text style={[styles.galleryCount, { color: palette.muted }]}>
+                  {publicMedia.length} public {publicMedia.length === 1 ? "photo" : "photos"}
+                </Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.gallery}
+              >
+                {publicMedia.map((item, index) => {
+                  const mediaAssetId = firstString(item, ["media_asset_id", "mediaAssetId"]);
+                  if (!mediaAssetId) return null;
+                  return (
+                    <View
+                      key={mediaAssetId}
+                      style={[styles.media, shadows.soft, { backgroundColor: palette.surface }]}
+                    >
+                      <RuntimeMediaImage
+                        assetId={mediaAssetId}
+                        label={`${stationName} public station photo ${index + 1}`}
+                        variant="hero"
+                      />
+                    </View>
+                  );
+                })}
+              </ScrollView>
             </View>
           ) : null}
 
@@ -151,7 +181,12 @@ function stationTone(value: string): "neutral" | "brand" | "success" | "warning"
 }
 
 const styles = StyleSheet.create({
-  media: { overflow: "hidden", borderRadius: radii.xl },
+  galleryBlock: { gap: spacing.sm },
+  galleryHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
+  galleryTitle: { ...typography.subheading, fontSize: 16 },
+  galleryCount: { ...typography.caption, fontSize: 10, fontWeight: "700" },
+  gallery: { gap: spacing.sm, paddingRight: spacing.md },
+  media: { width: 300, maxWidth: "82%", overflow: "hidden", borderRadius: radii.xl },
   hero: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
   heroIcon: { width: 54, height: 54, borderRadius: 19, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
   heroCopy: { flex: 1, minWidth: 0, gap: 3 },
