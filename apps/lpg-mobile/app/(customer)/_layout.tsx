@@ -11,7 +11,10 @@ export default function Layout() {
         hidden={[
           "assistant",
           "cylinder/register",
-          "cylinder/[id]",\n          "cylinder/[id]/edit",\n          "cylinder/[id]/media",\n          "cylinder/[id]/identity",
+          "cylinder/[id]",
+          "cylinder/[id]/edit",
+          "cylinder/[id]/media",
+          "cylinder/[id]/identity",
           "orders/[id]",
           "orders/[id]/tracking",
           "orders/[id]/verify",
