@@ -73,7 +73,7 @@ import { AdminSystemWorkspace } from "./admin-system-workspace";
 import { AdminAccessWorkspace } from "./admin-access-workspace";
 import { AdminAiWorkspace } from "./admin-ai-workspace";
 import { AdminContentWorkspace } from "./admin-content-workspace";
-import { AdminFleetWorkspace } from "./admin-fleet-workspace";
+import { AdminFleetWorkspace } from "./admin-fleet-workspace";\nimport { AdminOperationsWorkspace } from "./admin-operations-workspace";
 import { AdminStartupBrandingWorkspace } from "./admin-startup-branding-workspace";
 import { AdminStationPricingWorkspace } from "./admin-station-pricing-workspace";
 import { AdminStationInventoryWorkspace } from "./admin-station-inventory-workspace";
@@ -259,7 +259,7 @@ const foundationNavigation: readonly NavigationItem[] = [
     label: "Operations",
     href: "/operations",
     icon: "operations",
-    requiredPermissions: ["platform.events.read"],
+    requiredPermissions: ["lpg.orders.manage"],
   },
   {
     key: "finance",
