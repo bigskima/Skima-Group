@@ -60,7 +60,10 @@ Deno.test("customer home keeps independent services visible in every refill stat
 });
 
 Deno.test("customer reads remain user-scoped even when the same account has station roles", async () => {
-  const gateway = await read("supabase/functions/api-gateway/index.ts");
+  const [gateway, assistant] = await Promise.all([
+    read("supabase/functions/api-gateway/index.ts"),
+    read("apps/lpg-mobile/src/native/ui/AiAssistantScreen.tsx"),
+  ]);
   const customerOrderScopeMatches =
     gateway.match(/\.eq\("customer_user_id", authResult\.user\.id\)/g) ?? [];
   if (customerOrderScopeMatches.length < 3) {
@@ -68,7 +71,10 @@ Deno.test("customer reads remain user-scoped even when the same account has stat
       "Customer orders, active orders and deposit history must explicitly scope to the signed-in customer.",
     );
   }
+  assertIncludes(gateway, '.eq("owner_user_id", authResult.user.id)');
+  assertIncludes(gateway, '.eq("created_by", authResult.user.id)');
   assertIncludes(gateway, 'routePath === "/runtime/payments/deposits/preview"');
+  assertIncludes(assistant, 'path: "/lpg/orders?scope=customer"');
 });
 
 Deno.test("customer wallet top up uses the canonical gateway runtime", async () => {
@@ -93,9 +99,13 @@ Deno.test("nearby station discovery is location and service-radius authoritative
   assertIncludes(migration, "station.compliance_status = 'approved'");
   assertIncludes(gateway, 'routePath === "/lpg/stations/nearby"');
   assertIncludes(gateway, 'supabase.rpc("read_nearby_lpg_stations"');
+  const stationDetail = await read("apps/lpg-mobile/src/native/ui/StationDetailScreen.tsx");
   assertIncludes(domains, "nearbyStations:");
   assertIncludes(stationsScreen, "domainQueries.nearbyStations(latitude, longitude)");
   assertNotIncludes(stationsScreen, "domainQueries.stations()");
+  assertIncludes(stationDetail, "domainQueries.nearbyStations(deliveryLatitude, deliveryLongitude)");
+  assertIncludes(stationDetail, 'useEntityMediaLinks("station", station ? id : null)');
+  assertNotIncludes(stationDetail, "domainQueries.stations()");
 });
 
 Deno.test("cylinder presentation generation does not require an uploaded source photo", async () => {
@@ -120,6 +130,7 @@ Deno.test("station activation publishes only public-safe premises media", async 
     assertIncludes(migration, privateClass);
   }
   assertIncludes(migration, "'station.photo.public'");
+  assertIncludes(onboarding, "five or more premises photos");
   assertIncludes(onboarding, "Public-safe premises photos go live automatically when your station is activated.");
   assertIncludes(detail, "Station photos");
   assertIncludes(detail, 'role === "station.photo.public"');
