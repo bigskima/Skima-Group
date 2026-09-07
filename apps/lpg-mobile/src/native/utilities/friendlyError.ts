@@ -98,6 +98,18 @@ export function friendlyError(
     return "This saved location needs a valid map position before SKIMA can check service availability.";
 
   if (
+    message.includes("requested service area has an unsupported coverage type") ||
+    message.includes("radius service area requires latitude") ||
+    message.includes("service-area owner type")
+  )
+    return "SKIMA could not prepare this operating-area request. Detect your location again and retry.";
+  if (
+    message.includes("choose a valid mapped service area") ||
+    message.includes("geography") && message.includes("not found")
+  )
+    return "That service area is no longer available. Refresh the application and choose the area again.";
+
+  if (
     message.includes("verified cylinder capacity can only be changed") ||
     message.includes("capacity re-verification") ||
     message.includes("capacity reverification")
