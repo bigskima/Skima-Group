@@ -48,7 +48,7 @@ export function BankTransferModal({
   // Poll deposit status automatically
   const deposits = useGatewayQuery({
     key: ["deposits", "bank-transfer-modal"],
-    path: "/runtime/payments/deposits",
+    path: "/runtime/payments/deposits?scope=customer",
     schema: RecordArraySchema,
     enabled: visible && Boolean(depositId),
     refetchInterval: visible ? 3000 : undefined,
