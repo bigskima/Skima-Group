@@ -1079,106 +1079,10 @@ export const operationsConsoleConfig: AdminResourceConsoleConfig = {
 
 export const financeConsoleConfig: AdminResourceConsoleConfig = {
   eyebrow: "Money",
-  title: "Finance",
+  title: "Wallets & Settlements",
   description:
-    "Manage financial rules, then review wallets, withdrawals, commissions, settlements, and the official SKIMA accounting record.",
+    "Operate wallets, withdrawals, escrow, commissions, settlements, and the official SKIMA accounting record. Pricing is managed in the dedicated Revenue, Delivery Pricing, and Driver Pricing screens.",
   groups: [
-    {
-      key: "policy-governance",
-      label: "Financial Policy",
-      description:
-        "Create protected financial-rule versions, require a second administrator to approve sensitive changes, schedule when they start, and roll back safely.",
-      resources: [
-        resource("financial-policies", "Policy Versions", "/admin/financial-policies", [
-          "financial_policy_definitions",
-          "version",
-          "lifecycle_status",
-          "currency_code",
-          "effective_from",
-          "geography_type",
-        ]),
-      ],
-      actions: [
-        action(
-          "submit-financial-policy",
-          "Submit For Approval",
-          "/admin/financial-policies/submit",
-          [requiredText("policyVersionId", "Policy Version ID"), requiredText("reason", "Submission Note")],
-          "platform.financial_policy.draft",
-        ),
-        action(
-          "review-financial-policy",
-          "Approve Or Reject",
-          "/admin/financial-policies/review",
-          [
-            requiredText("policyVersionId", "Policy Version ID"),
-            {
-              key: "decision",
-              label: "Decision",
-              type: "select",
-              required: true,
-              options: [
-                { label: "Approve", value: "approved" },
-                { label: "Reject", value: "rejected" },
-              ],
-              defaultValue: "approved",
-            },
-            requiredText("reason", "Review Reason"),
-          ],
-          "platform.financial_policy.approve",
-        ),
-        action(
-          "activate-financial-policy",
-          "Activate Approved Version",
-          "/admin/financial-policies/activate",
-          [requiredText("policyVersionId", "Policy Version ID"), requiredText("reason", "Activation Reason")],
-          "platform.financial_policy.activate",
-        ),
-        action(
-          "deactivate-financial-policy",
-          "Deactivate Version",
-          "/admin/financial-policies/deactivate",
-          [requiredText("policyVersionId", "Policy Version ID"), requiredText("reason", "Deactivation Reason")],
-          "platform.financial_policy.activate",
-          "danger",
-        ),
-        action(
-          "rollback-financial-policy",
-          "Create Rollback Version",
-          "/admin/financial-policies/rollback",
-          [
-            requiredText("activeVersionId", "Version Being Replaced"),
-            requiredText("restoreVersionId", "Version To Restore"),
-            { key: "effectiveFrom", label: "Effective From", type: "datetime", required: true },
-            requiredText("reason", "Rollback Reason"),
-          ],
-          "platform.financial_policy.rollback",
-          "danger",
-        ),
-        action(
-          "preview-financial-policy",
-          "Resolve Policy Preview",
-          "/admin/financial-policies/resolve",
-          [
-            requiredText("policyKey", "Policy Key"),
-            requiredText("currencyCode", "Currency"),
-            optionalText("moduleKey", "Business Line"),
-            optionalText("serviceKey", "Service Scope"),
-            optionalText("organizationId", "Organization ID"),
-            {
-              key: "geographyType",
-              label: "Geography Scope",
-              type: "select",
-              options: financialGeographyOptions,
-              defaultValue: "global",
-            },
-            optionalText("geographyKey", "Geography Key"),
-            { key: "at", label: "Resolve At", type: "datetime" },
-          ],
-          "platform.financial_policy.read",
-        ),
-      ],
-    },
     {
       key: "wallets",
       label: "Wallets And Deposits",
