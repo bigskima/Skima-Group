@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     fontSize: 10,
     lineHeight: 15,
-    fontWeight: "650",
+    fontWeight: "600",
   },
   primaryButton: {
     minHeight: 60,
@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     lineHeight: 17,
-    fontWeight: "750",
+    fontWeight: "700",
   },
   disabled: { opacity: 0.48 },
   pressed: { transform: [{ scale: 0.992 }], opacity: 0.9 },
