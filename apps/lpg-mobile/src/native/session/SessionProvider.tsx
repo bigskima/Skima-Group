@@ -25,6 +25,18 @@ import { secureSessionStorage } from "../storage/secureStorage";
 import { friendlyError } from "../utilities/friendlyError";
 
 type Status = "loading" | "authenticated" | "unauthenticated" | "error";
+
+interface SignUpInput {
+  readonly displayName: string;
+  readonly email: string;
+  readonly password: string;
+}
+
+interface SignUpResult {
+  readonly sessionStarted: boolean;
+  readonly confirmationRequired: boolean;
+}
+
 interface SessionValue {
   status: Status;
   session: Session | null;
@@ -32,7 +44,11 @@ interface SessionValue {
   error: string | null;
   api: ApiGatewayClient;
   supabase: SupabaseClient;
+  clearAuthError(): void;
   signIn(email: string, password: string): Promise<boolean>;
+  signUp(input: SignUpInput): Promise<SignUpResult>;
+  requestPasswordReset(email: string, redirectTo: string): Promise<void>;
+  updatePassword(password: string): Promise<void>;
   signOut(): Promise<void>;
   refresh(): Promise<void>;
 }
@@ -84,6 +100,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
         setStatus("unauthenticated");
         return false;
       }
+
       // A valid Supabase session is sufficient to enter the customer app.
       // Role and organization context is hydrated immediately afterwards and
       // must never send an already-authenticated user back to the login page.
@@ -140,6 +157,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       session,
       status,
       supabase,
+      clearAuthError: () => setError(null),
       refresh: async () => {
         await apply(sessionRef.current);
       },
@@ -147,7 +165,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
         setError(null);
         setStatus("loading");
         const { data, error: authError } =
-          await supabase.auth.signInWithPassword({ email, password });
+          await supabase.auth.signInWithPassword({
+            email: email.trim().toLowerCase(),
+            password,
+          });
+
         if (authError) {
           setError(
             friendlyError(
@@ -158,24 +180,99 @@ export function SessionProvider({ children }: PropsWithChildren) {
           setStatus("unauthenticated");
           return false;
         }
+
         if (!data.session) {
           setError("We couldn't start your secure session. Please try again.");
           setStatus("unauthenticated");
           return false;
         }
+
         sessionRef.current = data.session;
         setSession(data.session);
         setStatus("authenticated");
         void apply(data.session);
         return true;
       },
+      signUp: async ({ displayName, email, password }) => {
+        setError(null);
+
+        const { data, error: authError } = await supabase.auth.signUp({
+          email: email.trim().toLowerCase(),
+          password,
+          options: {
+            data: {
+              display_name: displayName.trim(),
+              source: "skima.lpg.mobile",
+            },
+          },
+        });
+
+        if (authError) {
+          throw new Error(
+            friendlyError(
+              authError,
+              "We couldn't create your account. Check your details or sign in if you already use SKIMA.",
+            ),
+          );
+        }
+
+        if (data.session) {
+          sessionRef.current = data.session;
+          setSession(data.session);
+          setStatus("authenticated");
+          void apply(data.session);
+        }
+
+        return {
+          sessionStarted: Boolean(data.session),
+          confirmationRequired: !data.session,
+        };
+      },
+      requestPasswordReset: async (email, redirectTo) => {
+        setError(null);
+
+        const { error: authError } = await supabase.auth.resetPasswordForEmail(
+          email.trim().toLowerCase(),
+          { redirectTo },
+        );
+        if (authError) {
+          throw new Error(
+            friendlyError(
+              authError,
+              "We couldn't send the reset email. Check your connection and try again.",
+            ),
+          );
+        }
+      },
+      updatePassword: async (password) => {
+        setError(null);
+
+        const { error: authError } = await supabase.auth.updateUser({ password });
+        if (authError) {
+          throw new Error(
+            friendlyError(
+              authError,
+              "We couldn't update your password. Open the newest reset email and try again.",
+            ),
+          );
+        }
+      },
       signOut: async () => {
         await supabase.auth.signOut();
         await apply(null);
       },
     }),
-    [api, apply, context, error, session, status, supabase],
+    [
+      api,
+      apply,
+      context,
+      error,
+      session,
+      status,
+      supabase,
+    ],
   );
+
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
@@ -187,15 +284,17 @@ export function useSession() {
 }
 
 function readConfig() {
-  const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
+  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
   const configuredGateway = process.env.EXPO_PUBLIC_API_GATEWAY_URL?.trim();
+
   if (!url || !anonKey)
     throw new Error(
       "EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY are required.",
     );
+
   return {
-    url,
+    url: url.replace(/\/$/, ""),
     anonKey,
     gateway:
       configuredGateway ||

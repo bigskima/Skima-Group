@@ -11,6 +11,22 @@ export default function RootHtml({ children }: PropsWithChildren) {
         <meta name="theme-color" content="#ED1C2E" />
         <meta name="description" content="SKIMA LPG customer, driver and station fulfilment." />
         <title>SKIMA LPG</title>
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              html { color-scheme: light dark; }
+              input:-webkit-autofill,
+              input:-webkit-autofill:hover,
+              input:-webkit-autofill:focus,
+              input:-webkit-autofill:active {
+                -webkit-background-clip: text;
+                background-clip: text;
+                transition: background-color 9999s ease-out 0s;
+                box-shadow: inset 0 0 0 1000px transparent;
+              }
+            `,
+          }}
+        />
         <ScrollViewStyleReset />
       </head>
       <body>{children}</body>

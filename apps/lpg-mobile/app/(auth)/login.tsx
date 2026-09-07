@@ -1,11 +1,16 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { Redirect, router } from "expo-router";
-import { Eye, EyeOff, LockKeyhole, Mail } from "lucide-react-native";
+import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react-native";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+
 import { useSession } from "../../src/native/session/SessionProvider";
 import { useAppTheme } from "../../src/native/theme/ThemeProvider";
 import { colors, radii, spacing } from "../../src/native/theme/tokens";
+import {
+  AuthFeedback,
+  AuthPrimaryButton,
+  AuthTextField,
+} from "../../src/native/ui/AuthControls";
 import { AuthShell } from "../../src/native/ui/AuthShell";
 import { friendlyError } from "../../src/native/utilities/friendlyError";
 
@@ -19,127 +24,179 @@ export default function Login() {
   const [message, setMessage] = useState<string | null>(null);
   const ready = Boolean(email.trim() && password);
 
+  const clearFeedback = () => {
+    if (message) setMessage(null);
+    if (session.error) session.clearAuthError();
+  };
+
   const submit = async () => {
     if (!ready || pending) return;
     setPending(true);
     setMessage(null);
+    session.clearAuthError();
+
     try {
-      const signedIn = await session.signIn(email.trim().toLowerCase(), password);
-      if (signedIn) router.replace("/(customer)");
-      else setMessage("We couldn't sign you in. Check your details and try again.");
+      const signedIn = await session.signIn(email, password);
+      if (signedIn) router.replace("/");
     } catch (cause) {
-      setMessage(friendlyError(cause, "We couldn't sign you in. Check your details and try again."));
+      setMessage(
+        friendlyError(
+          cause,
+          "We couldn't sign you in. Check your details and try again.",
+        ),
+      );
     } finally {
       setPending(false);
     }
   };
 
-  if (session.status === "authenticated") return <Redirect href="/(customer)" />;
+  if (session.status === "authenticated") return <Redirect href="/" />;
+
+  const errorMessage = session.error ?? message;
 
   return (
     <AuthShell
-      eyebrow="Welcome back"
-      title="Sign in"
-      body="Use the account you created for SKIMA. Your available customer, driver and station workspaces will load after sign-in."
+      activeMode="login"
+      eyebrow="Secure account access"
+      title="Welcome back"
+      body="Sign in once. SKIMA will unlock only the customer, driver or station workspaces your account is allowed to use."
       footer={
-        <Text style={[styles.footerText, { color: palette.muted }]}>
-          New to SKIMA?{" "}
-          <Text onPress={() => router.push("/(auth)/register")} style={styles.linkStrong}>
-            Create an account
+        <View style={styles.footerStack}>
+          <Text style={[styles.footerText, { color: palette.muted }]}>
+            New to SKIMA?{" "}
+            <Text onPress={() => router.replace("/(auth)/register")} style={styles.linkStrong}>
+              Create your account
+            </Text>
           </Text>
-        </Text>
+          <View style={[styles.footerTrust, { backgroundColor: palette.soft }]}>
+            <ShieldCheck color={palette.success} size={15} />
+            <Text style={[styles.footerTrustText, { color: palette.mutedStrong }]}>
+              Your account decides access. Signing in never grants driver or station authority by itself.
+            </Text>
+          </View>
+        </View>
       }
     >
-      <View style={styles.fieldBlock}>
-        <Text style={[styles.label, { color: palette.ink }]}>Email</Text>
-        <View style={[styles.field, { backgroundColor: palette.input, borderColor: palette.border }]}>
-          <Mail color={palette.muted} size={18} />
-          <TextInput
-            accessibilityLabel="Email address"
-            autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-            placeholderTextColor={palette.muted}
-            returnKeyType="next"
-            style={[styles.input, { color: palette.ink }]}
-            value={email}
-          />
-        </View>
-      </View>
+      <AuthTextField
+        accessibilityLabel="Email address"
+        autoCapitalize="none"
+        autoComplete="email"
+        icon={<Mail color={palette.mutedStrong} size={18} strokeWidth={2.2} />}
+        keyboardType="email-address"
+        label="Email address"
+        onChangeText={(value) => {
+          setEmail(value);
+          clearFeedback();
+        }}
+        placeholder="you@example.com"
+        returnKeyType="next"
+        value={email}
+      />
 
-      <View style={styles.fieldBlock}>
-        <View style={styles.labelRow}>
-          <Text style={[styles.label, { color: palette.ink }]}>Password</Text>
-          <Pressable accessibilityRole="button" onPress={() => router.push("/(auth)/forgot-password")}>
-            <Text style={styles.linkStrong}>Forgot password?</Text>
-          </Pressable>
-        </View>
-        <View style={[styles.field, { backgroundColor: palette.input, borderColor: palette.border }]}>
-          <LockKeyhole color={palette.muted} size={18} />
-          <TextInput
-            accessibilityLabel="Password"
-            autoComplete="current-password"
-            onChangeText={setPassword}
-            onSubmitEditing={() => void submit()}
-            placeholder="Enter your password"
-            placeholderTextColor={palette.muted}
-            secureTextEntry={!showPassword}
-            style={[styles.input, { color: palette.ink }]}
-            value={password}
-          />
+      <View style={styles.passwordBlock}>
+        <View style={styles.passwordTopline}>
+          <Text style={[styles.passwordHint, { color: palette.mutedStrong }]}>Password</Text>
           <Pressable
-            accessibilityLabel={showPassword ? "Hide password" : "Show password"}
             accessibilityRole="button"
             hitSlop={8}
-            onPress={() => setShowPassword((value) => !value)}
+            onPress={() => router.push("/(auth)/forgot-password")}
           >
-            {showPassword ? <EyeOff color={palette.muted} size={18} /> : <Eye color={palette.muted} size={18} />}
+            <Text style={styles.forgotLink}>Forgot password?</Text>
           </Pressable>
         </View>
+
+        <AuthTextField
+          accessibilityLabel="Password"
+          autoComplete="current-password"
+          icon={<LockKeyhole color={palette.mutedStrong} size={18} strokeWidth={2.2} />}
+          label=""
+          onChangeText={(value) => {
+            setPassword(value);
+            clearFeedback();
+          }}
+          onSubmitEditing={() => void submit()}
+          placeholder="Enter your password"
+          returnKeyType="go"
+          rightAction={
+            <Pressable
+              accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+              accessibilityRole="button"
+              hitSlop={10}
+              onPress={() => setShowPassword((value) => !value)}
+              style={styles.eyeButton}
+            >
+              {showPassword ? (
+                <EyeOff color={palette.mutedStrong} size={19} />
+              ) : (
+                <Eye color={palette.mutedStrong} size={19} />
+              )}
+            </Pressable>
+          }
+          secureTextEntry={!showPassword}
+          value={password}
+        />
       </View>
 
-      {session.error || message ? (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {session.error ? friendlyError(new Error(session.error), "We couldn't sign you in. Check your details and try again.") : message}
-        </Text>
-      ) : null}
+      {errorMessage ? <AuthFeedback message={errorMessage} tone="error" /> : null}
 
-      <Pressable
-        accessibilityRole="button"
-        disabled={!ready || pending}
+      <AuthPrimaryButton
+        disabled={!ready}
+        label="Continue to SKIMA"
         onPress={() => void submit()}
-        style={({ pressed }) => [styles.button, !ready && styles.disabled, (pressed || pending) && styles.pressed]}
-      >
-        <LinearGradient colors={[colors.brand, colors.brandDark]} style={styles.buttonFill}>
-          {pending ? <ActivityIndicator color="white" /> : <Text style={styles.buttonText}>Sign in to SKIMA</Text>}
-        </LinearGradient>
-      </Pressable>
+        pending={pending}
+      />
     </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  fieldBlock: { gap: 8 },
-  labelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
-  label: { fontSize: 12, fontWeight: "900" },
-  field: {
-    minHeight: 56,
+  passwordBlock: { gap: 7 },
+  passwordTopline: {
+    minHeight: 18,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radii.lg,
-    paddingHorizontal: spacing.md,
+    justifyContent: "space-between",
+    gap: spacing.md,
+    paddingHorizontal: 2,
   },
-  input: { flex: 1, minHeight: 54, fontSize: 15, fontWeight: "700" },
-  button: { minHeight: 56, overflow: "hidden", borderRadius: radii.lg, marginTop: 2 },
-  buttonFill: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.lg },
-  buttonText: { color: "white", fontSize: 15, fontWeight: "900" },
-  error: { color: colors.danger, fontSize: 12, lineHeight: 18, fontWeight: "800" },
-  footerText: { textAlign: "center", fontSize: 13, lineHeight: 20, fontWeight: "700" },
-  linkStrong: { color: colors.brand, fontSize: 12, fontWeight: "900" },
-  disabled: { opacity: 0.48 },
-  pressed: { opacity: 0.8 },
+  passwordHint: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "800",
+    letterSpacing: 0.25,
+  },
+  forgotLink: {
+    color: colors.brand,
+    fontSize: 10,
+    lineHeight: 15,
+    fontWeight: "900",
+  },
+  eyeButton: {
+    width: 34,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radii.md,
+  },
+  footerStack: { gap: 12 },
+  footerText: {
+    textAlign: "center",
+    fontSize: 11,
+    lineHeight: 17,
+    fontWeight: "700",
+  },
+  linkStrong: { color: colors.brand, fontWeight: "900" },
+  footerTrust: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    borderRadius: radii.md,
+    padding: 10,
+  },
+  footerTrustText: {
+    flex: 1,
+    fontSize: 9,
+    lineHeight: 14,
+    fontWeight: "600",
+  },
 });
