@@ -77,8 +77,6 @@ export default function Register() {
       eyebrow="Create your SKIMA identity"
       title="One account. Start as a customer."
       body="Create your account here. Driver and station access is added later only after the required application and approval."
-      runtimeMessage={session.authRuntimeMessage}
-      runtimeStatus={session.authRuntimeStatus}
       footer={
         <View style={styles.footerStack}>
           <Text style={[styles.footerText, { color: palette.muted }]}>
@@ -159,7 +157,7 @@ export default function Register() {
       {message ? <AuthFeedback message={message} tone={success ? "success" : "error"} /> : null}
 
       <AuthPrimaryButton
-        disabled={!ready || session.authRuntimeStatus === "unavailable"}
+        disabled={!ready}
         label="Create my SKIMA account"
         onPress={() => void submit()}
         pending={pending}
