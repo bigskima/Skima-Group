@@ -57,6 +57,9 @@ const ROUTES = new Set([
   "/admin/maps/location/providers",
   "/admin/maps/location/audit",
   "/admin/maps/location/provider",
+  "/admin/verification/configuration",
+  "/admin/verification/exceptions",
+  "/admin/verification/provider-route",
   "/admin/ai/runtime",
   "/admin/ai/provider-route",
   "/admin/ai/free-fallback-route",
@@ -375,6 +378,38 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       timestamp: new Date().toISOString(),
       requestId: id,
     });
+  }
+
+  if (routePath === "/admin/verification/configuration" && request.method === "GET") {
+    return rpcDataResponse(
+      supabase.rpc("read_verification_provider_configuration"),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/verification/exceptions" && request.method === "GET") {
+    return rpcDataResponse(
+      supabase.rpc("read_verification_exception_queue"),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/verification/provider-route" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+
+    return rpcResponse(
+      supabase.rpc("configure_verification_provider_route", {
+        target_verification_key: requirePlatformKey(payload.verificationKey, "verificationKey"),
+        target_provider_key: requirePlatformKey(payload.providerKey, "providerKey"),
+        target_workflow_ref: optionalString(payload.workflowRef),
+        target_status: requireString(payload.status, "status"),
+        target_priority: requireBoundedInteger(payload.priority ?? 100, "priority", 0, 10000),
+        target_config: optionalRecord(payload.config) ?? {},
+      }),
+      id,
+    );
   }
 
   if (routePath === "/admin/ai/runtime" && request.method === "GET") {
