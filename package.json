@@ -64,7 +64,8 @@
     "lpg-auth:contract": "deno test --allow-read scripts/lpg-auth-production-contract.test.ts",
     "payout-runtime:contract": "deno test --allow-read scripts/payout-runtime-production-contract.test.ts",
     "vercel-ignore:test": "node scripts/vercel-ignore.test.mjs",
-    "utility-billing:contract": "deno test --allow-read scripts/utility-billing-production-contract.test.ts"
+    "utility-billing:contract": "deno test --allow-read scripts/utility-billing-production-contract.test.ts",
+    "verification-runtime:contract": "deno test --allow-read scripts/verification-runtime-contract.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.110.9",
