@@ -1,7 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
-import { useSession } from "../session/SessionProvider";
+import { useGatewayMutation, useGatewayQuery } from "./gateway";
 
 export const VerificationCheckSchema = z.object({
   id: z.string().uuid(),
@@ -51,173 +50,67 @@ export const VerificationReconciliationSchema = z.object({
 export type VerificationCheck = z.output<typeof VerificationCheckSchema>;
 export type VerificationSession = z.output<typeof VerificationSessionSchema>;
 
-interface VerificationEnvelope<T> {
-  readonly ok: boolean;
-  readonly data?: T;
-  readonly error?: string;
-  readonly message?: string;
-  readonly details?: Record<string, unknown>;
-  readonly requestId?: string;
-}
-
-function verificationBaseUrl(): string {
-  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
-  if (!supabaseUrl) throw new Error("EXPO_PUBLIC_SUPABASE_URL is required.");
-  return `${supabaseUrl.replace(/\/$/, "")}/functions/v1/verification-runtime`;
-}
-
-async function verificationRequest<TSchema extends z.ZodTypeAny>(input: {
-  path: string;
-  token: string;
-  schema: TSchema;
-  method?: "GET" | "POST";
-  body?: unknown;
-  signal?: AbortSignal;
-}): Promise<z.output<TSchema>> {
-  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
-  if (!anonKey) throw new Error("EXPO_PUBLIC_SUPABASE_ANON_KEY is required.");
-
-  const response = await fetch(`${verificationBaseUrl()}${input.path}`, {
-    method: input.method ?? "GET",
-    headers: {
-      Authorization: `Bearer ${input.token}`,
-      apikey: anonKey,
-      "Content-Type": "application/json",
-      "x-skima-client": "lpg-expo",
-    },
-    body: input.body === undefined ? undefined : JSON.stringify(input.body),
-    signal: input.signal,
-  });
-
-  let envelope: VerificationEnvelope<unknown>;
-  try {
-    envelope = await response.json() as VerificationEnvelope<unknown>;
-  } catch {
-    throw new Error("The SKIMA verification service returned an unreadable response.");
-  }
-
-  if (!response.ok || envelope.ok !== true) {
-    throw new Error(
-      envelope.message ||
-        "SKIMA could not complete this verification request. You can retry or use an allowed fallback.",
-    );
-  }
-
-  return input.schema.parse(envelope.data ?? null);
-}
-
-export function useApplicationVerification(applicationId: string | null | undefined) {
-  const session = useSession();
-
-  return useQuery({
-    queryKey: [
-      "lpg-expo",
-      "verification-runtime",
-      "application",
-      applicationId ?? "none",
-      session.session?.user.id ?? "anonymous",
-    ],
-    enabled:
-      session.status === "authenticated" &&
-      Boolean(session.session?.access_token) &&
-      Boolean(applicationId),
-    queryFn: ({ signal }) => {
-      const token = session.session?.access_token;
-      if (!token || !applicationId) throw new Error("An application and signed-in session are required.");
-      return verificationRequest({
-        path: `/requirements?applicationId=${encodeURIComponent(applicationId)}`,
-        token,
-        schema: VerificationChecksSchema,
-        signal,
-      });
-    },
+export function useApplicationVerification(
+  applicationId: string | null | undefined,
+) {
+  return useGatewayQuery({
+    key: ["partner-verification", "application", applicationId ?? "none"],
+    path:
+      `/runtime/partner-verification/requirements?applicationId=${encodeURIComponent(applicationId ?? "")}`,
+    schema: VerificationChecksSchema,
+    enabled: Boolean(applicationId),
   });
 }
 
 export function useStartVerification() {
-  const session = useSession();
-  const client = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (input: {
+  return useGatewayMutation<
+    VerificationSession,
+    {
       applicationId: string;
       verificationKey: string;
       idempotencyKey: string;
-    }) => {
-      const token = session.session?.access_token;
-      if (!token) throw new Error("An authenticated session is required.");
-      return verificationRequest({
-        path: "/sessions",
-        token,
-        schema: VerificationSessionSchema,
-        method: "POST",
-        body: input,
-      });
-    },
-    onSuccess: async (_data, input) => {
-      await client.invalidateQueries({
-        queryKey: ["lpg-expo", "verification-runtime", "application", input.applicationId],
-      });
-    },
+    }
+  >({
+    path: "/runtime/partner-verification/sessions",
+    schema: VerificationSessionSchema,
+    invalidate: [["partner-verification"]],
   });
 }
 
 export function useRefreshVerification() {
-  const session = useSession();
-  const client = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (input: {
+  return useGatewayMutation<
+    VerificationSession,
+    {
       applicationId: string;
       sessionId: string;
       idempotencyKey: string;
-    }) => {
-      const token = session.session?.access_token;
-      if (!token) throw new Error("An authenticated session is required.");
-      return verificationRequest({
-        path: "/sessions/refresh",
-        token,
-        schema: VerificationSessionSchema,
-        method: "POST",
-        body: {
-          sessionId: input.sessionId,
-          idempotencyKey: input.idempotencyKey,
-        },
-      });
-    },
-    onSuccess: async (_data, input) => {
-      await client.invalidateQueries({
-        queryKey: ["lpg-expo", "verification-runtime", "application", input.applicationId],
-      });
-      await client.invalidateQueries({ queryKey: ["lpg-expo", "applications"] });
-      await client.invalidateQueries({ queryKey: ["lpg-expo", "documents"] });
-    },
+    }
+  >({
+    path: "/runtime/partner-verification/sessions/refresh",
+    schema: VerificationSessionSchema,
+    invalidate: [
+      ["partner-verification"],
+      ["applications"],
+      ["documents"],
+    ],
   });
 }
 
 export function useReconcileApplicationVerification() {
-  const session = useSession();
-  const client = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (input: {
+  return useGatewayMutation<
+    z.output<typeof VerificationReconciliationSchema>,
+    {
       applicationId: string;
       idempotencyKey: string;
-    }) => {
-      const token = session.session?.access_token;
-      if (!token) throw new Error("An authenticated session is required.");
-      return verificationRequest({
-        path: "/applications/reconcile",
-        token,
-        schema: VerificationReconciliationSchema,
-        method: "POST",
-        body: input,
-      });
-    },
-    onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: ["lpg-expo", "applications"] });
-      await client.invalidateQueries({ queryKey: ["lpg-expo", "verification-runtime"] });
-    },
+    }
+  >({
+    path: "/runtime/partner-verification/applications/reconcile",
+    schema: VerificationReconciliationSchema,
+    invalidate: [
+      ["partner-verification"],
+      ["applications"],
+      ["documents"],
+    ],
   });
 }
 
@@ -236,8 +129,9 @@ export function verificationForDocumentKey(
   documentKey: string,
 ): VerificationCheck | null {
   return (
-    (checks ?? []).find((check) => check.satisfiesDocumentKeys.includes(documentKey)) ??
-    null
+    (checks ?? []).find((check) =>
+      check.satisfiesDocumentKeys.includes(documentKey)
+    ) ?? null
   );
 }
 
@@ -248,5 +142,7 @@ export function shouldShowVerificationFallback(
   if (check.status === "passed") return false;
   if (!check.manualFallbackAllowed) return false;
   if (!check.automaticAvailable) return true;
-  return ["failed", "expired", "manual_fallback", "cancelled"].includes(check.status);
+  return ["failed", "expired", "manual_fallback", "cancelled"].includes(
+    check.status,
+  );
 }
