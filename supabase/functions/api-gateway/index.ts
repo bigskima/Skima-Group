@@ -680,6 +680,19 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     );
   }
 
+  if (routePath === "/admin/financial-policies/replace-active" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(
+      supabase.rpc("activate_financial_policy_replacement", {
+        target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+        target_policy_version_id: requireUuid(body.value.policyVersionId, "policyVersionId"),
+        target_reason: requireString(body.value.reason, "reason"),
+      }),
+      id,
+    );
+  }
+
   if (routePath === "/admin/financial-policies/deactivate" && request.method === "POST") {
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
@@ -1895,14 +1908,20 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
-    return rpcResponse(
+    const dispatchIdempotencyKey = requireString(payload.idempotencyKey, "idempotencyKey");
+    const dispatchSource = optionalString(payload.source) ?? "skima.lpg.dispatch_api";
+    return lpgDispatchResponse(
       serviceClient.rpc("dispatch_lpg_order", {
         target_candidate_limit: optionalInteger(payload.candidateLimit),
-        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_idempotency_key: dispatchIdempotencyKey,
         target_lpg_order_id: lpgOrderId,
-        target_source: optionalString(payload.source) ?? "skima.lpg.dispatch_api",
+        target_source: dispatchSource,
       }),
+      lpgOrderId,
+      dispatchIdempotencyKey,
+      dispatchSource,
       id,
+      serviceClient,
     );
   }
 
@@ -6763,6 +6782,43 @@ async function resolveSessionContext(
           };
         }),
     },
+    requestId: id,
+  });
+}
+
+async function lpgDispatchResponse(
+  query: SelectQuery,
+  lpgOrderId: string,
+  dispatchIdempotencyKey: string,
+  dispatchSource: string,
+  id: string,
+  serviceClient: SupabaseClient,
+): Promise<Response> {
+  const { data, error } = await query;
+
+  if (error) {
+    return databaseError(error as { readonly message: string; readonly code?: string }, id);
+  }
+
+  const notificationResult = await serviceClient.rpc("queue_lpg_order_status_notifications", {
+    target_idempotency_key: dispatchIdempotencyKey + ":notifications",
+    target_lpg_order_id: lpgOrderId,
+    target_source: dispatchSource,
+  });
+
+  if (notificationResult.error) {
+    return jsonResponse({
+      ok: false,
+      error: "dispatch_notification_queue_failed",
+      message: "A driver was selected, but SKIMA could not queue the order notifications. Refresh Operations to confirm the assignment, then check Notification delivery.",
+      id: data,
+      requestId: id,
+    }, 500);
+  }
+
+  return jsonResponse({
+    ok: true,
+    id: data,
     requestId: id,
   });
 }
