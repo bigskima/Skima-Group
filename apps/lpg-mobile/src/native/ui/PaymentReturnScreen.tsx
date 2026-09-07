@@ -25,7 +25,7 @@ export function PaymentReturnScreen() {
   const params = useLocalSearchParams<{ depositRequestId?: string; reference?: string }>();
   const deposits = useGatewayQuery({
     key: ["deposits", "payment-return"],
-    path: "/runtime/payments/deposits",
+    path: "/runtime/payments/deposits?scope=customer",
     schema: RecordArraySchema,
     refetchInterval: 5000,
   });
