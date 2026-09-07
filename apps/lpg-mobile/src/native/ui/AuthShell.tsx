@@ -3,7 +3,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import {
   Check,
-  CircleAlert,
   LockKeyhole,
   ShieldCheck,
   Sparkles,
@@ -21,7 +20,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { AuthRuntimeState } from "../session/authRuntime";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, shadows, spacing } from "../theme/tokens";
 import { BrandMark } from "./BrandMark";
@@ -36,8 +34,6 @@ export function AuthShell({
   children,
   footer,
   activeMode,
-  runtimeStatus,
-  runtimeMessage,
 }: {
   readonly eyebrow: string;
   readonly title: string;
@@ -46,8 +42,6 @@ export function AuthShell({
   readonly children: ReactNode;
   readonly footer?: ReactNode;
   readonly activeMode?: AuthMode;
-  readonly runtimeStatus?: AuthRuntimeState;
-  readonly runtimeMessage?: string | null;
 }) {
   const { palette, scheme } = useAppTheme();
   const { width } = useWindowDimensions();
@@ -155,31 +149,10 @@ export function AuthShell({
               {activeMode ? <AuthModeTabs activeMode={activeMode} /> : null}
 
               <View style={styles.heading}>
-                <View style={styles.headingTopline}>
-                  <Text style={styles.eyebrow}>{eyebrow}</Text>
-                  <RuntimeBadge status={runtimeStatus} />
-                </View>
+                <Text style={styles.eyebrow}>{eyebrow}</Text>
                 <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
                 <Text style={[styles.body, { color: palette.muted }]}>{body}</Text>
               </View>
-
-              {runtimeStatus === "unavailable" && runtimeMessage ? (
-                <View
-                  accessibilityRole="alert"
-                  style={[
-                    styles.runtimeAlert,
-                    {
-                      backgroundColor: palette.dangerSoft,
-                      borderColor: palette.danger + "3D",
-                    },
-                  ]}
-                >
-                  <CircleAlert color={palette.danger} size={17} />
-                  <Text style={[styles.runtimeAlertText, { color: palette.danger }]}>
-                    {runtimeMessage}
-                  </Text>
-                </View>
-              ) : null}
 
               <View style={styles.form}>{children}</View>
               {footer ? (
@@ -252,27 +225,6 @@ function AuthModeTab({
         {label}
       </Text>
     </Pressable>
-  );
-}
-
-function RuntimeBadge({ status }: { readonly status?: AuthRuntimeState }) {
-  const { palette } = useAppTheme();
-  if (!status) return null;
-
-  const label = status === "ready" ? "Secure link ready" : status === "checking" ? "Checking secure link" : "Link unavailable";
-  const color = status === "ready" ? palette.success : status === "unavailable" ? palette.danger : palette.mutedStrong;
-  const backgroundColor =
-    status === "ready"
-      ? palette.successSoft
-      : status === "unavailable"
-        ? palette.dangerSoft
-        : palette.soft;
-
-  return (
-    <View style={[styles.runtimeBadge, { backgroundColor }]}>
-      <View style={[styles.runtimeDot, { backgroundColor: color }]} />
-      <Text style={[styles.runtimeBadgeText, { color }]}>{label}</Text>
-    </View>
   );
 }
 
@@ -494,13 +446,7 @@ const styles = StyleSheet.create({
   tabActive: {},
   tabLabel: { fontSize: 12, lineHeight: 16, fontWeight: "900" },
   heading: { gap: 7 },
-  headingTopline: {
-    minHeight: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
+
   eyebrow: {
     color: colors.brand,
     fontSize: 9,
@@ -509,42 +455,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1.25,
     textTransform: "uppercase",
   },
-  runtimeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderRadius: radii.pill,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
-  runtimeDot: { width: 6, height: 6, borderRadius: 3 },
-  runtimeBadgeText: { fontSize: 8, lineHeight: 11, fontWeight: "900" },
-  title: {
-    fontSize: 30,
-    lineHeight: 34,
-    fontWeight: "900",
-    letterSpacing: -0.9,
-  },
+
+
   body: { maxWidth: 430, fontSize: 12, lineHeight: 18, fontWeight: "500" },
-  runtimeAlert: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 9,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    padding: 11,
-  },
-  runtimeAlertText: { flex: 1, fontSize: 10, lineHeight: 16, fontWeight: "700" },
-  form: { gap: 15 },
-  footerDivider: { height: StyleSheet.hairlineWidth },
-  footer: { paddingTop: 1 },
-  privacyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 8,
-  },
+
+
   privacyText: { fontSize: 9, lineHeight: 13, fontWeight: "600", textAlign: "center" },
   pressed: { opacity: 0.76 },
 });
