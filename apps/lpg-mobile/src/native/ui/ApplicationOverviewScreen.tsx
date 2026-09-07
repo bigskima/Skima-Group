@@ -21,6 +21,13 @@ import {
 } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
+  satisfiedVerificationDocumentKeys,
+  shouldShowVerificationFallback,
+  useApplicationVerification,
+  useReconcileApplicationVerification,
+  verificationForDocumentKey,
+} from "../api/verification";
+import {
   ActionResponseSchema,
   displayStatus,
   firstNumber,
@@ -48,6 +55,7 @@ import { colors, radii, spacing } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { AiContextAction } from "./AiContextAction";
+import { AutomatedVerificationCard } from "./AutomatedVerificationCard";
 import { Card } from "./Card";
 import { Screen } from "./Screen";
 
@@ -85,8 +93,8 @@ const STATION_PHOTO_VIEWS = [
   {
     key: "station.photo.entrance",
     title: "Main Entrance",
-    description: "Main vehicular entry and safety gate area.",
-    isRequired: true,
+    description: "Optional additional view of the main vehicular entry and safety gate area.",
+    isRequired: false,
   },
   {
     key: "station.photo.pump",
@@ -103,14 +111,14 @@ const STATION_PHOTO_VIEWS = [
   {
     key: "station.photo.compound",
     title: "Full Compound Yard View",
-    description: "Wide-angle view of the compound and safety perimeter.",
-    isRequired: true,
+    description: "Optional wide-angle view of the compound and safety perimeter.",
+    isRequired: false,
   },
   {
     key: "station.photo.signboard",
     title: "Station Name Signboard",
-    description: "Official branded signage with the station name.",
-    isRequired: true,
+    description: "Optional public-profile candidate showing the official station name.",
+    isRequired: false,
   },
   {
     key: "station.photo.drone",
@@ -148,6 +156,7 @@ export function ApplicationOverviewScreen({
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [legalOrLicence, setLegalOrLicence] = useState("");
+  const [businessRegistrationNumber, setBusinessRegistrationNumber] = useState("");
   const [stationRole, setStationRole] = useState("owner");
   const [stationName, setStationName] = useState("");
   const [slug, setSlug] = useState("");
@@ -198,6 +207,8 @@ export function ApplicationOverviewScreen({
   const operationalStatus = firstString(current, ["operational_status", "operationalStatus"]);
   const currentId = current ? recordId(current) : null;
   const payloadVersions = useApplicationPayload(currentId);
+  const verification = useApplicationVerification(currentId);
+  const reconcileVerification = useReconcileApplicationVerification();
 
   const requirementSetId = firstString(type, [
     "document_requirement_set_id",
@@ -284,6 +295,14 @@ export function ApplicationOverviewScreen({
         legalOrLicence,
     );
     setStationRole(firstString(authority, ["role"]) ?? stationRole);
+    setBusinessRegistrationNumber(
+      firstString(organization, [
+        "registrationNumber",
+        "registration_number",
+        "cacNumber",
+        "cac_number",
+      ]) ?? businessRegistrationNumber,
+    );
     setStationName(
       firstString(station, ["displayName", "display_name"]) ??
         firstString(organization, ["displayName", "display_name"]) ??
@@ -342,6 +361,7 @@ export function ApplicationOverviewScreen({
         ...existingOrganization,
         displayName: stationName.trim() || name.trim(),
         legalName: legalOrLicence.trim() || stationName.trim(),
+        registrationNumber: businessRegistrationNumber.trim().toUpperCase(),
         slug:
           slug.trim() ||
           stationName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
@@ -503,6 +523,14 @@ export function ApplicationOverviewScreen({
         applicationId: appId,
         idempotencyKey: idempotencyKey("app-submit", appId),
       });
+      try {
+        await reconcileVerification.mutateAsync({
+          applicationId: appId,
+          idempotencyKey: idempotencyKey("verification-reconcile", appId),
+        });
+      } catch (cause) {
+        if (__DEV__) console.info("SKIMA automatic verification reconciliation pending", cause);
+      }
       await applications.refetch();
       await session.refresh();
     } catch (cause) {
@@ -536,6 +564,15 @@ export function ApplicationOverviewScreen({
   const totalSteps = workspace === "driver" ? driverTotalSteps : stationTotalSteps;
 
   const currentPayload = buildPayload();
+  const verificationChecks = verification.data ?? [];
+  const verifiedDocumentKeys = satisfiedVerificationDocumentKeys(verificationChecks);
+  const verificationCheck = (key: string) =>
+    verificationChecks.find((item) => item.verificationKey === key) ?? null;
+  const showFallbackDocument = (documentKey: string) =>
+    shouldShowVerificationFallback(
+      verificationForDocumentKey(verificationChecks, documentKey),
+    );
+
   const applicableRequirements = appRequirements.filter((requirement) =>
     requirementAppliesToPayload(requirement, currentPayload),
   );
@@ -543,6 +580,7 @@ export function ApplicationOverviewScreen({
   const missingRequiredDocs = applicableRequirements.filter((requirement) => {
     if (requirement.is_required === false) return false;
     const key = firstString(requirement, ["key"]) ?? "";
+    if (verifiedDocumentKeys.has(key)) return false;
     const submission = getSubForReq(key);
     const submissionStatus = firstString(submission, ["status"]);
     return !submission || submissionStatus === "rejected";
@@ -617,8 +655,12 @@ export function ApplicationOverviewScreen({
     return {
       title: firstString(requirement, ["display_name", "displayName"]) ?? key,
       isRequired: requirement.is_required !== false,
-      isUploaded: Boolean(submission && firstString(submission, ["status"]) !== "rejected"),
-      status: firstString(submission, ["status"]) ?? "pending",
+      isUploaded:
+        verifiedDocumentKeys.has(key) ||
+        Boolean(submission && firstString(submission, ["status"]) !== "rejected"),
+      status: verifiedDocumentKeys.has(key)
+        ? "verified_automatically"
+        : firstString(submission, ["status"]) ?? "pending",
       stepIndex:
         workspace === "driver"
           ? key === "driver.profile-photo"
@@ -656,16 +698,16 @@ export function ApplicationOverviewScreen({
             ? currentStep === 1
               ? "Personal Information"
               : currentStep === 2
-                ? "Driver Photograph"
+                ? "Identity & Driver Photo"
                 : currentStep === 3
-                  ? "Driver Documents"
+                  ? "Licence & Evidence"
                   : "Review & Submit"
             : currentStep === 1
-              ? "Representative & Role"
+              ? "Representative Verification"
               : currentStep === 2
-                ? "Station & Location"
+                ? "Business, Station & Location"
                 : currentStep === 3
-                  ? "Required Certificates"
+                  ? "Safety & Regulatory Evidence"
                   : currentStep === 4
                     ? "Station Premises Photos"
                     : "Review & Submit"
@@ -733,7 +775,15 @@ export function ApplicationOverviewScreen({
           ) : null}
 
           {currentStep === 2 ? (
-            <View>
+            <View style={{ gap: spacing.md }}>
+              <AutomatedVerificationCard
+                applicationId={currentId}
+                ensureApplicationId={ensureApplicationId}
+                verificationKey="verification.person.identity"
+                title="Identity & liveness"
+                description="Complete one secure identity check. When it passes, SKIMA will not ask for a duplicate government-ID upload."
+                check={verificationCheck("verification.person.identity")}
+              />
               {(() => {
                 const submission = getSubForReq("driver.profile-photo");
                 const mediaUrl = firstString(submission, ["storage_path", "mediaUrl"]);
@@ -751,8 +801,16 @@ export function ApplicationOverviewScreen({
           ) : null}
 
           {currentStep === 3 ? (
-            <View>
-              {DRIVER_DOCUMENT_KEYS.map((reqKey) => {
+            <View style={{ gap: spacing.md }}>
+              <AutomatedVerificationCard
+                applicationId={currentId}
+                ensureApplicationId={ensureApplicationId}
+                verificationKey="verification.driver.licence"
+                title="Driver licence"
+                description="SKIMA will use the configured verification provider when available. A document upload appears only when fallback evidence is needed."
+                check={verificationCheck("verification.driver.licence")}
+              />
+              {DRIVER_DOCUMENT_KEYS.filter((reqKey) => showFallbackDocument(reqKey)).map((reqKey) => {
                 const requirement = appRequirements.find(
                   (item) => firstString(item, ["key"]) === reqKey,
                 );
@@ -815,7 +873,16 @@ export function ApplicationOverviewScreen({
       ) : (
         <>
           {currentStep === 1 ? (
-            <Card>
+            <View style={{ gap: spacing.md }}>
+              <AutomatedVerificationCard
+                applicationId={currentId}
+                ensureApplicationId={ensureApplicationId}
+                verificationKey="verification.person.identity"
+                title="Verify the representative"
+                description="Use one secure identity and liveness check for the owner, manager or authorized representative registering this station."
+                check={verificationCheck("verification.person.identity")}
+              />
+              <Card>
               <Text style={styles.sectionHeader}>Representative Details</Text>
 
               <View style={styles.fieldGroup}>
@@ -869,27 +936,43 @@ export function ApplicationOverviewScreen({
                 />
               </View>
 
-              {(() => {
-                const submission = getSubForReq("station.representative-photo");
-                const mediaUrl = firstString(submission, ["storage_path", "mediaUrl"]);
-                return (
-                  <PhotoCaptureCard
-                    title="Representative Photo (Private)"
-                    subtitle="Take a clear face photo of the representative applying for this station."
-                    photoUrl={mediaUrl}
-                    guidanceText="Kept private and used only to verify your identity."
-                    onPhotoSelected={(file) =>
-                      handleUploadRequirement("station.representative-photo", file)
-                    }
-                  />
-                );
-              })()}
             </Card>
+            </View>
           ) : null}
 
           {currentStep === 2 ? (
-            <Card>
-              <Text style={styles.sectionHeader}>Station Facility Details</Text>
+            <View style={{ gap: spacing.md }}>
+              <AutomatedVerificationCard
+                applicationId={currentId}
+                ensureApplicationId={ensureApplicationId}
+                verificationKey="verification.business.registry"
+                title="Verify the registered business"
+                description="Use the configured business-verification provider first. When it passes, CAC/business-registration uploads are no longer duplicated."
+                check={verificationCheck("verification.business.registry")}
+              />
+              <Card>
+              <Text style={styles.sectionHeader}>Business & Station Details</Text>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Registered Business / Legal Name *</Text>
+                <TextInput
+                  value={legalOrLicence}
+                  onChangeText={setLegalOrLicence}
+                  placeholder="e.g. Emelie Gas Limited"
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>CAC / BN / RC Number</Text>
+                <TextInput
+                  value={businessRegistrationNumber}
+                  onChangeText={setBusinessRegistrationNumber}
+                  autoCapitalize="characters"
+                  placeholder="e.g. RC1234567"
+                  style={styles.input}
+                />
+              </View>
 
               <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>LPG Station Name *</Text>
@@ -956,11 +1039,24 @@ export function ApplicationOverviewScreen({
                 />
               </View>
             </Card>
+            </View>
           ) : null}
 
           {currentStep === 3 ? (
-            <View>
+            <View style={{ gap: spacing.md }}>
+              {stationRole !== "owner" ? (
+                <AutomatedVerificationCard
+                  applicationId={currentId}
+                  ensureApplicationId={ensureApplicationId}
+                  verificationKey="verification.station.authority"
+                  title="Representative authority"
+                  description="Owners do not need an authorization letter. Managers or representatives use automatic authority verification when configured, otherwise only the authority evidence below is required."
+                  check={verificationCheck("verification.station.authority")}
+                />
+              ) : null}
               {STATION_DOCUMENT_KEYS.filter((reqKey) =>
+                showFallbackDocument(reqKey) &&
+
                 applicableRequirements.some(
                   (requirement) => firstString(requirement, ["key"]) === reqKey,
                 ),
@@ -1024,6 +1120,8 @@ export function ApplicationOverviewScreen({
                   stepIndex: 1,
                   items: [
                     { label: "Station Name", value: stationName },
+                    { label: "Registered Business", value: legalOrLicence },
+                    { label: "CAC / Registration No.", value: businessRegistrationNumber || "Not provided" },
                     { label: "Representative", value: name },
                     {
                       label: "Role",
