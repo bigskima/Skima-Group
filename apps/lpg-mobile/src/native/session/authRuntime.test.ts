@@ -1,4 +1,4 @@
-import { AuthRuntimeError, verifySkimaAuthRuntime } from "./authRuntime";
+import { verifySkimaAuthRuntime } from "./authRuntime";
 
 describe("SKIMA auth runtime verification", () => {
   it("accepts the canonical SKIMA health identity", async () => {
@@ -32,7 +32,7 @@ describe("SKIMA auth runtime verification", () => {
           }),
         })) as unknown as typeof fetch,
       }),
-    ).rejects.toMatchObject<AuthRuntimeError>({
+    ).rejects.toMatchObject({
       kind: "configuration",
     });
   });
@@ -46,7 +46,7 @@ describe("SKIMA auth runtime verification", () => {
           throw new Error("network down");
         }) as typeof fetch,
       }),
-    ).rejects.toMatchObject<AuthRuntimeError>({
+    ).rejects.toMatchObject({
       kind: "network",
     });
   });
