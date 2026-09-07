@@ -9,7 +9,7 @@ import {
 } from "../_shared/partner-verification.ts";
 
 const CORS_HEADERS = {
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, x-skima-client, apikey, content-type",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Origin": "*",
   "Content-Type": "application/json",
