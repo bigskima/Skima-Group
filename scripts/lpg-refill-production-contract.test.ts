@@ -135,6 +135,19 @@ Deno.test("nearby station discovery is location and service-radius authoritative
   assertNotIncludes(stationDetail, "domainQueries.stations()");
 });
 
+Deno.test("refill cylinder chooser uses presentation media without oversized placeholder copy", async () => {
+  const [refill, mediaImage] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/RuntimeMediaImage.tsx"),
+  ]);
+  assertIncludes(refill, 'useEntityMediaLinks("lpg_cylinder", cylinderId)');
+  assertIncludes(refill, "presentationId ?? originalId");
+  assertIncludes(refill, '"SKIMA display image"');
+  assertIncludes(mediaImage, 'variant === "thumbnail"');
+  assertIncludes(mediaImage, '"No photo"');
+  assertIncludes(mediaImage, "thumbnailLabel");
+});
+
 Deno.test("cylinder presentation generation does not require an uploaded source photo", async () => {
   const registration = await read("apps/lpg-mobile/src/native/ui/CylinderRegistrationScreen.tsx");
   assertIncludes(registration, "if (cylinderId) {");

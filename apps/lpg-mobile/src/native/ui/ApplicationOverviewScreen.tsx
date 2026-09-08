@@ -170,15 +170,22 @@ export function ApplicationOverviewScreen({
   const draftAttemptKey = useRef(`${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
   const category = workspace === "station" ? "business" : "driver";
-  const type = useMemo(
-    () =>
-      (types.data ?? []).find(
+  const type = useMemo(() => {
+    const canonicalKey =
+      workspace === "station"
+        ? "application.lpg.station.phase-one"
+        : "application.lpg.driver.phase-one";
+    const activeTypes = (types.data ?? []).filter(
+      (item) => firstString(item, ["status"]) === "active",
+    );
+    return (
+      activeTypes.find((item) => firstString(item, ["key"]) === canonicalKey) ??
+      activeTypes.find(
         (item) =>
-          firstString(item, ["application_category", "applicationCategory"]) === category &&
-          firstString(item, ["status"]) === "active",
-      ),
-    [category, types.data],
-  );
+          firstString(item, ["application_category", "applicationCategory"]) === category,
+      )
+    );
+  }, [category, types.data, workspace]);
 
   const typeId = type ? recordId(type) : null;
 
@@ -388,7 +395,7 @@ export function ApplicationOverviewScreen({
 
     const typeKey =
       firstString(type, ["key"]) ??
-      (workspace === "station" ? "application.lpg.station" : "application.lpg.driver");
+      (workspace === "station" ? "application.lpg.station.phase-one" : "application.lpg.driver.phase-one");
     const userId = session.context?.user.id;
     if (!userId) throw new Error("Please sign in again before starting the application.");
 
@@ -600,7 +607,6 @@ export function ApplicationOverviewScreen({
         "under_review",
         "approved",
         "changes_requested",
-        "additional_info_required",
         "rejected",
       ].includes(status),
   );

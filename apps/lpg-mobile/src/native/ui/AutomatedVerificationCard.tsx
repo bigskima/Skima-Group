@@ -201,8 +201,8 @@ export function AutomatedVerificationCard({
         <View style={[styles.fallbackBox, { backgroundColor: palette.warningSoft }]}>
           <FileWarning color={palette.warning} size={18} />
           <Text style={[styles.fallbackText, { color: palette.ink }]}>
-            Automatic verification is not configured for this check yet.
-            {canFallback ? " Use the fallback evidence shown below." : " Try again later."}
+            The secure automatic check is not available for this application right now.
+            {canFallback ? " Continue with the accepted evidence below; SKIMA can review it without blocking your draft." : " Try the secure check again later."}
           </Text>
         </View>
       ) : (

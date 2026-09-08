@@ -336,7 +336,9 @@ function DriverGeographyStep(props: {
     }
 
     const existingPayload = props.existingPayload ?? {};
-    const existingService = nestedRecord(existingPayload, "service") ?? {};
+    const existingService = stripLegacyServiceAreaFields(
+      nestedRecord(existingPayload, "service") ?? {},
+    );
     const mergedPayload: PlatformRecord = {
       ...existingPayload,
       location,
@@ -589,12 +591,29 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+function stripLegacyServiceAreaFields(service: PlatformRecord): PlatformRecord {
+  const next = { ...service };
+  delete next.serviceAreaIds;
+  delete next.service_area_ids;
+  delete next.primaryServiceAreaId;
+  delete next.primary_service_area_id;
+  return next;
+}
+
 function serviceAreaSummary(area: ServiceArea) {
   const parts = [area.locality_name, area.town_name, area.city_name, area.lga_name, area.state_name]
     .filter((part, index, all): part is string => Boolean(part) && all.indexOf(part) === index);
   const location = parts.join(", ");
-  const type = area.area_type === "lga" ? "LGA" : area.area_type.charAt(0).toUpperCase() + area.area_type.slice(1);
+  const type = friendlyAreaType(area.area_type);
   return location ? `${type} · ${location}` : type;
+}
+
+function friendlyAreaType(value: string) {
+  if (value.toLowerCase() === "lga") return "LGA";
+  return value
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function dateValue(record: PlatformRecord) {

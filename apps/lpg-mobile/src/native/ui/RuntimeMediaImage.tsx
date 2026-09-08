@@ -46,13 +46,21 @@ export function RuntimeMediaImage({
     session.status === "authenticated" &&
     query.isPending &&
     !query.error;
-  const placeholderLabel = !assetId
-    ? `${label} not uploaded yet`
-    : query.error
-      ? `${label} could not be loaded`
-      : activelyLoading
-        ? "Loading image…"
-        : `${label} unavailable`;
+  const placeholderLabel = variant === "thumbnail"
+    ? !assetId
+      ? "No photo"
+      : query.error
+        ? "Image unavailable"
+        : activelyLoading
+          ? "Loading…"
+          : "Image unavailable"
+    : !assetId
+      ? `${label} not uploaded yet`
+      : query.error
+        ? `${label} could not be loaded`
+        : activelyLoading
+          ? "Loading image…"
+          : `${label} unavailable`;
 
   return query.data?.signedUrl ? (
     <Image
@@ -65,7 +73,7 @@ export function RuntimeMediaImage({
   ) : (
     <View style={[styles.placeholder, variant === "avatar" && styles.avatar, variant === "hero" && styles.hero, variant === "thumbnail" && styles.thumbnail]}>
       <ImageOff color={colors.muted} size={28} />
-      <Text style={styles.label}>{placeholderLabel}</Text>
+      <Text numberOfLines={variant === "thumbnail" ? 2 : undefined} style={[styles.label, variant === "thumbnail" && styles.thumbnailLabel]}>{placeholderLabel}</Text>
     </View>
   );
 }
@@ -88,5 +96,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing.sm,
   },
-  label: { color: colors.muted, fontWeight: "700" },
+  label: { color: colors.muted, fontWeight: "700", textAlign: "center" },
+  thumbnailLabel: { fontSize: 10, lineHeight: 13, paddingHorizontal: 5 },
 });

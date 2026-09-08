@@ -26,6 +26,7 @@ import {
   firstString,
   nestedRecord,
   recordId,
+  type PlatformRecord,
 } from "../api/records";
 import { ApplicationProgress } from "../application/ApplicationProgress";
 import { ApplicationReviewSummary } from "../application/ApplicationReviewSummary";
@@ -106,15 +107,20 @@ export function DriverApplicationScreen() {
   const draftAttemptKey = useRef(`${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
   const candidateLookupKey = useRef<string | null>(null);
 
-  const type = useMemo(
-    () =>
-      (types.data ?? []).find(
+  const type = useMemo(() => {
+    const activeTypes = (types.data ?? []).filter(
+      (item) => firstString(item, ["status"]) === "active",
+    );
+    return (
+      activeTypes.find(
+        (item) => firstString(item, ["key"]) === "application.lpg.driver.phase-one",
+      ) ??
+      activeTypes.find(
         (item) =>
-          firstString(item, ["application_category", "applicationCategory"]) === "driver" &&
-          firstString(item, ["status"]) === "active",
-      ),
-    [types.data],
-  );
+          firstString(item, ["application_category", "applicationCategory"]) === "driver",
+      )
+    );
+  }, [types.data]);
   const typeId = type ? recordId(type) : null;
 
   const current = useMemo(() => {
@@ -247,7 +253,7 @@ export function DriverApplicationScreen() {
     const existingIdentity = nestedRecord(basePayload, "identity") ?? {};
     const existingContact = nestedRecord(basePayload, "contact") ?? {};
     const existingLicence = nestedRecord(basePayload, "licence") ?? {};
-    const existingService = nestedRecord(basePayload, "service") ?? {};
+    const existingService = stripLegacyServiceAreaFields(nestedRecord(basePayload, "service") ?? {});
     const existingLocation = nestedRecord(basePayload, "location");
 
     const selectedCoverageRequests = selectedServiceAreaIds.map((geographyId) => ({
@@ -285,7 +291,7 @@ export function DriverApplicationScreen() {
 
   const ensureApplicationId = async (): Promise<string> => {
     if (currentId) return currentId;
-    const typeKey = firstString(type, ["key"]) ?? "application.lpg.driver";
+    const typeKey = firstString(type, ["key"]) ?? "application.lpg.driver.phase-one";
     const userId = session.context?.user.id;
     if (!userId) throw new Error("Please sign in again before starting the application.");
 
@@ -512,7 +518,6 @@ export function DriverApplicationScreen() {
       "under_review",
       "approved",
       "changes_requested",
-      "additional_info_required",
       "rejected",
     ].includes(status),
   );
@@ -1162,6 +1167,15 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
 });
+function stripLegacyServiceAreaFields(service: PlatformRecord): PlatformRecord {
+  const next = { ...service };
+  delete next.serviceAreaIds;
+  delete next.service_area_ids;
+  delete next.primaryServiceAreaId;
+  delete next.primary_service_area_id;
+  return next;
+}
+
 function readCoverageGeographyIds(service: Record<string, unknown> | null): string[] {
   const requests = service?.coverageRequests;
   if (!Array.isArray(requests)) return [];

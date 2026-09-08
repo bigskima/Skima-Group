@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { AlertTriangle, CheckCircle2, MapPin, Scale, ShieldCheck, Store, WalletCards } from "lucide-react-native";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { domainQueries } from "../api/domains";
+import { domainQueries, useEntityMediaLinks } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
   ActionResponseSchema,
@@ -825,9 +825,27 @@ function SelectionSection({
           {records.map((item, index) => {
             const id = recordId(item) ?? String(index);
             const active = id === selected;
-            return (
-              <Pressable key={id} accessibilityRole="button" accessibilityState={{ selected: active }} onPress={() => onSelect(id)} style={[styles.recordChoice, { backgroundColor: active ? palette.brandSoft : palette.surfaceSubtle, borderColor: active ? palette.brand : palette.border }]}>
-                {showImages ? <RuntimeMediaImage assetId={firstAssetId(item.image_asset_ids ?? item.imageAssetIds)} label={displayTitle(item)} variant="thumbnail" /> : null}
+            return showImages ? (
+              <CylinderSelectionChoice
+                key={id}
+                cylinder={item}
+                active={active}
+                onSelect={() => onSelect(id)}
+              />
+            ) : (
+              <Pressable
+                key={id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                onPress={() => onSelect(id)}
+                style={[
+                  styles.recordChoice,
+                  {
+                    backgroundColor: active ? palette.brandSoft : palette.surfaceSubtle,
+                    borderColor: active ? palette.brand : palette.border,
+                  },
+                ]}
+              >
                 <Text style={[styles.recordChoiceText, { color: palette.ink }]}>{displayTitle(item)}</Text>
                 {active ? <CheckCircle2 color={palette.brand} size={20} /> : null}
               </Pressable>
@@ -838,6 +856,57 @@ function SelectionSection({
         <Text style={[styles.emptyText, { color: palette.muted }]}>{emptyText}</Text>
       )}
     </View>
+  );
+}
+
+function CylinderSelectionChoice({
+  cylinder,
+  active,
+  onSelect,
+}: {
+  cylinder: PlatformRecord;
+  active: boolean;
+  onSelect(): void;
+}) {
+  const { palette } = useAppTheme();
+  const cylinderId = recordId(cylinder);
+  const links = useEntityMediaLinks("lpg_cylinder", cylinderId);
+  const presentation = (links.data ?? []).find((item) =>
+    (firstString(item, ["media_role", "mediaRole"]) ?? "").includes("presentation"),
+  );
+  const presentationId = firstString(presentation, ["media_asset_id", "mediaAssetId"]);
+  const originalId = firstAssetId(cylinder.image_asset_ids ?? cylinder.imageAssetIds);
+  const assetId = presentationId ?? originalId;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      onPress={onSelect}
+      style={[
+        styles.recordChoice,
+        styles.cylinderChoice,
+        {
+          backgroundColor: active ? palette.brandSoft : palette.surfaceSubtle,
+          borderColor: active ? palette.brand : palette.border,
+        },
+      ]}
+    >
+      <RuntimeMediaImage
+        assetId={assetId}
+        label={displayTitle(cylinder)}
+        variant="thumbnail"
+      />
+      <View style={styles.cylinderChoiceCopy}>
+        <Text numberOfLines={2} style={[styles.recordChoiceText, { color: palette.ink }]}>
+          {displayTitle(cylinder)}
+        </Text>
+        <Text style={[styles.cylinderChoiceMeta, { color: palette.muted }]}>
+          {presentationId ? "SKIMA display image" : originalId ? "Cylinder photo" : "Photo optional"}
+        </Text>
+      </View>
+      {active ? <CheckCircle2 color={palette.brand} size={20} /> : null}
+    </Pressable>
   );
 }
 
@@ -1068,6 +1137,9 @@ const styles = StyleSheet.create({
   sectionDescription: { ...typography.caption, lineHeight: 17 },
   choices: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   recordChoice: { minWidth: 150, flexGrow: 1, flexBasis: 160, flexDirection: "row", alignItems: "center", gap: spacing.sm, borderWidth: 1, borderRadius: radii.lg, padding: spacing.sm },
+  cylinderChoice: { width: "100%", minWidth: 0, flexBasis: "100%", flexGrow: 0, minHeight: 96 },
+  cylinderChoiceCopy: { flex: 1, minWidth: 0, gap: 3 },
+  cylinderChoiceMeta: { ...typography.caption, fontSize: 10 },
   recordChoiceText: { flex: 1, ...typography.bodyStrong, fontSize: 13 },
   emptyText: { ...typography.caption, paddingVertical: spacing.xs },
   stationQueryState: { gap: spacing.sm },
