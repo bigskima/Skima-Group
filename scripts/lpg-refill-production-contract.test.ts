@@ -86,12 +86,35 @@ Deno.test("quality admin queue has one unambiguous production RPC shape", async 
   assertIncludes(quality, "target_severity: null");
 });
 
-Deno.test("first-time driver geography save continues into application progress", async () => {
+Deno.test("driver geography save continues without turning a successful persistence into a refresh error", async () => {
   const screen = await read("apps/lpg-mobile/src/native/ui/DriverApplicationEntryScreen.tsx");
   assertIncludes(screen, "continueAfterSave");
   assertIncludes(screen, "setContinueAfterSave(true)");
-  assertIncludes(screen, "const refreshedApplications = await applications.refetch()");
+  assertIncludes(screen, "void applications.refetch()");
   assertIncludes(screen, "geographyComplete || continueAfterSave");
+  assertNotIncludes(screen, "const refreshedApplications = await applications.refetch()");
+});
+
+Deno.test("detected driver location cannot retain a stale mapped area from another state", async () => {
+  const [screen, repair, guard] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/DriverApplicationEntryScreen.tsx"),
+    read("supabase/migrations/20260908205000_reconcile_cross_state_driver_application_coverage.sql"),
+    read("supabase/migrations/20260908206000_partner_application_cross_state_coverage_guard.sql"),
+  ]);
+
+  assertIncludes(screen, "readMatchedGeographyId");
+  assertIncludes(screen, "setSelectedIds([])");
+  assertIncludes(screen, "setCandidateCoverage(null)");
+  assertIncludes(screen, "matchedGeographyId");
+
+  assertIncludes(repair, "application.lpg.driver.phase-one");
+  assertIncludes(repair, "'RADIUS'");
+  assertIncludes(repair, "'universal_candidate_coverage'");
+
+  assertIncludes(guard, "normalize_partner_application_coverage_for_location");
+  assertIncludes(guard, "before insert or update of payload");
+  assertIncludes(guard, "application.lpg.station.phase-one");
+  assertIncludes(guard, "'RADIUS'");
 });
 
 Deno.test("customer home keeps independent services visible in every refill state", async () => {
