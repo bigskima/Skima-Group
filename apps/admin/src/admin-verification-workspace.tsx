@@ -78,6 +78,12 @@ export function AdminVerificationWorkspace(props: {
     (route) => recordString(route, "status") === "active",
   );
   const exceptionRows = exceptions.data ?? [];
+  const supabaseBaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)
+    ?.trim()
+    .replace(/\/$/, "");
+  const diditWebhookUrl = supabaseBaseUrl
+    ? `${supabaseBaseUrl}/functions/v1/verification-provider-webhook/didit`
+    : "/functions/v1/verification-provider-webhook/didit";
 
   const selectedRoute = useMemo(
     () =>
@@ -223,6 +229,40 @@ export function AdminVerificationWorkspace(props: {
           icon={ShieldCheck}
           tone="info"
         />
+      </section>
+
+      <section className="sk-panel">
+        <div className="sk-panel__header">
+          <div>
+            <p className="admin-section-kicker">Didit callbacks</p>
+            <h2>Verification webhook destination</h2>
+            <p>
+              Use this endpoint in Didit → API & Webhooks. Subscribe to
+              <strong> status.updated</strong> and <strong>data.updated</strong>.
+              The signing secret belongs in the Supabase function secret
+              <code> DIDIT_WEBHOOK_SECRET</code>; do not paste the secret into this dashboard.
+            </p>
+          </div>
+          <StatusBadge tone="success">Signed HMAC endpoint</StatusBadge>
+        </div>
+        <div className="admin-notice">
+          <strong>Webhook URL</strong>
+          <div style={{ marginTop: 6, overflowWrap: "anywhere" }}>
+            <code>{diditWebhookUrl}</code>
+          </div>
+          <div className="skima-action-row" style={{ marginTop: 10 }}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void navigator.clipboard.writeText(diditWebhookUrl);
+                setNotice("Didit webhook URL copied.");
+              }}
+            >
+              Copy webhook URL
+            </Button>
+          </div>
+        </div>
       </section>
 
       {notice ? (
