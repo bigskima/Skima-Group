@@ -77,6 +77,16 @@ export function AdminVerificationWorkspace(props: {
   const activeRoutes = routes.filter(
     (route) => recordString(route, "status") === "active",
   );
+  const identityRoute =
+    routes.find(
+      (route) => recordString(route, "verificationKey") === "verification.person.identity",
+    ) ?? null;
+  const businessRoute =
+    routes.find(
+      (route) => recordString(route, "verificationKey") === "verification.business.registry",
+    ) ?? null;
+  const identityAutomatic = recordString(identityRoute ?? {}, "status") === "active";
+  const businessAutomatic = recordString(businessRoute ?? {}, "status") === "active";
   const exceptionRows = exceptions.data ?? [];
   const supabaseBaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)
     ?.trim()
@@ -107,6 +117,23 @@ export function AdminVerificationWorkspace(props: {
           priority: Number(priority) || 100,
           config: {
             configuredFrom: "skima-admin",
+            launchMode:
+              verificationKey === "verification.business.registry"
+                ? routeStatus === "active"
+                  ? "automatic_kyb"
+                  : "assisted_kyb"
+                : verificationKey === "verification.person.identity"
+                  ? routeStatus === "active"
+                    ? "automatic_kyc"
+                    : "manual_fallback"
+                  : routeStatus === "active"
+                    ? "automatic"
+                    : "manual_fallback",
+            manualReviewPrimary:
+              verificationKey === "verification.business.registry" &&
+              routeStatus !== "active",
+            automaticRouteRetained:
+              verificationKey === "verification.business.registry",
           },
         },
         MutationIdSchema,
@@ -116,6 +143,52 @@ export function AdminVerificationWorkspace(props: {
         routeStatus === "active"
           ? "Verification route is active. New checks can use it without a mobile app release."
           : "Verification route saved. Automatic checks will use fallback policy while this route is not active.",
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin-verification-configuration"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin-verification-exceptions"] }),
+      ]);
+    },
+    onError: (error) => setNotice(readError(error)),
+  });
+
+  const setLaunchRouteMode = useMutation({
+    mutationFn: ({
+      route,
+      status: nextStatus,
+      launchMode,
+    }: {
+      route: PlatformRecord;
+      status: "active" | "paused";
+      launchMode: "automatic_kyc" | "assisted_kyb" | "automatic_kyb" | "manual_fallback";
+    }) =>
+      api.post(
+        "/admin/verification/provider-route",
+        {
+          verificationKey: recordString(route, "verificationKey"),
+          providerKey: recordString(route, "providerKey"),
+          workflowRef: recordString(route, "workflowRef"),
+          status: nextStatus,
+          priority: recordNumber(route, "priority") ?? 100,
+          config: {
+            configuredFrom: "skima-admin-launch-policy",
+            launchMode,
+            automaticRouteRetained:
+              recordString(route, "verificationKey") === "verification.business.registry",
+            manualReviewPrimary: launchMode === "assisted_kyb",
+          },
+        },
+        MutationIdSchema,
+      ),
+    onSuccess: async (_, variables) => {
+      setNotice(
+        variables.launchMode === "assisted_kyb"
+          ? "Business KYB is now assisted by SKIMA review. The automatic route is retained for future activation."
+          : variables.launchMode === "automatic_kyb"
+            ? "Automatic business KYB is enabled. New station applications can use the configured KYB provider."
+            : variables.launchMode === "automatic_kyc"
+              ? "Automatic personal KYC is enabled for drivers and station representatives."
+              : "Automatic personal KYC is paused. Eligible applications will use permitted fallback evidence.",
       );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["admin-verification-configuration"] }),
@@ -196,7 +269,7 @@ export function AdminVerificationWorkspace(props: {
       <PageHeader
         eyebrow="Partner trust"
         title="Verification"
-        description="Automatic verification is the primary path for identity, licence and business checks. Admin review is reserved for exceptions and compliance evidence that cannot be verified automatically."
+        description="Launch policy: personal KYC is automatic for drivers and station representatives, while business KYB is assisted through CAC/business evidence and admin review. The automatic KYB route stays configured so it can be enabled later without an app release."
         actions={
           <Button icon={RefreshCcw} variant="outline" onClick={refresh}>
             Refresh
@@ -229,6 +302,82 @@ export function AdminVerificationWorkspace(props: {
           icon={ShieldCheck}
           tone="info"
         />
+      </section>
+
+      <section className="sk-panel">
+        <div className="sk-panel__header">
+          <div>
+            <p className="admin-section-kicker">Launch verification policy</p>
+            <h2>KYC automatic · KYB assisted</h2>
+            <p>
+              Personal identity checks and business checks are controlled independently.
+              A paid or unavailable business-verification route must never disable personal KYC.
+            </p>
+          </div>
+          <StatusBadge tone="info">Database-driven</StatusBadge>
+        </div>
+
+        <div className="sk-panel__body">
+          <div className="admin-summary-row">
+            <div>
+              <strong>Personal KYC</strong>
+              <p>Drivers and non-owner station representatives · identity + liveness.</p>
+              <small>Does not verify company owners, UBOs or the business itself.</small>
+            </div>
+            <div>
+              <StatusBadge tone={identityAutomatic ? "success" : "warning"}>
+                {identityAutomatic ? "Automatic" : "Fallback"}
+              </StatusBadge>
+              {identityRoute ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  isLoading={setLaunchRouteMode.isPending}
+                  disabled={!canManage}
+                  onClick={() =>
+                    void setLaunchRouteMode.mutateAsync({
+                      route: identityRoute,
+                      status: identityAutomatic ? "paused" : "active",
+                      launchMode: identityAutomatic ? "manual_fallback" : "automatic_kyc",
+                    }).catch(() => undefined)
+                  }
+                >
+                  {identityAutomatic ? "Pause automatic KYC" : "Enable automatic KYC"}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="admin-summary-row">
+            <div>
+              <strong>Business KYB</strong>
+              <p>CAC/business-registration evidence · SKIMA admin review for launch.</p>
+              <small>The configured automatic KYB workflow remains stored and can be switched on later.</small>
+            </div>
+            <div>
+              <StatusBadge tone={businessAutomatic ? "success" : "warning"}>
+                {businessAutomatic ? "Automatic" : "Assisted review"}
+              </StatusBadge>
+              {businessRoute ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  isLoading={setLaunchRouteMode.isPending}
+                  disabled={!canManage}
+                  onClick={() =>
+                    void setLaunchRouteMode.mutateAsync({
+                      route: businessRoute,
+                      status: businessAutomatic ? "paused" : "active",
+                      launchMode: businessAutomatic ? "assisted_kyb" : "automatic_kyb",
+                    }).catch(() => undefined)
+                  }
+                >
+                  {businessAutomatic ? "Use assisted KYB" : "Enable automatic KYB"}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="sk-panel">
@@ -335,9 +484,9 @@ export function AdminVerificationWorkspace(props: {
               name="workflow-ref"
               helperText={
                 verificationKey === "verification.business.registry"
-                  ? "Use the Didit KYB workflow ID. A passed KYB check replaces duplicate business-registration evidence only; SKIMA still keeps separate safety and regulatory evidence where required."
+                  ? "Keep the KYB workflow ID here even while the route is paused. Launch uses assisted CAC/business review; enabling the route later turns automatic KYB back on without a mobile release."
                   : verificationKey === "verification.person.identity"
-                    ? "Use the Didit KYC workflow that includes identity, liveness and face matching. It is not an API key."
+                    ? "Use the personal KYC workflow for drivers and non-owner station representatives. It should include identity, liveness and face matching, and must not be used for company-owner or UBO screening."
                     : "This is the hosted verification workflow configured with the provider. It is not an API key."
               }
               value={workflowRef}
@@ -518,6 +667,9 @@ export function AdminVerificationWorkspace(props: {
                     {recordString(route, "workflowRef")
                       ? `Workflow ${recordString(route, "workflowRef")}`
                       : "Workflow not configured"}
+                    {recordString(recordObject(route, "config"), "launchMode")
+                      ? ` · ${friendly(recordString(recordObject(route, "config"), "launchMode") ?? "")}`
+                      : ""}
                   </small>
                 </div>
               </div>
@@ -538,6 +690,13 @@ function recordNumber(record: PlatformRecord, key: string): number | null {
   const value = record[key];
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function recordObject(record: PlatformRecord, key: string): PlatformRecord {
+  const value = record[key];
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as PlatformRecord
+    : {};
 }
 
 function friendly(value: string): string {

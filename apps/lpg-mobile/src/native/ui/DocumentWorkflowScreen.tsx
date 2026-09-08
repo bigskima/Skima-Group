@@ -139,6 +139,12 @@ export function DocumentWorkflowScreen({
   };
 
   const verificationChecks = verification.data ?? [];
+  const automaticVerificationChecks = verificationChecks.filter(
+    (check) => check.automaticAvailable,
+  );
+  const assistedVerificationChecks = verificationChecks.filter(
+    (check) => check.routeMode === "assisted_kyb" && !check.automaticAvailable,
+  );
   const verifiedDocumentKeys = satisfiedVerificationDocumentKeys(verificationChecks);
   const verificationCheckForDocument = (documentKey: string) =>
     verificationForDocumentKey(verificationChecks, documentKey);
@@ -333,7 +339,9 @@ export function DocumentWorkflowScreen({
                     ? `${outstandingRequested.length} item${outstandingRequested.length === 1 ? "" : "s"} still need attention. Requested items appear first.`
                     : "Your requested replacements are ready. Review them and resubmit when complete."
                   : verificationChecks.length
-                    ? `${verificationChecks.length} automatic check${verificationChecks.length === 1 ? "" : "s"} plus only the fallback or regulatory evidence that still applies.`
+                    ? assistedVerificationChecks.length > 0
+                      ? `${automaticVerificationChecks.length} automatic check${automaticVerificationChecks.length === 1 ? "" : "s"} · ${assistedVerificationChecks.length} assisted business review${assistedVerificationChecks.length === 1 ? "" : "s"} · plus required regulatory evidence.`
+                      : `${automaticVerificationChecks.length} automatic check${automaticVerificationChecks.length === 1 ? "" : "s"} plus only the fallback or regulatory evidence that still applies.`
                     : `${visibleConfigured.length} evidence requirement${visibleConfigured.length === 1 ? "" : "s"} for this application.`}
               </Text>
             </View>
@@ -348,9 +356,11 @@ export function DocumentWorkflowScreen({
               description={
                 check.status === "passed"
                   ? "This requirement is already satisfied automatically."
-                  : check.manualFallbackAllowed
-                    ? "Use automatic verification first. A fallback upload is shown only when the automatic route is unavailable or unsuccessful."
-                    : "This check must be completed through the configured secure verification provider."
+                  : check.routeMode === "assisted_kyb" && !check.automaticAvailable
+                    ? "Business KYB is assisted for launch. Upload the CAC or business-registration evidence shown below; SKIMA will review it. The automatic route remains configured for future activation."
+                    : check.manualFallbackAllowed
+                      ? "Use automatic verification first. A fallback upload is shown only when the automatic route is unavailable or unsuccessful."
+                      : "This check must be completed through the configured secure verification provider."
               }
               check={check}
             />

@@ -113,13 +113,16 @@ Deno.test("mobile uses automatic verification first and controlled fallback evid
   assertStringIncludes(documentScreen, "shouldShowVerificationFallback");
 });
 
-Deno.test("admin exposes provider routing and exception-only review", () => {
+Deno.test("admin exposes provider routing, launch KYC/KYB policy and exception-only review", () => {
   assertStringIncludes(adminApp, 'href: "/verification"');
   assertStringIncludes(adminApp, 'props.route === "/verification"');
   assertStringIncludes(adminApp, "AdminVerificationWorkspace");
   assertStringIncludes(adminVerification, '"/admin/verification/configuration"');
   assertStringIncludes(adminVerification, '"/admin/verification/exceptions"');
   assertStringIncludes(adminVerification, '"/admin/verification/provider-route"');
+  assertStringIncludes(adminVerification, "KYC automatic · KYB assisted");
+  assertStringIncludes(adminVerification, "Enable automatic KYB");
+  assertStringIncludes(adminVerification, "Use assisted KYB");
   assertStringIncludes(adminVerification, "Exception-only review");
 });
 
@@ -146,7 +149,7 @@ Deno.test("verification admin exception queue uses a real application identifier
   );
 });
 
-Deno.test("verification credit exhaustion becomes a safe fallback instead of a dead provider route", async () => {
+Deno.test("verification credit exhaustion pauses only the failing route", async () => {
   const [routePauseMigration, card, friendlyErrors] = await Promise.all([
     read("supabase/migrations/20260908204515_pause_verification_routes_on_credit_exhaustion.sql"),
     read("apps/lpg-mobile/src/native/ui/AutomatedVerificationCard.tsx"),
@@ -154,19 +157,51 @@ Deno.test("verification credit exhaustion becomes a safe fallback instead of a d
   ]);
 
   assertStringIncludes(sharedVerification, "verification_provider_credits_exhausted");
-  assertStringIncludes(sharedVerification, "pauseVerificationProviderRoutes");
-  assertStringIncludes(sharedVerification, '.update({');
+  assertStringIncludes(sharedVerification, "pauseVerificationRoute");
+  assertStringIncludes(sharedVerification, '.eq("id", routeId)');
+  assert(
+    !sharedVerification.includes("pauseVerificationProviderRoutes"),
+    "A paid KYB credit failure must not pause unrelated personal KYC routes.",
+  );
+  assertStringIncludes(sharedVerification, 'runtimePauseReason: "provider_credits_exhausted"');
   assertStringIncludes(sharedVerification, 'status: "paused"');
 
   assertStringIncludes(routePauseMigration, "provider_credits_exhausted");
-  assertStringIncludes(routePauseMigration, "status = 'paused'");
   assertStringIncludes(routePauseMigration, "provider_execution_logs");
 
   assertStringIncludes(card, "localApplicationId");
   assertStringIncludes(card, "localAutomaticUnavailable");
-  assertStringIncludes(card, "accepted fallback evidence");
   assertStringIncludes(friendlyErrors, "not enough credits");
   assertStringIncludes(friendlyErrors, "Secure verification is temporarily unavailable");
+});
+
+Deno.test("launch policy keeps personal KYC automatic and business KYB assisted", async () => {
+  const [policy, card, verificationApi, documents] = await Promise.all([
+    read("supabase/migrations/20260908215010_automatic_kyc_assisted_kyb_launch_policy.sql"),
+    read("apps/lpg-mobile/src/native/ui/AutomatedVerificationCard.tsx"),
+    read("apps/lpg-mobile/src/native/api/verification.ts"),
+    read("apps/lpg-mobile/src/native/ui/DocumentWorkflowScreen.tsx"),
+  ]);
+
+  assertStringIncludes(policy, "'verification.person.identity'");
+  assertStringIncludes(policy, "'automatic_kyc'");
+  assertStringIncludes(policy, "'station_representative_only'");
+  assertStringIncludes(policy, "'business_owner_or_ubo_scope', false");
+  assertStringIncludes(policy, "array['station.representative-identity']::text[]");
+  assertStringIncludes(policy, "'verification.business.registry'");
+  assertStringIncludes(policy, "'assisted_kyb'");
+  assertStringIncludes(policy, "'automatic_route_retained', true");
+  assertStringIncludes(policy, "status = 'paused'");
+  assertStringIncludes(policy, "status = 'active'");
+
+  assertStringIncludes(verificationApi, "routeMode");
+  assertStringIncludes(verificationApi, "routeConfigured");
+  assertStringIncludes(card, "ASSISTED BUSINESS REVIEW");
+  assertStringIncludes(card, "Automatic KYB retained for future admin activation");
+  assertStringIncludes(documents, 'check.routeMode === "assisted_kyb"');
+  assertStringIncludes(applicationScreen, 'stationRole !== "owner"');
+  assertStringIncludes(applicationScreen, "Automatic KYC is used for station representatives at launch");
+  assertStringIncludes(applicationScreen, "The automatic KYB route is retained for future activation");
 });
 
 Deno.test("verification runtime is JWT protected", () => {
