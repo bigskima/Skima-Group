@@ -133,11 +133,11 @@ export function CustomerOrdersScreen() {
                 key={id ?? String(index)}
                 accessibilityRole="button"
                 disabled={!id}
-                onPress={() => router.push(
+                onPress={() => router.push((
                   paymentNeeded
                     ? `/(customer)/orders/${id}/payment`
-                    : `/(customer)/orders/${id}` as never,
-                )}
+                    : `/(customer)/orders/${id}`
+                ) as never)}
                 style={({ pressed }) => [
                   styles.order,
                   shadows.soft,
