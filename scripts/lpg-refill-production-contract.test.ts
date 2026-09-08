@@ -98,8 +98,8 @@ Deno.test("driver geography save continues without turning a successful persiste
 Deno.test("detected driver location cannot retain a stale mapped area from another state", async () => {
   const [screen, repair, guard] = await Promise.all([
     read("apps/lpg-mobile/src/native/ui/DriverApplicationEntryScreen.tsx"),
-    read("supabase/migrations/20260908205000_reconcile_cross_state_driver_application_coverage.sql"),
-    read("supabase/migrations/20260908206000_partner_application_cross_state_coverage_guard.sql"),
+    read("supabase/migrations/20260908204716_reconcile_cross_state_driver_application_coverage.sql"),
+    read("supabase/migrations/20260908204807_partner_application_cross_state_coverage_guard.sql"),
   ]);
 
   assertIncludes(screen, "readMatchedGeographyId");
