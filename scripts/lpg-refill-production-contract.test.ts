@@ -99,6 +99,19 @@ Deno.test("customer wallet top up uses the canonical gateway runtime", async () 
   assertNotIncludes(topUp, 'useFinanceMutation');
 });
 
+Deno.test("customer wallet activity stays compact as history grows", async () => {
+  const [topUp, transactions] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/TopUpScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/CustomerFinanceActivityScreen.tsx"),
+  ]);
+  assertIncludes(topUp, "availableBalance");
+  assertIncludes(topUp, "[2000, 5000, 10000, 20000]");
+  assertIncludes(transactions, "const PAGE_SIZE = 8");
+  assertIncludes(transactions, "filteredRows.slice(0, visibleCount)");
+  assertIncludes(transactions, "Show");
+  assertIncludes(transactions, "older transactions");
+});
+
 Deno.test("nearby station discovery is location and service-radius authoritative", async () => {
   const [migration, gateway, domains, stationsScreen] = await Promise.all([
     read("supabase/migrations/20260907104500_lpg_customer_nearby_station_public_media.sql"),
