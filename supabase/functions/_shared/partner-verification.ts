@@ -187,7 +187,14 @@ export async function startPartnerVerificationSession(
       error instanceof VerificationRuntimeError &&
       error.code === "verification_provider_credits_exhausted"
     ) {
-      await pauseVerificationProviderRoutes(serviceClient, route.provider.id);
+      // Pause only the failing verification route. A paid KYB failure must not
+      // disable the separate personal KYC route that drivers and station
+      // representatives rely on.
+      await pauseVerificationRoute(
+        serviceClient,
+        route.id,
+        route.config,
+      );
     }
 
     throw error;
@@ -723,24 +730,31 @@ function isExpired(value: unknown): boolean {
   return Number.isFinite(time) && time <= Date.now();
 }
 
-async function pauseVerificationProviderRoutes(
+async function pauseVerificationRoute(
   serviceClient: SupabaseClient,
-  providerAdapterId: string,
+  routeId: string,
+  routeConfig: Record<string, unknown>,
 ): Promise<void> {
   const result = await serviceClient
     .from("verification_provider_routes")
     .update({
       status: "paused",
+      config: {
+        ...routeConfig,
+        runtimePauseReason: "provider_credits_exhausted",
+        runtimePausedAt: new Date().toISOString(),
+      },
       updated_at: new Date().toISOString(),
     })
-    .eq("provider_adapter_id", providerAdapterId)
+    .eq("id", routeId)
     .eq("status", "active");
 
   if (result.error) {
     console.info(JSON.stringify({
       severity: "warning",
       source: "partner-verification",
-      message: "Verification provider routes could not be paused after a provider-credit failure.",
+      routeId,
+      message: "The failing verification route could not be paused after a provider-credit failure.",
       detail: result.error.message,
     }));
   }
