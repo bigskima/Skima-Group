@@ -169,6 +169,7 @@ export async function startPartnerVerificationSession(
       },
     );
   } catch (error) {
+    const runtimeError = error instanceof VerificationRuntimeError ? error : null;
     await logProviderExecution(serviceClient, {
       providerAdapterId: route.provider.id,
       operationKey: "verification.session.create",
@@ -179,17 +180,17 @@ export async function startPartnerVerificationSession(
         verificationKey,
         workflowRef: route.workflow_ref,
       },
-      responsePayload: {},
+      responsePayload: runtimeError?.details ?? {},
       errorMessage: error instanceof Error ? error.message : "provider request failed",
     });
 
     if (
-      error instanceof VerificationRuntimeError &&
-      error.code === "verification_provider_credits_exhausted"
+      runtimeError?.code === "verification_provider_credits_exhausted" &&
+      shouldPauseVerificationRouteForCreditFailure(verificationKey, route.config)
     ) {
-      // Pause only the failing verification route. A paid KYB failure must not
-      // disable the separate personal KYC route that drivers and station
-      // representatives rely on.
+      // Personal KYC remains retryable because the free-tier route should not be
+      // permanently disabled by a balance/workflow mismatch. Paid KYB routes may
+      // pause to avoid repeatedly presenting an unavailable automatic path.
       await pauseVerificationRoute(
         serviceClient,
         route.id,
@@ -634,7 +635,23 @@ async function diditRequest(
   }
 
   if (!response.ok) {
-    const providerMessage = textValue(body.message) ?? textValue(body.detail);
+    const providerMessage =
+      textValue(body.message) ??
+      textValue(body.detail) ??
+      textValue(body.error) ??
+      textValue(body.description) ??
+      textValue(recordValue(body.error).message) ??
+      textValue(recordValue(body.error).detail);
+    const providerCode =
+      textValue(body.code) ??
+      textValue(body.error_code) ??
+      textValue(body.errorCode) ??
+      textValue(recordValue(body.error).code);
+    const providerRequestId =
+      response.headers.get("x-request-id")?.trim() ||
+      response.headers.get("request-id")?.trim() ||
+      response.headers.get("x-correlation-id")?.trim() ||
+      null;
     const normalizedProviderMessage = providerMessage?.toLowerCase() ?? "";
     const creditsExhausted =
       normalizedProviderMessage.includes("not enough credits") ||
@@ -653,13 +670,21 @@ async function diditRequest(
         ? "verification_provider_rate_limited"
         : "verification_provider_request_failed",
       creditsExhausted
-        ? "Secure verification is temporarily unavailable. Continue with accepted fallback evidence or try again later."
+        ? "This Didit workflow requires billable credits. SKIMA can retry after the workflow or balance is corrected, and the accepted fallback evidence remains available."
         : response.status === 429
         ? "Automatic verification is temporarily busy. Try again shortly."
         : providerMessage && !providerMessage.toLowerCase().includes("api key")
         ? providerMessage
         : "The verification provider could not complete the request.",
       response.status >= 400 && response.status < 600 ? response.status : 502,
+      {
+        providerHttpStatus: response.status,
+        providerCode,
+        providerRequestId,
+        providerMessage: providerMessage && !providerMessage.toLowerCase().includes("api key")
+          ? providerMessage
+          : null,
+      },
     );
   }
 
@@ -728,6 +753,17 @@ function isExpired(value: unknown): boolean {
   if (!text) return false;
   const time = Date.parse(text);
   return Number.isFinite(time) && time <= Date.now();
+}
+
+function shouldPauseVerificationRouteForCreditFailure(
+  verificationKey: string,
+  routeConfig: Record<string, unknown>,
+): boolean {
+  if (verificationKey === "verification.person.identity") return false;
+  return (
+    textValue(routeConfig.launchMode) === "assisted_kyb" ||
+    textValue(routeConfig.workflow_kind)?.toUpperCase() === "KYB"
+  );
 }
 
 async function pauseVerificationRoute(

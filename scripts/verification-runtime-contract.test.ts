@@ -149,7 +149,7 @@ Deno.test("verification admin exception queue uses a real application identifier
   );
 });
 
-Deno.test("verification credit exhaustion pauses only the failing route", async () => {
+Deno.test("verification credit exhaustion keeps personal KYC retryable and isolates paid routes", async () => {
   const [routePauseMigration, card, friendlyErrors] = await Promise.all([
     read("supabase/migrations/20260908204515_pause_verification_routes_on_credit_exhaustion.sql"),
     read("apps/lpg-mobile/src/native/ui/AutomatedVerificationCard.tsx"),
@@ -158,6 +158,9 @@ Deno.test("verification credit exhaustion pauses only the failing route", async 
 
   assertStringIncludes(sharedVerification, "verification_provider_credits_exhausted");
   assertStringIncludes(sharedVerification, "pauseVerificationRoute");
+  assertStringIncludes(sharedVerification, "shouldPauseVerificationRouteForCreditFailure");
+  assertStringIncludes(sharedVerification, 'verificationKey === "verification.person.identity"');
+  assertStringIncludes(sharedVerification, "return false");
   assertStringIncludes(sharedVerification, '.eq("id", routeId)');
   assert(
     !sharedVerification.includes("pauseVerificationProviderRoutes"),
@@ -202,6 +205,28 @@ Deno.test("launch policy keeps personal KYC automatic and business KYB assisted"
   assertStringIncludes(applicationScreen, 'stationRole !== "owner"');
   assertStringIncludes(applicationScreen, "Automatic KYC is used for station representatives at launch");
   assertStringIncludes(applicationScreen, "The automatic KYB route is retained for future activation");
+});
+
+Deno.test("Didit personal KYC uses the free workflow and authority remains assisted", async () => {
+  const policy = await read(
+    "supabase/migrations/20260909004500_didit_free_kyc_workflow_reconciliation.sql",
+  );
+
+  assertStringIncludes(policy, "108e2fb0-6f50-4a39-87c9-a87060dabcd1");
+  assertStringIncludes(policy, "'Free KYC'");
+  assertStringIncludes(policy, "'freeTierEligible', true");
+  assertStringIncludes(policy, "'freeTierAllowancePerFeaturePerMonth', 500");
+  assertStringIncludes(policy, "'PASSIVE_LIVENESS'");
+  assertStringIncludes(policy, "'IP_ANALYSIS'");
+  assertStringIncludes(policy, "'verification.person.identity'");
+  assertStringIncludes(policy, "'verification.station.authority'");
+  assertStringIncludes(policy, "'assisted_authority_review'");
+  assertStringIncludes(adminVerification, "Didit Free KYC");
+  assertStringIncludes(adminVerification, "Assisted review");
+  assertStringIncludes(adminVerification, "paid active-liveness/AML/NFC workflows");
+  assertStringIncludes(sharedVerification, "providerHttpStatus");
+  assertStringIncludes(sharedVerification, "providerRequestId");
+  assertStringIncludes(sharedVerification, "providerMessage");
 });
 
 Deno.test("verification runtime is JWT protected", () => {
