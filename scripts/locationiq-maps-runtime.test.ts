@@ -405,6 +405,17 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
   assertIncludes(adminCoverage, 'supabase.rpc("read_application_coverage_requests_admin"');
 });
 
+Deno.test("universal partner coverage is the only application geography projector", async () => {
+  const cutover = await readRepositoryFile(
+    "supabase/migrations/20260908054000_retire_legacy_partner_application_geography_trigger.sql",
+  );
+  assertIncludes(cutover, "drop trigger if exists application_versions_sync_geography");
+  assertIncludes(cutover, "drop trigger if exists sync_universal_application_geography");
+  assertIncludes(cutover, "create trigger sync_universal_application_geography");
+  assertIncludes(cutover, "sync_universal_application_location_and_coverage()");
+  assertNotIncludes(cutover, "drop function public.sync_application_geography_for_version");
+});
+
 Deno.test("mobile basemap falls back before a public API-key tile URL can blank the map", async () => {
   const runtime = await readRepositoryFile("apps/lpg-mobile/src/native/domains/maps/index.ts");
   const webMap = await readRepositoryFile("apps/lpg-mobile/src/native/maps/OperationalMap.web.tsx");
