@@ -26,6 +26,7 @@ import { RuntimeMediaImage } from "./RuntimeMediaImage";
 import { Screen } from "./Screen";
 
 const TYPE = "customer-refill-request";
+const STATION_PREVIEW_LIMIT = 4;
 
 export function NewRefillScreen() {
   const session = useSession();
@@ -158,6 +159,8 @@ export function NewRefillScreen() {
         setDeliveryLocationId(String(draft.values.deliveryLocationId ?? ""));
         setStationId(String(draft.values.stationId ?? ""));
         setRequestedKg(String(draft.values.requestedKg ?? ""));
+        setRequestedAmount(String(draft.values.requestedAmount ?? ""));
+        setPurchaseMode(draft.values.purchaseMode === "amount" ? "amount" : "kg");
         setInstructions(String(draft.values.instructions ?? ""));
         setOrderId(typeof draft.values.orderId === "string" ? draft.values.orderId : null);
         const savedQuote = asRecord(draft.values.quoteRecord);
@@ -206,6 +209,8 @@ export function NewRefillScreen() {
         deliveryLocationId,
         stationId,
         requestedKg,
+        requestedAmount,
+        purchaseMode,
         instructions,
         quoteId,
         quoteRecord,
@@ -225,7 +230,9 @@ export function NewRefillScreen() {
     pickupLocationId,
     quoteId,
     quoteRecord,
+    requestedAmount,
     requestedKg,
+    purchaseMode,
     stationId,
   ]);
 
@@ -359,6 +366,31 @@ export function NewRefillScreen() {
     setError(null);
   };
 
+  const changeRequestedKg = (value: string) => {
+    setRequestedKg(value);
+    setStationId("");
+    setQuoteId(null);
+    setQuoteRecord(null);
+    setError(null);
+  };
+
+  const changeRequestedAmount = (value: string) => {
+    setRequestedAmount(value);
+    setStationId("");
+    setQuoteId(null);
+    setQuoteRecord(null);
+    setError(null);
+  };
+
+  const changePurchaseMode = (nextMode: "kg" | "amount") => {
+    if (nextMode === purchaseMode) return;
+    setPurchaseMode(nextMode);
+    setStationId("");
+    setQuoteId(null);
+    setQuoteRecord(null);
+    setError(null);
+  };
+
   const currency = firstString(quoteRecord, ["currencyCode", "currency_code"]) ?? "NGN";
   const total = firstNumber(quoteRecord, ["totalAmount", "total_amount", "quotedTotal"]);
   const stationUnavailable = stationEligibilityReady && !eligibleStations.isPending && !eligibleStations.isError && displayedStations.length === 0;
@@ -372,7 +404,7 @@ export function NewRefillScreen() {
           ? "Check availability to continue"
           : serviceUnavailable
             ? "Service not available for this trip"
-            : !validRequestedKg
+            : !validPurchase
               ? "Enter refill amount to continue"
               : exceedsCylinderCapacity
                 ? "Correct refill amount to continue"
@@ -467,7 +499,7 @@ export function NewRefillScreen() {
           ) : null}
 
           {refillStep === 1 ? <><SelectionSection
-            step="1"
+            eyebrow="CYLINDER"
             icon={<Scale color={palette.brand} size={20} />}
             title="Choose your cylinder"
             description="Choose the cylinder you want to refill."
@@ -479,7 +511,7 @@ export function NewRefillScreen() {
           /><AppButton label="Continue to locations" fullWidth disabled={!cylinderId} onPress={() => setRefillStep(2)} /></> : null}
 
           {refillStep === 2 ? <><SelectionSection
-            step="2"
+            eyebrow="PICKUP"
             icon={<MapPin color={palette.brand} size={20} />}
             title="Pickup location"
             description="Where should the driver collect the cylinder?"
@@ -490,7 +522,7 @@ export function NewRefillScreen() {
           />
 
           <SelectionSection
-            step="3"
+            eyebrow="RETURN"
             icon={<MapPin color={palette.brand} size={20} />}
             title="Return location"
             description="Choose where the filled cylinder should be delivered."
@@ -569,11 +601,11 @@ export function NewRefillScreen() {
           ) : null}
 
           {refillStep === 3 ? <View style={[styles.formCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <SectionLead step="4" icon={<Scale color={palette.brand} size={20} />} title="Choose how much gas you need" description="Order by weight or enter the amount you want to spend. SKIMA converts money to kilograms using the selected station's live price." />
+            <SectionLead eyebrow="REFILL AMOUNT" icon={<Scale color={palette.brand} size={20} />} title="Choose how much gas you need" description="Order by weight or enter the amount you want to spend. SKIMA converts money to kilograms using the selected station's live price." />
 
             <View style={styles.modeSwitch}>
-              <AppButton label="Buy by kg" size="sm" variant={purchaseMode === "kg" ? "primary" : "secondary"} onPress={() => setPurchaseMode("kg")} />
-              <AppButton label="Buy by amount" size="sm" variant={purchaseMode === "amount" ? "primary" : "secondary"} onPress={() => setPurchaseMode("amount")} />
+              <AppButton label="Buy by kg" size="sm" variant={purchaseMode === "kg" ? "primary" : "secondary"} onPress={() => changePurchaseMode("kg")} />
+              <AppButton label="Buy by amount" size="sm" variant={purchaseMode === "amount" ? "primary" : "secondary"} onPress={() => changePurchaseMode("amount")} />
             </View>
 
             {cylinderCapacityKg !== null ? (
@@ -612,7 +644,7 @@ export function NewRefillScreen() {
                     fullWidth
                     variant="secondary"
                     onPress={() =>
-                      setRequestedKg(
+                      changeRequestedKg(
                         formatKg(
                           Math.max(
                             0.5,
@@ -625,13 +657,7 @@ export function NewRefillScreen() {
                 </View>
                 <TextInput
                   value={requestedKg}
-                  onChangeText={(value) => {
-                    setRequestedKg(value);
-                    setStationId("");
-                    setQuoteId(null);
-                    setQuoteRecord(null);
-                    if (error) setError(null);
-                  }}
+                  onChangeText={changeRequestedKg}
                   keyboardType="decimal-pad"
                   placeholder="e.g. 6"
                   placeholderTextColor={palette.muted}
@@ -655,7 +681,7 @@ export function NewRefillScreen() {
                     fullWidth
                     variant="secondary"
                     onPress={() =>
-                      setRequestedKg(
+                      changeRequestedKg(
                         formatKg(
                           Math.min(
                             cylinderCapacityKg ?? 1000,
@@ -669,8 +695,8 @@ export function NewRefillScreen() {
               </View>
             </View> : <View style={styles.fieldGroup}>
               <Text style={[styles.fieldLabel, { color: palette.ink }]}>Amount to spend (NGN)</Text>
-              <TextInput value={requestedAmount} onChangeText={setRequestedAmount} keyboardType="decimal-pad" placeholder="e.g. 5000" placeholderTextColor={palette.muted} style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]} />
-              <View style={styles.amountPresets}>{[2000, 5000, 10000].map((amount) => <AppButton key={amount} label={`₦${amount.toLocaleString()}`} size="sm" variant={requestedAmount === String(amount) ? "primary" : "secondary"} onPress={() => setRequestedAmount(String(amount))} />)}</View>
+              <TextInput value={requestedAmount} onChangeText={changeRequestedAmount} keyboardType="decimal-pad" placeholder="e.g. 5000" placeholderTextColor={palette.muted} style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]} />
+              <View style={styles.amountPresets}>{[2000, 5000, 10000].map((amount) => <AppButton key={amount} label={`₦${amount.toLocaleString()}`} size="sm" variant={requestedAmount === String(amount) ? "primary" : "secondary"} onPress={() => changeRequestedAmount(String(amount))} />)}</View>
               <Text style={[styles.capacityBody, { color: palette.muted }]}>{selectedStation?.price_per_kg ? `${money(Number(requestedAmount) || 0, "NGN")} buys approximately ${requestedKg || "0"} kg at ${selectedStation.display_name}.` : "Choose a station below to calculate the exact kilograms its current price can provide."}</Text>
             </View>}
 
@@ -680,9 +706,7 @@ export function NewRefillScreen() {
                   label={`Use ${formatKg(cylinderCapacityKg)} kg`}
                   size="sm"
                   onPress={() => {
-                    setRequestedKg(formatKg(cylinderCapacityKg));
-                    setStationId("");
-                    setError(null);
+                    changeRequestedKg(formatKg(cylinderCapacityKg));
                   }}
                 />
                 <AppButton
@@ -745,7 +769,11 @@ export function NewRefillScreen() {
 
           <AppModal visible={reviewOpen} title="Review your refill" description="Confirm every detail before SKIMA prepares your protected quote." onClose={() => setReviewOpen(false)}>
               <View style={styles.reviewContent}>
-                <Text style={[styles.reviewLine, { color: palette.muted }]}>{displayTitle(selectedCylinder ?? {})} • {requestedKg || "—"} kg</Text>
+                <Text style={[styles.reviewLine, { color: palette.muted }]}>
+                  {purchaseMode === "amount"
+                    ? `${displayTitle(selectedCylinder ?? {})} • ${money(requestedAmountNumber, "NGN")} • ~${requestedKg || "—"} kg`
+                    : `${displayTitle(selectedCylinder ?? {})} • ${requestedKg || "—"} kg`}
+                </Text>
                 <Text style={[styles.reviewLine, { color: palette.muted }]}>{selectedStation?.display_name ?? "Selected station"}</Text>
                 <Text style={[styles.reviewLine, { color: palette.muted }]}>Pickup and return: {displayTitle(selectedPickupLocation ?? {})} → {displayTitle(selectedDeliveryLocation ?? {})}</Text>
                 <Text style={[styles.reviewHint, { color: palette.muted }]}>Next, Matty’s pricing safeguards prepare a quote. No payment is taken until you confirm the quote.</Text>
@@ -768,7 +796,7 @@ export function NewRefillScreen() {
 }
 
 function SelectionSection({
-  step,
+  eyebrow,
   icon,
   title,
   description,
@@ -778,7 +806,7 @@ function SelectionSection({
   emptyText,
   showImages = false,
 }: {
-  step: string;
+  eyebrow: string;
   icon: ReactNode;
   title: string;
   description: string;
@@ -791,7 +819,7 @@ function SelectionSection({
   const { palette } = useAppTheme();
   return (
     <View style={[styles.selectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-      <SectionLead step={step} icon={icon} title={title} description={description} />
+      <SectionLead eyebrow={eyebrow} icon={icon} title={title} description={description} />
       {records.length ? (
         <View style={styles.choices}>
           {records.map((item, index) => {
@@ -831,10 +859,20 @@ function StationSelectionSection({
   onRetry(): void;
 }) {
   const { palette } = useAppTheme();
+  const [showAllStations, setShowAllStations] = useState(false);
+  const selectedIndex = stations.findIndex(
+    (station) => station.station_branch_id === selected,
+  );
+  const shouldShowAll =
+    showAllStations || selectedIndex >= STATION_PREVIEW_LIMIT;
+  const visibleStations = shouldShowAll
+    ? stations
+    : stations.slice(0, STATION_PREVIEW_LIMIT);
+
   return (
     <View style={[styles.selectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
       <SectionLead
-        step="5"
+        eyebrow="STATION"
         icon={<Store color={palette.brand} size={20} />}
         title="Choose a station"
         description="Only stations currently able to complete this refill are shown. The closest options appear first."
@@ -856,7 +894,7 @@ function StationSelectionSection({
         </View>
       ) : (
         <View style={styles.stationOptions}>
-          {stations.map((station, index) => {
+          {visibleStations.map((station, index) => {
             const active = station.station_branch_id === selected;
             return (
               <Pressable
@@ -894,18 +932,31 @@ function StationSelectionSection({
         </View>
       )}
 
+      {stations.length > STATION_PREVIEW_LIMIT ? (
+        <AppButton
+          label={
+            shouldShowAll
+              ? "Show closest stations only"
+              : `View all ${stations.length} eligible stations`
+          }
+          variant="secondary"
+          size="sm"
+          onPress={() => setShowAllStations((value) => !value)}
+        />
+      ) : null}
+
       <Text style={[styles.stationFootnote, { color: palette.muted }]}>The final delivery route and full price are calculated when you request the quote.</Text>
     </View>
   );
 }
 
-function SectionLead({ step, icon, title, description }: { step: string; icon: ReactNode; title: string; description: string }) {
+function SectionLead({ eyebrow, icon, title, description }: { eyebrow: string; icon: ReactNode; title: string; description: string }) {
   const { palette } = useAppTheme();
   return (
     <View style={styles.sectionLead}>
       <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}>{icon}</View>
       <View style={styles.sectionCopy}>
-        <Text style={[styles.sectionStep, { color: palette.brand }]}>STEP {step}</Text>
+        <Text style={[styles.sectionStep, { color: palette.brand }]}>{eyebrow}</Text>
         <Text style={[styles.sectionTitle, { color: palette.ink }]}>{title}</Text>
         <Text style={[styles.sectionDescription, { color: palette.muted }]}>{description}</Text>
       </View>
