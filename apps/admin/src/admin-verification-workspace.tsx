@@ -117,6 +117,23 @@ export function AdminVerificationWorkspace(props: {
           priority: Number(priority) || 100,
           config: {
             configuredFrom: "skima-admin",
+            launchMode:
+              verificationKey === "verification.business.registry"
+                ? routeStatus === "active"
+                  ? "automatic_kyb"
+                  : "assisted_kyb"
+                : verificationKey === "verification.person.identity"
+                  ? routeStatus === "active"
+                    ? "automatic_kyc"
+                    : "manual_fallback"
+                  : routeStatus === "active"
+                    ? "automatic"
+                    : "manual_fallback",
+            manualReviewPrimary:
+              verificationKey === "verification.business.registry" &&
+              routeStatus !== "active",
+            automaticRouteRetained:
+              verificationKey === "verification.business.registry",
           },
         },
         MutationIdSchema,
