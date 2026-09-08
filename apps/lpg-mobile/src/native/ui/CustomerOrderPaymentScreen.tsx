@@ -60,7 +60,7 @@ export function CustomerOrderPaymentScreen() {
   ]) ?? 0;
   const paymentStatus = normalizeStatus(
     firstString(order, ["payment_status", "paymentStatus"]) ??
-      displayStatus(order) ??
+      (order ? displayStatus(order) : null) ??
       "pending",
   );
   const paid = PAID_PAYMENT_STATES.has(paymentStatus);
