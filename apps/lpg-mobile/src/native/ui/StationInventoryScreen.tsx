@@ -38,6 +38,7 @@ import { SectionHeader } from "./SectionHeader";
 import { StatusPill } from "./StatusPill";
 
 type Editor = "report" | "adjust" | "source" | "availability" | "fallback" | "capacity" | "provider" | "device" | "issue" | null;
+type InventorySection = "overview" | "stock" | "operations" | "sources" | "activity";
 
 export function StationInventoryScreen() {
   const { palette } = useAppTheme();
@@ -81,6 +82,7 @@ export function StationInventoryScreen() {
   const configurationVersion = firstNumber(configuration, ["version"]);
   const needsSetup = physical === null || rolloutStatus === "setup_required" || rolloutStatus === "legacy_shadow";
   const [editor, setEditor] = useState<Editor>(null);
+  const [section, setSection] = useState<InventorySection>("overview");
   const [message, setMessage] = useState<string | null>(null);
   const [messageSuccess, setMessageSuccess] = useState(false);
 
@@ -122,6 +124,12 @@ export function StationInventoryScreen() {
       setMessageSuccess(false);
       setMessage(friendlyError(cause, "Inventory could not be confirmed."));
     }
+  };
+
+  const selectSection = (next: InventorySection) => {
+    setSection(next);
+    setEditor(null);
+    setMessage(null);
   };
 
   return (
@@ -167,6 +175,10 @@ export function StationInventoryScreen() {
             />
           ))}
 
+          <InventorySectionSwitcher section={section} onSelect={selectSection} />
+
+          {section === "overview" ? (
+            <>
           <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
             <View style={styles.heroTop}>
               <View style={styles.heroCopy}>
@@ -290,18 +302,54 @@ export function StationInventoryScreen() {
             <Text style={[styles.caption, { color: palette.muted }]}>Last confirmed: {friendlyTime(firstString(inventory, ["lastVerifiedAt"]))}</Text>
           </View>
 
-          <View style={styles.actionGrid}>
-            {canConfirm ? <AppButton label="Confirm unchanged" variant="secondary" loading={confirm.isPending} onPress={() => void confirmUnchanged()} /> : null}
-            {canUpdateStock ? <AppButton label={physical === null ? "Report opening stock" : "Update stock"} variant="secondary" onPress={() => setEditor("report")} /> : null}
-            {canAdjustStock ? <AppButton label="Record adjustment" variant="secondary" onPress={() => setEditor("adjust")} /> : null}
-            {canManageSources ? <AppButton label="Manage source" variant="secondary" onPress={() => setEditor("source")} /> : null}
-            {canManageAvailability ? <AppButton label="Availability" variant="secondary" onPress={() => setEditor("availability")} /> : null}
-            {canManageSources ? <AppButton label={manualFallbackActive ? "End fallback" : "Manual fallback"} variant="secondary" onPress={() => setEditor("fallback")} /> : null}
-            {canManageCapacity ? <AppButton label="Processing capacity" variant="secondary" onPress={() => setEditor("capacity")} /> : null}
-            {canManageProviders ? <AppButton label="Provider setup" variant="secondary" onPress={() => setEditor("provider")} /> : null}
-            {canManageProviders && tanks.length > 0 && connections.length > 0 ? <AppButton label="Map device" variant="secondary" onPress={() => setEditor("device")} /> : null}
-            {canReportIssue ? <AppButton label="Report stockout" variant="secondary" onPress={() => setEditor("issue")} /> : null}
+          <View style={styles.quickLayerGrid}>
+            <LayerShortcut title="Stock" subtitle="Report, adjust, tanks and reservations" onPress={() => selectSection("stock")} />
+            <LayerShortcut title="Operations" subtitle="Availability, capacity and stockout controls" onPress={() => selectSection("operations")} />
+            <LayerShortcut title="Sources" subtitle="Manual, POS and telemetry setup" onPress={() => selectSection("sources")} />
+            <LayerShortcut title="Activity" subtitle="Recent stock history and exceptions" onPress={() => selectSection("activity")} />
           </View>
+            </>
+          ) : null}
+
+          {section !== "overview" ? (
+            <>
+              <SectionHeader
+                title={
+                  section === "stock"
+                    ? "Stock control"
+                    : section === "operations"
+                      ? "Station operations"
+                      : section === "sources"
+                        ? "Inventory sources"
+                        : "Inventory activity"
+                }
+                description={
+                  section === "stock"
+                    ? "Update physical stock, allocation, tanks and reservations without mixing provider setup into the same form."
+                    : section === "operations"
+                      ? "Manage dispatch availability, processing capacity, fallback and operational exceptions."
+                      : section === "sources"
+                        ? "Configure how SKIMA receives stock readings from manual, POS or telemetry sources."
+                        : "Review the latest auditable inventory events and exceptions."
+                }
+              />
+
+              {section !== "activity" ? (
+                <View style={styles.actionGrid}>
+                  {section === "stock" && canConfirm ? <AppButton label="Confirm unchanged" variant="secondary" loading={confirm.isPending} onPress={() => void confirmUnchanged()} /> : null}
+                  {section === "stock" && canUpdateStock ? <AppButton label={physical === null ? "Report opening stock" : "Update stock"} variant="secondary" onPress={() => setEditor("report")} /> : null}
+                  {section === "stock" && canAdjustStock ? <AppButton label="Record adjustment" variant="secondary" onPress={() => setEditor("adjust")} /> : null}
+                  {section === "operations" && canManageAvailability ? <AppButton label="Availability" variant="secondary" onPress={() => setEditor("availability")} /> : null}
+                  {section === "operations" && canManageSources ? <AppButton label={manualFallbackActive ? "End fallback" : "Manual fallback"} variant="secondary" onPress={() => setEditor("fallback")} /> : null}
+                  {section === "operations" && canManageCapacity ? <AppButton label="Processing capacity" variant="secondary" onPress={() => setEditor("capacity")} /> : null}
+                  {section === "operations" && canReportIssue ? <AppButton label="Report stockout" variant="secondary" onPress={() => setEditor("issue")} /> : null}
+                  {section === "sources" && canManageSources ? <AppButton label="Manage source" variant="secondary" onPress={() => setEditor("source")} /> : null}
+                  {section === "sources" && canManageProviders ? <AppButton label="Provider setup" variant="secondary" onPress={() => setEditor("provider")} /> : null}
+                  {section === "sources" && canManageProviders && tanks.length > 0 && connections.length > 0 ? <AppButton label="Map device" variant="secondary" onPress={() => setEditor("device")} /> : null}
+                </View>
+              ) : null}
+            </>
+          ) : null}
 
           {editor === "report" && stationBranchId ? (
             <StockReportEditor
@@ -387,69 +435,108 @@ export function StationInventoryScreen() {
 
           {message ? <Notice tone={messageSuccess ? "success" : "danger"} text={message} /> : null}
 
-          {connections.length ? (
+          {section === "sources" ? (
             <>
-              <SectionHeader title="Connected sources" description="Provider status is monitored without exposing credentials in the app." />
-              <View style={styles.list}>{connections.map((connection) => (
-                <SimpleRow
-                  key={firstString(connection, ["publicReference"]) ?? firstString(connection, ["displayName"]) ?? "provider"}
-                  icon={<Database color={palette.brand} size={18} />}
-                  title={firstString(connection, ["displayName", "providerName"]) ?? "Inventory provider"}
-                  subtitle={`${friendlyLabel(firstString(connection, ["status"]) ?? "pending")} · ${friendlyLabel(firstString(connection, ["healthStatus"]) ?? "unknown")} · last sync ${friendlyTime(firstString(connection, ["lastSuccessfulSyncAt"]))}`}
-                />
-              ))}</View>
-            </>
-          ) : null}
-
-          {devices.length ? (
-            <>
-              <SectionHeader title="Telemetry devices" description="Mapped tank sensors and their most recent health state." />
-              <View style={styles.list}>{devices.map((device) => (
-                <SimpleRow
-                  key={firstString(device, ["publicReference"]) ?? firstString(device, ["displayName"]) ?? "device"}
-                  icon={<Gauge color={palette.brand} size={18} />}
-                  title={firstString(device, ["displayName"]) ?? "Tank device"}
-                  subtitle={`${friendlyLabel(firstString(device, ["healthStatus"]) ?? "unknown")} · last reading ${friendlyTime(firstString(device, ["lastReadingAt"]))}`}
-                />
-              ))}</View>
-            </>
-          ) : null}
-
-          <SectionHeader title="Tanks" description="Installed storage is infrastructure and never treated as current stock." />
-          <View style={styles.list}>
-            {tanks.length ? tanks.map((tank) => (
-              <View key={firstString(tank, ["publicReference", "tankId"]) ?? firstString(tank, ["name"]) ?? "tank"} style={[styles.listCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                <View style={[styles.smallIcon, { backgroundColor: palette.brandSoft }]}><Warehouse color={palette.brand} size={19} /></View>
-                <View style={styles.flexCopy}>
-                  <Text style={[styles.cardTitle, { color: palette.ink }]}>{firstString(tank, ["name"]) ?? "LPG tank"}</Text>
-                  <Text style={[styles.body, { color: palette.muted }]}>{kg(firstNumber(tank, ["physicalStockKg"]))} current · {kg(firstNumber(tank, ["ratedCapacityKg"]))} rated</Text>
+              <View style={[styles.sourceCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                <View style={styles.rowBetween}>
+                  <View style={styles.iconTitle}>
+                    <View style={[styles.smallIcon, { backgroundColor: palette.brandSoft }]}><Database color={palette.brand} size={19} /></View>
+                    <View style={styles.flexCopy}>
+                      <Text style={[styles.cardTitle, { color: palette.ink }]}>Current source</Text>
+                      <Text style={[styles.body, { color: palette.muted }]}>{friendlyLabel(firstString(inventory, ["activeSource"]) ?? primarySource)}</Text>
+                    </View>
+                  </View>
+                  <StatusPill label={friendlyLabel(firstString(inventory, ["sourceHealth"]) ?? "Unknown")} tone={firstString(inventory, ["sourceHealth"]) === "healthy" ? "success" : "warning"} />
                 </View>
-                <StatusPill label={friendlyLabel(firstString(tank, ["status"]) ?? "Unknown")} tone={firstString(tank, ["status"]) === "active" ? "success" : "warning"} />
+                <Text style={[styles.caption, { color: palette.muted }]}>Last confirmed: {friendlyTime(firstString(inventory, ["lastVerifiedAt"]))}</Text>
               </View>
-            )) : <EmptyState icon={<Warehouse color={palette.brand} size={24} />} title="No individual tanks configured" description="The station's existing installed capacity remains visible until tank details are added." />}
-          </View>
 
-          <SectionHeader title="Operational capacity" description="Stock and the station's ability to process refill jobs are evaluated together." />
-          <View style={styles.metricGrid}>
-            <Metric label="Active jobs" value={String(firstNumber(operationalCapacity, ["activeJobs"]) ?? 0)} />
-            <Metric label="Concurrent limit" value={String(firstNumber(operationalCapacity, ["maximumConcurrentJobs"]) ?? 0)} />
-          </View>
-
-          {reservations.length ? (
-            <>
-              <SectionHeader title="Reserved stock" description="Kilograms held for active SKIMA orders." />
-              <View style={styles.list}>{reservations.slice(0, 5).map((reservation) => (
-                <SimpleRow
-                  key={firstString(reservation, ["publicReference"]) ?? "reservation"}
-                  icon={<PackageCheck color={palette.brand} size={18} />}
-                  title={firstString(reservation, ["orderReference"]) ?? "SKIMA order"}
-                  subtitle={`${kg(firstNumber(reservation, ["reservedKg"]))} · ${friendlyLabel(firstString(reservation, ["status"]) ?? "reserved")}`}
+              {connections.length ? (
+                <>
+                  <SectionHeader title="Connected sources" description="Provider status is monitored without exposing credentials in the app." />
+                  <View style={styles.list}>{connections.map((connection) => (
+                    <SimpleRow
+                      key={firstString(connection, ["publicReference"]) ?? firstString(connection, ["displayName"]) ?? "provider"}
+                      icon={<Database color={palette.brand} size={18} />}
+                      title={firstString(connection, ["displayName", "providerName"]) ?? "Inventory provider"}
+                      subtitle={`${friendlyLabel(firstString(connection, ["status"]) ?? "pending")} · ${friendlyLabel(firstString(connection, ["healthStatus"]) ?? "unknown")} · last sync ${friendlyTime(firstString(connection, ["lastSuccessfulSyncAt"]))}`}
+                    />
+                  ))}</View>
+                </>
+              ) : (
+                <EmptyState
+                  icon={<Database color={palette.brand} size={24} />}
+                  title="No provider connection yet"
+                  description="Manual inventory remains available. Connect a supported POS or telemetry provider only when the station is ready."
                 />
-              ))}</View>
+              )}
+
+              {devices.length ? (
+                <>
+                  <SectionHeader title="Telemetry devices" description="Mapped tank sensors and their most recent health state." />
+                  <View style={styles.list}>{devices.map((device) => (
+                    <SimpleRow
+                      key={firstString(device, ["publicReference"]) ?? firstString(device, ["displayName"]) ?? "device"}
+                      icon={<Gauge color={palette.brand} size={18} />}
+                      title={firstString(device, ["displayName"]) ?? "Tank device"}
+                      subtitle={`${friendlyLabel(firstString(device, ["healthStatus"]) ?? "unknown")} · last reading ${friendlyTime(firstString(device, ["lastReadingAt"]))}`}
+                    />
+                  ))}</View>
+                </>
+              ) : null}
             </>
           ) : null}
 
-          {reconciliationCases.length ? (
+          {section === "stock" ? (
+            <>
+              <View style={styles.metricGrid}>
+                <Metric label="Physical stock" value={kg(physical)} />
+                <Metric label="Allocated to SKIMA" value={kg(allocation)} />
+                <Metric label="Reserved" value={kg(reserved)} />
+                <Metric label="Dispatchable" value={kg(dispatchable)} />
+              </View>
+
+              <SectionHeader title="Tanks" description="Installed storage is infrastructure and never treated as current stock." />
+              <View style={styles.list}>
+                {tanks.length ? tanks.map((tank) => (
+                  <View key={firstString(tank, ["publicReference", "tankId"]) ?? firstString(tank, ["name"]) ?? "tank"} style={[styles.listCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                    <View style={[styles.smallIcon, { backgroundColor: palette.brandSoft }]}><Warehouse color={palette.brand} size={19} /></View>
+                    <View style={styles.flexCopy}>
+                      <Text style={[styles.cardTitle, { color: palette.ink }]}>{firstString(tank, ["name"]) ?? "LPG tank"}</Text>
+                      <Text style={[styles.body, { color: palette.muted }]}>{kg(firstNumber(tank, ["physicalStockKg"]))} current · {kg(firstNumber(tank, ["ratedCapacityKg"]))} rated</Text>
+                    </View>
+                    <StatusPill label={friendlyLabel(firstString(tank, ["status"]) ?? "Unknown")} tone={firstString(tank, ["status"]) === "active" ? "success" : "warning"} />
+                  </View>
+                )) : <EmptyState icon={<Warehouse color={palette.brand} size={24} />} title="No individual tanks configured" description="The station's installed capacity remains visible until tank details are added." />}
+              </View>
+
+              {reservations.length ? (
+                <>
+                  <SectionHeader title="Reserved stock" description="Kilograms held for active SKIMA orders." />
+                  <View style={styles.list}>{reservations.slice(0, 5).map((reservation) => (
+                    <SimpleRow
+                      key={firstString(reservation, ["publicReference"]) ?? "reservation"}
+                      icon={<PackageCheck color={palette.brand} size={18} />}
+                      title={firstString(reservation, ["orderReference"]) ?? "SKIMA order"}
+                      subtitle={`${kg(firstNumber(reservation, ["reservedKg"]))} · ${friendlyLabel(firstString(reservation, ["status"]) ?? "reserved")}`}
+                    />
+                  ))}</View>
+                </>
+              ) : null}
+            </>
+          ) : null}
+
+          {section === "operations" ? (
+            <>
+              <SectionHeader title="Operational capacity" description="Stock and the station's ability to process refill jobs are evaluated together." />
+              <View style={styles.metricGrid}>
+                <Metric label="Active jobs" value={String(firstNumber(operationalCapacity, ["activeJobs"]) ?? 0)} />
+                <Metric label="Concurrent limit" value={String(firstNumber(operationalCapacity, ["maximumConcurrentJobs"]) ?? 0)} />
+              </View>
+            </>
+          ) : null}
+
+          {section === "operations" && reconciliationCases.length ? (
             <>
               <SectionHeader title="Reconciliation needed" description="Conflicting evidence must be reviewed before normal inventory authority is restored." />
               <View style={styles.list}>{reconciliationCases.slice(0, 5).map((item) => (
@@ -463,18 +550,26 @@ export function StationInventoryScreen() {
             </>
           ) : null}
 
-          {history.length ? (
-            <>
-              <SectionHeader title="Recent history" description="An auditable record of stock reports, adjustments and reservations." />
-              <View style={styles.list}>{history.slice(0, 8).map((event) => (
-                <SimpleRow
-                  key={firstString(event, ["publicReference"]) ?? firstString(event, ["occurredAt"]) ?? "event"}
-                  icon={<History color={palette.brand} size={18} />}
-                  title={friendlyLabel(firstString(event, ["eventType"]) ?? "Inventory event")}
-                  subtitle={`${signedKg(firstNumber(event, ["stockDeltaKg"]))} · ${friendlyTime(firstString(event, ["occurredAt"]))}`}
-                />
-              ))}</View>
-            </>
+          {section === "activity" ? (
+            history.length ? (
+              <>
+                <SectionHeader title="Recent history" description="An auditable record of stock reports, adjustments and reservations." />
+                <View style={styles.list}>{history.slice(0, 8).map((event) => (
+                  <SimpleRow
+                    key={firstString(event, ["publicReference"]) ?? firstString(event, ["occurredAt"]) ?? "event"}
+                    icon={<History color={palette.brand} size={18} />}
+                    title={friendlyLabel(firstString(event, ["eventType"]) ?? "Inventory event")}
+                    subtitle={`${signedKg(firstNumber(event, ["stockDeltaKg"]))} · ${friendlyTime(firstString(event, ["occurredAt"]))}`}
+                  />
+                ))}</View>
+              </>
+            ) : (
+              <EmptyState
+                icon={<History color={palette.brand} size={24} />}
+                title="No inventory activity yet"
+                description="Stock reports, adjustments and reservations will appear here as the station operates."
+              />
+            )
           ) : null}
 
           {!canUpdate && !canAdjust && !canManageSources && !canManageAvailability && !canManageCapacity && !canManageProviders && !canReportIssue ? (
@@ -486,6 +581,81 @@ export function StationInventoryScreen() {
         </>
       )}
     </Screen>
+  );
+}
+
+function InventorySectionSwitcher({
+  section,
+  onSelect,
+}: {
+  section: InventorySection;
+  onSelect(section: InventorySection): void;
+}) {
+  const { palette } = useAppTheme();
+  const sections: Array<{ key: InventorySection; label: string }> = [
+    { key: "overview", label: "Overview" },
+    { key: "stock", label: "Stock" },
+    { key: "operations", label: "Operations" },
+    { key: "sources", label: "Sources" },
+    { key: "activity", label: "Activity" },
+  ];
+
+  return (
+    <View style={[styles.sectionNav, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      {sections.map((item) => {
+        const active = item.key === section;
+        return (
+          <Pressable
+            key={item.key}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            onPress={() => onSelect(item.key)}
+            style={({ pressed }) => [
+              styles.sectionNavItem,
+              {
+                backgroundColor: active ? palette.brandSoft : palette.surfaceSubtle,
+                borderColor: active ? palette.brand : palette.border,
+                opacity: pressed ? 0.76 : 1,
+              },
+            ]}
+          >
+            <Text style={[styles.sectionNavText, { color: active ? palette.brand : palette.mutedStrong }]}>
+              {item.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function LayerShortcut({
+  title,
+  subtitle,
+  onPress,
+}: {
+  title: string;
+  subtitle: string;
+  onPress(): void;
+}) {
+  const { palette } = useAppTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.layerShortcut,
+        {
+          backgroundColor: palette.surface,
+          borderColor: palette.border,
+          opacity: pressed ? 0.8 : 1,
+          transform: [{ scale: pressed ? 0.985 : 1 }],
+        },
+      ]}
+    >
+      <Text style={[styles.layerShortcutTitle, { color: palette.ink }]}>{title}</Text>
+      <Text style={[styles.layerShortcutBody, { color: palette.muted }]}>{subtitle}</Text>
+    </Pressable>
   );
 }
 
@@ -859,6 +1029,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 15,
   },
+  sectionNav: { flexDirection: "row", flexWrap: "wrap", gap: 6, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: 6 },
+  sectionNavItem: { flexGrow: 1, minWidth: 88, minHeight: 38, alignItems: "center", justifyContent: "center", borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: 10 },
+  sectionNavText: { ...typography.caption, fontSize: 10, fontWeight: "900" },
+  quickLayerGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  layerShortcut: { width: "48%", flexGrow: 1, minHeight: 86, gap: 5, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  layerShortcutTitle: { ...typography.bodyStrong, fontSize: 14 },
+  layerShortcutBody: { ...typography.caption, fontSize: 10, lineHeight: 15 },
   sourceCard: { gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md }, smallIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" }, cardTitle: { ...typography.bodyStrong, fontSize: 14 }, body: { ...typography.caption, lineHeight: 18 }, caption: { ...typography.caption }, actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   editor: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg }, fieldGroup: { gap: spacing.sm }, fieldLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" }, input: { minHeight: 52, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: 16 }, choices: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, choice: { borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }, choiceText: { ...typography.caption, fontWeight: "800" },
   list: { gap: spacing.sm }, listCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md }, notice: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md }, noticeText: { flex: 1, ...typography.caption, fontWeight: "800", lineHeight: 18 }, readOnly: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },

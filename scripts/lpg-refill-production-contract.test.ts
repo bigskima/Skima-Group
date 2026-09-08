@@ -112,6 +112,48 @@ Deno.test("customer wallet activity stays compact as history grows", async () =>
   assertIncludes(transactions, "older transactions");
 });
 
+Deno.test("awaiting-payment orders remain resumable without creating duplicate refills", async () => {
+  const [payment, orders, customerLayout] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/CustomerOrderPaymentScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/CustomerOrdersScreen.tsx"),
+    read("apps/lpg-mobile/app/(customer)/_layout.tsx"),
+  ]);
+
+  assertIncludes(payment, 'path: "/lpg/orders/reserve-payment"');
+  assertIncludes(payment, 'source: "skima.lpg.mobile.resume-payment"');
+  assertIncludes(payment, 'idempotencyKey("reserve-order-payment", orderId)');
+  assertIncludes(payment, "domainQueries.orders()");
+  assertNotIncludes(payment, "useJobDetails");
+  assertNotIncludes(payment, "create_lpg_refill_order");
+  assertNotIncludes(payment, "reserve.reset()");
+  assertIncludes(orders, '"Continue payment"');
+  assertIncludes(orders, 'orders/${id}/payment');
+  assertIncludes(orders, "const ORDER_PAGE_SIZE = 8");
+  assertIncludes(orders, "filteredOrders.slice(0, visibleCount)");
+  assertIncludes(orders, "jobOrder ?? savedOrder");
+  assertIncludes(customerLayout, '"orders/[id]/payment"');
+});
+
+Deno.test("station, driver and customer operation queues avoid unbounded long screens", async () => {
+  const [inventory, jobs, orders] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/StationInventoryScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/JobListScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/CustomerOrdersScreen.tsx"),
+  ]);
+
+  assertIncludes(inventory, 'type InventorySection = "overview" | "stock" | "operations" | "sources" | "activity"');
+  assertIncludes(inventory, "InventorySectionSwitcher");
+  assertIncludes(inventory, 'section === "stock"');
+  assertIncludes(inventory, 'section === "operations"');
+  assertIncludes(inventory, 'section === "sources"');
+  assertIncludes(inventory, 'section === "activity"');
+  assertIncludes(inventory, "LayerShortcut");
+  assertIncludes(jobs, "const JOB_PAGE_SIZE = 8");
+  assertIncludes(jobs, "matchingJobs.slice(0, visibleCount)");
+  assertIncludes(jobs, "Show ${Math.min(JOB_PAGE_SIZE");
+  assertIncludes(orders, "const ORDER_PAGE_SIZE = 8");
+});
+
 Deno.test("nearby station discovery is location and service-radius authoritative", async () => {
   const [migration, gateway, domains, stationsScreen] = await Promise.all([
     read("supabase/migrations/20260907104500_lpg_customer_nearby_station_public_media.sql"),

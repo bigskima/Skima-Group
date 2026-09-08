@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { ChevronRight, ClipboardList, MapPin, PackageCheck, ShieldCheck, Truck } from "lucide-react-native";
+import { useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useJobDetails } from "../api/domains";
 import { useResolvedLocationLabel } from "../domains/maps/readableLocation";
@@ -48,9 +49,22 @@ const DELIVERY_CONFIRMATION_STATES = new Set([
 
 const FINAL_ORDER_STATES = new Set(["delivered", "completed"]);
 
+const ORDER_PAGE_SIZE = 8;
+type OrderFilter = "active" | "payment" | "completed" | "all";
+
 export function CustomerOrdersScreen() {
   const { palette } = useAppTheme();
   const orders = domainQueries.orders();
+  const [filter, setFilter] = useState<OrderFilter>("active");
+  const [visibleCount, setVisibleCount] = useState(ORDER_PAGE_SIZE);
+  const allOrders = orders.data ?? [];
+  const filteredOrders = allOrders.filter((order) => orderMatchesFilter(order, filter));
+  const visibleOrders = filteredOrders.slice(0, visibleCount);
+
+  const selectFilter = (next: OrderFilter) => {
+    setFilter(next);
+    setVisibleCount(ORDER_PAGE_SIZE);
+  };
 
   return (
     <Screen
@@ -77,7 +91,7 @@ export function CustomerOrdersScreen() {
           description="Check your connection and try again."
           action={<AppButton label="Try again" variant="secondary" onPress={() => void orders.refetch()} />}
         />
-      ) : (orders.data ?? []).length === 0 ? (
+      ) : allOrders.length === 0 ? (
         <EmptyState
           icon={<PackageCheck color={palette.brand} size={27} />}
           title="Ready for your first refill"
@@ -85,8 +99,23 @@ export function CustomerOrdersScreen() {
           action={<AppButton label="Request a refill" onPress={() => router.push("/(customer)/orders/new")} />}
         />
       ) : (
-        <View style={styles.orderList}>
-          {(orders.data ?? []).map((order, index) => {
+        <>
+          <View style={styles.filters}>
+            <OrderFilterChip label="Active" active={filter === "active"} onPress={() => selectFilter("active")} />
+            <OrderFilterChip label="Payment" active={filter === "payment"} onPress={() => selectFilter("payment")} />
+            <OrderFilterChip label="Completed" active={filter === "completed"} onPress={() => selectFilter("completed")} />
+            <OrderFilterChip label="All" active={filter === "all"} onPress={() => selectFilter("all")} />
+          </View>
+
+          {filteredOrders.length === 0 ? (
+            <EmptyState
+              title={filter === "payment" ? "No payments waiting" : filter === "completed" ? "No completed refills yet" : "Nothing in this view"}
+              description={filter === "payment" ? "Orders that still need payment will appear here with a direct Continue payment route." : "Choose another order filter to see the rest of your refill history."}
+              action={<AppButton label="Show all orders" variant="secondary" onPress={() => selectFilter("all")} />}
+            />
+          ) : (
+          <View style={styles.orderList}>
+          {visibleOrders.map((order, index) => {
             const id = recordId(order);
             const cylinder = nestedRecord(order, "cylinder");
             const station = nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
@@ -96,13 +125,19 @@ export function CustomerOrdersScreen() {
             const stationText = station
               ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned station")
               : "Finding the best station";
+            const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? status;
+            const paymentNeeded = isPaymentActionRequired(status, paymentStatus);
 
             return (
               <Pressable
                 key={id ?? String(index)}
                 accessibilityRole="button"
                 disabled={!id}
-                onPress={() => router.push(`/(customer)/orders/${id}` as never)}
+                onPress={() => router.push((
+                  paymentNeeded
+                    ? `/(customer)/orders/${id}/payment`
+                    : `/(customer)/orders/${id}`
+                ) as never)}
                 style={({ pressed }) => [
                   styles.order,
                   shadows.soft,
@@ -140,15 +175,26 @@ export function CustomerOrdersScreen() {
                   </View>
                 </View>
 
-                <View style={[styles.station, { backgroundColor: palette.surfaceSubtle }]}>
-                  <MapPin color={palette.mutedStrong} size={16} />
-                  <Text numberOfLines={1} style={[styles.stationText, { color: palette.mutedStrong }]}>{stationText}</Text>
-                  <ChevronRight color={palette.muted} size={17} />
+                <View style={[styles.station, { backgroundColor: paymentNeeded ? palette.warningSoft : palette.surfaceSubtle }]}>
+                  <MapPin color={paymentNeeded ? palette.warning : palette.mutedStrong} size={16} />
+                  <Text numberOfLines={1} style={[styles.stationText, { color: paymentNeeded ? palette.warning : palette.mutedStrong }]}>
+                    {paymentNeeded ? "Payment needed · Tap to continue" : stationText}
+                  </Text>
+                  <ChevronRight color={paymentNeeded ? palette.warning : palette.muted} size={17} />
                 </View>
               </Pressable>
             );
           })}
+          {visibleCount < filteredOrders.length ? (
+            <AppButton
+              label={`Show ${Math.min(ORDER_PAGE_SIZE, filteredOrders.length - visibleCount)} older orders`}
+              variant="secondary"
+              onPress={() => setVisibleCount((count) => count + ORDER_PAGE_SIZE)}
+            />
+          ) : null}
         </View>
+          )}
+        </>
       )}
     </Screen>
   );
@@ -158,8 +204,11 @@ export function CustomerOrderDetailScreen() {
   const { palette } = useAppTheme();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const detail = useJobDetails(id ?? null);
+  const orders = domainQueries.orders();
   const root = detail.data;
-  const order = nestedRecord(root, "order") ?? root;
+  const jobOrder = nestedRecord(root, "order") ?? (root && recordId(root) ? root : null);
+  const savedOrder = (orders.data ?? []).find((item) => recordId(item) === id) ?? null;
+  const order = jobOrder ?? savedOrder;
   const cylinder = nestedRecord(root, "cylinder") ?? nestedRecord(order, "cylinder");
   const station = nestedRecord(root, "station") ?? nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
   const pickup = nestedRecord(root, "pickupLocation") ?? nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location");
@@ -168,6 +217,7 @@ export function CustomerOrderDetailScreen() {
   const normalized = normalizeStatus(status);
   const currency = firstString(order, ["currency_code", "currencyCode"]) ?? "NGN";
   const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? "pending";
+  const paymentNeeded = order ? isPaymentActionRequired(status, paymentStatus) : false;
   const pickupAddress = useResolvedLocationLabel(
     pickup,
     "Saved order location",
@@ -200,16 +250,16 @@ export function CustomerOrderDetailScreen() {
         />
       }
     >
-      {detail.isPending ? (
+      {detail.isPending && orders.isPending ? (
         <View style={styles.loading}>
           <ActivityIndicator color={palette.brand} />
           <Text style={[styles.loadingText, { color: palette.muted }]}>Loading order details…</Text>
         </View>
-      ) : detail.error ? (
+      ) : detail.error && orders.error ? (
         <EmptyState
           title="Couldn't load this order"
           description="We couldn't refresh the latest order state. Check your connection and try again."
-          action={<AppButton label="Try again" variant="secondary" onPress={() => void detail.refetch()} />}
+          action={<AppButton label="Try again" variant="secondary" onPress={() => void Promise.all([detail.refetch(), orders.refetch()])} />}
         />
       ) : !order ? (
         <EmptyState
@@ -276,6 +326,13 @@ export function CustomerOrderDetailScreen() {
           </Card>
 
           <View style={styles.actions}>
+            {id && paymentNeeded ? (
+              <AppButton
+                label="Continue payment"
+                fullWidth
+                onPress={() => router.push(`/(customer)/orders/${id}/payment` as never)}
+              />
+            ) : null}
             {trackable && id ? <AppButton label="Open live tracking" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/tracking` as never)} /> : null}
             {id && canVerifyDelivery ? <AppButton label="Confirm delivery" variant="secondary" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/verify` as never)} /> : null}
             {id && canShowReceipt ? <AppButton label="View or share receipt" variant="ghost" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/receipt` as never)} /> : null}
@@ -289,6 +346,55 @@ export function CustomerOrderDetailScreen() {
       )}
     </Screen>
   );
+}
+
+function OrderFilterChip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress(): void;
+}) {
+  const { palette } = useAppTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.filterChip,
+        {
+          backgroundColor: active ? palette.brandSoft : palette.surface,
+          borderColor: active ? palette.brand : palette.border,
+          opacity: pressed ? 0.78 : 1,
+        },
+      ]}
+    >
+      <Text style={[styles.filterChipText, { color: active ? palette.brand : palette.mutedStrong }]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function orderMatchesFilter(order: PlatformRecord, filter: OrderFilter) {
+  if (filter === "all") return true;
+  const status = displayStatus(order) ?? "created";
+  const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? status;
+  const normalized = normalizeStatus(status);
+  if (filter === "payment") return isPaymentActionRequired(status, paymentStatus);
+  if (filter === "completed") return FINAL_ORDER_STATES.has(normalized);
+  return !FINAL_ORDER_STATES.has(normalized) && !isPaymentActionRequired(status, paymentStatus);
+}
+
+function isPaymentActionRequired(orderStatus: string, paymentStatus: string) {
+  const orderState = normalizeStatus(orderStatus);
+  const paymentState = normalizeStatus(paymentStatus);
+  if (["reserved", "payment_reserved", "paid", "settled", "refunded"].includes(paymentState)) return false;
+  return ["created", "awaiting_payment", "pending"].includes(orderState) ||
+    ["pending", "awaiting_payment", "failed", "rejected"].includes(paymentState);
 }
 
 function cylinderSummary(cylinder: PlatformRecord | null) {
@@ -408,6 +514,9 @@ function paymentStatusTone(value: string): "neutral" | "brand" | "success" | "wa
 const styles = StyleSheet.create({
   loading: { minHeight: 180, alignItems: "center", justifyContent: "center", gap: spacing.sm },
   loadingText: { ...typography.caption },
+  filters: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  filterChip: { minHeight: 38, justifyContent: "center", borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: 13 },
+  filterChipText: { ...typography.caption, fontSize: 10, fontWeight: "900" },
   orderList: { gap: spacing.sm + 2 },
   order: { gap: 12, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl },
   orderHead: { flexDirection: "row", alignItems: "center", gap: 11 },
