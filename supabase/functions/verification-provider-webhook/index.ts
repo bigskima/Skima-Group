@@ -338,9 +338,8 @@ async function readDiditProvider(
     .single();
 
   if (result.error) throw new WebhookError("verification_provider_not_found", 500);
-  if (result.data.status !== "active") {
-    throw new WebhookError("verification_provider_inactive", 503);
-  }
+  // Webhook delivery must remain valid for in-flight sessions even if an
+  // operator pauses new Didit sessions after this session was created.
   if (
     typeof expectedProviderAdapterId === "string" &&
     expectedProviderAdapterId &&
