@@ -46,11 +46,15 @@ export function AutomatedVerificationCard({
   const start = useStartVerification();
   const refresh = useRefreshVerification();
   const [localSessionId, setLocalSessionId] = useState<string | null>(null);
+  const [localApplicationId, setLocalApplicationId] = useState<string | null>(null);
+  const [localAutomaticUnavailable, setLocalAutomaticUnavailable] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const status = check?.status ?? "not_started";
   const sessionId = check?.sessionId ?? localSessionId;
+  const resolvedApplicationId = applicationId ?? localApplicationId;
   const passed = status === "passed";
-  const automaticAvailable = check?.automaticAvailable ?? true;
+  const automaticAvailable =
+    (check?.automaticAvailable ?? true) && !localAutomaticUnavailable;
   const pendingProviderReview = status === "manual_review";
   const canFallback = check?.manualFallbackAllowed ?? true;
   const isBusy = start.isPending || refresh.isPending;
@@ -63,6 +67,7 @@ export function AutomatedVerificationCard({
       if (!resolvedApplicationId) {
         throw new Error("Save this application step before starting verification.");
       }
+      setLocalApplicationId(resolvedApplicationId);
 
       const result = await start.mutateAsync({
         applicationId: resolvedApplicationId,
@@ -74,6 +79,7 @@ export function AutomatedVerificationCard({
       });
 
       setLocalSessionId(result.id);
+      setLocalAutomaticUnavailable(false);
       if (result.verificationUrl) {
         const supported = await Linking.canOpenURL(result.verificationUrl);
         if (!supported) throw new Error("The secure verification page could not be opened.");
@@ -83,12 +89,13 @@ export function AutomatedVerificationCard({
         setMessage("Verification session started. Tap Check result after completing the provider flow.");
       }
     } catch (cause) {
+      setLocalAutomaticUnavailable(true);
       setMessage(
         friendlyError(
           cause,
           canFallback
-            ? "Automatic verification is unavailable right now. Use the fallback evidence below."
-            : "Automatic verification could not be started. Please try again.",
+            ? "Secure verification is temporarily unavailable. Continue with the accepted fallback evidence below or try again later."
+            : "Secure verification could not be started. Please try again later.",
         ),
       );
     }
@@ -97,17 +104,17 @@ export function AutomatedVerificationCard({
   const refreshVerification = async () => {
     setMessage(null);
     try {
-      const resolvedApplicationId = applicationId;
-      if (!resolvedApplicationId || !sessionId) {
+      const activeApplicationId = resolvedApplicationId;
+      if (!activeApplicationId || !sessionId) {
         throw new Error("Start the verification check before refreshing its result.");
       }
 
       const result = await refresh.mutateAsync({
-        applicationId: resolvedApplicationId,
+        applicationId: activeApplicationId,
         sessionId,
         idempotencyKey: idempotencyKey(
           "verification-refresh",
-          `${resolvedApplicationId}:${verificationKey}:${sessionId}`,
+          `${activeApplicationId}:${verificationKey}:${sessionId}`,
         ),
       });
 
@@ -197,15 +204,15 @@ export function AutomatedVerificationCard({
             This check is complete. SKIMA will not ask you to upload the document it replaces.
           </Text>
         </View>
-      ) : !automaticAvailable && check ? (
+      ) : !automaticAvailable ? (
         <>
           <View style={[styles.fallbackBox, { backgroundColor: palette.warningSoft }]}>
             <FileWarning color={palette.warning} size={18} />
             <Text style={[styles.fallbackText, { color: palette.ink }]}>
-              The secure check was unavailable when this application status was loaded.
+              The secure check is temporarily unavailable.
               {canFallback
-                ? " You can retry the secure check now or continue with accepted fallback evidence."
-                : " Retry the secure check before continuing."}
+                ? " You can continue with accepted fallback evidence or retry later."
+                : " Retry the secure check later before continuing."}
             </Text>
           </View>
           <Pressable
@@ -260,7 +267,7 @@ export function AutomatedVerificationCard({
           {sessionId ? (
             <Pressable
               accessibilityRole="button"
-              disabled={isBusy || !applicationId}
+              disabled={isBusy || !resolvedApplicationId}
               onPress={() => void refreshVerification()}
               style={({ pressed }) => [
                 styles.secondary,
@@ -269,7 +276,7 @@ export function AutomatedVerificationCard({
                   borderColor: palette.border,
                 },
                 pressed && styles.pressed,
-                (isBusy || !applicationId) && styles.disabled,
+                (isBusy || !resolvedApplicationId) && styles.disabled,
               ]}
             >
               {refresh.isPending ? (
