@@ -16,6 +16,7 @@ export default function Layout() {
           "cylinder/[id]/media",
           "cylinder/[id]/identity",
           "orders/[id]",
+          "orders/[id]/payment",
           "orders/[id]/tracking",
           "orders/[id]/verify",
           "orders/[id]/receipt",
