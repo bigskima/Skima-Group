@@ -435,69 +435,108 @@ export function StationInventoryScreen() {
 
           {message ? <Notice tone={messageSuccess ? "success" : "danger"} text={message} /> : null}
 
-          {connections.length ? (
+          {section === "sources" ? (
             <>
-              <SectionHeader title="Connected sources" description="Provider status is monitored without exposing credentials in the app." />
-              <View style={styles.list}>{connections.map((connection) => (
-                <SimpleRow
-                  key={firstString(connection, ["publicReference"]) ?? firstString(connection, ["displayName"]) ?? "provider"}
-                  icon={<Database color={palette.brand} size={18} />}
-                  title={firstString(connection, ["displayName", "providerName"]) ?? "Inventory provider"}
-                  subtitle={`${friendlyLabel(firstString(connection, ["status"]) ?? "pending")} · ${friendlyLabel(firstString(connection, ["healthStatus"]) ?? "unknown")} · last sync ${friendlyTime(firstString(connection, ["lastSuccessfulSyncAt"]))}`}
-                />
-              ))}</View>
-            </>
-          ) : null}
-
-          {devices.length ? (
-            <>
-              <SectionHeader title="Telemetry devices" description="Mapped tank sensors and their most recent health state." />
-              <View style={styles.list}>{devices.map((device) => (
-                <SimpleRow
-                  key={firstString(device, ["publicReference"]) ?? firstString(device, ["displayName"]) ?? "device"}
-                  icon={<Gauge color={palette.brand} size={18} />}
-                  title={firstString(device, ["displayName"]) ?? "Tank device"}
-                  subtitle={`${friendlyLabel(firstString(device, ["healthStatus"]) ?? "unknown")} · last reading ${friendlyTime(firstString(device, ["lastReadingAt"]))}`}
-                />
-              ))}</View>
-            </>
-          ) : null}
-
-          <SectionHeader title="Tanks" description="Installed storage is infrastructure and never treated as current stock." />
-          <View style={styles.list}>
-            {tanks.length ? tanks.map((tank) => (
-              <View key={firstString(tank, ["publicReference", "tankId"]) ?? firstString(tank, ["name"]) ?? "tank"} style={[styles.listCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                <View style={[styles.smallIcon, { backgroundColor: palette.brandSoft }]}><Warehouse color={palette.brand} size={19} /></View>
-                <View style={styles.flexCopy}>
-                  <Text style={[styles.cardTitle, { color: palette.ink }]}>{firstString(tank, ["name"]) ?? "LPG tank"}</Text>
-                  <Text style={[styles.body, { color: palette.muted }]}>{kg(firstNumber(tank, ["physicalStockKg"]))} current · {kg(firstNumber(tank, ["ratedCapacityKg"]))} rated</Text>
+              <View style={[styles.sourceCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                <View style={styles.rowBetween}>
+                  <View style={styles.iconTitle}>
+                    <View style={[styles.smallIcon, { backgroundColor: palette.brandSoft }]}><Database color={palette.brand} size={19} /></View>
+                    <View style={styles.flexCopy}>
+                      <Text style={[styles.cardTitle, { color: palette.ink }]}>Current source</Text>
+                      <Text style={[styles.body, { color: palette.muted }]}>{friendlyLabel(firstString(inventory, ["activeSource"]) ?? primarySource)}</Text>
+                    </View>
+                  </View>
+                  <StatusPill label={friendlyLabel(firstString(inventory, ["sourceHealth"]) ?? "Unknown")} tone={firstString(inventory, ["sourceHealth"]) === "healthy" ? "success" : "warning"} />
                 </View>
-                <StatusPill label={friendlyLabel(firstString(tank, ["status"]) ?? "Unknown")} tone={firstString(tank, ["status"]) === "active" ? "success" : "warning"} />
+                <Text style={[styles.caption, { color: palette.muted }]}>Last confirmed: {friendlyTime(firstString(inventory, ["lastVerifiedAt"]))}</Text>
               </View>
-            )) : <EmptyState icon={<Warehouse color={palette.brand} size={24} />} title="No individual tanks configured" description="The station's existing installed capacity remains visible until tank details are added." />}
-          </View>
 
-          <SectionHeader title="Operational capacity" description="Stock and the station's ability to process refill jobs are evaluated together." />
-          <View style={styles.metricGrid}>
-            <Metric label="Active jobs" value={String(firstNumber(operationalCapacity, ["activeJobs"]) ?? 0)} />
-            <Metric label="Concurrent limit" value={String(firstNumber(operationalCapacity, ["maximumConcurrentJobs"]) ?? 0)} />
-          </View>
-
-          {reservations.length ? (
-            <>
-              <SectionHeader title="Reserved stock" description="Kilograms held for active SKIMA orders." />
-              <View style={styles.list}>{reservations.slice(0, 5).map((reservation) => (
-                <SimpleRow
-                  key={firstString(reservation, ["publicReference"]) ?? "reservation"}
-                  icon={<PackageCheck color={palette.brand} size={18} />}
-                  title={firstString(reservation, ["orderReference"]) ?? "SKIMA order"}
-                  subtitle={`${kg(firstNumber(reservation, ["reservedKg"]))} · ${friendlyLabel(firstString(reservation, ["status"]) ?? "reserved")}`}
+              {connections.length ? (
+                <>
+                  <SectionHeader title="Connected sources" description="Provider status is monitored without exposing credentials in the app." />
+                  <View style={styles.list}>{connections.map((connection) => (
+                    <SimpleRow
+                      key={firstString(connection, ["publicReference"]) ?? firstString(connection, ["displayName"]) ?? "provider"}
+                      icon={<Database color={palette.brand} size={18} />}
+                      title={firstString(connection, ["displayName", "providerName"]) ?? "Inventory provider"}
+                      subtitle={`${friendlyLabel(firstString(connection, ["status"]) ?? "pending")} · ${friendlyLabel(firstString(connection, ["healthStatus"]) ?? "unknown")} · last sync ${friendlyTime(firstString(connection, ["lastSuccessfulSyncAt"]))}`}
+                    />
+                  ))}</View>
+                </>
+              ) : (
+                <EmptyState
+                  icon={<Database color={palette.brand} size={24} />}
+                  title="No provider connection yet"
+                  description="Manual inventory remains available. Connect a supported POS or telemetry provider only when the station is ready."
                 />
-              ))}</View>
+              )}
+
+              {devices.length ? (
+                <>
+                  <SectionHeader title="Telemetry devices" description="Mapped tank sensors and their most recent health state." />
+                  <View style={styles.list}>{devices.map((device) => (
+                    <SimpleRow
+                      key={firstString(device, ["publicReference"]) ?? firstString(device, ["displayName"]) ?? "device"}
+                      icon={<Gauge color={palette.brand} size={18} />}
+                      title={firstString(device, ["displayName"]) ?? "Tank device"}
+                      subtitle={`${friendlyLabel(firstString(device, ["healthStatus"]) ?? "unknown")} · last reading ${friendlyTime(firstString(device, ["lastReadingAt"]))}`}
+                    />
+                  ))}</View>
+                </>
+              ) : null}
             </>
           ) : null}
 
-          {reconciliationCases.length ? (
+          {section === "stock" ? (
+            <>
+              <View style={styles.metricGrid}>
+                <Metric label="Physical stock" value={kg(physical)} />
+                <Metric label="Allocated to SKIMA" value={kg(allocation)} />
+                <Metric label="Reserved" value={kg(reserved)} />
+                <Metric label="Dispatchable" value={kg(dispatchable)} />
+              </View>
+
+              <SectionHeader title="Tanks" description="Installed storage is infrastructure and never treated as current stock." />
+              <View style={styles.list}>
+                {tanks.length ? tanks.map((tank) => (
+                  <View key={firstString(tank, ["publicReference", "tankId"]) ?? firstString(tank, ["name"]) ?? "tank"} style={[styles.listCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                    <View style={[styles.smallIcon, { backgroundColor: palette.brandSoft }]}><Warehouse color={palette.brand} size={19} /></View>
+                    <View style={styles.flexCopy}>
+                      <Text style={[styles.cardTitle, { color: palette.ink }]}>{firstString(tank, ["name"]) ?? "LPG tank"}</Text>
+                      <Text style={[styles.body, { color: palette.muted }]}>{kg(firstNumber(tank, ["physicalStockKg"]))} current · {kg(firstNumber(tank, ["ratedCapacityKg"]))} rated</Text>
+                    </View>
+                    <StatusPill label={friendlyLabel(firstString(tank, ["status"]) ?? "Unknown")} tone={firstString(tank, ["status"]) === "active" ? "success" : "warning"} />
+                  </View>
+                )) : <EmptyState icon={<Warehouse color={palette.brand} size={24} />} title="No individual tanks configured" description="The station's installed capacity remains visible until tank details are added." />}
+              </View>
+
+              {reservations.length ? (
+                <>
+                  <SectionHeader title="Reserved stock" description="Kilograms held for active SKIMA orders." />
+                  <View style={styles.list}>{reservations.slice(0, 5).map((reservation) => (
+                    <SimpleRow
+                      key={firstString(reservation, ["publicReference"]) ?? "reservation"}
+                      icon={<PackageCheck color={palette.brand} size={18} />}
+                      title={firstString(reservation, ["orderReference"]) ?? "SKIMA order"}
+                      subtitle={`${kg(firstNumber(reservation, ["reservedKg"]))} · ${friendlyLabel(firstString(reservation, ["status"]) ?? "reserved")}`}
+                    />
+                  ))}</View>
+                </>
+              ) : null}
+            </>
+          ) : null}
+
+          {section === "operations" ? (
+            <>
+              <SectionHeader title="Operational capacity" description="Stock and the station's ability to process refill jobs are evaluated together." />
+              <View style={styles.metricGrid}>
+                <Metric label="Active jobs" value={String(firstNumber(operationalCapacity, ["activeJobs"]) ?? 0)} />
+                <Metric label="Concurrent limit" value={String(firstNumber(operationalCapacity, ["maximumConcurrentJobs"]) ?? 0)} />
+              </View>
+            </>
+          ) : null}
+
+          {section === "operations" && reconciliationCases.length ? (
             <>
               <SectionHeader title="Reconciliation needed" description="Conflicting evidence must be reviewed before normal inventory authority is restored." />
               <View style={styles.list}>{reconciliationCases.slice(0, 5).map((item) => (
@@ -511,18 +550,26 @@ export function StationInventoryScreen() {
             </>
           ) : null}
 
-          {history.length ? (
-            <>
-              <SectionHeader title="Recent history" description="An auditable record of stock reports, adjustments and reservations." />
-              <View style={styles.list}>{history.slice(0, 8).map((event) => (
-                <SimpleRow
-                  key={firstString(event, ["publicReference"]) ?? firstString(event, ["occurredAt"]) ?? "event"}
-                  icon={<History color={palette.brand} size={18} />}
-                  title={friendlyLabel(firstString(event, ["eventType"]) ?? "Inventory event")}
-                  subtitle={`${signedKg(firstNumber(event, ["stockDeltaKg"]))} · ${friendlyTime(firstString(event, ["occurredAt"]))}`}
-                />
-              ))}</View>
-            </>
+          {section === "activity" ? (
+            history.length ? (
+              <>
+                <SectionHeader title="Recent history" description="An auditable record of stock reports, adjustments and reservations." />
+                <View style={styles.list}>{history.slice(0, 8).map((event) => (
+                  <SimpleRow
+                    key={firstString(event, ["publicReference"]) ?? firstString(event, ["occurredAt"]) ?? "event"}
+                    icon={<History color={palette.brand} size={18} />}
+                    title={friendlyLabel(firstString(event, ["eventType"]) ?? "Inventory event")}
+                    subtitle={`${signedKg(firstNumber(event, ["stockDeltaKg"]))} · ${friendlyTime(firstString(event, ["occurredAt"]))}`}
+                  />
+                ))}</View>
+              </>
+            ) : (
+              <EmptyState
+                icon={<History color={palette.brand} size={24} />}
+                title="No inventory activity yet"
+                description="Stock reports, adjustments and reservations will appear here as the station operates."
+              />
+            )
           ) : null}
 
           {!canUpdate && !canAdjust && !canManageSources && !canManageAvailability && !canManageCapacity && !canManageProviders && !canReportIssue ? (
