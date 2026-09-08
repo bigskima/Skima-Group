@@ -148,7 +148,7 @@ Deno.test("verification admin exception queue uses a real application identifier
 
 Deno.test("verification credit exhaustion becomes a safe fallback instead of a dead provider route", async () => {
   const [routePauseMigration, card, friendlyErrors] = await Promise.all([
-    read("supabase/migrations/20260908204000_pause_verification_routes_on_credit_exhaustion.sql"),
+    read("supabase/migrations/20260908204515_pause_verification_routes_on_credit_exhaustion.sql"),
     read("apps/lpg-mobile/src/native/ui/AutomatedVerificationCard.tsx"),
     read("apps/lpg-mobile/src/native/utilities/friendlyError.ts"),
   ]);
