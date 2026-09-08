@@ -21,14 +21,35 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const webhookSecret = Deno.env.get("DIDIT_WEBHOOK_SECRET");
 
-  if (!supabaseUrl || !serviceRoleKey || !webhookSecret) {
+  if (!supabaseUrl || !serviceRoleKey) {
     console.error(JSON.stringify({
       severity: "error",
       source: "verification-provider-webhook",
       requestId: id,
-      message: "Didit webhook runtime is missing required Supabase or webhook secrets.",
+      message: "Didit webhook runtime is missing required Supabase service configuration.",
+    }));
+    return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
+  }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  });
+  const webhookSecret = await resolveServerSecret(
+    supabase,
+    "DIDIT_WEBHOOK_SECRET",
+  );
+
+  if (!webhookSecret) {
+    console.error(JSON.stringify({
+      severity: "error",
+      source: "verification-provider-webhook",
+      requestId: id,
+      message: "Didit webhook signing secret is unavailable.",
     }));
     return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 500);
   }
@@ -77,14 +98,6 @@ Deno.serve(async (request: Request): Promise<Response> => {
       requestId: id,
     });
   }
-
-  const supabase = createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-      persistSession: false,
-    },
-  });
 
   try {
     const duplicate = await alreadyProcessed(supabase, eventId);
@@ -314,6 +327,20 @@ async function verifyDiditWebhook(
   }
 
   throw new WebhookError("invalid_signature", 401);
+}
+
+async function resolveServerSecret(
+  supabase: SupabaseClient,
+  name: string,
+): Promise<string | null> {
+  const environmentValue = Deno.env.get(name)?.trim();
+  if (environmentValue) return environmentValue;
+
+  const result = await supabase.rpc("read_server_secret", {
+    target_name: name,
+  });
+  if (result.error) return null;
+  return optionalString(result.data);
 }
 
 async function alreadyProcessed(
