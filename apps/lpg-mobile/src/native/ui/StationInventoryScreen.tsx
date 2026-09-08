@@ -584,6 +584,81 @@ export function StationInventoryScreen() {
   );
 }
 
+function InventorySectionSwitcher({
+  section,
+  onSelect,
+}: {
+  section: InventorySection;
+  onSelect(section: InventorySection): void;
+}) {
+  const { palette } = useAppTheme();
+  const sections: Array<{ key: InventorySection; label: string }> = [
+    { key: "overview", label: "Overview" },
+    { key: "stock", label: "Stock" },
+    { key: "operations", label: "Operations" },
+    { key: "sources", label: "Sources" },
+    { key: "activity", label: "Activity" },
+  ];
+
+  return (
+    <View style={[styles.sectionNav, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      {sections.map((item) => {
+        const active = item.key === section;
+        return (
+          <Pressable
+            key={item.key}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            onPress={() => onSelect(item.key)}
+            style={({ pressed }) => [
+              styles.sectionNavItem,
+              {
+                backgroundColor: active ? palette.brandSoft : palette.surfaceSubtle,
+                borderColor: active ? palette.brand : palette.border,
+                opacity: pressed ? 0.76 : 1,
+              },
+            ]}
+          >
+            <Text style={[styles.sectionNavText, { color: active ? palette.brand : palette.mutedStrong }]}>
+              {item.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function LayerShortcut({
+  title,
+  subtitle,
+  onPress,
+}: {
+  title: string;
+  subtitle: string;
+  onPress(): void;
+}) {
+  const { palette } = useAppTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.layerShortcut,
+        {
+          backgroundColor: palette.surface,
+          borderColor: palette.border,
+          opacity: pressed ? 0.8 : 1,
+          transform: [{ scale: pressed ? 0.985 : 1 }],
+        },
+      ]}
+    >
+      <Text style={[styles.layerShortcutTitle, { color: palette.ink }]}>{title}</Text>
+      <Text style={[styles.layerShortcutBody, { color: palette.muted }]}>{subtitle}</Text>
+    </Pressable>
+  );
+}
+
 function StockReportEditor({ stationBranchId, measurementMethods, currentAllocation, expectedVersion, onClose, onResult }: {
   stationBranchId: string; measurementMethods: PlatformRecord[]; currentAllocation: number | null;
   expectedVersion: number | null;
@@ -954,6 +1029,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 15,
   },
+  sectionNav: { flexDirection: "row", flexWrap: "wrap", gap: 6, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: 6 },
+  sectionNavItem: { flexGrow: 1, minWidth: 88, minHeight: 38, alignItems: "center", justifyContent: "center", borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: 10 },
+  sectionNavText: { ...typography.caption, fontSize: 10, fontWeight: "900" },
+  quickLayerGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  layerShortcut: { width: "48%", flexGrow: 1, minHeight: 86, gap: 5, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  layerShortcutTitle: { ...typography.bodyStrong, fontSize: 14 },
+  layerShortcutBody: { ...typography.caption, fontSize: 10, lineHeight: 15 },
   sourceCard: { gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md }, smallIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" }, cardTitle: { ...typography.bodyStrong, fontSize: 14 }, body: { ...typography.caption, lineHeight: 18 }, caption: { ...typography.caption }, actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   editor: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg }, fieldGroup: { gap: spacing.sm }, fieldLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" }, input: { minHeight: 52, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.md, fontSize: 16 }, choices: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }, choice: { borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }, choiceText: { ...typography.caption, fontWeight: "800" },
   list: { gap: spacing.sm }, listCard: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md }, notice: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md }, noticeText: { flex: 1, ...typography.caption, fontWeight: "800", lineHeight: 18 }, readOnly: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
