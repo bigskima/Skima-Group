@@ -343,7 +343,7 @@ function readBuildRenderer(): RendererConfiguration {
   const hasConfiguredTemplate = isUsableTileTemplate(configuredTemplate);
   const configuredAttribution = (import.meta.env.VITE_MAP_ATTRIBUTION as string | undefined)?.trim();
   return {
-    key: hasConfiguredTemplate ? "renderer.maps.build-configured" : "renderer.maps.openstreetmap-standard",
+    key: hasConfiguredTemplate ? "renderer.maps.build-configured" : "renderer.maps.carto-voyager-keyless",
     tileTemplate: hasConfiguredTemplate ? configuredTemplate.trim() : SAFE_TILE_TEMPLATE,
     attribution: hasConfiguredTemplate && configuredAttribution ? configuredAttribution : SAFE_ATTRIBUTION,
     maxZoom: 19,
