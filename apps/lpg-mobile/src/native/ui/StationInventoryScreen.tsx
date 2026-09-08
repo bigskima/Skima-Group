@@ -38,6 +38,7 @@ import { SectionHeader } from "./SectionHeader";
 import { StatusPill } from "./StatusPill";
 
 type Editor = "report" | "adjust" | "source" | "availability" | "fallback" | "capacity" | "provider" | "device" | "issue" | null;
+type InventorySection = "overview" | "stock" | "operations" | "sources" | "activity";
 
 export function StationInventoryScreen() {
   const { palette } = useAppTheme();
@@ -81,6 +82,7 @@ export function StationInventoryScreen() {
   const configurationVersion = firstNumber(configuration, ["version"]);
   const needsSetup = physical === null || rolloutStatus === "setup_required" || rolloutStatus === "legacy_shadow";
   const [editor, setEditor] = useState<Editor>(null);
+  const [section, setSection] = useState<InventorySection>("overview");
   const [message, setMessage] = useState<string | null>(null);
   const [messageSuccess, setMessageSuccess] = useState(false);
 
@@ -122,6 +124,12 @@ export function StationInventoryScreen() {
       setMessageSuccess(false);
       setMessage(friendlyError(cause, "Inventory could not be confirmed."));
     }
+  };
+
+  const selectSection = (next: InventorySection) => {
+    setSection(next);
+    setEditor(null);
+    setMessage(null);
   };
 
   return (
