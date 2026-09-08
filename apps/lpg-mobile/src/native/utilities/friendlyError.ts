@@ -68,6 +68,12 @@ export function friendlyError(
   if (message.includes("rate") && message.includes("limit"))
     return "That was a little too quick. Wait a moment and try again.";
   if (
+    message.includes("not enough credits") ||
+    message.includes("insufficient credits") ||
+    (message.includes("credit") && message.includes("top up"))
+  )
+    return "Secure verification is temporarily unavailable. Continue the application and use the accepted fallback evidence in the evidence step, or try again later.";
+  if (
     message.includes("session") ||
     message.includes("jwt") ||
     message.includes("unauthorized") ||
