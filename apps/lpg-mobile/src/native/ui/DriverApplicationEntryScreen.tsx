@@ -100,8 +100,13 @@ export function DriverApplicationEntryScreen() {
     storedLongitude !== null;
 
   const [editing, setEditing] = useState(false);
+  // A newly-created draft does not have a payload query bound to its ID until
+  // React re-renders. Remember the successful save locally so the user can
+  // continue immediately instead of being trapped on the geography step while
+  // the new application/payload queries catch up.
+  const [continueAfterSave, setContinueAfterSave] = useState(false);
 
-  if (geographyComplete && !editing) {
+  if ((geographyComplete || continueAfterSave) && !editing) {
     return (
       <View style={styles.applicationShell}>
         <View style={[styles.editBar, { backgroundColor: palette.surface, borderColor: palette.border }]}> 
@@ -110,16 +115,26 @@ export function DriverApplicationEntryScreen() {
             <View style={styles.editBarText}>
               <Text style={[styles.editBarTitle, { color: palette.ink }]}>Service areas saved</Text>
               <Text style={[styles.editBarSubtitle, { color: palette.muted }]} numberOfLines={1}>
-                {storedAreaIds.length > 0
-                  ? (storedAreaIds.length === 1 ? "1 operating area" : `${storedAreaIds.length} operating areas`)
-                  : storedCandidateCoverage
-                    ? `Candidate radius · ${Math.round(storedCandidateCoverage.radiusMeters / 1000 * 10) / 10} km`
-                    : `${storedCoverageCount} coverage request(s)`} · location captured
+                {!geographyComplete && continueAfterSave
+                  ? "Operating area saved · application ready to continue"
+                  : storedAreaIds.length > 0
+                    ? (storedAreaIds.length === 1 ? "1 operating area" : `${storedAreaIds.length} operating areas`)
+                    : storedCandidateCoverage
+                      ? `Candidate radius · ${Math.round(storedCandidateCoverage.radiusMeters / 1000 * 10) / 10} km`
+                      : `${storedCoverageCount} coverage request(s) · location captured`}
               </Text>
             </View>
           </View>
           {canEditGeography ? (
-            <AppButton label="Edit" size="sm" variant="ghost" onPress={() => setEditing(true)} />
+            <AppButton
+              label="Edit"
+              size="sm"
+              variant="ghost"
+              onPress={() => {
+                setContinueAfterSave(false);
+                setEditing(true);
+              }}
+            />
           ) : null}
         </View>
         <View style={styles.applicationBody}>
@@ -157,8 +172,15 @@ export function DriverApplicationEntryScreen() {
       initialCandidateCoverage={storedCandidateCoverage}
       initialLocation={operationalLocationFromRecord(storedLocation)}
       onSaved={async () => {
-        await applications.refetch();
-        if (currentId) await payloadQuery.refetch();
+        const refreshedApplications = await applications.refetch();
+        if (refreshedApplications.error) throw refreshedApplications.error;
+
+        if (currentId) {
+          const refreshedPayload = await payloadQuery.refetch();
+          if (refreshedPayload.error) throw refreshedPayload.error;
+        }
+
+        setContinueAfterSave(true);
         setEditing(false);
       }}
       onCancel={geographyComplete ? () => setEditing(false) : undefined}

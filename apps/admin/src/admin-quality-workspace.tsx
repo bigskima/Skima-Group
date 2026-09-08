@@ -72,6 +72,7 @@ export function AdminQualityWorkspace() {
       const rpcStatus = statusFilter === "active" ? null : statusFilter;
       const { data, error } = await supabase.rpc("read_lpg_quality_admin_queue", {
         target_status: rpcStatus,
+        target_severity: null,
         target_limit: 200,
       });
       if (error) throw error;
