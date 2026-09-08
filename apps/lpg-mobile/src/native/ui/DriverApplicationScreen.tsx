@@ -26,6 +26,7 @@ import {
   firstString,
   nestedRecord,
   recordId,
+  type PlatformRecord,
 } from "../api/records";
 import { ApplicationProgress } from "../application/ApplicationProgress";
 import { ApplicationReviewSummary } from "../application/ApplicationReviewSummary";
