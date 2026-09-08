@@ -12,7 +12,7 @@ import {
   Zap,
 } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 
 import { domainQueries } from "../api/domains";
@@ -96,11 +96,44 @@ export function UtilityBillsScreen() {
   const currency = firstString(wallet, ["currency_code", "currencyCode"]) ?? "NGN";
 
   const fixedAmount = firstNumber(product, ["fixed_amount", "fixedAmount"]);
+  const minimumAmount = firstNumber(product, ["minimum_amount", "minimumAmount"]);
+  const maximumAmount = firstNumber(product, ["maximum_amount", "maximumAmount"]);
   const numericAmount = fixedAmount ?? Number(amount);
+  const amountIsValidNumber = Number.isFinite(numericAmount) && numericAmount > 0;
+  const belowMinimum = Boolean(
+    amountIsValidNumber &&
+      minimumAmount !== null &&
+      numericAmount < minimumAmount,
+  );
+  const aboveMaximum = Boolean(
+    amountIsValidNumber &&
+      maximumAmount !== null &&
+      numericAmount > maximumAmount,
+  );
+  const insufficientBalance = Boolean(
+    amountIsValidNumber && numericAmount > balance,
+  );
+  const amountError = !amount.trim() && fixedAmount === null
+    ? null
+    : !amountIsValidNumber
+      ? "Enter a valid amount greater than zero."
+      : belowMinimum && minimumAmount !== null
+        ? `Minimum payment is ${formatMajorMoney(minimumAmount, selectedCurrency)}.`
+        : aboveMaximum && maximumAmount !== null
+          ? `Maximum payment is ${formatMajorMoney(maximumAmount, selectedCurrency)}.`
+          : insufficientBalance
+            ? "Your available wallet balance is not enough for this payment."
+            : null;
+  const amountHint =
+    fixedAmount === null && !amountError
+      ? amountRangeLabel(minimumAmount, maximumAmount, selectedCurrency)
+      : undefined;
   const canSubmit =
     Boolean(product && walletId && identifier.trim()) &&
-    Number.isFinite(numericAmount) &&
-    numericAmount > 0;
+    amountIsValidNumber &&
+    !belowMinimum &&
+    !aboveMaximum &&
+    !insufficientBalance;
 
   const visibleProducts =
     activeGroup?.products.slice(
@@ -337,7 +370,11 @@ export function UtilityBillsScreen() {
               </Text>
             </View>
 
-            <View style={styles.categoryGrid}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryRail}
+            >
               {categories.map((category) => {
                 const selected = category.key === activeGroup?.key;
                 return (
@@ -387,7 +424,7 @@ export function UtilityBillsScreen() {
                   </Pressable>
                 );
               })}
-            </View>
+            </ScrollView>
           </View>
 
           {activeGroup ? (
@@ -629,7 +666,16 @@ export function UtilityBillsScreen() {
               onChangeText={setAmount}
               keyboardType="decimal-pad"
               placeholder="0.00"
+              error={amountError}
+              hint={amountHint}
             />
+          ) : insufficientBalance ? (
+            <Text
+              accessibilityRole="alert"
+              style={[styles.inlineError, { color: palette.danger }]}
+            >
+              Your available wallet balance is not enough for this payment.
+            </Text>
           ) : null}
 
           {showOptionalFields ? (
@@ -741,6 +787,23 @@ function friendlyStatus(value: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function amountRangeLabel(
+  minimum: number | null,
+  maximum: number | null,
+  currency: string,
+) {
+  if (minimum !== null && maximum !== null) {
+    return `${formatMajorMoney(minimum, currency)} – ${formatMajorMoney(maximum, currency)} allowed.`;
+  }
+  if (minimum !== null) {
+    return `Minimum ${formatMajorMoney(minimum, currency)}.`;
+  }
+  if (maximum !== null) {
+    return `Maximum ${formatMajorMoney(maximum, currency)}.`;
+  }
+  return undefined;
+}
+
 function formatMajorMoney(value: number, currency: string) {
   try {
     return new Intl.NumberFormat(undefined, {
@@ -817,15 +880,13 @@ const styles = StyleSheet.create({
   sectionCount: { ...typography.caption, fontSize: 10, fontWeight: "800" },
 
   categorySection: { gap: spacing.sm },
-  categoryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  categoryRail: {
     gap: spacing.sm,
+    paddingRight: spacing.md,
   },
   categoryChip: {
-    minWidth: 132,
-    flexGrow: 1,
-    flexBasis: 132,
+    width: 142,
+    flexShrink: 0,
     minHeight: 54,
     flexDirection: "row",
     alignItems: "center",
@@ -961,6 +1022,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   optionalText: { ...typography.caption, fontWeight: "900" },
+  inlineError: { ...typography.caption, fontWeight: "800", lineHeight: 17 },
 
   actions: {
     flexDirection: "row",

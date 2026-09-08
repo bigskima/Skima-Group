@@ -4,6 +4,7 @@ const migration = await Deno.readTextFile("supabase/migrations/20260906072000_ut
 const stationLayout = await Deno.readTextFile("apps/lpg-mobile/app/(station)/_layout.tsx");
 const dashboard = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/PremiumDashboard.tsx");
 const guide = await Deno.readTextFile("apps/admin/src/admin-utility-provider-guide.tsx");
+const customerBills = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/UtilityBillsScreen.tsx");
 
 Deno.test("cashback is prepared from policy and only earned after confirmed success", () => {
   assertStringIncludes(migration, "create table if not exists public.utility_reward_policies");
@@ -30,4 +31,13 @@ Deno.test("admin includes provider access guidance from official provider sites"
   assertStringIncludes(guide, "https://www.vtpass.com/documentation/");
   assertStringIncludes(guide, "https://developers.reloadly.com/airtime/docs");
   assertStringIncludes(guide, "test credentials");
+});
+
+Deno.test("customer bill UI stays compact and validates configured amount limits", () => {
+  assertStringIncludes(customerBills, "horizontal");
+  assertStringIncludes(customerBills, "showAllProducts");
+  assertStringIncludes(customerBills, '["minimum_amount", "minimumAmount"]');
+  assertStringIncludes(customerBills, '["maximum_amount", "maximumAmount"]');
+  assertStringIncludes(customerBills, "insufficientBalance");
+  assertStringIncludes(customerBills, "amountRangeLabel");
 });
