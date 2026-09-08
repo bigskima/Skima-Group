@@ -1,6 +1,19 @@
 const root = new URL("../", import.meta.url);
 const read = (path: string) => Deno.readTextFile(new URL(path, root));
 
+Deno.test("refill UI preserves amount-mode drafts and limits long station lists", async () => {
+  const screen = await read("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx");
+  assertIncludes(screen, "setRequestedAmount(String(draft.values.requestedAmount");
+  assertIncludes(screen, 'setPurchaseMode(draft.values.purchaseMode === "amount"');
+  assertIncludes(screen, "requestedAmount,");
+  assertIncludes(screen, "purchaseMode,");
+  assertIncludes(screen, "STATION_PREVIEW_LIMIT = 4");
+  assertIncludes(screen, "stations.slice(0, STATION_PREVIEW_LIMIT)");
+  assertIncludes(screen, ": !validPurchase");
+  assertIncludes(screen, 'eyebrow="REFILL AMOUNT"');
+  assertIncludes(screen, 'eyebrow="STATION"');
+});
+
 Deno.test("amount-mode station eligibility remains database authoritative", async () => {
   const [migration, hook, screen] = await Promise.all([
     read("supabase/migrations/20260906023000_lpg_amount_station_eligibility.sql"),
