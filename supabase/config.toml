@@ -69,3 +69,6 @@ verify_jwt = false
 
 [functions.verification-runtime]
 verify_jwt = true
+
+[functions.verification-provider-webhook]
+verify_jwt = false
