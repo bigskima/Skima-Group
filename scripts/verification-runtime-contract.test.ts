@@ -146,6 +146,29 @@ Deno.test("verification admin exception queue uses a real application identifier
   );
 });
 
+Deno.test("verification credit exhaustion becomes a safe fallback instead of a dead provider route", async () => {
+  const [routePauseMigration, card, friendlyErrors] = await Promise.all([
+    read("supabase/migrations/20260908204000_pause_verification_routes_on_credit_exhaustion.sql"),
+    read("apps/lpg-mobile/src/native/ui/AutomatedVerificationCard.tsx"),
+    read("apps/lpg-mobile/src/native/utilities/friendlyError.ts"),
+  ]);
+
+  assertStringIncludes(sharedVerification, "verification_provider_credits_exhausted");
+  assertStringIncludes(sharedVerification, "pauseVerificationProviderRoutes");
+  assertStringIncludes(sharedVerification, '.update({');
+  assertStringIncludes(sharedVerification, 'status: "paused"');
+
+  assertStringIncludes(routePauseMigration, "provider_credits_exhausted");
+  assertStringIncludes(routePauseMigration, "status = 'paused'");
+  assertStringIncludes(routePauseMigration, "provider_execution_logs");
+
+  assertStringIncludes(card, "localApplicationId");
+  assertStringIncludes(card, "localAutomaticUnavailable");
+  assertStringIncludes(card, "accepted fallback evidence");
+  assertStringIncludes(friendlyErrors, "not enough credits");
+  assertStringIncludes(friendlyErrors, "Secure verification is temporarily unavailable");
+});
+
 Deno.test("verification runtime is JWT protected", () => {
   assertStringIncludes(supabaseConfig, "[functions.verification-runtime]");
   assertStringIncludes(supabaseConfig, "verify_jwt = true");
