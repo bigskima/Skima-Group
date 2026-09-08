@@ -55,6 +55,8 @@ export function AutomatedVerificationCard({
   const passed = status === "passed";
   const automaticAvailable =
     (check?.automaticAvailable ?? true) && !localAutomaticUnavailable;
+  const assistedManual =
+    check?.routeMode === "assisted_kyb" && !automaticAvailable;
   const pendingProviderReview = status === "manual_review";
   const canFallback = check?.manualFallbackAllowed ?? true;
   const isBusy = start.isPending || refresh.isPending;
@@ -179,9 +181,11 @@ export function AutomatedVerificationCard({
           <Text style={[styles.eyebrow, { color: passed ? palette.success : palette.brand }]}>
             {passed
               ? "VERIFIED AUTOMATICALLY"
-              : automaticAvailable
-                ? "SECURE AUTOMATIC CHECK"
-                : "VERIFICATION OPTIONS"}
+              : assistedManual
+                ? "ASSISTED BUSINESS REVIEW"
+                : automaticAvailable
+                  ? "SECURE AUTOMATIC CHECK"
+                  : "VERIFICATION OPTIONS"}
           </Text>
           <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
           <Text style={[styles.body, { color: palette.muted }]}>{description}</Text>
@@ -195,6 +199,13 @@ export function AutomatedVerificationCard({
             Secure check powered by {check.providerDisplayName}
           </Text>
         </View>
+      ) : assistedManual && check?.routeConfigured ? (
+        <View style={[styles.providerPill, { backgroundColor: palette.surfaceSubtle }]}>
+          <ShieldCheck color={palette.mutedStrong} size={13} />
+          <Text style={[styles.providerText, { color: palette.mutedStrong }]}>
+            Automatic KYB retained for future admin activation
+          </Text>
+        </View>
       ) : null}
 
       {passed ? (
@@ -202,6 +213,15 @@ export function AutomatedVerificationCard({
           <CheckCircle2 color={palette.success} size={17} />
           <Text style={[styles.successText, { color: palette.success }]}>
             This check is complete. SKIMA will not ask you to upload the document it replaces.
+          </Text>
+        </View>
+      ) : assistedManual ? (
+        <View style={[styles.fallbackBox, { backgroundColor: palette.warningSoft }]}>
+          <FileWarning color={palette.warning} size={18} />
+          <Text style={[styles.fallbackText, { color: palette.ink }]}>
+            Business verification is assisted for launch. Continue to the evidence step,
+            upload the CAC or business-registration document, and SKIMA will review it.
+            Automatic KYB remains configured and can be enabled later by an administrator.
           </Text>
         </View>
       ) : !automaticAvailable ? (
