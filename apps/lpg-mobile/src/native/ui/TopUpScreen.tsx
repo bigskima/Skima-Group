@@ -48,6 +48,8 @@ export function TopUpScreen() {
     firstString(wallet, ["currency_code", "currencyCode"]) ??
     firstString(currencies.data?.[0], ["code"]) ??
     "NGN";
+  const availableBalance =
+    firstNumber(wallet, ["available_balance", "availableBalance", "balance"]) ?? 0;
 
   const preview = useGatewayMutation({
     path: "/runtime/payments/deposits/preview",
@@ -132,15 +134,19 @@ export function TopUpScreen() {
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
         <View style={styles.heroHeader}>
-          <View>
-            <Text style={styles.heroLabel}>ADD FUNDS TO WALLET</Text>
-            <Text style={styles.heroValue}>{currency}</Text>
+          <View style={styles.heroCopy}>
+            <Text style={styles.heroLabel}>AVAILABLE WALLET BALANCE</Text>
+            <Text adjustsFontSizeToFit numberOfLines={1} style={styles.heroValue}>
+              {money(availableBalance, currency)}
+            </Text>
           </View>
           <View style={styles.heroIcon}>
             <WalletCards color="#FFFFFF" size={25} />
           </View>
         </View>
-        <Text style={styles.heroSub}>Your wallet receives the amount you choose. Any SKIMA fee is shown separately before you pay.</Text>
+        <Text style={styles.heroSub}>
+          Choose how much to add. SKIMA shows the wallet credit, fee and total charge before checkout.
+        </Text>
       </View>
 
       <Card padding="lg">
@@ -152,6 +158,18 @@ export function TopUpScreen() {
           placeholder="e.g. 5,000"
           error={error}
         />
+
+        <View style={styles.quickAmounts}>
+          {[2000, 5000, 10000, 20000].map((value) => (
+            <AppButton
+              key={value}
+              label={`₦${value.toLocaleString()}`}
+              size="sm"
+              variant={amount === String(value) ? "primary" : "secondary"}
+              onPress={() => changeAmount(String(value))}
+            />
+          ))}
+        </View>
 
         {feePreview ? (
           <View style={[styles.breakdown, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
@@ -217,10 +235,12 @@ function money(value: number, currency: string) {
 const styles = StyleSheet.create({
   hero: { padding: spacing.lg, borderRadius: radii.xl, gap: spacing.md },
   heroHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md },
+  heroCopy: { flex: 1, minWidth: 0 },
   heroLabel: { color: "rgba(255,255,255,.78)", ...typography.eyebrow, fontSize: 9 },
-  heroValue: { color: "#FFFFFF", fontSize: 35, lineHeight: 42, fontWeight: "900", letterSpacing: -0.8, marginTop: 4 },
+  heroValue: { color: "#FFFFFF", fontSize: 31, lineHeight: 38, fontWeight: "900", letterSpacing: -0.8, marginTop: 4 },
   heroIcon: { width: 48, height: 48, borderRadius: 17, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
   heroSub: { color: "rgba(255,255,255,.84)", ...typography.caption, lineHeight: 18, maxWidth: 460 },
+  quickAmounts: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.md },
   breakdown: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md, gap: spacing.sm, marginBottom: spacing.md },
   moneyRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: spacing.md },
   moneyLabel: { ...typography.caption },
