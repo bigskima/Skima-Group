@@ -77,9 +77,9 @@ export function CustomerOrderPaymentScreen() {
       });
       await Promise.all([orders.refetch(), wallets.refetch()]);
       router.replace(`/(customer)/orders/${orderId}` as never);
-    } catch (cause) {
-      reserve.reset();
-      throw cause;
+    } catch {
+      // React Query keeps the mutation error so the saved-order payment screen
+      // can explain the failure without deleting or duplicating the order.
     }
   };
 
@@ -167,9 +167,7 @@ export function CustomerOrderPaymentScreen() {
               fullWidth
               loading={reserve.isPending}
               disabled={!walletId || !enoughBalance}
-              onPress={() => {
-                void continuePayment().catch(() => undefined);
-              }}
+              onPress={() => void continuePayment()}
             />
             <AppButton
               label="View order details"
