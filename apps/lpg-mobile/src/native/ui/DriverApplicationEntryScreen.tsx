@@ -172,16 +172,13 @@ export function DriverApplicationEntryScreen() {
       initialCandidateCoverage={storedCandidateCoverage}
       initialLocation={operationalLocationFromRecord(storedLocation)}
       onSaved={async () => {
-        const refreshedApplications = await applications.refetch();
-        if (refreshedApplications.error) throw refreshedApplications.error;
-
-        if (currentId) {
-          const refreshedPayload = await payloadQuery.refetch();
-          if (refreshedPayload.error) throw refreshedPayload.error;
-        }
-
+        // Persistence has already completed when this callback runs. Do not
+        // report a successful save as failed just because a follow-up refresh
+        // is slow or temporarily unavailable.
         setContinueAfterSave(true);
         setEditing(false);
+        void applications.refetch();
+        if (currentId) void payloadQuery.refetch();
       }}
       onCancel={geographyComplete ? () => setEditing(false) : undefined}
     />
@@ -279,7 +276,19 @@ function DriverGeographyStep(props: {
         },
       );
       if (candidateError) throw candidateError;
+      const matchedGeographyId = readMatchedGeographyId(data);
       const request = readCandidateCoverageResponse(data);
+
+      // A newly detected location must replace any stale area choice from a
+      // previous GPS position. This prevents a Lagos detection from carrying
+      // forward an old Awka South selection.
+      if (matchedGeographyId) {
+        setSelectedIds([matchedGeographyId]);
+        setCandidateCoverage(null);
+        return null;
+      }
+
+      setSelectedIds([]);
       setCandidateCoverage(request);
       return request;
     } finally {
@@ -293,6 +302,10 @@ function DriverGeographyStep(props: {
     try {
       const nextLocation = await maps.resolveOperationalLocation(await readOperationalLocation());
       setLocation(nextLocation);
+      // Never retain an area selected for an older location while resolving
+      // the newly detected point.
+      setSelectedIds([]);
+      setCandidateCoverage(null);
       candidateLookupKey.current = null;
       try {
         await resolveCandidateCoverage(nextLocation);
@@ -713,6 +726,14 @@ function readCandidateCoverageResponse(value: unknown): CandidateCoverageRequest
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const result = value as Record<string, unknown>;
   return readCandidateCoverageRequest(result.request);
+}
+
+function readMatchedGeographyId(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const result = value as Record<string, unknown>;
+  return typeof result.matchedGeographyId === "string" && result.matchedGeographyId.trim()
+    ? result.matchedGeographyId
+    : null;
 }
 
 function readCandidateCoverageRequest(value: unknown): CandidateCoverageRequest | null {
