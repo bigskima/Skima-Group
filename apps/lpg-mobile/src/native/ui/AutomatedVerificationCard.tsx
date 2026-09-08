@@ -94,7 +94,7 @@ export function AutomatedVerificationCard({
         friendlyError(
           cause,
           canFallback
-            ? "Secure verification is temporarily unavailable. Continue with the accepted fallback evidence below or try again later."
+            ? "Secure verification is temporarily unavailable. Continue the application and use the accepted fallback evidence in the evidence step, or try again later."
             : "Secure verification could not be started. Please try again later.",
         ),
       );
