@@ -182,6 +182,14 @@ export async function startPartnerVerificationSession(
       responsePayload: {},
       errorMessage: error instanceof Error ? error.message : "provider request failed",
     });
+
+    if (
+      error instanceof VerificationRuntimeError &&
+      error.code === "verification_provider_credits_exhausted"
+    ) {
+      await pauseVerificationProviderRoutes(serviceClient, route.provider.id);
+    }
+
     throw error;
   }
 
@@ -537,6 +545,7 @@ async function activeRoute(
   serviceClient: SupabaseClient,
   verificationDefinitionId: string,
 ): Promise<{
+  id: string;
   workflow_ref: string;
   config: Record<string, unknown>;
   provider: { id: string; key: string; display_name: string };
@@ -566,6 +575,7 @@ async function activeRoute(
     if (!providerResult.data || providerResult.data.status !== "active") continue;
 
     return {
+      id: requireString(route.id, "verification route id"),
       workflow_ref: workflowRef,
       config: recordValue(route.config),
       provider: {
@@ -618,13 +628,26 @@ async function diditRequest(
 
   if (!response.ok) {
     const providerMessage = textValue(body.message) ?? textValue(body.detail);
+    const normalizedProviderMessage = providerMessage?.toLowerCase() ?? "";
+    const creditsExhausted =
+      normalizedProviderMessage.includes("not enough credits") ||
+      normalizedProviderMessage.includes("insufficient credits") ||
+      (
+        normalizedProviderMessage.includes("credit") &&
+        normalizedProviderMessage.includes("top up")
+      );
+
     throw new VerificationRuntimeError(
-      response.status === 401 || response.status === 403
+      creditsExhausted
+        ? "verification_provider_credits_exhausted"
+        : response.status === 401 || response.status === 403
         ? "verification_provider_authentication_failed"
         : response.status === 429
         ? "verification_provider_rate_limited"
         : "verification_provider_request_failed",
-      response.status === 429
+      creditsExhausted
+        ? "Secure verification is temporarily unavailable. Continue with accepted fallback evidence or try again later."
+        : response.status === 429
         ? "Automatic verification is temporarily busy. Try again shortly."
         : providerMessage && !providerMessage.toLowerCase().includes("api key")
         ? providerMessage
@@ -698,6 +721,29 @@ function isExpired(value: unknown): boolean {
   if (!text) return false;
   const time = Date.parse(text);
   return Number.isFinite(time) && time <= Date.now();
+}
+
+async function pauseVerificationProviderRoutes(
+  serviceClient: SupabaseClient,
+  providerAdapterId: string,
+): Promise<void> {
+  const result = await serviceClient
+    .from("verification_provider_routes")
+    .update({
+      status: "paused",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("provider_adapter_id", providerAdapterId)
+    .eq("status", "active");
+
+  if (result.error) {
+    console.info(JSON.stringify({
+      severity: "warning",
+      source: "partner-verification",
+      message: "Verification provider routes could not be paused after a provider-credit failure.",
+      detail: result.error.message,
+    }));
+  }
 }
 
 async function logProviderExecution(
