@@ -71,21 +71,28 @@ export interface MapsRuntimeConfig {
 
 const KEYLESS_RASTER_TILE_TEMPLATE =
   "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
+const KEYLESS_OSM_TILE_TEMPLATE =
+  "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const KEYLESS_MAP_STYLE_URL = "https://demotiles.maplibre.org/style.json";
 const KEYLESS_ATTRIBUTION = "© OpenStreetMap contributors, © CARTO";
+const KEYLESS_OSM_ATTRIBUTION = "© OpenStreetMap contributors";
 
 export function getMapsRuntimeConfig(): MapsRuntimeConfig {
   const tileMaxZoom = Number(process.env.EXPO_PUBLIC_MAP_TILE_MAX_ZOOM);
+  const configuredProvider = readEnv("EXPO_PUBLIC_MAP_TILE_PROVIDER", "carto_voyager")
+    .toLowerCase();
   const configuredRaster = process.env.EXPO_PUBLIC_MAP_TILE_URL?.trim();
   const configuredStyle = process.env.EXPO_PUBLIC_MAP_STYLE_URL?.trim();
-  const safeRaster = isUsablePublicTileTemplate(configuredRaster)
-    ? configuredRaster!
-    : KEYLESS_RASTER_TILE_TEMPLATE;
+  const selectedRaster = selectKeylessRaster(configuredProvider, configuredRaster);
   const safeStyle = isUsablePublicStyleUrl(configuredStyle)
     ? configuredStyle!
     : KEYLESS_MAP_STYLE_URL;
-  const usingRasterFallback = safeRaster === KEYLESS_RASTER_TILE_TEMPLATE &&
-    Boolean(configuredRaster && configuredRaster !== KEYLESS_RASTER_TILE_TEMPLATE);
+  const usingRasterFallback =
+    selectedRaster.fallback ||
+    Boolean(
+      configuredRaster &&
+        configuredRaster.trim() !== selectedRaster.template,
+    );
 
   return {
     renderer: {
@@ -95,12 +102,10 @@ export function getMapsRuntimeConfig(): MapsRuntimeConfig {
     tile: {
       key: usingRasterFallback
         ? "keyless_raster_fallback"
-        : readEnv("EXPO_PUBLIC_MAP_TILE_PROVIDER", "carto_voyager"),
+        : selectedRaster.key,
       styleUrl: safeStyle,
-      rasterTileTemplate: safeRaster,
-      attribution: usingRasterFallback
-        ? KEYLESS_ATTRIBUTION
-        : readEnv("EXPO_PUBLIC_MAP_ATTRIBUTION", KEYLESS_ATTRIBUTION),
+      rasterTileTemplate: selectedRaster.template,
+      attribution: selectedRaster.attribution,
       maxZoom: Number.isFinite(tileMaxZoom) ? clamp(Math.round(tileMaxZoom), 1, 24) : 19,
     },
     geocodingProviderKey: readEnv("EXPO_PUBLIC_MAP_GEOCODING_PROVIDER", "skima_gateway"),
@@ -176,7 +181,65 @@ export function isUsablePublicTileTemplate(value?: string | null): value is stri
   const normalized = value.trim();
   if (!/^https:\/\//i.test(normalized)) return false;
   if (!["{z}", "{x}", "{y}"].every((token) => normalized.includes(token))) return false;
-  return !requiresPublicMapCredential(normalized);
+  if (requiresPublicMapCredential(normalized)) return false;
+  return keylessTileHost(normalized) !== null;
+}
+
+function selectKeylessRaster(
+  provider: string,
+  configuredTemplate?: string,
+): { key: string; template: string; attribution: string; fallback: boolean } {
+  if (
+    provider === "carto_voyager" &&
+    isUsablePublicTileTemplate(configuredTemplate) &&
+    keylessTileHost(configuredTemplate) === "carto"
+  ) {
+    return {
+      key: "carto_voyager",
+      template: configuredTemplate,
+      attribution: KEYLESS_ATTRIBUTION,
+      fallback: false,
+    };
+  }
+
+  if (
+    ["openstreetmap", "osm", "osm_standard"].includes(provider) &&
+    isUsablePublicTileTemplate(configuredTemplate) &&
+    keylessTileHost(configuredTemplate) === "osm"
+  ) {
+    return {
+      key: "osm_standard",
+      template: configuredTemplate,
+      attribution: KEYLESS_OSM_ATTRIBUTION,
+      fallback: false,
+    };
+  }
+
+  return {
+    key: "carto_voyager",
+    template: KEYLESS_RASTER_TILE_TEMPLATE,
+    attribution: KEYLESS_ATTRIBUTION,
+    fallback: Boolean(
+      configuredTemplate ||
+        !["carto_voyager", "openstreetmap", "osm", "osm_standard"].includes(provider),
+    ),
+  };
+}
+
+function keylessTileHost(template: string): "carto" | "osm" | null {
+  try {
+    const hostname = new URL(
+      template
+        .replace("{z}", "1")
+        .replace("{x}", "1")
+        .replace("{y}", "1"),
+    ).hostname.toLowerCase();
+    if (hostname.endsWith(".basemaps.cartocdn.com")) return "carto";
+    if (hostname === "tile.openstreetmap.org") return "osm";
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function isUsablePublicStyleUrl(value?: string | null): value is string {
