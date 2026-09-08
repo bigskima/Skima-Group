@@ -878,14 +878,23 @@ export function ApplicationOverviewScreen({
         <>
           {currentStep === 1 ? (
             <View style={{ gap: spacing.md }}>
-              <AutomatedVerificationCard
-                applicationId={currentId}
-                ensureApplicationId={ensureApplicationId}
-                verificationKey="verification.person.identity"
-                title="Verify the representative"
-                description="Use one secure identity and liveness check for the owner, manager or authorized representative registering this station."
-                check={verificationCheck("verification.person.identity")}
-              />
+              {stationRole !== "owner" ? (
+                <AutomatedVerificationCard
+                  applicationId={currentId}
+                  ensureApplicationId={ensureApplicationId}
+                  verificationKey="verification.person.identity"
+                  title="Verify the representative"
+                  description="Use one secure identity and liveness check for the manager, employee or authorized representative registering this station. This does not verify company owners or beneficial owners."
+                  check={verificationCheck("verification.person.identity")}
+                />
+              ) : (
+                <Card>
+                  <Text style={styles.sectionHeader}>Owner applicant</Text>
+                  <Text style={styles.helperText}>
+                    Automatic KYC is used for station representatives at launch. If the station owner is applying directly, owner identity remains part of the evidence reviewed by SKIMA.
+                  </Text>
+                </Card>
+              )}
               <Card>
               <Text style={styles.sectionHeader}>Representative Details</Text>
 
@@ -924,9 +933,13 @@ export function ApplicationOverviewScreen({
                 </View>
                 {stationRole !== "owner" ? (
                   <Text style={styles.helperText}>
-                    SKIMA will first verify your identity automatically. If your authority cannot be confirmed automatically, only proof that you are authorized to register this station will be requested.
+                    SKIMA verifies the registering representative's identity automatically. If authority cannot be confirmed, only proof that you are authorized to register this station will be requested.
                   </Text>
-                ) : null}
+                ) : (
+                  <Text style={styles.helperText}>
+                    Owner applicants continue with manual owner-identity evidence. SKIMA does not automatically verify company owners or beneficial owners in the launch flow.
+                  </Text>
+                )}
               </View>
 
               <View style={styles.fieldGroup}>
@@ -950,8 +963,16 @@ export function ApplicationOverviewScreen({
                 applicationId={currentId}
                 ensureApplicationId={ensureApplicationId}
                 verificationKey="verification.business.registry"
-                title="Verify the registered business"
-                description="Use the configured business-verification provider first. When it passes, CAC/business-registration uploads are no longer duplicated."
+                title={
+                  verificationCheck("verification.business.registry")?.automaticAvailable
+                    ? "Verify the registered business"
+                    : "Business registration review"
+                }
+                description={
+                  verificationCheck("verification.business.registry")?.automaticAvailable
+                    ? "Automatic KYB is enabled. When it passes, CAC/business-registration uploads are no longer duplicated."
+                    : "For launch, upload CAC or business-registration evidence in the evidence step and SKIMA will review it. The automatic KYB route is retained for future activation."
+                }
                 check={verificationCheck("verification.business.registry")}
               />
               <Card>
