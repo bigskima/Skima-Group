@@ -199,6 +199,9 @@ Deno.test("launch policy keeps personal KYC automatic and business KYB assisted"
   assertStringIncludes(card, "ASSISTED BUSINESS REVIEW");
   assertStringIncludes(card, "Automatic KYB retained for future admin activation");
   assertStringIncludes(documents, 'check.routeMode === "assisted_kyb"');
+  assertStringIncludes(applicationScreen, 'stationRole !== "owner"');
+  assertStringIncludes(applicationScreen, "Automatic KYC is used for station representatives at launch");
+  assertStringIncludes(applicationScreen, "The automatic KYB route is retained for future activation");
 });
 
 Deno.test("verification runtime is JWT protected", () => {
