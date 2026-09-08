@@ -83,6 +83,15 @@ export function CustomerOrderPaymentScreen() {
     }
   };
 
+  const openTopUp = () => {
+    if (!orderId) {
+      router.push("/(customer)/wallet/top-up" as never);
+      return;
+    }
+    const returnTo = `/(customer)/orders/${orderId}/payment`;
+    router.push(`/(customer)/wallet/top-up?returnTo=${encodeURIComponent(returnTo)}` as never);
+  };
+
   return (
     <Screen
       eyebrow="Order payment"
@@ -141,7 +150,7 @@ export function CustomerOrderPaymentScreen() {
             <Text style={[styles.caption, { color: palette.muted }]}>
               {enoughBalance
                 ? "SKIMA will reserve the order amount from your wallet and move the refill into dispatch."
-                : "Your saved order remains waiting for payment. Add funds, then return here to continue."}
+                : "Your saved order remains waiting for payment. Add funds and SKIMA will return you to this payment automatically."}
             </Text>
           </View>
 
@@ -158,7 +167,7 @@ export function CustomerOrderPaymentScreen() {
               <AppButton
                 label="Top up wallet"
                 fullWidth
-                onPress={() => router.push("/(customer)/wallet/top-up" as never)}
+                onPress={openTopUp}
               />
             ) : null}
             <AppButton
