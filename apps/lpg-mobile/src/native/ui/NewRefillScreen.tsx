@@ -860,14 +860,18 @@ function StationSelectionSection({
 }) {
   const { palette } = useAppTheme();
   const [showAllStations, setShowAllStations] = useState(false);
-  const selectedIndex = stations.findIndex(
+  const selectedStation = stations.find(
     (station) => station.station_branch_id === selected,
   );
-  const shouldShowAll =
-    showAllStations || selectedIndex >= STATION_PREVIEW_LIMIT;
-  const visibleStations = shouldShowAll
-    ? stations
-    : stations.slice(0, STATION_PREVIEW_LIMIT);
+  const closestStations = stations.slice(0, STATION_PREVIEW_LIMIT);
+  const selectedAlreadyVisible = closestStations.some(
+    (station) => station.station_branch_id === selected,
+  );
+  const previewStations =
+    selectedStation && !selectedAlreadyVisible
+      ? [...closestStations.slice(0, STATION_PREVIEW_LIMIT - 1), selectedStation]
+      : closestStations;
+  const visibleStations = showAllStations ? stations : previewStations;
 
   return (
     <View style={[styles.selectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -935,7 +939,7 @@ function StationSelectionSection({
       {stations.length > STATION_PREVIEW_LIMIT ? (
         <AppButton
           label={
-            shouldShowAll
+            showAllStations
               ? "Show closest stations only"
               : `View all ${stations.length} eligible stations`
           }
