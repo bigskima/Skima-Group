@@ -76,6 +76,7 @@ async function deployFunctions(): Promise<void> {
   await deployFunction(projectRef, "api-gateway", false);
   await deployFunction(projectRef, "finance-runtime", false);
   await deployFunction(projectRef, "verification-runtime", false);
+  await deployFunction(projectRef, "verification-provider-webhook", true);
   await deployFunction(projectRef, "runtime-worker", true);
   await deployFunction(projectRef, "inventory-provider-webhook", true);
   await deployFunction(projectRef, "payment-webhook", true);
@@ -154,7 +155,7 @@ Commands:
   link              Link this repo to the hosted Supabase dev project
   db-push           Push migrations to the linked hosted dev project
   db-reset-linked   Reset the linked hosted dev database with the local migrations
-  functions-deploy  Deploy health, api-gateway, finance-runtime, runtime-worker, inventory-provider-webhook, payment-webhook, and webhook-sandbox-receiver
+  functions-deploy  Deploy health, api-gateway, finance-runtime, verification-runtime, verification-provider-webhook, runtime-worker, inventory-provider-webhook, payment-webhook, and webhook-sandbox-receiver
   status            Check CLI project access
 `,
   );
