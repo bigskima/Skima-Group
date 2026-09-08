@@ -89,7 +89,7 @@ Deno.test("redundant partner paperwork is reduced without removing safety eviden
 
 Deno.test("verification runtime uses secure provider sessions and normalized decisions", () => {
   assertStringIncludes(runtime, "partner-verification.ts");
-  assertStringIncludes(sharedVerification, 'Deno.env.get("DIDIT_API_KEY")');
+  assertStringIncludes(sharedVerification, 'resolveServerSecret(serviceClient, "DIDIT_API_KEY")');
   assertStringIncludes(sharedVerification, '"https://verification.didit.me/v3/session/"');
   assertStringIncludes(sharedVerification, "/decision/");
   assertStringIncludes(sharedVerification, '"x-api-key": apiKey');
@@ -162,7 +162,7 @@ Deno.test("Didit live route activation binds published KYC and KYB workflows", a
 Deno.test("Didit webhook is public-to-provider but HMAC authenticated and idempotent", () => {
   assertStringIncludes(supabaseConfig, "[functions.verification-provider-webhook]");
   assertStringIncludes(supabaseConfig, "verify_jwt = false");
-  assertStringIncludes(providerWebhook, 'Deno.env.get("DIDIT_WEBHOOK_SECRET")');
+  assertStringIncludes(providerWebhook, 'resolveServerSecret(\n    supabase,\n    "DIDIT_WEBHOOK_SECRET"');
   assertStringIncludes(providerWebhook, 'request.headers.get("x-signature-v2")');
   assertStringIncludes(providerWebhook, "canonicalJson(payload)");
   assertStringIncludes(providerWebhook, 'request.headers.get("x-signature")');
