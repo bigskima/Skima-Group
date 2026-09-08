@@ -126,7 +126,7 @@ export async function startPartnerVerificationSession(
     );
   }
 
-  const apiKey = Deno.env.get("DIDIT_API_KEY");
+  const apiKey = await resolveServerSecret(serviceClient, "DIDIT_API_KEY");
   if (!apiKey) {
     throw new VerificationRuntimeError(
       "verification_provider_not_configured",
@@ -312,7 +312,7 @@ export async function refreshPartnerVerificationSession(
     );
   }
 
-  const apiKey = Deno.env.get("DIDIT_API_KEY");
+  const apiKey = await resolveServerSecret(serviceClient, "DIDIT_API_KEY");
   if (!apiKey) {
     throw new VerificationRuntimeError(
       "verification_provider_not_configured",
@@ -517,6 +517,20 @@ async function applicationMapping(
     );
   }
   return mapping.data;
+}
+
+async function resolveServerSecret(
+  serviceClient: SupabaseClient,
+  name: string,
+): Promise<string | null> {
+  const environmentValue = Deno.env.get(name)?.trim();
+  if (environmentValue) return environmentValue;
+
+  const result = await serviceClient.rpc("read_server_secret", {
+    target_name: name,
+  });
+  if (result.error) return null;
+  return textValue(result.data);
 }
 
 async function activeRoute(

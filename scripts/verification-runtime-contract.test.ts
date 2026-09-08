@@ -89,7 +89,7 @@ Deno.test("redundant partner paperwork is reduced without removing safety eviden
 
 Deno.test("verification runtime uses secure provider sessions and normalized decisions", () => {
   assertStringIncludes(runtime, "partner-verification.ts");
-  assertStringIncludes(sharedVerification, 'Deno.env.get("DIDIT_API_KEY")');
+  assertStringIncludes(sharedVerification, 'resolveServerSecret(serviceClient, "DIDIT_API_KEY")');
   assertStringIncludes(sharedVerification, '"https://verification.didit.me/v3/session/"');
   assertStringIncludes(sharedVerification, "/decision/");
   assertStringIncludes(sharedVerification, '"x-api-key": apiKey');
@@ -139,10 +139,30 @@ Deno.test("verification runtime is JWT protected", () => {
   assertStringIncludes(supabaseConfig, "verify_jwt = true");
 });
 
+Deno.test("Didit server secrets may come from Edge secrets or service-role-only Vault fallback", () => {
+  assertStringIncludes(sharedVerification, 'resolveServerSecret(serviceClient, "DIDIT_API_KEY")');
+  assertStringIncludes(sharedVerification, 'rpc("read_server_secret"');
+  assertStringIncludes(providerWebhook, '"DIDIT_WEBHOOK_SECRET"');
+  assertStringIncludes(providerWebhook, 'rpc("read_server_secret"');
+});
+
+Deno.test("Didit live route activation binds published KYC and KYB workflows", async () => {
+  const migration = await read(
+    "supabase/migrations/20260908081707_didit_vault_route_activation.sql",
+  );
+  assertStringIncludes(migration, "read_server_secret");
+  assertStringIncludes(migration, "grant execute on function public.read_server_secret(text) to service_role");
+  assertStringIncludes(migration, "f08c2586-0b0c-42a7-b386-c220eb320c37");
+  assertStringIncludes(migration, "bcdcd368-63c0-47ab-8427-35e865dfdde2");
+  assertStringIncludes(migration, "verification.person.identity");
+  assertStringIncludes(migration, "verification.business.registry");
+  assertStringIncludes(migration, "status = 'active'");
+});
+
 Deno.test("Didit webhook is public-to-provider but HMAC authenticated and idempotent", () => {
   assertStringIncludes(supabaseConfig, "[functions.verification-provider-webhook]");
   assertStringIncludes(supabaseConfig, "verify_jwt = false");
-  assertStringIncludes(providerWebhook, 'Deno.env.get("DIDIT_WEBHOOK_SECRET")');
+  assertStringIncludes(providerWebhook, 'resolveServerSecret(\n    supabase,\n    "DIDIT_WEBHOOK_SECRET"');
   assertStringIncludes(providerWebhook, 'request.headers.get("x-signature-v2")');
   assertStringIncludes(providerWebhook, "canonicalJson(payload)");
   assertStringIncludes(providerWebhook, 'request.headers.get("x-signature")');
