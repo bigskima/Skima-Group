@@ -100,8 +100,13 @@ export function DriverApplicationEntryScreen() {
     storedLongitude !== null;
 
   const [editing, setEditing] = useState(false);
+  // A newly-created draft does not have a payload query bound to its ID until
+  // React re-renders. Remember the successful save locally so the user can
+  // continue immediately instead of being trapped on the geography step while
+  // the new application/payload queries catch up.
+  const [continueAfterSave, setContinueAfterSave] = useState(false);
 
-  if (geographyComplete && !editing) {
+  if ((geographyComplete || continueAfterSave) && !editing) {
     return (
       <View style={styles.applicationShell}>
         <View style={[styles.editBar, { backgroundColor: palette.surface, borderColor: palette.border }]}> 
@@ -119,7 +124,15 @@ export function DriverApplicationEntryScreen() {
             </View>
           </View>
           {canEditGeography ? (
-            <AppButton label="Edit" size="sm" variant="ghost" onPress={() => setEditing(true)} />
+            <AppButton
+              label="Edit"
+              size="sm"
+              variant="ghost"
+              onPress={() => {
+                setContinueAfterSave(false);
+                setEditing(true);
+              }}
+            />
           ) : null}
         </View>
         <View style={styles.applicationBody}>
@@ -157,8 +170,15 @@ export function DriverApplicationEntryScreen() {
       initialCandidateCoverage={storedCandidateCoverage}
       initialLocation={operationalLocationFromRecord(storedLocation)}
       onSaved={async () => {
-        await applications.refetch();
-        if (currentId) await payloadQuery.refetch();
+        const refreshedApplications = await applications.refetch();
+        if (refreshedApplications.error) throw refreshedApplications.error;
+
+        if (currentId) {
+          const refreshedPayload = await payloadQuery.refetch();
+          if (refreshedPayload.error) throw refreshedPayload.error;
+        }
+
+        setContinueAfterSave(true);
         setEditing(false);
       }}
       onCancel={geographyComplete ? () => setEditing(false) : undefined}
