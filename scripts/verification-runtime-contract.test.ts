@@ -148,7 +148,7 @@ Deno.test("Didit server secrets may come from Edge secrets or service-role-only 
 
 Deno.test("Didit live route activation binds published KYC and KYB workflows", async () => {
   const migration = await read(
-    "supabase/migrations/20260908082000_didit_vault_route_activation.sql",
+    "supabase/migrations/20260908081707_didit_vault_route_activation.sql",
   );
   assertStringIncludes(migration, "read_server_secret");
   assertStringIncludes(migration, "grant execute on function public.read_server_secret(text) to service_role");
