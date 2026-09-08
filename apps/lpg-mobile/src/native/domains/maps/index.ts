@@ -189,40 +189,55 @@ function selectKeylessRaster(
   provider: string,
   configuredTemplate?: string,
 ): { key: string; template: string; attribution: string; fallback: boolean } {
-  if (
-    provider === "carto_voyager" &&
-    isUsablePublicTileTemplate(configuredTemplate) &&
-    keylessTileHost(configuredTemplate) === "carto"
-  ) {
-    return {
-      key: "carto_voyager",
-      template: configuredTemplate,
-      attribution: KEYLESS_ATTRIBUTION,
-      fallback: false,
-    };
+  if (provider === "carto_voyager") {
+    if (!configuredTemplate) {
+      return {
+        key: "carto_voyager",
+        template: KEYLESS_RASTER_TILE_TEMPLATE,
+        attribution: KEYLESS_ATTRIBUTION,
+        fallback: false,
+      };
+    }
+    if (
+      isUsablePublicTileTemplate(configuredTemplate) &&
+      keylessTileHost(configuredTemplate) === "carto"
+    ) {
+      return {
+        key: "carto_voyager",
+        template: configuredTemplate,
+        attribution: KEYLESS_ATTRIBUTION,
+        fallback: false,
+      };
+    }
   }
 
-  if (
-    ["openstreetmap", "osm", "osm_standard"].includes(provider) &&
-    isUsablePublicTileTemplate(configuredTemplate) &&
-    keylessTileHost(configuredTemplate) === "osm"
-  ) {
-    return {
-      key: "osm_standard",
-      template: configuredTemplate,
-      attribution: KEYLESS_OSM_ATTRIBUTION,
-      fallback: false,
-    };
+  if (["openstreetmap", "osm", "osm_standard"].includes(provider)) {
+    if (!configuredTemplate) {
+      return {
+        key: "osm_standard",
+        template: KEYLESS_OSM_TILE_TEMPLATE,
+        attribution: KEYLESS_OSM_ATTRIBUTION,
+        fallback: false,
+      };
+    }
+    if (
+      isUsablePublicTileTemplate(configuredTemplate) &&
+      keylessTileHost(configuredTemplate) === "osm"
+    ) {
+      return {
+        key: "osm_standard",
+        template: configuredTemplate,
+        attribution: KEYLESS_OSM_ATTRIBUTION,
+        fallback: false,
+      };
+    }
   }
 
   return {
     key: "carto_voyager",
     template: KEYLESS_RASTER_TILE_TEMPLATE,
     attribution: KEYLESS_ATTRIBUTION,
-    fallback: Boolean(
-      configuredTemplate ||
-        !["carto_voyager", "openstreetmap", "osm", "osm_standard"].includes(provider),
-    ),
+    fallback: true,
   };
 }
 
