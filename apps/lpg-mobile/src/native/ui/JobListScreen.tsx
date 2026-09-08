@@ -20,15 +20,19 @@ import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
 import { StatusPill } from "./StatusPill";
 
+const JOB_PAGE_SIZE = 8;
+
 export function JobListScreen({ workspace }: { workspace: "driver" | "station" }) {
   const { palette } = useAppTheme();
   const jobs = workspace === "driver" ? domainQueries.driverJobs() : domainQueries.stationJobs();
   const config = useLpgConfig();
   const [searchQuery, setSearchQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(JOB_PAGE_SIZE);
   const allJobs = jobs.data ?? [];
-  const visibleJobs = workspace === "station" && searchQuery.trim()
+  const matchingJobs = workspace === "station" && searchQuery.trim()
     ? allJobs.filter((job) => matchesStationVerificationSearch(job, searchQuery))
     : allJobs;
+  const visibleJobs = matchingJobs.slice(0, visibleCount);
   const driverLimit = workspace === "driver" ? readDriverDispatchLimit(config.data) : null;
   const remainingDriverSlots = driverLimit === null ? null : Math.max(driverLimit - allJobs.length, 0);
 
@@ -99,7 +103,10 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
             accessibilityLabel="Find assigned LPG service"
             autoCapitalize="characters"
             autoCorrect={false}
-            onChangeText={setSearchQuery}
+            onChangeText={(value) => {
+              setSearchQuery(value);
+              setVisibleCount(JOB_PAGE_SIZE);
+            }}
             placeholder="Order, Cylinder ID or Driver ID"
             placeholderTextColor={palette.muted}
             style={[styles.searchInput, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
@@ -126,7 +133,7 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
           title={workspace === "driver" ? "No active deliveries" : "No expected arrivals"}
           description={workspace === "driver" ? "New suitable jobs appear here automatically. You may receive another job before finishing the current one when your route and workload allow it." : "New refill orders appear here automatically when SKIMA assigns them to this station."}
         />
-      ) : visibleJobs.length === 0 ? (
+      ) : matchingJobs.length === 0 ? (
         <EmptyState
           icon={<Search color={palette.brand} size={26} />}
           title="No assigned arrival matches"
@@ -225,6 +232,13 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
               </Pressable>
             );
           })}
+          {visibleCount < matchingJobs.length ? (
+            <AppButton
+              label={`Show ${Math.min(JOB_PAGE_SIZE, matchingJobs.length - visibleCount)} more`}
+              variant="secondary"
+              onPress={() => setVisibleCount((count) => count + JOB_PAGE_SIZE)}
+            />
+          ) : null}
         </View>
       )}
     </Screen>
