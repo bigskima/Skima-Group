@@ -1,5 +1,5 @@
 import * as Linking from "expo-linking";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { ShieldCheck, WalletCards } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -25,6 +25,9 @@ import { Screen } from "./Screen";
 
 export function TopUpScreen() {
   const { palette } = useAppTheme();
+  const params = useLocalSearchParams<{ returnTo?: string | string[] }>();
+  const requestedReturn = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
+  const returnTo = safeCustomerReturn(requestedReturn);
   const wallets = domainQueries.wallets();
   const currencies = domainQueries.currencies();
 
@@ -102,7 +105,10 @@ export function TopUpScreen() {
         walletId: resolvedWalletId ?? undefined,
         callbackUrl: Linking.createURL("payment-return"),
         idempotencyKey: idempotencyKey("wallet-top-up", walletId ?? "wallet"),
-        metadata: { returnUrl: Linking.createURL("payment-return") },
+        metadata: {
+          returnUrl: Linking.createURL("payment-return"),
+          appReturnTo: returnTo ?? undefined,
+        },
       });
 
       const response = result ?? {};
@@ -129,7 +135,11 @@ export function TopUpScreen() {
     <Screen
       eyebrow="SKIMA Wallet"
       title="Add money"
-      subtitle="See exactly what enters your wallet and any SKIMA fee before payment."
+      subtitle={
+        returnTo
+          ? "Add the funds you need, then SKIMA will return you to the saved order payment."
+          : "See exactly what enters your wallet and any SKIMA fee before payment."
+      }
       action={<AppButton label="Cancel" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
@@ -145,7 +155,9 @@ export function TopUpScreen() {
           </View>
         </View>
         <Text style={styles.heroSub}>
-          Choose how much to add. SKIMA shows the wallet credit, fee and total charge before checkout.
+          {returnTo
+            ? "Your order stays saved while you fund the wallet. After a successful top-up, you will return to confirm that same order."
+            : "Choose how much to add. SKIMA shows the wallet credit, fee and total charge before checkout."}
         </Text>
       </View>
 
@@ -207,11 +219,24 @@ export function TopUpScreen() {
         onClose={() => setModalVisible(false)}
         onSuccess={() => {
           setModalVisible(false);
-          router.replace("/(customer)/wallet");
+          router.replace((returnTo ?? "/(customer)/wallet") as never);
         }}
       />
     </Screen>
   );
+}
+
+function safeCustomerReturn(value: string | undefined) {
+  if (!value) return null;
+  let decoded = value;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    // Expo Router commonly provides an already-decoded value.
+  }
+  return /^\/\(customer\)\/orders\/[0-9a-f-]{36}\/payment$/i.test(decoded)
+    ? decoded
+    : null;
 }
 
 function MoneyRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {

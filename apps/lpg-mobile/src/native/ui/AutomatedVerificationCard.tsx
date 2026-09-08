@@ -174,7 +174,7 @@ export function AutomatedVerificationCard({
               ? "VERIFIED AUTOMATICALLY"
               : automaticAvailable
                 ? "SECURE AUTOMATIC CHECK"
-                : "FALLBACK AVAILABLE"}
+                : "VERIFICATION OPTIONS"}
           </Text>
           <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
           <Text style={[styles.body, { color: palette.muted }]}>{description}</Text>
@@ -198,13 +198,40 @@ export function AutomatedVerificationCard({
           </Text>
         </View>
       ) : !automaticAvailable && check ? (
-        <View style={[styles.fallbackBox, { backgroundColor: palette.warningSoft }]}>
-          <FileWarning color={palette.warning} size={18} />
-          <Text style={[styles.fallbackText, { color: palette.ink }]}>
-            The secure automatic check is not available for this application right now.
-            {canFallback ? " Continue with the accepted evidence below; SKIMA can review it without blocking your draft." : " Try the secure check again later."}
-          </Text>
-        </View>
+        <>
+          <View style={[styles.fallbackBox, { backgroundColor: palette.warningSoft }]}>
+            <FileWarning color={palette.warning} size={18} />
+            <Text style={[styles.fallbackText, { color: palette.ink }]}>
+              The secure check was unavailable when this application status was loaded.
+              {canFallback
+                ? " You can retry the secure check now or continue with accepted fallback evidence."
+                : " Retry the secure check before continuing."}
+            </Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            disabled={isBusy}
+            onPress={() => void startVerification()}
+            style={({ pressed }) => [
+              styles.secondary,
+              {
+                backgroundColor: palette.surfaceSubtle,
+                borderColor: palette.border,
+              },
+              pressed && styles.pressed,
+              isBusy && styles.disabled,
+            ]}
+          >
+            {start.isPending ? (
+              <ActivityIndicator color={palette.brand} />
+            ) : (
+              <>
+                <RefreshCw color={palette.brand} size={16} strokeWidth={2.4} />
+                <Text style={[styles.secondaryText, { color: palette.brand }]}>Retry secure verification</Text>
+              </>
+            )}
+          </Pressable>
+        </>
       ) : (
         <View style={styles.actions}>
           <Pressable
@@ -319,6 +346,7 @@ const styles = StyleSheet.create({
     gap: 7,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
   },
   secondaryText: { fontSize: 11, fontWeight: "900" },
   successBox: {
