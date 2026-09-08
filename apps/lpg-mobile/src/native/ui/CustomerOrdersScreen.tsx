@@ -204,8 +204,11 @@ export function CustomerOrderDetailScreen() {
   const { palette } = useAppTheme();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const detail = useJobDetails(id ?? null);
+  const orders = domainQueries.orders();
   const root = detail.data;
-  const order = nestedRecord(root, "order") ?? root;
+  const jobOrder = nestedRecord(root, "order") ?? (root && recordId(root) ? root : null);
+  const savedOrder = (orders.data ?? []).find((item) => recordId(item) === id) ?? null;
+  const order = jobOrder ?? savedOrder;
   const cylinder = nestedRecord(root, "cylinder") ?? nestedRecord(order, "cylinder");
   const station = nestedRecord(root, "station") ?? nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
   const pickup = nestedRecord(root, "pickupLocation") ?? nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location");
@@ -247,16 +250,16 @@ export function CustomerOrderDetailScreen() {
         />
       }
     >
-      {detail.isPending ? (
+      {detail.isPending && orders.isPending ? (
         <View style={styles.loading}>
           <ActivityIndicator color={palette.brand} />
           <Text style={[styles.loadingText, { color: palette.muted }]}>Loading order details…</Text>
         </View>
-      ) : detail.error ? (
+      ) : detail.error && orders.error ? (
         <EmptyState
           title="Couldn't load this order"
           description="We couldn't refresh the latest order state. Check your connection and try again."
-          action={<AppButton label="Try again" variant="secondary" onPress={() => void detail.refetch()} />}
+          action={<AppButton label="Try again" variant="secondary" onPress={() => void Promise.all([detail.refetch(), orders.refetch()])} />}
         />
       ) : !order ? (
         <EmptyState
