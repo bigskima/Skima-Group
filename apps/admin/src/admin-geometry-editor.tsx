@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Crosshair, Minus, Plus, RotateCcw } from "lucide-react";
+import { Crosshair, Maximize2, Minimize2, Minus, Plus, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { z } from "zod";
 
@@ -20,8 +20,8 @@ type RendererConfiguration = {
 const WIDTH = 800;
 const HEIGHT = 420;
 const TILE = 256;
-const SAFE_TILE_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const SAFE_ATTRIBUTION = "OpenStreetMap contributors";
+const SAFE_TILE_TEMPLATE = "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
+const SAFE_ATTRIBUTION = "© OpenStreetMap contributors, © CARTO";
 const SAFE_CENTER: Coordinate = [8.6753, 9.082];
 
 const RendererConfigurationSchema = z.object({
@@ -67,7 +67,6 @@ export function AdminGeometryEditor(props: {
       };
     },
   });
-  const renderer = rendererQuery.data ?? BUILD_RENDERER;
   const initial = useMemo(() => readPolygons(props.value), [props.value]);
   const [polygons, setPolygons] = useState<Coordinate[][]>(initial.length ? initial : [[]]);
   const [active, setActive] = useState(Math.max(initial.length - 1, 0));
@@ -77,6 +76,9 @@ export function AdminGeometryEditor(props: {
   const [zoom, setZoom] = useState(
     initial.length ? Math.min(12, BUILD_RENDERER.maxZoom) : BUILD_RENDERER.defaultZoom,
   );
+  const [fullScreen, setFullScreen] = useState(false);
+  const [tileFailure, setTileFailure] = useState(false);
+  const renderer = tileFailure ? BUILD_RENDERER : (rendererQuery.data ?? BUILD_RENDERER);
 
   useEffect(() => {
     const next = initial.length ? initial : [[]];
@@ -92,6 +94,24 @@ export function AdminGeometryEditor(props: {
       setZoom(renderer.defaultZoom);
     }
   }, [initial.length, props.point, renderer.defaultCenter, renderer.defaultZoom]);
+
+  useEffect(() => {
+    setTileFailure(false);
+  }, [rendererQuery.data?.tileTemplate]);
+
+  useEffect(() => {
+    if (!fullScreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFullScreen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [fullScreen]);
 
   const layout = tiles(center, zoom, renderer.tileTemplate);
   const paths = polygons.map((polygon) => polygonPath(polygon, center, zoom));
@@ -140,7 +160,32 @@ export function AdminGeometryEditor(props: {
   };
 
   return (
-    <section className="sk-panel">
+    <>
+      {fullScreen ? (
+        <div
+          aria-hidden="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1199,
+            background: "rgba(4, 10, 14, 0.72)",
+            backdropFilter: "blur(3px)",
+          }}
+        />
+      ) : null}
+      <section
+        className="sk-panel"
+        style={fullScreen
+          ? {
+              position: "fixed",
+              inset: 14,
+              zIndex: 1200,
+              overflow: "auto",
+              margin: 0,
+              boxShadow: "0 24px 80px rgba(0,0,0,.35)",
+            }
+          : undefined}
+      >
       <div className="sk-panel__header">
         <div>
           <h3>{props.mode === "polygon" ? "Interactive boundary editor" : "Select radius center"}</h3>
@@ -167,6 +212,14 @@ export function AdminGeometryEditor(props: {
           >
             Zoom in
           </Button>
+          <Button
+            size="sm"
+            variant={fullScreen ? "primary" : "outline"}
+            icon={fullScreen ? Minimize2 : Maximize2}
+            onClick={() => setFullScreen((value) => !value)}
+          >
+            {fullScreen ? "Exit full map" : "Open full map"}
+          </Button>
         </div>
       </div>
       {rendererQuery.error
@@ -185,7 +238,7 @@ export function AdminGeometryEditor(props: {
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         style={{
           width: "100%",
-          minHeight: 360,
+          minHeight: fullScreen ? "calc(100vh - 250px)" : 360,
           border: "1px solid #ccd7dc",
           borderRadius: 16,
           background: "#eaf0f2",
@@ -201,6 +254,7 @@ export function AdminGeometryEditor(props: {
             width={TILE}
             height={TILE}
             preserveAspectRatio="none"
+            onError={() => setTileFailure(true)}
           />
         ))}
         {paths.map((path, index) => (
@@ -277,8 +331,10 @@ export function AdminGeometryEditor(props: {
       </div>
       <p className="skima-muted">
         Basemap: {renderer.attribution}. Geometry becomes authoritative only after server preview and activation.
+        {fullScreen ? " Press Esc or use Exit full map when you are done." : ""}
       </p>
     </section>
+    </>
   );
 }
 
@@ -287,7 +343,7 @@ function readBuildRenderer(): RendererConfiguration {
   const hasConfiguredTemplate = isUsableTileTemplate(configuredTemplate);
   const configuredAttribution = (import.meta.env.VITE_MAP_ATTRIBUTION as string | undefined)?.trim();
   return {
-    key: hasConfiguredTemplate ? "renderer.maps.build-configured" : "renderer.maps.openstreetmap-standard",
+    key: hasConfiguredTemplate ? "renderer.maps.build-configured" : "renderer.maps.carto-voyager-keyless",
     tileTemplate: hasConfiguredTemplate ? configuredTemplate.trim() : SAFE_TILE_TEMPLATE,
     attribution: hasConfiguredTemplate && configuredAttribution ? configuredAttribution : SAFE_ATTRIBUTION,
     maxZoom: 19,
@@ -302,7 +358,19 @@ function isUsableTileTemplate(value: unknown): value is string {
   const template = value.trim();
   if (!template.startsWith("https://")) return false;
   if (!["{z}", "{x}", "{y}"].every((token) => template.includes(token))) return false;
-  return !requiresPublicMapCredential(template);
+  if (requiresPublicMapCredential(template)) return false;
+  try {
+    const hostname = new URL(
+      template
+        .replace("{z}", "1")
+        .replace("{x}", "1")
+        .replace("{y}", "1"),
+    ).hostname.toLowerCase();
+    return hostname === "tile.openstreetmap.org" ||
+      hostname.endsWith(".basemaps.cartocdn.com");
+  } catch {
+    return false;
+  }
 }
 
 function requiresPublicMapCredential(value: string) {

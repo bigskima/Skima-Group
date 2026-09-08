@@ -309,13 +309,17 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
 
   // Admin rendering must not require an env-only basemap to be usable.
   assertIncludes(adminGeometry, 'supabase.rpc("read_maps_renderer_configuration")');
-  assertIncludes(adminGeometry, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+  assertIncludes(adminGeometry, "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png");
   assertNotIncludes(
     adminGeometry,
     "Configure VITE_MAP_TILE_URL_TEMPLATE for the provider basemap",
   );
   assertIncludes(adminGeometry, "requiresPublicMapCredential");
   assertIncludes(adminGeometry, '"locationiq.com"');
+  assertIncludes(adminGeometry, '"Open full map"');
+  assertIncludes(adminGeometry, '"Exit full map"');
+  assertIncludes(adminGeometry, 'position: "fixed"');
+  assertIncludes(adminGeometry, 'onError={() => setTileFailure(true)}');
 
   // Customer and partner saves must preserve normalized location data and
   // must not erase geography written by another onboarding step.
@@ -416,12 +420,28 @@ Deno.test("universal partner coverage is the only application geography projecto
   assertNotIncludes(cutover, "drop function public.sync_application_geography_for_version");
 });
 
+Deno.test("platform map renderer defaults to a credential-free launch basemap", async () => {
+  const migration = await readRepositoryFile(
+    "supabase/migrations/20260908065500_keyless_map_renderer_default.sql",
+  );
+  assertIncludes(migration, "renderer.maps.carto-voyager-keyless");
+  assertIncludes(migration, "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png");
+  assertIncludes(migration, "'credential_required', false");
+  assertIncludes(migration, "'public_client_safe', true");
+  assertNotIncludes(migration, "LOCATIONIQ_ACCESS_TOKEN");
+});
+
 Deno.test("mobile basemap falls back before a public API-key tile URL can blank the map", async () => {
   const runtime = await readRepositoryFile("apps/lpg-mobile/src/native/domains/maps/index.ts");
   const webMap = await readRepositoryFile("apps/lpg-mobile/src/native/maps/OperationalMap.web.tsx");
   const nativeMap = await readRepositoryFile("apps/lpg-mobile/src/native/maps/OperationalMap.native.tsx");
 
   assertIncludes(runtime, "KEYLESS_RASTER_TILE_TEMPLATE");
+  assertIncludes(runtime, "KEYLESS_OSM_TILE_TEMPLATE");
+  assertIncludes(runtime, "selectKeylessRaster");
+  assertIncludes(runtime, "keylessTileHost");
+  assertIncludes(runtime, "basemaps.cartocdn.com");
+  assertIncludes(runtime, "tile.openstreetmap.org");
   assertIncludes(runtime, "requiresPublicMapCredential");
   assertIncludes(runtime, '"locationiq.com"');
   assertIncludes(runtime, '"api.mapbox.com"');

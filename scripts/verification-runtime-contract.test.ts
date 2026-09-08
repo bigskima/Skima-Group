@@ -10,6 +10,7 @@ const [
   migration,
   partnerMediaMigration,
   runtime,
+  providerWebhook,
   sharedVerification,
   mobileVerification,
   applicationScreen,
@@ -21,6 +22,7 @@ const [
   read("supabase/migrations/20260907070000_automatic_partner_verification_engine.sql"),
   read("supabase/migrations/20260819214411_lpg_granular_partner_media_privacy.sql"),
   read("supabase/functions/verification-runtime/index.ts"),
+  read("supabase/functions/verification-provider-webhook/index.ts"),
   read("supabase/functions/_shared/partner-verification.ts"),
   read("apps/lpg-mobile/src/native/api/verification.ts"),
   read("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx"),
@@ -135,4 +137,25 @@ Deno.test("mobile partner verification uses the canonical API gateway", () => {
 Deno.test("verification runtime is JWT protected", () => {
   assertStringIncludes(supabaseConfig, "[functions.verification-runtime]");
   assertStringIncludes(supabaseConfig, "verify_jwt = true");
+});
+
+Deno.test("Didit webhook is public-to-provider but HMAC authenticated and idempotent", () => {
+  assertStringIncludes(supabaseConfig, "[functions.verification-provider-webhook]");
+  assertStringIncludes(supabaseConfig, "verify_jwt = false");
+  assertStringIncludes(providerWebhook, 'Deno.env.get("DIDIT_WEBHOOK_SECRET")');
+  assertStringIncludes(providerWebhook, 'request.headers.get("x-signature-v2")');
+  assertStringIncludes(providerWebhook, "canonicalJson(payload)");
+  assertStringIncludes(providerWebhook, 'request.headers.get("x-signature")');
+  assertStringIncludes(providerWebhook, 'request.headers.get("x-signature-simple")');
+  assertStringIncludes(providerWebhook, 'request.headers.get("x-timestamp")');
+  assertStringIncludes(providerWebhook, "MAX_TIMESTAMP_SKEW_SECONDS = 300");
+  assertStringIncludes(providerWebhook, '"status.updated"');
+  assertStringIncludes(providerWebhook, '"data.updated"');
+  assertStringIncludes(providerWebhook, 'provider_kind: "verification"');
+  assertStringIncludes(providerWebhook, 'idempotency_key: eventId');
+  assertStringIncludes(providerWebhook, 'reconcile_application_verification');
+  assert(
+    !providerWebhook.includes("decision: payload.decision"),
+    "Raw Didit decision payloads must not be persisted by the webhook runtime.",
+  );
 });
