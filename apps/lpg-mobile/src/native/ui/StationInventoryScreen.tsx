@@ -311,18 +311,45 @@ export function StationInventoryScreen() {
             </>
           ) : null}
 
-          <View style={styles.actionGrid}>
-            {canConfirm ? <AppButton label="Confirm unchanged" variant="secondary" loading={confirm.isPending} onPress={() => void confirmUnchanged()} /> : null}
-            {canUpdateStock ? <AppButton label={physical === null ? "Report opening stock" : "Update stock"} variant="secondary" onPress={() => setEditor("report")} /> : null}
-            {canAdjustStock ? <AppButton label="Record adjustment" variant="secondary" onPress={() => setEditor("adjust")} /> : null}
-            {canManageSources ? <AppButton label="Manage source" variant="secondary" onPress={() => setEditor("source")} /> : null}
-            {canManageAvailability ? <AppButton label="Availability" variant="secondary" onPress={() => setEditor("availability")} /> : null}
-            {canManageSources ? <AppButton label={manualFallbackActive ? "End fallback" : "Manual fallback"} variant="secondary" onPress={() => setEditor("fallback")} /> : null}
-            {canManageCapacity ? <AppButton label="Processing capacity" variant="secondary" onPress={() => setEditor("capacity")} /> : null}
-            {canManageProviders ? <AppButton label="Provider setup" variant="secondary" onPress={() => setEditor("provider")} /> : null}
-            {canManageProviders && tanks.length > 0 && connections.length > 0 ? <AppButton label="Map device" variant="secondary" onPress={() => setEditor("device")} /> : null}
-            {canReportIssue ? <AppButton label="Report stockout" variant="secondary" onPress={() => setEditor("issue")} /> : null}
-          </View>
+          {section !== "overview" ? (
+            <>
+              <SectionHeader
+                title={
+                  section === "stock"
+                    ? "Stock control"
+                    : section === "operations"
+                      ? "Station operations"
+                      : section === "sources"
+                        ? "Inventory sources"
+                        : "Inventory activity"
+                }
+                description={
+                  section === "stock"
+                    ? "Update physical stock, allocation, tanks and reservations without mixing provider setup into the same form."
+                    : section === "operations"
+                      ? "Manage dispatch availability, processing capacity, fallback and operational exceptions."
+                      : section === "sources"
+                        ? "Configure how SKIMA receives stock readings from manual, POS or telemetry sources."
+                        : "Review the latest auditable inventory events and exceptions."
+                }
+              />
+
+              {section !== "activity" ? (
+                <View style={styles.actionGrid}>
+                  {section === "stock" && canConfirm ? <AppButton label="Confirm unchanged" variant="secondary" loading={confirm.isPending} onPress={() => void confirmUnchanged()} /> : null}
+                  {section === "stock" && canUpdateStock ? <AppButton label={physical === null ? "Report opening stock" : "Update stock"} variant="secondary" onPress={() => setEditor("report")} /> : null}
+                  {section === "stock" && canAdjustStock ? <AppButton label="Record adjustment" variant="secondary" onPress={() => setEditor("adjust")} /> : null}
+                  {section === "operations" && canManageAvailability ? <AppButton label="Availability" variant="secondary" onPress={() => setEditor("availability")} /> : null}
+                  {section === "operations" && canManageSources ? <AppButton label={manualFallbackActive ? "End fallback" : "Manual fallback"} variant="secondary" onPress={() => setEditor("fallback")} /> : null}
+                  {section === "operations" && canManageCapacity ? <AppButton label="Processing capacity" variant="secondary" onPress={() => setEditor("capacity")} /> : null}
+                  {section === "operations" && canReportIssue ? <AppButton label="Report stockout" variant="secondary" onPress={() => setEditor("issue")} /> : null}
+                  {section === "sources" && canManageSources ? <AppButton label="Manage source" variant="secondary" onPress={() => setEditor("source")} /> : null}
+                  {section === "sources" && canManageProviders ? <AppButton label="Provider setup" variant="secondary" onPress={() => setEditor("provider")} /> : null}
+                  {section === "sources" && canManageProviders && tanks.length > 0 && connections.length > 0 ? <AppButton label="Map device" variant="secondary" onPress={() => setEditor("device")} /> : null}
+                </View>
+              ) : null}
+            </>
+          ) : null}
 
           {editor === "report" && stationBranchId ? (
             <StockReportEditor
