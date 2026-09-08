@@ -64,6 +64,36 @@ Deno.test("payment reservation and automatic dispatch are one transaction", asyn
 });
 
 
+Deno.test("live dispatch retry accepts PostGIS driver-position coordinate types", async () => {
+  const [remediation, operations] = await Promise.all([
+    read("supabase/migrations/20260908193000_live_lpg_runtime_admin_reconciliation.sql"),
+    read("apps/admin/src/admin-operations-workspace.tsx"),
+  ]);
+  assertIncludes(remediation, "origin_latitude numeric");
+  assertIncludes(remediation, "target_latitude double precision");
+  assertIncludes(remediation, "origin_latitude double precision");
+  assertIncludes(remediation, "target_latitude::numeric");
+  assertIncludes(operations, "Retry driver matching");
+  assertIncludes(operations, '"/lpg/orders/dispatch"');
+});
+
+Deno.test("quality admin queue has one unambiguous production RPC shape", async () => {
+  const [remediation, quality] = await Promise.all([
+    read("supabase/migrations/20260908193000_live_lpg_runtime_admin_reconciliation.sql"),
+    read("apps/admin/src/admin-quality-workspace.tsx"),
+  ]);
+  assertIncludes(remediation, "drop function if exists public.read_lpg_quality_admin_queue(text, integer)");
+  assertIncludes(quality, "target_severity: null");
+});
+
+Deno.test("first-time driver geography save continues into application progress", async () => {
+  const screen = await read("apps/lpg-mobile/src/native/ui/DriverApplicationEntryScreen.tsx");
+  assertIncludes(screen, "continueAfterSave");
+  assertIncludes(screen, "setContinueAfterSave(true)");
+  assertIncludes(screen, "const refreshedApplications = await applications.refetch()");
+  assertIncludes(screen, "geographyComplete || continueAfterSave");
+});
+
 Deno.test("customer home keeps independent services visible in every refill state", async () => {
   const dashboard = await read("apps/lpg-mobile/src/native/ui/PremiumDashboard.tsx");
   assertIncludes(dashboard, "function CustomerBillsCard()");
