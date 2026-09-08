@@ -323,9 +323,14 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
   assertIncludes(customerLocationSave, "formattedAddress");
   assertIncludes(partnerApplication, "...basePayload");
   assertIncludes(partnerApplication, "location: lastLocation ?? existingLocation ?? null");
+  assertIncludes(partnerApplication, '"application.lpg.station.phase-one"');
   assertIncludes(driverApplication, "...existingService");
+  assertIncludes(driverApplication, "stripLegacyServiceAreaFields");
   assertIncludes(driverWorkspaceApplication, "...basePayload");
   assertIncludes(driverWorkspaceApplication, "...existingService");
+  assertIncludes(driverWorkspaceApplication, "stripLegacyServiceAreaFields");
+  assertIncludes(driverWorkspaceApplication, '"application.lpg.driver.phase-one"');
+  assertIncludes(driverApplication, '"application.lpg.driver.phase-one"');
   assertIncludes(adminCoverage, 'supabase.rpc("migrate_verified_operational_coverage")');
   assertIncludes(partnerGeographyReconciliation, "'service.coverageRequests'");
   assertIncludes(partnerGeographyReconciliation, "'service.serviceAreaIds'");
