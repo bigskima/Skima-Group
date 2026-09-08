@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { CheckCircle2, ShieldCheck, WalletCards } from "lucide-react-native";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
-import { domainQueries, useJobDetails } from "../api/domains";
+import { domainQueries } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
   ActionResponseSchema,
@@ -33,7 +33,7 @@ export function CustomerOrderPaymentScreen() {
   const { palette } = useAppTheme();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const orderId = typeof id === "string" ? id : null;
-  const detail = useJobDetails(orderId);
+  const orders = domainQueries.orders();
   const wallets = domainQueries.wallets();
   const reserve = useGatewayMutation({
     path: "/lpg/orders/reserve-payment",
@@ -41,8 +41,7 @@ export function CustomerOrderPaymentScreen() {
     invalidate: [["orders"], ["orders", "active"], ["wallets"]],
   });
 
-  const root = detail.data;
-  const order = nestedRecord(root, "order") ?? root;
+  const order = (orders.data ?? []).find((item) => firstString(item, ["id"]) === orderId) ?? null;
   const wallet = selectWorkspaceWallet(wallets.data ?? [], "customer");
   const walletId = firstString(wallet, ["wallet_id", "walletId", "id"]);
   const currency =
@@ -77,7 +76,7 @@ export function CustomerOrderPaymentScreen() {
         source: "skima.lpg.mobile.resume-payment",
         idempotencyKey: idempotencyKey("reserve-order-payment", orderId),
       });
-      await Promise.all([detail.refetch(), wallets.refetch()]);
+      await Promise.all([orders.refetch(), wallets.refetch()]);
       router.replace(`/(customer)/orders/${orderId}` as never);
     } catch (cause) {
       reserve.reset();
@@ -92,12 +91,12 @@ export function CustomerOrderPaymentScreen() {
       subtitle="Resume payment for an order you already created. SKIMA will not create a duplicate refill."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
-      {detail.isPending || wallets.isPending ? (
+      {orders.isPending || wallets.isPending ? (
         <View style={styles.loading}>
           <ActivityIndicator color={palette.brand} />
           <Text style={[styles.caption, { color: palette.muted }]}>Loading the saved order and wallet…</Text>
         </View>
-      ) : detail.error || !order ? (
+      ) : orders.error || !order ? (
         <EmptyState
           title="This order could not be loaded"
           description="Return to Orders and refresh before trying payment again."
