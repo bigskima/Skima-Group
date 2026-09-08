@@ -288,6 +288,13 @@ async function verifyDiditWebhook(
     throw new WebhookError("stale_webhook", 401);
   }
 
+  const signatureV2 = request.headers.get("x-signature-v2");
+  if (signatureV2) {
+    const canonical = canonicalJson(payload);
+    const expected = await hmacSha256(secret, canonical);
+    if (constantTimeEqual(signatureV2.toLowerCase(), expected)) return;
+  }
+
   const rawSignature = request.headers.get("x-signature");
   if (rawSignature) {
     const expected = await hmacSha256(secret, rawBody);
@@ -298,7 +305,7 @@ async function verifyDiditWebhook(
   if (simpleSignature) {
     const canonical = [
       stringOrEmpty(payload.timestamp),
-      stringOrEmpty(payload.session_id ?? payload.business_session_id),
+      stringOrEmpty(payload.session_id),
       stringOrEmpty(payload.status),
       stringOrEmpty(payload.webhook_type),
     ].join(":");
@@ -435,6 +442,23 @@ function numberValue(value: unknown): number | undefined {
 function stringOrEmpty(value: unknown): string {
   if (value === null || value === undefined) return "";
   return String(value);
+}
+
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(sortJsonKeys(value));
+}
+
+function sortJsonKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJsonKeys);
+  if (value && typeof value === "object") {
+    const source = value as Record<string, unknown>;
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) {
+      sorted[key] = sortJsonKeys(source[key]);
+    }
+    return sorted;
+  }
+  return value;
 }
 
 async function hmacSha256(secret: string, message: string): Promise<string> {
