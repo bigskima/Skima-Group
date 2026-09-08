@@ -175,6 +175,10 @@ export function StationInventoryScreen() {
             />
           ))}
 
+          <InventorySectionSwitcher section={section} onSelect={selectSection} />
+
+          {section === "overview" ? (
+            <>
           <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
             <View style={styles.heroTop}>
               <View style={styles.heroCopy}>
@@ -297,6 +301,15 @@ export function StationInventoryScreen() {
             </View>
             <Text style={[styles.caption, { color: palette.muted }]}>Last confirmed: {friendlyTime(firstString(inventory, ["lastVerifiedAt"]))}</Text>
           </View>
+
+          <View style={styles.quickLayerGrid}>
+            <LayerShortcut title="Stock" subtitle="Report, adjust, tanks and reservations" onPress={() => selectSection("stock")} />
+            <LayerShortcut title="Operations" subtitle="Availability, capacity and stockout controls" onPress={() => selectSection("operations")} />
+            <LayerShortcut title="Sources" subtitle="Manual, POS and telemetry setup" onPress={() => selectSection("sources")} />
+            <LayerShortcut title="Activity" subtitle="Recent stock history and exceptions" onPress={() => selectSection("activity")} />
+          </View>
+            </>
+          ) : null}
 
           <View style={styles.actionGrid}>
             {canConfirm ? <AppButton label="Confirm unchanged" variant="secondary" loading={confirm.isPending} onPress={() => void confirmUnchanged()} /> : null}
