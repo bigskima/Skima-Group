@@ -85,8 +85,16 @@ export function AdminVerificationWorkspace(props: {
     routes.find(
       (route) => recordString(route, "verificationKey") === "verification.business.registry",
     ) ?? null;
+  const authorityRoute =
+    routes.find(
+      (route) => recordString(route, "verificationKey") === "verification.station.authority",
+    ) ?? null;
   const identityAutomatic = recordString(identityRoute ?? {}, "status") === "active";
   const businessAutomatic = recordString(businessRoute ?? {}, "status") === "active";
+  const identityConfig = recordObject(identityRoute ?? {}, "config");
+  const identityFreeTier = identityConfig.freeTierEligible === true;
+  const identityFreeAllowance =
+    recordNumber(identityConfig, "freeTierAllowancePerFeaturePerMonth") ?? 0;
   const exceptionRows = exceptions.data ?? [];
   const supabaseBaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)
     ?.trim()
@@ -321,8 +329,13 @@ export function AdminVerificationWorkspace(props: {
           <div className="admin-summary-row">
             <div>
               <strong>Personal KYC</strong>
-              <p>Drivers and non-owner station representatives · identity + liveness.</p>
-              <small>Does not verify company owners, UBOs or the business itself.</small>
+              <p>Drivers and non-owner station representatives · identity + passive liveness + face match.</p>
+              <small>
+                {identityFreeTier
+                  ? `Didit Free KYC · up to ${identityFreeAllowance || 500} monthly checks per included core feature. `
+                  : ""}
+                Does not verify company owners, UBOs or the business itself.
+              </small>
             </div>
             <div>
               <StatusBadge tone={identityAutomatic ? "success" : "warning"}>
@@ -345,6 +358,21 @@ export function AdminVerificationWorkspace(props: {
                   {identityAutomatic ? "Pause automatic KYC" : "Enable automatic KYC"}
                 </Button>
               ) : null}
+            </div>
+          </div>
+
+          <div className="admin-summary-row">
+            <div>
+              <strong>Representative authority</strong>
+              <p>Employment or authorization evidence for non-owner station representatives.</p>
+              <small>Identity KYC does not prove authority to register a station; SKIMA reviews this evidence separately.</small>
+            </div>
+            <div>
+              <StatusBadge tone="warning">
+                {authorityRoute && recordString(authorityRoute, "status") === "active"
+                  ? "Automatic"
+                  : "Assisted review"}
+              </StatusBadge>
             </div>
           </div>
 
@@ -486,8 +514,10 @@ export function AdminVerificationWorkspace(props: {
                 verificationKey === "verification.business.registry"
                   ? "Keep the KYB workflow ID here even while the route is paused. Launch uses assisted CAC/business review; enabling the route later turns automatic KYB back on without a mobile release."
                   : verificationKey === "verification.person.identity"
-                    ? "Use the personal KYC workflow for drivers and non-owner station representatives. It should include identity, liveness and face matching, and must not be used for company-owner or UBO screening."
-                    : "This is the hosted verification workflow configured with the provider. It is not an API key."
+                    ? "Use Didit's Free KYC workflow for drivers and non-owner station representatives: ID verification, passive liveness, face match and IP/device analysis. Do not use paid active-liveness/AML/NFC workflows here."
+                    : verificationKey === "verification.station.authority"
+                      ? "Representative authority is assisted for launch. Keep the route paused unless a future provider can actually verify employment/authorization evidence."
+                      : "This is the hosted verification workflow configured with the provider. It is not an API key."
               }
               value={workflowRef}
               onChange={(event) => setWorkflowRef(event.currentTarget.value)}
