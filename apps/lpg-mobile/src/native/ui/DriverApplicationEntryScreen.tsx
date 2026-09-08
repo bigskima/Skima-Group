@@ -115,11 +115,13 @@ export function DriverApplicationEntryScreen() {
             <View style={styles.editBarText}>
               <Text style={[styles.editBarTitle, { color: palette.ink }]}>Service areas saved</Text>
               <Text style={[styles.editBarSubtitle, { color: palette.muted }]} numberOfLines={1}>
-                {storedAreaIds.length > 0
-                  ? (storedAreaIds.length === 1 ? "1 operating area" : `${storedAreaIds.length} operating areas`)
-                  : storedCandidateCoverage
-                    ? `Candidate radius · ${Math.round(storedCandidateCoverage.radiusMeters / 1000 * 10) / 10} km`
-                    : `${storedCoverageCount} coverage request(s)`} · location captured
+                {!geographyComplete && continueAfterSave
+                  ? "Operating area saved · application ready to continue"
+                  : storedAreaIds.length > 0
+                    ? (storedAreaIds.length === 1 ? "1 operating area" : `${storedAreaIds.length} operating areas`)
+                    : storedCandidateCoverage
+                      ? `Candidate radius · ${Math.round(storedCandidateCoverage.radiusMeters / 1000 * 10) / 10} km`
+                      : `${storedCoverageCount} coverage request(s) · location captured`}
               </Text>
             </View>
           </View>
