@@ -67,7 +67,6 @@ export function AdminGeometryEditor(props: {
       };
     },
   });
-  const renderer = tileFailure ? BUILD_RENDERER : (rendererQuery.data ?? BUILD_RENDERER);
   const initial = useMemo(() => readPolygons(props.value), [props.value]);
   const [polygons, setPolygons] = useState<Coordinate[][]>(initial.length ? initial : [[]]);
   const [active, setActive] = useState(Math.max(initial.length - 1, 0));
@@ -79,6 +78,7 @@ export function AdminGeometryEditor(props: {
   );
   const [fullScreen, setFullScreen] = useState(false);
   const [tileFailure, setTileFailure] = useState(false);
+  const renderer = tileFailure ? BUILD_RENDERER : (rendererQuery.data ?? BUILD_RENDERER);
 
   useEffect(() => {
     const next = initial.length ? initial : [[]];
