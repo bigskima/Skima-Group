@@ -143,6 +143,8 @@ Deno.test("Didit webhook is public-to-provider but HMAC authenticated and idempo
   assertStringIncludes(supabaseConfig, "[functions.verification-provider-webhook]");
   assertStringIncludes(supabaseConfig, "verify_jwt = false");
   assertStringIncludes(providerWebhook, 'Deno.env.get("DIDIT_WEBHOOK_SECRET")');
+  assertStringIncludes(providerWebhook, 'request.headers.get("x-signature-v2")');
+  assertStringIncludes(providerWebhook, "canonicalJson(payload)");
   assertStringIncludes(providerWebhook, 'request.headers.get("x-signature")');
   assertStringIncludes(providerWebhook, 'request.headers.get("x-signature-simple")');
   assertStringIncludes(providerWebhook, 'request.headers.get("x-timestamp")');
