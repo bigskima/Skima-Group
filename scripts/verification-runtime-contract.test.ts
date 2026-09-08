@@ -134,6 +134,18 @@ Deno.test("mobile partner verification uses the canonical API gateway", () => {
   );
 });
 
+Deno.test("verification admin exception queue uses a real application identifier", async () => {
+  const remediation = await read(
+    "supabase/migrations/20260908193000_live_lpg_runtime_admin_reconciliation.sql",
+  );
+  assertStringIncludes(remediation, "create or replace function public.read_verification_exception_queue()");
+  assertStringIncludes(remediation, "'APP-' || upper(substr(replace(application.id::text, '-', ''), 1, 12))");
+  assert(
+    !remediation.includes("application.public_reference"),
+    "The repaired exception queue must not reference a column that application_records does not own.",
+  );
+});
+
 Deno.test("verification runtime is JWT protected", () => {
   assertStringIncludes(supabaseConfig, "[functions.verification-runtime]");
   assertStringIncludes(supabaseConfig, "verify_jwt = true");
