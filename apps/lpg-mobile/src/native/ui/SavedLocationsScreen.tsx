@@ -1,5 +1,6 @@
 import { router } from "expo-router";
 import { Check, MapPin, Plus, ShieldCheck } from "lucide-react-native";
+import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { displaySubtitle, displayTitle, recordId } from "../api/records";
@@ -11,10 +12,15 @@ import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 
+const LOCATION_PAGE_SIZE = 6;
+
 export function SavedLocationsScreen() {
   const { palette } = useAppTheme();
   const locations = domainQueries.locations();
   const records = locations.data ?? [];
+  const [visibleCount, setVisibleCount] = useState(LOCATION_PAGE_SIZE);
+  const visibleRecords = records.slice(0, visibleCount);
+  const hiddenCount = Math.max(0, records.length - visibleRecords.length);
 
   return (
     <Screen
@@ -78,35 +84,53 @@ export function SavedLocationsScreen() {
           }
         />
       ) : (
-        <View style={styles.list}>
-          {records.map((item, index) => {
-            const id = recordId(item);
-            const title = displayTitle(item) || "Saved place";
-            const address = displaySubtitle(item) ?? "Saved pickup and return point";
-            return (
-              <View
-                key={id ?? String(index)}
-                style={[
-                  styles.place,
-                  shadows.soft,
-                  { backgroundColor: palette.surface, borderColor: palette.border },
-                ]}
-              >
-                <View style={[styles.pin, { backgroundColor: palette.brandSoft }]}>
-                  <MapPin color={palette.brand} size={20} />
+        <>
+          <View style={styles.list}>
+            {visibleRecords.map((item, index) => {
+              const id = recordId(item);
+              const title = displayTitle(item) || "Saved place";
+              const address = displaySubtitle(item) ?? "Saved pickup and return point";
+              return (
+                <View
+                  key={id ?? String(index)}
+                  style={[
+                    styles.place,
+                    shadows.soft,
+                    { backgroundColor: palette.surface, borderColor: palette.border },
+                  ]}
+                >
+                  <View style={[styles.pin, { backgroundColor: palette.brandSoft }]}>
+                    <MapPin color={palette.brand} size={20} />
+                  </View>
+                  <View style={styles.copy}>
+                    <Text numberOfLines={1} style={[styles.title, { color: palette.ink }]}>{title}</Text>
+                    <Text numberOfLines={2} style={[styles.address, { color: palette.muted }]}>{address}</Text>
+                  </View>
+                  <View style={[styles.savedBadge, { backgroundColor: palette.successSoft }]}>
+                    <Check color={palette.success} size={13} />
+                    <Text style={[styles.savedBadgeText, { color: palette.success }]}>Saved</Text>
+                  </View>
                 </View>
-                <View style={styles.copy}>
-                  <Text numberOfLines={1} style={[styles.title, { color: palette.ink }]}>{title}</Text>
-                  <Text numberOfLines={2} style={[styles.address, { color: palette.muted }]}>{address}</Text>
-                </View>
-                <View style={[styles.savedBadge, { backgroundColor: palette.successSoft }]}>
-                  <Check color={palette.success} size={13} />
-                  <Text style={[styles.savedBadgeText, { color: palette.success }]}>Saved</Text>
-                </View>
-              </View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
+
+          {hiddenCount > 0 ? (
+            <AppButton
+              label={`Show ${Math.min(LOCATION_PAGE_SIZE, hiddenCount)} more places`}
+              variant="secondary"
+              fullWidth
+              onPress={() => setVisibleCount((count) => count + LOCATION_PAGE_SIZE)}
+            />
+          ) : records.length > LOCATION_PAGE_SIZE ? (
+            <AppButton
+              label="Show fewer places"
+              variant="ghost"
+              fullWidth
+              onPress={() => setVisibleCount(LOCATION_PAGE_SIZE)}
+            />
+          ) : null}
+        </>
       )}
     </Screen>
   );
