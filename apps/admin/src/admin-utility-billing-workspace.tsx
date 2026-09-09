@@ -30,31 +30,38 @@ const SnapshotSchema = z.object({
   billers: z.array(RowSchema),
   products: z.array(RowSchema),
   routes: z.array(RowSchema),
+  economics: z.array(RowSchema).default([]),
   providers: z.array(RowSchema),
+  syncRuns: z.array(RowSchema).default([]),
   promotions: z.array(RowSchema),
   cashbacks: z.array(RowSchema),
   payments: z.array(RowSchema),
 });
 const MutationIdSchema = z.string().uuid();
+const PreviewSchema = z.record(z.unknown());
 
 type Row = z.infer<typeof RowSchema>;
 type SetupStep =
   | "guide"
+  | "provider"
+  | "catalog"
   | "category"
   | "biller"
   | "product"
-  | "provider"
+  | "economics"
   | "connection"
-  | "promotion";
+  | "campaign";
 
 const steps: ReadonlyArray<{ key: SetupStep; label: string; detail: string }> = [
-  { key: "guide", label: "Start here", detail: "Access, setup and launch guide" },
-  { key: "category", label: "Service types", detail: "Electricity, airtime, data and more" },
-  { key: "biller", label: "Companies", detail: "The companies customers can pay" },
-  { key: "product", label: "Plans", detail: "Amounts and customer details required" },
-  { key: "provider", label: "Providers", detail: "Add the bill-payment API connection" },
-  { key: "connection", label: "Routing", detail: "Connect plans to an approved provider" },
-  { key: "promotion", label: "Offers", detail: "Discounts and campaign limits" },
+  { key: "guide", label: "Start here", detail: "How the utility engine works" },
+  { key: "provider", label: "Providers", detail: "Connect any bill-payment API" },
+  { key: "catalog", label: "Catalogue", detail: "Provider sync and SKIMA curation" },
+  { key: "category", label: "Service types", detail: "Manual fallback: airtime, data, electricity" },
+  { key: "biller", label: "Companies", detail: "Manual fallback: MTN, Glo, EEDC and more" },
+  { key: "product", label: "Plans", detail: "Manual fallback: bundles and bill types" },
+  { key: "economics", label: "Economics", detail: "Margin, costs and protected profit" },
+  { key: "connection", label: "Routing", detail: "Map product to provider and activate safely" },
+  { key: "campaign", label: "Campaigns", detail: "Profit-safe cashback and discounts" },
 ];
 
 export function AdminUtilityBillingWorkspace() {
