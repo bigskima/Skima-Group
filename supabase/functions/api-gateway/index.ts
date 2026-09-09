@@ -275,6 +275,7 @@ const ROUTES = new Set([
   "/admin/utility-billing/catalog-sync/run",
   "/admin/utility-billing/campaign-pool",
   "/admin/utility-billing/campaign-pool/fund",
+  "/admin/utility-billing/payments/reconcile",
   "/runtime/utility-billing/validate",
   "/runtime/communications/sync",
   "/runtime/otp/challenges",
@@ -5506,6 +5507,17 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_currency_code: optionalString(body.value.currencyCode) ?? "NGN",
         target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
         target_metadata: optionalRecord(body.value.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/utility-billing/payments/reconcile" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(
+      supabase.rpc("request_utility_reconciliation", {
+        target_request_id: requireUuid(body.value.requestId, "requestId"),
       }),
       id,
     );
