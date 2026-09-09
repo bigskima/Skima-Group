@@ -19,6 +19,9 @@ const reservationCleanup = await Deno.readTextFile("supabase/migrations/20260909
 const providerActivation = await Deno.readTextFile("supabase/migrations/20260909033900_utility_provider_activation_control.sql");
 const runtimeWorker = await Deno.readTextFile("supabase/functions/runtime-worker/index.ts");
 const utilityArchitecture = await Deno.readTextFile("docs/utility-billing-architecture.md");
+const realMoneyReconciliation = await Deno.readTextFile("supabase/migrations/20260909072500_utility_real_money_reconciliation_guard.sql");
+const utilityWebhookMetadata = await Deno.readTextFile("supabase/migrations/20260909072700_utility_provider_webhook_metadata.sql");
+const utilityProviderWebhook = await Deno.readTextFile("supabase/functions/utility-provider-webhook/index.ts");
 
 Deno.test("cashback is prepared from policy and only earned after confirmed success", () => {
   assertStringIncludes(migration, "create table if not exists public.utility_reward_policies");
@@ -260,6 +263,49 @@ Deno.test("post-success provider reversal is explicitly outside initial retry se
   assertStringIncludes(utilityArchitecture, "post-settlement reversal/clawback policy");
   assertStringIncludes(utilityArchitecture, "must not be emulated by retrying the original");
   assertStringIncludes(utilityArchitecture, "purchase.");
+});
+
+Deno.test("duplicate provider references are reconciled instead of refunded", () => {
+  assertStringIncludes(utilityProviderRuntime, "utility_provider_duplicate_reference");
+  assertStringIncludes(utilityProviderRuntime, 'normalizedMessage.includes("duplicate")');
+  assertStringIncludes(utilityProviderRuntime, 'normalizedMessage.includes("reference")');
+  assertStringIncludes(runtimeWorker, "ambiguousDuplicate");
+  assertStringIncludes(runtimeWorker, 'normalized?.code === "utility_provider_duplicate_reference"');
+  assertStringIncludes(runtimeWorker, "target_provider_reference: ambiguousDuplicate");
+});
+
+Deno.test("Flutterwave status reconciliation uses tx_ref instead of flw_ref", () => {
+  assertStringIncludes(utilityProviderRuntime, "const transactionReference");
+  assertStringIncludes(utilityProviderRuntime, "optionalString(data.tx_ref)");
+  assertStringIncludes(utilityProviderRuntime, "providerFulfillmentReference: optionalString(data.flw_ref)");
+  assertStringIncludes(utilityProviderRuntime, "providerReference: transactionReference");
+});
+
+Deno.test("unresolved real-money utility payments escalate without automatic refund", () => {
+  assertStringIncludes(realMoneyReconciliation, "'reconciliation_required'");
+  assertStringIncludes(realMoneyReconciliation, "mark_stale_utility_reconciliations");
+  assertStringIncludes(realMoneyReconciliation, "reconciliation_attempts>=target_max_attempts");
+  assertStringIncludes(realMoneyReconciliation, "Customer funds remain safely reserved");
+  assertStringIncludes(realMoneyReconciliation, "request_utility_reconciliation");
+  assertStringIncludes(adminUtility, "Retry provider status");
+  assertStringIncludes(adminUtility, "Customer funds remain reserved");
+  assert(!realMoneyReconciliation.includes("utility-refund:"));
+});
+
+Deno.test("utility provider webhook is signed and wakes authoritative reconciliation only", () => {
+  assertStringIncludes(utilityWebhookMetadata, "SUPABASE_SECRET:FLUTTERWAVE_WEBHOOK_SECRET");
+  assertStringIncludes(utilityWebhookMetadata, "flutterwave-hmac-or-verif-hash");
+  assertStringIncludes(utilityProviderWebhook, 'request.headers.get("flutterwave-signature")');
+  assertStringIncludes(utilityProviderWebhook, 'request.headers.get("verif-hash")');
+  assertStringIncludes(utilityProviderWebhook, "hmacSha256Base64");
+  assertStringIncludes(utilityProviderWebhook, "readUtilityPurchaseStatus");
+  assertStringIncludes(utilityProviderWebhook, "Never settle from callback contents alone");
+  assertStringIncludes(utilityProviderWebhook, "finalize_utility_payment_request");
+  assertStringIncludes(utilityProviderWebhook, "resolve_utility_webhook_request");
+  assertStringIncludes(utilityProviderRuntime, "resolveUtilityWebhookCallbackUrl");
+  assertStringIncludes(utilityProviderRuntime, "/functions/v1/utility-provider-webhook/");
+  assert(!utilityProviderWebhook.includes('rpc("read_server_secret"'));
+  assert(!utilityProviderWebhook.includes("vault.decrypted_secrets"));
 });
 
 Deno.test("customer home exposes bills while station location screens stay off the tab bar", () => {

@@ -337,9 +337,13 @@ async function processUtilityPayments(
       }
     } catch (error) {
       const normalized = error instanceof UtilityProviderRuntimeError ? error : null;
+      const ambiguousDuplicate =
+        action === "purchase" &&
+        normalized?.code === "utility_provider_duplicate_reference";
       const deterministicFailure =
         action === "purchase" &&
         normalized !== null &&
+        !ambiguousDuplicate &&
         normalized.status >= 400 &&
         normalized.status < 500 &&
         normalized.status !== 408 &&
@@ -358,7 +362,9 @@ async function processUtilityPayments(
       } else {
         await requireRpc(supabase.rpc("mark_utility_payment_processing", {
           target_request_id: requestId,
-          target_provider_reference: existingProviderReference,
+          target_provider_reference: ambiguousDuplicate
+            ? publicReference
+            : existingProviderReference,
           target_provider_response: normalized?.details ?? {},
           target_error_code: normalized?.code ?? "utility_provider_unknown_error",
           target_error_message: error instanceof Error

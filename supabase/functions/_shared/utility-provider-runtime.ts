@@ -200,7 +200,10 @@ export async function purchaseUtilityService(
   const context = await readUtilityProviderContext(serviceClient, input.providerKey);
   const adapter = resolveUtilityAdapter(context);
   try {
-    const result = await adapter.purchase(input);
+    const result = await adapter.purchase({
+      ...input,
+      callbackUrl: input.callbackUrl ?? resolveUtilityWebhookCallbackUrl(context),
+    });
     await recordExecution(
       serviceClient,
       context,
@@ -272,6 +275,7 @@ export async function runUtilityProviderLivePurchaseTest(
       customerIdentifier: input.customerIdentifier,
       amount: input.amount,
       reference: input.reference,
+      callbackUrl: resolveUtilityWebhookCallbackUrl(context),
     });
     const normalizedStatus = optionalString(result.status) ?? "processing";
     const runtimeReady = normalizedStatus === "succeeded";
@@ -461,18 +465,29 @@ function createFlutterwaveBillsAdapter(context: UtilityProviderContext): Utility
         const providerMessage =
           optionalString(record.message) ??
           optionalString(record.error) ??
+          optionalString(optionalRecord(record.data)?.message) ??
           "The utility provider could not complete the request.";
+        const normalizedMessage = providerMessage.toLowerCase();
+        const duplicateReference =
+          response.status === 400 &&
+          normalizedMessage.includes("duplicate") &&
+          normalizedMessage.includes("reference");
         throw new UtilityProviderRuntimeError(
-          response.status === 401 || response.status === 403
+          duplicateReference
+            ? "utility_provider_duplicate_reference"
+            : response.status === 401 || response.status === 403
             ? "utility_provider_authentication_failed"
             : response.status === 429
             ? "utility_provider_rate_limited"
             : "utility_provider_request_failed",
-          providerMessage,
+          duplicateReference
+            ? "The provider already knows this transaction reference. SKIMA will verify its status instead of charging again."
+            : providerMessage,
           response.status >= 400 && response.status < 600 ? response.status : 502,
           {
             providerHttpStatus: response.status,
             providerMessage,
+            duplicateReference,
           },
         );
       }
@@ -658,17 +673,20 @@ function createFlutterwaveBillsAdapter(context: UtilityProviderContext): Utility
         },
       );
       const data = optionalRecord(response.data) ?? response;
+      const transactionReference =
+        optionalString(data.tx_ref) ??
+        optionalString(data.reference) ??
+        input.reference;
       return {
         status: normalizeFlutterwaveBillStatus(data),
-        providerReference:
-          optionalString(data.flw_ref) ??
-          optionalString(data.tx_ref) ??
-          optionalString(data.reference) ??
-          input.reference,
+        // Flutterwave's bill-status endpoint is queried with tx_ref. Keep that
+        // canonical transaction reference separate from flw_ref so an
+        // ambiguous purchase is never reconciled with the wrong identifier.
+        providerReference: transactionReference,
+        providerFulfillmentReference: optionalString(data.flw_ref),
         customerReference:
           optionalString(data.customer_reference) ??
-          optionalString(data.tx_ref) ??
-          input.reference,
+          transactionReference,
         amount: optionalNumber(data.amount) ?? input.amount,
         fee: optionalNumber(data.fee),
         commission: optionalNumber(data.commission),
@@ -681,16 +699,16 @@ function createFlutterwaveBillsAdapter(context: UtilityProviderContext): Utility
         `bills/${encodeURIComponent(reference)}?verbose=1`,
       );
       const data = optionalRecord(response.data) ?? response;
+      const transactionReference =
+        optionalString(data.tx_ref) ??
+        reference;
       return {
         status: normalizeFlutterwaveBillStatus(data),
-        providerReference:
-          optionalString(data.flw_ref) ??
-          optionalString(data.tx_ref) ??
-          reference,
+        providerReference: transactionReference,
+        providerFulfillmentReference: optionalString(data.flw_ref),
         customerReference:
           optionalString(data.customer_reference) ??
-          optionalString(data.tx_ref) ??
-          reference,
+          transactionReference,
         amount: optionalNumber(data.amount),
         fee: optionalNumber(data.fee),
         commission: optionalNumber(data.commission),
@@ -806,6 +824,29 @@ function resolveEdgeSecret(secretRef: string | null): string {
     );
   }
   return value;
+}
+
+function resolveUtilityWebhookCallbackUrl(
+  context: UtilityProviderContext,
+): string | null {
+  const webhook = optionalRecord(context.config.webhook);
+  const path = optionalString(webhook?.path);
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  if (
+    !path ||
+    !supabaseUrl ||
+    !path.startsWith("/functions/v1/utility-provider-webhook/")
+  ) {
+    return null;
+  }
+
+  try {
+    const base = new URL(supabaseUrl);
+    if (base.protocol !== "https:") return null;
+    return new URL(path, base).toString();
+  } catch {
+    return null;
+  }
 }
 
 function safeApiBaseUrl(value: string, allowedHosts: string[]): URL {

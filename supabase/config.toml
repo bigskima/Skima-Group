@@ -72,3 +72,6 @@ verify_jwt = true
 
 [functions.verification-provider-webhook]
 verify_jwt = false
+
+[functions.utility-provider-webhook]
+verify_jwt = false
