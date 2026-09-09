@@ -274,39 +274,59 @@ export function AdminUtilityBillingWorkspace() {
               save.mutate({ kind: "provider", key, configuration })}
           />
         ) : null}
+        {step === "catalog" ? (
+          <CatalogSyncOverview
+            providers={data?.providers ?? []}
+            syncRuns={data?.syncRuns ?? []}
+          />
+        ) : null}
+        {step === "economics" ? (
+          <EconomicsForm
+            routes={data?.routes ?? []}
+            economics={data?.economics ?? []}
+            busy={saveEconomics.isPending}
+            previewBusy={previewEconomics.isPending}
+            error={saveEconomics.error ?? previewEconomics.error}
+            preview={previewEconomics.data ?? null}
+            onSave={(input) => saveEconomics.mutate(input)}
+            onPreview={(input) => previewEconomics.mutate(input)}
+          />
+        ) : null}
         {step === "connection" ? (
           <ConnectionForm
             products={data?.products ?? []}
             providers={data?.providers ?? []}
+            routes={data?.routes ?? []}
+            economics={data?.economics ?? []}
             busy={connect.isPending}
             error={connect.error}
             onSave={(input) => connect.mutate(input)}
           />
         ) : null}
-        {step === "promotion" ? (
-          <div className="utility-offer-stack">
-            <PromotionForm
-              busy={save.isPending}
-              error={save.error}
-              onSave={(key, configuration) =>
-                save.mutate({ kind: "promotion", key, configuration })}
-            />
-            <CashbackForm
-              busy={cashback.isPending}
-              error={cashback.error}
-              onSave={(input) => cashback.mutate(input)}
-            />
-          </div>
+        {step === "campaign" ? (
+          <CampaignForm
+            categories={data?.categories ?? []}
+            billers={data?.billers ?? []}
+            products={data?.products ?? []}
+            promotions={data?.promotions ?? []}
+            cashbacks={data?.cashbacks ?? []}
+            preview={previewCampaign.data ?? null}
+            previewBusy={previewCampaign.isPending}
+            saveBusy={saveCampaign.isPending}
+            error={previewCampaign.error ?? saveCampaign.error}
+            onPreview={(input) => previewCampaign.mutate(input)}
+            onSave={(input) => saveCampaign.mutate(input)}
+          />
         ) : null}
       </section>
 
       <section className="admin-notice">
-        <strong>Payment protection</strong>
+        <strong>Profit and payment protection</strong>
         <p>
-          A provider can be saved before its fulfillment adapter is ready, but SKIMA
-          will not allow a customer-facing route to go live until the provider has a
-          configured Edge secret and a tested runtime adapter. This prevents a bill
-          request from taking wallet funds with nowhere safe to fulfill it.
+          A route cannot go live until the provider has an Edge-secret reference, a tested
+          fulfillment adapter, and active economics that preserve the configured minimum
+          SKIMA profit. Margin-funded campaigns are blocked when they would cross that floor;
+          marketing or sponsor campaigns require an explicit budget.
         </p>
       </section>
     </>
