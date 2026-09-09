@@ -5374,7 +5374,10 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const categoryCodesRaw = body.value.categoryCodes;
     const categoryCodes = categoryCodesRaw === undefined || categoryCodesRaw === null
       ? []
-      : requireStringArray(categoryCodesRaw, "categoryCodes", 50);
+      : requireStringArray(categoryCodesRaw, "categoryCodes");
+    if (categoryCodes.length > 50) {
+      throw new RequestValidationError("categoryCodes must contain at most 50 items.");
+    }
     const data = await syncUtilityProviderCatalog(
       createServiceClient(supabaseUrl, serviceRoleKey),
       requirePlatformKey(body.value.providerKey, "providerKey"),
@@ -12639,20 +12642,6 @@ async function requireUtilityBillingManage(
   if (permission.data !== true && superAdmin.data !== true) {
     throw new RequestValidationError("bill service management permission is required");
   }
-}
-
-function requireStringArray(
-  value: unknown,
-  field: string,
-  maximumItems: number,
-): string[] {
-  if (!Array.isArray(value) || value.length > maximumItems) {
-    throw new RequestValidationError(
-      `${field} must be an array with at most ${maximumItems} items.`,
-    );
-  }
-  return value.map((item, index) =>
-    requireString(item, `${field}[${index}]`));
 }
 
 function requireRecord(value: unknown, fieldName: string): Readonly<Record<string, unknown>> {
