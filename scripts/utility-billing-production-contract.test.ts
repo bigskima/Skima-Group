@@ -2,6 +2,8 @@ import { assert, assertStringIncludes } from "jsr:@std/assert@1.0.18";
 
 const migration = await Deno.readTextFile("supabase/migrations/20260906072000_utility_rewards_and_safe_admin_directory.sql");
 const providerRuntime = await Deno.readTextFile("supabase/migrations/20260909013500_utility_provider_onboarding_runtime.sql");
+const profitRuntime = await Deno.readTextFile("supabase/migrations/20260909022000_utility_margin_safe_campaigns_and_catalog_sync.sql");
+const profitGuards = await Deno.readTextFile("supabase/migrations/20260909022500_utility_profit_guards_and_catalog_availability.sql");
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const adminUtility = await Deno.readTextFile("apps/admin/src/admin-utility-billing-workspace.tsx");
 const stationLayout = await Deno.readTextFile("apps/lpg-mobile/app/(station)/_layout.tsx");
@@ -47,6 +49,59 @@ Deno.test("customer routes cannot go live before provider fulfillment is ready",
   assertStringIncludes(providerRuntime, "this provider has no live SKIMA fulfillment adapter yet");
   assertStringIncludes(adminUtility, "Not ready for customer traffic");
   assertStringIncludes(adminUtility, "providerReady");
+});
+
+Deno.test("utility provider integration stays generic and catalog sync is canonical", () => {
+  assertStringIncludes(profitRuntime, "utility_provider_catalog_sync_runs");
+  assertStringIncludes(profitRuntime, "utility_provider_catalog_items");
+  assertStringIncludes(profitRuntime, "begin_utility_provider_catalog_sync");
+  assertStringIncludes(profitRuntime, "stage_utility_provider_catalog_items");
+  assertStringIncludes(profitRuntime, "publish_utility_provider_catalog_sync");
+  assertStringIncludes(profitRuntime, "canonical_key");
+  assertStringIncludes(profitRuntime, "provider_product_code");
+  assert(!profitRuntime.includes("provider.utility.vtpass"));
+  assert(!profitRuntime.includes("provider.utility.reloadly"));
+  assert(!profitRuntime.includes("provider.utility.flutterwave"));
+});
+
+Deno.test("route economics protects SKIMA contribution before customer activation", () => {
+  assertStringIncludes(profitRuntime, "utility_route_economics");
+  assertStringIncludes(profitRuntime, "provider_discount_percent");
+  assertStringIncludes(profitRuntime, "collection_cost_percent");
+  assertStringIncludes(profitRuntime, "operating_reserve_percent");
+  assertStringIncludes(profitRuntime, "minimum_profit_percent");
+  assertStringIncludes(profitRuntime, "customer_fee_percent");
+  assertStringIncludes(profitRuntime, "calculate_utility_route_economics");
+  assertStringIncludes(profitGuards, "guard_utility_route_activation");
+  assertStringIncludes(profitGuards, "protected SKIMA profit floor");
+});
+
+Deno.test("cashback and discount campaigns cannot silently consume protected margin", () => {
+  assertStringIncludes(profitRuntime, "funding_mode");
+  assertStringIncludes(profitRuntime, "'margin','marketing_budget','sponsor'");
+  assertStringIncludes(profitRuntime, "preview_utility_campaign_profit");
+  assertStringIncludes(profitRuntime, "configure_utility_campaign");
+  assertStringIncludes(profitRuntime, "budget_reserved");
+  assertStringIncludes(profitRuntime, "budget_spent");
+  assertStringIncludes(profitRuntime, "margin_campaign_cost_amount");
+  assertStringIncludes(profitRuntime, "subsidized_campaign_cost_amount");
+  assertStringIncludes(profitRuntime, "expected_cashback_amount");
+  assertStringIncludes(profitRuntime, "this campaign cannot be applied because it would reduce the protected SKIMA profit");
+  assertStringIncludes(profitGuards, "guard_utility_promotion_activation");
+  assertStringIncludes(profitGuards, "guard_utility_cashback_activation");
+});
+
+Deno.test("utility admin exposes catalog economics routing and profit-safe campaigns", () => {
+  assertStringIncludes(adminUtility, 'key: "catalog"');
+  assertStringIncludes(adminUtility, 'key: "economics"');
+  assertStringIncludes(adminUtility, 'key: "campaign"');
+  assertStringIncludes(adminUtility, "Provider catalogue sync");
+  assertStringIncludes(adminUtility, "Set route economics");
+  assertStringIncludes(adminUtility, "Create a profit-safe campaign");
+  assertStringIncludes(adminUtility, "Maximum ordinary campaign spend");
+  assertStringIncludes(gateway, '"/admin/utility-billing/economics"');
+  assertStringIncludes(gateway, '"/admin/utility-billing/campaign-preview"');
+  assertStringIncludes(gateway, '"/admin/utility-billing/catalog-sync/publish"');
 });
 
 Deno.test("customer home exposes bills while station location screens stay off the tab bar", () => {
