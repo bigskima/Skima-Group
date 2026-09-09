@@ -32,6 +32,8 @@ import {
   VerificationRuntimeError,
 } from "../_shared/partner-verification.ts";
 import {
+  checkUtilityProviderLivePurchaseTest,
+  runUtilityProviderLivePurchaseTest,
   syncUtilityProviderCatalog,
   testUtilityProviderConnection,
   UtilityProviderRuntimeError,
@@ -267,7 +269,11 @@ const ROUTES = new Set([
   "/admin/utility-billing/catalog-sync/stage",
   "/admin/utility-billing/catalog-sync/publish",
   "/admin/utility-billing/providers/test",
+  "/admin/utility-billing/providers/live-test",
+  "/admin/utility-billing/providers/live-test/status",
   "/admin/utility-billing/catalog-sync/run",
+  "/admin/utility-billing/campaign-pool",
+  "/admin/utility-billing/campaign-pool/fund",
   "/runtime/utility-billing/validate",
   "/runtime/communications/sync",
   "/runtime/otp/challenges",
@@ -5141,7 +5147,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       const body = await readJsonBody(request, id);
       if ("response" in body) return body.response;
       const payload = body.value;
-      return rpcResponse(supabase.rpc("create_utility_payment_request", {
+      const createResult = await supabase.rpc("create_utility_payment_request", {
         target_product_id: requireUuid(payload.productId, "productId"),
         target_wallet_id: requireUuid(payload.walletId, "walletId"),
         target_customer_identifier: requireString(payload.customerIdentifier, "customerIdentifier"),
@@ -5150,7 +5156,39 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_promotion_key: optionalString(payload.promotionKey),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_metadata: optionalRecord(payload.metadata) ?? {},
-      }), id);
+      });
+      if (createResult.error) {
+        return databaseError(createResult.error, id);
+      }
+
+      const utilityRequestId = requireUuid(createResult.data, "utilityRequestId");
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!serviceRoleKey) {
+        return jsonResponse({
+          ok: false,
+          error: "server_misconfigured",
+          message: "Utility payment reservation is not configured on this SKIMA backend.",
+          requestId: id,
+        }, 503);
+      }
+
+      const reserveResult = await createServiceClient(
+        supabaseUrl,
+        serviceRoleKey,
+      ).rpc("reserve_utility_payment_request", {
+        target_request_id: utilityRequestId,
+        target_idempotency_key: `utility-reserve:${utilityRequestId}`,
+      });
+      if (reserveResult.error) {
+        return databaseError(reserveResult.error, id);
+      }
+
+      return jsonResponse({
+        ok: true,
+        id: utilityRequestId,
+        data: reserveResult.data,
+        requestId: id,
+      });
     }
   }
 
@@ -5356,6 +5394,99 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       requirePlatformKey(body.value.providerKey, "providerKey"),
     );
     return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (routePath === "/admin/utility-billing/providers/live-test" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    await requireUtilityBillingManage(supabase);
+
+    if (body.value.confirmLiveSpend !== true) {
+      throw new RequestValidationError(
+        "confirmLiveSpend must be true before SKIMA can send a real-money provider test.",
+      );
+    }
+
+    const amount = requireNumber(body.value.amount, "amount");
+    if (amount <= 0 || amount > 5000) {
+      throw new RequestValidationError(
+        "Live utility test amount must be greater than 0 and no more than 5000 NGN.",
+      );
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "Utility provider live testing is not configured on this SKIMA backend.",
+        requestId: id,
+      }, 503);
+    }
+
+    const reference = optionalString(body.value.reference) ??
+      `skima-live-test-${crypto.randomUUID()}`;
+    const data = await runUtilityProviderLivePurchaseTest(
+      createServiceClient(supabaseUrl, serviceRoleKey),
+      {
+        providerKey: requirePlatformKey(body.value.providerKey, "providerKey"),
+        billerCode: requireString(body.value.billerCode, "billerCode"),
+        itemCode: requireString(body.value.itemCode, "itemCode"),
+        customerIdentifier: requireString(
+          body.value.customerIdentifier,
+          "customerIdentifier",
+        ),
+        amount,
+        reference,
+      },
+    );
+    return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (routePath === "/admin/utility-billing/providers/live-test/status" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    await requireUtilityBillingManage(supabase);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "Utility provider live testing is not configured on this SKIMA backend.",
+        requestId: id,
+      }, 503);
+    }
+    const data = await checkUtilityProviderLivePurchaseTest(
+      createServiceClient(supabaseUrl, serviceRoleKey),
+      {
+        providerKey: requirePlatformKey(body.value.providerKey, "providerKey"),
+        reference: requireString(body.value.reference, "reference"),
+      },
+    );
+    return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (routePath === "/admin/utility-billing/campaign-pool" && request.method === "GET") {
+    return rpcDataResponse(
+      supabase.rpc("read_utility_campaign_pool_balance", {
+        target_currency_code: optionalString(url.searchParams.get("currency")) ?? "NGN",
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/admin/utility-billing/campaign-pool/fund" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(
+      supabase.rpc("fund_utility_campaign_pool", {
+        target_amount: requireNumber(body.value.amount, "amount"),
+        target_currency_code: optionalString(body.value.currencyCode) ?? "NGN",
+        target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(body.value.metadata) ?? {},
+      }),
+      id,
+    );
   }
 
   if (routePath === "/admin/utility-billing/catalog-sync/run" && request.method === "POST") {
