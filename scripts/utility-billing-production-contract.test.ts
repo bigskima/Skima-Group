@@ -12,6 +12,10 @@ const guide = await Deno.readTextFile("apps/admin/src/admin-utility-provider-gui
 const customerBills = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/UtilityBillsScreen.tsx");
 const utilityProviderRuntime = await Deno.readTextFile("supabase/functions/_shared/utility-provider-runtime.ts");
 const flutterwaveAdapterInstall = await Deno.readTextFile("supabase/migrations/20260909030000_flutterwave_utility_adapter_installation.sql");
+const fulfillmentRuntime = await Deno.readTextFile("supabase/migrations/20260909033000_utility_financial_fulfillment_runtime.sql");
+const settlementAllocation = await Deno.readTextFile("supabase/migrations/20260909033500_utility_settlement_profit_allocation.sql");
+const runtimeWorker = await Deno.readTextFile("supabase/functions/runtime-worker/index.ts");
+const utilityArchitecture = await Deno.readTextFile("docs/utility-billing-architecture.md");
 
 Deno.test("cashback is prepared from policy and only earned after confirmed success", () => {
   assertStringIncludes(migration, "create table if not exists public.utility_reward_policies");
@@ -151,6 +155,81 @@ Deno.test("customer bill flow validates provider account details before creating
   assertStringIncludes(customerBills, "Check details");
   assertStringIncludes(customerBills, "Confirm payment");
   assertStringIncludes(customerBills, "Customer details confirmed");
+});
+
+Deno.test("utility customer money is reserved before provider fulfillment", () => {
+  assertStringIncludes(fulfillmentRuntime, "reserve_utility_payment_request");
+  assertStringIncludes(fulfillmentRuntime, "insufficient available wallet balance");
+  assertStringIncludes(fulfillmentRuntime, "ensure_platform_clearing_wallet");
+  assertStringIncludes(fulfillmentRuntime, "subsidized_campaign_cost_amount");
+  assertStringIncludes(fulfillmentRuntime, "ensure_utility_campaign_funding_wallet");
+  assertStringIncludes(fulfillmentRuntime, "'payment_reserved'");
+  assertStringIncludes(gateway, "reserve_utility_payment_request");
+  assertStringIncludes(gateway, "utility-reserve:");
+  assertStringIncludes(customerBills, "reserved from your SKIMA Wallet");
+  assert(!fulfillmentRuntime.includes("insert into public.wallet_ledger_entries"));
+});
+
+Deno.test("utility worker purchases once and reconciles ambiguous provider results", () => {
+  assertStringIncludes(fulfillmentRuntime, "claim_utility_payment_requests");
+  assertStringIncludes(fulfillmentRuntime, "for update skip locked");
+  assertStringIncludes(fulfillmentRuntime, "next_reconcile_at");
+  assertStringIncludes(runtimeWorker, "processUtilityPayments");
+  assertStringIncludes(runtimeWorker, "purchaseUtilityService");
+  assertStringIncludes(runtimeWorker, "readUtilityPurchaseStatus");
+  assertStringIncludes(runtimeWorker, 'action === "purchase"');
+  assertStringIncludes(runtimeWorker, 'action === "status"');
+  assertStringIncludes(runtimeWorker, "mark_utility_payment_processing");
+  assertStringIncludes(runtimeWorker, "finalize_utility_payment_request");
+  assertStringIncludes(utilityArchitecture, "query provider status before any new purchase attempt");
+});
+
+Deno.test("utility success settles provider cashback cost reserve and protected contribution", () => {
+  assertStringIncludes(settlementAllocation, "provider_cost");
+  assertStringIncludes(settlementAllocation, "utility_cost_reserve");
+  assertStringIncludes(settlementAllocation, "collectionCost");
+  assertStringIncludes(settlementAllocation, "operatingReserve");
+  assertStringIncludes(settlementAllocation, "protected_skima_contribution");
+  assertStringIncludes(settlementAllocation, "expected_cashback_amount");
+  assertStringIncludes(settlementAllocation, "status='credited'");
+  assertStringIncludes(settlementAllocation, "minimum_profit_amount");
+  assertStringIncludes(settlementAllocation, "protected SKIMA profit floor");
+  assert(!settlementAllocation.includes("insert into public.wallet_ledger_entries"));
+});
+
+Deno.test("utility definitive failure returns customer and funded campaign reservation", () => {
+  assertStringIncludes(fulfillmentRuntime, "target_provider_status not in ('succeeded','failed','reversed')");
+  assertStringIncludes(fulfillmentRuntime, "'refundPart','customer'");
+  assertStringIncludes(fulfillmentRuntime, "'refundPart','campaign_subsidy'");
+  assertStringIncludes(fulfillmentRuntime, "'utility-refund:'");
+});
+
+Deno.test("provider runtime readiness requires explicit real-money vend success", () => {
+  assertStringIncludes(utilityProviderRuntime, "runUtilityProviderLivePurchaseTest");
+  assertStringIncludes(utilityProviderRuntime, "checkUtilityProviderLivePurchaseTest");
+  assertStringIncludes(utilityProviderRuntime, 'runtimeReady = normalizedStatus === "succeeded"');
+  assertStringIncludes(gateway, '"/admin/utility-billing/providers/live-test"');
+  assertStringIncludes(gateway, "confirmLiveSpend");
+  assertStringIncludes(gateway, "no more than 5000 NGN");
+  assertStringIncludes(adminUtility, "Run a small real-money provider test");
+  assertStringIncludes(adminUtility, "the provider's funded balance may be charged");
+  assertStringIncludes(adminUtility, "Check live test status");
+});
+
+Deno.test("budget-funded utility campaigns use a real segregated funding pool", () => {
+  assertStringIncludes(fulfillmentRuntime, "ensure_utility_campaign_funding_wallet");
+  assertStringIncludes(fulfillmentRuntime, "fund_utility_campaign_pool");
+  assertStringIncludes(fulfillmentRuntime, "SKIMA revenue balance is insufficient");
+  assertStringIncludes(fulfillmentRuntime, "utility campaign funding pool is insufficient");
+  assertStringIncludes(gateway, '"/admin/utility-billing/campaign-pool"');
+  assertStringIncludes(gateway, '"/admin/utility-billing/campaign-pool/fund"');
+  assertStringIncludes(adminUtility, "Funded campaign pool");
+  assertStringIncludes(adminUtility, "already-earned SKIMA revenue");
+});
+
+Deno.test("post-success provider reversal is explicitly outside initial retry semantics", () => {
+  assertStringIncludes(utilityArchitecture, "post-settlement reversal/clawback policy");
+  assertStringIncludes(utilityArchitecture, "must not be emulated by retrying the original purchase");
 });
 
 Deno.test("customer home exposes bills while station location screens stay off the tab bar", () => {
