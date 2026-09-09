@@ -119,36 +119,34 @@ export function AdminUtilityBillingWorkspace() {
       client.invalidateQueries({ queryKey: ["admin-utility-billing"] }),
   });
 
-  const cashback = useMutation({
-    mutationFn: (input: {
-      key: string;
-      name: string;
-      kind: string;
-      value: number;
-      cap: number | null;
-      minimum: number | null;
-      total: number | null;
-      perCustomer: number | null;
-      state: string;
-    }) =>
+  const saveEconomics = useMutation({
+    mutationFn: (input: Record<string, unknown>) =>
+      api.post("/admin/utility-billing/economics", input, MutationIdSchema),
+    onSuccess: async () =>
+      client.invalidateQueries({ queryKey: ["admin-utility-billing"] }),
+  });
+
+  const previewEconomics = useMutation({
+    mutationFn: (input: Record<string, unknown>) =>
       api.post(
-        "/admin/utility-billing/configuration",
-        {
-          kind: "cashback",
-          key: input.key,
-          configuration: {
-            displayName: input.name,
-            calculationKind: input.kind,
-            rewardValue: input.value,
-            maximumReward: input.cap,
-            minimumSpend: input.minimum,
-            totalAwardLimit: input.total,
-            perCustomerLimit: input.perCustomer,
-            status: input.state,
-          },
-        },
-        MutationIdSchema,
+        "/admin/utility-billing/economics/preview",
+        input,
+        PreviewSchema,
       ),
+  });
+
+  const previewCampaign = useMutation({
+    mutationFn: (input: Record<string, unknown>) =>
+      api.post(
+        "/admin/utility-billing/campaign-preview",
+        input,
+        PreviewSchema,
+      ),
+  });
+
+  const saveCampaign = useMutation({
+    mutationFn: (input: Record<string, unknown>) =>
+      api.post("/admin/utility-billing/campaign", input, MutationIdSchema),
     onSuccess: async () =>
       client.invalidateQueries({ queryKey: ["admin-utility-billing"] }),
   });
@@ -162,7 +160,7 @@ export function AdminUtilityBillingWorkspace() {
       <PageHeader
         eyebrow="Customer services"
         title="Bills & everyday payments"
-        description="Set up service types, companies, plans, provider credentials and routing in one guided workspace. Provider secrets stay in Supabase Edge Function secrets."
+        description="Connect any utility provider, sync its catalogue, set route economics, then run cashback or discounts only when SKIMA's protected contribution remains positive."
         actions={
           <Button
             icon={RefreshCcw}
