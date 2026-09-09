@@ -251,6 +251,130 @@ export async function readUtilityPurchaseStatus(
   return adapter.readStatus(input.reference);
 }
 
+export async function runUtilityProviderLivePurchaseTest(
+  serviceClient: SupabaseClient,
+  input: Readonly<{
+    providerKey: string;
+    billerCode: string;
+    itemCode: string;
+    customerIdentifier: string;
+    amount: number;
+    reference: string;
+  }>,
+): Promise<JsonRecord> {
+  const context = await readUtilityProviderContext(serviceClient, input.providerKey);
+  const adapter = resolveUtilityAdapter(context);
+
+  try {
+    const result = await adapter.purchase({
+      billerCode: input.billerCode,
+      itemCode: input.itemCode,
+      customerIdentifier: input.customerIdentifier,
+      amount: input.amount,
+      reference: input.reference,
+    });
+    const normalizedStatus = optionalString(result.status) ?? "processing";
+    const runtimeReady = normalizedStatus === "succeeded";
+    await updateProviderHealth(serviceClient, context.id, {
+      runtimeReady,
+      livePurchaseTestAt: new Date().toISOString(),
+      livePurchaseTestReference: input.reference,
+      livePurchaseTestStatus: normalizedStatus,
+      livePurchaseTestError: null,
+    });
+    await recordExecution(
+      serviceClient,
+      context,
+      "utility.live_purchase.test",
+      "succeeded",
+      {
+        providerKey: input.providerKey,
+        billerCode: input.billerCode,
+        itemCode: input.itemCode,
+        customerIdentifier: maskIdentifier(input.customerIdentifier),
+        amount: input.amount,
+        reference: input.reference,
+      },
+      result,
+      null,
+      `live-test:${input.providerKey}:${input.reference}`,
+    );
+    return {
+      ...result,
+      providerKey: input.providerKey,
+      runtimeReady,
+      reference: input.reference,
+    };
+  } catch (error) {
+    const normalized = normalizeUtilityProviderError(error);
+    await updateProviderHealth(serviceClient, context.id, {
+      runtimeReady: false,
+      livePurchaseTestAt: new Date().toISOString(),
+      livePurchaseTestReference: input.reference,
+      livePurchaseTestStatus: "failed",
+      livePurchaseTestError: normalized.code,
+    });
+    await recordExecution(
+      serviceClient,
+      context,
+      "utility.live_purchase.test",
+      "failed",
+      {
+        providerKey: input.providerKey,
+        billerCode: input.billerCode,
+        itemCode: input.itemCode,
+        customerIdentifier: maskIdentifier(input.customerIdentifier),
+        amount: input.amount,
+        reference: input.reference,
+      },
+      normalized.details,
+      normalized.message,
+      `live-test:${input.providerKey}:${input.reference}`,
+    );
+    throw normalized;
+  }
+}
+
+export async function checkUtilityProviderLivePurchaseTest(
+  serviceClient: SupabaseClient,
+  input: Readonly<{ providerKey: string; reference: string }>,
+): Promise<JsonRecord> {
+  const context = await readUtilityProviderContext(serviceClient, input.providerKey);
+  const adapter = resolveUtilityAdapter(context);
+  const result = await adapter.readStatus(input.reference);
+  const normalizedStatus = optionalString(result.status) ?? "processing";
+  const runtimeReady = normalizedStatus === "succeeded";
+
+  await updateProviderHealth(serviceClient, context.id, {
+    runtimeReady,
+    livePurchaseTestAt: new Date().toISOString(),
+    livePurchaseTestReference: input.reference,
+    livePurchaseTestStatus: normalizedStatus,
+    livePurchaseTestError: normalizedStatus === "failed" ? "live_purchase_failed" : null,
+  });
+
+  await recordExecution(
+    serviceClient,
+    context,
+    "utility.live_purchase.status",
+    "succeeded",
+    {
+      providerKey: input.providerKey,
+      reference: input.reference,
+    },
+    result,
+    null,
+    `live-test-status:${input.providerKey}:${input.reference}`,
+  );
+
+  return {
+    ...result,
+    providerKey: input.providerKey,
+    reference: input.reference,
+    runtimeReady,
+  };
+}
+
 type UtilityAdapter = Readonly<{
   kind: string;
   testConnection(): Promise<JsonRecord>;
