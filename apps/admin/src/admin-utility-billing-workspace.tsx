@@ -905,6 +905,196 @@ function CatalogSyncOverview({
   );
 }
 
+function LiveProviderTestForm({
+  providers,
+  products,
+  routes,
+  busy,
+  statusBusy,
+  error,
+  result,
+  onRun,
+  onCheck,
+}: {
+  providers: Row[];
+  products: Row[];
+  routes: Row[];
+  busy: boolean;
+  statusBusy: boolean;
+  error: Error | null;
+  result: Row | null;
+  onRun(input: Record<string, unknown>): void;
+  onCheck(input: Record<string, unknown>): void;
+}) {
+  const [providerKey, setProviderKey] = useState("");
+  const [routeId, setRouteId] = useState("");
+  const [billerCode, setBillerCode] = useState("");
+  const [customerIdentifier, setCustomerIdentifier] = useState("");
+  const [amount, setAmount] = useState("100");
+  const [confirmed, setConfirmed] = useState(false);
+
+  const provider = providers.find((item) => text(item, "key") === providerKey) ?? null;
+  const providerRoutes = routes.filter(
+    (item) => !providerKey || text(item, "provider_key") === providerKey,
+  );
+  const route = providerRoutes.find((item) => text(item, "id") === routeId) ?? null;
+  const productKey = route ? text(route, "product_key") : "";
+  const product = products.find((item) => text(item, "key") === productKey) ?? null;
+  const productMetadata = product ? objectValue(product, "metadata") : null;
+  const mappedBillerCode =
+    productMetadata ? text(productMetadata, "providerBillerCode") : "";
+  const resolvedBillerCode = billerCode.trim() || mappedBillerCode;
+  const itemCode = route ? text(route, "provider_product_code") : "";
+  const resultReference =
+    result ? text(result, "reference") || text(result, "providerReference") : "";
+  const resultStatus = result ? text(result, "status") : "";
+  const runtimeReady = result?.runtimeReady === true;
+
+  return (
+    <Form
+      title="Run a small real-money provider test"
+      description="This readiness check vends a real service directly from the provider's funded source balance. It does not debit a SKIMA customer wallet."
+    >
+      <div className="admin-notice">
+        <strong>Do this only after the live Edge secret is configured</strong>
+        <p>
+          Start with your own phone number or meter and a small amount. SKIMA limits this
+          admin test to ₦5,000 per request. A successful provider result is what marks the
+          fulfillment runtime ready; saving a key or passing a catalogue call is not enough.
+        </p>
+      </div>
+      <SelectInput
+        label="Provider"
+        value={providerKey}
+        onChange={(event) => {
+          setProviderKey(event.currentTarget.value);
+          setRouteId("");
+          setBillerCode("");
+          setConfirmed(false);
+        }}
+        options={options(providers, "key", "display_name", "Choose provider")}
+      />
+      {provider ? (
+        <div className="admin-summary-row">
+          <div>
+            <strong>{text(provider, "display_name") || providerKey}</strong>
+            <p>
+              {flag(provider, "secret_configured") ? "Edge secret reference saved" : "Edge secret reference missing"} ·
+              {" "}{flag(provider, "runtime_ready") ? "Live vend already verified" : "Live vend not verified yet"}
+            </p>
+          </div>
+        </div>
+      ) : null}
+      <SelectInput
+        label="Provider product route"
+        value={routeId}
+        onChange={(event) => {
+          setRouteId(event.currentTarget.value);
+          setBillerCode("");
+          setConfirmed(false);
+        }}
+        options={[
+          { label: "Choose a synced product route", value: "" },
+          ...providerRoutes.map((item) => ({
+            value: text(item, "id"),
+            label: `${text(item, "product_name") || text(item, "product_key") || "Product"} → ${text(item, "provider_name") || "Provider"}`,
+          })),
+        ]}
+      />
+      <TextInput
+        label="Provider biller code"
+        value={resolvedBillerCode}
+        onChange={(event) => setBillerCode(event.currentTarget.value)}
+        placeholder="Usually imported from the provider catalogue"
+      />
+      {mappedBillerCode ? (
+        <small>Imported biller mapping: <code>{mappedBillerCode}</code></small>
+      ) : (
+        <small>The catalogue adapter should normally populate this. Enter it manually only when the provider mapping is missing.</small>
+      )}
+      <TextInput
+        label="Real recipient / account identifier"
+        value={customerIdentifier}
+        onChange={(event) => {
+          setCustomerIdentifier(event.currentTarget.value);
+          setConfirmed(false);
+        }}
+        placeholder="Your phone number or meter/account number"
+      />
+      <TextInput
+        label="Real test amount (₦)"
+        type="number"
+        value={amount}
+        onChange={(event) => {
+          setAmount(event.currentTarget.value);
+          setConfirmed(false);
+        }}
+      />
+      <label className="admin-checkbox-row">
+        <input
+          type="checkbox"
+          checked={confirmed}
+          onChange={(event) => setConfirmed(event.currentTarget.checked)}
+        />
+        <span>
+          I understand this is a real provider transaction and the provider's funded
+          balance may be charged.
+        </span>
+      </label>
+      {error ? <div className="admin-notice is-error" role="alert">{friendly(error)}</div> : null}
+      <Button
+        icon={Zap}
+        isLoading={busy}
+        disabled={
+          !providerKey ||
+          !routeId ||
+          !resolvedBillerCode ||
+          !itemCode ||
+          !customerIdentifier.trim() ||
+          !positive(amount) ||
+          numeric(amount) > 5000 ||
+          !confirmed
+        }
+        onClick={() =>
+          onRun({
+            providerKey,
+            billerCode: resolvedBillerCode,
+            itemCode,
+            customerIdentifier: customerIdentifier.trim(),
+            amount: numeric(amount),
+            confirmLiveSpend: true,
+          })}
+      >
+        Send real test
+      </Button>
+      {result ? (
+        <div className={runtimeReady ? "admin-notice" : "admin-notice"}>
+          <strong>
+            {runtimeReady
+              ? "Live provider fulfillment verified"
+              : `Provider result: ${friendlyText(resultStatus || "processing")}`}
+          </strong>
+          <p>
+            Reference: {resultReference || "Provider reference pending"}.
+            {runtimeReady
+              ? " SKIMA may now treat this adapter as live-runtime ready."
+              : " If the provider returned a pending/processing result, check it before enabling customer routes."}
+          </p>
+        </div>
+      ) : null}
+      {resultReference && !runtimeReady ? (
+        <Button
+          variant="outline"
+          isLoading={statusBusy}
+          onClick={() => onCheck({ providerKey, reference: resultReference })}
+        >
+          Check live test status
+        </Button>
+      ) : null}
+    </Form>
+  );
+}
+
 function EconomicsForm({
   routes,
   economics,
@@ -1062,24 +1252,30 @@ function CampaignForm({
   products,
   promotions,
   cashbacks,
+  campaignPool,
   preview,
   previewBusy,
   saveBusy,
+  fundBusy,
   error,
   onPreview,
   onSave,
+  onFundPool,
 }: {
   categories: Row[];
   billers: Row[];
   products: Row[];
   promotions: Row[];
   cashbacks: Row[];
+  campaignPool: Row | null;
   preview: Row | null;
   previewBusy: boolean;
   saveBusy: boolean;
+  fundBusy: boolean;
   error: Error | null;
   onPreview(input: Record<string, unknown>): void;
   onSave(input: Record<string, unknown>): void;
+  onFundPool(amount: number): void;
 }) {
   const [campaignType, setCampaignType] = useState("cashback");
   const [name, setName] = useState("");
@@ -1095,6 +1291,7 @@ function CampaignForm({
   const [usageLimit, setUsageLimit] = useState("");
   const [perCustomer, setPerCustomer] = useState("1");
   const [state, setState] = useState("draft");
+  const [poolTopUp, setPoolTopUp] = useState("");
 
   const scopeRows =
     scopeType === "category"
@@ -1134,6 +1331,34 @@ function CampaignForm({
           when a separate funded pool is intentionally paying the reward.
         </p>
       </div>
+      <div className="admin-summary-row">
+        <div>
+          <strong>Funded campaign pool</strong>
+          <p>
+            {formatNaira(campaignPool ? numberValue(campaignPool, "balance") : 0)}
+            {" "}available for marketing/sponsor subsidies.
+          </p>
+        </div>
+      </div>
+      <TextInput
+        label="Move SKIMA revenue into campaign pool (₦)"
+        type="number"
+        value={poolTopUp}
+        onChange={(event) => setPoolTopUp(event.currentTarget.value)}
+        placeholder="Optional"
+      />
+      <Button
+        variant="outline"
+        isLoading={fundBusy}
+        disabled={!positive(poolTopUp)}
+        onClick={() => onFundPool(numeric(poolTopUp))}
+      >
+        Fund campaign pool
+      </Button>
+      <small>
+        This moves already-earned SKIMA revenue into a dedicated liability wallet. It
+        does not create money or borrow from customer balances.
+      </small>
       <SelectInput
         label="Campaign type"
         value={campaignType}
