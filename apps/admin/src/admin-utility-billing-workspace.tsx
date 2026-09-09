@@ -1356,7 +1356,7 @@ function CampaignForm({
         Fund campaign pool
       </Button>
       <small>
-        This moves already-earned SKIMA revenue into a dedicated liability wallet. It
+        This moves already-earned SKIMA revenue into a dedicated campaign wallet. It
         does not create money or borrow from customer balances.
       </small>
       <SelectInput
