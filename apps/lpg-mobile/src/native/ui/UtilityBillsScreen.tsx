@@ -238,7 +238,7 @@ export function UtilityBillsScreen() {
       setValidationResult(null);
       setShowOptionalFields(false);
       setNotice(
-        "Your request has been received. Your wallet is used only when the bill payment is confirmed.",
+        "Your payment is reserved from your SKIMA Wallet while the provider completes the bill. If the provider confirms failure, the reserved amount is returned automatically.",
       );
     } catch (cause) {
       setNotice(
