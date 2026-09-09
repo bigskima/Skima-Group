@@ -89,7 +89,7 @@ Deno.test("redundant partner paperwork is reduced without removing safety eviden
 
 Deno.test("verification runtime uses secure provider sessions and normalized decisions", () => {
   assertStringIncludes(runtime, "partner-verification.ts");
-  assertStringIncludes(sharedVerification, 'resolveServerSecret(serviceClient, "DIDIT_API_KEY")');
+  assertStringIncludes(sharedVerification, 'resolveEdgeSecret("DIDIT_API_KEY")');
   assertStringIncludes(sharedVerification, '"https://verification.didit.me/v3/session/"');
   assertStringIncludes(sharedVerification, "/decision/");
   assertStringIncludes(sharedVerification, '"x-api-key": apiKey');
@@ -234,11 +234,31 @@ Deno.test("verification runtime is JWT protected", () => {
   assertStringIncludes(supabaseConfig, "verify_jwt = true");
 });
 
-Deno.test("Didit server secrets may come from Edge secrets or service-role-only Vault fallback", () => {
-  assertStringIncludes(sharedVerification, 'resolveServerSecret(serviceClient, "DIDIT_API_KEY")');
-  assertStringIncludes(sharedVerification, 'rpc("read_server_secret"');
-  assertStringIncludes(providerWebhook, '"DIDIT_WEBHOOK_SECRET"');
-  assertStringIncludes(providerWebhook, 'rpc("read_server_secret"');
+Deno.test("Didit credentials are Edge Function secrets only", async () => {
+  const policy = await read(
+    "supabase/migrations/20260909011500_didit_edge_secret_only_runtime.sql",
+  );
+
+  assertStringIncludes(sharedVerification, 'resolveEdgeSecret("DIDIT_API_KEY")');
+  assertStringIncludes(sharedVerification, "Deno.env.get(name)");
+  assert(
+    !sharedVerification.includes('rpc("read_server_secret"'),
+    "Personal KYC must not fall back to database/Vault secret reads.",
+  );
+
+  assertStringIncludes(providerWebhook, 'resolveEdgeSecret("DIDIT_WEBHOOK_SECRET")');
+  assertStringIncludes(providerWebhook, "Deno.env.get(name)");
+  assert(
+    !providerWebhook.includes('rpc("read_server_secret"'),
+    "Didit webhook verification must not fall back to database/Vault secret reads.",
+  );
+
+  assertStringIncludes(policy, "'credential_source', 'supabase_edge_function_secret'");
+  assertStringIncludes(policy, "'database_secret_fallback', false");
+  assertStringIncludes(policy, "'SUPABASE_SECRET:DIDIT_API_KEY'");
+  assertStringIncludes(policy, "'SUPABASE_SECRET:DIDIT_WEBHOOK_SECRET'");
+  assertStringIncludes(adminVerification, "there is no database-secret fallback");
+  assertStringIncludes(adminVerification, "Edge secret reference");
 });
 
 Deno.test("Didit live route activation binds published KYC and KYB workflows", async () => {
@@ -257,7 +277,7 @@ Deno.test("Didit live route activation binds published KYC and KYB workflows", a
 Deno.test("Didit webhook is public-to-provider but HMAC authenticated and idempotent", () => {
   assertStringIncludes(supabaseConfig, "[functions.verification-provider-webhook]");
   assertStringIncludes(supabaseConfig, "verify_jwt = false");
-  assertStringIncludes(providerWebhook, 'resolveServerSecret(\n    supabase,\n    "DIDIT_WEBHOOK_SECRET"');
+  assertStringIncludes(providerWebhook, 'resolveEdgeSecret("DIDIT_WEBHOOK_SECRET")');
   assertStringIncludes(providerWebhook, 'request.headers.get("x-signature-v2")');
   assertStringIncludes(providerWebhook, "canonicalJson(payload)");
   assertStringIncludes(providerWebhook, 'request.headers.get("x-signature")');
