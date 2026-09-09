@@ -14,6 +14,7 @@ const utilityProviderRuntime = await Deno.readTextFile("supabase/functions/_shar
 const flutterwaveAdapterInstall = await Deno.readTextFile("supabase/migrations/20260909030000_flutterwave_utility_adapter_installation.sql");
 const fulfillmentRuntime = await Deno.readTextFile("supabase/migrations/20260909033000_utility_financial_fulfillment_runtime.sql");
 const settlementAllocation = await Deno.readTextFile("supabase/migrations/20260909033500_utility_settlement_profit_allocation.sql");
+const campaignWalletSegregation = await Deno.readTextFile("supabase/migrations/20260909033700_utility_campaign_wallet_segregation.sql");
 const runtimeWorker = await Deno.readTextFile("supabase/functions/runtime-worker/index.ts");
 const utilityArchitecture = await Deno.readTextFile("docs/utility-billing-architecture.md");
 
@@ -226,6 +227,10 @@ Deno.test("budget-funded utility campaigns use a real segregated funding pool", 
   assertStringIncludes(gateway, '"/admin/utility-billing/campaign-pool/fund"');
   assertStringIncludes(adminUtility, "Funded campaign pool");
   assertStringIncludes(adminUtility, "already-earned SKIMA revenue");
+  assertStringIncludes(campaignWalletSegregation, "'platform_campaign'");
+  assertStringIncludes(campaignWalletSegregation, "'wallet_purpose','utility_campaign_funding'");
+  assertStringIncludes(campaignWalletSegregation, "'withdrawable',false");
+  assertStringIncludes(utilityArchitecture, "dedicated non-withdrawable platform campaign wallet");
 });
 
 Deno.test("post-success provider reversal is explicitly outside initial retry semantics", () => {
