@@ -29,6 +29,7 @@ import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
 
 const MutationSchema = z.string().uuid();
+const ValidationSchema = z.record(z.unknown());
 const DEFAULT_PRODUCT_LIMIT = 6;
 const DEFAULT_HISTORY_LIMIT = 3;
 
@@ -56,11 +57,18 @@ export function UtilityBillsScreen() {
   const [phone, setPhone] = useState("");
   const [promo, setPromo] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [validatedIdentifier, setValidatedIdentifier] = useState("");
+  const [validationResult, setValidationResult] = useState<PlatformRecord | null>(null);
 
   const createPayment = useGatewayMutation({
     path: "/runtime/utility-billing/requests",
     schema: MutationSchema,
     invalidate: [["utility-billing", "requests"], ["wallets"]],
+  });
+
+  const validateCustomer = useGatewayMutation({
+    path: "/runtime/utility-billing/validate",
+    schema: ValidationSchema,
   });
 
   const categories = useMemo(() => groupCatalog(catalog.data ?? []), [catalog.data]);
@@ -158,24 +166,53 @@ export function UtilityBillsScreen() {
     setIdentifier("");
     setAmount("");
     setPhone("");
+    setValidatedIdentifier("");
+    setValidationResult(null);
     setShowOptionalFields(false);
     setNotice(null);
   };
 
   const closePayment = () => {
-    if (createPayment.isPending) return;
+    if (createPayment.isPending || validateCustomer.isPending) return;
     setProduct(null);
     setIdentifier("");
     setAmount("");
     setPhone("");
+    setValidatedIdentifier("");
+    setValidationResult(null);
     setShowOptionalFields(false);
   };
 
   const submit = async () => {
     if (!product || !walletId || !canSubmit) return;
+    const productId = firstString(product, ["product_id"]);
+    if (!productId) return;
+
+    if (validatedIdentifier !== identifier.trim()) {
+      try {
+        const result = await validateCustomer.mutateAsync({
+          productId,
+          customerIdentifier: identifier.trim(),
+        });
+        setValidatedIdentifier(identifier.trim());
+        setValidationResult(result);
+        return;
+      } catch (cause) {
+        setValidationResult(null);
+        setValidatedIdentifier("");
+        setNotice(
+          friendlyError(
+            cause,
+            "We could not confirm these customer details. Check the number and try again.",
+          ),
+        );
+        return;
+      }
+    }
+
     try {
       await createPayment.mutateAsync({
-        productId: firstString(product, ["product_id"]),
+        productId,
         walletId,
         customerIdentifier: identifier.trim(),
         amount: numericAmount,
@@ -183,9 +220,13 @@ export function UtilityBillsScreen() {
         promotionKey: promo.trim() || undefined,
         idempotencyKey: createClientIdempotencyKey(
           "utility-payment",
-          firstString(product, ["product_id"]) ?? "product",
+          productId,
         ),
-        metadata: { channel: "lpg-mobile" },
+        metadata: {
+          channel: "lpg-mobile",
+          customerValidated: true,
+          validationSkipped: validationResult?.validationSkipped === true,
+        },
       });
 
       setProduct(null);
@@ -193,6 +234,8 @@ export function UtilityBillsScreen() {
       setAmount("");
       setPhone("");
       setPromo("");
+      setValidatedIdentifier("");
+      setValidationResult(null);
       setShowOptionalFields(false);
       setNotice(
         "Your request has been received. Your wallet is used only when the bill payment is confirmed.",
@@ -652,12 +695,39 @@ export function UtilityBillsScreen() {
               "Account or phone number"
             }
             value={identifier}
-            onChangeText={setIdentifier}
+            onChangeText={(value) => {
+              setIdentifier(value);
+              setValidatedIdentifier("");
+              setValidationResult(null);
+            }}
             placeholder={
               firstString(product, ["customer_identifier_hint"]) ??
               "Enter customer detail"
             }
           />
+
+          {validationResult ? (
+            <View
+              style={[
+                styles.validationCard,
+                { backgroundColor: palette.successSoft, borderColor: palette.success },
+              ]}
+            >
+              <Text style={[styles.validationTitle, { color: palette.success }]}>
+                {validationResult.validationSkipped === true
+                  ? "Recipient details ready"
+                  : "Customer details confirmed"}
+              </Text>
+              {firstString(validationResult, ["customerName"]) ? (
+                <Text style={[styles.validationBody, { color: palette.ink }]}>
+                  {firstString(validationResult, ["customerName"])}
+                </Text>
+              ) : null}
+              <Text style={[styles.validationBody, { color: palette.muted }]}>
+                {identifier.trim()}
+              </Text>
+            </View>
+          ) : null}
 
           {fixedAmount === null ? (
             <AppField
@@ -725,9 +795,13 @@ export function UtilityBillsScreen() {
           </View>
           <View style={styles.actionSlot}>
             <AppButton
-              label="Continue"
+              label={
+                validatedIdentifier === identifier.trim()
+                  ? "Confirm payment"
+                  : "Check details"
+              }
               fullWidth
-              loading={createPayment.isPending}
+              loading={createPayment.isPending || validateCustomer.isPending}
               disabled={!canSubmit}
               onPress={() => void submit()}
             />
@@ -1023,6 +1097,14 @@ const styles = StyleSheet.create({
   },
   optionalText: { ...typography.caption, fontWeight: "900" },
   inlineError: { ...typography.caption, fontWeight: "800", lineHeight: 17 },
+  validationCard: {
+    gap: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.md,
+    padding: spacing.sm + 2,
+  },
+  validationTitle: { ...typography.bodyStrong, fontSize: 12 },
+  validationBody: { ...typography.caption, fontSize: 10 },
 
   actions: {
     flexDirection: "row",

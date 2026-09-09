@@ -10,6 +10,8 @@ const stationLayout = await Deno.readTextFile("apps/lpg-mobile/app/(station)/_la
 const dashboard = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/PremiumDashboard.tsx");
 const guide = await Deno.readTextFile("apps/admin/src/admin-utility-provider-guide.tsx");
 const customerBills = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/UtilityBillsScreen.tsx");
+const utilityProviderRuntime = await Deno.readTextFile("supabase/functions/_shared/utility-provider-runtime.ts");
+const flutterwaveAdapterInstall = await Deno.readTextFile("supabase/migrations/20260909030000_flutterwave_utility_adapter_installation.sql");
 
 Deno.test("cashback is prepared from policy and only earned after confirmed success", () => {
   assertStringIncludes(migration, "create table if not exists public.utility_reward_policies");
@@ -102,6 +104,53 @@ Deno.test("utility admin exposes catalog economics routing and profit-safe campa
   assertStringIncludes(gateway, '"/admin/utility-billing/economics"');
   assertStringIncludes(gateway, '"/admin/utility-billing/campaign-preview"');
   assertStringIncludes(gateway, '"/admin/utility-billing/catalog-sync/publish"');
+});
+
+Deno.test("Flutterwave is an installed plugin, not a hardcoded utility route", () => {
+  assertStringIncludes(flutterwaveAdapterInstall, "'provider.utility.flutterwave'");
+  assertStringIncludes(flutterwaveAdapterInstall, "'adapterKind', 'flutterwave-bills-v3'");
+  assertStringIncludes(flutterwaveAdapterInstall, "'runtimeReady', false");
+  assertStringIncludes(flutterwaveAdapterInstall, "'SUPABASE_SECRET:FLUTTERWAVE_SECRET_KEY'");
+  assertStringIncludes(utilityProviderRuntime, 'adapterKind === "flutterwave-bills-v3"');
+  assertStringIncludes(utilityProviderRuntime, "resolveUtilityAdapter(context)");
+  assertStringIncludes(utilityProviderRuntime, "providerKey");
+  assertStringIncludes(utilityProviderRuntime, "utility_provider_adapter_not_installed");
+});
+
+Deno.test("utility provider credentials are Edge-secret-only", () => {
+  assertStringIncludes(utilityProviderRuntime, "Deno.env.get(secretName)");
+  assertStringIncludes(utilityProviderRuntime, "SUPABASE_SECRET:");
+  assert(!utilityProviderRuntime.includes('rpc("read_server_secret"'));
+  assert(!utilityProviderRuntime.includes("vault.decrypted_secrets"));
+});
+
+Deno.test("Flutterwave adapter implements full bills provider boundary", () => {
+  assertStringIncludes(utilityProviderRuntime, "top-bill-categories");
+  assertStringIncludes(utilityProviderRuntime, "/billers?country=");
+  assertStringIncludes(utilityProviderRuntime, "/items");
+  assertStringIncludes(utilityProviderRuntime, "/validate?code=");
+  assertStringIncludes(utilityProviderRuntime, "/payment");
+  assertStringIncludes(utilityProviderRuntime, "?verbose=1");
+  assertStringIncludes(utilityProviderRuntime, "providerBillerCode");
+  assertStringIncludes(utilityProviderRuntime, "providerItemCode");
+});
+
+Deno.test("admin can test providers and sync catalog after Edge secret setup", () => {
+  assertStringIncludes(gateway, '"/admin/utility-billing/providers/test"');
+  assertStringIncludes(gateway, '"/admin/utility-billing/catalog-sync/run"');
+  assertStringIncludes(gateway, "testUtilityProviderConnection");
+  assertStringIncludes(gateway, "syncUtilityProviderCatalog");
+  assertStringIncludes(adminUtility, "Test API connection");
+  assertStringIncludes(adminUtility, "Sync catalogue");
+});
+
+Deno.test("customer bill flow validates provider account details before creating request", () => {
+  assertStringIncludes(gateway, '"/runtime/utility-billing/validate"');
+  assertStringIncludes(gateway, "read_utility_customer_validation_context");
+  assertStringIncludes(customerBills, "validateCustomer");
+  assertStringIncludes(customerBills, "Check details");
+  assertStringIncludes(customerBills, "Confirm payment");
+  assertStringIncludes(customerBills, "Customer details confirmed");
 });
 
 Deno.test("customer home exposes bills while station location screens stay off the tab bar", () => {
