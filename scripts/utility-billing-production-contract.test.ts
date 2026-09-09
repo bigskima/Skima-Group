@@ -16,6 +16,7 @@ const fulfillmentRuntime = await Deno.readTextFile("supabase/migrations/20260909
 const settlementAllocation = await Deno.readTextFile("supabase/migrations/20260909033500_utility_settlement_profit_allocation.sql");
 const campaignWalletSegregation = await Deno.readTextFile("supabase/migrations/20260909033700_utility_campaign_wallet_segregation.sql");
 const reservationCleanup = await Deno.readTextFile("supabase/migrations/20260909033800_utility_reservation_failure_cleanup.sql");
+const providerActivation = await Deno.readTextFile("supabase/migrations/20260909033900_utility_provider_activation_control.sql");
 const runtimeWorker = await Deno.readTextFile("supabase/functions/runtime-worker/index.ts");
 const utilityArchitecture = await Deno.readTextFile("docs/utility-billing-architecture.md");
 
@@ -227,6 +228,17 @@ Deno.test("provider runtime readiness requires explicit real-money vend success"
   assertStringIncludes(adminUtility, "the provider's funded");
   assertStringIncludes(adminUtility, "balance may be charged");
   assertStringIncludes(adminUtility, "Check live test status");
+});
+
+Deno.test("utility provider activation is governed by connection and live vend readiness", () => {
+  assertStringIncludes(providerActivation, "set_utility_provider_status");
+  assertStringIncludes(providerActivation, "connectionHealthy");
+  assertStringIncludes(providerActivation, "runtimeReady");
+  assertStringIncludes(providerActivation, "complete a successful real-money provider test before activation");
+  assertStringIncludes(gateway, '"/admin/utility-billing/providers/status"');
+  assertStringIncludes(gateway, "set_utility_provider_status");
+  assertStringIncludes(adminUtility, "Activate provider");
+  assertStringIncludes(adminUtility, "Pause provider");
 });
 
 Deno.test("budget-funded utility campaigns use a real segregated funding pool", () => {
