@@ -569,12 +569,16 @@ function ProviderForm({
 function ConnectionForm({
   products,
   providers,
+  routes,
+  economics,
   busy,
   error,
   onSave,
 }: {
   products: Row[];
   providers: Row[];
+  routes: Row[];
+  economics: Row[];
   busy: boolean;
   error: Error | null;
   onSave(input: {
@@ -589,16 +593,26 @@ function ConnectionForm({
   const [product, setProduct] = useState("");
   const [provider, setProvider] = useState("");
   const [code, setCode] = useState("");
-  const [fee, setFee] = useState("0");
   const [state, setState] = useState("inactive");
   const selectedProvider = providers.find((row) => text(row, "key") === provider) ?? null;
   const providerReady = selectedProvider ? flag(selectedProvider, "runtime_ready") : false;
   const secretConfigured = selectedProvider ? flag(selectedProvider, "secret_configured") : false;
+  const routeExists = routes.some(
+    (row) =>
+      text(row, "product_key") === product &&
+      text(row, "provider_key") === provider,
+  );
+  const economicsReady = economics.some(
+    (row) =>
+      text(row, "product_key") === product &&
+      text(row, "provider_key") === provider &&
+      text(row, "status") === "active",
+  );
 
   return (
     <Form
       title="Connect a payment plan"
-      description="Map the customer plan to the provider product code. Keep it unavailable until the provider runtime test has passed."
+      description="Map the SKIMA product to the provider code. Create the route first, configure its economics, then activate it only after the provider runtime is tested."
     >
       {providers.length === 0 ? (
         <div className="admin-notice">
@@ -606,7 +620,7 @@ function ConnectionForm({
           <p>Open the Providers step first. You no longer need to leave this workspace to create one.</p>
         </div>
       ) : null}
-      {selectedProvider && (!providerReady || !secretConfigured) ? (
+      {selectedProvider && (!providerReady || !secretConfigured || (routeExists && !economicsReady)) ? (
         <div className="admin-notice">
           <strong>Not ready for customer traffic</strong>
           <p>
@@ -614,7 +628,10 @@ function ConnectionForm({
               ? "The provider does not yet have an Edge secret reference. "
               : ""}
             {!providerReady
-              ? "The provider also needs a tested SKIMA fulfillment adapter before this route can go live."
+              ? "A tested SKIMA fulfillment adapter is still required. "
+              : ""}
+            {routeExists && !economicsReady
+              ? "Configure this route in the Economics step before activating it."
               : ""}
           </p>
         </div>
@@ -622,7 +639,10 @@ function ConnectionForm({
       <SelectInput label="Payment plan" value={product} onChange={(e) => setProduct(e.currentTarget.value)} options={options(products, "key", "display_name", "Choose a plan")} />
       <SelectInput label="Service provider" value={provider} onChange={(e) => setProvider(e.currentTarget.value)} options={options(providers, "key", "display_name", "Choose a provider")} />
       <TextInput label="Provider product code" value={code} onChange={(e) => setCode(e.currentTarget.value)} placeholder="Code supplied by the provider" />
-      <TextInput label="Customer fee (₦)" type="number" value={fee} onChange={(e) => setFee(e.currentTarget.value)} />
+      <div className="admin-notice">
+        <strong>Fees moved to Economics</strong>
+        <p>Customer fees, provider commission, collection cost, reserve and minimum profit are configured together so SKIMA can calculate real contribution before a route goes live.</p>
+      </div>
       <SelectInput
         label="Customer availability"
         value={state}
@@ -639,7 +659,7 @@ function ConnectionForm({
           !product ||
           !provider ||
           !code.trim() ||
-          (state === "active" && (!providerReady || !secretConfigured))
+          (state === "active" && (!providerReady || !secretConfigured || !economicsReady))
         }
         onClick={() =>
           onSave({
@@ -648,7 +668,7 @@ function ConnectionForm({
             productCode: code.trim(),
             priority: 100,
             state,
-            fee: Number(fee) || 0,
+            fee: 0,
           })}
       />
     </Form>
