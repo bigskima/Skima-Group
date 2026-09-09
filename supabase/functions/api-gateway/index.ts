@@ -5175,6 +5175,19 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           target_metadata: optionalRecord(configuration.metadata) ?? {},
         }), id);
       }
+      if (kind === "cashback") {
+        return rpcResponse(supabase.rpc("configure_utility_cashback", {
+          target_key: requireString(body.value.key, "key"),
+          target_display_name: requireString(configuration.displayName, "displayName"),
+          target_calculation_kind: requireString(configuration.calculationKind, "calculationKind"),
+          target_reward_value: requireNumber(configuration.rewardValue, "rewardValue"),
+          target_maximum_reward: optionalNumber(configuration.maximumReward, "maximumReward"),
+          target_minimum_spend: optionalNumber(configuration.minimumSpend, "minimumSpend"),
+          target_total_award_limit: optionalInteger(configuration.totalAwardLimit),
+          target_per_customer_limit: optionalInteger(configuration.perCustomerLimit),
+          target_status: optionalString(configuration.status) ?? "draft",
+        }), id);
+      }
       if (kind === "route") {
         return rpcResponse(supabase.rpc("configure_utility_provider_route", {
           target_product_key: requireString(configuration.productKey, "productKey"),
