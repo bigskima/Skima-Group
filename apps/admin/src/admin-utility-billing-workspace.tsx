@@ -1196,6 +1196,36 @@ function positive(value: string) {
   return Number.isFinite(Number(value)) && Number(value) > 0;
 }
 
+function numeric(value: string, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function numberValue(row: Row, key: string) {
+  const value = row[key];
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function objectValue(row: Row, key: string): Row | null {
+  const value = row[key];
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Row
+    : null;
+}
+
+function formatNaira(value: number) {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function friendlyText(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function numberOrNull(value: string) {
   return value.trim() === "" ? null : Number(value);
 }
