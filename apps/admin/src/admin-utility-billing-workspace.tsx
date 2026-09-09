@@ -675,104 +675,411 @@ function ConnectionForm({
   );
 }
 
-function PromotionForm({ busy, error, onSave }: SaveProps) {
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState("percentage");
-  const [value, setValue] = useState("");
-  const [cap, setCap] = useState("");
-  const [min, setMin] = useState("");
-  const [total, setTotal] = useState("");
-  const [perCustomer, setPerCustomer] = useState("1");
-  const [state, setState] = useState("draft");
-
+function CatalogSyncOverview({
+  providers,
+  syncRuns,
+}: {
+  providers: Row[];
+  syncRuns: Row[];
+}) {
+  const syncReady = providers.filter((row) => flag(row, "catalog_sync_ready"));
   return (
-    <Form title="Create an offer" description="Set a discount and control how often it can be used.">
-      <TextInput label="Offer name" value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="Welcome bill payment offer" />
-      <SelectInput label="Discount type" value={kind} onChange={(e) => setKind(e.currentTarget.value)} options={[{ label: "Percentage", value: "percentage" }, { label: "Fixed amount", value: "fixed" }]} />
-      <TextInput label={kind === "percentage" ? "Discount (%)" : "Discount amount (₦)"} type="number" value={value} onChange={(e) => setValue(e.currentTarget.value)} />
-      {kind === "percentage" ? <TextInput label="Maximum discount (₦)" type="number" value={cap} onChange={(e) => setCap(e.currentTarget.value)} /> : null}
-      <TextInput label="Minimum customer spend (₦)" type="number" value={min} onChange={(e) => setMin(e.currentTarget.value)} />
-      <TextInput label="Total uses allowed" type="number" value={total} onChange={(e) => setTotal(e.currentTarget.value)} />
-      <TextInput label="Uses allowed per customer" type="number" value={perCustomer} onChange={(e) => setPerCustomer(e.currentTarget.value)} />
-      <Visibility value={state} onChange={setState} />
-      <Submit
-        busy={busy}
-        error={error}
-        disabled={!name.trim() || !positive(value)}
-        onClick={() =>
-          onSave(slug(name), {
-            displayName: name.trim(),
-            discountKind: kind,
-            discountValue: Number(value),
-            maximumDiscount: numberOrNull(cap),
-            minimumSpend: numberOrNull(min),
-            usageLimit: integerOrNull(total),
-            perCustomerLimit: integerOrNull(perCustomer),
-            status: state,
-          })}
-      />
+    <Form
+      title="Provider catalogue sync"
+      description="The provider-specific adapter converts its own catalogue into SKIMA's generic category → company → product contract. SKIMA publishes synced records as drafts so you decide what customers can see."
+    >
+      <div className="admin-notice">
+        <strong>Do not manually copy hundreds of provider plans</strong>
+        <p>
+          Airtime networks, electricity distributors and data bundles should normally
+          come from the connected provider. Manual Service types, Companies and Plans
+          remain available only as a fallback.
+        </p>
+      </div>
+      <div className="admin-summary-row">
+        <div>
+          <strong>Providers with catalogue sync</strong>
+          <p>{syncReady.length} of {providers.length} configured providers expose the generic sync contract.</p>
+        </div>
+        <div>
+          <strong>Recent sync runs</strong>
+          <p>{syncRuns.length}</p>
+        </div>
+      </div>
+      {syncRuns.slice(0, 5).map((run) => (
+        <div className="admin-summary-row" key={text(run, "id")}>
+          <div>
+            <strong>{text(run, "provider_name") || "Utility provider"}</strong>
+            <p>{friendlyText(text(run, "status") || "running")}</p>
+          </div>
+          <div>
+            <strong>{numberValue(run, "item_count")}</strong>
+            <p>catalogue items</p>
+          </div>
+        </div>
+      ))}
+      {providers.length > 0 && syncReady.length === 0 ? (
+        <div className="admin-notice">
+          <strong>Provider adapter not installed yet</strong>
+          <p>
+            This is expected until we choose the first provider. The database and API
+            sync contract are already provider-neutral; the future adapter only needs to
+            translate that provider's response into SKIMA's canonical catalogue payload.
+          </p>
+        </div>
+      ) : null}
     </Form>
   );
 }
 
-function CashbackForm({
+function EconomicsForm({
+  routes,
+  economics,
   busy,
+  previewBusy,
   error,
+  preview,
   onSave,
+  onPreview,
 }: {
+  routes: Row[];
+  economics: Row[];
   busy: boolean;
+  previewBusy: boolean;
   error: Error | null;
-  onSave(input: {
-    key: string;
-    name: string;
-    kind: string;
-    value: number;
-    cap: number | null;
-    minimum: number | null;
-    total: number | null;
-    perCustomer: number | null;
-    state: string;
-  }): void;
+  preview: Row | null;
+  onSave(input: Record<string, unknown>): void;
+  onPreview(input: Record<string, unknown>): void;
 }) {
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState("percentage");
-  const [value, setValue] = useState("");
-  const [cap, setCap] = useState("");
-  const [min, setMin] = useState("");
-  const [total, setTotal] = useState("");
-  const [perCustomer, setPerCustomer] = useState("1");
-  const [state, setState] = useState("draft");
+  const [routeId, setRouteId] = useState("");
+  const [providerDiscountPercent, setProviderDiscountPercent] = useState("");
+  const [providerDiscountFixed, setProviderDiscountFixed] = useState("");
+  const [collectionCostPercent, setCollectionCostPercent] = useState("");
+  const [collectionCostFixed, setCollectionCostFixed] = useState("");
+  const [reservePercent, setReservePercent] = useState("");
+  const [reserveFixed, setReserveFixed] = useState("");
+  const [minimumProfitPercent, setMinimumProfitPercent] = useState("1");
+  const [minimumProfitFixed, setMinimumProfitFixed] = useState("");
+  const [customerFeePercent, setCustomerFeePercent] = useState("");
+  const [customerFeeFixed, setCustomerFeeFixed] = useState("");
+  const [minimumAmount, setMinimumAmount] = useState("100");
+  const [previewAmount, setPreviewAmount] = useState("1000");
+  const [state, setState] = useState("active");
+
+  const route = routes.find((item) => text(item, "id") === routeId) ?? null;
+  const productKey = route ? text(route, "product_key") : "";
+  const providerKey = route ? text(route, "provider_key") : "";
+  const existing = economics.find(
+    (item) =>
+      text(item, "product_key") === productKey &&
+      text(item, "provider_key") === providerKey,
+  );
 
   return (
     <Form
-      title="Create a cashback reward"
-      description="Reward completed bill payments. Cashback is earned only after the service company confirms success."
+      title="Set route economics"
+      description="Enter the provider commission/discount and SKIMA's variable costs. These numbers are generic and belong to the route, not to any hardcoded provider."
     >
-      <TextInput label="Cashback name" value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="Bills cashback" />
-      <SelectInput label="Cashback type" value={kind} onChange={(e) => setKind(e.currentTarget.value)} options={[{ label: "Percentage", value: "percentage" }, { label: "Fixed amount", value: "fixed" }]} />
-      <TextInput label={kind === "percentage" ? "Cashback (%)" : "Cashback amount (₦)"} type="number" value={value} onChange={(e) => setValue(e.currentTarget.value)} />
-      {kind === "percentage" ? <TextInput label="Maximum cashback (₦)" type="number" value={cap} onChange={(e) => setCap(e.currentTarget.value)} /> : null}
-      <TextInput label="Minimum customer spend (₦)" type="number" value={min} onChange={(e) => setMin(e.currentTarget.value)} />
-      <TextInput label="Total rewards available" type="number" value={total} onChange={(e) => setTotal(e.currentTarget.value)} />
-      <TextInput label="Rewards per customer" type="number" value={perCustomer} onChange={(e) => setPerCustomer(e.currentTarget.value)} />
-      <Visibility value={state} onChange={setState} />
-      <Submit
-        busy={busy}
-        error={error}
-        disabled={!name.trim() || !positive(value)}
+      <SelectInput
+        label="Product → provider route"
+        value={routeId}
+        onChange={(event) => setRouteId(event.currentTarget.value)}
+        options={[
+          { label: "Choose a route", value: "" },
+          ...routes.map((item) => ({
+            value: text(item, "id"),
+            label: `${text(item, "product_name") || "Product"} → ${text(item, "provider_name") || "Provider"}`,
+          })),
+        ]}
+      />
+      {existing ? (
+        <div className="admin-notice">
+          <strong>Economics already configured</strong>
+          <p>
+            Current state: {friendlyText(text(existing, "status") || "inactive")}.
+            Saving below updates the protected model.
+          </p>
+        </div>
+      ) : null}
+      <TextInput label="Provider discount / commission (%)" type="number" value={providerDiscountPercent} onChange={(e) => setProviderDiscountPercent(e.currentTarget.value)} placeholder="3" />
+      <TextInput label="Provider fixed discount (₦)" type="number" value={providerDiscountFixed} onChange={(e) => setProviderDiscountFixed(e.currentTarget.value)} placeholder="0" />
+      <TextInput label="Allocated collection cost (%)" type="number" value={collectionCostPercent} onChange={(e) => setCollectionCostPercent(e.currentTarget.value)} placeholder="0.5" />
+      <TextInput label="Allocated collection cost fixed (₦)" type="number" value={collectionCostFixed} onChange={(e) => setCollectionCostFixed(e.currentTarget.value)} placeholder="0" />
+      <TextInput label="Operating / risk reserve (%)" type="number" value={reservePercent} onChange={(e) => setReservePercent(e.currentTarget.value)} placeholder="0.5" />
+      <TextInput label="Operating / risk reserve fixed (₦)" type="number" value={reserveFixed} onChange={(e) => setReserveFixed(e.currentTarget.value)} placeholder="0" />
+      <TextInput label="Minimum SKIMA profit (%)" type="number" value={minimumProfitPercent} onChange={(e) => setMinimumProfitPercent(e.currentTarget.value)} placeholder="1" />
+      <TextInput label="Minimum SKIMA profit fixed (₦)" type="number" value={minimumProfitFixed} onChange={(e) => setMinimumProfitFixed(e.currentTarget.value)} placeholder="0" />
+      <TextInput label="Customer convenience fee (%)" type="number" value={customerFeePercent} onChange={(e) => setCustomerFeePercent(e.currentTarget.value)} placeholder="0" />
+      <TextInput label="Customer convenience fee fixed (₦)" type="number" value={customerFeeFixed} onChange={(e) => setCustomerFeeFixed(e.currentTarget.value)} placeholder="0" />
+      <TextInput label="Smallest amount used for profit checks (₦)" type="number" value={minimumAmount} onChange={(e) => setMinimumAmount(e.currentTarget.value)} />
+      <SelectInput
+        label="Economics status"
+        value={state}
+        onChange={(e) => setState(e.currentTarget.value)}
+        options={[
+          { label: "Active protection", value: "active" },
+          { label: "Inactive", value: "inactive" },
+        ]}
+      />
+      {error ? <div className="admin-notice is-error" role="alert">{friendly(error)}</div> : null}
+      <Button
+        icon={Save}
+        isLoading={busy}
+        disabled={!productKey || !providerKey}
         onClick={() =>
           onSave({
-            key: slug(name),
-            name: name.trim(),
-            kind,
-            value: Number(value),
-            cap: numberOrNull(cap),
-            minimum: numberOrNull(min),
-            total: integerOrNull(total),
-            perCustomer: integerOrNull(perCustomer),
-            state,
+            productKey,
+            providerAdapterKey: providerKey,
+            providerDiscountPercent: numeric(providerDiscountPercent),
+            providerDiscountFixed: numeric(providerDiscountFixed),
+            collectionCostPercent: numeric(collectionCostPercent),
+            collectionCostFixed: numeric(collectionCostFixed),
+            operatingReservePercent: numeric(reservePercent),
+            operatingReserveFixed: numeric(reserveFixed),
+            minimumProfitPercent: numeric(minimumProfitPercent),
+            minimumProfitFixed: numeric(minimumProfitFixed),
+            customerFeePercent: numeric(customerFeePercent),
+            customerFeeFixed: numeric(customerFeeFixed),
+            minimumEconomicAmount: numeric(minimumAmount, 100),
+            status: state,
           })}
+      >
+        Save protected economics
+      </Button>
+      <TextInput label="Preview transaction amount (₦)" type="number" value={previewAmount} onChange={(e) => setPreviewAmount(e.currentTarget.value)} />
+      <Button
+        variant="outline"
+        isLoading={previewBusy}
+        disabled={!productKey || !providerKey || !positive(previewAmount)}
+        onClick={() =>
+          onPreview({
+            productKey,
+            providerAdapterKey: providerKey,
+            faceAmount: numeric(previewAmount),
+          })}
+      >
+        Preview profit
+      </Button>
+      {preview ? <EconomicsPreview preview={preview} /> : null}
+    </Form>
+  );
+}
+
+function EconomicsPreview({ preview }: { preview: Row }) {
+  const safe = preview.profitable === true;
+  return (
+    <div className={safe ? "admin-notice" : "admin-notice is-error"}>
+      <strong>{safe ? "Protected profit passes" : "Profit floor is not protected"}</strong>
+      <p>
+        Provider cost {formatNaira(numberValue(preview, "providerCost"))} · provider margin {formatNaira(numberValue(preview, "providerDiscount"))} · customer fee {formatNaira(numberValue(preview, "customerFee"))}
+      </p>
+      <p>
+        Collection {formatNaira(numberValue(preview, "collectionCost"))} · reserve {formatNaira(numberValue(preview, "operatingReserve"))} · minimum profit {formatNaira(numberValue(preview, "minimumProfit"))}
+      </p>
+      <p>
+        Maximum ordinary campaign spend at this amount: <strong>{formatNaira(numberValue(preview, "maxSafeMarginCampaign"))}</strong>. Contribution after current campaign cost: <strong>{formatNaira(numberValue(preview, "contributionProfit"))}</strong>.
+      </p>
+    </div>
+  );
+}
+
+function CampaignForm({
+  categories,
+  billers,
+  products,
+  promotions,
+  cashbacks,
+  preview,
+  previewBusy,
+  saveBusy,
+  error,
+  onPreview,
+  onSave,
+}: {
+  categories: Row[];
+  billers: Row[];
+  products: Row[];
+  promotions: Row[];
+  cashbacks: Row[];
+  preview: Row | null;
+  previewBusy: boolean;
+  saveBusy: boolean;
+  error: Error | null;
+  onPreview(input: Record<string, unknown>): void;
+  onSave(input: Record<string, unknown>): void;
+}) {
+  const [campaignType, setCampaignType] = useState("cashback");
+  const [name, setName] = useState("");
+  const [scopeType, setScopeType] = useState("all");
+  const [scopeKey, setScopeKey] = useState("");
+  const [kind, setKind] = useState("percentage");
+  const [value, setValue] = useState("");
+  const [maximum, setMaximum] = useState("");
+  const [minimumSpend, setMinimumSpend] = useState("");
+  const [fundingMode, setFundingMode] = useState("margin");
+  const [budget, setBudget] = useState("");
+  const [sponsorReference, setSponsorReference] = useState("");
+  const [usageLimit, setUsageLimit] = useState("");
+  const [perCustomer, setPerCustomer] = useState("1");
+  const [state, setState] = useState("draft");
+
+  const scopeRows =
+    scopeType === "category"
+      ? categories
+      : scopeType === "biller"
+        ? billers
+        : scopeType === "product"
+          ? products
+          : [];
+
+  const payload = {
+    campaignType,
+    scopeType,
+    scopeKey: scopeType === "all" ? null : scopeKey,
+    calculationKind: kind,
+    value: numeric(value),
+    maximumAmount: numberOrNull(maximum),
+    minimumSpend: numberOrNull(minimumSpend),
+    fundingMode,
+  };
+
+  const routeRows = preview && Array.isArray(preview.routes)
+    ? preview.routes.filter((item): item is Row => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+  const previewSafe = preview?.safe === true;
+  const firstEconomics = routeRows.length > 0 ? objectValue(routeRows[0], "economics") : null;
+
+  return (
+    <Form
+      title="Create a profit-safe campaign"
+      description="Cashback and discounts use the same margin guard. Ordinary campaigns can spend only the margin left after collection cost, reserve and SKIMA's minimum profit."
+    >
+      <div className="admin-notice">
+        <strong>{promotions.length + cashbacks.length} campaigns configured</strong>
+        <p>
+          Margin-funded is the safe default. Use Marketing budget or Sponsor only
+          when a separate funded pool is intentionally paying the reward.
+        </p>
+      </div>
+      <SelectInput
+        label="Campaign type"
+        value={campaignType}
+        onChange={(e) => setCampaignType(e.currentTarget.value)}
+        options={[
+          { label: "Cashback after provider success", value: "cashback" },
+          { label: "Instant discount", value: "discount" },
+        ]}
       />
+      <TextInput label="Campaign name" value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="Weekend airtime cashback" />
+      <SelectInput
+        label="Target"
+        value={scopeType}
+        onChange={(e) => {
+          setScopeType(e.currentTarget.value);
+          setScopeKey("");
+        }}
+        options={[
+          { label: "All utility services", value: "all" },
+          { label: "One service type", value: "category" },
+          { label: "One company / network", value: "biller" },
+          { label: "One product / plan", value: "product" },
+        ]}
+      />
+      {scopeType !== "all" ? (
+        <SelectInput
+          label={scopeType === "category" ? "Service type" : scopeType === "biller" ? "Company / network" : "Product / plan"}
+          value={scopeKey}
+          onChange={(e) => setScopeKey(e.currentTarget.value)}
+          options={options(scopeRows, "key", "display_name", "Choose target")}
+        />
+      ) : null}
+      <SelectInput
+        label="Reward calculation"
+        value={kind}
+        onChange={(e) => setKind(e.currentTarget.value)}
+        options={[
+          { label: "Percentage", value: "percentage" },
+          { label: "Fixed naira amount", value: "fixed" },
+        ]}
+      />
+      <TextInput label={kind === "percentage" ? "Reward / discount (%)" : "Reward / discount (₦)"} type="number" value={value} onChange={(e) => setValue(e.currentTarget.value)} />
+      {kind === "percentage" ? <TextInput label="Maximum reward per transaction (₦)" type="number" value={maximum} onChange={(e) => setMaximum(e.currentTarget.value)} /> : null}
+      <TextInput label="Minimum purchase (₦)" type="number" value={minimumSpend} onChange={(e) => setMinimumSpend(e.currentTarget.value)} />
+      <SelectInput
+        label="Funding"
+        value={fundingMode}
+        onChange={(e) => setFundingMode(e.currentTarget.value)}
+        options={[
+          { label: "Route margin — must remain profitable", value: "margin" },
+          { label: "SKIMA marketing budget", value: "marketing_budget" },
+          { label: "Sponsor-funded", value: "sponsor" },
+        ]}
+      />
+      {fundingMode !== "margin" ? (
+        <TextInput label="Campaign budget (₦)" type="number" value={budget} onChange={(e) => setBudget(e.currentTarget.value)} />
+      ) : null}
+      {fundingMode === "sponsor" ? (
+        <TextInput label="Sponsor reference" value={sponsorReference} onChange={(e) => setSponsorReference(e.currentTarget.value)} placeholder="Agreement or sponsor reference" />
+      ) : null}
+      <TextInput label="Total uses allowed (optional)" type="number" value={usageLimit} onChange={(e) => setUsageLimit(e.currentTarget.value)} />
+      <TextInput label="Uses per customer" type="number" value={perCustomer} onChange={(e) => setPerCustomer(e.currentTarget.value)} />
+      <SelectInput
+        label="Campaign state"
+        value={state}
+        onChange={(e) => setState(e.currentTarget.value)}
+        options={[
+          { label: "Draft", value: "draft" },
+          { label: "Activate after profit check", value: "active" },
+          { label: "Inactive", value: "inactive" },
+        ]}
+      />
+      {error ? <div className="admin-notice is-error" role="alert">{friendly(error)}</div> : null}
+      <Button
+        variant="outline"
+        isLoading={previewBusy}
+        disabled={!positive(value) || (scopeType !== "all" && !scopeKey)}
+        onClick={() => onPreview(payload)}
+      >
+        Check campaign profit
+      </Button>
+      {preview ? (
+        <div className={previewSafe ? "admin-notice" : "admin-notice is-error"}>
+          <strong>{previewSafe ? "Campaign passes profit protection" : "Campaign is not safe to activate"}</strong>
+          <p>{numberValue(preview, "routeCount")} active route(s) checked.</p>
+          {firstEconomics ? (
+            <p>
+              Example protected margin available: {formatNaira(numberValue(firstEconomics, "maxSafeMarginCampaign"))}; contribution after campaign: {formatNaira(numberValue(firstEconomics, "contributionProfit"))}.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      <Button
+        icon={Save}
+        isLoading={saveBusy}
+        disabled={
+          !name.trim() ||
+          !positive(value) ||
+          (scopeType !== "all" && !scopeKey) ||
+          (fundingMode !== "margin" && !positive(budget)) ||
+          (state === "active" && !previewSafe)
+        }
+        onClick={() =>
+          onSave({
+            ...payload,
+            key: `utility.${campaignType}.${slug(name)}`,
+            displayName: name.trim(),
+            description: null,
+            budgetAmount: fundingMode === "margin" ? null : numberOrNull(budget),
+            sponsorReference: sponsorReference.trim() || null,
+            usageLimit: integerOrNull(usageLimit),
+            perCustomerLimit: integerOrNull(perCustomer),
+            startsAt: null,
+            endsAt: null,
+            status: state,
+          })}
+      >
+        Save campaign
+      </Button>
     </Form>
   );
 }
