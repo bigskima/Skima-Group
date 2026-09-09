@@ -164,6 +164,17 @@ export function AdminUtilityBillingWorkspace() {
       client.invalidateQueries({ queryKey: ["admin-utility-billing"] }),
   });
 
+  const setProviderStatus = useMutation({
+    mutationFn: (input: { providerKey: string; status: string }) =>
+      api.post(
+        "/admin/utility-billing/providers/status",
+        input,
+        MutationIdSchema,
+      ),
+    onSuccess: async () =>
+      client.invalidateQueries({ queryKey: ["admin-utility-billing"] }),
+  });
+
   const testProvider = useMutation({
     mutationFn: (providerKey: string) =>
       api.post(
@@ -345,11 +356,14 @@ export function AdminUtilityBillingWorkspace() {
             providers={data?.providers ?? []}
             busy={save.isPending}
             testBusy={testProvider.isPending}
-            error={save.error ?? testProvider.error}
+            statusBusy={setProviderStatus.isPending}
+            error={save.error ?? testProvider.error ?? setProviderStatus.error}
             testResult={testProvider.data ?? null}
             onSave={(key, configuration) =>
               save.mutate({ kind: "provider", key, configuration })}
             onTest={(providerKey) => testProvider.mutate(providerKey)}
+            onStatus={(providerKey, nextStatus) =>
+              setProviderStatus.mutate({ providerKey, status: nextStatus })}
           />
         ) : null}
         {step === "catalog" ? (
@@ -568,15 +582,19 @@ function ProviderForm({
   providers,
   busy,
   testBusy,
+  statusBusy,
   error,
   testResult,
   onSave,
   onTest,
+  onStatus,
 }: SaveProps & {
   providers: Row[];
   testBusy: boolean;
+  statusBusy: boolean;
   testResult: Row | null;
   onTest(providerKey: string): void;
+  onStatus(providerKey: string, status: string): void;
 }) {
   const [name, setName] = useState("");
   const [family, setFamily] = useState("");
@@ -610,13 +628,30 @@ function ProviderForm({
               {" "}{flag(provider, "secret_configured") ? "Edge secret reference saved" : "No Edge secret reference"}
             </p>
           </div>
-          <Button
-            variant="outline"
-            isLoading={testBusy}
-            onClick={() => onTest(text(provider, "key"))}
-          >
-            Test API connection
-          </Button>
+          <div className="admin-action-row">
+            <Button
+              variant="outline"
+              isLoading={testBusy}
+              onClick={() => onTest(text(provider, "key"))}
+            >
+              Test API connection
+            </Button>
+            <Button
+              variant="outline"
+              isLoading={statusBusy}
+              disabled={
+                text(provider, "status") !== "active" &&
+                (!flag(provider, "runtime_ready") || !flag(provider, "secret_configured"))
+              }
+              onClick={() =>
+                onStatus(
+                  text(provider, "key"),
+                  text(provider, "status") === "active" ? "inactive" : "active",
+                )}
+            >
+              {text(provider, "status") === "active" ? "Pause provider" : "Activate provider"}
+            </Button>
+          </div>
         </div>
       ))}
       {testResult ? (
