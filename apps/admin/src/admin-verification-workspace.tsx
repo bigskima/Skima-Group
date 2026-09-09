@@ -416,7 +416,7 @@ export function AdminVerificationWorkspace(props: {
             <p>
               Use this endpoint in Didit → API & Webhooks. Subscribe to
               <strong> status.updated</strong> and <strong>data.updated</strong>.
-              The signing secret belongs in the Supabase function secret
+              The signing secret must exist in the Supabase Edge Function secret
               <code> DIDIT_WEBHOOK_SECRET</code>; do not paste the secret into this dashboard.
             </p>
           </div>
@@ -458,7 +458,7 @@ export function AdminVerificationWorkspace(props: {
               <p className="admin-section-kicker">Provider routing</p>
               <h2>Automatic verification route</h2>
               <p>
-                Choose the provider workflow for a SKIMA verification check. Secrets stay in Supabase function secrets and are never entered here.
+                Choose the provider workflow for a SKIMA verification check. Didit credentials are read only from Supabase Edge Function secrets; there is no database-secret fallback.
               </p>
             </div>
             <StatusBadge tone={canManage ? "success" : "neutral"}>
@@ -581,7 +581,7 @@ export function AdminVerificationWorkspace(props: {
                     {friendly(recordString(provider, "status") ?? "inactive")}
                   </StatusBadge>
                   <small>
-                    Secret: {recordString(provider, "secretRef") ?? "No secret reference configured"}
+                    Edge secret reference: {recordString(provider, "secretRef") ?? "No secret reference configured"}
                   </small>
                 </div>
               </div>
