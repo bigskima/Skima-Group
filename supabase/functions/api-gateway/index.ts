@@ -5206,6 +5206,109 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
   }
 
+  if (routePath === "/admin/utility-billing/economics" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const value = body.value;
+    return rpcResponse(supabase.rpc("configure_utility_route_economics", {
+      target_product_key: requireString(value.productKey, "productKey"),
+      target_provider_adapter_key: requireString(value.providerAdapterKey, "providerAdapterKey"),
+      target_provider_discount_percent: optionalNumber(value.providerDiscountPercent, "providerDiscountPercent") ?? 0,
+      target_provider_discount_fixed: optionalNumber(value.providerDiscountFixed, "providerDiscountFixed") ?? 0,
+      target_collection_cost_percent: optionalNumber(value.collectionCostPercent, "collectionCostPercent") ?? 0,
+      target_collection_cost_fixed: optionalNumber(value.collectionCostFixed, "collectionCostFixed") ?? 0,
+      target_operating_reserve_percent: optionalNumber(value.operatingReservePercent, "operatingReservePercent") ?? 0,
+      target_operating_reserve_fixed: optionalNumber(value.operatingReserveFixed, "operatingReserveFixed") ?? 0,
+      target_minimum_profit_percent: optionalNumber(value.minimumProfitPercent, "minimumProfitPercent") ?? 0,
+      target_minimum_profit_fixed: optionalNumber(value.minimumProfitFixed, "minimumProfitFixed") ?? 0,
+      target_customer_fee_percent: optionalNumber(value.customerFeePercent, "customerFeePercent") ?? 0,
+      target_customer_fee_fixed: optionalNumber(value.customerFeeFixed, "customerFeeFixed") ?? 0,
+      target_minimum_economic_amount: optionalNumber(value.minimumEconomicAmount, "minimumEconomicAmount") ?? 100,
+      target_status: optionalString(value.status) ?? "active",
+      target_metadata: optionalRecord(value.metadata) ?? {},
+    }), id);
+  }
+
+  if (routePath === "/admin/utility-billing/economics/preview" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("preview_utility_route_economics", {
+      target_product_key: requireString(body.value.productKey, "productKey"),
+      target_provider_adapter_key: requireString(body.value.providerAdapterKey, "providerAdapterKey"),
+      target_face_amount: requireNumber(body.value.faceAmount, "faceAmount"),
+    }), id);
+  }
+
+  if (routePath === "/admin/utility-billing/campaign-preview" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const value = body.value;
+    return rpcResponse(supabase.rpc("preview_utility_campaign_profit", {
+      target_campaign_type: requireString(value.campaignType, "campaignType"),
+      target_scope_type: requireString(value.scopeType, "scopeType"),
+      target_scope_key: optionalString(value.scopeKey),
+      target_calculation_kind: requireString(value.calculationKind, "calculationKind"),
+      target_value: requireNumber(value.value, "value"),
+      target_maximum_amount: optionalNumber(value.maximumAmount, "maximumAmount"),
+      target_minimum_spend: optionalNumber(value.minimumSpend, "minimumSpend"),
+      target_funding_mode: optionalString(value.fundingMode) ?? "margin",
+    }), id);
+  }
+
+  if (routePath === "/admin/utility-billing/campaign" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const value = body.value;
+    return rpcResponse(supabase.rpc("configure_utility_campaign", {
+      target_campaign_type: requireString(value.campaignType, "campaignType"),
+      target_key: requireString(value.key, "key"),
+      target_display_name: requireString(value.displayName, "displayName"),
+      target_description: optionalString(value.description),
+      target_scope_type: requireString(value.scopeType, "scopeType"),
+      target_scope_key: optionalString(value.scopeKey),
+      target_calculation_kind: requireString(value.calculationKind, "calculationKind"),
+      target_value: requireNumber(value.value, "value"),
+      target_maximum_amount: optionalNumber(value.maximumAmount, "maximumAmount"),
+      target_minimum_spend: optionalNumber(value.minimumSpend, "minimumSpend"),
+      target_starts_at: optionalString(value.startsAt),
+      target_ends_at: optionalString(value.endsAt),
+      target_usage_limit: optionalInteger(value.usageLimit),
+      target_per_customer_limit: optionalInteger(value.perCustomerLimit),
+      target_funding_mode: optionalString(value.fundingMode) ?? "margin",
+      target_budget_amount: optionalNumber(value.budgetAmount, "budgetAmount"),
+      target_sponsor_reference: optionalString(value.sponsorReference),
+      target_status: optionalString(value.status) ?? "draft",
+    }), id);
+  }
+
+  if (routePath === "/admin/utility-billing/catalog-sync/begin" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("begin_utility_provider_catalog_sync", {
+      target_provider_adapter_key: requireString(body.value.providerAdapterKey, "providerAdapterKey"),
+      target_idempotency_key: requireString(body.value.idempotencyKey, "idempotencyKey"),
+      target_source: optionalString(body.value.source) ?? "skima.admin.utility_catalog_sync",
+      target_metadata: optionalRecord(body.value.metadata) ?? {},
+    }), id);
+  }
+
+  if (routePath === "/admin/utility-billing/catalog-sync/stage" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("stage_utility_provider_catalog_items", {
+      target_sync_run_id: requireUuid(body.value.syncRunId, "syncRunId"),
+      target_items: requireArray(body.value.items, "items"),
+    }), id);
+  }
+
+  if (routePath === "/admin/utility-billing/catalog-sync/publish" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(supabase.rpc("publish_utility_provider_catalog_sync", {
+      target_sync_run_id: requireUuid(body.value.syncRunId, "syncRunId"),
+    }), id);
+  }
+
   if (routePath === "/runtime/communications/sync" && request.method === "POST") {
     const body = await readJsonBody(request, id);
 
