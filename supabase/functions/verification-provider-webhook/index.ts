@@ -39,10 +39,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
       persistSession: false,
     },
   });
-  const webhookSecret = await resolveServerSecret(
-    supabase,
-    "DIDIT_WEBHOOK_SECRET",
-  );
+  const webhookSecret = resolveEdgeSecret("DIDIT_WEBHOOK_SECRET");
 
   if (!webhookSecret) {
     console.error(JSON.stringify({
@@ -329,18 +326,9 @@ async function verifyDiditWebhook(
   throw new WebhookError("invalid_signature", 401);
 }
 
-async function resolveServerSecret(
-  supabase: SupabaseClient,
-  name: string,
-): Promise<string | null> {
+function resolveEdgeSecret(name: string): string | null {
   const environmentValue = Deno.env.get(name)?.trim();
-  if (environmentValue) return environmentValue;
-
-  const result = await supabase.rpc("read_server_secret", {
-    target_name: name,
-  });
-  if (result.error) return null;
-  return optionalString(result.data);
+  return environmentValue || null;
 }
 
 async function alreadyProcessed(
