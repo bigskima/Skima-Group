@@ -269,6 +269,7 @@ const ROUTES = new Set([
   "/admin/utility-billing/catalog-sync/stage",
   "/admin/utility-billing/catalog-sync/publish",
   "/admin/utility-billing/providers/test",
+  "/admin/utility-billing/providers/status",
   "/admin/utility-billing/providers/live-test",
   "/admin/utility-billing/providers/live-test/status",
   "/admin/utility-billing/catalog-sync/run",
@@ -5403,6 +5404,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       requirePlatformKey(body.value.providerKey, "providerKey"),
     );
     return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (routePath === "/admin/utility-billing/providers/status" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    return rpcResponse(
+      supabase.rpc("set_utility_provider_status", {
+        target_provider_key: requirePlatformKey(body.value.providerKey, "providerKey"),
+        target_status: requireString(body.value.status, "status"),
+      }),
+      id,
+    );
   }
 
   if (routePath === "/admin/utility-billing/providers/live-test" && request.method === "POST") {
