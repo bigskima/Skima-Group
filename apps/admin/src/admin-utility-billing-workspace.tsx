@@ -51,7 +51,8 @@ type SetupStep =
   | "product"
   | "economics"
   | "connection"
-  | "campaign";
+  | "campaign"
+  | "operations";
 
 const steps: ReadonlyArray<{ key: SetupStep; label: string; detail: string }> = [
   { key: "guide", label: "Start here", detail: "How the utility engine works" },
@@ -64,6 +65,7 @@ const steps: ReadonlyArray<{ key: SetupStep; label: string; detail: string }> = 
   { key: "economics", label: "Economics", detail: "Margin, costs and protected profit" },
   { key: "connection", label: "Routing", detail: "Map product to provider and activate safely" },
   { key: "campaign", label: "Campaigns", detail: "Profit-safe cashback and discounts" },
+  { key: "operations", label: "Operations", detail: "Payment status and reconciliation" },
 ];
 
 export function AdminUtilityBillingWorkspace() {
@@ -237,9 +239,24 @@ export function AdminUtilityBillingWorkspace() {
     },
   });
 
+  const retryReconciliation = useMutation({
+    mutationFn: (requestId: string) =>
+      api.post(
+        "/admin/utility-billing/payments/reconcile",
+        { requestId },
+        MutationIdSchema,
+      ),
+    onSuccess: async () =>
+      client.invalidateQueries({ queryKey: ["admin-utility-billing"] }),
+  });
+
   const data = snapshot.data;
   const readyProviders =
     data?.providers.filter((item) => flag(item, "runtime_ready")).length ?? 0;
+  const unresolvedPayments =
+    data?.payments.filter((item) =>
+      ["processing", "reconciliation_required"].includes(text(item, "status"))
+    ).length ?? 0;
 
   return (
     <>
@@ -294,6 +311,12 @@ export function AdminUtilityBillingWorkspace() {
             label="Offers"
             value={data?.promotions.length ?? 0}
             icon={BadgePercent}
+          />
+          <MetricTile
+            label="Needs reconciliation"
+            value={unresolvedPayments}
+            icon={RefreshCcw}
+            tone={unresolvedPayments > 0 ? "warning" : "success"}
           />
         </section>
       )}
@@ -428,6 +451,14 @@ export function AdminUtilityBillingWorkspace() {
             onPreview={(input) => previewCampaign.mutate(input)}
             onSave={(input) => saveCampaign.mutate(input)}
             onFundPool={(amount) => fundCampaignPool.mutate(amount)}
+          />
+        ) : null}
+        {step === "operations" ? (
+          <UtilityOperationsPanel
+            payments={data?.payments ?? []}
+            busy={retryReconciliation.isPending}
+            error={retryReconciliation.error}
+            onRetry={(requestId) => retryReconciliation.mutate(requestId)}
           />
         ) : null}
       </section>
@@ -1126,6 +1157,81 @@ function LiveProviderTestForm({
           Check live test status
         </Button>
       ) : null}
+    </Form>
+  );
+}
+
+function UtilityOperationsPanel({
+  payments,
+  busy,
+  error,
+  onRetry,
+}: {
+  payments: Row[];
+  busy: boolean;
+  error: Error | null;
+  onRetry(requestId: string): void;
+}) {
+  const unresolved = payments.filter((payment) =>
+    ["processing", "reconciliation_required"].includes(text(payment, "status"))
+  );
+  const recent = payments.slice(0, 25);
+
+  return (
+    <Form
+      title="Utility payment operations"
+      description="Provider timeouts and ambiguous results are reconciled by status query. SKIMA never repeats a purchase or refunds a customer merely because the provider is slow."
+    >
+      {error ? (
+        <div className="admin-notice is-error" role="alert">{friendly(error)}</div>
+      ) : null}
+      <div className="admin-notice">
+        <strong>{unresolved.length} unresolved payment{unresolved.length === 1 ? "" : "s"}</strong>
+        <p>
+          After repeated automated checks, an unresolved payment moves to
+          Reconciliation required. Customer funds remain reserved until the provider
+          gives an authoritative final status.
+        </p>
+      </div>
+      {recent.length === 0 ? (
+        <div className="admin-notice">
+          <strong>No utility transactions yet</strong>
+          <p>Real transactions will appear here after a provider and customer routes are activated.</p>
+        </div>
+      ) : null}
+      {recent.map((payment) => {
+        const status = text(payment, "status") || "unknown";
+        const requestId = text(payment, "id");
+        const canRetry = ["processing", "reconciliation_required"].includes(status);
+        return (
+          <div className="admin-summary-row" key={requestId}>
+            <div>
+              <strong>{text(payment, "public_reference") || "Utility payment"}</strong>
+              <p>
+                {friendlyText(status)} · {formatNaira(numberValue(payment, "total_amount"))}
+                {text(payment, "provider_reference")
+                  ? ` · Provider ref ${text(payment, "provider_reference")}`
+                  : ""}
+              </p>
+              {text(payment, "last_error_message") ? (
+                <small>{text(payment, "last_error_message")}</small>
+              ) : null}
+            </div>
+            {canRetry ? (
+              <Button
+                variant="outline"
+                isLoading={busy}
+                disabled={!requestId}
+                onClick={() => onRetry(requestId)}
+              >
+                Retry provider status
+              </Button>
+            ) : (
+              <strong>{friendlyText(status)}</strong>
+            )}
+          </div>
+        );
+      })}
     </Form>
   );
 }
