@@ -5172,14 +5172,23 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         }, 503);
       }
 
-      const reserveResult = await createServiceClient(
+      const utilityServiceClient = createServiceClient(
         supabaseUrl,
         serviceRoleKey,
-      ).rpc("reserve_utility_payment_request", {
-        target_request_id: utilityRequestId,
-        target_idempotency_key: `utility-reserve:${utilityRequestId}`,
-      });
+      );
+      const reserveResult = await utilityServiceClient.rpc(
+        "reserve_utility_payment_request",
+        {
+          target_request_id: utilityRequestId,
+          target_idempotency_key: `utility-reserve:${utilityRequestId}`,
+        },
+      );
       if (reserveResult.error) {
+        await utilityServiceClient.rpc("fail_unreserved_utility_payment_request", {
+          target_request_id: utilityRequestId,
+          target_error_code: "reservation_failed",
+          target_error_message: reserveResult.error.message,
+        });
         return databaseError(reserveResult.error, id);
       }
 
