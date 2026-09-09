@@ -95,7 +95,7 @@ single test amount. Only a successful real vend marks `runtimeReady=true`.
 Ordinary margin-funded offers consume only the safe margin remaining after provider cost,
 collection-cost allocation, operating reserve and minimum SKIMA contribution.
 
-Marketing-budget and sponsor-funded offers use a dedicated campaign funding liability wallet. Admin
+Marketing-budget and sponsor-funded offers use a dedicated non-withdrawable platform campaign wallet. Admin
 must first move already-earned SKIMA revenue into that pool. At request creation, the required
 subsidy is financially reserved before the provider call. This prevents the platform from promising
 cashback or discounts that it cannot fund.
