@@ -1,7 +1,12 @@
-import { createClient } from "npm:@supabase/supabase-js@2.110.9";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.110.9";
 
 import { jsonResponse, optionsResponse, requestId } from "../_shared/http.ts";
 import { AiProviderRuntimeError, resolveAiProviderRoute } from "../_shared/ai-provider-runtime.ts";
+import {
+  purchaseUtilityService,
+  readUtilityPurchaseStatus,
+  UtilityProviderRuntimeError,
+} from "../_shared/utility-provider-runtime.ts";
 
 const DEFAULT_LIMIT = 25;
 const DEFAULT_WEBHOOK_TIMEOUT_MS = 5_000;
@@ -44,6 +49,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const limit = body.limit ?? DEFAULT_LIMIT;
 
     const lpgLifecycle = await processLpgOrderLifecycle(supabase, limit);
+    const utilityPayments = await processUtilityPayments(supabase, limit);
     const notifications = await processNotifications(supabase, limit);
     const communications = await syncCommunicationMessages(supabase, limit);
     const aiTasks = await processAiTasks(supabase, limit);
@@ -79,6 +85,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         lpgLifecycle,
         locationReadiness,
         notifications,
+        utilityPayments,
         webhooks,
         requestId: id,
       },
@@ -104,6 +111,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         lpgLifecycle,
         locationReadiness,
         notifications,
+        utilityPayments,
         webhooks,
       },
       requestId: id,
@@ -244,6 +252,132 @@ async function readWorkerBody(request: Request): Promise<WorkerBody> {
 
   return {
     limit: typeof limit === "number" ? Math.min(Math.max(limit, 1), 100) : undefined,
+  };
+}
+
+async function processUtilityPayments(
+  supabase: RuntimeSupabaseClient,
+  limit: number,
+): Promise<Readonly<Record<string, number>>> {
+  const claim = await supabase.rpc("claim_utility_payment_requests", {
+    target_limit: limit,
+  });
+  if (claim.error) {
+    throw new Error(claim.error.message);
+  }
+
+  const rows = Array.isArray(claim.data) ? claim.data : [];
+  let purchased = 0;
+  let reconciled = 0;
+  let succeeded = 0;
+  let failed = 0;
+  let processing = 0;
+  const providerClient = supabase as unknown as SupabaseClient;
+
+  for (const raw of rows) {
+    const row = requireRecord(raw);
+    const requestId = requireString(row.request_id ?? row.requestId);
+    const action = optionalString(row.action) ?? "status";
+    const providerKey = requireString(row.provider_key ?? row.providerKey);
+    const billerCode = requireString(row.provider_biller_code ?? row.providerBillerCode);
+    const itemCode = requireString(row.provider_product_code ?? row.providerProductCode);
+    const customerIdentifier = requireString(row.customer_identifier ?? row.customerIdentifier);
+    const amount = requireNumber(row.amount);
+    const publicReference = requireString(row.public_reference ?? row.publicReference);
+    const existingProviderReference =
+      optionalString(row.provider_reference ?? row.providerReference) ?? publicReference;
+
+    try {
+      const result = action === "purchase"
+        ? await purchaseUtilityService(providerClient, {
+          providerKey,
+          billerCode,
+          itemCode,
+          customerIdentifier,
+          amount,
+          reference: publicReference,
+        })
+        : await readUtilityPurchaseStatus(providerClient, {
+          providerKey,
+          reference: existingProviderReference,
+        });
+
+      if (action === "purchase") purchased += 1;
+      else reconciled += 1;
+
+      const status = optionalString(result.status) ?? "processing";
+      const providerReference =
+        optionalString(result.providerReference) ??
+        optionalString(result.customerReference) ??
+        existingProviderReference;
+
+      if (status === "succeeded" || status === "failed" || status === "reversed") {
+        await requireRpc(supabase.rpc("finalize_utility_payment_request", {
+          target_request_id: requestId,
+          target_provider_status: status,
+          target_provider_reference: providerReference,
+          target_provider_response: result,
+          target_error_code: status === "succeeded" ? null : `provider_${status}`,
+          target_error_message: status === "succeeded"
+            ? null
+            : optionalString(result.rawStatus) ?? `Provider reported ${status}.`,
+        }));
+        if (status === "succeeded") succeeded += 1;
+        else failed += 1;
+      } else {
+        await requireRpc(supabase.rpc("mark_utility_payment_processing", {
+          target_request_id: requestId,
+          target_provider_reference: providerReference,
+          target_provider_response: result,
+          target_error_code: null,
+          target_error_message: null,
+          target_retry_after_seconds: 120,
+        }));
+        processing += 1;
+      }
+    } catch (error) {
+      const normalized = error instanceof UtilityProviderRuntimeError ? error : null;
+      const deterministicFailure =
+        action === "purchase" &&
+        normalized !== null &&
+        normalized.status >= 400 &&
+        normalized.status < 500 &&
+        normalized.status !== 408 &&
+        normalized.status !== 429;
+
+      if (deterministicFailure) {
+        await requireRpc(supabase.rpc("finalize_utility_payment_request", {
+          target_request_id: requestId,
+          target_provider_status: "failed",
+          target_provider_reference: existingProviderReference,
+          target_provider_response: normalized.details,
+          target_error_code: normalized.code,
+          target_error_message: normalized.message,
+        }));
+        failed += 1;
+      } else {
+        await requireRpc(supabase.rpc("mark_utility_payment_processing", {
+          target_request_id: requestId,
+          target_provider_reference: existingProviderReference,
+          target_provider_response: normalized?.details ?? {},
+          target_error_code: normalized?.code ?? "utility_provider_unknown_error",
+          target_error_message: error instanceof Error
+            ? error.message.slice(0, 1000)
+            : "Utility provider request is awaiting reconciliation.",
+          target_retry_after_seconds: 180,
+        }));
+        processing += 1;
+      }
+    }
+  }
+
+  return {
+    claimed: rows.length,
+    failed,
+    processing,
+    purchased,
+    reconciled,
+    succeeded,
   };
 }
 
