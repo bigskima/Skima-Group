@@ -645,7 +645,7 @@ begin
       request_record.id,
       entries,
       'utility-settle:' || request_record.id::text,
-      provider_record.id,
+      null,
       coalesce(nullif(btrim(target_provider_reference),''),request_record.provider_reference,request_record.public_reference),
       request_record.economics_snapshot,
       jsonb_build_object(
@@ -727,7 +727,7 @@ begin
       request_record.id,
       entries,
       'utility-refund:' || request_record.id::text,
-      provider_record.id,
+      null,
       coalesce(nullif(btrim(target_provider_reference),''),request_record.provider_reference,request_record.public_reference),
       request_record.economics_snapshot,
       jsonb_build_object(
