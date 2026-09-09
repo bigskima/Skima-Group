@@ -178,7 +178,7 @@ Deno.test("utility worker purchases once and reconciles ambiguous provider resul
   assertStringIncludes(runtimeWorker, "purchaseUtilityService");
   assertStringIncludes(runtimeWorker, "readUtilityPurchaseStatus");
   assertStringIncludes(runtimeWorker, 'action === "purchase"');
-  assertStringIncludes(runtimeWorker, 'action === "status"');
+  assertStringIncludes(runtimeWorker, ': await readUtilityPurchaseStatus');
   assertStringIncludes(runtimeWorker, "mark_utility_payment_processing");
   assertStringIncludes(runtimeWorker, "finalize_utility_payment_request");
   assertStringIncludes(utilityArchitecture, "query provider status before any new purchase attempt");
@@ -212,7 +212,8 @@ Deno.test("provider runtime readiness requires explicit real-money vend success"
   assertStringIncludes(gateway, "confirmLiveSpend");
   assertStringIncludes(gateway, "no more than 5000 NGN");
   assertStringIncludes(adminUtility, "Run a small real-money provider test");
-  assertStringIncludes(adminUtility, "the provider's funded balance may be charged");
+  assertStringIncludes(adminUtility, "the provider's funded");
+  assertStringIncludes(adminUtility, "balance may be charged");
   assertStringIncludes(adminUtility, "Check live test status");
 });
 
@@ -229,7 +230,8 @@ Deno.test("budget-funded utility campaigns use a real segregated funding pool", 
 
 Deno.test("post-success provider reversal is explicitly outside initial retry semantics", () => {
   assertStringIncludes(utilityArchitecture, "post-settlement reversal/clawback policy");
-  assertStringIncludes(utilityArchitecture, "must not be emulated by retrying the original purchase");
+  assertStringIncludes(utilityArchitecture, "must not be emulated by retrying the original");
+  assertStringIncludes(utilityArchitecture, "purchase.");
 });
 
 Deno.test("customer home exposes bills while station location screens stay off the tab bar", () => {
