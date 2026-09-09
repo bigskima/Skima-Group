@@ -45,6 +45,7 @@ type SetupStep =
   | "guide"
   | "provider"
   | "catalog"
+  | "live-test"
   | "category"
   | "biller"
   | "product"
@@ -56,6 +57,7 @@ const steps: ReadonlyArray<{ key: SetupStep; label: string; detail: string }> = 
   { key: "guide", label: "Start here", detail: "How the utility engine works" },
   { key: "provider", label: "Providers", detail: "Connect any bill-payment API" },
   { key: "catalog", label: "Catalogue", detail: "Provider sync and SKIMA curation" },
+  { key: "live-test", label: "Live test", detail: "Verify a small real-money vend safely" },
   { key: "category", label: "Service types", detail: "Manual fallback: airtime, data, electricity" },
   { key: "biller", label: "Companies", detail: "Manual fallback: MTN, Glo, EEDC and more" },
   { key: "product", label: "Plans", detail: "Manual fallback: bundles and bill types" },
@@ -74,6 +76,17 @@ export function AdminUtilityBillingWorkspace() {
     enabled: status === "authenticated",
     retry: false,
     queryFn: () => api.get("/admin/utility-billing/configuration", SnapshotSchema),
+  });
+
+  const campaignPool = useQuery({
+    queryKey: ["admin-utility-campaign-pool"],
+    enabled: status === "authenticated",
+    retry: false,
+    queryFn: () =>
+      api.get(
+        "/admin/utility-billing/campaign-pool?currency=NGN",
+        PreviewSchema,
+      ),
   });
 
   const save = useMutation({
@@ -171,6 +184,46 @@ export function AdminUtilityBillingWorkspace() {
       ),
     onSuccess: async () =>
       client.invalidateQueries({ queryKey: ["admin-utility-billing"] }),
+  });
+
+  const liveProviderTest = useMutation({
+    mutationFn: (input: Record<string, unknown>) =>
+      api.post(
+        "/admin/utility-billing/providers/live-test",
+        input,
+        PreviewSchema,
+      ),
+    onSuccess: async () =>
+      client.invalidateQueries({ queryKey: ["admin-utility-billing"] }),
+  });
+
+  const liveProviderStatus = useMutation({
+    mutationFn: (input: Record<string, unknown>) =>
+      api.post(
+        "/admin/utility-billing/providers/live-test/status",
+        input,
+        PreviewSchema,
+      ),
+    onSuccess: async () =>
+      client.invalidateQueries({ queryKey: ["admin-utility-billing"] }),
+  });
+
+  const fundCampaignPool = useMutation({
+    mutationFn: (amount: number) =>
+      api.post(
+        "/admin/utility-billing/campaign-pool/fund",
+        {
+          amount,
+          currencyCode: "NGN",
+          idempotencyKey: `utility-campaign-pool:${crypto.randomUUID()}`,
+          metadata: { source: "skima.admin.utility_billing" },
+        },
+        MutationIdSchema,
+      ),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: ["admin-utility-campaign-pool"] });
+      await client.invalidateQueries({ queryKey: ["admin-utility-billing"] });
+    },
   });
 
   const data = snapshot.data;
@@ -309,6 +362,19 @@ export function AdminUtilityBillingWorkspace() {
             onSync={(providerKey) => syncCatalog.mutate(providerKey)}
           />
         ) : null}
+        {step === "live-test" ? (
+          <LiveProviderTestForm
+            providers={data?.providers ?? []}
+            products={data?.products ?? []}
+            routes={data?.routes ?? []}
+            busy={liveProviderTest.isPending}
+            statusBusy={liveProviderStatus.isPending}
+            error={liveProviderTest.error ?? liveProviderStatus.error}
+            result={liveProviderStatus.data ?? liveProviderTest.data ?? null}
+            onRun={(input) => liveProviderTest.mutate(input)}
+            onCheck={(input) => liveProviderStatus.mutate(input)}
+          />
+        ) : null}
         {step === "economics" ? (
           <EconomicsForm
             routes={data?.routes ?? []}
@@ -339,12 +405,15 @@ export function AdminUtilityBillingWorkspace() {
             products={data?.products ?? []}
             promotions={data?.promotions ?? []}
             cashbacks={data?.cashbacks ?? []}
+            campaignPool={campaignPool.data ?? null}
             preview={previewCampaign.data ?? null}
             previewBusy={previewCampaign.isPending}
             saveBusy={saveCampaign.isPending}
-            error={previewCampaign.error ?? saveCampaign.error}
+            fundBusy={fundCampaignPool.isPending}
+            error={previewCampaign.error ?? saveCampaign.error ?? fundCampaignPool.error}
             onPreview={(input) => previewCampaign.mutate(input)}
             onSave={(input) => saveCampaign.mutate(input)}
+            onFundPool={(amount) => fundCampaignPool.mutate(amount)}
           />
         ) : null}
       </section>
