@@ -151,6 +151,28 @@ export function AdminUtilityBillingWorkspace() {
       client.invalidateQueries({ queryKey: ["admin-utility-billing"] }),
   });
 
+  const testProvider = useMutation({
+    mutationFn: (providerKey: string) =>
+      api.post(
+        "/admin/utility-billing/providers/test",
+        { providerKey },
+        PreviewSchema,
+      ),
+    onSuccess: async () =>
+      client.invalidateQueries({ queryKey: ["admin-utility-billing"] }),
+  });
+
+  const syncCatalog = useMutation({
+    mutationFn: (providerKey: string) =>
+      api.post(
+        "/admin/utility-billing/catalog-sync/run",
+        { providerKey },
+        PreviewSchema,
+      ),
+    onSuccess: async () =>
+      client.invalidateQueries({ queryKey: ["admin-utility-billing"] }),
+  });
+
   const data = snapshot.data;
   const readyProviders =
     data?.providers.filter((item) => flag(item, "runtime_ready")).length ?? 0;
@@ -269,15 +291,22 @@ export function AdminUtilityBillingWorkspace() {
           <ProviderForm
             providers={data?.providers ?? []}
             busy={save.isPending}
-            error={save.error}
+            testBusy={testProvider.isPending}
+            error={save.error ?? testProvider.error}
+            testResult={testProvider.data ?? null}
             onSave={(key, configuration) =>
               save.mutate({ kind: "provider", key, configuration })}
+            onTest={(providerKey) => testProvider.mutate(providerKey)}
           />
         ) : null}
         {step === "catalog" ? (
           <CatalogSyncOverview
             providers={data?.providers ?? []}
             syncRuns={data?.syncRuns ?? []}
+            busy={syncCatalog.isPending}
+            error={syncCatalog.error}
+            result={syncCatalog.data ?? null}
+            onSync={(providerKey) => syncCatalog.mutate(providerKey)}
           />
         ) : null}
         {step === "economics" ? (
