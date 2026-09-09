@@ -946,6 +946,9 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           "queue",
           "cache",
           "observability",
+          "inventory",
+          "utility",
+          "verification",
         ])
         .order("provider_kind", { ascending: true })
         .order("key", { ascending: true }),
@@ -5158,6 +5161,20 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       if ("response" in body) return body.response;
       const kind = requireString(body.value.kind, "kind");
       const configuration = optionalRecord(body.value.configuration) ?? {};
+      if (kind === "provider") {
+        return rpcResponse(supabase.rpc("configure_utility_provider_adapter", {
+          target_key: requireString(body.value.key, "key"),
+          target_display_name: requireString(configuration.displayName, "displayName"),
+          target_status: optionalString(configuration.status) ?? "inactive",
+          target_secret_ref: optionalString(configuration.secretRef),
+          target_provider_family: optionalString(configuration.providerFamily),
+          target_environment: optionalString(configuration.environment) ?? "production",
+          target_base_url: optionalString(configuration.baseUrl),
+          target_website_url: optionalString(configuration.websiteUrl),
+          target_documentation_url: optionalString(configuration.documentationUrl),
+          target_metadata: optionalRecord(configuration.metadata) ?? {},
+        }), id);
+      }
       if (kind === "route") {
         return rpcResponse(supabase.rpc("configure_utility_provider_route", {
           target_product_key: requireString(configuration.productKey, "productKey"),
