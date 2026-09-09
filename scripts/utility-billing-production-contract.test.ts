@@ -15,6 +15,7 @@ const flutterwaveAdapterInstall = await Deno.readTextFile("supabase/migrations/2
 const fulfillmentRuntime = await Deno.readTextFile("supabase/migrations/20260909033000_utility_financial_fulfillment_runtime.sql");
 const settlementAllocation = await Deno.readTextFile("supabase/migrations/20260909033500_utility_settlement_profit_allocation.sql");
 const campaignWalletSegregation = await Deno.readTextFile("supabase/migrations/20260909033700_utility_campaign_wallet_segregation.sql");
+const reservationCleanup = await Deno.readTextFile("supabase/migrations/20260909033800_utility_reservation_failure_cleanup.sql");
 const runtimeWorker = await Deno.readTextFile("supabase/functions/runtime-worker/index.ts");
 const utilityArchitecture = await Deno.readTextFile("docs/utility-billing-architecture.md");
 
@@ -169,6 +170,16 @@ Deno.test("utility customer money is reserved before provider fulfillment", () =
   assertStringIncludes(gateway, "utility-reserve:");
   assertStringIncludes(customerBills, "reserved from your SKIMA Wallet");
   assert(!fulfillmentRuntime.includes("insert into public.wallet_ledger_entries"));
+});
+
+Deno.test("failed utility wallet reservation releases prepared campaign state", () => {
+  assertStringIncludes(reservationCleanup, "fail_unreserved_utility_payment_request");
+  assertStringIncludes(reservationCleanup, "status='failed'");
+  assertStringIncludes(reservationCleanup, "reservation_transaction_id is null");
+  assertStringIncludes(gateway, "fail_unreserved_utility_payment_request");
+  assertStringIncludes(gateway, "reservation_failed");
+  assertStringIncludes(profitRuntime, "budget_reserved=greatest(0,budget_reserved-new.discount_amount)");
+  assertStringIncludes(profitRuntime, "budget_reserved=greatest(0,budget_reserved-new.expected_cashback_amount)");
 });
 
 Deno.test("utility worker purchases once and reconciles ambiguous provider results", () => {
