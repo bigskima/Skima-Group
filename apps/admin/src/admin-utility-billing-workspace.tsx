@@ -498,9 +498,17 @@ function ProductForm({
 function ProviderForm({
   providers,
   busy,
+  testBusy,
   error,
+  testResult,
   onSave,
-}: SaveProps & { providers: Row[] }) {
+  onTest,
+}: SaveProps & {
+  providers: Row[];
+  testBusy: boolean;
+  testResult: Row | null;
+  onTest(providerKey: string): void;
+}) {
   const [name, setName] = useState("");
   const [family, setFamily] = useState("");
   const [environment, setEnvironment] = useState("production");
@@ -520,6 +528,35 @@ function ProviderForm({
           <p>
             {providers.filter((item) => flag(item, "runtime_ready")).length} currently have a
             live fulfillment adapter.
+          </p>
+        </div>
+      ) : null}
+      {providers.map((provider) => (
+        <div className="admin-summary-row" key={text(provider, "id") || text(provider, "key")}>
+          <div>
+            <strong>{text(provider, "display_name") || text(provider, "key")}</strong>
+            <p>
+              {friendlyText(text(provider, "status") || "inactive")} ·
+              {" "}{flag(provider, "catalog_sync_ready") ? "Catalogue adapter installed" : "No catalogue adapter"} ·
+              {" "}{flag(provider, "secret_configured") ? "Edge secret reference saved" : "No Edge secret reference"}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            isLoading={testBusy}
+            onClick={() => onTest(text(provider, "key"))}
+          >
+            Test API connection
+          </Button>
+        </div>
+      ))}
+      {testResult ? (
+        <div className="admin-notice">
+          <strong>Provider connection responded</strong>
+          <p>
+            {text(testResult, "providerName") || "Provider"} returned
+            {" "}{numberValue(testResult, "categoryCount")} bill categories in
+            {" "}{numberValue(testResult, "latencyMs")} ms.
           </p>
         </div>
       ) : null}
@@ -707,9 +744,17 @@ function ConnectionForm({
 function CatalogSyncOverview({
   providers,
   syncRuns,
+  busy,
+  error,
+  result,
+  onSync,
 }: {
   providers: Row[];
   syncRuns: Row[];
+  busy: boolean;
+  error: Error | null;
+  result: Row | null;
+  onSync(providerKey: string): void;
 }) {
   const syncReady = providers.filter((row) => flag(row, "catalog_sync_ready"));
   return (
@@ -735,6 +780,36 @@ function CatalogSyncOverview({
           <p>{syncRuns.length}</p>
         </div>
       </div>
+      {providers.map((provider) => (
+        <div className="admin-summary-row" key={text(provider, "id") || text(provider, "key")}>
+          <div>
+            <strong>{text(provider, "display_name") || text(provider, "key")}</strong>
+            <p>
+              {flag(provider, "catalog_sync_ready")
+                ? "Ready to import this provider's categories, companies and plans."
+                : "This provider does not have a catalogue adapter installed yet."}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            isLoading={busy}
+            disabled={!flag(provider, "catalog_sync_ready")}
+            onClick={() => onSync(text(provider, "key"))}
+          >
+            Sync catalogue
+          </Button>
+        </div>
+      ))}
+      {error ? <div className="admin-notice is-error" role="alert">{friendly(error)}</div> : null}
+      {result ? (
+        <div className="admin-notice">
+          <strong>Catalogue sync completed</strong>
+          <p>
+            Imported {numberValue(result, "itemCount")} provider catalogue items.
+            They remain subject to SKIMA curation, economics and route activation.
+          </p>
+        </div>
+      ) : null}
       {syncRuns.slice(0, 5).map((run) => (
         <div className="admin-summary-row" key={text(run, "id")}>
           <div>
