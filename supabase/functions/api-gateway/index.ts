@@ -31,6 +31,12 @@ import {
   startPartnerVerificationSession,
   VerificationRuntimeError,
 } from "../_shared/partner-verification.ts";
+import {
+  syncUtilityProviderCatalog,
+  testUtilityProviderConnection,
+  UtilityProviderRuntimeError,
+  validateUtilityCustomer,
+} from "../_shared/utility-provider-runtime.ts";
 
 const ROUTES = new Set([
   "/health",
@@ -260,6 +266,9 @@ const ROUTES = new Set([
   "/admin/utility-billing/catalog-sync/begin",
   "/admin/utility-billing/catalog-sync/stage",
   "/admin/utility-billing/catalog-sync/publish",
+  "/admin/utility-billing/providers/test",
+  "/admin/utility-billing/catalog-sync/run",
+  "/runtime/utility-billing/validate",
   "/runtime/communications/sync",
   "/runtime/otp/challenges",
   "/runtime/otp/delivery",
@@ -327,6 +336,19 @@ async function handleRequest(request: Request): Promise<Response> {
     }
 
     if (error instanceof VerificationRuntimeError) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: error.code,
+          message: error.message,
+          details: error.details,
+          requestId: id,
+        },
+        error.status,
+      );
+    }
+
+    if (error instanceof UtilityProviderRuntimeError) {
       return jsonResponse(
         {
           ok: false,
@@ -5314,6 +5336,101 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     return rpcResponse(supabase.rpc("publish_utility_provider_catalog_sync", {
       target_sync_run_id: requireUuid(body.value.syncRunId, "syncRunId"),
     }), id);
+  }
+
+  if (routePath === "/admin/utility-billing/providers/test" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    await requireUtilityBillingManage(supabase);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "Utility provider testing is not configured on this SKIMA backend.",
+        requestId: id,
+      }, 503);
+    }
+    const data = await testUtilityProviderConnection(
+      createServiceClient(supabaseUrl, serviceRoleKey),
+      requirePlatformKey(body.value.providerKey, "providerKey"),
+    );
+    return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (routePath === "/admin/utility-billing/catalog-sync/run" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    await requireUtilityBillingManage(supabase);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "Utility provider catalogue sync is not configured on this SKIMA backend.",
+        requestId: id,
+      }, 503);
+    }
+    const categoryCodesRaw = body.value.categoryCodes;
+    const categoryCodes = categoryCodesRaw === undefined || categoryCodesRaw === null
+      ? []
+      : requireStringArray(categoryCodesRaw, "categoryCodes", 50);
+    const data = await syncUtilityProviderCatalog(
+      createServiceClient(supabaseUrl, serviceRoleKey),
+      requirePlatformKey(body.value.providerKey, "providerKey"),
+      { categoryCodes },
+    );
+    return jsonResponse({ ok: true, data, requestId: id });
+  }
+
+  if (routePath === "/runtime/utility-billing/validate" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const productId = requireUuid(body.value.productId, "productId");
+    const customerIdentifier = requireString(
+      body.value.customerIdentifier,
+      "customerIdentifier",
+    );
+    const contextResult = await supabase.rpc(
+      "read_utility_customer_validation_context",
+      { target_product_id: productId },
+    );
+    if (contextResult.error) {
+      return databaseError(contextResult.error, id);
+    }
+    const context = requireRecord(contextResult.data, "utility validation context");
+    const categoryKey = requireString(context.categoryKey, "categoryKey");
+    if (categoryKey === "airtime" || categoryKey === "data") {
+      return jsonResponse({
+        ok: true,
+        data: {
+          valid: true,
+          validationSkipped: true,
+          customerIdentifier,
+          reason: "provider_validation_not_required",
+        },
+        requestId: id,
+      });
+    }
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({
+        ok: false,
+        error: "server_misconfigured",
+        message: "Utility customer validation is not configured on this SKIMA backend.",
+        requestId: id,
+      }, 503);
+    }
+    const data = await validateUtilityCustomer(
+      createServiceClient(supabaseUrl, serviceRoleKey),
+      {
+        providerKey: requirePlatformKey(context.providerKey, "providerKey"),
+        billerCode: requireString(context.providerBillerCode, "providerBillerCode"),
+        itemCode: requireString(context.providerProductCode, "providerProductCode"),
+        customerIdentifier,
+      },
+    );
+    return jsonResponse({ ok: true, data, requestId: id });
   }
 
   if (routePath === "/runtime/communications/sync" && request.method === "POST") {
@@ -12505,6 +12622,37 @@ function optionalBoolean(value: unknown): boolean | null {
   }
 
   return value;
+}
+
+async function requireUtilityBillingManage(
+  supabase: SupabaseClient,
+): Promise<void> {
+  const [permission, superAdmin] = await Promise.all([
+    supabase.rpc("has_permission", {
+      target_permission: "platform.billing.manage",
+      target_organization_id: null,
+    }),
+    supabase.rpc("is_platform_super_admin"),
+  ]);
+  if (permission.error) throw permission.error;
+  if (superAdmin.error) throw superAdmin.error;
+  if (permission.data !== true && superAdmin.data !== true) {
+    throw new RequestValidationError("bill service management permission is required");
+  }
+}
+
+function requireStringArray(
+  value: unknown,
+  field: string,
+  maximumItems: number,
+): string[] {
+  if (!Array.isArray(value) || value.length > maximumItems) {
+    throw new RequestValidationError(
+      `${field} must be an array with at most ${maximumItems} items.`,
+    );
+  }
+  return value.map((item, index) =>
+    requireString(item, `${field}[${index}]`));
 }
 
 function requireRecord(value: unknown, fieldName: string): Readonly<Record<string, unknown>> {
