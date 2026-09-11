@@ -17,6 +17,7 @@ import { CoverageMapScreen } from "./CoverageMapScreen";
 import { CoveragePartnerScreen } from "./CoveragePartnerScreen";
 import { CoverageSectionNav, type CoverageSection } from "./CoverageSectionNav";
 import { CoverageWorkspaceV2 } from "./CoverageWorkspaceV2";
+import "./coverage-v2-operations.css";
 
 export function OperationsWorkspaceRouter(props: {
   readonly route: string;
