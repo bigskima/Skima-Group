@@ -18,7 +18,7 @@ let source = await readFile(path, "utf8");
 source = replaceExact(
   source,
   `import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";`,
-  `import { type ReactNode, useEffect, useMemo, useState } from "react";`,
+  `import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";`,
   "React import",
 );
 
