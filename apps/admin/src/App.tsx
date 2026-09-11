@@ -39,7 +39,7 @@ import {
 import { AdminShell } from "./AdminShell";
 import { AdminLoginView } from "./admin-login-view";
 import { foundationNavigation } from "./admin-navigation-config";
-import { AdminWorkspaceRouter } from "./admin-workspace-router";
+import { AdminV2WorkspaceRouter } from "./app/AdminV2WorkspaceRouter";
 import {
   buildAdminCategoryNavigation,
   getAdminScreenLabel,
@@ -188,7 +188,7 @@ export function App() {
   const safeRoute = hasVisibleScreen ? route : "/dashboard";
   const safeWorkspace = getAdminWorkspaceForRoute(safeRoute);
   const safeWorkspaceNavigation = getAdminWorkspaceNavigation(safeWorkspace.key, visibleScreens).map(toShellNavItem);
-  const safeCategory = categoryNavigation.find((item) => item.key === safeWorkspace.key) ?? categoryNavigation[0];
+  const safeCategory = categoryNavigation.find((item) => item.key === safeWorkspace.key) ?? activeCategory;
 
   return (
     <PermissionProvider can={can}>
@@ -206,7 +206,7 @@ export function App() {
         onSignOut={sessionState.signOut}
       >
         {safeWorkspace.key === "dashboard" ? (
-          <AdminWorkspaceRouter route={safeRoute} onNavigate={navigate} />
+          <AdminV2WorkspaceRouter route={safeRoute} onNavigate={navigate} />
         ) : (
           <AdminWorkspaceLayout
             title={safeWorkspace.label}
@@ -215,7 +215,7 @@ export function App() {
             activeHref={safeRoute}
             onNavigate={navigate}
           >
-            <AdminWorkspaceRouter route={safeRoute} onNavigate={navigate} />
+            <AdminV2WorkspaceRouter route={safeRoute} onNavigate={navigate} />
           </AdminWorkspaceLayout>
         )}
       </AdminShell>
