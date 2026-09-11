@@ -43,13 +43,22 @@ jobs:
           node scripts/apply-phase4-admin-ai-upgrade.mjs
           python3 - <<'PY'
           from pathlib import Path
-          path = Path("supabase/functions/api-gateway/index.ts")
-          text = path.read_text()
+
+          gateway = Path("supabase/functions/api-gateway/index.ts")
+          text = gateway.read_text()
           old = '].filter((item): item is Record<string, unknown> => item !== null);'
           new = '].filter((item) => item !== null) as Array<{ key: string; label: string; count: number; severity: string; summary: string }>;'
           if old not in text:
               raise SystemExit("attention digest type target not found")
-          path.write_text(text.replace(old, new, 1))
+          gateway.write_text(text.replace(old, new, 1))
+
+          contract = Path("scripts/ai-runtime-contract.test.ts")
+          contract_text = contract.read_text()
+          old_helper = 'function assertIncludes(value: string, expected: string, message: string): void {'
+          new_helper = 'function assertIncludes(value: string, expected: string, message = "Expected source to include required AI runtime contract text"): void {'
+          if old_helper not in contract_text:
+              raise SystemExit("AI contract helper target not found")
+          contract.write_text(contract_text.replace(old_helper, new_helper, 1))
           PY
 
       - name: Typecheck platform and edge functions
