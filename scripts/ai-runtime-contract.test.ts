@@ -2693,7 +2693,7 @@ function normalizeWhitespace(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function assertIncludes(value: string, expected: string, message: string): void {
+function assertIncludes(value: string, expected: string, message = "Expected source to include required AI runtime contract text"): void {
   if (!value.includes(expected)) {
     throw new Error(message + `\nExpected to include: ${expected}`);
   }
@@ -2716,3 +2716,20 @@ function assertNotMatch(value: string, pattern: RegExp, message: string): void {
     throw new Error(message + `\nUnexpected pattern: ${String(pattern)}`);
   }
 }
+
+
+Deno.test("admin intelligence is platform-wide, prioritized and layered", () => {
+  assertIncludes(gatewaySource, "buildAdminAttentionDigest");
+  assertIncludes(gatewaySource, "reason across the entire supplied platform context");
+  assertIncludes(gatewaySource, "supportTriageAssessments");
+  assertIncludes(gatewaySource, "applicationReviewReadiness");
+  assertIncludes(gatewaySource, "stationInventoryOutlook");
+  assertIncludes(gatewaySource, "suggestions: aiWorkspaceSuggestions(workspace, context)");
+  assertIncludes(adminAiWorkspace, 'label: "Needs attention"');
+  assertIncludes(adminAiWorkspace, 'label: "Decision insights"');
+  assertIncludes(adminAiWorkspace, 'label: "AI settings"');
+  assertIncludes(adminAiWorkspace, "Applications waiting on SKIMA");
+  assertIncludes(adminAiWorkspace, "Support cases needing attention");
+  assertIncludes(adminAiWorkspace, "Stock & capacity attention");
+  assertIncludes(adminAiWorkspace, "Recent AI task health");
+});
