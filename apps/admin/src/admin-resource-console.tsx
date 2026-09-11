@@ -24,6 +24,7 @@ import {
 } from "@skima/ui";
 import { ChevronDown, RefreshCcw, Search } from "lucide-react";
 
+import { AdminWorkspaceIntro, AdminWorkspaceSections } from "./admin-workspace-sections";
 import { useSessionState } from "./session";
 
 const RecordSchema = z.record(z.unknown());
@@ -183,12 +184,21 @@ const LOOKUP_BY_FIELD_KEY: Readonly<Record<string, LookupDefinition>> = {
 };
 
 export function AdminResourceConsole(props: { readonly config: AdminResourceConsoleConfig }) {
-  const [activeGroupKey, setActiveGroupKey] = useState(props.config.groups[0]?.key ?? "");
+  const firstGroup = props.config.groups[0];
+  const [activeGroupKey, setActiveGroupKey] = useState(firstGroup?.key ?? "");
+  const [activeResourceKey, setActiveResourceKey] = useState(firstGroup?.resources[0]?.key ?? "");
   const [activeAction, setActiveAction] = useState<AdminActionDefinition | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const activeGroup = props.config.groups.find((group) => group.key === activeGroupKey) ??
-    props.config.groups[0];
+  const activeGroup = props.config.groups.find((group) => group.key === activeGroupKey) ?? firstGroup;
+  const activeResource = activeGroup?.resources.find((resource) => resource.key === activeResourceKey) ??
+    activeGroup?.resources[0];
+
+  useEffect(() => {
+    if (!activeGroup) return;
+    if (activeGroup.resources.some((resource) => resource.key === activeResourceKey)) return;
+    setActiveResourceKey(activeGroup.resources[0]?.key ?? "");
+  }, [activeGroup, activeResourceKey]);
 
   const refreshAll = () => {
     setNotice(null);
@@ -212,45 +222,41 @@ export function AdminResourceConsole(props: { readonly config: AdminResourceCons
         description={props.config.description}
         actions={
           <Button icon={RefreshCcw} variant="outline" onClick={refreshAll}>
-            Refresh data
+            Refresh
           </Button>
         }
       />
 
-      <div
-        className="skima-resource-tabs admin-resource-tabs"
-        role="tablist"
-        aria-label={`${props.config.title} sections`}
-      >
-        {props.config.groups.map((group) => (
-          <button
-            key={group.key}
-            type="button"
-            role="tab"
-            aria-selected={group.key === activeGroup.key}
-            className={group.key === activeGroup.key ? "is-active" : undefined}
-            onClick={() => {
-              setNotice(null);
-              setActiveGroupKey(group.key);
-            }}
-          >
-            {group.label}
-          </button>
-        ))}
-      </div>
+      <AdminWorkspaceSections
+        label={`${props.config.title} sections`}
+        activeKey={activeGroup.key}
+        onChange={(key) => {
+          const nextGroup = props.config.groups.find((group) => group.key === key);
+          setNotice(null);
+          setActiveGroupKey(key);
+          setActiveResourceKey(nextGroup?.resources[0]?.key ?? "");
+        }}
+        sections={props.config.groups.map((group) => ({
+          key: group.key,
+          label: group.label,
+          description: group.description,
+          badge: group.resources.length || null,
+        }))}
+      />
 
       {notice ? <StatusBadge tone="success" className="skima-status-note">{notice}</StatusBadge> : null}
 
       <section className="sk-panel admin-resource-summary">
         <div className="sk-panel__header">
-          <div>
-            <h2>{activeGroup.label}</h2>
-            <p className="skima-muted">{activeGroup.description}</p>
-          </div>
+          <AdminWorkspaceIntro
+            kicker="Current area"
+            title={activeGroup.label}
+            description={activeGroup.description}
+          />
         </div>
         {activeGroup.actions.length ? (
           <div className="admin-resource-action-block">
-            <p>What would you like to do?</p>
+            <p>Common actions</p>
             <div className="skima-resource-actions">
               {activeGroup.actions.map((action) => (
                 <Button
@@ -262,7 +268,7 @@ export function AdminResourceConsole(props: { readonly config: AdminResourceCons
                     setActiveAction(action);
                   }}
                 >
-                  {action.label}
+                  {friendlyActionLabel(action.label)}
                 </Button>
               ))}
             </div>
@@ -272,18 +278,34 @@ export function AdminResourceConsole(props: { readonly config: AdminResourceCons
         )}
       </section>
 
-      <div className="skima-resource-grid admin-resource-grid">
-        {activeGroup.resources.map((resource) => (
-          <AdminResourcePanel key={resource.key} resource={resource} />
-        ))}
-      </div>
+      {activeGroup.resources.length > 1 ? (
+        <AdminWorkspaceSections
+          compact
+          label={`${activeGroup.label} information`}
+          activeKey={activeResource?.key ?? ""}
+          onChange={setActiveResourceKey}
+          sections={activeGroup.resources.map((resource) => ({
+            key: resource.key,
+            label: friendlyResourceTitle(resource.title),
+            description: resource.description ?? `View ${friendlyResourceTitle(resource.title).toLowerCase()}.`,
+          }))}
+        />
+      ) : null}
+
+      {activeResource ? (
+        <AdminResourcePanel key={`${activeGroup.key}:${activeResource.key}`} resource={activeResource} />
+      ) : (
+        <section className="sk-panel">
+          <p className="skima-muted">There is no information view configured for this area yet.</p>
+        </section>
+      )}
 
       <AdminActionDialog
         action={activeAction}
         onClose={() => setActiveAction(null)}
         onComplete={(label) => {
           setActiveAction(null);
-          setNotice(`${label} completed successfully.`);
+          setNotice(`${friendlyActionLabel(label)} saved.`);
         }}
       />
     </>
@@ -297,15 +319,16 @@ function AdminResourcePanel(props: { readonly resource: AdminResourceDefinition 
     () => buildColumns(records, props.resource.preferredKeys),
     [props.resource.preferredKeys, records],
   );
+  const title = friendlyResourceTitle(props.resource.title);
 
   if (query.isLoading) {
-    return <LoadingState label={`Loading ${props.resource.title}`} />;
+    return <LoadingState label={`Loading ${title}`} />;
   }
 
   if (query.error) {
     return (
       <ErrorState
-        title={`${props.resource.title} unavailable`}
+        title={`${title} unavailable`}
         message={readErrorMessage(query.error)}
         onRetry={() => void query.refetch()}
       />
@@ -316,19 +339,17 @@ function AdminResourcePanel(props: { readonly resource: AdminResourceDefinition 
     <section className="sk-panel admin-resource-panel">
       <div className="sk-panel__header">
         <div>
-          <h2>{props.resource.title}</h2>
-          {props.resource.description
-            ? <p className="skima-muted">{props.resource.description}</p>
-            : null}
+          <h2>{title}</h2>
+          {props.resource.description ? <p className="skima-muted">{props.resource.description}</p> : null}
         </div>
         <StatusBadge>{records.length === 1 ? "1 item" : `${records.length} items`}</StatusBadge>
       </div>
       <DataTable
-        caption={props.resource.title}
+        caption={title}
         columns={columns}
         records={records}
         getRowKey={(record) => String(record.id ?? record.key ?? JSON.stringify(record))}
-        emptyTitle={`No ${props.resource.title.toLowerCase()} yet`}
+        emptyTitle={`No ${title.toLowerCase()} yet`}
         emptyMessage="There is nothing to show in this section right now."
       />
     </section>
@@ -348,10 +369,7 @@ function AdminActionDialog(props: {
   const action = props.action;
   const mutation = useMutation({
     mutationFn: (payload: Readonly<Record<string, unknown>>) => {
-      if (!action) {
-        throw new Error("Choose an action before submitting.");
-      }
-
+      if (!action) throw new Error("Choose an action before submitting.");
       return api.post(action.path, payload, MutationResponseSchema);
     },
     onSuccess: async () => {
@@ -379,16 +397,13 @@ function AdminActionDialog(props: {
     mutation.reset();
   }, [action?.key]);
 
-  if (!action) {
-    return null;
-  }
+  if (!action) return null;
 
-  const standardFields = action.fields.filter((field) => !isAdvancedOptionalField(field));
-  const advancedFields = action.fields.filter(isAdvancedOptionalField);
+  const standardFields = action.fields.filter((field) => !isAdvancedField(field));
+  const advancedFields = action.fields.filter(isAdvancedField);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
     try {
       setFormError(null);
       const payload = buildPayload(action, formValues);
@@ -400,7 +415,7 @@ function AdminActionDialog(props: {
 
   return (
     <Dialog
-      title={action.label}
+      title={friendlyActionLabel(action.label)}
       isOpen={Boolean(action)}
       onClose={props.onClose}
       footer={
@@ -414,14 +429,14 @@ function AdminActionDialog(props: {
             isLoading={mutation.isPending}
             variant={action.tone === "danger" ? "destructive" : "primary"}
           >
-            {action.submitLabel ?? action.label}
+            {friendlyActionLabel(action.submitLabel ?? action.label)}
           </Button>
         </>
       }
     >
       <form id="admin-action-form" className="skima-form-grid" onSubmit={submit}>
         <p className="admin-dialog-guidance">
-          Choose people, companies and records by name where available. Skima keeps internal references behind the scenes.
+          Choose people, companies and records by name where possible. SKIMA handles record references in the background.
         </p>
         {standardFields.map((field) => (
           <AdminActionFieldInput
@@ -445,7 +460,7 @@ function AdminActionDialog(props: {
             {showAdvanced ? (
               <>
                 <p className="skima-muted">
-                  These settings are optional. Leave them unchanged unless you know they are needed for this action.
+                  These settings are for uncommon or technical cases. Leave them unchanged unless this task specifically requires them.
                 </p>
                 {advancedFields.map((field) => (
                   <AdminActionFieldInput
@@ -460,9 +475,7 @@ function AdminActionDialog(props: {
           </section>
         ) : null}
         {formError ? <StatusBadge tone="danger">{formError}</StatusBadge> : null}
-        {mutation.error
-          ? <StatusBadge tone="danger">{readErrorMessage(mutation.error)}</StatusBadge>
-          : null}
+        {mutation.error ? <StatusBadge tone="danger">{readErrorMessage(mutation.error)}</StatusBadge> : null}
       </form>
     </Dialog>
   );
@@ -493,7 +506,7 @@ function AdminActionFieldInput(props: {
       <CheckboxField
         id={fieldId}
         label={friendlyFieldLabel(props.field)}
-        helperText={props.field.helperText}
+        helperText={friendlyHelperText(props.field)}
         checked={props.value === "true"}
         onChange={(event) => props.onChange(event.currentTarget.checked ? "true" : "false")}
       />
@@ -519,7 +532,7 @@ function AdminActionFieldInput(props: {
       <SelectInput
         id={fieldId}
         label={friendlyFieldLabel(props.field)}
-        helperText={props.field.helperText}
+        helperText={friendlyHelperText(props.field)}
         value={props.value}
         required={props.field.required}
         options={props.field.options ?? []}
@@ -535,11 +548,7 @@ function AdminActionFieldInput(props: {
       helperText={friendlyHelperText(props.field)}
       value={props.value}
       placeholder={props.field.placeholder}
-      type={fieldType === "number"
-        ? "number"
-        : fieldType === "datetime"
-        ? "datetime-local"
-        : "text"}
+      type={fieldType === "number" ? "number" : fieldType === "datetime" ? "datetime-local" : "text"}
       required={props.field.required}
       onChange={(event) => props.onChange(event.currentTarget.value)}
     />
@@ -571,7 +580,7 @@ function AdminLookupField(props: {
     .filter((option): option is { readonly label: string; readonly value: string } => Boolean(option));
   const hasCurrent = props.value && options.some((option) => option.value === props.value);
   const currentOption = props.value && !hasCurrent
-    ? { label: `Current selection (${shortReference(props.value)})`, value: props.value }
+    ? { label: "Current selection", value: props.value }
     : null;
   const selectOptions = [
     {
@@ -595,7 +604,7 @@ function AdminLookupField(props: {
         label={friendlyFieldLabel(props.field)}
         helperText={
           query.error
-            ? `The ${props.lookup.noun} list could not be loaded. Paste the internal reference only if you already have it.`
+            ? `The ${props.lookup.noun} list could not be loaded. Try refreshing before saving this change.`
             : `No ${props.lookup.noun} records are available yet.`
         }
         value={props.value}
@@ -618,7 +627,7 @@ function AdminLookupField(props: {
       <SelectInput
         id={`admin-action-${props.field.key}`}
         label={friendlyFieldLabel(props.field)}
-        helperText={`Select the ${props.lookup.noun}; Skima will use the correct internal reference automatically.`}
+        helperText={`Choose the ${props.lookup.noun} by name.`}
         value={props.value}
         required={props.field.required}
         options={selectOptions}
@@ -633,7 +642,6 @@ function AdminLookupField(props: {
 
 function useAdminRecords(queryKey: string, path: string) {
   const { api, status } = useSessionState();
-
   return useQuery({
     queryKey: ["admin-resource", queryKey, path],
     queryFn: () => api.get(path, RecordArraySchema),
@@ -648,16 +656,10 @@ function buildPayload(
   const payload: Record<string, unknown> = {};
 
   for (const field of action.fields) {
-    if (field.includeInPayload === false) {
-      continue;
-    }
-
+    if (field.includeInPayload === false) continue;
     const rawValue = formValues[field.key] ?? "";
     const value = parseFieldValue(field, rawValue);
-
-    if (value !== undefined) {
-      payload[field.key] = value;
-    }
+    if (value !== undefined) payload[field.key] = value;
   }
 
   if (!("idempotencyKey" in payload)) {
@@ -671,21 +673,13 @@ function parseFieldValue(field: AdminActionField, rawValue: string): unknown {
   const fieldType = field.type ?? "text";
   const trimmed = rawValue.trim();
 
-  if (!field.required && trimmed.length === 0) {
-    return undefined;
-  }
+  if (!field.required && trimmed.length === 0) return undefined;
 
-  if (fieldType === "boolean") {
-    return rawValue === "true";
-  }
+  if (fieldType === "boolean") return rawValue === "true";
 
   if (fieldType === "number") {
     const parsed = Number(trimmed);
-
-    if (Number.isNaN(parsed)) {
-      throw new Error(`${friendlyFieldLabel(field)} must be a number.`);
-    }
-
+    if (Number.isNaN(parsed)) throw new Error(`${friendlyFieldLabel(field)} must be a number.`);
     return parsed;
   }
 
@@ -700,14 +694,11 @@ function parseFieldValue(field: AdminActionField, rawValue: string): unknown {
   if (fieldType === "stringArray") {
     if (trimmed.startsWith("[")) {
       const parsed = JSON.parse(trimmed);
-
       if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== "string")) {
         throw new Error(`${friendlyFieldLabel(field)} must contain a list of text values.`);
       }
-
       return parsed;
     }
-
     return trimmed.split(",").map((value) => value.trim()).filter(Boolean);
   }
 
@@ -723,18 +714,9 @@ function parseFieldValue(field: AdminActionField, rawValue: string): unknown {
 }
 
 function stringifyFieldValue(value: unknown): string {
-  if (value === undefined || value === null) {
-    return "";
-  }
-
-  if (typeof value === "string") {
-    return value;
-  }
-
-  if (typeof value === "boolean" || typeof value === "number") {
-    return String(value);
-  }
-
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "boolean" || typeof value === "number") return String(value);
   return JSON.stringify(value, null, 2);
 }
 
@@ -742,12 +724,19 @@ function buildColumns(
   records: readonly PlatformRecord[],
   preferredKeys: readonly string[],
 ): TableColumn<PlatformRecord>[] {
-  const keys = new Set(preferredKeys);
+  const usefulPreferredKeys = preferredKeys.filter((key) => !isTechnicalIdentifierKey(key));
+  const keys = new Set(usefulPreferredKeys);
 
   for (const record of records.slice(0, 4)) {
-    for (const key of Object.keys(record).slice(0, 5)) {
-      keys.add(key);
+    for (const key of Object.keys(record)) {
+      if (keys.size >= 7) break;
+      if (!isTechnicalIdentifierKey(key)) keys.add(key);
     }
+  }
+
+  if (keys.size === 0) {
+    const fallback = preferredKeys[0] ?? Object.keys(records[0] ?? {})[0];
+    if (fallback) keys.add(fallback);
   }
 
   return Array.from(keys).slice(0, 7).map((key) => ({
@@ -782,30 +771,16 @@ function renderRecordValue(
     if (/_minor$/i.test(key)) {
       return <MoneyDisplay value={formatMoney(value, String(record.currency_code ?? "NGN"))} />;
     }
-
     if (/amount|balance/i.exec(key)) {
       return <MoneyDisplay value={formatMajorMoney(value, String(record.currency_code ?? "NGN"))} />;
     }
-
     return String(value);
   }
 
-  if (typeof value === "boolean") {
-    return value ? "Yes" : "No";
-  }
-
-  if (value === null || value === undefined) {
-    return "Not set";
-  }
-
-  if (Array.isArray(value)) {
-    return value.length === 1 ? "1 item" : `${value.length} items`;
-  }
-
-  if (typeof value === "object") {
-    return "Configured";
-  }
-
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (value === null || value === undefined) return "Not set";
+  if (Array.isArray(value)) return value.length === 1 ? "1 item" : `${value.length} items`;
+  if (typeof value === "object") return "Configured";
   return String(value);
 }
 
@@ -820,16 +795,29 @@ function friendlyFieldLabel(field: AdminActionField): string {
     stationBranchId: "Station location",
     roleKey: "Role",
     moduleKey: "Business line",
+    moduleVersionId: "Version",
     itemId: "Service or item",
     variantId: "Variant",
     applicationId: "Application",
     invitedEmail: "Email address",
     expiresAt: "Invitation expires",
+    permissionKeys: "Allowed actions",
+    eventTypeKeys: "Notification types",
+    signingSecretRef: "Security key",
+    manifest: "Version settings",
+    componentType: "Feature type",
+    componentKey: "Feature name",
+    referenceKey: "Connected setting",
     metadata: "Additional system details",
     config: "Advanced configuration",
+    deliveryConfig: "Delivery settings",
   };
 
-  return overrides[field.key] ?? field.label;
+  return overrides[field.key] ?? field.label
+    .replace(/\bID\b/g, "")
+    .replace(/\bKey\b/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 function friendlyHelperText(field: AdminActionField): string | undefined {
@@ -843,29 +831,77 @@ function friendlyHelperText(field: AdminActionField): string | undefined {
       "Only change this structured setting when required.";
   }
 
-  return field.helperText;
+  return field.helperText
+    ?.replace(/internal reference/gi, "record")
+    .replace(/configuration key/gi, "setting name")
+    .replace(/permission keys/gi, "allowed actions");
 }
 
 function friendlyColumnHeader(key: string): string {
   const overrides: Readonly<Record<string, string>> = {
     id: "Reference",
-    user_id: "User reference",
-    organization_id: "Company reference",
-    branch_id: "Location reference",
-    item_id: "Item reference",
-    variant_id: "Variant reference",
-    application_id: "Application reference",
-    module_id: "Business line reference",
-    media_asset_id: "Media reference",
-    permission_keys: "Permissions",
-    event_type_keys: "Events",
+    permission_keys: "Allowed actions",
+    event_type_keys: "Notification types",
+    provider_kind: "Provider type",
+    module_key: "Business line",
+    display_name: "Name",
+    created_at: "Created",
+    updated_at: "Updated",
   };
 
-  return overrides[key] ?? normalizeStatusLabel(key);
+  return overrides[key] ?? normalizeStatusLabel(key)
+    .replace(/\bId\b/g, "")
+    .replace(/\bKey\b/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
-function isAdvancedOptionalField(field: AdminActionField): boolean {
-  return field.type === "json" && !field.required;
+function isAdvancedField(field: AdminActionField): boolean {
+  return field.type === "json" || [
+    "metadata",
+    "config",
+    "manifest",
+    "deliveryConfig",
+    "referenceKey",
+    "signingSecretRef",
+  ].includes(field.key);
+}
+
+function isTechnicalIdentifierKey(key: string): boolean {
+  return key === "id" || /_id$/i.test(key) || /Id$/.test(key) || [
+    "role_id",
+    "module_id",
+    "organization_id",
+    "branch_id",
+    "item_id",
+    "variant_id",
+    "application_id",
+    "media_asset_id",
+  ].includes(key);
+}
+
+function friendlyResourceTitle(title: string): string {
+  return title
+    .replace(/Webhook/gi, "External notification")
+    .replace(/Provider Adapters?/gi, "Connected providers")
+    .replace(/Admin Role Templates?/gi, "Admin roles")
+    .replace(/Admin Users?/gi, "Admins")
+    .replace(/User Profiles?/gi, "User accounts")
+    .replace(/Module Versions?/gi, "Business line versions")
+    .replace(/Module Components?/gi, "Business line features")
+    .replace(/Module Events?/gi, "Business line activity")
+    .replace(/Permission(s)?/gi, "Access rule$1");
+}
+
+function friendlyActionLabel(label: string): string {
+  return label
+    .replace(/Configure/gi, "Set up")
+    .replace(/Webhook/gi, "External notification")
+    .replace(/Admin User/gi, "Admin")
+    .replace(/Admin Role/gi, "Admin role")
+    .replace(/Module/gi, "Business line")
+    .replace(/Queue/gi, "Send")
+    .replace(/Revoke Admin/gi, "Remove admin access");
 }
 
 function toLookupOption(
@@ -947,9 +983,7 @@ function formatMajorMoney(
 function formatDate(value: string): string {
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
+  if (Number.isNaN(date.getTime())) return value;
 
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
@@ -958,22 +992,10 @@ function formatDate(value: string): string {
 }
 
 function toneFromValue(value: string): "neutral" | "success" | "warning" | "danger" | "info" {
-  if (/active|approved|complete|completed|success|paid|verified|delivered/i.exec(value)) {
-    return "success";
-  }
-
-  if (/failed|rejected|revoked|suspended|cancelled|error|blocked|quarantined/i.exec(value)) {
-    return "danger";
-  }
-
-  if (/pending|queued|review|draft|submitted|processing|requested/i.exec(value)) {
-    return "warning";
-  }
-
-  if (/new|uploaded|incomplete|info/i.exec(value)) {
-    return "info";
-  }
-
+  if (/active|approved|complete|completed|success|paid|verified|delivered/i.exec(value)) return "success";
+  if (/failed|rejected|revoked|suspended|cancelled|error|blocked|quarantined/i.exec(value)) return "danger";
+  if (/pending|queued|review|draft|submitted|processing|requested/i.exec(value)) return "warning";
+  if (/new|uploaded|incomplete|info/i.exec(value)) return "info";
   return "neutral";
 }
 
@@ -986,7 +1008,7 @@ function readErrorMessage(error: unknown): string {
     return "Your administrator account does not have permission to complete this action.";
   }
   if (/network|fetch|timeout|timed out/i.test(error.message)) {
-    return "Skima could not reach the service. Check your connection and try again.";
+    return "SKIMA could not reach the service. Check your connection and try again.";
   }
   return error.message;
 }
