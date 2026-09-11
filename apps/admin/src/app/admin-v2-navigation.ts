@@ -179,6 +179,15 @@ const partnerScreenLabels: Readonly<Record<string, string>> = {
   "/partners/fleet": "Fleet & vehicles",
 };
 
+const operationsScreenLabels: Readonly<Record<string, string>> = {
+  "/operations": "Operations overview",
+  "/operations/orders": "Orders & dispatch",
+  "/operations/coverage": "Service coverage",
+  "/operations/inventory": "Station stock",
+  "/operations/quality": "Service quality",
+  "/operations/support": "Support",
+};
+
 export function toAdminV2NavigationItem(item: NavigationItem): NavigationItem {
   return {
     ...item,
@@ -194,12 +203,12 @@ export function buildAdminCategoryNavigation(items: readonly NavigationItem[]): 
 
     if (!firstVisibleScreen) return [];
 
+    const hasLanding = workspace.key === "money" || workspace.key === "partners" || workspace.key === "operations";
+
     return [{
       key: workspace.key,
       label: workspace.label,
-      href: workspace.key === "money" || workspace.key === "partners"
-        ? workspace.basePath
-        : firstVisibleScreen.href,
+      href: hasLanding ? workspace.basePath : firstVisibleScreen.href,
       icon: workspace.icon,
     } satisfies NavigationItem];
   });
@@ -211,6 +220,7 @@ export function getAdminWorkspaceNavigation(
 ): readonly NavigationItem[] {
   if (workspaceKey === "money") return buildMoneyWorkspaceNavigation(items);
   if (workspaceKey === "partners") return buildPartnersWorkspaceNavigation(items);
+  if (workspaceKey === "operations") return buildOperationsWorkspaceNavigation(items);
 
   const workspace = adminWorkspaceDefinitions.find((candidate) => candidate.key === workspaceKey);
   if (!workspace) return [];
@@ -231,6 +241,7 @@ export function getAdminScreenLabel(route: string, items: readonly NavigationIte
   const path = resolveAdminPath(route);
   if (moneyScreenLabels[path]) return moneyScreenLabels[path];
   if (partnerScreenLabels[path]) return partnerScreenLabels[path];
+  if (operationsScreenLabels[path]) return operationsScreenLabels[path];
 
   const exact = items.find((item) => item.href === path);
   if (exact) return exact.label;
@@ -247,6 +258,10 @@ export function resolveAdminPath(rawPath: string): string {
 
   if (path.startsWith("/stations/")) {
     return `/partners/stations/${path.slice("/stations/".length)}`;
+  }
+
+  if (path === "/operations") {
+    return path;
   }
 
   return legacyExactRoutes[path] ?? path;
@@ -346,6 +361,34 @@ function buildPartnersWorkspaceNavigation(items: readonly NavigationItem[]): rea
       if (item.key === "stations") return { ...item, label: "Stations" };
       if (item.key === "location-review") return { ...item, label: "Location review" };
       if (item.key === "fleet") return { ...item, label: "Fleet & vehicles" };
+      return item;
+    }),
+  ];
+}
+
+function buildOperationsWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
+  const orderedKeys = ["operations", "coverage", "inventory", "quality", "support"] as const;
+  const visibleItems = orderedKeys
+    .map((key) => items.find((item) => item.key === key))
+    .filter((item): item is NavigationItem => Boolean(item));
+  const first = visibleItems[0];
+
+  if (!first) return [];
+
+  return [
+    {
+      key: "operations-overview",
+      label: "Overview",
+      href: "/operations",
+      icon: "overview",
+      requiredPermissions: first.requiredPermissions,
+    },
+    ...visibleItems.map((item) => {
+      if (item.key === "operations") return { ...item, label: "Orders & dispatch" };
+      if (item.key === "coverage") return { ...item, label: "Service coverage" };
+      if (item.key === "inventory") return { ...item, label: "Station stock" };
+      if (item.key === "quality") return { ...item, label: "Service quality" };
+      if (item.key === "support") return { ...item, label: "Support" };
       return item;
     }),
   ];
