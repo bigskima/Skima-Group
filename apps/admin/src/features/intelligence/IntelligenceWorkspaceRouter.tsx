@@ -7,14 +7,8 @@ export function IntelligenceWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
 }) {
-  if (props.route === "/intelligence") {
-    return <IntelligenceOverviewScreen onNavigate={props.onNavigate} />;
-  }
-
-  if (props.route === "/intelligence/ask") {
-    return <AdminAiWorkspace />;
-  }
-
+  if (props.route === "/intelligence") return <IntelligenceOverviewScreen onNavigate={props.onNavigate} />;
+  if (props.route === "/intelligence/ask") return <AdminAiWorkspace />;
   return <IntelligenceOverviewScreen onNavigate={props.onNavigate} />;
 }
 
@@ -33,7 +27,7 @@ function IntelligenceOverviewScreen(props: { readonly onNavigate: (href: string)
           href: "/intelligence/ask",
           icon: Sparkles,
           meta: "Decision support",
-          requiredPermissions: ["platform.ai.read"],
+          permissionKey: "ai",
         },
         {
           key: "ask-skima",
@@ -42,7 +36,7 @@ function IntelligenceOverviewScreen(props: { readonly onNavigate: (href: string)
           href: "/intelligence/ask",
           icon: Bot,
           meta: "Read only",
-          requiredPermissions: ["platform.ai.read"],
+          permissionKey: "ai",
         },
       ]}
     />
