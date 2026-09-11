@@ -1198,7 +1198,6 @@ async function generateWithCloudflare(
       },
       body: JSON.stringify({
         prompt,
-        seed: Math.floor(Math.random() * 2_147_483_647),
         steps: readIntegerEnv("CLOUDFLARE_AI_STEPS", 8, 1, 8),
       }),
       signal: AbortSignal.timeout(45_000),
