@@ -1,3 +1,5 @@
+// SKIMA Admin composition root. Navigation, authentication, and workspace routing
+// live in dedicated modules; domain workspaces retain their existing API contracts.
 import {
   Activity,
   BookOpenCheck,
@@ -67,34 +69,9 @@ import {
 } from "@skima/ui";
 
 import { AdminShell } from "./AdminShell";
-import { AdminBrandLogo } from "./admin-brand-logo";
-import { AdminResourceConsole } from "./admin-resource-console";
-import { AdminCompanyWorkspace } from "./admin-company-workspace";
-import { AdminSystemWorkspace } from "./admin-system-workspace";
-import { AdminAccessWorkspace } from "./admin-access-workspace";
-import { AdminAiWorkspace } from "./admin-ai-workspace";
-import { AdminContentWorkspace } from "./admin-content-workspace";
-import { AdminFleetWorkspace } from "./admin-fleet-workspace";
-import { AdminOperationsWorkspace } from "./admin-operations-workspace";
-import { AdminDriverParticipationWorkspace } from "./admin-driver-participation-workspace";
-import { AdminDeliveryPricingWorkspace, AdminDriverPricingWorkspace } from "./admin-delivery-pricing-workspace";
-import { AdminPartnerLocationReviewWorkspace } from "./admin-partner-location-review-workspace";
-import { AdminPolicyWorkspace } from "./admin-policy-workspace";
-import { AdminQualityWorkspace } from "./admin-quality-workspace";
-import { AdminRevenueWorkspace } from "./admin-revenue-workspace";
-import { AdminServiceCoverageWorkspace } from "./admin-service-coverage-workspace";
-import { AdminStartupBrandingWorkspace } from "./admin-startup-branding-workspace";
-import { AdminStationPricingWorkspace } from "./admin-station-pricing-workspace";
-import { AdminStationInventoryWorkspace } from "./admin-station-inventory-workspace";
-import { AdminSupportWorkspace } from "./admin-support-workspace";
-import { AdminUtilityBillingWorkspace } from "./admin-utility-billing-workspace";
-import { AdminVerificationWorkspace } from "./admin-verification-workspace";
-import {
-  catalogConsoleConfig,
-  financeConsoleConfig,
-  governanceConsoleConfig,
-  integrationConsoleConfig,
-} from "./admin-resource-config";
+import { AdminLoginView } from "./admin-login-view";
+import { foundationNavigation } from "./admin-navigation-config";
+import { AdminWorkspaceRouter } from "./admin-workspace-router";
 import { useSessionState } from "./session";
 
 const RecordSchema = z.record(z.unknown());
@@ -209,197 +186,6 @@ const navIconMap = {
   billing: BadgeDollarSign,
 } as const;
 
-const foundationNavigation: readonly NavigationItem[] = [
-  {
-    key: "overview",
-    label: "Overview",
-    href: "/",
-    icon: "overview",
-  },
-  {
-    key: "company",
-    label: "Companies",
-    href: "/company",
-    icon: "company",
-    requiredPermissions: ["platform.organizations.read"],
-  },
-  {
-    key: "access",
-    label: "People & Access",
-    href: "/access",
-    icon: "access",
-    requiredPermissions: ["platform.admins.read"],
-  },
-  {
-    key: "applications",
-    label: "Applications",
-    href: "/applications",
-    icon: "applications",
-    requiredPermissions: ["platform.applications.read"],
-  },
-  {
-    key: "verification",
-    label: "Verification",
-    href: "/verification",
-    icon: "verification",
-    requiredPermissions: ["platform.verification.read"],
-  },
-  {
-    key: "fleet",
-    label: "Fleet & Vehicles",
-    href: "/fleet",
-    icon: "fleet",
-    requiredPermissions: ["platform.fleets.read"],
-  },
-  {
-    key: "stations",
-    label: "Stations",
-    href: "/stations",
-    icon: "stations",
-    requiredPermissions: ["platform.partner_price.manage"],
-  },
-  {
-    key: "inventory",
-    label: "Station Inventory",
-    href: "/station-inventory",
-    icon: "inventory",
-    requiredPermissions: ["platform.inventory.manage"],
-  },
-  {
-    key: "support",
-    label: "Support Inbox",
-    href: "/support",
-    icon: "support",
-    requiredPermissions: ["platform.support.read"],
-  },
-  {
-    key: "billing",
-    label: "Utility Billing",
-    href: "/utility-billing",
-    icon: "billing",
-    requiredPermissions: ["platform.billing.read"],
-  },
-  {
-    key: "operations",
-    label: "Operations",
-    href: "/operations",
-    icon: "operations",
-    requiredPermissions: ["lpg.orders.manage"],
-  },
-  {
-    key: "coverage",
-    label: "Service Coverage",
-    href: "/coverage",
-    icon: "coverage",
-    requiredPermissions: ["platform.coverage.read"],
-  },
-  {
-    key: "location-review",
-    label: "Location Review",
-    href: "/location-review",
-    icon: "locationReview",
-    requiredPermissions: ["platform.applications.review"],
-  },
-  {
-    key: "drivers",
-    label: "Driver Participation",
-    href: "/drivers",
-    icon: "drivers",
-    requiredPermissions: ["platform.drivers.read"],
-  },
-  {
-    key: "quality",
-    label: "Service Quality",
-    href: "/quality",
-    icon: "quality",
-    requiredPermissions: ["lpg.quality.read"],
-  },
-  {
-    key: "finance",
-    label: "Wallets & Settlements",
-    href: "/finance",
-    icon: "finance",
-    requiredPermissions: ["platform.financial.read"],
-  },
-  {
-    key: "delivery-pricing",
-    label: "Delivery Pricing",
-    href: "/delivery-pricing",
-    icon: "deliveryPricing",
-    requiredPermissions: ["platform.financial_policy.read"],
-  },
-  {
-    key: "driver-pricing",
-    label: "Driver Pricing",
-    href: "/driver-pricing",
-    icon: "driverPricing",
-    requiredPermissions: ["platform.financial_policy.read"],
-  },
-  {
-    key: "revenue",
-    label: "Money & Revenue",
-    href: "/revenue",
-    icon: "revenue",
-    requiredPermissions: ["platform.revenue.read"],
-  },
-  {
-    key: "ai",
-    label: "SKIMA Intelligence",
-    href: "/ai",
-    icon: "ai",
-    requiredPermissions: ["platform.ai.read"],
-  },
-  {
-    key: "content",
-    label: "Brand & Content",
-    href: "/content",
-    icon: "content",
-    requiredPermissions: ["platform.content.read"],
-  },
-  {
-    key: "policies",
-    label: "Terms & Policies",
-    href: "/policies",
-    icon: "policies",
-    requiredPermissions: ["platform.policy.read"],
-  },
-  {
-    key: "branding",
-    label: "App Branding",
-    href: "/branding",
-    icon: "branding",
-    requiredPermissions: ["platform.configuration.read"],
-  },
-  {
-    key: "catalog",
-    label: "Services",
-    href: "/catalog",
-    icon: "catalog",
-    requiredPermissions: ["platform.configuration.read"],
-  },
-  {
-    key: "governance",
-    label: "Configuration",
-    href: "/governance",
-    icon: "governance",
-    requiredPermissions: ["platform.configuration.read"],
-  },
-  {
-    key: "providers",
-    label: "Integrations",
-    href: "/providers",
-    icon: "providers",
-    requiredPermissions: ["platform.providers.manage"],
-  },
-  {
-    key: "system",
-    label: "System Health & History",
-    href: "/system",
-    icon: "system",
-    requiredPermissions: ["platform.health.read"],
-  },
-];
-
 export function App() {
   const sessionState = useSessionState();
   const [route, setRoute] = useState(readRouteFromHash);
@@ -416,7 +202,7 @@ export function App() {
   }
 
   if (sessionState.status === "unauthenticated") {
-    return <LoginView />;
+    return <AdminLoginView />;
   }
 
   if (sessionState.status === "error" || !sessionState.context) {
@@ -504,172 +290,15 @@ export function App() {
         onNavigate={navigate}
         onSignOut={sessionState.signOut}
       >
-        <Workspace route={workspaceRoute} onNavigate={navigate} />
+        <AdminWorkspaceRouter
+          route={workspaceRoute}
+          onNavigate={navigate}
+          applicationsWorkspace={<ApplicationsWorkspace />}
+          overviewWorkspace={<OverviewWorkspace onNavigate={navigate} />}
+        />
       </AdminShell>
     </PermissionProvider>
   );
-}
-
-function LoginView() {
-  const { signIn, error } = useSessionState();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isSubmitting, setSubmitting] = useState(false);
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSubmitting(true);
-
-    try {
-      await signIn(email, password);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <main className="skima-auth-page">
-      <section className="skima-auth-panel skima-auth-panel--admin">
-        <div className="admin-login-brand">
-          <AdminBrandLogo className="admin-login-brand__logo" />
-          <div>
-            <h1>SKIMA</h1>
-            <p>Operations & company control</p>
-          </div>
-        </div>
-        <div className="admin-login-copy">
-          <span className="admin-login-copy__eyebrow">Secure admin access</span>
-          <h2>Welcome back</h2>
-          <p>Sign in to manage SKIMA operations, service areas, partners, support, money, and platform settings.</p>
-        </div>
-        <form className="skima-form" onSubmit={submit}>
-          <TextInput
-            label="Email address"
-            name="email"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.currentTarget.value)}
-            required
-          />
-          <TextInput
-            label="Password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.currentTarget.value)}
-            required
-          />
-          {error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}
-          <Button icon={ShieldCheck} isLoading={isSubmitting} type="submit">
-            Continue to SKIMA Admin
-          </Button>
-          <small className="admin-login-security-note">Your permissions decide which tools you can access after sign-in.</small>
-        </form>
-      </section>
-    </main>
-  );
-}
-
-function Workspace(props: { readonly route: string; readonly onNavigate: (href: string) => void }) {
-  if (props.route === "/station-inventory") {
-    return <AdminStationInventoryWorkspace />;
-  }
-
-  if (props.route === "/stations" || props.route.startsWith("/stations/")) {
-    return <AdminStationPricingWorkspace route={props.route} onNavigate={props.onNavigate} />;
-  }
-
-  if (props.route === "/company") {
-    return <AdminCompanyWorkspace />;
-  }
-
-  if (props.route === "/access") {
-    return <AdminAccessWorkspace />;
-  }
-
-  if (props.route === "/content") {
-    return <AdminContentWorkspace />;
-  }
-  if (props.route === "/branding") return <AdminStartupBrandingWorkspace />;
-
-  if (props.route === "/governance") {
-    return <AdminResourceConsole config={governanceConsoleConfig} />;
-  }
-
-  if (props.route === "/applications") {
-    return <ApplicationsWorkspace />;
-  }
-
-  if (props.route === "/verification") {
-    return <AdminVerificationWorkspace onOpenApplications={() => props.onNavigate("/applications")} />;
-  }
-
-  if (props.route === "/fleet") {
-    return <AdminFleetWorkspace />;
-  }
-
-  if (props.route === "/operations") {
-    return <AdminOperationsWorkspace />;
-  }
-
-  if (props.route === "/coverage") {
-    return <AdminServiceCoverageWorkspace />;
-  }
-
-  if (props.route === "/location-review") {
-    return <AdminPartnerLocationReviewWorkspace />;
-  }
-
-  if (props.route === "/drivers") {
-    return <AdminDriverParticipationWorkspace />;
-  }
-
-  if (props.route === "/quality") {
-    return <AdminQualityWorkspace />;
-  }
-
-  if (props.route === "/revenue") {
-    return <AdminRevenueWorkspace onOpenFinance={() => props.onNavigate("/finance")} />;
-  }
-
-  if (props.route === "/delivery-pricing") {
-    return <AdminDeliveryPricingWorkspace />;
-  }
-
-  if (props.route === "/driver-pricing") {
-    return <AdminDriverPricingWorkspace />;
-  }
-
-  if (props.route === "/policies") {
-    return <AdminPolicyWorkspace />;
-  }
-
-  if (props.route === "/support") return <AdminSupportWorkspace />;
-  if (props.route === "/utility-billing") return <AdminUtilityBillingWorkspace />;
-
-  if (props.route === "/finance") {
-    return <AdminResourceConsole config={financeConsoleConfig} />;
-  }
-
-  if (props.route === "/ai") {
-    return <AdminAiWorkspace />;
-  }
-
-  if (props.route === "/catalog") {
-    return <AdminResourceConsole config={catalogConsoleConfig} />;
-  }
-
-  if (props.route === "/providers") {
-    return <AdminResourceConsole config={integrationConsoleConfig} />;
-  }
-
-  if (props.route === "/system") {
-    return <AdminSystemWorkspace />;
-  }
-
-  return <OverviewWorkspace onNavigate={props.onNavigate} />;
 }
 
 function OverviewWorkspace(props: { readonly onNavigate: (href: string) => void }) {
