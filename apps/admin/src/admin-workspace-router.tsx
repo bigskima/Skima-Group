@@ -8,6 +8,7 @@ import { AdminDeliveryPricingWorkspace, AdminDriverPricingWorkspace } from "./ad
 import { AdminDriverParticipationWorkspace } from "./admin-driver-participation-workspace";
 import { AdminFleetWorkspace } from "./admin-fleet-workspace";
 import { AdminOperationsWorkspace } from "./admin-operations-workspace";
+import { AdminOverviewWorkspace } from "./admin-overview-workspace";
 import { AdminPartnerLocationReviewWorkspace } from "./admin-partner-location-review-workspace";
 import { AdminPolicyWorkspace } from "./admin-policy-workspace";
 import { AdminQualityWorkspace } from "./admin-quality-workspace";
@@ -32,6 +33,7 @@ export function AdminWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
   readonly applicationsWorkspace: ReactNode;
+  /** Temporary compatibility bridge while the remaining App.tsx workspace is extracted. */
   readonly overviewWorkspace: ReactNode;
 }) {
   if (props.route === "/station-inventory") return <AdminStationInventoryWorkspace />;
@@ -66,5 +68,5 @@ export function AdminWorkspaceRouter(props: {
   if (props.route === "/catalog") return <AdminResourceConsole config={catalogConsoleConfig} />;
   if (props.route === "/providers") return <AdminResourceConsole config={integrationConsoleConfig} />;
   if (props.route === "/system") return <AdminSystemWorkspace />;
-  return props.overviewWorkspace;
+  return <AdminOverviewWorkspace onNavigate={props.onNavigate} />;
 }
