@@ -18,6 +18,8 @@ export function AdminWorkspaceLayout(props: AdminWorkspaceLayoutProps) {
     return <>{props.children}</>;
   }
 
+  const activeItemHref = resolveActiveItemHref(props.activeHref, props.items);
+
   return (
     <div className="admin-workspace-layout">
       <aside className="admin-workspace-layout__rail" aria-label={`${props.title} workspace navigation`}>
@@ -30,7 +32,7 @@ export function AdminWorkspaceLayout(props: AdminWorkspaceLayoutProps) {
         <nav className="admin-workspace-layout__nav">
           {props.items.map((item) => {
             const Icon = item.icon ?? Circle;
-            const active = isRouteActive(props.activeHref, item.href);
+            const active = item.href === activeItemHref;
 
             return (
               <button
@@ -52,7 +54,7 @@ export function AdminWorkspaceLayout(props: AdminWorkspaceLayoutProps) {
       <div className="admin-workspace-layout__body">
         <nav className="admin-workspace-layout__mobile-nav" aria-label={`${props.title} workspace sections`}>
           {props.items.map((item) => {
-            const active = isRouteActive(props.activeHref, item.href);
+            const active = item.href === activeItemHref;
             return (
               <button
                 key={item.key}
@@ -72,6 +74,8 @@ export function AdminWorkspaceLayout(props: AdminWorkspaceLayoutProps) {
   );
 }
 
-function isRouteActive(current: string, target: string): boolean {
-  return current === target || current.startsWith(`${target}/`);
+function resolveActiveItemHref(current: string, items: readonly NavItem[]): string | null {
+  return items
+    .filter((item) => current === item.href || current.startsWith(`${item.href}/`))
+    .sort((left, right) => right.href.length - left.href.length)[0]?.href ?? null;
 }
