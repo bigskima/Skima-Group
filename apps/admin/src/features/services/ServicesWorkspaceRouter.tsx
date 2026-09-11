@@ -12,22 +12,10 @@ export function ServicesWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
 }) {
-  if (props.route === "/services") {
-    return <ServicesOverviewScreen onNavigate={props.onNavigate} />;
-  }
-
-  if (props.route === "/services/utility-billing") {
-    return <AdminUtilityBillingWorkspace />;
-  }
-
-  if (props.route === "/services/catalog") {
-    return <AdminResourceConsole config={serviceCatalogConfig} />;
-  }
-
-  if (props.route === "/services/availability") {
-    return <AdminResourceConsole config={serviceAvailabilityConfig} />;
-  }
-
+  if (props.route === "/services") return <ServicesOverviewScreen onNavigate={props.onNavigate} />;
+  if (props.route === "/services/utility-billing") return <AdminUtilityBillingWorkspace />;
+  if (props.route === "/services/catalog") return <AdminResourceConsole config={serviceCatalogConfig} />;
+  if (props.route === "/services/availability") return <AdminResourceConsole config={serviceAvailabilityConfig} />;
   return <ServicesOverviewScreen onNavigate={props.onNavigate} />;
 }
 
@@ -46,6 +34,7 @@ function ServicesOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/services/utility-billing",
           icon: Zap,
           meta: "Bills & payments",
+          permissionKey: "billing",
         },
         {
           key: "catalog",
@@ -54,6 +43,7 @@ function ServicesOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/services/catalog",
           icon: Boxes,
           meta: "What SKIMA offers",
+          permissionKey: "catalog",
         },
         {
           key: "availability",
@@ -62,6 +52,7 @@ function ServicesOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/services/availability",
           icon: ShieldCheck,
           meta: "Can customers order?",
+          permissionKey: "catalog",
         },
       ]}
     />

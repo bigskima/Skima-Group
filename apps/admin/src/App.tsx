@@ -27,7 +27,6 @@ import {
 } from "lucide-react";
 
 import {
-  filterNavigationItems,
   hasPermission,
   type NavigationItem,
 } from "@skima/frontend-core";
@@ -40,7 +39,10 @@ import {
 
 import { AdminShell } from "./AdminShell";
 import { AdminLoginView } from "./admin-login-view";
-import { foundationNavigation } from "./admin-navigation-config";
+import {
+  canAccessAdminNavigationKey,
+  foundationNavigation,
+} from "./admin-navigation-config";
 import { AdminV2WorkspaceRouter } from "./app/AdminV2WorkspaceRouter";
 import {
   buildAdminCategoryNavigation,
@@ -123,69 +125,22 @@ export function App() {
   const can = (permission: string) =>
     sessionState.context?.platformAdmin?.admin_kind === "super_admin" ||
     hasPermission(permissionContext, permission);
-  const grantedPermissions = new Set(sessionState.context.permissions);
-  const hasAnyPermission = (permissions: readonly string[]) =>
-    permissions.some((permission) => grantedPermissions.has(permission));
-  const filteredNavigation = sessionState.context.platformAdmin?.admin_kind === "super_admin"
-    ? foundationNavigation
-    : foundationNavigation.filter((item) => {
-      if (item.key === "verification") {
-        return hasAnyPermission([
-          "platform.verification.read",
-          "platform.verification.manage",
-          "platform.applications.review",
-        ]);
-      }
-      if (item.key === "operations") {
-        return hasAnyPermission([
-          "lpg.orders.manage",
-          "lpg.dispatch.execute",
-          "lpg.cylinders.manage",
-          "lpg.safety.manage",
-          "lpg.config.manage",
-        ]);
-      }
-      if (item.key === "coverage") {
-        return hasAnyPermission([
-          "platform.coverage.read",
-          "platform.coverage.manage",
-          "lpg.config.manage",
-        ]);
-      }
-      if (item.key === "drivers") {
-        return hasAnyPermission([
-          "platform.drivers.read",
-          "platform.drivers.manage",
-          "platform.drivers.verify",
-        ]);
-      }
-      if (item.key === "quality") {
-        return hasAnyPermission([
-          "lpg.quality.read",
-          "lpg.quality.manage",
-          "lpg.operations.manage",
-        ]);
-      }
-      if (item.key === "delivery-pricing" || item.key === "driver-pricing") {
-        return hasAnyPermission([
-          "platform.financial_policy.read",
-          "platform.financial_policy.draft",
-          "platform.financial_policy.approve",
-          "platform.financial_policy.activate",
-        ]);
-      }
-      return filterNavigationItems([item], permissionContext).length > 0;
-    });
+  const filteredNavigation = foundationNavigation.filter((item) =>
+    canAccessAdminNavigationKey(item.key, can)
+  );
 
   const visibleScreens = filteredNavigation.map(toAdminV2NavigationItem);
   const categoryNavigation = buildAdminCategoryNavigation(visibleScreens);
   const shellNavItems = categoryNavigation.map(toShellNavItem);
   const workspace = getAdminWorkspaceForRoute(route);
-  const workspaceNavigation = getAdminWorkspaceNavigation(workspace.key, visibleScreens).map(toShellNavItem);
+  const workspaceNavigationItems = getAdminWorkspaceNavigation(workspace.key, visibleScreens);
+  const workspaceNavigation = workspaceNavigationItems.map(toShellNavItem);
   const activeCategory = categoryNavigation.find((item) => item.key === workspace.key) ?? categoryNavigation[0];
   const screenLabel = getAdminScreenLabel(route, visibleScreens);
-  const isWorkspaceLanding = route === workspace.basePath && workspaceNavigation.length > 0;
-  const hasVisibleScreen = isWorkspaceLanding || visibleScreens.some((item) =>
+  const isWorkspaceLanding = route === workspace.basePath && workspaceNavigationItems.length > 0;
+  const hasVisibleScreen = isWorkspaceLanding || workspaceNavigationItems.some((item) =>
+    route === item.href || route.startsWith(`${item.href}/`)
+  ) || visibleScreens.some((item) =>
     route === item.href || route.startsWith(`${item.href}/`)
   );
   const safeRoute = hasVisibleScreen ? route : "/dashboard";

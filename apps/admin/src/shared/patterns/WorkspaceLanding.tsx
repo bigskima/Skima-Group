@@ -2,6 +2,9 @@ import type { LucideIcon } from "lucide-react";
 import { ArrowRight } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { usePermissionCheck } from "@skima/ui";
+
+import { getAdminNavigationPermissionRule } from "../../admin-navigation-config";
 import "./workspace-landing.css";
 
 export interface WorkspaceLandingAction {
@@ -11,6 +14,25 @@ export interface WorkspaceLandingAction {
   readonly href: string;
   readonly icon: LucideIcon;
   readonly meta?: string;
+  readonly permissionKey?: string;
+  readonly requiredPermissions?: readonly string[];
+  readonly anyOfPermissions?: readonly string[];
+}
+
+export function canAccessWorkspaceLandingAction(
+  action: WorkspaceLandingAction,
+  can: (permission: string) => boolean,
+): boolean {
+  const inheritedRule = action.permissionKey
+    ? getAdminNavigationPermissionRule(action.permissionKey)
+    : null;
+  if (inheritedRule && !inheritedRule.known) return false;
+
+  const requiredPermissions = action.requiredPermissions ?? inheritedRule?.requiredPermissions ?? [];
+  const anyOfPermissions = action.anyOfPermissions ?? inheritedRule?.anyOfPermissions ?? [];
+  const hasAllRequired = requiredPermissions.every((permission) => can(permission));
+  const hasAnyRequired = anyOfPermissions.length === 0 || anyOfPermissions.some((permission) => can(permission));
+  return hasAllRequired && hasAnyRequired;
 }
 
 export function WorkspaceLanding(props: {
@@ -21,6 +43,9 @@ export function WorkspaceLanding(props: {
   readonly onNavigate: (href: string) => void;
   readonly aside?: ReactNode;
 }) {
+  const can = usePermissionCheck();
+  const visibleActions = props.actions.filter((action) => canAccessWorkspaceLandingAction(action, can));
+
   return (
     <section className="workspace-landing">
       <header className="workspace-landing__header">
@@ -33,7 +58,7 @@ export function WorkspaceLanding(props: {
       </header>
 
       <div className="workspace-landing__grid">
-        {props.actions.map((action) => {
+        {visibleActions.length > 0 ? visibleActions.map((action) => {
           const Icon = action.icon;
           return (
             <button
@@ -51,7 +76,12 @@ export function WorkspaceLanding(props: {
               <ArrowRight className="workspace-landing__arrow" aria-hidden="true" />
             </button>
           );
-        })}
+        }) : (
+          <div className="sk-panel" role="status">
+            <strong>No tasks are available for your current access.</strong>
+            <p className="skima-muted">Ask a Super Admin to review your role if you need access to this workspace.</p>
+          </div>
+        )}
       </div>
     </section>
   );

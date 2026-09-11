@@ -9,22 +9,10 @@ export function ExperienceWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
 }) {
-  if (props.route === "/experience") {
-    return <ExperienceOverviewScreen onNavigate={props.onNavigate} />;
-  }
-
-  if (props.route === "/experience/content") {
-    return <AdminContentWorkspace />;
-  }
-
-  if (props.route === "/experience/policies") {
-    return <AdminPolicyWorkspace />;
-  }
-
-  if (props.route === "/experience/branding") {
-    return <AdminStartupBrandingWorkspace />;
-  }
-
+  if (props.route === "/experience") return <ExperienceOverviewScreen onNavigate={props.onNavigate} />;
+  if (props.route === "/experience/content") return <AdminContentWorkspace />;
+  if (props.route === "/experience/policies") return <AdminPolicyWorkspace />;
+  if (props.route === "/experience/branding") return <AdminStartupBrandingWorkspace />;
   return <ExperienceOverviewScreen onNavigate={props.onNavigate} />;
 }
 
@@ -43,6 +31,7 @@ function ExperienceOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/experience/content",
           icon: Megaphone,
           meta: "Customer-facing content",
+          permissionKey: "content",
         },
         {
           key: "policies",
@@ -51,6 +40,7 @@ function ExperienceOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/experience/policies",
           icon: FileText,
           meta: "Policy governance",
+          permissionKey: "policies",
         },
         {
           key: "branding",
@@ -59,6 +49,7 @@ function ExperienceOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/experience/branding",
           icon: Image,
           meta: "Startup experience",
+          permissionKey: "branding",
         },
       ]}
     />

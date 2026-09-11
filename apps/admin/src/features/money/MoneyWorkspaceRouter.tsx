@@ -21,42 +21,15 @@ export function MoneyWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
 }) {
-  if (props.route === "/money") {
-    return <MoneyOverviewScreen onNavigate={props.onNavigate} />;
-  }
-
-  if (props.route === "/money/revenue") {
-    return <AdminRevenueWorkspace onOpenFinance={() => props.onNavigate("/money/balances")} />;
-  }
-
-  if (props.route === "/money/balances") {
-    return <AdminResourceConsole config={moneyBalancesConfig} />;
-  }
-
-  if (props.route === "/money/withdrawals") {
-    return <AdminResourceConsole config={moneyWithdrawalsConfig} />;
-  }
-
-  if (props.route === "/money/settlements") {
-    return <AdminResourceConsole config={moneySettlementsConfig} />;
-  }
-
-  if (props.route === "/money/pricing") {
-    return <MoneyPricingScreen onNavigate={props.onNavigate} />;
-  }
-
-  if (props.route === "/money/pricing/delivery") {
-    return <AdminDeliveryPricingWorkspace />;
-  }
-
-  if (props.route === "/money/pricing/drivers") {
-    return <AdminDriverPricingWorkspace />;
-  }
-
-  if (props.route === "/money/controls") {
-    return <MoneyControlsScreen onNavigate={props.onNavigate} />;
-  }
-
+  if (props.route === "/money") return <MoneyOverviewScreen onNavigate={props.onNavigate} />;
+  if (props.route === "/money/revenue") return <AdminRevenueWorkspace onOpenFinance={() => props.onNavigate("/money/balances")} />;
+  if (props.route === "/money/balances") return <AdminResourceConsole config={moneyBalancesConfig} />;
+  if (props.route === "/money/withdrawals") return <AdminResourceConsole config={moneyWithdrawalsConfig} />;
+  if (props.route === "/money/settlements") return <AdminResourceConsole config={moneySettlementsConfig} />;
+  if (props.route === "/money/pricing") return <MoneyPricingScreen onNavigate={props.onNavigate} />;
+  if (props.route === "/money/pricing/delivery") return <AdminDeliveryPricingWorkspace />;
+  if (props.route === "/money/pricing/drivers") return <AdminDriverPricingWorkspace />;
+  if (props.route === "/money/controls") return <MoneyControlsScreen onNavigate={props.onNavigate} />;
   return <MoneyOverviewScreen onNavigate={props.onNavigate} />;
 }
 
@@ -75,6 +48,7 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/revenue",
           icon: BadgeDollarSign,
           meta: "Earnings",
+          permissionKey: "revenue",
         },
         {
           key: "balances",
@@ -83,6 +57,7 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/balances",
           icon: WalletCards,
           meta: "Wallets",
+          permissionKey: "finance",
         },
         {
           key: "withdrawals",
@@ -91,6 +66,7 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/withdrawals",
           icon: Landmark,
           meta: "Payout operations",
+          permissionKey: "finance",
         },
         {
           key: "settlements",
@@ -99,6 +75,7 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/settlements",
           icon: ReceiptText,
           meta: "Order money",
+          permissionKey: "finance",
         },
         {
           key: "pricing",
@@ -107,6 +84,7 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/pricing",
           icon: SlidersHorizontal,
           meta: "Pricing policy",
+          permissionKey: "delivery-pricing",
         },
         {
           key: "controls",
@@ -115,6 +93,14 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/controls",
           icon: Settings2,
           meta: "Governance",
+          anyOfPermissions: [
+            "platform.revenue.read",
+            "platform.financial.read",
+            "platform.financial_policy.read",
+            "platform.financial_policy.draft",
+            "platform.financial_policy.approve",
+            "platform.financial_policy.activate",
+          ],
         },
       ]}
     />
@@ -136,6 +122,7 @@ function MoneyPricingScreen(props: { readonly onNavigate: (href: string) => void
           href: "/money/pricing/delivery",
           icon: BadgeDollarSign,
           meta: "Customer charge",
+          permissionKey: "delivery-pricing",
         },
         {
           key: "driver-pricing",
@@ -144,6 +131,7 @@ function MoneyPricingScreen(props: { readonly onNavigate: (href: string) => void
           href: "/money/pricing/drivers",
           icon: WalletCards,
           meta: "Driver earnings",
+          permissionKey: "driver-pricing",
         },
       ]}
     />
@@ -165,6 +153,7 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/revenue",
           icon: BadgeDollarSign,
           meta: "Revenue policy",
+          permissionKey: "revenue",
         },
         {
           key: "delivery-controls",
@@ -173,6 +162,7 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/pricing/delivery",
           icon: SlidersHorizontal,
           meta: "Delivery policy",
+          permissionKey: "delivery-pricing",
         },
         {
           key: "driver-controls",
@@ -181,6 +171,7 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/pricing/drivers",
           icon: WalletCards,
           meta: "Driver policy",
+          permissionKey: "driver-pricing",
         },
         {
           key: "settlement-controls",
@@ -189,6 +180,7 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/settlements",
           icon: ReceiptText,
           meta: "Settlement policy",
+          permissionKey: "finance",
         },
       ]}
     />

@@ -16,10 +16,7 @@ export function PartnersWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
 }) {
-  if (props.route === "/partners") {
-    return <PartnersOverviewScreen onNavigate={props.onNavigate} />;
-  }
-
+  if (props.route === "/partners") return <PartnersOverviewScreen onNavigate={props.onNavigate} />;
   return (
     <AdminWorkspaceRouter
       route={toLegacyAdminWorkspacePath(props.route)}
@@ -43,6 +40,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/applications",
           icon: ClipboardCheck,
           meta: "Approvals",
+          permissionKey: "applications",
         },
         {
           key: "verification",
@@ -51,6 +49,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/verification",
           icon: ShieldCheck,
           meta: "Identity & business checks",
+          permissionKey: "verification",
         },
         {
           key: "companies",
@@ -59,6 +58,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/companies",
           icon: Building2,
           meta: "Organisations",
+          permissionKey: "company",
         },
         {
           key: "drivers",
@@ -67,6 +67,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/drivers",
           icon: UserRoundCheck,
           meta: "Delivery partners",
+          permissionKey: "drivers",
         },
         {
           key: "stations",
@@ -75,6 +76,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/stations",
           icon: Store,
           meta: "LPG partners",
+          permissionKey: "stations",
         },
         {
           key: "location-review",
@@ -83,6 +85,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/location-review",
           icon: MapPinned,
           meta: "Location checks",
+          permissionKey: "location-review",
         },
         {
           key: "fleet",
@@ -91,6 +94,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/fleet",
           icon: Truck,
           meta: "Vehicles",
+          permissionKey: "fleet",
         },
       ]}
     />

@@ -31,3 +31,71 @@ export const foundationNavigation: readonly NavigationItem[] = [
   { key: "providers", label: "Integrations", href: "/providers", icon: "providers", requiredPermissions: ["platform.providers.manage"] },
   { key: "system", label: "System Health & History", href: "/system", icon: "system", requiredPermissions: ["platform.health.read"] },
 ];
+
+export interface AdminNavigationPermissionRule {
+  readonly known: boolean;
+  readonly requiredPermissions?: readonly string[];
+  readonly anyOfPermissions?: readonly string[];
+}
+
+const navigationAnyOfPermissions: Readonly<Record<string, readonly string[]>> = {
+  verification: [
+    "platform.verification.read",
+    "platform.verification.manage",
+    "platform.applications.review",
+  ],
+  operations: [
+    "lpg.orders.manage",
+    "lpg.dispatch.execute",
+    "lpg.cylinders.manage",
+    "lpg.safety.manage",
+    "lpg.config.manage",
+  ],
+  coverage: [
+    "platform.coverage.read",
+    "platform.coverage.manage",
+    "lpg.config.manage",
+  ],
+  drivers: [
+    "platform.drivers.read",
+    "platform.drivers.manage",
+    "platform.drivers.verify",
+  ],
+  quality: [
+    "lpg.quality.read",
+    "lpg.quality.manage",
+    "lpg.operations.manage",
+  ],
+  "delivery-pricing": [
+    "platform.financial_policy.read",
+    "platform.financial_policy.draft",
+    "platform.financial_policy.approve",
+    "platform.financial_policy.activate",
+  ],
+  "driver-pricing": [
+    "platform.financial_policy.read",
+    "platform.financial_policy.draft",
+    "platform.financial_policy.approve",
+    "platform.financial_policy.activate",
+  ],
+};
+
+export function getAdminNavigationPermissionRule(key: string): AdminNavigationPermissionRule {
+  const item = foundationNavigation.find((candidate) => candidate.key === key);
+  const anyOfPermissions = navigationAnyOfPermissions[key];
+  if (!item && !anyOfPermissions) return { known: false };
+  if (anyOfPermissions) return { known: true, anyOfPermissions };
+  return { known: true, requiredPermissions: item?.requiredPermissions };
+}
+
+export function canAccessAdminNavigationKey(
+  key: string,
+  can: (permission: string) => boolean,
+): boolean {
+  const rule = getAdminNavigationPermissionRule(key);
+  if (!rule.known) return false;
+  const hasAllRequired = (rule.requiredPermissions ?? []).every((permission) => can(permission));
+  const anyOf = rule.anyOfPermissions ?? [];
+  const hasAnyRequired = anyOf.length === 0 || anyOf.some((permission) => can(permission));
+  return hasAllRequired && hasAnyRequired;
+}
