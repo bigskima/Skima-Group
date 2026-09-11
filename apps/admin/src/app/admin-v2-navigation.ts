@@ -64,7 +64,7 @@ export const adminWorkspaceDefinitions: readonly AdminWorkspaceDefinition[] = [
     description: "Applications, partner organisations, drivers, stations and verification.",
     basePath: "/partners",
     icon: "partners",
-    screenKeys: ["applications", "verification", "location-review", "company", "drivers", "fleet", "stations"],
+    screenKeys: ["applications", "company", "drivers", "stations", "verification", "location-review", "fleet"],
   },
   {
     key: "operations",
@@ -144,7 +144,6 @@ const legacyExactRoutes: Readonly<Record<string, string>> = {
   "/governance": "/platform/configuration",
   "/providers": "/platform/integrations",
   "/system": "/platform/system",
-  "/partners": "/partners/applications",
   "/services": "/services/utility-billing",
   "/intelligence": "/intelligence/ask",
   "/experience": "/experience/content",
@@ -153,7 +152,7 @@ const legacyExactRoutes: Readonly<Record<string, string>> = {
 
 const v2ToLegacyExactRoutes = Object.fromEntries(
   Object.entries(legacyExactRoutes)
-    .filter(([legacy]) => legacy !== "/partners" && legacy !== "/services" && legacy !== "/intelligence" && legacy !== "/experience" && legacy !== "/platform")
+    .filter(([legacy]) => legacy !== "/services" && legacy !== "/intelligence" && legacy !== "/experience" && legacy !== "/platform")
     .map(([legacy, v2]) => [v2, legacy]),
 ) as Readonly<Record<string, string>>;
 
@@ -167,6 +166,17 @@ const moneyScreenLabels: Readonly<Record<string, string>> = {
   "/money/pricing/delivery": "Delivery pricing",
   "/money/pricing/drivers": "Driver pricing",
   "/money/controls": "Financial controls",
+};
+
+const partnerScreenLabels: Readonly<Record<string, string>> = {
+  "/partners": "People & Partners overview",
+  "/partners/applications": "Applications",
+  "/partners/companies": "Companies",
+  "/partners/drivers": "Drivers",
+  "/partners/stations": "Stations",
+  "/partners/verification": "Verification",
+  "/partners/location-review": "Location review",
+  "/partners/fleet": "Fleet & vehicles",
 };
 
 export function toAdminV2NavigationItem(item: NavigationItem): NavigationItem {
@@ -187,7 +197,9 @@ export function buildAdminCategoryNavigation(items: readonly NavigationItem[]): 
     return [{
       key: workspace.key,
       label: workspace.label,
-      href: workspace.key === "money" ? workspace.basePath : firstVisibleScreen.href,
+      href: workspace.key === "money" || workspace.key === "partners"
+        ? workspace.basePath
+        : firstVisibleScreen.href,
       icon: workspace.icon,
     } satisfies NavigationItem];
   });
@@ -198,6 +210,7 @@ export function getAdminWorkspaceNavigation(
   items: readonly NavigationItem[],
 ): readonly NavigationItem[] {
   if (workspaceKey === "money") return buildMoneyWorkspaceNavigation(items);
+  if (workspaceKey === "partners") return buildPartnersWorkspaceNavigation(items);
 
   const workspace = adminWorkspaceDefinitions.find((candidate) => candidate.key === workspaceKey);
   if (!workspace) return [];
@@ -217,6 +230,7 @@ export function getAdminWorkspaceForRoute(route: string): AdminWorkspaceDefiniti
 export function getAdminScreenLabel(route: string, items: readonly NavigationItem[]): string {
   const path = resolveAdminPath(route);
   if (moneyScreenLabels[path]) return moneyScreenLabels[path];
+  if (partnerScreenLabels[path]) return partnerScreenLabels[path];
 
   const exact = items.find((item) => item.href === path);
   if (exact) return exact.label;
@@ -307,4 +321,32 @@ function buildMoneyWorkspaceNavigation(items: readonly NavigationItem[]): readon
   }
 
   return navigation;
+}
+
+function buildPartnersWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
+  const orderedKeys = ["applications", "company", "drivers", "stations", "verification", "location-review", "fleet"] as const;
+  const visibleItems = orderedKeys
+    .map((key) => items.find((item) => item.key === key))
+    .filter((item): item is NavigationItem => Boolean(item));
+  const first = visibleItems[0];
+
+  if (!first) return [];
+
+  return [
+    {
+      key: "partners-overview",
+      label: "Overview",
+      href: "/partners",
+      icon: "overview",
+      requiredPermissions: first.requiredPermissions,
+    },
+    ...visibleItems.map((item) => {
+      if (item.key === "company") return { ...item, label: "Companies" };
+      if (item.key === "drivers") return { ...item, label: "Drivers" };
+      if (item.key === "stations") return { ...item, label: "Stations" };
+      if (item.key === "location-review") return { ...item, label: "Location review" };
+      if (item.key === "fleet") return { ...item, label: "Fleet & vehicles" };
+      return item;
+    }),
+  ];
 }
