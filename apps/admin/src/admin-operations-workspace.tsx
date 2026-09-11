@@ -1,5 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, AlertTriangle, MapPin, RefreshCcw, Route, ShieldCheck, Truck, WalletCards } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowLeft,
+  MapPin,
+  RefreshCcw,
+  Route,
+  ShieldCheck,
+  Truck,
+  WalletCards,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { z } from "zod";
 
@@ -7,6 +17,7 @@ import { createClientIdempotencyKey, normalizeStatusLabel } from "@skima/fronten
 import {
   Button,
   DataTable,
+  DetailList,
   ErrorState,
   LoadingState,
   MetricTile,
@@ -16,6 +27,10 @@ import {
   type TableColumn,
 } from "@skima/ui";
 
+import {
+  buildOrderRecordRoute,
+  parseOrderRecordRoute,
+} from "./features/operations/order-record-route";
 import { useSessionState } from "./session";
 
 const OrderSchema = z.object({
@@ -72,11 +87,21 @@ type QueueFilter = "active" | "attention" | "completed" | "all";
 const TERMINAL_STATUSES = new Set(["completed", "cancelled", "refunded", "failed"]);
 const RECOVERY_STATUSES = new Set(["payment_reserved", "matching_station", "matching_driver"]);
 
-export function AdminOperationsWorkspace() {
+export function AdminOperationsWorkspace(props: {
+  readonly route?: string;
+  readonly onNavigate?: (href: string) => void;
+} = {}) {
   const { api, status, context } = useSessionState();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<QueueFilter>("active");
   const [notice, setNotice] = useState<string | null>(null);
+  const [legacySelectedReference, setLegacySelectedReference] = useState<string | null>(null);
+  const controlledRoute = props.route ? parseOrderRecordRoute(props.route) : null;
+  const selectedReference = controlledRoute?.kind === "order"
+    ? controlledRoute.reference
+    : controlledRoute?.kind === "queue"
+    ? null
+    : legacySelectedReference;
 
   const canRecoverDispatch = context?.platformAdmin?.admin_kind === "super_admin" ||
     context?.permissions.includes("lpg.dispatch.execute") ||
@@ -125,6 +150,14 @@ export function AdminOperationsWorkspace() {
   );
 
   const allOrders = orders.data ?? [];
+  const selectedOrder = selectedReference
+    ? allOrders.find((order) => {
+      const job = jobsByOrderId.get(order.id);
+      return orderRecordReference(order, job) === selectedReference || order.id === selectedReference;
+    }) ?? null
+    : null;
+  const selectedJob = selectedOrder ? jobsByOrderId.get(selectedOrder.id) ?? null : null;
+
   const visibleOrders = useMemo(() => allOrders.filter((order) => {
     if (filter === "all") return true;
     if (filter === "attention") return needsDispatchRecovery(order);
@@ -134,13 +167,33 @@ export function AdminOperationsWorkspace() {
 
   const activeCount = allOrders.filter((order) => !TERMINAL_STATUSES.has(order.status)).length;
   const attentionCount = allOrders.filter(needsDispatchRecovery).length;
-  const assignedCount = allOrders.filter((order) => !TERMINAL_STATUSES.has(order.status) && Boolean(order.driver_profile_id)).length;
+  const assignedCount = allOrders.filter((order) =>
+    !TERMINAL_STATUSES.has(order.status) && Boolean(order.driver_profile_id)
+  ).length;
   const inEscrowCount = allOrders.filter((order) =>
     !TERMINAL_STATUSES.has(order.status) &&
     ["reserved", "held", "payment_reserved"].includes(order.payment_status)
   ).length;
 
-  const columns = useMemo<TableColumn<LpgOrder>[]>(() => [
+  const openOrder = (order: LpgOrder) => {
+    const reference = orderRecordReference(order, jobsByOrderId.get(order.id));
+    setNotice(null);
+    if (props.route && props.onNavigate) {
+      props.onNavigate(buildOrderRecordRoute(reference));
+      return;
+    }
+    setLegacySelectedReference(reference);
+  };
+
+  const closeOrder = () => {
+    if (props.route && props.onNavigate) {
+      props.onNavigate("/operations/orders");
+      return;
+    }
+    setLegacySelectedReference(null);
+  };
+
+  const columns: TableColumn<LpgOrder>[] = [
     {
       key: "order",
       header: "Refill",
@@ -206,35 +259,46 @@ export function AdminOperationsWorkspace() {
       render: (order) => (
         <span>
           <StatusBadge tone={statusTone(order.status)}>{normalizeStatusLabel(order.status)}</StatusBadge><br />
-          <small>Payment: {normalizeStatusLabel(order.payment_status)} · Assignment: {normalizeStatusLabel(order.assignment_status)}</small>
+          <small>
+            Payment: {normalizeStatusLabel(order.payment_status)} · Assignment: {normalizeStatusLabel(order.assignment_status)}
+          </small>
         </span>
       ),
     },
     {
       key: "action",
-      header: "Recovery",
-      render: (order) => needsDispatchRecovery(order) ? (
-        canRecoverDispatch ? (
-          <Button
-            size="sm"
-            variant="outline"
-            icon={Route}
-            isLoading={retryDispatch.isPending && retryDispatch.variables?.id === order.id}
-            disabled={retryDispatch.isPending}
-            onClick={() => {
-              setNotice(null);
-              retryDispatch.mutate(order);
-            }}
-          >
-            Retry driver matching
+      header: "Actions",
+      render: (order) => (
+        <div className="skima-action-row">
+          <Button size="sm" variant="outline" onClick={() => openOrder(order)}>
+            Open
           </Button>
-        ) : <span className="skima-muted">Operations permission required</span>
-      ) : <span className="skima-muted">{order.driver_profile_id ? "Automatic assignment active" : "No recovery action"}</span>,
+          {needsDispatchRecovery(order) ? (
+            canRecoverDispatch ? (
+              <Button
+                size="sm"
+                variant="outline"
+                icon={Route}
+                isLoading={retryDispatch.isPending && retryDispatch.variables?.id === order.id}
+                disabled={retryDispatch.isPending}
+                onClick={() => {
+                  setNotice(null);
+                  retryDispatch.mutate(order);
+                }}
+              >
+                Retry matching
+              </Button>
+            ) : <span className="skima-muted">Operations permission required</span>
+          ) : null}
+        </div>
+      ),
     },
-  ], [canRecoverDispatch, jobsByOrderId, retryDispatch.isPending, retryDispatch.variables?.id]);
+  ];
 
   const loading = orders.isLoading || jobs.isLoading;
   const error = orders.error ?? jobs.error;
+  const invalidRoute = controlledRoute?.kind === "invalid";
+  const missingOrder = controlledRoute?.kind === "order" && !loading && !error && !selectedOrder;
 
   return (
     <>
@@ -255,28 +319,19 @@ export function AdminOperationsWorkspace() {
 
       <section className="skima-grid skima-grid--compact">
         <MetricTile label="Active refills" value={activeCount} icon={Activity} tone="info" />
-        <MetricTile label="Needs driver recovery" value={attentionCount} icon={AlertTriangle} tone={attentionCount ? "warning" : "success"} />
+        <MetricTile
+          label="Needs driver recovery"
+          value={attentionCount}
+          icon={AlertTriangle}
+          tone={attentionCount ? "warning" : "success"}
+        />
         <MetricTile label="Drivers assigned" value={assignedCount} icon={Truck} tone="success" />
-        <MetricTile label="Payment reserved" value={inEscrowCount} icon={WalletCards} tone={inEscrowCount ? "info" : "neutral"} />
-      </section>
-
-      <section className="sk-panel">
-        <div className="sk-panel__header">
-          <div>
-            <h2>Automatic dispatch is primary</h2>
-            <p className="skima-muted">
-              SKIMA chooses eligible drivers using live location, coverage, verification, vehicle eligibility, workload, distance and dispatch policy. Admin recovery never bypasses those checks.
-            </p>
-          </div>
-          <StatusBadge tone={attentionCount ? "warning" : "success"}>
-            {attentionCount ? `${attentionCount} refill${attentionCount === 1 ? "" : "s"} need attention` : "Dispatch healthy"}
-          </StatusBadge>
-        </div>
-        {attentionCount ? (
-          <div className="admin-inline-warning">
-            Use <strong>Retry driver matching</strong> only for a funded order left without a driver. If no eligible driver is available, SKIMA will keep the order unassigned and show the reason instead of forcing an unsafe assignment.
-          </div>
-        ) : null}
+        <MetricTile
+          label="Payment reserved"
+          value={inEscrowCount}
+          icon={WalletCards}
+          tone={inEscrowCount ? "info" : "neutral"}
+        />
       </section>
 
       {notice ? (
@@ -285,71 +340,247 @@ export function AdminOperationsWorkspace() {
         </div>
       ) : null}
 
-      <section className="sk-panel">
-        <div className="sk-panel__header">
-          <div>
-            <h2>Refill queue</h2>
-            <p className="skima-muted">Human-readable station, driver, payment and fee information from the canonical LPG order and job APIs.</p>
-          </div>
-          <div style={{ minWidth: 190 }}>
-            <SelectInput
-              label="Show"
-              value={filter}
-              onChange={(event) => setFilter(event.currentTarget.value as QueueFilter)}
-              options={[
-                { label: "Active refills", value: "active" },
-                { label: "Needs driver recovery", value: "attention" },
-                { label: "Completed", value: "completed" },
-                { label: "All orders", value: "all" },
-              ]}
+      {loading ? <LoadingState label="Loading live LPG operations" /> : null}
+      {error ? (
+        <ErrorState
+          title="LPG operations unavailable"
+          message={readError(error)}
+          onRetry={() => void Promise.all([orders.refetch(), jobs.refetch()])}
+        />
+      ) : null}
+
+      {!loading && !error && invalidRoute ? (
+        <ErrorState
+          title="Refill link unavailable"
+          message="This refill link is not valid. Open the refill queue to choose an order."
+          onRetry={() => props.onNavigate?.("/operations/orders")}
+        />
+      ) : null}
+
+      {!loading && !error && missingOrder ? (
+        <ErrorState
+          title="Refill not found"
+          message="This refill is no longer available to your account or the link is out of date."
+          onRetry={() => props.onNavigate?.("/operations/orders")}
+        />
+      ) : null}
+
+      {!loading && !error && !invalidRoute && !missingOrder && selectedOrder ? (
+        <OrderDetailPanel
+          order={selectedOrder}
+          job={selectedJob}
+          canRecoverDispatch={canRecoverDispatch}
+          isRetrying={retryDispatch.isPending}
+          onBack={closeOrder}
+          onRetry={() => {
+            setNotice(null);
+            retryDispatch.mutate(selectedOrder);
+          }}
+        />
+      ) : null}
+
+      {!loading && !error && !invalidRoute && !missingOrder && !selectedOrder ? (
+        <>
+          <section className="sk-panel">
+            <div className="sk-panel__header">
+              <div>
+                <h2>Automatic dispatch is primary</h2>
+                <p className="skima-muted">
+                  SKIMA chooses eligible drivers using live location, coverage, verification, vehicle eligibility, workload, distance and dispatch policy. Admin recovery never bypasses those checks.
+                </p>
+              </div>
+              <StatusBadge tone={attentionCount ? "warning" : "success"}>
+                {attentionCount
+                  ? `${attentionCount} refill${attentionCount === 1 ? "" : "s"} need attention`
+                  : "Dispatch healthy"}
+              </StatusBadge>
+            </div>
+            {attentionCount ? (
+              <div className="admin-inline-warning">
+                Use <strong>Retry driver matching</strong> only for a funded order left without a driver. If no eligible driver is available, SKIMA will keep the order unassigned rather than force an unsafe assignment.
+              </div>
+            ) : null}
+          </section>
+
+          <section className="sk-panel">
+            <div className="sk-panel__header">
+              <div>
+                <h2>Refill queue</h2>
+                <p className="skima-muted">
+                  Human-readable station, driver, payment and fee information from the canonical LPG order and job APIs.
+                </p>
+              </div>
+              <div style={{ minWidth: 190 }}>
+                <SelectInput
+                  label="Show"
+                  value={filter}
+                  onChange={(event) => setFilter(event.currentTarget.value as QueueFilter)}
+                  options={[
+                    { label: "Active refills", value: "active" },
+                    { label: "Needs driver recovery", value: "attention" },
+                    { label: "Completed", value: "completed" },
+                    { label: "All orders", value: "all" },
+                  ]}
+                />
+              </div>
+            </div>
+            <DataTable
+              caption="SKIMA LPG refill operations"
+              columns={columns}
+              records={visibleOrders}
+              getRowKey={(order) => order.id}
+              emptyTitle={filter === "attention" ? "No driver recovery needed" : "No refill orders in this view"}
+              emptyMessage={filter === "attention"
+                ? "Automatic dispatch has assigned drivers to all funded active refills."
+                : "Orders will appear here as customers create LPG refills."}
             />
-          </div>
-        </div>
+          </section>
 
-        {loading ? <LoadingState label="Loading live LPG operations" /> : null}
-        {error ? (
-          <ErrorState
-            title="LPG operations unavailable"
-            message={readError(error)}
-            onRetry={() => void Promise.all([orders.refetch(), jobs.refetch()])}
-          />
-        ) : null}
-        {!loading && !error ? (
-          <DataTable
-            caption="SKIMA LPG refill operations"
-            columns={columns}
-            records={visibleOrders}
-            getRowKey={(order) => order.id}
-            emptyTitle={filter === "attention" ? "No driver recovery needed" : "No refill orders in this view"}
-            emptyMessage={filter === "attention"
-              ? "Automatic dispatch has assigned drivers to all funded active refills."
-              : "Orders will appear here as customers create LPG refills."}
-          />
-        ) : null}
-      </section>
-
-      <section className="skima-grid">
-        <div className="sk-panel">
-          <div className="sk-panel__header">
-            <div>
-              <h2>Location & station context</h2>
-              <p className="skima-muted">Operations uses saved station addresses from the LPG job runtime rather than displaying latitude/longitude as operator labels.</p>
+          <section className="skima-grid">
+            <div className="sk-panel">
+              <div className="sk-panel__header">
+                <div>
+                  <h2>Location & station context</h2>
+                  <p className="skima-muted">
+                    Operations uses saved station addresses from the LPG job runtime rather than displaying latitude/longitude as operator labels.
+                  </p>
+                </div>
+                <MapPin size={20} />
+              </div>
             </div>
-            <MapPin size={20} />
-          </div>
-        </div>
-        <div className="sk-panel">
-          <div className="sk-panel__header">
-            <div>
-              <h2>Eligibility protected</h2>
-              <p className="skima-muted">Recovery calls the canonical dispatch engine. An administrator cannot assign an unverified, out-of-area, stale-location or ineligible driver from this screen.</p>
+            <div className="sk-panel">
+              <div className="sk-panel__header">
+                <div>
+                  <h2>Eligibility protected</h2>
+                  <p className="skima-muted">
+                    Recovery calls the canonical dispatch engine. An administrator cannot assign an unverified, out-of-area, stale-location or ineligible driver from this screen.
+                  </p>
+                </div>
+                <ShieldCheck size={20} />
+              </div>
             </div>
-            <ShieldCheck size={20} />
-          </div>
-        </div>
-      </section>
+          </section>
+        </>
+      ) : null}
     </>
   );
+}
+
+function OrderDetailPanel(props: {
+  readonly order: LpgOrder;
+  readonly job: LpgJob | null;
+  readonly canRecoverDispatch: boolean;
+  readonly isRetrying: boolean;
+  readonly onBack: () => void;
+  readonly onRetry: () => void;
+}) {
+  const order = props.order;
+  const job = props.job;
+  const reference = order.public_reference ?? job?.publicReference ?? "Refill";
+  const recoveryNeeded = needsDispatchRecovery(order);
+
+  return (
+    <section className="sk-panel">
+      <div className="sk-panel__header">
+        <div>
+          <Button icon={ArrowLeft} variant="ghost" size="sm" onClick={props.onBack}>
+            Back to refill queue
+          </Button>
+          <p className="skima-muted" style={{ marginBottom: 4, marginTop: 10 }}>Refill record</p>
+          <h2 style={{ margin: 0 }}>{reference}</h2>
+        </div>
+        <StatusBadge tone={statusTone(order.status)}>{normalizeStatusLabel(order.status)}</StatusBadge>
+      </div>
+
+      <div className="admin-layer-grid">
+        <div className="admin-setting-section">
+          <h3>Order & cylinder</h3>
+          <DetailList
+            items={[
+              { label: "Requested LPG", value: `${order.requested_kg.toFixed(1)} kg` },
+              {
+                label: "Cylinder",
+                value: job?.cylinderReference ?? job?.cylinderIdentifier ?? "Cylinder reference unavailable",
+              },
+              {
+                label: "Cylinder size",
+                value: job?.cylinderSizeKg != null ? `${job.cylinderSizeKg.toFixed(1)} kg` : "Not recorded",
+              },
+              {
+                label: "Actual LPG filled",
+                value: job?.actualKg != null ? `${job.actualKg.toFixed(1)} kg` : "Not recorded yet",
+              },
+              { label: "Created", value: formatDate(order.created_at) },
+              { label: "Last updated", value: formatDate(order.updated_at) },
+            ]}
+          />
+        </div>
+
+        <div className="admin-setting-section">
+          <h3>Station & driver</h3>
+          <DetailList
+            items={[
+              { label: "Station", value: job?.stationDisplayName ?? "Station pending" },
+              { label: "Station address", value: job?.stationAddress ?? "Address not available" },
+              { label: "Driver", value: job?.driverDisplayName ?? "Not assigned" },
+              { label: "Driver reference", value: job?.driverReference ?? "Not assigned" },
+              {
+                label: "Driver verification",
+                value: job?.driverVerificationStatus
+                  ? normalizeStatusLabel(job.driverVerificationStatus)
+                  : "Not available",
+              },
+              { label: "Assignment", value: normalizeStatusLabel(order.assignment_status) },
+            ]}
+          />
+        </div>
+
+        <div className="admin-setting-section">
+          <h3>Payment & settlement</h3>
+          <DetailList
+            items={[
+              { label: "Customer total", value: money(order.total_amount, order.currency_code) },
+              { label: "Station share", value: money(order.station_amount ?? 0, order.currency_code) },
+              { label: "Delivery fee", value: money(order.delivery_fee_amount ?? 0, order.currency_code) },
+              { label: "SKIMA fee", value: money(order.platform_fee_amount ?? 0, order.currency_code) },
+              { label: "Driver commission", value: money(order.driver_commission_amount ?? 0, order.currency_code) },
+              { label: "Payment", value: normalizeStatusLabel(order.payment_status) },
+            ]}
+          />
+        </div>
+
+        <div className="admin-setting-section">
+          <h3>Dispatch protection</h3>
+          <p>
+            Driver assignment remains automatic and eligibility-driven. Recovery re-runs the canonical matching engine; it never manually assigns an ineligible driver.
+          </p>
+          {recoveryNeeded ? (
+            props.canRecoverDispatch ? (
+              <Button
+                icon={Route}
+                variant="outline"
+                isLoading={props.isRetrying}
+                disabled={props.isRetrying}
+                onClick={props.onRetry}
+              >
+                Retry driver matching
+              </Button>
+            ) : (
+              <StatusBadge tone="warning">Operations permission required for recovery</StatusBadge>
+            )
+          ) : (
+            <StatusBadge tone={order.driver_profile_id ? "success" : "neutral"}>
+              {order.driver_profile_id ? "Automatic assignment active" : "No recovery action needed"}
+            </StatusBadge>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function orderRecordReference(order: LpgOrder, job: LpgJob | undefined): string {
+  return order.public_reference ?? job?.publicReference ?? order.id;
 }
 
 function needsDispatchRecovery(order: LpgOrder): boolean {
