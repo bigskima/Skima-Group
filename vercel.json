@@ -1,5 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "*": false,
+      "main": true
+    }
+  },
   "buildCommand": "npm run lpg-mobile:build",
   "installCommand": "npm --prefix apps/lpg-mobile ci",
   "outputDirectory": "apps/lpg-mobile/dist",
