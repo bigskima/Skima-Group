@@ -200,6 +200,13 @@ const intelligenceScreenLabels: Readonly<Record<string, string>> = {
   "/intelligence/ask": "SKIMA Intelligence",
 };
 
+const experienceScreenLabels: Readonly<Record<string, string>> = {
+  "/experience": "Experience overview",
+  "/experience/content": "Brand & content",
+  "/experience/policies": "Terms & policies",
+  "/experience/branding": "App branding",
+};
+
 export function toAdminV2NavigationItem(item: NavigationItem): NavigationItem {
   return {
     ...item,
@@ -215,7 +222,7 @@ export function buildAdminCategoryNavigation(items: readonly NavigationItem[]): 
 
     if (!firstVisibleScreen) return [];
 
-    const hasLanding = ["money", "partners", "operations", "services", "intelligence"].includes(workspace.key);
+    const hasLanding = ["money", "partners", "operations", "services", "intelligence", "experience"].includes(workspace.key);
 
     return [{
       key: workspace.key,
@@ -235,6 +242,7 @@ export function getAdminWorkspaceNavigation(
   if (workspaceKey === "operations") return buildOperationsWorkspaceNavigation(items);
   if (workspaceKey === "services") return buildServicesWorkspaceNavigation(items);
   if (workspaceKey === "intelligence") return buildIntelligenceWorkspaceNavigation(items);
+  if (workspaceKey === "experience") return buildExperienceWorkspaceNavigation(items);
 
   const workspace = adminWorkspaceDefinitions.find((candidate) => candidate.key === workspaceKey);
   if (!workspace) return [];
@@ -258,6 +266,7 @@ export function getAdminScreenLabel(route: string, items: readonly NavigationIte
   if (operationsScreenLabels[path]) return operationsScreenLabels[path];
   if (servicesScreenLabels[path]) return servicesScreenLabels[path];
   if (intelligenceScreenLabels[path]) return intelligenceScreenLabels[path];
+  if (experienceScreenLabels[path]) return experienceScreenLabels[path];
 
   const exact = items.find((item) => item.href === path);
   if (exact) return exact.label;
@@ -276,7 +285,7 @@ export function resolveAdminPath(rawPath: string): string {
     return `/partners/stations/${path.slice("/stations/".length)}`;
   }
 
-  if (path === "/operations" || path === "/services" || path === "/intelligence") {
+  if (path === "/operations" || path === "/services" || path === "/intelligence" || path === "/experience") {
     return path;
   }
 
@@ -464,5 +473,31 @@ function buildIntelligenceWorkspaceNavigation(items: readonly NavigationItem[]):
       label: "Intelligence workspace",
       href: "/intelligence/ask",
     },
+  ];
+}
+
+function buildExperienceWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
+  const orderedKeys = ["content", "policies", "branding"] as const;
+  const visibleItems = orderedKeys
+    .map((key) => items.find((item) => item.key === key))
+    .filter((item): item is NavigationItem => Boolean(item));
+  const first = visibleItems[0];
+
+  if (!first) return [];
+
+  return [
+    {
+      key: "experience-overview",
+      label: "Overview",
+      href: "/experience",
+      icon: "overview",
+      requiredPermissions: first.requiredPermissions,
+    },
+    ...visibleItems.map((item) => {
+      if (item.key === "content") return { ...item, label: "Brand & content" };
+      if (item.key === "policies") return { ...item, label: "Terms & policies" };
+      if (item.key === "branding") return { ...item, label: "App branding" };
+      return item;
+    }),
   ];
 }
