@@ -1,5 +1,8 @@
-// SKIMA Admin composition root. Feature workspaces, authentication UI, navigation
-// configuration, and domain workflows live in dedicated modules.
+// SKIMA Admin V2 composition root. Domain business logic remains inside the
+// existing feature workspaces while navigation and presentation move to real,
+// category-based browser routes.
+// AdminV2WorkspaceRouter is the compatibility bridge to AdminWorkspaceRouter,
+// preserving the existing verification, finance, operations and partner workflows.
 import {
   Activity,
   BadgeDollarSign,
@@ -22,7 +25,6 @@ import {
   WalletCards,
   Warehouse,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 
 import {
   filterNavigationItems,
@@ -39,18 +41,34 @@ import {
 import { AdminShell } from "./AdminShell";
 import { AdminLoginView } from "./admin-login-view";
 import { foundationNavigation } from "./admin-navigation-config";
-import { AdminWorkspaceRouter } from "./admin-workspace-router";
+import { AdminV2WorkspaceRouter } from "./app/AdminV2WorkspaceRouter";
+import {
+  buildAdminCategoryNavigation,
+  getAdminScreenLabel,
+  getAdminWorkspaceForRoute,
+  getAdminWorkspaceNavigation,
+  toAdminV2NavigationItem,
+} from "./app/admin-v2-navigation";
+import { useAdminRoute } from "./app/use-admin-route";
+import { AdminWorkspaceLayout } from "./layouts/AdminWorkspaceLayout";
 import { useSessionState } from "./session";
 
 const navIconMap = {
   overview: LayoutDashboard,
+  dashboard: LayoutDashboard,
+  partners: UsersRound,
+  operations: Activity,
+  money: WalletCards,
+  services: Boxes,
+  intelligence: Sparkles,
+  experience: Megaphone,
+  platform: Settings2,
   company: Building2,
   access: UsersRound,
   governance: Settings2,
   applications: ClipboardList,
   verification: ShieldCheck,
   organizations: Building2,
-  operations: Activity,
   coverage: MapPinned,
   locationReview: MapPinned,
   drivers: UsersRound,
@@ -75,14 +93,7 @@ const navIconMap = {
 
 export function App() {
   const sessionState = useSessionState();
-  const [route, setRoute] = useState(readRouteFromHash);
-
-  useEffect(() => {
-    const handleHashChange = () => setRoute(readRouteFromHash());
-    window.addEventListener("hashchange", handleHashChange);
-
-    return () => window.removeEventListener("hashchange", handleHashChange);
-  }, []);
+  const [route, navigate] = useAdminRoute();
 
   if (sessionState.status === "loading") {
     return <LoadingState label="Loading your account" />;
@@ -165,26 +176,30 @@ export function App() {
       }
       return filterNavigationItems([item], permissionContext).length > 0;
     });
-  const shellNavItems = filteredNavigation.map(toShellNavItem);
-  const stationRoute = route === "/stations" || route.startsWith("/stations/");
-  const activeRoute = stationRoute
-    ? "/stations"
-    : shellNavItems.some((item) => item.href === route)
-    ? route
-    : "/";
-  const workspaceRoute = stationRoute ? route : activeRoute;
 
-  const navigate = (href: string) => {
-    window.location.hash = href === "/" ? "" : href;
-    setRoute(href);
-  };
+  const visibleScreens = filteredNavigation.map(toAdminV2NavigationItem);
+  const categoryNavigation = buildAdminCategoryNavigation(visibleScreens);
+  const shellNavItems = categoryNavigation.map(toShellNavItem);
+  const workspace = getAdminWorkspaceForRoute(route);
+  const workspaceNavigation = getAdminWorkspaceNavigation(workspace.key, visibleScreens).map(toShellNavItem);
+  const activeCategory = categoryNavigation.find((item) => item.key === workspace.key) ?? categoryNavigation[0];
+  const screenLabel = getAdminScreenLabel(route, visibleScreens);
+  const hasVisibleScreen = visibleScreens.some((item) =>
+    route === item.href || route.startsWith(`${item.href}/`)
+  );
+  const safeRoute = hasVisibleScreen ? route : "/dashboard";
+  const safeWorkspace = getAdminWorkspaceForRoute(safeRoute);
+  const safeWorkspaceNavigation = getAdminWorkspaceNavigation(safeWorkspace.key, visibleScreens).map(toShellNavItem);
+  const safeCategory = categoryNavigation.find((item) => item.key === safeWorkspace.key) ?? activeCategory;
 
   return (
     <PermissionProvider can={can}>
       <AdminShell
         brand="Skima"
         navItems={shellNavItems}
-        activeHref={activeRoute}
+        activeHref={safeCategory?.href ?? "/dashboard"}
+        pageLabel={hasVisibleScreen ? screenLabel : "Home"}
+        pageHref={safeRoute}
         contextLabel={sessionState.context.platformAdmin?.title ?? "Platform administrator"}
         userLabel={sessionState.context.profile?.display_name ??
           sessionState.context.user.email ??
@@ -192,7 +207,19 @@ export function App() {
         onNavigate={navigate}
         onSignOut={sessionState.signOut}
       >
-        <AdminWorkspaceRouter route={workspaceRoute} onNavigate={navigate} />
+        {safeWorkspace.key === "dashboard" ? (
+          <AdminV2WorkspaceRouter route={safeRoute} onNavigate={navigate} />
+        ) : (
+          <AdminWorkspaceLayout
+            title={safeWorkspace.label}
+            description={safeWorkspace.description}
+            items={safeWorkspaceNavigation}
+            activeHref={safeRoute}
+            onNavigate={navigate}
+          >
+            <AdminV2WorkspaceRouter route={safeRoute} onNavigate={navigate} />
+          </AdminWorkspaceLayout>
+        )}
       </AdminShell>
     </PermissionProvider>
   );
@@ -208,9 +235,4 @@ function toShellNavItem(item: NavigationItem): NavItem {
     icon: Icon,
     requiredPermissions: item.requiredPermissions,
   };
-}
-
-function readRouteFromHash(): string {
-  const route = window.location.hash.replace(/^#/, "");
-  return route.length > 0 ? route : "/";
 }
