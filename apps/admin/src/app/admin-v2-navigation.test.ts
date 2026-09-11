@@ -37,11 +37,34 @@ describe("SKIMA Admin V2 navigation", () => {
       "partners",
       "money",
     ]);
+    expect(categories.find((item) => item.key === "partners")?.href).toBe("/partners");
     expect(categories.find((item) => item.key === "money")?.href).toBe("/money");
   });
 
-  it("keeps the Money category root as a real landing screen", () => {
+  it("keeps migrated category roots as real landing screens", () => {
+    expect(resolveAdminPath("/partners")).toBe("/partners");
     expect(resolveAdminPath("/money")).toBe("/money");
+  });
+
+  it("builds focused People and Partners navigation from existing permissions", () => {
+    const items: NavigationItem[] = [
+      { key: "applications", label: "Applications", href: "/applications", icon: "applications" },
+      { key: "company", label: "Companies", href: "/company", icon: "company" },
+      { key: "drivers", label: "Driver Participation", href: "/drivers", icon: "drivers" },
+      { key: "stations", label: "Stations", href: "/stations", icon: "stations" },
+      { key: "verification", label: "Verification", href: "/verification", icon: "verification" },
+      { key: "fleet", label: "Fleet", href: "/fleet", icon: "fleet" },
+    ].map(toAdminV2NavigationItem);
+
+    expect(getAdminWorkspaceNavigation("partners", items).map((item) => item.href)).toEqual([
+      "/partners",
+      "/partners/applications",
+      "/partners/companies",
+      "/partners/drivers",
+      "/partners/stations",
+      "/partners/verification",
+      "/partners/fleet",
+    ]);
   });
 
   it("splits Money into focused permission-aware screens", () => {
