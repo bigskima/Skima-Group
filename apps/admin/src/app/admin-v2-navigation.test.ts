@@ -20,6 +20,10 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(resolveAdminPath("/content")).toBe("/experience/content");
     expect(resolveAdminPath("/policies")).toBe("/experience/policies");
     expect(resolveAdminPath("/branding")).toBe("/experience/branding");
+    expect(resolveAdminPath("/access")).toBe("/platform/people-access");
+    expect(resolveAdminPath("/governance")).toBe("/platform/configuration");
+    expect(resolveAdminPath("/providers")).toBe("/platform/integrations");
+    expect(resolveAdminPath("/system")).toBe("/platform/system");
   });
 
   it("bridges V2 routes back to the current domain workspace during migration", () => {
@@ -34,6 +38,10 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(toLegacyAdminWorkspacePath("/experience/content")).toBe("/content");
     expect(toLegacyAdminWorkspacePath("/experience/policies")).toBe("/policies");
     expect(toLegacyAdminWorkspacePath("/experience/branding")).toBe("/branding");
+    expect(toLegacyAdminWorkspacePath("/platform/people-access")).toBe("/access");
+    expect(toLegacyAdminWorkspacePath("/platform/configuration")).toBe("/governance");
+    expect(toLegacyAdminWorkspacePath("/platform/integrations")).toBe("/providers");
+    expect(toLegacyAdminWorkspacePath("/platform/system")).toBe("/system");
   });
 
   it("builds one global navigation item per visible category", () => {
@@ -49,6 +57,10 @@ describe("SKIMA Admin V2 navigation", () => {
       { key: "content", label: "Brand & Content", href: "/content", icon: "content" },
       { key: "policies", label: "Terms & Policies", href: "/policies", icon: "policies" },
       { key: "branding", label: "App Branding", href: "/branding", icon: "branding" },
+      { key: "access", label: "People & Access", href: "/access", icon: "access" },
+      { key: "governance", label: "Configuration", href: "/governance", icon: "governance" },
+      { key: "providers", label: "Integrations", href: "/providers", icon: "providers" },
+      { key: "system", label: "System", href: "/system", icon: "system" },
     ].map(toAdminV2NavigationItem);
 
     const categories = buildAdminCategoryNavigation(items);
@@ -60,6 +72,7 @@ describe("SKIMA Admin V2 navigation", () => {
       "services",
       "intelligence",
       "experience",
+      "platform",
     ]);
     expect(categories.find((item) => item.key === "partners")?.href).toBe("/partners");
     expect(categories.find((item) => item.key === "operations")?.href).toBe("/operations");
@@ -67,6 +80,7 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(categories.find((item) => item.key === "services")?.href).toBe("/services");
     expect(categories.find((item) => item.key === "intelligence")?.href).toBe("/intelligence");
     expect(categories.find((item) => item.key === "experience")?.href).toBe("/experience");
+    expect(categories.find((item) => item.key === "platform")?.href).toBe("/platform");
   });
 
   it("keeps migrated category roots as real landing screens", () => {
@@ -76,6 +90,7 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(resolveAdminPath("/services")).toBe("/services");
     expect(resolveAdminPath("/intelligence")).toBe("/intelligence");
     expect(resolveAdminPath("/experience")).toBe("/experience");
+    expect(resolveAdminPath("/platform")).toBe("/platform");
   });
 
   it("builds focused People and Partners navigation from existing permissions", () => {
@@ -177,6 +192,23 @@ describe("SKIMA Admin V2 navigation", () => {
     ]);
   });
 
+  it("splits Platform into access, configuration, integrations and system health", () => {
+    const items: NavigationItem[] = [
+      { key: "access", label: "People & Access", href: "/access", icon: "access" },
+      { key: "governance", label: "Configuration", href: "/governance", icon: "governance" },
+      { key: "providers", label: "Integrations", href: "/providers", icon: "providers" },
+      { key: "system", label: "System", href: "/system", icon: "system" },
+    ].map(toAdminV2NavigationItem);
+
+    expect(getAdminWorkspaceNavigation("platform", items).map((item) => item.href)).toEqual([
+      "/platform",
+      "/platform/people-access",
+      "/platform/configuration",
+      "/platform/integrations",
+      "/platform/system",
+    ]);
+  });
+
   it("resolves the active workspace from nested URLs", () => {
     expect(getAdminWorkspaceForRoute("/partners/stations/123").key).toBe("partners");
     expect(getAdminWorkspaceForRoute("/operations/coverage").key).toBe("operations");
@@ -184,5 +216,6 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(getAdminWorkspaceForRoute("/services/availability").key).toBe("services");
     expect(getAdminWorkspaceForRoute("/intelligence/ask").key).toBe("intelligence");
     expect(getAdminWorkspaceForRoute("/experience/branding").key).toBe("experience");
+    expect(getAdminWorkspaceForRoute("/platform/integrations").key).toBe("platform");
   });
 });
