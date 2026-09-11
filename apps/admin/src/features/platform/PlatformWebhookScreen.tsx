@@ -26,7 +26,7 @@ import {
   text,
 } from "./platform-v2-shared";
 
-export function PlatformWebhookScreen(props: { readonly onNavigate: (href: string) => void }) {
+export function PlatformWebhookScreen(props?: { readonly onNavigate: (href: string) => void }) {
   const { api, status } = useSessionState();
   const client = useQueryClient();
   const enabled = status === "authenticated";
@@ -104,7 +104,7 @@ export function PlatformWebhookScreen(props: { readonly onNavigate: (href: strin
         actions={
           <>
             <Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button>
-            <Button icon={Settings2} requiredPermission="platform.providers.manage" onClick={() => props.onNavigate("/platform/configuration/advanced")}>Manage advanced setup</Button>
+            {props?.onNavigate ? <Button icon={Settings2} requiredPermission="platform.providers.manage" onClick={() => props.onNavigate("/platform/configuration/advanced")}>Manage advanced setup</Button> : null}
           </>
         }
       />
