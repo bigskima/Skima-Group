@@ -1,3 +1,4 @@
+import { formatMoney } from "@skima/frontend-core";
 import { z } from "zod";
 
 export const MoneyRowSchema = z.record(z.unknown());
@@ -51,8 +52,7 @@ export function formatMajorMoney(value: number, code = "NGN"): string {
 }
 
 export function formatMinorMoney(value: number, code = "NGN"): string {
-  const minorUnits = code === "NGN" || code === "USD" ? 100 : 100;
-  return formatMajorMoney(value / minorUnits, code);
+  return formatMoney(value, code);
 }
 
 export function formatDate(value: string): string {
