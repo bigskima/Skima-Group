@@ -6,6 +6,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import { AdminSupportWorkspace } from "../../admin-support-workspace";
 import { AdminWorkspaceRouter } from "../../admin-workspace-router";
 import { toLegacyAdminWorkspacePath } from "../../app/admin-v2-navigation";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
@@ -14,7 +15,14 @@ export function OperationsWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
 }) {
-  if (props.route === "/operations") return <OperationsOverviewScreen onNavigate={props.onNavigate} />;
+  if (props.route === "/operations") {
+    return <OperationsOverviewScreen onNavigate={props.onNavigate} />;
+  }
+
+  if (props.route === "/operations/support" || props.route.startsWith("/operations/support/")) {
+    return <AdminSupportWorkspace route={props.route} onNavigate={props.onNavigate} />;
+  }
+
   return (
     <AdminWorkspaceRouter
       route={toLegacyAdminWorkspacePath(props.route)}
