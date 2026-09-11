@@ -39,6 +39,20 @@ describe("workspace landing permissions", () => {
     expect(canAccessWorkspaceLandingAction(target, () => false)).toBe(false);
   });
 
+  it("inherits the authoritative any-of rule for a navigation screen", () => {
+    const target = action({ permissionKey: "operations" });
+
+    expect(canAccessWorkspaceLandingAction(target, (permission) => permission === "lpg.dispatch.execute")).toBe(true);
+    expect(canAccessWorkspaceLandingAction(target, () => false)).toBe(false);
+  });
+
+  it("inherits simple navigation permissions for focused cards", () => {
+    const target = action({ permissionKey: "support" });
+
+    expect(canAccessWorkspaceLandingAction(target, (permission) => permission === "platform.support.read")).toBe(true);
+    expect(canAccessWorkspaceLandingAction(target, () => false)).toBe(false);
+  });
+
   it("enforces all-of and any-of requirements together", () => {
     const target = action({
       requiredPermissions: ["platform.workspace.read"],
