@@ -52,6 +52,14 @@ jobs:
               raise SystemExit("attention digest type target not found")
           gateway.write_text(text.replace(old, new, 1))
 
+          admin = Path("apps/admin/src/admin-ai-workspace.tsx")
+          admin_text = admin.read_text()
+          old_prompt = '    "Which applications or support cases are waiting on SKIMA?",'
+          new_prompt = '    "Which applications are ready for review?",\n    "Which support cases need attention?",'
+          if old_prompt not in admin_text:
+              raise SystemExit("admin AI compatibility prompts target not found")
+          admin.write_text(admin_text.replace(old_prompt, new_prompt, 1))
+
           contract = Path("scripts/ai-runtime-contract.test.ts")
           contract_text = contract.read_text()
           old_helper = 'function assertIncludes(value: string, expected: string, message: string): void {'
