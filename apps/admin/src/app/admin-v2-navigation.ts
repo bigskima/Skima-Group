@@ -77,7 +77,7 @@ export const adminWorkspaceDefinitions: readonly AdminWorkspaceDefinition[] = [
   {
     key: "money",
     label: "Money",
-    description: "Revenue, balances, settlements and pricing controls.",
+    description: "Revenue, balances, withdrawals, settlements and pricing controls.",
     basePath: "/money",
     icon: "money",
     screenKeys: ["revenue", "finance", "delivery-pricing", "driver-pricing"],
@@ -145,7 +145,6 @@ const legacyExactRoutes: Readonly<Record<string, string>> = {
   "/providers": "/platform/integrations",
   "/system": "/platform/system",
   "/partners": "/partners/applications",
-  "/money": "/money/revenue",
   "/services": "/services/utility-billing",
   "/intelligence": "/intelligence/ask",
   "/experience": "/experience/content",
@@ -154,9 +153,21 @@ const legacyExactRoutes: Readonly<Record<string, string>> = {
 
 const v2ToLegacyExactRoutes = Object.fromEntries(
   Object.entries(legacyExactRoutes)
-    .filter(([legacy]) => legacy !== "/partners" && legacy !== "/money" && legacy !== "/services" && legacy !== "/intelligence" && legacy !== "/experience" && legacy !== "/platform")
+    .filter(([legacy]) => legacy !== "/partners" && legacy !== "/services" && legacy !== "/intelligence" && legacy !== "/experience" && legacy !== "/platform")
     .map(([legacy, v2]) => [v2, legacy]),
 ) as Readonly<Record<string, string>>;
+
+const moneyScreenLabels: Readonly<Record<string, string>> = {
+  "/money": "Money overview",
+  "/money/revenue": "Revenue",
+  "/money/balances": "Balances & deposits",
+  "/money/withdrawals": "Withdrawals",
+  "/money/settlements": "Settlements & escrow",
+  "/money/pricing": "Pricing",
+  "/money/pricing/delivery": "Delivery pricing",
+  "/money/pricing/drivers": "Driver pricing",
+  "/money/controls": "Financial controls",
+};
 
 export function toAdminV2NavigationItem(item: NavigationItem): NavigationItem {
   return {
@@ -176,7 +187,7 @@ export function buildAdminCategoryNavigation(items: readonly NavigationItem[]): 
     return [{
       key: workspace.key,
       label: workspace.label,
-      href: firstVisibleScreen.href,
+      href: workspace.key === "money" ? workspace.basePath : firstVisibleScreen.href,
       icon: workspace.icon,
     } satisfies NavigationItem];
   });
@@ -186,6 +197,8 @@ export function getAdminWorkspaceNavigation(
   workspaceKey: AdminWorkspaceKey,
   items: readonly NavigationItem[],
 ): readonly NavigationItem[] {
+  if (workspaceKey === "money") return buildMoneyWorkspaceNavigation(items);
+
   const workspace = adminWorkspaceDefinitions.find((candidate) => candidate.key === workspaceKey);
   if (!workspace) return [];
 
@@ -203,6 +216,8 @@ export function getAdminWorkspaceForRoute(route: string): AdminWorkspaceDefiniti
 
 export function getAdminScreenLabel(route: string, items: readonly NavigationItem[]): string {
   const path = resolveAdminPath(route);
+  if (moneyScreenLabels[path]) return moneyScreenLabels[path];
+
   const exact = items.find((item) => item.href === path);
   if (exact) return exact.label;
 
@@ -238,4 +253,58 @@ export function normalizePath(rawPath: string): string {
   const withLeadingSlash = withoutQuery.startsWith("/") ? withoutQuery : `/${withoutQuery}`;
   const normalized = withLeadingSlash.replace(/\/{2,}/g, "/").replace(/\/+$/, "");
   return normalized || "/";
+}
+
+function buildMoneyWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
+  const revenue = items.find((item) => item.key === "revenue");
+  const finance = items.find((item) => item.key === "finance");
+  const deliveryPricing = items.find((item) => item.key === "delivery-pricing");
+  const driverPricing = items.find((item) => item.key === "driver-pricing");
+  const first = revenue ?? finance ?? deliveryPricing ?? driverPricing;
+
+  if (!first) return [];
+
+  const navigation: NavigationItem[] = [
+    {
+      key: "money-overview",
+      label: "Overview",
+      href: "/money",
+      icon: "overview",
+      requiredPermissions: first.requiredPermissions,
+    },
+  ];
+
+  if (revenue) {
+    navigation.push({ ...revenue, label: "Revenue", href: "/money/revenue" });
+  }
+
+  if (finance) {
+    navigation.push(
+      { ...finance, key: "money-balances", label: "Balances & deposits", href: "/money/balances" },
+      { ...finance, key: "money-withdrawals", label: "Withdrawals", href: "/money/withdrawals" },
+      { ...finance, key: "money-settlements", label: "Settlements & escrow", href: "/money/settlements" },
+    );
+  }
+
+  if (deliveryPricing || driverPricing) {
+    const pricingPermissionSource = deliveryPricing ?? driverPricing!;
+    navigation.push({
+      ...pricingPermissionSource,
+      key: "money-pricing",
+      label: "Pricing",
+      href: "/money/pricing",
+    });
+  }
+
+  if (revenue || deliveryPricing || driverPricing) {
+    const controlPermissionSource = revenue ?? deliveryPricing ?? driverPricing!;
+    navigation.push({
+      ...controlPermissionSource,
+      key: "money-controls",
+      label: "Financial controls",
+      href: "/money/controls",
+    });
+  }
+
+  return navigation;
 }
