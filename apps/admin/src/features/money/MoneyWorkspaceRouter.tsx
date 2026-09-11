@@ -75,6 +75,7 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/revenue",
           icon: BadgeDollarSign,
           meta: "Earnings",
+          requiredPermissions: ["platform.revenue.read"],
         },
         {
           key: "balances",
@@ -83,6 +84,7 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/balances",
           icon: WalletCards,
           meta: "Wallets",
+          requiredPermissions: ["platform.financial.read"],
         },
         {
           key: "withdrawals",
@@ -91,6 +93,7 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/withdrawals",
           icon: Landmark,
           meta: "Payout operations",
+          requiredPermissions: ["platform.financial.read"],
         },
         {
           key: "settlements",
@@ -99,6 +102,7 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/settlements",
           icon: ReceiptText,
           meta: "Order money",
+          requiredPermissions: ["platform.financial.read"],
         },
         {
           key: "pricing",
@@ -107,6 +111,7 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/pricing",
           icon: SlidersHorizontal,
           meta: "Pricing policy",
+          requiredPermissions: ["platform.financial_policy.read"],
         },
         {
           key: "controls",
@@ -115,6 +120,11 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/controls",
           icon: Settings2,
           meta: "Governance",
+          anyOfPermissions: [
+            "platform.revenue.read",
+            "platform.financial.read",
+            "platform.financial_policy.read",
+          ],
         },
       ]}
     />
@@ -136,6 +146,7 @@ function MoneyPricingScreen(props: { readonly onNavigate: (href: string) => void
           href: "/money/pricing/delivery",
           icon: BadgeDollarSign,
           meta: "Customer charge",
+          requiredPermissions: ["platform.financial_policy.read"],
         },
         {
           key: "driver-pricing",
@@ -144,6 +155,7 @@ function MoneyPricingScreen(props: { readonly onNavigate: (href: string) => void
           href: "/money/pricing/drivers",
           icon: WalletCards,
           meta: "Driver earnings",
+          requiredPermissions: ["platform.financial_policy.read"],
         },
       ]}
     />
@@ -165,6 +177,7 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/revenue",
           icon: BadgeDollarSign,
           meta: "Revenue policy",
+          requiredPermissions: ["platform.revenue.read"],
         },
         {
           key: "delivery-controls",
@@ -173,6 +186,7 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/pricing/delivery",
           icon: SlidersHorizontal,
           meta: "Delivery policy",
+          requiredPermissions: ["platform.financial_policy.read"],
         },
         {
           key: "driver-controls",
@@ -181,6 +195,7 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/pricing/drivers",
           icon: WalletCards,
           meta: "Driver policy",
+          requiredPermissions: ["platform.financial_policy.read"],
         },
         {
           key: "settlement-controls",
@@ -189,6 +204,7 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
           href: "/money/settlements",
           icon: ReceiptText,
           meta: "Settlement policy",
+          requiredPermissions: ["platform.financial.read"],
         },
       ]}
     />
