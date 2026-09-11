@@ -1,0 +1,226 @@
+.utility-v2,
+.utility-v2__screen {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.utility-v2__nav {
+  display: flex;
+  gap: 0.55rem;
+  overflow-x: auto;
+  padding: 0.15rem 0 0.25rem;
+  scrollbar-width: thin;
+}
+
+.utility-v2__nav button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 42px;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--sk-border, rgba(148, 163, 184, 0.22));
+  border-radius: 12px;
+  background: var(--sk-surface, #fff);
+  color: var(--sk-muted, #64748b);
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.utility-v2__nav button:hover,
+.utility-v2__nav button.is-active {
+  border-color: rgba(220, 38, 38, 0.36);
+  background: rgba(220, 38, 38, 0.06);
+  color: var(--sk-text, #0f172a);
+}
+
+.utility-v2__nav svg {
+  width: 17px;
+  height: 17px;
+}
+
+.utility-v2__task-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.utility-v2__task {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 0.75rem;
+  min-height: 118px;
+  padding: 1rem;
+  border: 1px solid var(--sk-border, rgba(148, 163, 184, 0.22));
+  border-radius: 15px;
+  background: var(--sk-surface, #fff);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.utility-v2__task:hover {
+  border-color: rgba(220, 38, 38, 0.34);
+  transform: translateY(-1px);
+}
+
+.utility-v2__task-icon,
+.utility-v2__record-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(220, 38, 38, 0.09);
+  color: #dc2626;
+}
+
+.utility-v2__task span:last-child {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.utility-v2__task strong {
+  color: var(--sk-text, #0f172a);
+}
+
+.utility-v2__task small {
+  color: var(--sk-muted, #64748b);
+  line-height: 1.45;
+}
+
+.utility-v2__record-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.utility-v2__record {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.85rem;
+  border: 1px solid var(--sk-border, rgba(148, 163, 184, 0.2));
+  border-radius: 13px;
+  background: var(--sk-surface-muted, rgba(148, 163, 184, 0.035));
+}
+
+.utility-v2__record-copy {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.utility-v2__record-copy small {
+  color: var(--sk-muted, #64748b);
+}
+
+.utility-v2__review-grid,
+.utility-v2__readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.utility-v2__review-grid > div,
+.utility-v2__readiness-grid > div,
+.utility-v2__stat {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.utility-v2__review-grid > div,
+.utility-v2__readiness-grid > div {
+  padding: 0.8rem;
+  border: 1px solid var(--sk-border, rgba(148, 163, 184, 0.2));
+  border-radius: 12px;
+  background: var(--sk-surface-muted, rgba(148, 163, 184, 0.05));
+}
+
+.utility-v2__review-grid small,
+.utility-v2__readiness-grid small,
+.utility-v2__stat small {
+  color: var(--sk-muted, #64748b);
+}
+
+.utility-v2__readiness-grid > div {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.utility-v2__readiness-grid svg {
+  width: 20px;
+  height: 20px;
+}
+
+.utility-v2__readiness-grid .is-ready svg {
+  color: #16a34a;
+}
+
+.utility-v2__readiness-grid .is-pending svg {
+  color: #d97706;
+}
+
+.utility-v2__form-card {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.utility-v2__advanced {
+  border-top: 1px solid var(--sk-border, rgba(148, 163, 184, 0.18));
+  padding-top: 0.65rem;
+}
+
+.utility-v2__advanced > summary {
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.utility-v2__advanced > div {
+  margin-top: 0.8rem;
+}
+
+.utility-v2__pool {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.utility-v2__pool > div:first-child {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.utility-v2__pool > div:first-child span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+@media (max-width: 960px) {
+  .utility-v2__task-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .utility-v2__pool {
+    align-items: stretch;
+    display: grid;
+  }
+}
+
+@media (max-width: 680px) {
+  .utility-v2__task-grid,
+  .utility-v2__review-grid,
+  .utility-v2__readiness-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .utility-v2__record {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .utility-v2__record > :last-child {
+    grid-column: 1 / -1;
+  }
+}
