@@ -23,9 +23,13 @@ export function canAccessWorkspaceLandingAction(
   action: WorkspaceLandingAction,
   can: (permission: string) => boolean,
 ): boolean {
-  const inheritedRule = action.permissionKey ? getAdminNavigationPermissionRule(action.permissionKey) : {};
-  const requiredPermissions = action.requiredPermissions ?? inheritedRule.requiredPermissions ?? [];
-  const anyOfPermissions = action.anyOfPermissions ?? inheritedRule.anyOfPermissions ?? [];
+  const inheritedRule = action.permissionKey
+    ? getAdminNavigationPermissionRule(action.permissionKey)
+    : null;
+  if (inheritedRule && !inheritedRule.known) return false;
+
+  const requiredPermissions = action.requiredPermissions ?? inheritedRule?.requiredPermissions ?? [];
+  const anyOfPermissions = action.anyOfPermissions ?? inheritedRule?.anyOfPermissions ?? [];
   const hasAllRequired = requiredPermissions.every((permission) => can(permission));
   const hasAnyRequired = anyOfPermissions.length === 0 || anyOfPermissions.some((permission) => can(permission));
   return hasAllRequired && hasAnyRequired;
