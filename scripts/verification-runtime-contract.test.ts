@@ -16,6 +16,8 @@ const [
   applicationScreen,
   documentScreen,
   adminApp,
+  adminNavigation,
+  adminWorkspaceRouter,
   adminVerification,
   supabaseConfig,
 ] = await Promise.all([
@@ -28,6 +30,8 @@ const [
   read("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx"),
   read("apps/lpg-mobile/src/native/ui/DocumentWorkflowScreen.tsx"),
   read("apps/admin/src/App.tsx"),
+  read("apps/admin/src/admin-navigation-config.ts"),
+  read("apps/admin/src/admin-workspace-router.tsx"),
   read("apps/admin/src/admin-verification-workspace.tsx"),
   read("supabase/config.toml"),
 ]);
@@ -114,9 +118,11 @@ Deno.test("mobile uses automatic verification first and controlled fallback evid
 });
 
 Deno.test("admin exposes provider routing, launch KYC/KYB policy and exception-only review", () => {
-  assertStringIncludes(adminApp, 'href: "/verification"');
-  assertStringIncludes(adminApp, 'props.route === "/verification"');
-  assertStringIncludes(adminApp, "AdminVerificationWorkspace");
+  assertStringIncludes(adminApp, "AdminWorkspaceRouter");
+  assertStringIncludes(adminApp, "foundationNavigation");
+  assertStringIncludes(adminNavigation, 'href: "/verification"');
+  assertStringIncludes(adminWorkspaceRouter, 'props.route === "/verification"');
+  assertStringIncludes(adminWorkspaceRouter, "AdminVerificationWorkspace");
   assertStringIncludes(adminVerification, '"/admin/verification/configuration"');
   assertStringIncludes(adminVerification, '"/admin/verification/exceptions"');
   assertStringIncludes(adminVerification, '"/admin/verification/provider-route"');
