@@ -2,6 +2,7 @@ import { AdminWorkspaceRouter } from "../admin-workspace-router";
 import { MoneyWorkspaceRouter } from "../features/money/MoneyWorkspaceRouter";
 import { OperationsWorkspaceRouter } from "../features/operations/OperationsWorkspaceRouter";
 import { PartnersWorkspaceRouter } from "../features/partners/PartnersWorkspaceRouter";
+import { ServicesWorkspaceRouter } from "../features/services/ServicesWorkspaceRouter";
 import { toLegacyAdminWorkspacePath } from "./admin-v2-navigation";
 
 export function AdminV2WorkspaceRouter(props: {
@@ -18,6 +19,10 @@ export function AdminV2WorkspaceRouter(props: {
 
   if (props.route === "/operations" || props.route.startsWith("/operations/")) {
     return <OperationsWorkspaceRouter route={props.route} onNavigate={props.onNavigate} />;
+  }
+
+  if (props.route === "/services" || props.route.startsWith("/services/")) {
+    return <ServicesWorkspaceRouter route={props.route} onNavigate={props.onNavigate} />;
   }
 
   return (

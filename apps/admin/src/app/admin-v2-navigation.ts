@@ -188,6 +188,13 @@ const operationsScreenLabels: Readonly<Record<string, string>> = {
   "/operations/support": "Support",
 };
 
+const servicesScreenLabels: Readonly<Record<string, string>> = {
+  "/services": "Services overview",
+  "/services/utility-billing": "Utility billing",
+  "/services/catalog": "Service catalog",
+  "/services/availability": "Service availability",
+};
+
 export function toAdminV2NavigationItem(item: NavigationItem): NavigationItem {
   return {
     ...item,
@@ -203,7 +210,7 @@ export function buildAdminCategoryNavigation(items: readonly NavigationItem[]): 
 
     if (!firstVisibleScreen) return [];
 
-    const hasLanding = workspace.key === "money" || workspace.key === "partners" || workspace.key === "operations";
+    const hasLanding = ["money", "partners", "operations", "services"].includes(workspace.key);
 
     return [{
       key: workspace.key,
@@ -221,6 +228,7 @@ export function getAdminWorkspaceNavigation(
   if (workspaceKey === "money") return buildMoneyWorkspaceNavigation(items);
   if (workspaceKey === "partners") return buildPartnersWorkspaceNavigation(items);
   if (workspaceKey === "operations") return buildOperationsWorkspaceNavigation(items);
+  if (workspaceKey === "services") return buildServicesWorkspaceNavigation(items);
 
   const workspace = adminWorkspaceDefinitions.find((candidate) => candidate.key === workspaceKey);
   if (!workspace) return [];
@@ -242,6 +250,7 @@ export function getAdminScreenLabel(route: string, items: readonly NavigationIte
   if (moneyScreenLabels[path]) return moneyScreenLabels[path];
   if (partnerScreenLabels[path]) return partnerScreenLabels[path];
   if (operationsScreenLabels[path]) return operationsScreenLabels[path];
+  if (servicesScreenLabels[path]) return servicesScreenLabels[path];
 
   const exact = items.find((item) => item.href === path);
   if (exact) return exact.label;
@@ -260,7 +269,7 @@ export function resolveAdminPath(rawPath: string): string {
     return `/partners/stations/${path.slice("/stations/".length)}`;
   }
 
-  if (path === "/operations") {
+  if (path === "/operations" || path === "/services") {
     return path;
   }
 
@@ -392,4 +401,40 @@ function buildOperationsWorkspaceNavigation(items: readonly NavigationItem[]): r
       return item;
     }),
   ];
+}
+
+function buildServicesWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
+  const billing = items.find((item) => item.key === "billing");
+  const catalog = items.find((item) => item.key === "catalog");
+  const first = billing ?? catalog;
+
+  if (!first) return [];
+
+  const navigation: NavigationItem[] = [
+    {
+      key: "services-overview",
+      label: "Overview",
+      href: "/services",
+      icon: "overview",
+      requiredPermissions: first.requiredPermissions,
+    },
+  ];
+
+  if (billing) {
+    navigation.push({ ...billing, label: "Utility billing", href: "/services/utility-billing" });
+  }
+
+  if (catalog) {
+    navigation.push(
+      { ...catalog, label: "Service catalog", href: "/services/catalog" },
+      {
+        ...catalog,
+        key: "service-availability",
+        label: "Service availability",
+        href: "/services/availability",
+      },
+    );
+  }
+
+  return navigation;
 }

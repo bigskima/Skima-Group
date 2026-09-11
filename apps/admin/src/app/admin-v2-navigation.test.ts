@@ -15,6 +15,7 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(resolveAdminPath("/applications")).toBe("/partners/applications");
     expect(resolveAdminPath("/revenue")).toBe("/money/revenue");
     expect(resolveAdminPath("/stations/demo-station")).toBe("/partners/stations/demo-station");
+    expect(resolveAdminPath("/utility-billing")).toBe("/services/utility-billing");
   });
 
   it("bridges V2 routes back to the current domain workspace during migration", () => {
@@ -23,6 +24,8 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(toLegacyAdminWorkspacePath("/partners/stations/demo-station")).toBe("/stations/demo-station");
     expect(toLegacyAdminWorkspacePath("/operations/orders")).toBe("/operations");
     expect(toLegacyAdminWorkspacePath("/operations/coverage")).toBe("/coverage");
+    expect(toLegacyAdminWorkspacePath("/services/utility-billing")).toBe("/utility-billing");
+    expect(toLegacyAdminWorkspacePath("/services/catalog")).toBe("/catalog");
   });
 
   it("builds one global navigation item per visible category", () => {
@@ -32,6 +35,8 @@ describe("SKIMA Admin V2 navigation", () => {
       { key: "operations", label: "Operations", href: "/operations", icon: "operations" },
       { key: "revenue", label: "Revenue", href: "/revenue", icon: "revenue" },
       { key: "finance", label: "Balances", href: "/finance", icon: "finance" },
+      { key: "billing", label: "Utility Billing", href: "/utility-billing", icon: "billing" },
+      { key: "catalog", label: "Services", href: "/catalog", icon: "catalog" },
     ].map(toAdminV2NavigationItem);
 
     const categories = buildAdminCategoryNavigation(items);
@@ -40,16 +45,19 @@ describe("SKIMA Admin V2 navigation", () => {
       "partners",
       "operations",
       "money",
+      "services",
     ]);
     expect(categories.find((item) => item.key === "partners")?.href).toBe("/partners");
     expect(categories.find((item) => item.key === "operations")?.href).toBe("/operations");
     expect(categories.find((item) => item.key === "money")?.href).toBe("/money");
+    expect(categories.find((item) => item.key === "services")?.href).toBe("/services");
   });
 
   it("keeps migrated category roots as real landing screens", () => {
     expect(resolveAdminPath("/partners")).toBe("/partners");
     expect(resolveAdminPath("/operations")).toBe("/operations");
     expect(resolveAdminPath("/money")).toBe("/money");
+    expect(resolveAdminPath("/services")).toBe("/services");
   });
 
   it("builds focused People and Partners navigation from existing permissions", () => {
@@ -111,9 +119,24 @@ describe("SKIMA Admin V2 navigation", () => {
     ]);
   });
 
+  it("splits Services into utility billing, catalog and availability screens", () => {
+    const items: NavigationItem[] = [
+      { key: "billing", label: "Utility Billing", href: "/utility-billing", icon: "billing" },
+      { key: "catalog", label: "Services", href: "/catalog", icon: "catalog" },
+    ].map(toAdminV2NavigationItem);
+
+    expect(getAdminWorkspaceNavigation("services", items).map((item) => item.href)).toEqual([
+      "/services",
+      "/services/utility-billing",
+      "/services/catalog",
+      "/services/availability",
+    ]);
+  });
+
   it("resolves the active workspace from nested URLs", () => {
     expect(getAdminWorkspaceForRoute("/partners/stations/123").key).toBe("partners");
     expect(getAdminWorkspaceForRoute("/operations/coverage").key).toBe("operations");
     expect(getAdminWorkspaceForRoute("/money/pricing/drivers").key).toBe("money");
+    expect(getAdminWorkspaceForRoute("/services/availability").key).toBe("services");
   });
 });
