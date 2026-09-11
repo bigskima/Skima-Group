@@ -41,6 +41,16 @@ jobs:
           path.write_text(text)
           PY
           node scripts/apply-phase4-admin-ai-upgrade.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("supabase/functions/api-gateway/index.ts")
+          text = path.read_text()
+          old = '].filter((item): item is Record<string, unknown> => item !== null);'
+          new = '].filter((item) => item !== null) as Array<{ key: string; label: string; count: number; severity: string; summary: string }>;'
+          if old not in text:
+              raise SystemExit("attention digest type target not found")
+          path.write_text(text.replace(old, new, 1))
+          PY
 
       - name: Typecheck platform and edge functions
         run: npm run check
