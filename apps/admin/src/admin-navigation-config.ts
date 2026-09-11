@@ -1,5 +1,7 @@
 import type { NavigationItem } from "@skima/frontend-core";
 
+// Single source of truth for the SKIMA admin shell navigation. Workspace rendering
+// remains in admin-workspace-router.tsx so composition concerns stay out of App.tsx.
 export const foundationNavigation: readonly NavigationItem[] = [
   { key: "overview", label: "Overview", href: "/", icon: "overview" },
   { key: "company", label: "Companies", href: "/company", icon: "company", requiredPermissions: ["platform.organizations.read"] },
