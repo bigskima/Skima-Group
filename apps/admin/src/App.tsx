@@ -184,7 +184,8 @@ export function App() {
   const workspaceNavigation = getAdminWorkspaceNavigation(workspace.key, visibleScreens).map(toShellNavItem);
   const activeCategory = categoryNavigation.find((item) => item.key === workspace.key) ?? categoryNavigation[0];
   const screenLabel = getAdminScreenLabel(route, visibleScreens);
-  const hasVisibleScreen = visibleScreens.some((item) =>
+  const isWorkspaceLanding = route === workspace.basePath && workspaceNavigation.length > 0;
+  const hasVisibleScreen = isWorkspaceLanding || visibleScreens.some((item) =>
     route === item.href || route.startsWith(`${item.href}/`)
   );
   const safeRoute = hasVisibleScreen ? route : "/dashboard";
