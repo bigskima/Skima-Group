@@ -11398,7 +11398,7 @@ async function aiAssistantResponse(params: AiAssistantParams): Promise<Response>
       conversationId: conversation.id,
       reply: result.text,
       capabilityKey,
-      suggestions: aiWorkspaceSuggestions(workspace),
+      suggestions: aiWorkspaceSuggestions(workspace, context),
     },
     requestId: params.id,
   });
@@ -11916,7 +11916,7 @@ async function buildAiAssistantContext(
     const stationInventoryOutlookRows = stationInventoryOutlook.error
       ? []
       : Array.isArray(stationInventoryOutlook.data) ? stationInventoryOutlook.data : [];
-    return {
+    const adminContext = {
       ...base,
       recentOrders: orders.data ?? [],
       applications: applications.data ?? [],
@@ -11932,9 +11932,80 @@ async function buildAiAssistantContext(
       applicationReviewReadiness: applicationReviewRows,
       stationInventoryOutlook: stationInventoryOutlookRows,
     };
+    return {
+      ...adminContext,
+      adminAttentionDigest: buildAdminAttentionDigest(adminContext),
+    };
   }
 
   return base;
+}
+
+function buildAdminAttentionDigest(
+  context: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  const insights = recordArrayValue(getRecordValue(context, "operationalInsights"));
+  const support = recordArrayValue(getRecordValue(context, "supportTriageAssessments"));
+  const applications = recordArrayValue(getRecordValue(context, "applicationReviewReadiness"));
+  const finance = recordArrayValue(getRecordValue(context, "financeReconciliationFindings"));
+  const partnerRisk = recordArrayValue(getRecordValue(context, "partnerRiskAssessments"));
+  const stationOutlook = recordArrayValue(getRecordValue(context, "stationInventoryOutlook"));
+  const aiRuns = recordArrayValue(getRecordValue(context, "aiRuns"));
+  const orders = recordArrayValue(getRecordValue(context, "recentOrders"));
+
+  const openInsights = insights.filter((item) => !["resolved", "dismissed", "closed"].includes((stringOrNull(getRecordValue(item, "status")) ?? "open").toLowerCase()));
+  const activeSupport = support.filter((item) => (stringOrNull(getRecordValue(item, "assessment_status")) ?? "active").toLowerCase() === "active");
+  const urgentSupport = activeSupport.filter((item) => {
+    const priority = (stringOrNull(getRecordValue(item, "priority_level")) ?? "").toLowerCase();
+    const sla = (stringOrNull(getRecordValue(item, "sla_status")) ?? "").toLowerCase();
+    return ["critical", "urgent"].includes(priority) || sla === "overdue";
+  });
+  const waitingOnSkima = applications.filter((item) => getRecordValue(item, "waitingOnSkima") === true);
+  const decisionReady = applications.filter((item) => getRecordValue(item, "decisionReady") === true);
+  const openFinance = finance.filter((item) => !["resolved", "dismissed", "closed"].includes((stringOrNull(getRecordValue(item, "status")) ?? "open").toLowerCase()));
+  const elevatedRisk = partnerRisk.filter((item) => ["critical", "high"].includes((stringOrNull(getRecordValue(item, "risk_level")) ?? "").toLowerCase()));
+  const stockPressure = stationOutlook.filter((item) => (stringOrNull(getRecordValue(item, "pressureLevel")) ?? "normal").toLowerCase() !== "normal");
+  const failedAiRuns = aiRuns.filter((item) => ["failed", "error"].includes((stringOrNull(getRecordValue(item, "status")) ?? "").toLowerCase()));
+  const assignmentAttention = orders.filter((item) => {
+    const status = (stringOrNull(getRecordValue(item, "status")) ?? "").toLowerCase();
+    const assignment = (stringOrNull(getRecordValue(item, "assignment_status")) ?? "").toLowerCase();
+    return !["completed", "cancelled", "refunded", "failed"].includes(status) && ["pending", "unassigned", "matching", "assignment_pending"].includes(assignment);
+  });
+
+  const priorityAreas = [
+    urgentSupport.length ? { key: "support", label: "Urgent support", count: urgentSupport.length, severity: "critical", summary: "Urgent or overdue customer support cases need human review." } : null,
+    openFinance.length ? { key: "finance", label: "Money reconciliation", count: openFinance.length, severity: "critical", summary: "Finance reconciliation findings need review against authoritative ledger and payment records." } : null,
+    stockPressure.length ? { key: "stock", label: "Station stock & capacity", count: stockPressure.length, severity: "warning", summary: "Stations have stock, trust or capacity pressure that may affect operations." } : null,
+    waitingOnSkima.length ? { key: "applications", label: "Applications waiting on SKIMA", count: waitingOnSkima.length, severity: "warning", summary: "Submitted applications have review work that is currently on SKIMA's side." } : null,
+    elevatedRisk.length ? { key: "partners", label: "Partner review", count: elevatedRisk.length, severity: "warning", summary: "High or critical advisory partner-risk signals need evidence-based human review." } : null,
+    assignmentAttention.length ? { key: "orders", label: "Order assignment", count: assignmentAttention.length, severity: "warning", summary: "Active orders show assignment states that may need dispatch review." } : null,
+    failedAiRuns.length ? { key: "ai", label: "AI runtime failures", count: failedAiRuns.length, severity: "warning", summary: "Recent AI tasks failed and may indicate provider, quota or runtime issues." } : null,
+    openInsights.length ? { key: "operations", label: "Operational exceptions", count: openInsights.length, severity: "info", summary: "Deterministic SKIMA rules have open operational exceptions." } : null,
+  ].filter((item) => item !== null) as Array<{ key: string; label: string; count: number; severity: string; summary: string }>;
+
+  const severityRank: Readonly<Record<string, number>> = { critical: 3, warning: 2, info: 1 };
+  priorityAreas.sort((left, right) =>
+    (severityRank[String(right.severity)] ?? 0) - (severityRank[String(left.severity)] ?? 0) || Number(right.count) - Number(left.count)
+  );
+
+  return {
+    generatedAt: new Date().toISOString(),
+    totalSignals: openInsights.length + activeSupport.length + waitingOnSkima.length + openFinance.length + elevatedRisk.length + stockPressure.length + failedAiRuns.length + assignmentAttention.length,
+    priorityAreas,
+    counts: {
+      operationalInsights: openInsights.length,
+      supportElevated: activeSupport.length,
+      supportUrgent: urgentSupport.length,
+      applicationsWaitingOnSkima: waitingOnSkima.length,
+      applicationsDecisionReady: decisionReady.length,
+      financeFindings: openFinance.length,
+      partnerRiskElevated: elevatedRisk.length,
+      stockPressure: stockPressure.length,
+      aiFailures: failedAiRuns.length,
+      assignmentAttention: assignmentAttention.length,
+    },
+    advisoryOnly: true,
+  };
 }
 
 function assertAiContextQuery(error: { readonly message?: string } | null): void {
@@ -12245,11 +12316,20 @@ function aiSystemPrompt(workspace: string): string {
     ? "Act as a driver workflow copilot. Use driverDailyBrief as the primary source for what the driver should do next, with active jobs and earnings records as supporting context only."
     : workspace === "station"
     ? "Act as a station operations assistant. Explain visible queue and station runtime information, and highlight attention items without changing them."
-    : "Act as the SKIMA admin operations copilot. Summarize visible operations and exceptions, but never perform or imply an administrative action.";
+    : "Act as SKIMA's senior operations intelligence copilot. Answer platform questions from the full authorized SKIMA context, connect related signals across teams, rank what needs attention, and explain the next human review step without performing or implying an administrative action.";
 
   return [
     "You are Matty, the friendly AI assistant inside SKIMA. If asked who you are, introduce yourself as Matty, the user's SKIMA assistant.",
     roleInstruction,
+    ...(workspace === "admin" ? [
+      "For admin questions, reason across the entire supplied platform context rather than describing the current page, route, component or source file.",
+      "When asked what needs attention, start with the answer and rank the highest-impact verified signals first. Consider severity, overdue work, blocked workflows, money/custody exposure, stock pressure, partner risk, support SLA, application readiness and AI runtime failures.",
+      "Use adminAttentionDigest as the deterministic priority summary, then use operationalInsights, supportTriageAssessments, applicationReviewReadiness, financeReconciliationFindings, partnerRiskAssessments, stationInventoryOutlook, recentOrders, aiRuns, demandForecasts, expansionOpportunities, dispatchShadowAssessments and pricingIntelligence as supporting evidence.",
+      "Separate verified SKIMA facts from forecasts, simulations and advisory risk scores. Never turn an advisory score into an accusation or a forecast into a guaranteed outcome.",
+      "Prefer human-facing names, public references and workflow labels. Avoid raw UUIDs unless the administrator explicitly asks for a technical reference.",
+      "If the available records do not show a material issue in a domain, say that plainly instead of inventing one. If data is missing or stale, name that limitation.",
+      "When useful, finish with a short Next checks section that tells the administrator what to review next without claiming that you performed the review or changed anything.",
+    ] : []),
     "SKIMA database state, ledger entries, pricing policies, permissions, dispatch rules, custody records and workflow states are authoritative. Never invent or overwrite them.",
     "Use supplied SKIMA account context for account-specific facts. If the requested fact is absent, say you cannot verify it from the available SKIMA data.",
     "Do not claim that a cylinder is safe based on AI or an image. For immediate LPG danger, advise the user to move away from danger and use the appropriate emergency channel.",
@@ -12292,7 +12372,10 @@ function aiSystemPrompt(workspace: string): string {
   ].join("\n");
 }
 
-function aiWorkspaceSuggestions(workspace: string): readonly string[] {
+function aiWorkspaceSuggestions(
+  workspace: string,
+  context: Readonly<Record<string, unknown>> = {},
+): readonly string[] {
   if (workspace === "customer") {
     return ["Where is my refill?", "When might I need another refill?", "Can SKIMA serve my saved location?", "Explain my latest refill price"];
   }
@@ -12302,7 +12385,19 @@ function aiWorkspaceSuggestions(workspace: string): readonly string[] {
   if (workspace === "station") {
     return ["How long could current stock cover?", "What needs attention?", "Explain my recent settlement"];
   }
-  return ["Which applications are ready for review?", "Which support cases need attention?", "Are any money records out of balance?", "Which areas deserve expansion review?"];
+  const digest = recordObjectValue(getRecordValue(context, "adminAttentionDigest"));
+  const counts = recordObjectValue(getRecordValue(digest, "counts"));
+  const suggestions = ["Give me a platform health brief and rank what needs attention."];
+  if (Number(getRecordValue(counts, "applicationsWaitingOnSkima") ?? 0) > 0) suggestions.push("Which applications are waiting on SKIMA, and what is blocking each one?");
+  if (Number(getRecordValue(counts, "applicationsDecisionReady") ?? 0) > 0) suggestions.push("Which applications are ready for review?");
+  if (Number(getRecordValue(counts, "supportUrgent") ?? 0) > 0) suggestions.push("Which support cases are most urgent or overdue, and why?");
+  if (Number(getRecordValue(counts, "supportElevated") ?? 0) > 0) suggestions.push("Which support cases need attention?");
+  if (Number(getRecordValue(counts, "financeFindings") ?? 0) > 0) suggestions.push("Which money records are out of balance and what should finance review next?");
+  if (Number(getRecordValue(counts, "stockPressure") ?? 0) > 0) suggestions.push("Which stations have stock or capacity pressure, and how trustworthy are the estimates?");
+  if (Number(getRecordValue(counts, "partnerRiskElevated") ?? 0) > 0) suggestions.push("Which partner risk signals need human review, and what evidence supports them?");
+  if (Number(getRecordValue(counts, "aiFailures") ?? 0) > 0) suggestions.push("Which AI tasks failed recently and which provider or workflow should I inspect?");
+  suggestions.push("Which areas deserve expansion review based on verified demand and partner interest?");
+  return suggestions.slice(0, 4);
 }
 
 async function adminAiRuntimeResponse(
@@ -12333,6 +12428,10 @@ async function adminAiRuntimeResponse(
     financeFindings,
     pricingIntelligence,
     expansionOpportunities,
+    aiRuns,
+    supportTriageAssessments,
+    applicationReviewReadiness,
+    stationInventoryOutlook,
     usageGovernor,
   ] = await Promise.all([
     serviceClient
@@ -12383,6 +12482,17 @@ async function adminAiRuntimeResponse(
     requestClient.rpc("read_ai_expansion_opportunities", {
       target_limit: 100,
     }),
+    serviceClient
+      .from("ai_task_runs")
+      .select("id,status,subject_type,source,created_at,started_at,completed_at,updated_at")
+      .order("created_at", { ascending: false })
+      .limit(50),
+    requestClient.rpc("read_ai_support_triage_assessments", {
+      target_minimum_priority: "elevated",
+      target_limit: 100,
+    }),
+    requestClient.rpc("read_ai_application_review_readiness", { target_limit: 100 }),
+    requestClient.rpc("read_ai_station_inventory_outlook", { target_station_branch_id: null }),
     requestClient.rpc("read_ai_usage_governor_status"),
   ]);
 
@@ -12407,6 +12517,25 @@ async function adminAiRuntimeResponse(
       expansionOpportunities: expansionOpportunities.error
         ? []
         : Array.isArray(expansionOpportunities.data) ? expansionOpportunities.data : [],
+      aiRuns: aiRuns.error ? [] : aiRuns.data ?? [],
+      supportTriageAssessments: supportTriageAssessments.error
+        ? []
+        : Array.isArray(supportTriageAssessments.data) ? supportTriageAssessments.data : [],
+      applicationReviewReadiness: applicationReviewReadiness.error
+        ? []
+        : Array.isArray(applicationReviewReadiness.data) ? applicationReviewReadiness.data : [],
+      stationInventoryOutlook: stationInventoryOutlook.error
+        ? []
+        : Array.isArray(stationInventoryOutlook.data) ? stationInventoryOutlook.data : [],
+      attentionDigest: buildAdminAttentionDigest({
+        aiRuns: aiRuns.error ? [] : aiRuns.data ?? [],
+        operationalInsights: insights.error ? [] : insights.data ?? [],
+        supportTriageAssessments: supportTriageAssessments.error ? [] : supportTriageAssessments.data ?? [],
+        applicationReviewReadiness: applicationReviewReadiness.error ? [] : applicationReviewReadiness.data ?? [],
+        financeReconciliationFindings: financeFindings.error ? [] : financeFindings.data ?? [],
+        partnerRiskAssessments: riskAssessments.error ? [] : riskAssessments.data ?? [],
+        stationInventoryOutlook: stationInventoryOutlook.error ? [] : stationInventoryOutlook.data ?? [],
+      }),
       usageGovernor: usageGovernor.error ? null : usageGovernor.data ?? null,
       userId: user.id,
     },

@@ -46,6 +46,11 @@ const AdminAiRuntimeSchema = z.object({
   financeFindings: z.array(PlatformRecordSchema).default([]),
   pricingIntelligence: PlatformRecordSchema.nullable().default(null),
   expansionOpportunities: z.array(PlatformRecordSchema).default([]),
+  aiRuns: z.array(PlatformRecordSchema).default([]),
+  supportTriageAssessments: z.array(PlatformRecordSchema).default([]),
+  applicationReviewReadiness: z.array(PlatformRecordSchema).default([]),
+  stationInventoryOutlook: z.array(PlatformRecordSchema).default([]),
+  attentionDigest: PlatformRecordSchema.default({}),
   usageGovernor: PlatformRecordSchema.nullable().default(null),
   userId: z.string().uuid().optional(),
 });
@@ -64,6 +69,10 @@ type AiChatMessage = {
   readonly content: string;
 };
 
+type AdminAiView = "ask" | "attention" | "intelligence" | "settings";
+type AdminAttentionView = "priority" | "applications" | "operations" | "money";
+type AdminIntelligenceView = "growth" | "pricing" | "dispatch";
+
 export function AdminAiWorkspace() {
   const { api, status } = useSessionState();
   const queryClient = useQueryClient();
@@ -74,6 +83,16 @@ export function AdminAiWorkspace() {
   const [routeEditor, setRouteEditor] = useState<string | null>(null);
   const [providerEditorOpen, setProviderEditorOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<AdminAiView>("ask");
+  const [attentionView, setAttentionView] = useState<AdminAttentionView>("priority");
+  const [intelligenceView, setIntelligenceView] = useState<AdminIntelligenceView>("growth");
+  const [suggestions, setSuggestions] = useState<string[]>([
+    "Give me a platform health brief and rank what needs attention.",
+    "Which applications are ready for review?",
+    "Which support cases need attention?",
+    "Are any money, partner, stock or AI records showing risk?",
+    "What should the operations team review next?",
+  ]);
 
   const runtime = useQuery({
     queryKey: ["admin-ai-runtime"],
@@ -94,6 +113,7 @@ export function AdminAiWorkspace() {
       ),
     onSuccess: (result) => {
       setConversationId(result.conversationId);
+      setSuggestions(result.suggestions.length ? result.suggestions : suggestions);
       setMessages((current) => [
         ...current,
         {
@@ -119,6 +139,11 @@ export function AdminAiWorkspace() {
   const financeFindings = runtime.data?.financeFindings ?? [];
   const pricingIntelligence = runtime.data?.pricingIntelligence ?? null;
   const expansionOpportunities = runtime.data?.expansionOpportunities ?? [];
+  const aiRuns = runtime.data?.aiRuns ?? [];
+  const supportTriageAssessments = runtime.data?.supportTriageAssessments ?? [];
+  const applicationReviewReadiness = runtime.data?.applicationReviewReadiness ?? [];
+  const stationInventoryOutlook = runtime.data?.stationInventoryOutlook ?? [];
+  const attentionDigest = runtime.data?.attentionDigest ?? {};
   const usageGovernor = runtime.data?.usageGovernor ?? null;
   const activeCapabilities = capabilities.filter((item) => recordString(item, "status") === "active");
   const activeProviders = providers.filter((item) =>
@@ -165,245 +190,508 @@ export function AdminAiWorkspace() {
       <PageHeader
         eyebrow="Intelligence"
         title="SKIMA Intelligence"
-        description="Ask operational questions and choose which configured AI provider handles each type of AI task. SKIMA business records, permissions and financial records remain the source of truth."
+        description="Ask SKIMA about the whole platform, review what needs attention, explore decision-support insights, and manage AI connections without mixing every task into one long page."
         actions={<Button icon={RefreshCcw} variant="outline" onClick={refresh}>Refresh</Button>}
       />
 
       <section className="skima-grid skima-grid--compact">
-        <MetricTile label="Active capabilities" value={activeCapabilities.length} icon={Sparkles} tone="info" />
+        <MetricTile
+          label="Attention signals"
+          value={recordNumber(attentionDigest, "totalSignals")}
+          icon={ShieldAlert}
+          tone={recordNumber(attentionDigest, "totalSignals") ? "warning" : "success"}
+        />
+        <MetricTile label="Active AI tasks" value={activeCapabilities.length} icon={Sparkles} tone="info" />
         <MetricTile label="Available providers" value={activeProviders.length} icon={Cpu} tone="success" />
         <MetricTile label="Active routes" value={activeRoutes.length} icon={Route} tone="neutral" />
-        <MetricTile
-          label="Open exceptions"
-          value={insights.filter((item) => recordString(item, "status") !== "resolved").length}
-          icon={ShieldCheck}
-          tone={insights.length ? "warning" : "success"}
-        />
       </section>
 
       {notice ? <div className="admin-notice" role="status">{notice}</div> : null}
 
-      <section className="admin-ai-layout">
-        <div className="sk-panel admin-ai-copilot">
-          <div className="sk-panel__header admin-ai-panel-head">
-            <div>
-              <p className="admin-section-kicker">Operations copilot</p>
-              <h2>Ask SKIMA</h2>
-              <p>Ask about visible LPG operations, applications, service areas, and whether SKIMA AI is working normally.</p>
+      <div className="skima-resource-tabs admin-resource-tabs" role="tablist" aria-label="SKIMA Intelligence sections">
+        {[
+          { key: "ask", label: "Ask SKIMA" },
+          { key: "attention", label: "Needs attention" },
+          { key: "intelligence", label: "Decision insights" },
+          { key: "settings", label: "AI settings" },
+        ].map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            role="tab"
+            aria-selected={activeView === item.key}
+            className={activeView === item.key ? "is-active" : undefined}
+            onClick={() => setActiveView(item.key as AdminAiView)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {activeView === "ask" ? (
+        <>
+          <AdminAttentionDigest
+            digest={attentionDigest}
+            onAsk={() => void send("Give me a concise platform health brief. Rank the issues that need attention now, explain why each matters using current SKIMA records, and give the next human review step for each. Separate verified facts from forecasts or advisory signals.")}
+            onOpen={() => setActiveView("attention")}
+          />
+          <section className="sk-panel admin-ai-copilot">
+            <div className="sk-panel__header admin-ai-panel-head">
+              <div>
+                <p className="admin-section-kicker">Platform copilot</p>
+                <h2>Ask SKIMA</h2>
+                <p>Ask across operations, applications, support, stock, money, partner risk, coverage and AI health. Answers use the current SKIMA records your administrator account can inspect.</p>
+              </div>
+              <StatusBadge tone="success">Read only</StatusBadge>
             </div>
-            <StatusBadge tone="success">Read only</StatusBadge>
-          </div>
 
-          <div className="admin-ai-thread" aria-live="polite">
-            {messages.length === 0 ? (
-              <div className="admin-ai-empty">
-                <span><Bot aria-hidden="true" /></span>
-                <strong>Start with an operational question</strong>
-                <p>Answers are grounded in the SKIMA records your administrator account is authorized to inspect.</p>
-              </div>
-            ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={"admin-ai-message is-" + message.role}
-                >
-                  {message.role === "assistant" ? <Sparkles aria-hidden="true" /> : null}
-                  <div>{message.content}</div>
+            <div className="admin-ai-thread" aria-live="polite">
+              {messages.length === 0 ? (
+                <div className="admin-ai-empty">
+                  <span><Bot aria-hidden="true" /></span>
+                  <strong>Ask about the platform, not just this screen</strong>
+                  <p>Matty can compare live operational signals and explain what needs attention without changing any SKIMA record.</p>
                 </div>
-              ))
-            )}
+              ) : (
+                messages.map((message) => (
+                  <div key={message.id} className={"admin-ai-message is-" + message.role}>
+                    {message.role === "assistant" ? <Sparkles aria-hidden="true" /> : null}
+                    <div>{message.content}</div>
+                  </div>
+                ))
+              )}
 
-            {ask.isPending ? (
-              <div className="admin-ai-message is-assistant is-thinking">
-                <Sparkles aria-hidden="true" />
-                <div>Checking current SKIMA records…</div>
-              </div>
-            ) : null}
-          </div>
+              {ask.isPending ? (
+                <div className="admin-ai-message is-assistant is-thinking">
+                  <Sparkles aria-hidden="true" />
+                  <div>Checking current SKIMA records across the platform…</div>
+                </div>
+              ) : null}
+            </div>
 
-          <div className="admin-ai-suggestions">
+            <div className="admin-ai-suggestions">
+              {suggestions.map((suggestion) => (
+                <button type="button" key={suggestion} disabled={ask.isPending} onClick={() => void send(suggestion)}>
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+
+            {assistantError ? <div className="admin-notice is-error" role="alert">{assistantError}</div> : null}
+
+            <form
+              className="admin-ai-composer"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void send();
+              }}
+            >
+              <textarea
+                aria-label="Ask SKIMA"
+                maxLength={3000}
+                placeholder="Ask what needs attention, why it matters, or what the team should review next…"
+                value={prompt}
+                onChange={(event) => setPrompt(event.currentTarget.value)}
+              />
+              <Button icon={Send} type="submit" isLoading={ask.isPending} disabled={!prompt.trim()}>
+                Ask
+              </Button>
+            </form>
+
+            <div className="admin-ai-guardrail">
+              <ShieldCheck aria-hidden="true" />
+              <span>SKIMA Intelligence can explain and prioritize. It cannot change orders, money, stock, approvals, dispatch, permissions or partner status.</span>
+            </div>
+          </section>
+        </>
+      ) : null}
+
+      {activeView === "attention" ? (
+        <>
+          <div className="skima-resource-tabs admin-resource-tabs" role="tablist" aria-label="Attention areas">
             {[
-              "Where does shadow dispatch disagree?",
-              "Which partner risks need review?",
-              "Where is LPG demand likely to be highest?",
-            ].map((suggestion) => (
+              { key: "priority", label: "Priority brief" },
+              { key: "applications", label: "Applications & support" },
+              { key: "operations", label: "Operations & stock" },
+              { key: "money", label: "Money & partners" },
+            ].map((item) => (
               <button
+                key={item.key}
                 type="button"
-                key={suggestion}
-                disabled={ask.isPending}
-                onClick={() => void send(suggestion)}
+                role="tab"
+                aria-selected={attentionView === item.key}
+                className={attentionView === item.key ? "is-active" : undefined}
+                onClick={() => setAttentionView(item.key as AdminAttentionView)}
               >
-                {suggestion}
+                {item.label}
               </button>
             ))}
           </div>
 
-          {assistantError ? <div className="admin-notice is-error" role="alert">{assistantError}</div> : null}
-
-          <form
-            className="admin-ai-composer"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void send();
-            }}
-          >
-            <textarea
-              aria-label="Ask SKIMA"
-              maxLength={3000}
-              placeholder="Ask SKIMA about operations…"
-              value={prompt}
-              onChange={(event) => setPrompt(event.currentTarget.value)}
-            />
-            <Button
-              icon={Send}
-              type="submit"
-              isLoading={ask.isPending}
-              disabled={!prompt.trim()}
-            >
-              Ask
-            </Button>
-          </form>
-
-          <div className="admin-ai-guardrail">
-            <ShieldCheck aria-hidden="true" />
-            <span>Copilot responses cannot change orders, dispatch assignments, wallets, payouts, approvals or permissions.</span>
-          </div>
-        </div>
-
-        <div className="sk-panel admin-ai-routing">
-          <div className="sk-panel__header admin-ai-panel-head">
-            <div>
-              <p className="admin-section-kicker">Provider routing</p>
-              <h2>AI task routing</h2>
-              <p>Choose which configured AI provider and model handles each type of AI task without redeploying the app.</p>
-            </div>
-            <Button
-              icon={Cpu}
-              variant="outline"
-              requiredPermission="platform.ai.manage"
-              onClick={() => setProviderEditorOpen((current) => !current)}
-            >
-              {providerEditorOpen ? "Close provider setup" : "Provider setup"}
-            </Button>
-          </div>
-
-          {providerEditorOpen ? (
-            <ProviderSetupForm
-              api={api}
-              onSaved={async (message) => {
-                setNotice(message);
-                await queryClient.invalidateQueries({ queryKey: ["admin-ai-runtime"] });
+          {attentionView === "priority" ? (
+            <AdminAttentionDigest
+              digest={attentionDigest}
+              onAsk={() => {
+                setActiveView("ask");
+                void send("What needs attention right now across SKIMA? Rank the highest-impact issues, explain the evidence and the next human review step. Do not perform any action.");
               }}
             />
           ) : null}
 
-          <div className="admin-ai-route-list">
-            {capabilities.map((capability) => {
-              const capabilityId = recordString(capability, "id");
-              const capabilityKey = recordString(capability, "key") ?? "";
-              const route = routes.find((item) =>
-                recordString(item, "capability_id") === capabilityId &&
-                recordString(item, "status") === "active"
-              );
-              const provider = providers.find((item) =>
-                recordString(item, "id") === recordString(route, "provider_adapter_id")
-              );
-              const fallbackRoute = routes.find((item) =>
-                recordString(item, "capability_id") === capabilityId &&
-                recordString(item, "status") === "active" &&
-                recordObject(item, "config").fallback_only === true
-              );
-              const fallbackProvider = providers.find((item) =>
-                recordString(item, "id") === recordString(fallbackRoute, "provider_adapter_id")
-              );
-              const isEditing = routeEditor === capabilityKey;
+          {attentionView === "applications" ? (
+            <>
+              <ApplicationReadinessPanel assessments={applicationReviewReadiness} />
+              <SupportTriagePanel assessments={supportTriageAssessments} />
+            </>
+          ) : null}
 
+          {attentionView === "operations" ? (
+            <>
+              <StationInventoryAttentionPanel outlook={stationInventoryOutlook} />
+              <AiRuntimeHealthPanel runs={aiRuns} />
+              <OperationalInsightsPanel
+                api={api}
+                insights={insights}
+                onChanged={async () => {
+                  await queryClient.invalidateQueries({ queryKey: ["admin-ai-runtime"] });
+                }}
+              />
+            </>
+          ) : null}
+
+          {attentionView === "money" ? (
+            <>
+              <FinanceReconciliationPanel findings={financeFindings} />
+              <PartnerRiskPanel assessments={riskAssessments} />
+            </>
+          ) : null}
+        </>
+      ) : null}
+
+      {activeView === "intelligence" ? (
+        <>
+          <div className="skima-resource-tabs admin-resource-tabs" role="tablist" aria-label="Decision insight areas">
+            {[
+              { key: "growth", label: "Demand & expansion" },
+              { key: "pricing", label: "Pricing" },
+              { key: "dispatch", label: "Dispatch review" },
+            ].map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                role="tab"
+                aria-selected={intelligenceView === item.key}
+                className={intelligenceView === item.key ? "is-active" : undefined}
+                onClick={() => setIntelligenceView(item.key as AdminIntelligenceView)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          {intelligenceView === "growth" ? (
+            <>
+              <DemandForecastPanel forecasts={forecasts} />
+              <ExpansionOpportunitiesPanel opportunities={expansionOpportunities} />
+            </>
+          ) : null}
+          {intelligenceView === "pricing" ? <PricingIntelligencePanel snapshot={pricingIntelligence} /> : null}
+          {intelligenceView === "dispatch" ? <DispatchShadowPanel assessments={dispatchAssessments} /> : null}
+        </>
+      ) : null}
+
+      {activeView === "settings" ? (
+        <>
+          <section className="sk-panel admin-ai-routing">
+            <div className="sk-panel__header admin-ai-panel-head">
+              <div>
+                <p className="admin-section-kicker">AI connections</p>
+                <h2>Task routing</h2>
+                <p>Choose which configured provider and model handles each AI task. Provider keys remain generic so routing can change without an app release.</p>
+              </div>
+              <Button
+                icon={Cpu}
+                variant="outline"
+                requiredPermission="platform.ai.manage"
+                onClick={() => setProviderEditorOpen((current) => !current)}
+              >
+                {providerEditorOpen ? "Close provider setup" : "Provider setup"}
+              </Button>
+            </div>
+
+            {providerEditorOpen ? (
+              <ProviderSetupForm
+                api={api}
+                onSaved={async (message) => {
+                  setNotice(message);
+                  await queryClient.invalidateQueries({ queryKey: ["admin-ai-runtime"] });
+                }}
+              />
+            ) : null}
+
+            <div className="admin-ai-route-list">
+              {capabilities.map((capability) => {
+                const capabilityId = recordString(capability, "id");
+                const capabilityKey = recordString(capability, "key") ?? "";
+                const route = routes.find((item) =>
+                  recordString(item, "capability_id") === capabilityId &&
+                  recordString(item, "status") === "active" &&
+                  recordObject(item, "config").fallback_only !== true
+                );
+                const provider = providers.find((item) =>
+                  recordString(item, "id") === recordString(route, "provider_adapter_id")
+                );
+                const fallbackRoute = routes.find((item) =>
+                  recordString(item, "capability_id") === capabilityId &&
+                  recordString(item, "status") === "active" &&
+                  recordObject(item, "config").fallback_only === true
+                );
+                const fallbackProvider = providers.find((item) =>
+                  recordString(item, "id") === recordString(fallbackRoute, "provider_adapter_id")
+                );
+                const isEditing = routeEditor === capabilityKey;
+
+                return (
+                  <div className="admin-ai-route-row" key={capabilityKey}>
+                    <div className="admin-ai-route-copy">
+                      <span className="admin-ai-route-icon"><WandSparkles aria-hidden="true" /></span>
+                      <div>
+                        <strong>{recordString(capability, "display_name") ?? normalizeStatusLabel(capabilityKey)}</strong>
+                        <small>{recordString(capability, "description") ?? "SKIMA AI task"}</small>
+                      </div>
+                    </div>
+                    <div className="admin-ai-route-current">
+                      <StatusBadge tone={route ? "success" : "warning"}>{route ? "Connected" : "Needs setup"}</StatusBadge>
+                      <strong>{recordString(provider, "display_name") ?? "No provider"}</strong>
+                      <small>{recordString(route, "model_key") ?? "No model selected"}</small>
+                      <small>Free backup: {recordString(fallbackProvider, "display_name") ?? "Not configured"}</small>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      requiredPermission="platform.ai.manage"
+                      onClick={() => setRouteEditor(isEditing ? null : capabilityKey)}
+                    >
+                      {isEditing ? "Close" : "Change"}
+                    </Button>
+                    {isEditing ? (
+                      <div className="admin-ai-route-editor">
+                        <RouteEditor
+                          api={api}
+                          capabilityKey={capabilityKey}
+                          capabilityResponseMode={recordString(capability, "response_mode") ?? "text"}
+                          providers={providers}
+                          currentProviderKey={recordString(provider, "key")}
+                          currentModel={recordString(route, "model_key")}
+                          currentFallbackRoute={fallbackRoute ?? null}
+                          onSaved={async () => {
+                            setRouteEditor(null);
+                            setNotice((recordString(capability, "display_name") ?? "AI task") + " routing updated.");
+                            await queryClient.invalidateQueries({ queryKey: ["admin-ai-runtime"] });
+                          }}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <AiUsageGovernorPanel
+            api={api}
+            governor={usageGovernor}
+            onChanged={async (message) => {
+              setNotice(message);
+              await queryClient.invalidateQueries({ queryKey: ["admin-ai-runtime"] });
+            }}
+          />
+        </>
+      ) : null}
+    </>
+  );
+
+}
+
+function AdminAttentionDigest(props: {
+  readonly digest: PlatformRecord;
+  readonly onAsk: () => void;
+  readonly onOpen?: () => void;
+}) {
+  const priorityAreas = recordArray(props.digest, "priorityAreas");
+  const totalSignals = recordNumber(props.digest, "totalSignals");
+  return (
+    <section className="sk-panel">
+      <div className="sk-panel__header admin-ai-panel-head">
+        <div>
+          <p className="admin-section-kicker">Current platform attention</p>
+          <h2>What needs attention</h2>
+          <p>Deterministic SKIMA checks combine applications, support, finance, partner risk, stock, operational exceptions and recent AI task health before Matty explains the picture.</p>
+        </div>
+        <StatusBadge tone={totalSignals ? "warning" : "success"}>
+          {totalSignals ? String(Math.round(totalSignals)) + " signals" : "No material signal"}
+        </StatusBadge>
+      </div>
+      <div className="sk-panel__body">
+        {priorityAreas.length === 0 ? (
+          <div className="admin-empty-state">
+            <CheckCircle2 aria-hidden="true" />
+            <strong>No material attention signal is open</strong>
+            <p>SKIMA has not surfaced a current application, support, finance, partner, stock, operations or AI-runtime issue in the available admin records.</p>
+          </div>
+        ) : (
+          <div className="skima-grid skima-grid--two">
+            {priorityAreas.slice(0, 6).map((area) => {
+              const key = recordString(area, "key") ?? JSON.stringify(area);
+              const severity = recordString(area, "severity") ?? "warning";
               return (
-                <div className="admin-ai-route-row" key={capabilityKey}>
-                  <div className="admin-ai-route-copy">
-                    <span className="admin-ai-route-icon"><WandSparkles aria-hidden="true" /></span>
-                    <div>
-                      <strong>{recordString(capability, "display_name") ?? normalizeStatusLabel(capabilityKey)}</strong>
-                      <small>{recordString(capability, "description") ?? "SKIMA AI capability"}</small>
-                    </div>
+                <article className="admin-summary-row" key={key}>
+                  <div>
+                    <strong>{recordString(area, "label") ?? "Needs review"}</strong>
+                    <p>{recordString(area, "summary") ?? "Review the supporting SKIMA records."}</p>
                   </div>
-                  <div className="admin-ai-route-current">
-                    <StatusBadge tone={route ? "success" : "warning"}>
-                      {route ? "Active" : "Unrouted"}
-                    </StatusBadge>
-                    <strong>{recordString(provider, "display_name") ?? "No provider"}</strong>
-                    <small>{recordString(route, "model_key") ?? "No model selected"}</small>
-                    <small>
-                      Free fallback: {recordString(fallbackProvider, "display_name") ?? "Not configured"}
-                      {fallbackRoute ? " · " + (recordString(fallbackRoute, "model_key") ?? "model") : ""}
-                    </small>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    requiredPermission="platform.ai.manage"
-                    onClick={() => setRouteEditor(isEditing ? null : capabilityKey)}
-                  >
-                    {isEditing ? "Close" : "Change"}
-                  </Button>
-
-                  {isEditing ? (
-                    <div className="admin-ai-route-editor">
-                      <RouteEditor
-                        api={api}
-                        capabilityKey={capabilityKey}
-                        capabilityResponseMode={recordString(capability, "response_mode") ?? "text"}
-                        providers={providers}
-                        currentProviderKey={recordString(provider, "key")}
-                        currentModel={recordString(route, "model_key")}
-                        currentFallbackRoute={fallbackRoute ?? null}
-                        onSaved={async () => {
-                          setRouteEditor(null);
-                          setNotice(
-                            (recordString(capability, "display_name") ?? "AI capability") +
-                            " route updated.",
-                          );
-                          await queryClient.invalidateQueries({ queryKey: ["admin-ai-runtime"] });
-                        }}
-                      />
-                    </div>
-                  ) : null}
-                </div>
+                  <StatusBadge tone={severity === "critical" ? "danger" : severity === "info" ? "info" : "warning"}>
+                    {Math.round(recordNumber(area, "count"))}
+                  </StatusBadge>
+                </article>
               );
             })}
           </div>
+        )}
+      </div>
+      <div className="sk-panel__footer skima-action-row">
+        <Button icon={Sparkles} onClick={props.onAsk}>Ask SKIMA for the brief</Button>
+        {props.onOpen ? <Button variant="outline" onClick={props.onOpen}>Open attention workspace</Button> : null}
+      </div>
+    </section>
+  );
+}
+
+function ApplicationReadinessPanel(props: { readonly assessments: readonly PlatformRecord[] }) {
+  const rows = [...props.assessments].sort((left, right) =>
+    recordNumber(right, "reviewAgeHours") - recordNumber(left, "reviewAgeHours")
+  );
+  const waitingOnSkima = rows.filter((row) => row.waitingOnSkima === true);
+  const decisionReady = rows.filter((row) => row.decisionReady === true);
+  return (
+    <section className="sk-panel">
+      <div className="sk-panel__header admin-ai-panel-head">
+        <div>
+          <p className="admin-section-kicker">Application review</p>
+          <h2>Applications waiting on SKIMA</h2>
+          <p>Shows deterministic readiness and blockers. Final approval or rejection remains a human application-review action.</p>
         </div>
-      </section>
+        <StatusBadge tone={waitingOnSkima.length ? "warning" : "success"}>
+          {waitingOnSkima.length ? String(waitingOnSkima.length) + " waiting" : "Clear"}
+        </StatusBadge>
+      </div>
+      <div className="sk-panel__body">
+        {rows.length === 0 ? <p className="skima-muted">No application review signal is available.</p> : rows.slice(0, 12).map((row) => (
+          <div className="admin-summary-row" key={recordString(row, "applicationId") ?? JSON.stringify(row)}>
+            <div>
+              <strong>{recordString(row, "applicationTypeName") ?? "Partner application"}</strong>
+              <p>{recordString(row, "nextReviewAction") ?? "Review the canonical application workflow."}</p>
+              <small>{formatForecastNumber(recordNumber(row, "reviewAgeHours"), 0)} hours in review · {Math.round(recordNumber(row, "approvalBlockerCount"))} blockers</small>
+            </div>
+            <StatusBadge tone={row.decisionReady === true ? "success" : row.waitingOnSkima === true ? "warning" : "neutral"}>
+              {row.decisionReady === true ? "Decision ready" : row.waitingOnSkima === true ? "SKIMA review" : "Waiting"}
+            </StatusBadge>
+          </div>
+        ))}
+      </div>
+      {decisionReady.length ? <div className="sk-panel__footer"><small>{decisionReady.length} application{decisionReady.length === 1 ? " is" : "s are"} ready for a human final decision.</small></div> : null}
+    </section>
+  );
+}
 
-      <AiUsageGovernorPanel
-        api={api}
-        governor={usageGovernor}
-        onChanged={async (message) => {
-          setNotice(message);
-          await queryClient.invalidateQueries({ queryKey: ["admin-ai-runtime"] });
-        }}
-      />
+function SupportTriagePanel(props: { readonly assessments: readonly PlatformRecord[] }) {
+  const rows = [...props.assessments].sort((left, right) => recordNumber(right, "priority_score") - recordNumber(left, "priority_score"));
+  return (
+    <section className="sk-panel">
+      <div className="sk-panel__header admin-ai-panel-head">
+        <div>
+          <p className="admin-section-kicker">Customer support</p>
+          <h2>Support cases needing attention</h2>
+          <p>Prioritizes open complaints using configured severity, age and related-case signals. Triage never resolves a case or changes money or partner status.</p>
+        </div>
+        <StatusBadge tone={rows.length ? "warning" : "success"}>{rows.length ? String(rows.length) + " elevated" : "Clear"}</StatusBadge>
+      </div>
+      <div className="sk-panel__body">
+        {rows.length === 0 ? <p className="skima-muted">No elevated support triage signal is open.</p> : rows.slice(0, 12).map((row) => {
+          const evidence = recordObject(row, "evidence");
+          const priority = recordString(row, "priority_level") ?? "elevated";
+          const sla = recordString(row, "sla_status") ?? "on_track";
+          return (
+            <div className="admin-summary-row" key={recordString(row, "complaint_id") ?? JSON.stringify(row)}>
+              <div>
+                <strong>{normalizeStatusLabel(recordString(evidence, "complaintCategory") ?? "Support case")}</strong>
+                <p>{recordString(row, "recommended_action") ?? "Review the complaint with its canonical SKIMA records."}</p>
+                <small>{normalizeStatusLabel(sla)} · {Math.round(recordNumber(row, "related_open_cases"))} related open case(s)</small>
+              </div>
+              <StatusBadge tone={priority === "critical" ? "danger" : priority === "urgent" ? "warning" : "info"}>{normalizeStatusLabel(priority)}</StatusBadge>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
-      <DemandForecastPanel forecasts={forecasts} />
+function StationInventoryAttentionPanel(props: { readonly outlook: readonly PlatformRecord[] }) {
+  const rows = props.outlook.filter((row) => (recordString(row, "pressureLevel") ?? "normal") !== "normal");
+  return (
+    <section className="sk-panel">
+      <div className="sk-panel__header admin-ai-panel-head">
+        <div>
+          <p className="admin-section-kicker">Station operations</p>
+          <h2>Stock & capacity attention</h2>
+          <p>Combines canonical stock state with deterministic demand estimates. It assumes no replenishment and does not predict supplier delivery.</p>
+        </div>
+        <StatusBadge tone={rows.length ? "warning" : "success"}>{rows.length ? String(rows.length) + " stations" : "No pressure"}</StatusBadge>
+      </div>
+      <div className="sk-panel__body">
+        {rows.length === 0 ? <p className="skima-muted">No station currently has an elevated stock or capacity signal.</p> : rows.slice(0, 12).map((row) => {
+          const level = recordString(row, "pressureLevel") ?? "attention";
+          return (
+            <div className="admin-summary-row" key={recordString(row, "stationBranchId") ?? JSON.stringify(row)}>
+              <div>
+                <strong>{recordString(row, "stationDisplayName") ?? "Station"}</strong>
+                <p>{recordString(row, "recommendedAction") ?? "Review the current station stock and capacity records."}</p>
+                <small>{row.depletionEstimateAvailable === true ? formatForecastNumber(recordNumber(row, "coverageDays"), 1) + " estimated coverage days" : "Depletion estimate withheld until stock data is trustworthy"}</small>
+              </div>
+              <StatusBadge tone={level === "critical" ? "danger" : level === "urgent" ? "warning" : "info"}>{normalizeStatusLabel(level)}</StatusBadge>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
-      <ExpansionOpportunitiesPanel opportunities={expansionOpportunities} />
-
-      <PricingIntelligencePanel snapshot={pricingIntelligence} />
-
-      <DispatchShadowPanel assessments={dispatchAssessments} />
-
-      <FinanceReconciliationPanel findings={financeFindings} />
-
-      <PartnerRiskPanel assessments={riskAssessments} />
-
-      <OperationalInsightsPanel
-        api={api}
-        insights={insights}
-        onChanged={async () => {
-          await queryClient.invalidateQueries({ queryKey: ["admin-ai-runtime"] });
-        }}
-      />
-    </>
+function AiRuntimeHealthPanel(props: { readonly runs: readonly PlatformRecord[] }) {
+  const failed = props.runs.filter((run) => ["failed", "error"].includes((recordString(run, "status") ?? "").toLowerCase()));
+  const pending = props.runs.filter((run) => ["queued", "pending", "processing", "running"].includes((recordString(run, "status") ?? "").toLowerCase()));
+  return (
+    <section className="sk-panel">
+      <div className="sk-panel__header admin-ai-panel-head">
+        <div>
+          <p className="admin-section-kicker">AI runtime health</p>
+          <h2>Recent AI task health</h2>
+          <p>Shows recent task execution state so provider or runtime failures are visible as an operational issue instead of silently appearing as a weak answer.</p>
+        </div>
+        <StatusBadge tone={failed.length ? "danger" : pending.length ? "warning" : "success"}>{failed.length ? String(failed.length) + " failed" : pending.length ? String(pending.length) + " running" : "Healthy"}</StatusBadge>
+      </div>
+      <div className="sk-panel__body">
+        {failed.length === 0 ? <p className="skima-muted">No recent AI task failure appears in the current runtime window.</p> : failed.slice(0, 10).map((run) => (
+          <div className="admin-summary-row" key={recordString(run, "id") ?? JSON.stringify(run)}>
+            <div>
+              <strong>{normalizeStatusLabel(recordString(run, "subject_type") ?? "AI task")}</strong>
+              <p>{normalizeStatusLabel(recordString(run, "source") ?? "SKIMA AI")}</p>
+            </div>
+            <StatusBadge tone="danger">Failed</StatusBadge>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
