@@ -1,0 +1,32 @@
+.money-v2 {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.money-v2 .sk-panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.money-v2__advanced {
+  border: 1px solid var(--sk-border, rgba(148, 163, 184, 0.22));
+  border-radius: 1rem;
+  padding: 0.9rem;
+}
+
+.money-v2__advanced > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.money-v2__advanced[open] > summary {
+  margin-bottom: 0.9rem;
+}
+
+@media (max-width: 720px) {
+  .money-v2 .sk-panel,
+  .money-v2__advanced {
+    overflow-x: auto;
+  }
+}
