@@ -366,6 +366,24 @@ Deno.test("text AI runtime is transport-driven rather than provider-name-driven"
   );
 });
 
+Deno.test("Cloudflare cylinder image requests stay within the current Workers AI schema", () => {
+  assertIncludes(
+    workerSource,
+    'steps: readIntegerEnv("CLOUDFLARE_AI_STEPS", 8, 1, 8)',
+    "Cloudflare image requests must retain bounded inference steps",
+  );
+  assertNotIncludes(
+    workerSource,
+    "seed: Math.floor(Math.random() * 2_147_483_647)",
+    "the current FLUX schema rejects the legacy seed field",
+  );
+  assertIncludes(
+    workerSource,
+    'resolveImageProvider(supabase, "ai.lpg.cylinder.presentation")',
+    "cylinder generation must continue through the configured provider route",
+  );
+});
+
 Deno.test("existing cylinder and driver image AI uses configured capability routes", () => {
   assertIncludes(
     workerSource,
