@@ -4,6 +4,7 @@ import { IntelligenceWorkspaceRouter } from "../features/intelligence/Intelligen
 import { MoneyWorkspaceRouter } from "../features/money/MoneyWorkspaceRouter";
 import { OperationsWorkspaceRouter } from "../features/operations/OperationsWorkspaceRouter";
 import { PartnersWorkspaceRouter } from "../features/partners/PartnersWorkspaceRouter";
+import { PlatformWorkspaceRouter } from "../features/platform/PlatformWorkspaceRouter";
 import { ServicesWorkspaceRouter } from "../features/services/ServicesWorkspaceRouter";
 import { toLegacyAdminWorkspacePath } from "./admin-v2-navigation";
 
@@ -33,6 +34,10 @@ export function AdminV2WorkspaceRouter(props: {
 
   if (props.route === "/experience" || props.route.startsWith("/experience/")) {
     return <ExperienceWorkspaceRouter route={props.route} onNavigate={props.onNavigate} />;
+  }
+
+  if (props.route === "/platform" || props.route.startsWith("/platform/")) {
+    return <PlatformWorkspaceRouter route={props.route} onNavigate={props.onNavigate} />;
   }
 
   return (
