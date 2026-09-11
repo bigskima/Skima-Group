@@ -16,6 +16,7 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(resolveAdminPath("/revenue")).toBe("/money/revenue");
     expect(resolveAdminPath("/stations/demo-station")).toBe("/partners/stations/demo-station");
     expect(resolveAdminPath("/utility-billing")).toBe("/services/utility-billing");
+    expect(resolveAdminPath("/ai")).toBe("/intelligence/ask");
   });
 
   it("bridges V2 routes back to the current domain workspace during migration", () => {
@@ -26,6 +27,7 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(toLegacyAdminWorkspacePath("/operations/coverage")).toBe("/coverage");
     expect(toLegacyAdminWorkspacePath("/services/utility-billing")).toBe("/utility-billing");
     expect(toLegacyAdminWorkspacePath("/services/catalog")).toBe("/catalog");
+    expect(toLegacyAdminWorkspacePath("/intelligence/ask")).toBe("/ai");
   });
 
   it("builds one global navigation item per visible category", () => {
@@ -37,6 +39,7 @@ describe("SKIMA Admin V2 navigation", () => {
       { key: "finance", label: "Balances", href: "/finance", icon: "finance" },
       { key: "billing", label: "Utility Billing", href: "/utility-billing", icon: "billing" },
       { key: "catalog", label: "Services", href: "/catalog", icon: "catalog" },
+      { key: "ai", label: "SKIMA Intelligence", href: "/ai", icon: "ai" },
     ].map(toAdminV2NavigationItem);
 
     const categories = buildAdminCategoryNavigation(items);
@@ -46,11 +49,13 @@ describe("SKIMA Admin V2 navigation", () => {
       "operations",
       "money",
       "services",
+      "intelligence",
     ]);
     expect(categories.find((item) => item.key === "partners")?.href).toBe("/partners");
     expect(categories.find((item) => item.key === "operations")?.href).toBe("/operations");
     expect(categories.find((item) => item.key === "money")?.href).toBe("/money");
     expect(categories.find((item) => item.key === "services")?.href).toBe("/services");
+    expect(categories.find((item) => item.key === "intelligence")?.href).toBe("/intelligence");
   });
 
   it("keeps migrated category roots as real landing screens", () => {
@@ -58,6 +63,7 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(resolveAdminPath("/operations")).toBe("/operations");
     expect(resolveAdminPath("/money")).toBe("/money");
     expect(resolveAdminPath("/services")).toBe("/services");
+    expect(resolveAdminPath("/intelligence")).toBe("/intelligence");
   });
 
   it("builds focused People and Partners navigation from existing permissions", () => {
@@ -133,10 +139,22 @@ describe("SKIMA Admin V2 navigation", () => {
     ]);
   });
 
+  it("gives SKIMA Intelligence a category landing without duplicating its governed workspace", () => {
+    const items: NavigationItem[] = [
+      { key: "ai", label: "SKIMA Intelligence", href: "/ai", icon: "ai" },
+    ].map(toAdminV2NavigationItem);
+
+    expect(getAdminWorkspaceNavigation("intelligence", items).map((item) => item.href)).toEqual([
+      "/intelligence",
+      "/intelligence/ask",
+    ]);
+  });
+
   it("resolves the active workspace from nested URLs", () => {
     expect(getAdminWorkspaceForRoute("/partners/stations/123").key).toBe("partners");
     expect(getAdminWorkspaceForRoute("/operations/coverage").key).toBe("operations");
     expect(getAdminWorkspaceForRoute("/money/pricing/drivers").key).toBe("money");
     expect(getAdminWorkspaceForRoute("/services/availability").key).toBe("services");
+    expect(getAdminWorkspaceForRoute("/intelligence/ask").key).toBe("intelligence");
   });
 });

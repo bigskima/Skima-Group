@@ -195,6 +195,11 @@ const servicesScreenLabels: Readonly<Record<string, string>> = {
   "/services/availability": "Service availability",
 };
 
+const intelligenceScreenLabels: Readonly<Record<string, string>> = {
+  "/intelligence": "SKIMA Intelligence overview",
+  "/intelligence/ask": "SKIMA Intelligence",
+};
+
 export function toAdminV2NavigationItem(item: NavigationItem): NavigationItem {
   return {
     ...item,
@@ -210,7 +215,7 @@ export function buildAdminCategoryNavigation(items: readonly NavigationItem[]): 
 
     if (!firstVisibleScreen) return [];
 
-    const hasLanding = ["money", "partners", "operations", "services"].includes(workspace.key);
+    const hasLanding = ["money", "partners", "operations", "services", "intelligence"].includes(workspace.key);
 
     return [{
       key: workspace.key,
@@ -229,6 +234,7 @@ export function getAdminWorkspaceNavigation(
   if (workspaceKey === "partners") return buildPartnersWorkspaceNavigation(items);
   if (workspaceKey === "operations") return buildOperationsWorkspaceNavigation(items);
   if (workspaceKey === "services") return buildServicesWorkspaceNavigation(items);
+  if (workspaceKey === "intelligence") return buildIntelligenceWorkspaceNavigation(items);
 
   const workspace = adminWorkspaceDefinitions.find((candidate) => candidate.key === workspaceKey);
   if (!workspace) return [];
@@ -251,6 +257,7 @@ export function getAdminScreenLabel(route: string, items: readonly NavigationIte
   if (partnerScreenLabels[path]) return partnerScreenLabels[path];
   if (operationsScreenLabels[path]) return operationsScreenLabels[path];
   if (servicesScreenLabels[path]) return servicesScreenLabels[path];
+  if (intelligenceScreenLabels[path]) return intelligenceScreenLabels[path];
 
   const exact = items.find((item) => item.href === path);
   if (exact) return exact.label;
@@ -269,7 +276,7 @@ export function resolveAdminPath(rawPath: string): string {
     return `/partners/stations/${path.slice("/stations/".length)}`;
   }
 
-  if (path === "/operations" || path === "/services") {
+  if (path === "/operations" || path === "/services" || path === "/intelligence") {
     return path;
   }
 
@@ -437,4 +444,25 @@ function buildServicesWorkspaceNavigation(items: readonly NavigationItem[]): rea
   }
 
   return navigation;
+}
+
+function buildIntelligenceWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
+  const intelligence = items.find((item) => item.key === "ai");
+
+  if (!intelligence) return [];
+
+  return [
+    {
+      key: "intelligence-overview",
+      label: "Overview",
+      href: "/intelligence",
+      icon: "overview",
+      requiredPermissions: intelligence.requiredPermissions,
+    },
+    {
+      ...intelligence,
+      label: "Intelligence workspace",
+      href: "/intelligence/ask",
+    },
+  ];
 }
