@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   CheckCircle2,
   ClipboardList,
   Eye,
@@ -12,6 +13,7 @@ import {
   RefreshCcw,
   ShieldCheck,
   UserCheck,
+  UsersRound,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -42,6 +44,7 @@ import {
   type PlatformRecord,
   useGatewayRecords,
 } from "./admin-gateway-data";
+import { AdminWorkspaceIntro, AdminWorkspaceSections } from "./admin-workspace-sections";
 import { useSessionState } from "./session";
 
 const MutationIdSchema = z.string().uuid();
@@ -126,6 +129,9 @@ type ReviewCommand =
     readonly internalNotes: string | null;
   };
 
+type ApplicationsLayer = "queue" | "review";
+type ReviewLayer = "applicant" | "documents" | "decision";
+
 export function AdminApplicationsWorkspace() {
   const sessionState = useSessionState();
   const queryClient = useQueryClient();
@@ -137,6 +143,7 @@ export function AdminApplicationsWorkspace() {
     "/runtime/documents/requirements",
   );
   const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
+  const [layer, setLayer] = useState<ApplicationsLayer>("queue");
   const [dialogState, setDialogState] = useState<ReviewDialogState | null>(null);
   const [operationNotice, setOperationNotice] = useState<string | null>(null);
 
@@ -151,7 +158,7 @@ export function AdminApplicationsWorkspace() {
     () =>
       applicationRecords.find((record) =>
         getRecordString(record, "id") === selectedApplicationId
-      ) ?? applicationRecords[0] ?? null,
+      ) ?? null,
     [applicationRecords, selectedApplicationId],
   );
   const selectedApplicationType = selectedApplication
@@ -165,6 +172,13 @@ export function AdminApplicationsWorkspace() {
       getRecordString(record, "application_id") === getRecordString(selectedApplication, "id")
     )
     : [];
+
+  useEffect(() => {
+    if (selectedApplicationId && !selectedApplication && !applications.isLoading) {
+      setSelectedApplicationId(null);
+      setLayer("queue");
+    }
+  }, [applications.isLoading, selectedApplication, selectedApplicationId]);
 
   const reviewAction = useMutation({
     mutationFn: (command: ReviewCommand) => executeReviewCommand(sessionState.api, command),
@@ -184,75 +198,123 @@ export function AdminApplicationsWorkspace() {
     void queryClient.invalidateQueries({ queryKey: ["gateway"] });
   };
 
+  const openApplication = (applicationId: string) => {
+    setSelectedApplicationId(applicationId);
+    setOperationNotice(null);
+    setLayer("review");
+  };
+
   return (
     <>
       <PageHeader
-        eyebrow="Partner approvals"
-        title="Applications"
-        description="Review driver and station applications, check submitted documents, request changes, and make final approval decisions."
+        eyebrow="Approvals"
+        title="Driver & Station Applications"
+        description="Work through applications in a simple review flow: choose a person, check their details and documents, then make a decision."
         actions={
           <Button icon={RefreshCcw} variant="outline" onClick={refreshAll}>
-            Refresh applications
+            Refresh
           </Button>
         }
       />
+
       <section className="skima-grid admin-application-metrics">
         <MetricTile
-          label="Waiting for review"
+          label="Waiting for you"
           value={waitingForReview}
           icon={ClipboardList}
           tone={waitingForReview ? "warning" : "success"}
         />
         <MetricTile
-          label="Documents submitted"
+          label="Files received"
           value={documents.data?.length ?? 0}
           icon={FileText}
           tone="info"
         />
         <MetricTile
-          label="Required checks"
-          value={requirements.data?.length ?? 0}
+          label="Application types"
+          value={applicationTypes.data?.length ?? 0}
           icon={ShieldCheck}
         />
       </section>
-      {operationNotice
-        ? <StatusBadge tone="success" className="skima-status-note">{operationNotice}</StatusBadge>
-        : null}
+
+      <AdminWorkspaceSections
+        compact
+        label="Application review sections"
+        activeKey={layer}
+        onChange={(key) => {
+          const next = key as ApplicationsLayer;
+          if (next === "review" && !selectedApplication) return;
+          setLayer(next);
+        }}
+        sections={[
+          {
+            key: "queue",
+            label: "Review queue",
+            description: "Choose the next application to work on.",
+            icon: ClipboardList,
+            badge: waitingForReview,
+          },
+          {
+            key: "review",
+            label: selectedApplication ? applicantDisplayName(selectedApplication) : "Current application",
+            description: selectedApplication ? "Applicant, documents and decision." : "Choose an application first.",
+            icon: UserCheck,
+            badge: selectedApplication ? selectedDocuments.length : null,
+          },
+        ]}
+      />
+
+      {operationNotice ? (
+        <StatusBadge tone="success" className="skima-status-note">{operationNotice}</StatusBadge>
+      ) : null}
       {isLoading ? <LoadingState label="Loading applications" /> : null}
-      {firstError
-        ? (
-          <ErrorState
-            title="Applications unavailable"
-            message={readErrorMessage(firstError)}
-            onRetry={refreshAll}
+      {firstError ? (
+        <ErrorState
+          title="Applications unavailable"
+          message={readErrorMessage(firstError)}
+          onRetry={refreshAll}
+        />
+      ) : null}
+
+      {!isLoading && !firstError && layer === "queue" ? (
+        <ApplicationReviewQueue
+          applications={applicationRecords}
+          applicationTypes={applicationTypes.data ?? []}
+          selectedApplicationId={selectedApplicationId}
+          onSelect={openApplication}
+        />
+      ) : null}
+
+      {!isLoading && !firstError && layer === "review" ? (
+        selectedApplication ? (
+          <ApplicationReviewPanel
+            application={selectedApplication}
+            applicationType={selectedApplicationType}
+            documents={selectedDocuments}
+            requirements={requirements.data ?? []}
+            currentUserId={sessionState.context?.user.id ?? null}
+            isSubmitting={reviewAction.isPending}
+            onBack={() => setLayer("queue")}
+            onOpenAction={(nextDialogState) => {
+              reviewAction.reset();
+              setOperationNotice(null);
+              setDialogState(nextDialogState);
+            }}
           />
-        )
-        : null}
-      {!isLoading && !firstError
-        ? (
-          <section className="skima-review-layout">
-            <ApplicationReviewQueue
-              applications={applicationRecords}
-              applicationTypes={applicationTypes.data ?? []}
-              selectedApplicationId={getRecordString(selectedApplication, "id")}
-              onSelect={setSelectedApplicationId}
+        ) : (
+          <section className="sk-panel">
+            <AdminWorkspaceIntro
+              kicker="Application review"
+              title="Choose an application first"
+              description="Open the review queue and choose the driver or station application you want to work on."
             />
-            <ApplicationReviewPanel
-              application={selectedApplication}
-              applicationType={selectedApplicationType}
-              documents={selectedDocuments}
-              requirements={requirements.data ?? []}
-              currentUserId={sessionState.context?.user.id ?? null}
-              isSubmitting={reviewAction.isPending}
-              onOpenAction={(nextDialogState) => {
-                reviewAction.reset();
-                setOperationNotice(null);
-                setDialogState(nextDialogState);
-              }}
-            />
+            <Button icon={ArrowLeft} variant="outline" onClick={() => setLayer("queue")}>
+              Open review queue
+            </Button>
           </section>
         )
-        : null}
+      ) : null}
+
       <ReviewActionDialog
         state={dialogState}
         error={reviewAction.error}
@@ -279,10 +341,11 @@ function ApplicationReviewQueue(props: {
   if (props.applications.length === 0) {
     return (
       <section className="sk-panel">
-        <div className="sk-panel__header">
-          <h2>Application list</h2>
-        </div>
-        <p className="skima-muted">No applications have been submitted yet.</p>
+        <AdminWorkspaceIntro
+          kicker="Review queue"
+          title="No applications yet"
+          description="New driver and station applications will appear here when they are submitted."
+        />
       </section>
     );
   }
@@ -292,13 +355,14 @@ function ApplicationReviewQueue(props: {
   return (
     <section className="sk-panel">
       <div className="sk-panel__header">
-        <div>
-          <h2>Application list</h2>
-          <p className="skima-muted">Select an application to review its details.</p>
-        </div>
-        <StatusBadge>{String(props.applications.length)}</StatusBadge>
+        <AdminWorkspaceIntro
+          kicker="Review queue"
+          title="Choose an application"
+          description="Applications needing attention are shown first. Open one to review only that applicant's details."
+        />
+        <StatusBadge>{String(props.applications.length)} total</StatusBadge>
       </div>
-      <div className="skima-review-queue">
+      <div className="admin-compact-card-grid">
         {orderedApplications.map((application) => {
           const applicationId = requireRecordString(application, "id");
           const applicationType = findRecordById(
@@ -316,29 +380,29 @@ function ApplicationReviewQueue(props: {
             <button
               key={applicationId}
               type="button"
-              className={`skima-review-item ${
-                applicationId === props.selectedApplicationId ? "is-active" : ""
+              className={`admin-compact-select-card${
+                applicationId === props.selectedApplicationId ? " is-active" : ""
               }`}
               onClick={() => props.onSelect(applicationId)}
             >
-              <span className="skima-review-item__header">
-                <span>
+              <span className="admin-compact-select-card__header">
+                <div>
                   <ApplicationTypeTag applicationType={applicationType} />
+                  <strong style={{ marginTop: 6 }}>{applicantName}</strong>
+                  <p>{subjectName ?? applicantEmail ?? title}</p>
+                </div>
+                <StatusBadge tone={statusTone(status)}>{friendlyApplicationStatus(status)}</StatusBadge>
+              </span>
+              <span className="admin-compact-metrics">
+                <span className="admin-compact-metric">
+                  <span>Application</span>
                   <strong>{title}</strong>
                 </span>
-                <StatusBadge tone={statusTone(status)}>{normalizeStatusLabel(status)}</StatusBadge>
-              </span>
-              <span className="skima-review-item__person">
-                <ApplicantAvatar application={application} />
-                <span>
-                  <strong>{applicantName}</strong>
-                  <small>{subjectName ?? applicantEmail ?? "Applicant details pending"}</small>
+                <span className="admin-compact-metric">
+                  <span>Received</span>
+                  <strong>{formatDate(getRecordString(application, "created_at"))}</strong>
                 </span>
               </span>
-              <p>
-                {formatShortId(applicationId)} ·{" "}
-                {formatDate(getRecordString(application, "created_at"))}
-              </p>
             </button>
           );
         })}
@@ -348,28 +412,18 @@ function ApplicationReviewQueue(props: {
 }
 
 function ApplicationReviewPanel(props: {
-  readonly application: PlatformRecord | null;
+  readonly application: PlatformRecord;
   readonly applicationType: PlatformRecord | null;
   readonly documents: readonly PlatformRecord[];
   readonly requirements: readonly PlatformRecord[];
   readonly currentUserId: string | null;
   readonly isSubmitting: boolean;
+  readonly onBack: () => void;
   readonly onOpenAction: (state: ReviewDialogState) => void;
 }) {
-  if (!props.application) {
-    return (
-      <section className="sk-panel">
-        <div className="sk-panel__header">
-          <h2>Application details</h2>
-        </div>
-        <p className="skima-muted">Choose an application to review.</p>
-      </section>
-    );
-  }
-
+  const [section, setSection] = useState<ReviewLayer>("applicant");
   const application = props.application;
   const status = getRecordString(application, "status") ?? "unknown";
-  const applicationId = requireRecordString(application, "id");
   const applicationName = getRecordString(props.applicationType, "display_name") ??
     normalizeStatusLabel(getRecordString(props.applicationType, "key") ?? "Application");
   const applicantName = applicantDisplayName(application);
@@ -388,7 +442,6 @@ function ApplicationReviewPanel(props: {
   const canRequestCorrection = status === "under_review";
   const canDecide = Boolean(props.currentUserId) &&
     ["submitted", "resubmitted", "under_review"].includes(status);
-
   const isApproved = status === "approved";
   const operationalStatus = getRecordString(application, "operational_status");
   const isOperationalActive = operationalStatus === "active";
@@ -399,139 +452,203 @@ function ApplicationReviewPanel(props: {
     <section className="sk-panel">
       <div className="sk-panel__header">
         <div>
-          <ApplicationTypeTag applicationType={props.applicationType} />
-          <h2>{applicationName}</h2>
-          <p className="skima-muted">Reference {formatShortId(applicationId)}</p>
+          <Button icon={ArrowLeft} variant="ghost" size="sm" onClick={props.onBack}>
+            Back to queue
+          </Button>
+          <div className="skima-applicant-card" style={{ marginTop: 10 }}>
+            <ApplicantAvatar application={application} size="lg" />
+            <div>
+              <p>{applicationName}</p>
+              <h2>{applicantName}</h2>
+              <small>{subjectName ?? applicantEmail ?? "Applicant details"}</small>
+            </div>
+          </div>
         </div>
-        <StatusBadge tone={statusTone(status)}>{normalizeStatusLabel(status)}</StatusBadge>
+        <StatusBadge tone={statusTone(status)}>{friendlyApplicationStatus(status)}</StatusBadge>
       </div>
-      <div className="skima-review-status-split">
-        <div>
-          <span>Application</span>
-          <strong>{normalizeStatusLabel(status)}</strong>
-          <small>Final {applicationNoun.toLowerCase()} approval is made separately from document checks.</small>
-        </div>
-        <div>
-          <span>Documents</span>
-          <strong>{approvedDocuments} of {props.documents.length} approved</strong>
-          <small>{pendingDocuments} document{pendingDocuments === 1 ? "" : "s"} still need attention.</small>
-        </div>
-      </div>
-      <div className="skima-applicant-card">
-        <ApplicantAvatar application={application} size="lg" />
-        <div>
-          <p>Applicant</p>
-          <h3>{applicantName}</h3>
-          <small>
-            {[applicantEmail, applicantPhone, subjectName].filter(Boolean).join(" • ") ||
-              "No contact details submitted yet"}
-          </small>
-        </div>
-      </div>
-      <DetailList
-        items={[
-          { label: "Applicant", value: applicantName },
+
+      <AdminWorkspaceSections
+        compact
+        label={`${applicantName} review sections`}
+        activeKey={section}
+        onChange={(key) => setSection(key as ReviewLayer)}
+        sections={[
           {
-            label: "Contact",
-            value: [applicantEmail, applicantPhone].filter(Boolean).join(" • ") || "Not provided",
-          },
-          { label: "Station / profile", value: subjectName ?? "Not provided" },
-          {
-            label: "Reviewer",
-            value: getRecordString(application, "reviewer_display_name") ?? "Not assigned",
-          },
-          { label: "Submitted", value: formatDate(getRecordString(application, "submitted_at")) },
-          {
-            label: "Live status",
-            value: isOperationalActive
-              ? "Active"
-              : isApproved
-              ? "Approved — awaiting activation"
-              : "Not active",
+            key: "applicant",
+            label: "Applicant",
+            description: "Person, contact and application details.",
+            icon: UsersRound,
           },
           {
-            label: "Application type",
-            value: normalizeStatusLabel(
-              getRecordString(props.applicationType, "application_category") ?? "Application",
-            ),
+            key: "documents",
+            label: "Documents",
+            description: "Open and review submitted files.",
+            icon: FileText,
+            badge: pendingDocuments || props.documents.length,
+          },
+          {
+            key: "decision",
+            label: "Decision & access",
+            description: "Approve, reject or manage live access.",
+            icon: CheckCircle2,
           },
         ]}
       />
-      <div className="skima-action-row">
-        <Button
-          icon={UserCheck}
-          variant="outline"
-          requiredPermission={APPLICATION_REVIEW_PERMISSION}
-          disabled={!canAssign || props.isSubmitting}
-          onClick={() => props.onOpenAction({ type: "assign", application })}
-        >
-          Start review
-        </Button>
-        <Button
-          icon={MessageSquareWarning}
-          variant="outline"
-          requiredPermission={APPLICATION_REVIEW_PERMISSION}
-          disabled={!canRequestCorrection || props.isSubmitting}
-          onClick={() => props.onOpenAction({ type: "correction", application })}
-        >
-          Ask applicant to update
-        </Button>
-        <Button
-          icon={CheckCircle2}
-          requiredPermission={APPLICATION_REVIEW_PERMISSION}
-          disabled={!canDecide || props.isSubmitting}
-          onClick={() => props.onOpenAction({ type: "approve", application })}
-        >
-          Approve {applicationNoun}
-        </Button>
-        <Button
-          icon={XCircle}
-          variant="destructive"
-          requiredPermission={APPLICATION_REVIEW_PERMISSION}
-          disabled={!canDecide || props.isSubmitting}
-          onClick={() => props.onOpenAction({ type: "reject", application })}
-        >
-          Reject {applicationNoun}
-        </Button>
-        {isApproved && !isOperationalActive && isBusinessCategory ? (
-          <Button
-            icon={Zap}
-            requiredPermission={APPLICATION_REVIEW_PERMISSION}
-            disabled={props.isSubmitting}
-            onClick={() => props.onOpenAction({ type: "activate-station", application })}
-          >
-            Activate station
-          </Button>
-        ) : null}
-        {isApproved && !isOperationalActive && isDriverCategory ? (
-          <Button
-            icon={Play}
-            requiredPermission={APPLICATION_REVIEW_PERMISSION}
-            disabled={props.isSubmitting}
-            onClick={() => props.onOpenAction({ type: "activate-driver", application })}
-          >
-            Activate driver
-          </Button>
-        ) : null}
-        {isOperationalActive ? (
-          <Button
-            icon={PowerOff}
-            variant="destructive"
-            requiredPermission={APPLICATION_REVIEW_PERMISSION}
-            disabled={props.isSubmitting}
-            onClick={() => props.onOpenAction({ type: "deactivate-partner", application })}
-          >
-            Suspend partner
-          </Button>
-        ) : null}
-      </div>
-      <DocumentReviewList
-        application={application}
-        documents={props.documents}
-        requirements={props.requirements}
-        isSubmitting={props.isSubmitting}
-        onOpenAction={props.onOpenAction}
-      />
+
+      {section === "applicant" ? (
+        <div className="admin-layer-grid">
+          <AdminWorkspaceIntro
+            kicker="Applicant"
+            title="Application details"
+            description="Check who applied and what they applied for. Documents are reviewed separately in the Documents section."
+          />
+          <DetailList
+            items={[
+              { label: "Name", value: applicantName },
+              {
+                label: "Contact",
+                value: [applicantEmail, applicantPhone].filter(Boolean).join(" • ") || "Not provided",
+              },
+              { label: "Station / driver profile", value: subjectName ?? "Not provided" },
+              {
+                label: "Handled by",
+                value: getRecordString(application, "reviewer_display_name") ?? "Not assigned yet",
+              },
+              { label: "Submitted", value: formatDate(getRecordString(application, "submitted_at")) },
+              { label: "Application", value: applicationName },
+              {
+                label: "Live access",
+                value: isOperationalActive
+                  ? "Active"
+                  : isApproved
+                  ? "Approved — waiting to be activated"
+                  : "Not active",
+              },
+            ]}
+          />
+          {canAssign ? (
+            <div className="skima-action-row">
+              <Button
+                icon={UserCheck}
+                requiredPermission={APPLICATION_REVIEW_PERMISSION}
+                disabled={props.isSubmitting}
+                onClick={() => props.onOpenAction({ type: "assign", application })}
+              >
+                Take this application
+              </Button>
+              <Button
+                icon={MessageSquareWarning}
+                variant="outline"
+                requiredPermission={APPLICATION_REVIEW_PERMISSION}
+                disabled={!canRequestCorrection || props.isSubmitting}
+                onClick={() => props.onOpenAction({ type: "correction", application })}
+              >
+                Request changes
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {section === "documents" ? (
+        <DocumentReviewList
+          application={application}
+          documents={props.documents}
+          requirements={props.requirements}
+          isSubmitting={props.isSubmitting}
+          onOpenAction={props.onOpenAction}
+        />
+      ) : null}
+
+      {section === "decision" ? (
+        <div className="admin-layer-grid">
+          <div className="skima-review-status-split">
+            <div>
+              <span>Application</span>
+              <strong>{friendlyApplicationStatus(status)}</strong>
+              <small>Review the applicant and documents before making the final decision.</small>
+            </div>
+            <div>
+              <span>Documents</span>
+              <strong>{approvedDocuments} of {props.documents.length} approved</strong>
+              <small>{pendingDocuments ? `${pendingDocuments} still need attention` : "No documents are waiting for review"}.</small>
+            </div>
+          </div>
+
+          <div className="admin-setting-section">
+            <h3>Application decision</h3>
+            <p>Approve when the application is acceptable, request changes when information is missing, or reject when it cannot proceed.</p>
+            <div className="skima-action-row" style={{ marginTop: 12 }}>
+              <Button
+                icon={CheckCircle2}
+                requiredPermission={APPLICATION_REVIEW_PERMISSION}
+                disabled={!canDecide || props.isSubmitting}
+                onClick={() => props.onOpenAction({ type: "approve", application })}
+              >
+                Approve {applicationNoun}
+              </Button>
+              <Button
+                icon={MessageSquareWarning}
+                variant="outline"
+                requiredPermission={APPLICATION_REVIEW_PERMISSION}
+                disabled={!canRequestCorrection || props.isSubmitting}
+                onClick={() => props.onOpenAction({ type: "correction", application })}
+              >
+                Request changes
+              </Button>
+              <Button
+                icon={XCircle}
+                variant="destructive"
+                requiredPermission={APPLICATION_REVIEW_PERMISSION}
+                disabled={!canDecide || props.isSubmitting}
+                onClick={() => props.onOpenAction({ type: "reject", application })}
+              >
+                Reject {applicationNoun}
+              </Button>
+            </div>
+          </div>
+
+          {isApproved ? (
+            <div className="admin-setting-section">
+              <h3>Live access</h3>
+              <p>Approval and live access are separate. Activate an approved partner only when they are ready to operate on SKIMA.</p>
+              <div className="skima-action-row" style={{ marginTop: 12 }}>
+                {!isOperationalActive && isBusinessCategory ? (
+                  <Button
+                    icon={Zap}
+                    requiredPermission={APPLICATION_REVIEW_PERMISSION}
+                    disabled={props.isSubmitting}
+                    onClick={() => props.onOpenAction({ type: "activate-station", application })}
+                  >
+                    Allow station to go live
+                  </Button>
+                ) : null}
+                {!isOperationalActive && isDriverCategory ? (
+                  <Button
+                    icon={Play}
+                    requiredPermission={APPLICATION_REVIEW_PERMISSION}
+                    disabled={props.isSubmitting}
+                    onClick={() => props.onOpenAction({ type: "activate-driver", application })}
+                  >
+                    Allow driver to receive jobs
+                  </Button>
+                ) : null}
+                {isOperationalActive ? (
+                  <Button
+                    icon={PowerOff}
+                    variant="destructive"
+                    requiredPermission={APPLICATION_REVIEW_PERMISSION}
+                    disabled={props.isSubmitting}
+                    onClick={() => props.onOpenAction({ type: "deactivate-partner", application })}
+                  >
+                    Pause live access
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -547,131 +664,134 @@ function DocumentReviewList(props: {
   const canReviewDocuments = applicationStatus === "under_review";
 
   return (
-    <section className="sk-panel">
+    <div className="admin-layer-grid">
       <div className="sk-panel__header">
-        <div>
-          <h2>Submitted documents</h2>
-          <p className="skima-muted">Review each document before making the final application decision.</p>
-        </div>
-        <StatusBadge>{String(props.documents.length)}</StatusBadge>
+        <AdminWorkspaceIntro
+          kicker="Documents"
+          title="Submitted files"
+          description="Open each file, check it, and record only the decision needed for that file."
+        />
+        <StatusBadge>{String(props.documents.length)} files</StatusBadge>
       </div>
       {!canReviewDocuments && props.documents.length > 0 ? (
         <p className="admin-dialog-guidance">
-          Start the application review before approving, rejecting, or asking for a new document.
+          Take this application first before approving, rejecting, or asking for a replacement document.
         </p>
       ) : null}
-      {props.documents.length === 0
-        ? <p className="skima-muted">No documents have been submitted for this application.</p>
-        : (
-          <div className="skima-document-list">
-            {props.documents.map((document) => {
-              const documentId = requireRecordString(document, "id");
-              const status = getRecordString(document, "status") ?? "unknown";
-              const requirement = findRecordById(
-                props.requirements,
-                getRecordString(document, "requirement_id"),
-              );
-              const title = getRecordString(requirement, "display_name") ?? "Document";
-              const reqKey = getRecordString(requirement, "key") ?? "";
-              const fileName = getNestedRecordString(document, ["metadata", "originalFileName"]) ??
-                getNestedRecordString(document, ["media_assets", "metadata", "originalFileName"]) ??
-                getRecordString(document, "storage_path")?.split("/").at(-1) ??
-                "Uploaded file";
+      {props.documents.length === 0 ? (
+        <div className="admin-setting-section">
+          <h3>No documents submitted</h3>
+          <p>This applicant has not submitted any documents for this application yet.</p>
+        </div>
+      ) : (
+        <div className="admin-compact-card-grid">
+          {props.documents.map((document) => {
+            const documentId = requireRecordString(document, "id");
+            const status = getRecordString(document, "status") ?? "unknown";
+            const requirement = findRecordById(
+              props.requirements,
+              getRecordString(document, "requirement_id"),
+            );
+            const title = getRecordString(requirement, "display_name") ?? "Document";
+            const reqKey = getRecordString(requirement, "key") ?? "";
+            const fileName = getNestedRecordString(document, ["metadata", "originalFileName"]) ??
+              getNestedRecordString(document, ["media_assets", "metadata", "originalFileName"]) ??
+              getRecordString(document, "storage_path")?.split("/").at(-1) ??
+              "Uploaded file";
 
-              return (
-                <article className="skima-document-row" key={documentId}>
-                  <div className="skima-document-row__header">
-                    <strong>{title}</strong>
-                    <StatusBadge tone={statusTone(status)}>
-                      {normalizeStatusLabel(status)}
-                    </StatusBadge>
+            return (
+              <article className="admin-detail-card" key={documentId}>
+                <div className="sk-panel__header">
+                  <div>
+                    <h3>{title}</h3>
+                    <p className="skima-muted" style={{ margin: 0, fontSize: 11 }}>{fileName}</p>
                   </div>
-                  <DetailList
-                    items={[
-                      {
-                        label: "File type",
-                        value: getRecordString(document, "content_type") ?? "Not provided",
-                      },
-                      { label: "File", value: fileName },
-                      { label: "Submitted", value: formatDate(getRecordString(document, "submitted_at")) },
-                      {
-                        label: "Review note",
-                        value: getRecordString(document, "decision_reason") ?? "No review note yet",
-                      },
-                      { label: "Reference", value: formatShortId(documentId) },
-                    ]}
-                  />
-                  <div className="skima-action-row">
-                    <DocumentViewButton document={document} />
+                  <StatusBadge tone={statusTone(status)}>{friendlyDocumentStatus(status)}</StatusBadge>
+                </div>
+                <DetailList
+                  items={[
+                    {
+                      label: "File format",
+                      value: friendlyFileType(getRecordString(document, "content_type")),
+                    },
+                    { label: "Received", value: formatDate(getRecordString(document, "submitted_at")) },
+                    {
+                      label: "Last review note",
+                      value: getRecordString(document, "decision_reason") ?? "No note yet",
+                    },
+                  ]}
+                />
+                <div className="skima-action-row" style={{ marginTop: 12 }}>
+                  <DocumentViewButton document={document} />
+                  <Button
+                    icon={FileCheck2}
+                    variant="outline"
+                    size="sm"
+                    requiredPermission={DOCUMENT_REVIEW_PERMISSION}
+                    disabled={!canReviewDocuments || props.isSubmitting}
+                    onClick={() =>
+                      props.onOpenAction({
+                        type: "document-approve",
+                        application: props.application,
+                        document,
+                      })}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    icon={MessageSquareWarning}
+                    variant="outline"
+                    size="sm"
+                    requiredPermission={DOCUMENT_REVIEW_PERMISSION}
+                    disabled={!canReviewDocuments || props.isSubmitting}
+                    onClick={() =>
+                      props.onOpenAction({
+                        type: "document-replacement",
+                        application: props.application,
+                        document,
+                      })}
+                  >
+                    Request replacement
+                  </Button>
+                  {status === "approved" && reqKey.startsWith("station.photo.") ? (
                     <Button
-                      icon={FileCheck2}
+                      icon={Image}
                       variant="outline"
                       size="sm"
-                      requiredPermission={DOCUMENT_REVIEW_PERMISSION}
-                      disabled={!canReviewDocuments || props.isSubmitting}
+                      requiredPermission={APPLICATION_REVIEW_PERMISSION}
+                      disabled={props.isSubmitting}
                       onClick={() =>
                         props.onOpenAction({
-                          type: "document-approve",
+                          type: "approve-public-media",
                           application: props.application,
                           document,
                         })}
                     >
-                      Approve
+                      Use on station profile
                     </Button>
-                    <Button
-                      icon={MessageSquareWarning}
-                      variant="outline"
-                      size="sm"
-                      requiredPermission={DOCUMENT_REVIEW_PERMISSION}
-                      disabled={!canReviewDocuments || props.isSubmitting}
-                      onClick={() =>
-                        props.onOpenAction({
-                          type: "document-replacement",
-                          application: props.application,
-                          document,
-                        })}
-                    >
-                      Ask for new document
-                    </Button>
-                    {status === "approved" && reqKey.startsWith("station.photo.") ? (
-                      <Button
-                        icon={Image}
-                        variant="outline"
-                        size="sm"
-                        requiredPermission={APPLICATION_REVIEW_PERMISSION}
-                        disabled={props.isSubmitting}
-                        onClick={() =>
-                          props.onOpenAction({
-                            type: "approve-public-media",
-                            application: props.application,
-                            document,
-                          })}
-                      >
-                        Publish photo
-                      </Button>
-                    ) : null}
-                    <Button
-                      icon={XCircle}
-                      variant="destructive"
-                      size="sm"
-                      requiredPermission={DOCUMENT_REVIEW_PERMISSION}
-                      disabled={!canReviewDocuments || props.isSubmitting}
-                      onClick={() =>
-                        props.onOpenAction({
-                          type: "document-reject",
-                          application: props.application,
-                          document,
-                        })}
-                    >
-                      Reject
-                    </Button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-    </section>
+                  ) : null}
+                  <Button
+                    icon={XCircle}
+                    variant="destructive"
+                    size="sm"
+                    requiredPermission={DOCUMENT_REVIEW_PERMISSION}
+                    disabled={!canReviewDocuments || props.isSubmitting}
+                    onClick={() =>
+                      props.onOpenAction({
+                        type: "document-reject",
+                        application: props.application,
+                        document,
+                      })}
+                  >
+                    Reject
+                  </Button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -712,7 +832,7 @@ function DocumentViewButton(props: { readonly document: PlatformRecord }) {
         disabled={!mediaAssetId || readSession.isPending}
         onClick={() => readSession.mutate()}
       >
-        {readSession.isPending ? "Opening" : "Open document"}
+        {readSession.isPending ? "Opening" : "Open file"}
       </Button>
       {error ? <small role="alert">{error}</small> : null}
     </span>
@@ -763,7 +883,7 @@ function ReviewActionDialog(props: {
     if (!canSubmit) {
       if (!actionAllowed) {
         setSubmitError(
-          `This action is not available while the application is ${normalizeStatusLabel(applicationStatus).toLowerCase()}.`,
+          `This action is not available while the application is ${friendlyApplicationStatus(applicationStatus).toLowerCase()}.`,
         );
       }
       return;
@@ -894,8 +1014,8 @@ function ReviewActionDialog(props: {
         {state.type === "activate-station" ? (
           <TextInput
             id="service-radius"
-            label="Service radius (metres)"
-            helperText="This is the maximum service radius for this station when it first becomes active. You can change it later."
+            label="Starting service distance (metres)"
+            helperText="The station can serve customers within this distance when it first goes live. You can change it later."
             type="number"
             inputMode="numeric"
             min={500}
@@ -915,23 +1035,17 @@ function ReviewActionDialog(props: {
             required
           />
         ) : null}
-        {state.type === "correction" || state.type === "document-correction"
-          ? (
-            <TextAreaInput
-              id="review-internal-notes"
-              label="Internal note (optional)"
-              helperText="Only SKIMA administrators can see this note."
-              value={internalNotes}
-              onChange={(event) => setInternalNotes(event.currentTarget.value)}
-            />
-          )
-          : null}
-        {props.error
-          ? <StatusBadge tone="danger">{readErrorMessage(props.error)}</StatusBadge>
-          : null}
-        {submitError
-          ? <StatusBadge tone="danger">{submitError}</StatusBadge>
-          : null}
+        {state.type === "correction" || state.type === "document-correction" ? (
+          <TextAreaInput
+            id="review-internal-notes"
+            label="Private admin note (optional)"
+            helperText="Only SKIMA administrators can see this note."
+            value={internalNotes}
+            onChange={(event) => setInternalNotes(event.currentTarget.value)}
+          />
+        ) : null}
+        {props.error ? <StatusBadge tone="danger">{readErrorMessage(props.error)}</StatusBadge> : null}
+        {submitError ? <StatusBadge tone="danger">{submitError}</StatusBadge> : null}
       </form>
     </Dialog>
   );
@@ -942,17 +1056,17 @@ function ReviewDialogGuidance(props: { readonly state: ReviewDialogState }) {
   let message: string | null = null;
 
   if (state.type === "assign") {
-    message = "This starts the review and assigns it to your administrator account.";
+    message = "This places the application in your review list so you can check its documents and make a decision.";
   } else if (state.type === "document-replacement") {
-    message = "The applicant will be asked to upload a new copy of this document. Explain clearly what is wrong so they know exactly what to replace.";
+    message = "The applicant will be asked to upload a new copy. Explain clearly what needs to be corrected.";
   } else if (state.type === "activate-station") {
-    message = "Activation makes this approved station available for live SKIMA operations, subject to its service-area and availability settings.";
+    message = "Going live allows this approved station to receive eligible SKIMA orders within its enabled service area.";
   } else if (state.type === "activate-driver") {
-    message = "Activation enables the approved driver profile and SKIMA Driver Pass for live dispatch eligibility.";
+    message = "Going live allows this approved driver to receive eligible SKIMA delivery jobs.";
   } else if (state.type === "deactivate-partner") {
-    message = "Suspending a live partner stops operational access until SKIMA activates the partner again.";
+    message = "Pausing live access stops new operational work until an administrator restores access.";
   } else if (state.type === "approve-public-media") {
-    message = "This photo will become eligible to appear on the station's public customer-facing profile.";
+    message = "This photo can be shown to customers on the station profile after you confirm it is suitable."
   }
 
   return message ? <p className="admin-dialog-guidance">{message}</p> : null;
@@ -1205,7 +1319,7 @@ function applicantDisplayName(application: PlatformRecord): string {
   return getRecordString(application, "applicant_display_name") ??
     getNestedRecordString(application, ["applicant_profile", "displayName"]) ??
     getRecordString(application, "applicant_email") ??
-    formatShortId(getRecordString(application, "applicant_user_id"));
+    "Applicant";
 }
 
 function requireRecordString(record: PlatformRecord, key: string): string {
@@ -1283,12 +1397,42 @@ function statusTone(status: string): "neutral" | "success" | "warning" | "danger
   return "neutral";
 }
 
-function formatShortId(value: string | null): string {
-  if (!value) {
-    return "None";
-  }
+function friendlyApplicationStatus(status: string): string {
+  const labels: Readonly<Record<string, string>> = {
+    submitted: "Waiting for review",
+    resubmitted: "Updated by applicant",
+    under_review: "Being reviewed",
+    additional_info_required: "Waiting for applicant",
+    correction_required: "Waiting for applicant",
+    approved: "Approved",
+    rejected: "Rejected",
+    suspended: "Access paused",
+    draft: "Not submitted",
+    incomplete: "Not complete",
+    withdrawn: "Withdrawn",
+    expired: "Expired",
+  };
+  return labels[status] ?? normalizeStatusLabel(status);
+}
 
-  return value.length > 12 ? `${value.slice(0, 8)}...` : value;
+function friendlyDocumentStatus(status: string): string {
+  const labels: Readonly<Record<string, string>> = {
+    uploaded: "Ready to check",
+    submitted: "Ready to check",
+    under_review: "Being checked",
+    correction_required: "Replacement requested",
+    approved: "Approved",
+    rejected: "Rejected",
+    expired: "Expired",
+  };
+  return labels[status] ?? normalizeStatusLabel(status);
+}
+
+function friendlyFileType(value: string | null): string {
+  if (!value) return "Not provided";
+  if (value === "application/pdf") return "PDF";
+  if (value.startsWith("image/")) return value.slice("image/".length).toUpperCase() + " image";
+  return value;
 }
 
 function formatDate(value: string | null): string {
@@ -1323,75 +1467,75 @@ function optionalTrimmedValue(value: string): string | null {
 }
 
 function reviewDialogTitle(state: ReviewDialogState): string {
-  if (state.type === "assign") return "Start application review";
-  if (state.type === "correction") return "Ask applicant to update application";
+  if (state.type === "assign") return "Take this application";
+  if (state.type === "correction") return "Request changes";
   if (state.type === "approve") return "Approve application";
   if (state.type === "reject") return "Reject application";
-  if (state.type === "activate-station") return "Activate station";
-  if (state.type === "activate-driver") return "Activate driver";
-  if (state.type === "deactivate-partner") return "Suspend partner";
+  if (state.type === "activate-station") return "Allow station to go live";
+  if (state.type === "activate-driver") return "Allow driver to receive jobs";
+  if (state.type === "deactivate-partner") return "Pause live access";
   if (state.type === "document-approve") return "Approve document";
   if (state.type === "document-reject") return "Reject document";
-  if (state.type === "document-replacement") return "Ask for a new document";
-  if (state.type === "approve-public-media") return "Publish station photo";
-  return "Ask for a document update";
+  if (state.type === "document-replacement") return "Request a replacement document";
+  if (state.type === "approve-public-media") return "Use photo on station profile";
+  return "Request a document update";
 }
 
 function reviewReasonLabel(state: ReviewDialogState): string {
   if (["correction", "document-correction", "document-replacement"].includes(state.type)) {
     return "Message to applicant";
   }
-  if (state.type === "deactivate-partner") return "Reason for suspension";
-  if (state.type === "approve" || state.type === "reject") return "Reason for decision";
+  if (state.type === "deactivate-partner") return "Why are you pausing access?";
+  if (state.type === "approve" || state.type === "reject") return "Decision note";
   if (state.type === "document-approve" || state.type === "document-reject") return "Review note";
   return "Reason";
 }
 
 function reviewReasonHelper(state: ReviewDialogState): string | undefined {
   if (state.type === "document-replacement") {
-    return "Explain what is wrong with the current document and what the applicant needs to upload instead.";
+    return "Explain what is wrong with the current document and what the applicant should upload instead.";
   }
   if (state.type === "correction" || state.type === "document-correction") {
-    return "Write a clear instruction the applicant can act on. This message will be visible to them.";
+    return "Write a clear instruction the applicant can act on. They will be able to see this message.";
   }
   if (state.type === "approve" || state.type === "reject") {
-    return "Record a concise reason for the final application decision.";
+    return "Add a short note explaining why you made this decision.";
   }
   if (state.type === "deactivate-partner") {
-    return "Explain why live access is being suspended. This becomes part of the administrative record.";
+    return "Explain why new work is being paused. This is kept in the admin history.";
   }
   return undefined;
 }
 
 function reviewDialogSubmitLabel(state: ReviewDialogState): string {
-  if (state.type === "assign") return "Start review";
-  if (state.type === "correction") return "Send update request";
+  if (state.type === "assign") return "Take application";
+  if (state.type === "correction") return "Send request";
   if (state.type === "approve") return "Approve application";
   if (state.type === "reject") return "Reject application";
-  if (state.type === "activate-station") return "Activate station";
-  if (state.type === "activate-driver") return "Activate driver";
-  if (state.type === "deactivate-partner") return "Suspend partner";
+  if (state.type === "activate-station") return "Allow station to go live";
+  if (state.type === "activate-driver") return "Allow driver to receive jobs";
+  if (state.type === "deactivate-partner") return "Pause live access";
   if (state.type === "document-approve") return "Approve document";
   if (state.type === "document-reject") return "Reject document";
   if (state.type === "document-replacement") return "Send request";
-  if (state.type === "approve-public-media") return "Publish photo";
+  if (state.type === "approve-public-media") return "Use photo";
   return "Send request";
 }
 
 function reviewSuccessMessage(command: ReviewCommand): string {
-  if (command.type === "assign") return "Review started and assigned to you.";
-  if (command.type === "correction") return "Update request sent to the applicant.";
+  if (command.type === "assign") return "This application is now assigned to you.";
+  if (command.type === "correction") return "Change request sent to the applicant.";
   if (command.type === "decision") {
     return command.decision === "approved" ? "Application approved." : "Application rejected.";
   }
-  if (command.type === "activate-station") return "Station activated for live operations.";
-  if (command.type === "activate-driver") return "Driver activated for live dispatch.";
-  if (command.type === "deactivate-partner") return "Partner access suspended.";
+  if (command.type === "activate-station") return "Station can now receive eligible SKIMA orders.";
+  if (command.type === "activate-driver") return "Driver can now receive eligible SKIMA jobs.";
+  if (command.type === "deactivate-partner") return "Live access has been paused.";
   if (command.type === "document-replacement") {
-    return "Request for a new document sent to the applicant.";
+    return "Replacement document requested from the applicant.";
   }
   if (command.type === "approve-public-media") {
-    return "Station photo approved for public display.";
+    return "Photo can now be shown on the station profile.";
   }
   if (command.type === "document-review") {
     if (command.decision === "approved") return "Document approved.";
