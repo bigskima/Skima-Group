@@ -50,7 +50,20 @@ jobs:
           new = '].filter((item) => item !== null) as Array<{ key: string; label: string; count: number; severity: string; summary: string }>;'
           if old not in text:
               raise SystemExit("attention digest type target not found")
-          gateway.write_text(text.replace(old, new, 1))
+          text = text.replace(old, new, 1)
+
+          apps_anchor = '  if (Number(getRecordValue(counts, "applicationsWaitingOnSkima") ?? 0) > 0) suggestions.push("Which applications are waiting on SKIMA, and what is blocking each one?");'
+          apps_extra = apps_anchor + '\n  if (Number(getRecordValue(counts, "applicationsDecisionReady") ?? 0) > 0) suggestions.push("Which applications are ready for review?");'
+          if apps_anchor not in text:
+              raise SystemExit("application suggestion target not found")
+          text = text.replace(apps_anchor, apps_extra, 1)
+
+          support_anchor = '  if (Number(getRecordValue(counts, "supportUrgent") ?? 0) > 0) suggestions.push("Which support cases are most urgent or overdue, and why?");'
+          support_extra = support_anchor + '\n  if (Number(getRecordValue(counts, "supportElevated") ?? 0) > 0) suggestions.push("Which support cases need attention?");'
+          if support_anchor not in text:
+              raise SystemExit("support suggestion target not found")
+          text = text.replace(support_anchor, support_extra, 1)
+          gateway.write_text(text)
 
           admin = Path("apps/admin/src/admin-ai-workspace.tsx")
           admin_text = admin.read_text()
