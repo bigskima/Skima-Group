@@ -158,20 +158,24 @@ export function App() {
   const pageLabel = showUnavailableRoute ? "Page unavailable" : hasVisibleScreen ? screenLabel : "Home";
   const pageHref = showUnavailableRoute ? safeWorkspace.basePath : safeRoute;
 
-  const workspaceContent = showUnavailableRoute ? (
-    <ErrorState
-      title="Page unavailable"
-      message="This page is not available from your current SKIMA admin access. Open the workspace overview and choose one of the tasks available to you."
-      onRetry={() => navigate(safeWorkspace.basePath, { replace: true })}
-    />
-  ) : (
-    <AdminV2WorkspaceRouter route={safeRoute} onNavigate={navigate} />
+  const workspaceContent = (
+    <div className="admin-v2-screen" data-route={safeRoute}>
+      {showUnavailableRoute ? (
+        <ErrorState
+          title="Page unavailable"
+          message="This page is not available from your current SKIMA admin access. Open the workspace overview and choose one of the tasks available to you."
+          onRetry={() => navigate(safeWorkspace.basePath, { replace: true })}
+        />
+      ) : (
+        <AdminV2WorkspaceRouter route={safeRoute} onNavigate={navigate} />
+      )}
+    </div>
   );
 
   return (
     <PermissionProvider can={can}>
       <AdminShell
-        brand="Skima"
+        brand="SKIMA"
         navItems={shellNavItems}
         activeHref={safeCategory?.href ?? "/dashboard"}
         pageLabel={pageLabel}
