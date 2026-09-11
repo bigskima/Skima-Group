@@ -1,6 +1,8 @@
 // SKIMA Admin V2 composition root. Domain business logic remains inside the
 // existing feature workspaces while navigation and presentation move to real,
 // category-based browser routes.
+// AdminV2WorkspaceRouter is the compatibility bridge to AdminWorkspaceRouter,
+// preserving the existing verification, finance, operations and partner workflows.
 import {
   Activity,
   BadgeDollarSign,
