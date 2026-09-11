@@ -93,7 +93,7 @@ jobs:
 
       - name: Commit validated source
         run: |
-          git rm scripts/apply-phase4-admin-ai-upgrade.mjs .github/workflows/phase4-admin-ai-upgrade.yml
+          git rm -f scripts/apply-phase4-admin-ai-upgrade.mjs .github/workflows/phase4-admin-ai-upgrade.yml
           git add apps/admin/src/admin-ai-workspace.tsx supabase/functions/api-gateway/index.ts scripts/ai-runtime-contract.test.ts
           if git diff --cached --quiet; then
             echo "No validated source changes to commit."
