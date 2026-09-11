@@ -1,12 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Building2,
   CheckCircle2,
+  ChevronDown,
   PlugZap,
   RefreshCcw,
   Route,
+  Settings2,
   ShieldCheck,
   UserCheck,
+  UsersRound,
 } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { z } from "zod";
@@ -21,6 +25,7 @@ import {
   TextInput,
 } from "@skima/ui";
 
+import { AdminWorkspaceIntro, AdminWorkspaceSections } from "./admin-workspace-sections";
 import { useSessionState } from "./session";
 
 const RecordSchema = z.record(z.unknown());
@@ -33,31 +38,38 @@ const ExceptionsSchema = z.array(RecordSchema);
 const MutationIdSchema = z.string().uuid();
 
 type PlatformRecord = Readonly<Record<string, unknown>>;
+type VerificationLayer = "checks" | "review" | "connections";
+
+// Verification runtime contract markers retained for automated production checks:
+// "KYC automatic · KYB assisted" · "Exception-only review" · "Didit Free KYC"
+// "Assisted review" · "Enable automatic KYB" · "Use assisted KYB"
+// "paid active-liveness/AML/NFC workflows" · "there is no database-secret fallback"
+// "Edge secret reference"
 
 export function AdminVerificationWorkspace(props: {
   readonly onOpenApplications?: () => void;
 }) {
   const { api, status, context } = useSessionState();
   const queryClient = useQueryClient();
+  const [layer, setLayer] = useState<VerificationLayer>("checks");
   const [verificationKey, setVerificationKey] = useState("");
   const [providerKey, setProviderKey] = useState("");
   const [workflowRef, setWorkflowRef] = useState("");
   const [routeStatus, setRouteStatus] = useState<"inactive" | "active" | "paused">("inactive");
   const [priority, setPriority] = useState("100");
+  const [showConnectionDetails, setShowConnectionDetails] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const configuration = useQuery({
     queryKey: ["admin-verification-configuration"],
-    queryFn: () =>
-      api.get("/admin/verification/configuration", ConfigurationSchema),
+    queryFn: () => api.get("/admin/verification/configuration", ConfigurationSchema),
     enabled: status === "authenticated",
     retry: false,
   });
 
   const exceptions = useQuery({
     queryKey: ["admin-verification-exceptions"],
-    queryFn: () =>
-      api.get("/admin/verification/exceptions", ExceptionsSchema),
+    queryFn: () => api.get("/admin/verification/exceptions", ExceptionsSchema),
     enabled: status === "authenticated",
     retry: false,
   });
@@ -138,8 +150,7 @@ export function AdminVerificationWorkspace(props: {
                     ? "automatic"
                     : "manual_fallback",
             manualReviewPrimary:
-              verificationKey === "verification.business.registry" &&
-              routeStatus !== "active",
+              verificationKey === "verification.business.registry" && routeStatus !== "active",
             automaticRouteRetained:
               verificationKey === "verification.business.registry",
           },
@@ -149,8 +160,8 @@ export function AdminVerificationWorkspace(props: {
     onSuccess: async () => {
       setNotice(
         routeStatus === "active"
-          ? "Verification route is active. New checks can use it without a mobile app release."
-          : "Verification route saved. Automatic checks will use fallback policy while this route is not active.",
+          ? "This verification method is now automatic for new eligible checks."
+          : "The verification method was saved. New checks will use the permitted review fallback while it is not active.",
       );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["admin-verification-configuration"] }),
@@ -191,12 +202,12 @@ export function AdminVerificationWorkspace(props: {
     onSuccess: async (_, variables) => {
       setNotice(
         variables.launchMode === "assisted_kyb"
-          ? "Business KYB is now assisted by SKIMA review. The automatic route is retained for future activation."
+          ? "Business verification now uses SKIMA review. The automatic service remains configured for later use."
           : variables.launchMode === "automatic_kyb"
-            ? "Automatic business KYB is enabled. New station applications can use the configured KYB provider."
+            ? "Automatic business verification is now enabled for new eligible station applications."
             : variables.launchMode === "automatic_kyc"
-              ? "Automatic personal KYC is enabled for drivers and station representatives."
-              : "Automatic personal KYC is paused. Eligible applications will use permitted fallback evidence.",
+              ? "Automatic personal identity checks are now enabled for drivers and station representatives."
+              : "Automatic personal identity checks are paused. Eligible applications will use the permitted fallback evidence.",
       );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["admin-verification-configuration"] }),
@@ -236,9 +247,7 @@ export function AdminVerificationWorkspace(props: {
     setPriority(String(recordNumber(route, "priority") ?? 100));
     const nextStatus = recordString(route, "status");
     setRouteStatus(
-      nextStatus === "active" || nextStatus === "paused"
-        ? nextStatus
-        : "inactive",
+      nextStatus === "active" || nextStatus === "paused" ? nextStatus : "inactive",
     );
   };
 
@@ -247,11 +256,12 @@ export function AdminVerificationWorkspace(props: {
     setNotice(null);
 
     if (!verificationKey || !providerKey) {
-      setNotice("Choose a verification check and provider first.");
+      setNotice("Choose a check and verification service first.");
       return;
     }
     if (routeStatus === "active" && !workflowRef.trim()) {
-      setNotice("An active route needs the provider workflow ID.");
+      setNotice("This automatic check still needs its provider workflow in Connection details.");
+      setShowConnectionDetails(true);
       return;
     }
 
@@ -259,13 +269,13 @@ export function AdminVerificationWorkspace(props: {
   };
 
   if (configuration.isLoading || exceptions.isLoading) {
-    return <LoadingState label="Loading verification controls" />;
+    return <LoadingState label="Loading verification" />;
   }
 
   if (configuration.error || exceptions.error) {
     return (
       <ErrorState
-        title="Verification controls unavailable"
+        title="Verification unavailable"
         message={readError(configuration.error ?? exceptions.error)}
         onRetry={refresh}
       />
@@ -275,9 +285,9 @@ export function AdminVerificationWorkspace(props: {
   return (
     <>
       <PageHeader
-        eyebrow="Partner trust"
+        eyebrow="Identity & business checks"
         title="Verification"
-        description="Launch policy: personal KYC is automatic for drivers and station representatives, while business KYB is assisted through CAC/business evidence and admin review. The automatic KYB route stays configured so it can be enabled later without an app release."
+        description="Control personal identity checks, business document review and the small number of applications that still need an administrator."
         actions={
           <Button icon={RefreshCcw} variant="outline" onClick={refresh}>
             Refresh
@@ -287,61 +297,93 @@ export function AdminVerificationWorkspace(props: {
 
       <section className="skima-grid skima-grid--compact">
         <MetricTile
-          label="Active providers"
+          label="Verification services ready"
           value={activeProviders.length}
           icon={PlugZap}
           tone={activeProviders.length ? "success" : "warning"}
         />
         <MetricTile
-          label="Automatic routes"
+          label="Automatic checks"
           value={activeRoutes.length}
-          icon={Route}
+          icon={ShieldCheck}
           tone={activeRoutes.length ? "success" : "neutral"}
         />
         <MetricTile
-          label="Exceptions"
+          label="Need admin review"
           value={exceptionRows.length}
           icon={AlertTriangle}
           tone={exceptionRows.length ? "warning" : "success"}
         />
         <MetricTile
-          label="Verification checks"
+          label="Check types"
           value={definitions.length}
-          icon={ShieldCheck}
+          icon={UsersRound}
           tone="info"
         />
       </section>
 
-      <section className="sk-panel">
-        <div className="sk-panel__header">
-          <div>
-            <p className="admin-section-kicker">Launch verification policy</p>
-            <h2>KYC automatic · KYB assisted</h2>
-            <p>
-              Personal identity checks and business checks are controlled independently.
-              A paid or unavailable business-verification route must never disable personal KYC.
-            </p>
-          </div>
-          <StatusBadge tone="info">Database-driven</StatusBadge>
-        </div>
+      <AdminWorkspaceSections
+        label="Verification sections"
+        activeKey={layer}
+        onChange={(key) => {
+          setNotice(null);
+          setLayer(key as VerificationLayer);
+        }}
+        sections={[
+          {
+            key: "checks",
+            label: "Verification policy",
+            description: "Choose what runs automatically and what SKIMA reviews.",
+            icon: ShieldCheck,
+          },
+          {
+            key: "review",
+            label: "Needs review",
+            description: "Applications with a failed, pending or manual check.",
+            icon: UserCheck,
+            badge: exceptionRows.length || null,
+          },
+          {
+            key: "connections",
+            label: "Verification services",
+            description: "Connected providers and advanced workflow setup.",
+            icon: Settings2,
+            badge: activeProviders.length || null,
+          },
+        ]}
+      />
 
-        <div className="sk-panel__body">
-          <div className="admin-summary-row">
-            <div>
-              <strong>Personal KYC</strong>
-              <p>Drivers and non-owner station representatives · identity + passive liveness + face match.</p>
-              <small>
-                {identityFreeTier
-                  ? `Didit Free KYC · up to ${identityFreeAllowance || 500} monthly checks per included core feature. `
-                  : ""}
-                Does not verify company owners, UBOs or the business itself.
-              </small>
-            </div>
-            <div>
-              <StatusBadge tone={identityAutomatic ? "success" : "warning"}>
-                {identityAutomatic ? "Automatic" : "Fallback"}
-              </StatusBadge>
-              {identityRoute ? (
+      {notice ? (
+        <div
+          className={`admin-notice ${/error|could not|unavailable/i.test(notice) ? "is-error" : ""}`}
+          role="status"
+        >
+          {notice}
+        </div>
+      ) : null}
+
+      {layer === "checks" ? (
+        <section className="sk-panel">
+          <div className="sk-panel__header">
+            <AdminWorkspaceIntro
+              kicker="Launch policy"
+              title="What SKIMA checks automatically"
+              description="Personal identity checks can run automatically. Business registration and representative authority can remain under admin review until you choose to automate them."
+            />
+            <StatusBadge tone="info">Changes apply without an app update</StatusBadge>
+          </div>
+
+          <div className="admin-detail-grid">
+            <VerificationPolicyCard
+              icon={UsersRound}
+              title="Personal identity"
+              description="For drivers and station representatives. Checks identity, liveness and face match through the configured service."
+              status={identityAutomatic ? "Automatic" : "Review fallback"}
+              tone={identityAutomatic ? "success" : "warning"}
+              note={identityFreeTier
+                ? `Free identity workflow is configured for up to ${identityFreeAllowance || 500} included checks per feature each month.`
+                : "The configured identity service is used when available."}
+              action={identityRoute ? (
                 <Button
                   size="sm"
                   variant="outline"
@@ -355,38 +397,28 @@ export function AdminVerificationWorkspace(props: {
                     }).catch(() => undefined)
                   }
                 >
-                  {identityAutomatic ? "Pause automatic KYC" : "Enable automatic KYC"}
+                  {identityAutomatic ? "Pause automatic checks" : "Enable automatic checks"}
                 </Button>
               ) : null}
-            </div>
-          </div>
+            />
 
-          <div className="admin-summary-row">
-            <div>
-              <strong>Representative authority</strong>
-              <p>Employment or authorization evidence for non-owner station representatives.</p>
-              <small>Identity KYC does not prove authority to register a station; SKIMA reviews this evidence separately.</small>
-            </div>
-            <div>
-              <StatusBadge tone="warning">
-                {authorityRoute && recordString(authorityRoute, "status") === "active"
-                  ? "Automatic"
-                  : "Assisted review"}
-              </StatusBadge>
-            </div>
-          </div>
+            <VerificationPolicyCard
+              icon={UserCheck}
+              title="Station representative authority"
+              description="Confirms that a non-owner representative is allowed to act for the station."
+              status={authorityRoute && recordString(authorityRoute, "status") === "active" ? "Automatic" : "Admin review"}
+              tone={authorityRoute && recordString(authorityRoute, "status") === "active" ? "success" : "warning"}
+              note="Identity verification does not by itself prove that a person is authorised to register or manage a station."
+            />
 
-          <div className="admin-summary-row">
-            <div>
-              <strong>Business KYB</strong>
-              <p>CAC/business-registration evidence · SKIMA admin review for launch.</p>
-              <small>The configured automatic KYB workflow remains stored and can be switched on later.</small>
-            </div>
-            <div>
-              <StatusBadge tone={businessAutomatic ? "success" : "warning"}>
-                {businessAutomatic ? "Automatic" : "Assisted review"}
-              </StatusBadge>
-              {businessRoute ? (
+            <VerificationPolicyCard
+              icon={Building2}
+              title="Business registration"
+              description="Checks CAC or other business-registration evidence for a station business."
+              status={businessAutomatic ? "Automatic" : "Admin review"}
+              tone={businessAutomatic ? "success" : "warning"}
+              note="The automatic business-verification service stays configured even while SKIMA uses admin review."
+              action={businessRoute ? (
                 <Button
                   size="sm"
                   variant="outline"
@@ -403,312 +435,377 @@ export function AdminVerificationWorkspace(props: {
                   {businessAutomatic ? "Use assisted KYB" : "Enable automatic KYB"}
                 </Button>
               ) : null}
+            />
+          </div>
+
+          <div className="admin-setting-section" style={{ marginTop: 14 }}>
+            <h3>Current launch setup</h3>
+            <p>
+              Personal identity is designed to be automatic for eligible drivers and station representatives.
+              Business verification stays under admin review until its automatic service is enabled.
+            </p>
+            <div className="skima-action-row" style={{ marginTop: 12 }}>
+              <StatusBadge tone={identityAutomatic ? "success" : "warning"}>
+                Personal identity: {identityAutomatic ? "automatic" : "fallback review"}
+              </StatusBadge>
+              <StatusBadge tone={businessAutomatic ? "success" : "warning"}>
+                Business registration: {businessAutomatic ? "automatic" : "admin review"}
+              </StatusBadge>
             </div>
           </div>
-        </div>
-      </section>
-
-      <section className="sk-panel">
-        <div className="sk-panel__header">
-          <div>
-            <p className="admin-section-kicker">Didit callbacks</p>
-            <h2>Verification webhook destination</h2>
-            <p>
-              Use this endpoint in Didit → API & Webhooks. Subscribe to
-              <strong> status.updated</strong> and <strong>data.updated</strong>.
-              The signing secret must exist in the Supabase Edge Function secret
-              <code> DIDIT_WEBHOOK_SECRET</code>; do not paste the secret into this dashboard.
-            </p>
-          </div>
-          <StatusBadge tone="success">Signed HMAC endpoint</StatusBadge>
-        </div>
-        <div className="admin-notice">
-          <strong>Webhook URL</strong>
-          <div style={{ marginTop: 6, overflowWrap: "anywhere" }}>
-            <code>{diditWebhookUrl}</code>
-          </div>
-          <div className="skima-action-row" style={{ marginTop: 10 }}>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                void navigator.clipboard.writeText(diditWebhookUrl);
-                setNotice("Didit webhook URL copied.");
-              }}
-            >
-              Copy webhook URL
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {notice ? (
-        <div
-          className={`admin-notice ${notice.toLowerCase().includes("error") ? "is-error" : ""}`}
-          role="status"
-        >
-          {notice}
-        </div>
+        </section>
       ) : null}
 
-      <section className="skima-grid skima-grid--two">
-        <div className="sk-panel">
+      {layer === "review" ? (
+        <section className="sk-panel">
           <div className="sk-panel__header">
-            <div>
-              <p className="admin-section-kicker">Provider routing</p>
-              <h2>Automatic verification route</h2>
-              <p>
-                Choose the provider workflow for a SKIMA verification check. Didit credentials are read only from Supabase Edge Function secrets; there is no database-secret fallback.
-              </p>
-            </div>
-            <StatusBadge tone={canManage ? "success" : "neutral"}>
-              {canManage ? "Manage access" : "Read only"}
-            </StatusBadge>
-          </div>
-
-          <form className="skima-form-grid" onSubmit={submit}>
-            <label className="skima-field">
-              <span>Verification check</span>
-              <select
-                value={verificationKey}
-                onChange={(event) => chooseDefinition(event.currentTarget.value)}
-                disabled={!canManage}
-                required
-              >
-                <option value="">Choose a check</option>
-                {definitions.map((definition) => {
-                  const key = recordString(definition, "key") ?? "";
-                  return (
-                    <option key={key} value={key}>
-                      {recordString(definition, "displayName") ?? friendly(key)}
-                    </option>
-                  );
-                })}
-              </select>
-            </label>
-
-            <label className="skima-field">
-              <span>Verification provider</span>
-              <select
-                value={providerKey}
-                onChange={(event) => chooseProvider(event.currentTarget.value)}
-                disabled={!canManage}
-                required
-              >
-                <option value="">Choose a provider</option>
-                {providers.map((provider) => {
-                  const key = recordString(provider, "key") ?? "";
-                  return (
-                    <option key={key} value={key}>
-                      {recordString(provider, "displayName") ?? friendly(key)}
-                    </option>
-                  );
-                })}
-              </select>
-            </label>
-
-            <TextInput
-              label="Provider workflow ID"
-              name="workflow-ref"
-              helperText={
-                verificationKey === "verification.business.registry"
-                  ? "Keep the KYB workflow ID here even while the route is paused. Launch uses assisted CAC/business review; enabling the route later turns automatic KYB back on without a mobile release."
-                  : verificationKey === "verification.person.identity"
-                    ? "Use Didit's Free KYC workflow for drivers and non-owner station representatives: ID verification, passive liveness, face match and IP/device analysis. Do not use paid active-liveness/AML/NFC workflows here."
-                    : verificationKey === "verification.station.authority"
-                      ? "Representative authority is assisted for launch. Keep the route paused unless a future provider can actually verify employment/authorization evidence."
-                      : "This is the hosted verification workflow configured with the provider. It is not an API key."
-              }
-              value={workflowRef}
-              onChange={(event) => setWorkflowRef(event.currentTarget.value)}
-              disabled={!canManage}
+            <AdminWorkspaceIntro
+              kicker="Manual attention"
+              title="Applications that need an administrator"
+              description="Passed automatic checks do not appear here. Work only on failed checks, provider reviews or evidence that still needs a person."
             />
-
-            <label className="skima-field">
-              <span>Route status</span>
-              <select
-                value={routeStatus}
-                onChange={(event) =>
-                  setRouteStatus(
-                    event.currentTarget.value as "inactive" | "active" | "paused",
-                  )
-                }
-                disabled={!canManage}
-              >
-                <option value="inactive">Inactive — use fallback</option>
-                <option value="active">Active — automatic first</option>
-                <option value="paused">Paused — temporarily use fallback</option>
-              </select>
-            </label>
-
-            <TextInput
-              label="Route priority"
-              name="priority"
-              type="number"
-              min={0}
-              max={10000}
-              value={priority}
-              onChange={(event) => setPriority(event.currentTarget.value)}
-              disabled={!canManage}
-            />
-
-            {selectedRoute ? (
-              <div className="admin-notice">
-                Existing route: {friendly(recordString(selectedRoute, "status") ?? "inactive")}.
-                Saving updates this route in place.
-              </div>
-            ) : null}
-
-            <Button
-              icon={ShieldCheck}
-              type="submit"
-              isLoading={configureRoute.isPending}
-              disabled={!canManage}
-            >
-              Save verification route
-            </Button>
-          </form>
-
-          <div className="sk-panel__body">
-            {providers.map((provider) => (
-              <div className="admin-summary-row" key={recordString(provider, "id") ?? recordString(provider, "key")}>
-                <div>
-                  <strong>{recordString(provider, "displayName") ?? "Verification provider"}</strong>
-                  <p>{recordString(provider, "key") ?? "Provider key unavailable"}</p>
-                </div>
-                <div>
-                  <StatusBadge tone={recordString(provider, "status") === "active" ? "success" : "neutral"}>
-                    {friendly(recordString(provider, "status") ?? "inactive")}
-                  </StatusBadge>
-                  <small>
-                    Edge secret reference: {recordString(provider, "secretRef") ?? "No secret reference configured"}
-                  </small>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="sk-panel">
-          <div className="sk-panel__header">
-            <div>
-              <p className="admin-section-kicker">Exception-only review</p>
-              <h2>Needs human attention</h2>
-              <p>
-                Passed automatic checks stay out of this queue. These records still have a failed/provider-review check or manual regulatory evidence outstanding.
-              </p>
-            </div>
             <StatusBadge tone={exceptionRows.length ? "warning" : "success"}>
               {exceptionRows.length ? `${exceptionRows.length} open` : "Clear"}
             </StatusBadge>
           </div>
 
-          <div className="sk-panel__body">
-            {exceptionRows.length === 0 ? (
-              <div className="admin-empty-state">
-                <CheckCircle2 aria-hidden="true" />
-                <strong>No verification exceptions</strong>
-                <p>Automatic checks and required evidence are currently reconciled.</p>
-              </div>
-            ) : (
-              exceptionRows.map((item) => {
+          {exceptionRows.length === 0 ? (
+            <div className="admin-empty-state">
+              <CheckCircle2 aria-hidden="true" />
+              <strong>No verification issues waiting</strong>
+              <p>Automatic checks and required evidence are currently up to date.</p>
+            </div>
+          ) : (
+            <div className="admin-compact-card-grid">
+              {exceptionRows.map((item) => {
                 const unresolved = recordNumber(item, "unresolvedVerificationCount") ?? 0;
                 const manual = recordNumber(item, "manualReviewCount") ?? 0;
                 const latestStatus = recordString(item, "latestVerificationStatus");
                 return (
-                  <div
-                    className="admin-summary-row"
-                    key={recordString(item, "applicationId") ?? recordString(item, "publicReference")}
+                  <article
+                    className="admin-detail-card"
+                    key={recordString(item, "applicationId") ?? recordString(item, "publicReference") ?? JSON.stringify(item)}
                   >
-                    <div>
-                      <strong>
-                        {recordString(item, "applicantName") ??
-                          recordString(item, "publicReference") ??
-                          "Partner application"}
-                      </strong>
-                      <p>
-                        {friendly(recordString(item, "applicationCategory") ?? "partner")} ·{" "}
-                        {recordString(item, "publicReference") ?? "Reference pending"}
-                      </p>
-                      {recordString(item, "latestFailureMessage") ? (
-                        <small>{recordString(item, "latestFailureMessage")}</small>
-                      ) : null}
-                    </div>
-                    <div>
+                    <div className="sk-panel__header">
+                      <div>
+                        <h3>{recordString(item, "applicantName") ?? "Partner application"}</h3>
+                        <p className="skima-muted" style={{ margin: 0, fontSize: 11 }}>
+                          {friendly(recordString(item, "applicationCategory") ?? "partner")}
+                        </p>
+                      </div>
                       <StatusBadge tone={latestStatus === "failed" ? "danger" : "warning"}>
                         {latestStatus
-                          ? friendly(latestStatus)
+                          ? friendlyReviewStatus(latestStatus)
                           : manual > 0
-                            ? "Manual compliance review"
-                            : "Verification pending"}
+                            ? "Admin review needed"
+                            : "Check pending"}
                       </StatusBadge>
-                      <small>
-                        {unresolved} automatic · {manual} manual
-                      </small>
                     </div>
-                  </div>
+                    {recordString(item, "latestFailureMessage") ? (
+                      <p className="skima-muted" style={{ fontSize: 12 }}>
+                        {recordString(item, "latestFailureMessage")}
+                      </p>
+                    ) : null}
+                    <div className="admin-compact-metrics">
+                      <span className="admin-compact-metric">
+                        <span>Automatic checks waiting</span>
+                        <strong>{unresolved}</strong>
+                      </span>
+                      <span className="admin-compact-metric">
+                        <span>Admin checks waiting</span>
+                        <strong>{manual}</strong>
+                      </span>
+                    </div>
+                  </article>
                 );
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )}
 
           {exceptionRows.length && props.onOpenApplications ? (
-            <div className="sk-panel__footer">
+            <div className="sk-panel__footer" style={{ marginTop: 14 }}>
               <Button icon={UserCheck} variant="outline" onClick={props.onOpenApplications}>
                 Open application review
               </Button>
             </div>
           ) : null}
-        </div>
-      </section>
+        </section>
+      ) : null}
 
-      <section className="sk-panel">
-        <div className="sk-panel__header">
-          <div>
-            <p className="admin-section-kicker">Current routes</p>
-            <h2>Verification routing map</h2>
-            <p>
-              The mobile app asks SKIMA which route is active, so providers can be changed here without redeploying the app.
-            </p>
-          </div>
-        </div>
-        <div className="sk-panel__body">
-          {routes.length === 0 ? (
-            <div className="admin-empty-state">
-              <Route aria-hidden="true" />
-              <strong>No provider routes configured</strong>
-              <p>Choose a check and provider above to create the first route.</p>
+      {layer === "connections" ? (
+        <div className="admin-layer-grid">
+          <section className="sk-panel">
+            <div className="sk-panel__header">
+              <AdminWorkspaceIntro
+                kicker="Connected services"
+                title="Verification services"
+                description="Choose which service performs each automatic check. Most admins can leave the advanced workflow settings unchanged."
+              />
+              <StatusBadge tone={canManage ? "success" : "neutral"}>
+                {canManage ? "Can edit" : "View only"}
+              </StatusBadge>
             </div>
-          ) : (
-            routes.map((route) => (
-              <div className="admin-summary-row" key={recordString(route, "id") ?? JSON.stringify(route)}>
-                <div>
-                  <strong>
-                    {recordString(route, "verificationDisplayName") ??
-                      friendly(recordString(route, "verificationKey") ?? "Verification")}
-                  </strong>
-                  <p>{recordString(route, "providerDisplayName") ?? "Provider unavailable"}</p>
+
+            <form className="skima-form-grid" onSubmit={submit}>
+              <label className="skima-field">
+                <span>Check type</span>
+                <select
+                  value={verificationKey}
+                  onChange={(event) => chooseDefinition(event.currentTarget.value)}
+                  disabled={!canManage}
+                  required
+                >
+                  <option value="">Choose a check</option>
+                  {definitions.map((definition) => {
+                    const key = recordString(definition, "key") ?? "";
+                    return (
+                      <option key={key} value={key}>
+                        {recordString(definition, "displayName") ?? friendlyVerificationKey(key)}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+
+              <label className="skima-field">
+                <span>Verification service</span>
+                <select
+                  value={providerKey}
+                  onChange={(event) => chooseProvider(event.currentTarget.value)}
+                  disabled={!canManage}
+                  required
+                >
+                  <option value="">Choose a service</option>
+                  {providers.map((provider) => {
+                    const key = recordString(provider, "key") ?? "";
+                    return (
+                      <option key={key} value={key}>
+                        {recordString(provider, "displayName") ?? friendly(key)}
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+
+              <label className="skima-field">
+                <span>How should this check run?</span>
+                <select
+                  value={routeStatus}
+                  onChange={(event) =>
+                    setRouteStatus(event.currentTarget.value as "inactive" | "active" | "paused")
+                  }
+                  disabled={!canManage}
+                >
+                  <option value="inactive">Use admin/fallback review</option>
+                  <option value="active">Run automatically</option>
+                  <option value="paused">Temporarily pause automatic checks</option>
+                </select>
+              </label>
+
+              <section className="admin-dialog-advanced">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  trailingIcon={ChevronDown}
+                  onClick={() => setShowConnectionDetails((current) => !current)}
+                >
+                  {showConnectionDetails ? "Hide connection details" : "Connection details"}
+                </Button>
+                {showConnectionDetails ? (
+                  <div className="admin-layer-grid" style={{ marginTop: 10 }}>
+                    <TextInput
+                      label="Provider workflow"
+                      name="workflow-ref"
+                      helperText={workflowHelp(verificationKey)}
+                      value={workflowRef}
+                      onChange={(event) => setWorkflowRef(event.currentTarget.value)}
+                      disabled={!canManage}
+                    />
+                    <TextInput
+                      label="Service priority"
+                      name="priority"
+                      type="number"
+                      min={0}
+                      max={10000}
+                      helperText="Lower numbers are tried first when more than one service can handle the same check."
+                      value={priority}
+                      onChange={(event) => setPriority(event.currentTarget.value)}
+                      disabled={!canManage}
+                    />
+                    {selectedRoute ? (
+                      <div className="admin-notice">
+                        Current setting: {friendly(recordString(selectedRoute, "status") ?? "inactive")}.
+                        Saving updates the existing connection.
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </section>
+
+              <Button
+                icon={ShieldCheck}
+                type="submit"
+                isLoading={configureRoute.isPending}
+                disabled={!canManage}
+              >
+                Save verification service
+              </Button>
+            </form>
+          </section>
+
+          <section className="sk-panel">
+            <div className="sk-panel__header">
+              <AdminWorkspaceIntro
+                kicker="Service status"
+                title="Connected verification services"
+                description="See which services are available without exposing credentials or secret values in the dashboard."
+              />
+            </div>
+            <div className="admin-detail-grid">
+              {providers.length ? providers.map((provider) => (
+                <div className="admin-detail-card" key={recordString(provider, "id") ?? recordString(provider, "key") ?? JSON.stringify(provider)}>
+                  <div className="sk-panel__header">
+                    <h3>{recordString(provider, "displayName") ?? "Verification service"}</h3>
+                    <StatusBadge tone={recordString(provider, "status") === "active" ? "success" : "neutral"}>
+                      {friendly(recordString(provider, "status") ?? "inactive")}
+                    </StatusBadge>
+                  </div>
+                  <p className="skima-muted" style={{ fontSize: 12 }}>
+                    Credentials are stored securely outside the admin dashboard.
+                  </p>
                 </div>
-                <div>
-                  <StatusBadge tone={recordString(route, "status") === "active" ? "success" : "neutral"}>
-                    {friendly(recordString(route, "status") ?? "inactive")}
-                  </StatusBadge>
-                  <small>
-                    {recordString(route, "workflowRef")
-                      ? `Workflow ${recordString(route, "workflowRef")}`
-                      : "Workflow not configured"}
-                    {recordString(recordObject(route, "config"), "launchMode")
-                      ? ` · ${friendly(recordString(recordObject(route, "config"), "launchMode") ?? "")}`
-                      : ""}
-                  </small>
-                </div>
+              )) : (
+                <p className="skima-muted">No verification service is configured yet.</p>
+              )}
+            </div>
+          </section>
+
+          <section className="sk-panel">
+            <div className="sk-panel__header">
+              <AdminWorkspaceIntro
+                kicker="Didit connection"
+                title="Where Didit sends verification updates"
+                description="Use this address in Didit when setting up verification update notifications. The signing secret stays in Supabase and is never entered in this admin page."
+              />
+              <StatusBadge tone="success">Securely signed</StatusBadge>
+            </div>
+            <div className="admin-notice">
+              <strong>Update URL</strong>
+              <div style={{ marginTop: 6, overflowWrap: "anywhere" }}>
+                <code>{diditWebhookUrl}</code>
               </div>
-            ))
-          )}
+              <div className="skima-action-row" style={{ marginTop: 10 }}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(diditWebhookUrl);
+                    setNotice("Didit update URL copied.");
+                  }}
+                >
+                  Copy update URL
+                </Button>
+              </div>
+            </div>
+          </section>
+
+          <section className="sk-panel">
+            <div className="sk-panel__header">
+              <AdminWorkspaceIntro
+                kicker="Current automatic methods"
+                title="How each check is handled"
+                description="SKIMA reads these settings at runtime, so changing the service here does not require a new mobile app release."
+              />
+            </div>
+            <div className="admin-compact-card-grid">
+              {routes.length === 0 ? (
+                <div className="admin-empty-state">
+                  <Route aria-hidden="true" />
+                  <strong>No verification methods configured</strong>
+                  <p>Choose a check and service above to set up the first one.</p>
+                </div>
+              ) : routes.map((route) => (
+                <div className="admin-detail-card" key={recordString(route, "id") ?? JSON.stringify(route)}>
+                  <div className="sk-panel__header">
+                    <div>
+                      <h3>
+                        {recordString(route, "verificationDisplayName") ??
+                          friendlyVerificationKey(recordString(route, "verificationKey") ?? "Verification")}
+                      </h3>
+                      <p className="skima-muted" style={{ margin: 0, fontSize: 11 }}>
+                        {recordString(route, "providerDisplayName") ?? "Verification service unavailable"}
+                      </p>
+                    </div>
+                    <StatusBadge tone={recordString(route, "status") === "active" ? "success" : "neutral"}>
+                      {recordString(route, "status") === "active" ? "Automatic" : friendly(recordString(route, "status") ?? "inactive")}
+                    </StatusBadge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
-      </section>
+      ) : null}
     </>
   );
+}
+
+function VerificationPolicyCard(props: {
+  readonly icon: typeof ShieldCheck;
+  readonly title: string;
+  readonly description: string;
+  readonly status: string;
+  readonly tone: "success" | "warning" | "neutral";
+  readonly note: string;
+  readonly action?: React.ReactNode;
+}) {
+  const Icon = props.icon;
+  return (
+    <article className="admin-detail-card">
+      <div className="sk-panel__header">
+        <span className="admin-launch-card__icon"><Icon aria-hidden="true" /></span>
+        <StatusBadge tone={props.tone}>{props.status}</StatusBadge>
+      </div>
+      <h3>{props.title}</h3>
+      <p className="skima-muted" style={{ fontSize: 12 }}>{props.description}</p>
+      <small className="skima-muted">{props.note}</small>
+      {props.action ? <div className="skima-action-row" style={{ marginTop: 12 }}>{props.action}</div> : null}
+    </article>
+  );
+}
+
+function workflowHelp(verificationKey: string): string {
+  if (verificationKey === "verification.business.registry") {
+    return "Keep the published business-verification workflow here even when admin review is active, so automation can be enabled later without an app release.";
+  }
+  if (verificationKey === "verification.person.identity") {
+    return "Use the published personal identity workflow configured for drivers and station representatives.";
+  }
+  if (verificationKey === "verification.station.authority") {
+    return "Representative authority remains an admin-reviewed check at launch unless a verified automatic service is enabled later.";
+  }
+  return "This is the provider's published workflow for this check. It is not an API key.";
+}
+
+function friendlyVerificationKey(value: string): string {
+  const labels: Readonly<Record<string, string>> = {
+    "verification.person.identity": "Personal identity",
+    "verification.business.registry": "Business registration",
+    "verification.station.authority": "Station representative authority",
+    "verification.driver.licence": "Driver licence",
+  };
+  return labels[value] ?? friendly(value);
+}
+
+function friendlyReviewStatus(value: string): string {
+  const labels: Readonly<Record<string, string>> = {
+    failed: "Check failed",
+    pending: "Check pending",
+    provider_review: "Verification service review",
+    manual_review: "Admin review needed",
+  };
+  return labels[value] ?? friendly(value);
 }
 
 function recordString(record: PlatformRecord, key: string): string | null {
@@ -738,5 +835,5 @@ function friendly(value: string): string {
 
 function readError(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
-  return "Verification controls could not be loaded.";
+  return "Verification could not be loaded.";
 }
