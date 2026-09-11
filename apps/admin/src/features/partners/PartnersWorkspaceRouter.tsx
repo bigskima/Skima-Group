@@ -43,6 +43,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/applications",
           icon: ClipboardCheck,
           meta: "Approvals",
+          requiredPermissions: ["platform.applications.read"],
         },
         {
           key: "verification",
@@ -51,6 +52,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/verification",
           icon: ShieldCheck,
           meta: "Identity & business checks",
+          requiredPermissions: ["platform.verification.read"],
         },
         {
           key: "companies",
@@ -59,6 +61,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/companies",
           icon: Building2,
           meta: "Organisations",
+          requiredPermissions: ["platform.organizations.read"],
         },
         {
           key: "drivers",
@@ -67,6 +70,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/drivers",
           icon: UserRoundCheck,
           meta: "Delivery partners",
+          requiredPermissions: ["platform.drivers.read"],
         },
         {
           key: "stations",
@@ -75,6 +79,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/stations",
           icon: Store,
           meta: "LPG partners",
+          requiredPermissions: ["platform.partner_price.manage"],
         },
         {
           key: "location-review",
@@ -83,6 +88,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/location-review",
           icon: MapPinned,
           meta: "Location checks",
+          requiredPermissions: ["platform.applications.review"],
         },
         {
           key: "fleet",
@@ -91,6 +97,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/partners/fleet",
           icon: Truck,
           meta: "Vehicles",
+          requiredPermissions: ["platform.fleets.read"],
         },
       ]}
     />
