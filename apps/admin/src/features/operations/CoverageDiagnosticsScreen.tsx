@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ClipboardSearch, MapPinCheck, RefreshCcw, ShieldCheck } from "lucide-react";
+import { ClipboardList, MapPinCheck, RefreshCcw, ShieldCheck } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { z } from "zod";
 
@@ -65,7 +65,7 @@ export function CoverageDiagnosticsScreen() {
           <MapPinCheck aria-hidden="true" /><span><strong>Check a location</strong><small>Why is an activity allowed or unavailable here?</small></span>
         </button>
         <button type="button" role="tab" aria-selected={mode === "dispatch"} className={mode === "dispatch" ? "is-active" : undefined} onClick={() => setMode("dispatch")}>
-          <ClipboardSearch aria-hidden="true" /><span><strong>Explain a dispatch</strong><small>Inspect the recorded evidence behind an assignment.</small></span>
+          <ClipboardList aria-hidden="true" /><span><strong>Explain a dispatch</strong><small>Inspect the recorded evidence behind an assignment.</small></span>
         </button>
       </div>
       {mode === "location" ? <LocationDiagnostic /> : <DispatchDiagnosticTool />}
