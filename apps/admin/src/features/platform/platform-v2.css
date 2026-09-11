@@ -2,6 +2,13 @@
 .platform-integration-v2 {
   display: grid;
   gap: 1rem;
+  min-width: 0;
+}
+
+.platform-v2 .sk-panel,
+.platform-integration-v2 .sk-panel {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .platform-v2__advanced,
@@ -68,5 +75,10 @@
   .platform-integration-v2__cards,
   .platform-integration-v2__provider-grid {
     grid-template-columns: 1fr;
+  }
+
+  .platform-v2 .sk-panel,
+  .platform-integration-v2 .sk-panel {
+    overflow-x: auto;
   }
 }
