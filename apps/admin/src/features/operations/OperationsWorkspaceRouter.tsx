@@ -14,10 +14,7 @@ export function OperationsWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
 }) {
-  if (props.route === "/operations") {
-    return <OperationsOverviewScreen onNavigate={props.onNavigate} />;
-  }
-
+  if (props.route === "/operations") return <OperationsOverviewScreen onNavigate={props.onNavigate} />;
   return (
     <AdminWorkspaceRouter
       route={toLegacyAdminWorkspacePath(props.route)}
@@ -41,7 +38,7 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/operations/orders",
           icon: ClipboardList,
           meta: "Live operations",
-          requiredPermissions: ["lpg.orders.manage"],
+          permissionKey: "operations",
         },
         {
           key: "coverage",
@@ -50,7 +47,7 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/operations/coverage",
           icon: MapPinned,
           meta: "Availability",
-          requiredPermissions: ["platform.coverage.read"],
+          permissionKey: "coverage",
         },
         {
           key: "inventory",
@@ -59,7 +56,7 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/operations/inventory",
           icon: Boxes,
           meta: "Supply",
-          requiredPermissions: ["platform.inventory.manage"],
+          permissionKey: "inventory",
         },
         {
           key: "quality",
@@ -68,7 +65,7 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/operations/quality",
           icon: ShieldCheck,
           meta: "Quality",
-          requiredPermissions: ["lpg.quality.read"],
+          permissionKey: "quality",
         },
         {
           key: "support",
@@ -77,7 +74,7 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/operations/support",
           icon: LifeBuoy,
           meta: "Cases",
-          requiredPermissions: ["platform.support.read"],
+          permissionKey: "support",
         },
       ]}
     />
