@@ -1,13 +1,10 @@
 import { PlugZap, ServerCog, Settings2, UsersRound } from "lucide-react";
 
 import { AdminAccessWorkspace } from "../../admin-access-workspace";
-import { AdminResourceConsole } from "../../admin-resource-console";
-import {
-  governanceConsoleConfig,
-  integrationConsoleConfig,
-} from "../../admin-resource-config";
-import { AdminSystemWorkspace } from "../../admin-system-workspace";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
+import { PlatformConfigurationWorkspaceV2 } from "./PlatformConfigurationWorkspaceV2";
+import { PlatformIntegrationsWorkspaceV2 } from "./PlatformIntegrationsWorkspaceV2";
+import { PlatformSystemWorkspaceV2 } from "./PlatformSystemWorkspaceV2";
 
 export function PlatformWorkspaceRouter(props: {
   readonly route: string;
@@ -15,9 +12,15 @@ export function PlatformWorkspaceRouter(props: {
 }) {
   if (props.route === "/platform") return <PlatformOverviewScreen onNavigate={props.onNavigate} />;
   if (props.route === "/platform/people-access") return <AdminAccessWorkspace />;
-  if (props.route === "/platform/configuration") return <AdminResourceConsole config={governanceConsoleConfig} />;
-  if (props.route === "/platform/integrations") return <AdminResourceConsole config={integrationConsoleConfig} />;
-  if (props.route === "/platform/system") return <AdminSystemWorkspace />;
+  if (props.route === "/platform/configuration" || props.route.startsWith("/platform/configuration/")) {
+    return <PlatformConfigurationWorkspaceV2 route={props.route} onNavigate={props.onNavigate} />;
+  }
+  if (props.route === "/platform/integrations" || props.route.startsWith("/platform/integrations/")) {
+    return <PlatformIntegrationsWorkspaceV2 route={props.route} onNavigate={props.onNavigate} />;
+  }
+  if (props.route === "/platform/system" || props.route.startsWith("/platform/system/")) {
+    return <PlatformSystemWorkspaceV2 route={props.route} onNavigate={props.onNavigate} />;
+  }
   return <PlatformOverviewScreen onNavigate={props.onNavigate} />;
 }
 
@@ -41,7 +44,7 @@ function PlatformOverviewScreen(props: { readonly onNavigate: (href: string) => 
         {
           key: "configuration",
           title: "Configuration",
-          description: "Manage shared SKIMA setup and governed platform behavior without mixing it with day-to-day operations.",
+          description: "Manage business lines and external event destinations through focused V2 configuration tasks.",
           href: "/platform/configuration",
           icon: Settings2,
           meta: "Platform setup",
@@ -50,7 +53,7 @@ function PlatformOverviewScreen(props: { readonly onNavigate: (href: string) => 
         {
           key: "integrations",
           title: "Integrations",
-          description: "Review swappable provider connections for maps, payments, utilities, notifications, AI and related services.",
+          description: "Review maps, provider adapters and communication delivery from separate operational workspaces.",
           href: "/platform/integrations",
           icon: PlugZap,
           meta: "External connections",
@@ -59,7 +62,7 @@ function PlatformOverviewScreen(props: { readonly onNavigate: (href: string) => 
         {
           key: "system",
           title: "System health",
-          description: "Inspect operational health, runtime status and platform diagnostics without exposing them across business workspaces.",
+          description: "Open focused health, background work, incident, activity and audit workspaces without loading a single command-center page.",
           href: "/platform/system",
           icon: ServerCog,
           meta: "Health & diagnostics",
