@@ -9,7 +9,12 @@ import {
 } from "lucide-react";
 
 import { AdminApplicationsWorkspace } from "../../admin-applications-workspace";
-import { AdminWorkspaceRouter } from "../../admin-workspace-router";
+import { AdminCompanyWorkspace } from "../../admin-company-workspace";
+import { AdminDriverParticipationWorkspace } from "../../admin-driver-participation-workspace";
+import { AdminFleetWorkspace } from "../../admin-fleet-workspace";
+import { AdminPartnerLocationReviewWorkspace } from "../../admin-partner-location-review-workspace";
+import { AdminStationPricingWorkspace } from "../../admin-station-pricing-workspace";
+import { AdminVerificationWorkspace } from "../../admin-verification-workspace";
 import { toLegacyAdminWorkspacePath } from "../../app/admin-v2-navigation";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
 import {
@@ -58,10 +63,36 @@ export function PartnersWorkspaceRouter(props: {
     );
   }
 
+  if (props.route === "/partners/companies") return <AdminCompanyWorkspace />;
+  if (props.route === "/partners/drivers") return <AdminDriverParticipationWorkspace />;
+  if (props.route === "/partners/verification") {
+    return <AdminVerificationWorkspace onOpenApplications={() => props.onNavigate(APPLICATIONS_BASE_PATH)} />;
+  }
+  if (props.route === "/partners/location-review") return <AdminPartnerLocationReviewWorkspace />;
+  if (props.route === "/partners/fleet") return <AdminFleetWorkspace />;
+  if (props.route === "/partners/stations" || props.route.startsWith("/partners/stations/")) {
+    return (
+      <AdminStationPricingWorkspace
+        route={toLegacyAdminWorkspacePath(props.route)}
+        onNavigate={props.onNavigate}
+      />
+    );
+  }
+
   return (
-    <AdminWorkspaceRouter
-      route={toLegacyAdminWorkspacePath(props.route)}
+    <WorkspaceLanding
+      eyebrow="People & Partners"
+      title="Partner page not found"
+      description="This People & Partners link is not part of the current Admin V2 workspace."
       onNavigate={props.onNavigate}
+      actions={[{
+        key: "partners-home",
+        title: "Back to People & Partners",
+        description: "Return to applications, companies, drivers, stations and verification.",
+        href: "/partners",
+        icon: UserRoundCheck,
+        meta: "People & Partners",
+      }]}
     />
   );
 }
