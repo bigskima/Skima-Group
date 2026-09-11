@@ -16,6 +16,8 @@ const [
   applicationScreen,
   documentScreen,
   adminApp,
+  adminNavigation,
+  adminWorkspaceRouter,
   adminVerification,
   supabaseConfig,
 ] = await Promise.all([
@@ -28,6 +30,8 @@ const [
   read("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx"),
   read("apps/lpg-mobile/src/native/ui/DocumentWorkflowScreen.tsx"),
   read("apps/admin/src/App.tsx"),
+  read("apps/admin/src/admin-navigation-config.ts"),
+  read("apps/admin/src/admin-workspace-router.tsx"),
   read("apps/admin/src/admin-verification-workspace.tsx"),
   read("supabase/config.toml"),
 ]);
@@ -114,9 +118,11 @@ Deno.test("mobile uses automatic verification first and controlled fallback evid
 });
 
 Deno.test("admin exposes provider routing, launch KYC/KYB policy and exception-only review", () => {
-  assertStringIncludes(adminApp, 'href: "/verification"');
-  assertStringIncludes(adminApp, 'props.route === "/verification"');
-  assertStringIncludes(adminApp, "AdminVerificationWorkspace");
+  assertStringIncludes(adminApp, "AdminWorkspaceRouter");
+  assertStringIncludes(adminApp, "foundationNavigation");
+  assertStringIncludes(adminNavigation, 'href: "/verification"');
+  assertStringIncludes(adminWorkspaceRouter, 'props.route === "/verification"');
+  assertStringIncludes(adminWorkspaceRouter, "AdminVerificationWorkspace");
   assertStringIncludes(adminVerification, '"/admin/verification/configuration"');
   assertStringIncludes(adminVerification, '"/admin/verification/exceptions"');
   assertStringIncludes(adminVerification, '"/admin/verification/provider-route"');
@@ -227,6 +233,16 @@ Deno.test("Didit personal KYC uses the free workflow and authority remains assis
   assertStringIncludes(sharedVerification, "providerHttpStatus");
   assertStringIncludes(sharedVerification, "providerRequestId");
   assertStringIncludes(sharedVerification, "providerMessage");
+});
+
+Deno.test("driver and station onboarding form colors follow the active app palette", () => {
+  assertStringIncludes(applicationScreen, "useAppTheme");
+  assertStringIncludes(applicationScreen, "const { palette } = useAppTheme()");
+  assertStringIncludes(applicationScreen, "placeholderTextColor={palette.muted}");
+  assertStringIncludes(applicationScreen, "backgroundColor: palette.input");
+  assertStringIncludes(applicationScreen, "color: palette.ink");
+  assertStringIncludes(applicationScreen, "backgroundColor: palette.brandSoft");
+  assertStringIncludes(applicationScreen, "backgroundColor: palette.successSoft");
 });
 
 Deno.test("verification runtime is JWT protected", () => {
