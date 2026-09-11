@@ -33,6 +33,7 @@ function IntelligenceOverviewScreen(props: { readonly onNavigate: (href: string)
           href: "/intelligence/ask",
           icon: Sparkles,
           meta: "Decision support",
+          requiredPermissions: ["platform.ai.read"],
         },
         {
           key: "ask-skima",
@@ -41,6 +42,7 @@ function IntelligenceOverviewScreen(props: { readonly onNavigate: (href: string)
           href: "/intelligence/ask",
           icon: Bot,
           meta: "Read only",
+          requiredPermissions: ["platform.ai.read"],
         },
       ]}
     />
