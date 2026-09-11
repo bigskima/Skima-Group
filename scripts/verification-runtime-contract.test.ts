@@ -229,6 +229,38 @@ Deno.test("Didit personal KYC uses the free workflow and authority remains assis
   assertStringIncludes(sharedVerification, "providerMessage");
 });
 
+Deno.test("Didit personal KYC accepts configured partner audiences and recovers stale workflow UUIDs", async () => {
+  const rolePolicy = await read(
+    "supabase/migrations/20260911105500_didit_role_alias_workflow_recovery.sql",
+  );
+
+  assertStringIncludes(rolePolicy, "'provider_audience', 'driver'");
+  assertStringIncludes(rolePolicy, "'provider_audience', 'station_rep'");
+  assertStringIncludes(rolePolicy, "'station_representative'");
+  assertStringIncludes(rolePolicy, "'workflowRecoveryEnabled', true");
+  assertStringIncludes(sharedVerification, "routeAllowsAudience");
+  assertStringIncludes(sharedVerification, "providerAudienceAliases");
+  assertStringIncludes(sharedVerification, "createDiditSessionWithWorkflowRecovery");
+  assertStringIncludes(sharedVerification, '"https://verification.didit.me/v3/workflows/"');
+  assertStringIncludes(sharedVerification, "extractProviderErrorMessage");
+  assertStringIncludes(sharedVerification, "providerWorkflowRecoveredAt");
+  assert(
+    !sharedVerification.includes("application.lpg.driver") &&
+      !sharedVerification.includes("application.lpg.station"),
+    "The provider runtime must resolve applicant audience from configuration, not LPG application keys.",
+  );
+});
+
+Deno.test("driver and station onboarding form colors follow the active app palette", () => {
+  assertStringIncludes(applicationScreen, "useAppTheme");
+  assertStringIncludes(applicationScreen, "const { palette } = useAppTheme()");
+  assertStringIncludes(applicationScreen, "placeholderTextColor={palette.muted}");
+  assertStringIncludes(applicationScreen, "backgroundColor: palette.input");
+  assertStringIncludes(applicationScreen, "color: palette.ink");
+  assertStringIncludes(applicationScreen, "backgroundColor: palette.brandSoft");
+  assertStringIncludes(applicationScreen, "backgroundColor: palette.successSoft");
+});
+
 Deno.test("verification runtime is JWT protected", () => {
   assertStringIncludes(supabaseConfig, "[functions.verification-runtime]");
   assertStringIncludes(supabaseConfig, "verify_jwt = true");

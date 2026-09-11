@@ -51,6 +51,7 @@ import {
 import { useMapsGatewayAdapter } from "../domains/maps/gateway";
 import { uploadMedia } from "../media/upload";
 import { useSession } from "../session/SessionProvider";
+import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
@@ -138,6 +139,7 @@ export function ApplicationOverviewScreen({
   workspace: "driver" | "station";
 }) {
   const session = useSession();
+  const { palette } = useAppTheme();
   const maps = useMapsGatewayAdapter();
   const applications = domainQueries.applications();
   const types = domainQueries.applicationTypes();
@@ -614,7 +616,7 @@ export function ApplicationOverviewScreen({
   if (applications.isPending || types.isPending || requirements.isPending) {
     return (
       <Screen eyebrow={`${workspace} application`} title="Application">
-        <ActivityIndicator color={colors.brand} />
+        <ActivityIndicator color={palette.brand} />
       </Screen>
     );
   }
@@ -626,7 +628,7 @@ export function ApplicationOverviewScreen({
         title="Application Status"
         action={
           <Pressable onPress={() => router.back()}>
-            <Text style={styles.link}>Back</Text>
+            <Text style={[styles.link, { color: palette.brand }]}>Back</Text>
           </Pressable>
         }
       >
@@ -684,7 +686,7 @@ export function ApplicationOverviewScreen({
       title={workspace === "driver" ? "Driver Application" : "Station Application"}
       action={
         <Pressable onPress={() => void handleSaveAndExit()}>
-          <Text style={styles.link}>Save & Exit</Text>
+          <Text style={[styles.link, { color: palette.brand }]}>Save & Exit</Text>
         </Pressable>
       }
     >
@@ -722,57 +724,62 @@ export function ApplicationOverviewScreen({
         <>
           {currentStep === 1 ? (
             <Card>
-              <Text style={styles.sectionHeader}>Personal Details</Text>
+              <Text style={[styles.sectionHeader, { color: palette.ink }]}>Personal Details</Text>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Full Legal Name *</Text>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>Full Legal Name *</Text>
                 <TextInput
                   value={name}
                   onChangeText={setName}
                   placeholder="e.g. Samuel Adeleke"
-                  style={styles.input}
+                  placeholderTextColor={palette.muted}
+                  style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Driver Display Name</Text>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>Driver Display Name</Text>
                 <TextInput
                   value={driverDisplayName}
                   onChangeText={setDriverDisplayName}
                   placeholder="e.g. Sam A."
-                  style={styles.input}
+                  placeholderTextColor={palette.muted}
+                  style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Phone Number *</Text>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>Phone Number *</Text>
                 <TextInput
                   value={phone}
                   onChangeText={setPhone}
                   keyboardType="phone-pad"
                   placeholder="e.g. 08012345678"
-                  style={styles.input}
+                  placeholderTextColor={palette.muted}
+                  style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Residential Address *</Text>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>Residential Address *</Text>
                 <TextInput
                   value={address}
                   onChangeText={setAddress}
                   multiline
                   placeholder="e.g. 14 Gas Way, Ikeja, Lagos"
-                  style={[styles.input, styles.textArea]}
+                  placeholderTextColor={palette.muted}
+                  style={[styles.input, styles.textArea, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Driver Licence Number *</Text>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>Driver Licence Number *</Text>
                 <TextInput
                   value={legalOrLicence}
                   onChangeText={setLegalOrLicence}
                   placeholder="e.g. ABC123456789"
-                  style={styles.input}
+                  placeholderTextColor={palette.muted}
+                  style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
                 />
               </View>
             </Card>
@@ -889,27 +896,28 @@ export function ApplicationOverviewScreen({
                 />
               ) : (
                 <Card>
-                  <Text style={styles.sectionHeader}>Owner applicant</Text>
-                  <Text style={styles.helperText}>
+                  <Text style={[styles.sectionHeader, { color: palette.ink }]}>Owner applicant</Text>
+                  <Text style={[styles.helperText, { color: palette.muted }]}>
                     Automatic KYC is used for station representatives at launch. If the station owner is applying directly, owner identity remains part of the evidence reviewed by SKIMA.
                   </Text>
                 </Card>
               )}
               <Card>
-              <Text style={styles.sectionHeader}>Representative Details</Text>
+              <Text style={[styles.sectionHeader, { color: palette.ink }]}>Representative Details</Text>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Representative Full Name *</Text>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>Representative Full Name *</Text>
                 <TextInput
                   value={name}
                   onChangeText={setName}
                   placeholder="e.g. Chief Ibrahim Danladi"
-                  style={styles.input}
+                  placeholderTextColor={palette.muted}
+                  style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Representative Role in Business *</Text>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>Representative Role in Business *</Text>
                 <View style={styles.roleChips}>
                   {STATION_ROLES.map((role) => (
                     <Pressable
@@ -917,13 +925,20 @@ export function ApplicationOverviewScreen({
                       onPress={() => setStationRole(role.key)}
                       style={[
                         styles.roleChip,
+                        { borderColor: palette.border, backgroundColor: palette.surface },
                         stationRole === role.key && styles.roleChipActive,
+                        stationRole === role.key && {
+                          borderColor: palette.brand,
+                          backgroundColor: palette.brandSoft,
+                        },
                       ]}
                     >
                       <Text
                         style={[
                           styles.roleChipText,
+                          { color: palette.muted },
                           stationRole === role.key && styles.roleChipTextActive,
+                          stationRole === role.key && { color: palette.brand },
                         ]}
                       >
                         {role.label}
@@ -932,24 +947,25 @@ export function ApplicationOverviewScreen({
                   ))}
                 </View>
                 {stationRole !== "owner" ? (
-                  <Text style={styles.helperText}>
+                  <Text style={[styles.helperText, { color: palette.muted }]}>
                     SKIMA verifies the registering representative's identity automatically. If authority cannot be confirmed, only proof that you are authorized to register this station will be requested.
                   </Text>
                 ) : (
-                  <Text style={styles.helperText}>
+                  <Text style={[styles.helperText, { color: palette.muted }]}>
                     Owner applicants continue with manual owner-identity evidence. SKIMA does not automatically verify company owners or beneficial owners in the launch flow.
                   </Text>
                 )}
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Phone Number *</Text>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>Phone Number *</Text>
                 <TextInput
                   value={phone}
                   onChangeText={setPhone}
                   keyboardType="phone-pad"
                   placeholder="e.g. 08033334444"
-                  style={styles.input}
+                  placeholderTextColor={palette.muted}
+                  style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
                 />
               </View>
 
@@ -976,61 +992,65 @@ export function ApplicationOverviewScreen({
                 check={verificationCheck("verification.business.registry")}
               />
               <Card>
-              <Text style={styles.sectionHeader}>Business & Station Details</Text>
+              <Text style={[styles.sectionHeader, { color: palette.ink }]}>Business & Station Details</Text>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Registered Business / Legal Name *</Text>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>Registered Business / Legal Name *</Text>
                 <TextInput
                   value={legalOrLicence}
                   onChangeText={setLegalOrLicence}
                   placeholder="e.g. Emelie Gas Limited"
-                  style={styles.input}
+                  placeholderTextColor={palette.muted}
+                  style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>CAC / BN / RC Number</Text>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>CAC / BN / RC Number</Text>
                 <TextInput
                   value={businessRegistrationNumber}
                   onChangeText={setBusinessRegistrationNumber}
                   autoCapitalize="characters"
                   placeholder="e.g. RC1234567"
-                  style={styles.input}
+                  placeholderTextColor={palette.muted}
+                  style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>LPG Station Name *</Text>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>LPG Station Name *</Text>
                 <TextInput
                   value={stationName}
                   onChangeText={setStationName}
                   placeholder="e.g. TotalEnergies LPG Plant Victoria Island"
-                  style={styles.input}
+                  placeholderTextColor={palette.muted}
+                  style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Physical Address *</Text>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>Physical Address *</Text>
                 <TextInput
                   value={address}
                   onChangeText={setAddress}
                   multiline
                   placeholder="e.g. Plot 104, Ozumba Mbadiwe Ave, Victoria Island, Lagos"
-                  style={[styles.input, styles.textArea]}
+                  placeholderTextColor={palette.muted}
+                  style={[styles.input, styles.textArea, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
                 />
               </View>
 
               <Pressable
                 disabled={detectingLocation}
                 onPress={() => void detectLocation()}
-                style={styles.locationBtn}
+                style={[styles.locationBtn, { borderColor: palette.brand, backgroundColor: palette.brandSoft }]}
               >
                 {detectingLocation ? (
-                  <ActivityIndicator color={colors.brand} />
+                  <ActivityIndicator color={palette.brand} />
                 ) : (
                   <>
-                    <LocateFixed color={colors.brand} size={18} />
-                    <Text style={styles.locationBtnText}>
+                    <LocateFixed color={palette.brand} size={18} />
+                    <Text style={[styles.locationBtnText, { color: palette.brand }]}>
                       {latitude !== null
                         ? "Update Current GPS Location"
                         : "Capture Station GPS Location"}
@@ -1040,13 +1060,13 @@ export function ApplicationOverviewScreen({
               </Pressable>
 
               {latitude !== null && longitude !== null ? (
-                <View style={styles.coordBox}>
-                  <MapPin color={colors.success} size={16} />
+                <View style={[styles.coordBox, { backgroundColor: palette.successSoft }]}>
+                  <MapPin color={palette.success} size={16} />
                   <View style={styles.coordCopy}>
-                    <Text style={styles.coordTitle}>
+                    <Text style={[styles.coordTitle, { color: palette.ink }]}>
                       {address || lastLocation?.formattedAddress || "Station location captured"}
                     </Text>
-                    <Text style={styles.coordText}>
+                    <Text style={[styles.coordText, { color: palette.success }]}>
                       {latitude.toFixed(6)}, {longitude.toFixed(6)}
                     </Text>
                   </View>
@@ -1054,13 +1074,14 @@ export function ApplicationOverviewScreen({
               ) : null}
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Station Refill Storage Capacity (kg)</Text>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>Station Refill Storage Capacity (kg)</Text>
                 <TextInput
                   value={capacity}
                   onChangeText={setCapacity}
                   keyboardType="numeric"
                   placeholder="e.g. 5000"
-                  style={styles.input}
+                  placeholderTextColor={palette.muted}
+                  style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
                 />
               </View>
             </Card>
@@ -1176,20 +1197,20 @@ export function ApplicationOverviewScreen({
         />
       ) : null}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
 
       <View style={styles.footerRow}>
         {currentStep > 1 ? (
-          <Pressable onPress={handlePrevStep} style={styles.prevBtn}>
-            <ArrowLeft color={colors.ink} size={16} />
-            <Text style={styles.prevBtnText}>Previous</Text>
+          <Pressable onPress={handlePrevStep} style={[styles.prevBtn, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+            <ArrowLeft color={palette.ink} size={16} />
+            <Text style={[styles.prevBtnText, { color: palette.ink }]}>Previous</Text>
           </Pressable>
         ) : (
           <View style={{ flex: 1 }} />
         )}
 
         {currentStep < totalSteps ? (
-          <Pressable onPress={() => void handleNextStep()} style={styles.nextBtn}>
+          <Pressable onPress={() => void handleNextStep()} style={[styles.nextBtn, { backgroundColor: palette.brand }]}>
             <Text style={styles.nextBtnText}>Save & Continue</Text>
             <ArrowRight color="white" size={16} />
           </Pressable>
@@ -1197,7 +1218,11 @@ export function ApplicationOverviewScreen({
           <Pressable
             disabled={!canSubmit || submitting}
             onPress={() => void handleSubmitApplication()}
-            style={[styles.submitBtn, (!canSubmit || submitting) && styles.btnDisabled]}
+            style={[
+              styles.submitBtn,
+              { backgroundColor: palette.success },
+              (!canSubmit || submitting) && styles.btnDisabled,
+            ]}
           >
             {submitting ? (
               <ActivityIndicator color="white" size="small" />

@@ -52,6 +52,10 @@ export async function startPartnerVerificationSession(
     applicationTypeId,
     verificationKey,
   );
+  const mappingMetadata = recordValue(mapping.metadata);
+  const providerAudience = textValue(
+    mappingMetadata.provider_audience ?? mappingMetadata.providerAudience,
+  );
 
   const appliesResult = await serviceClient.rpc(
     "application_verification_mapping_applies",
@@ -117,6 +121,15 @@ export async function startPartnerVerificationSession(
     );
   }
 
+  if (providerAudience && !routeAllowsAudience(route.config, providerAudience)) {
+    throw new VerificationRuntimeError(
+      "verification_audience_not_supported",
+      "This verification route is not enabled for the current applicant role.",
+      409,
+      { manualFallbackAllowed, providerAudience },
+    );
+  }
+
   if (route.provider.key !== "provider.verification.didit") {
     throw new VerificationRuntimeError(
       "verification_provider_not_supported",
@@ -149,6 +162,7 @@ export async function startPartnerVerificationSession(
       skima_application_id: applicationId,
       verification_key: verificationKey,
       verification_scope: verificationKey === "verification.business.registry" ? "station_kyb" : "partner_kyc",
+      ...(providerAudience ? { skima_partner_role: providerAudience } : {}),
     },
   };
   const callbackUrl = textValue(route.config.callback_url ?? route.config.callbackUrl);
@@ -159,15 +173,18 @@ export async function startPartnerVerificationSession(
   }
 
   let providerBody: Record<string, unknown>;
+  let providerWorkflowRef = route.workflow_ref;
   try {
-    providerBody = await diditRequest(
+    const providerResult = await createDiditSessionWithWorkflowRecovery({
       apiKey,
-      "https://verification.didit.me/v3/session/",
-      {
-        method: "POST",
-        body: JSON.stringify(providerRequest),
-      },
-    );
+      serviceClient,
+      route,
+      providerRequest,
+      verificationKey,
+      idempotencyKey,
+    });
+    providerBody = providerResult.body;
+    providerWorkflowRef = providerResult.workflowRef;
   } catch (error) {
     const runtimeError = error instanceof VerificationRuntimeError ? error : null;
     await logProviderExecution(serviceClient, {
@@ -178,7 +195,7 @@ export async function startPartnerVerificationSession(
       requestPayload: {
         applicationId,
         verificationKey,
-        workflowRef: route.workflow_ref,
+        workflowRef: providerWorkflowRef,
       },
       responsePayload: runtimeError?.details ?? {},
       errorMessage: error instanceof Error ? error.message : "provider request failed",
@@ -518,7 +535,7 @@ async function applicationMapping(
 
   const mapping = await serviceClient
     .from("application_verification_requirements")
-    .select("id,verification_definition_id,manual_fallback_allowed")
+    .select("id,verification_definition_id,manual_fallback_allowed,metadata")
     .eq("application_type_id", applicationTypeId)
     .eq("verification_definition_id", definition.data.id)
     .eq("status", "active")
@@ -543,12 +560,7 @@ function resolveEdgeSecret(name: string): string | null {
 async function activeRoute(
   serviceClient: SupabaseClient,
   verificationDefinitionId: string,
-): Promise<{
-  id: string;
-  workflow_ref: string;
-  config: Record<string, unknown>;
-  provider: { id: string; key: string; display_name: string };
-} | null> {
+): Promise<ActiveVerificationRoute | null> {
   const routes = await serviceClient
     .from("verification_provider_routes")
     .select("id,provider_adapter_id,workflow_ref,priority,config")
@@ -586,6 +598,327 @@ async function activeRoute(
   }
 
   return null;
+}
+
+type ActiveVerificationRoute = {
+  id: string;
+  workflow_ref: string;
+  config: Record<string, unknown>;
+  provider: { id: string; key: string; display_name: string };
+};
+
+function routeAllowsAudience(
+  routeConfig: Record<string, unknown>,
+  audience: string,
+): boolean {
+  const configured = Array.isArray(routeConfig.audience)
+    ? routeConfig.audience.map(textValue).filter((value): value is string => Boolean(value))
+    : [];
+  if (configured.length === 0 || configured.includes(audience)) return true;
+
+  const aliasMap = recordValue(
+    routeConfig.providerAudienceAliases ?? routeConfig.provider_audience_aliases,
+  );
+  const directAliases = Array.isArray(aliasMap[audience])
+    ? (aliasMap[audience] as unknown[])
+        .map(textValue)
+        .filter((value): value is string => Boolean(value))
+    : [];
+  if (directAliases.some((alias) => configured.includes(alias))) return true;
+
+  return Object.entries(aliasMap).some(([configuredAlias, values]) => {
+    if (!configured.includes(configuredAlias) || !Array.isArray(values)) return false;
+    return values.some((value) => textValue(value) === audience);
+  });
+}
+
+async function createDiditSessionWithWorkflowRecovery(input: {
+  apiKey: string;
+  serviceClient: SupabaseClient;
+  route: ActiveVerificationRoute;
+  providerRequest: Record<string, unknown>;
+  verificationKey: string;
+  idempotencyKey: string;
+}): Promise<{ body: Record<string, unknown>; workflowRef: string }> {
+  try {
+    return {
+      body: await diditRequest(
+        input.apiKey,
+        "https://verification.didit.me/v3/session/",
+        { method: "POST", body: JSON.stringify(input.providerRequest) },
+      ),
+      workflowRef: input.route.workflow_ref,
+    };
+  } catch (error) {
+    if (!shouldRecoverDiditWorkflow(error, input.route.config)) throw error;
+
+    const recovered = await resolveDiditWorkflow(input.apiKey, input.route.config);
+    if (!recovered) throw error;
+
+    const recoveredRequest = {
+      ...input.providerRequest,
+      workflow_id: recovered.uuid,
+    };
+    const body = await diditRequest(
+      input.apiKey,
+      "https://verification.didit.me/v3/session/",
+      { method: "POST", body: JSON.stringify(recoveredRequest) },
+    );
+
+    if (input.route.config.workflowRecoveryPersistResolvedRef === true) {
+      await persistRecoveredDiditWorkflow(
+        input.serviceClient,
+        input.route,
+        recovered,
+      );
+    }
+
+    await logProviderExecution(input.serviceClient, {
+      providerAdapterId: input.route.provider.id,
+      operationKey: "verification.workflow.recovered",
+      status: "succeeded",
+      idempotencyKey: input.idempotencyKey + ":workflow-recovery",
+      requestPayload: {
+        verificationKey: input.verificationKey,
+        previousWorkflowRef: input.route.workflow_ref,
+      },
+      responsePayload: {
+        workflowRef: recovered.uuid,
+        workflowLabel: recovered.label,
+        source: recovered.source,
+      },
+    });
+
+    return { body, workflowRef: recovered.uuid };
+  }
+}
+
+function shouldRecoverDiditWorkflow(
+  error: unknown,
+  routeConfig: Record<string, unknown>,
+): boolean {
+  if (routeConfig.workflowRecoveryEnabled !== true) return false;
+  if (!(error instanceof VerificationRuntimeError)) return false;
+  if (error.code !== "verification_provider_request_failed") return false;
+  if (error.details.providerHttpStatus !== 400) return false;
+
+  const message = textValue(error.details.providerMessage)?.toLowerCase() ?? "";
+  return (
+    message.includes("workflow") &&
+    (
+      message.includes("invalid") ||
+      message.includes("not found") ||
+      message.includes("does not exist") ||
+      message.includes("unknown")
+    )
+  );
+}
+
+async function resolveDiditWorkflow(
+  apiKey: string,
+  routeConfig: Record<string, unknown>,
+): Promise<{ uuid: string; label: string; source: string } | null> {
+  const workflows = await listDiditWorkflows(apiKey);
+  const eligible = workflows.filter((workflow) => {
+    if (workflow.is_archived === true) return false;
+    const type = textValue(workflow.workflow_type)?.toLowerCase();
+    return !type || type === "kyc" || type === "user" || type === "identity";
+  });
+  if (eligible.length === 0) return null;
+
+  const configuredLabel = textValue(
+    routeConfig.workflow_label ?? routeConfig.workflowLabel,
+  );
+  if (routeConfig.workflowRecoveryPreferConfiguredLabel === true && configuredLabel) {
+    const labelMatch = eligible.find(
+      (workflow) => textValue(workflow.workflow_label)?.toLowerCase() === configuredLabel.toLowerCase(),
+    );
+    const uuid = textValue(labelMatch?.uuid);
+    if (labelMatch && uuid) {
+      return {
+        uuid,
+        label: textValue(labelMatch.workflow_label) ?? configuredLabel,
+        source: "configured_label",
+      };
+    }
+  }
+
+  if (routeConfig.freeTierEligible === true) {
+    const freeLabelMatch = eligible.find((workflow) =>
+      textValue(workflow.workflow_label)?.toLowerCase().includes("free")
+    );
+    const uuid = textValue(freeLabelMatch?.uuid);
+    if (freeLabelMatch && uuid) {
+      return {
+        uuid,
+        label: textValue(freeLabelMatch.workflow_label) ?? "Free KYC",
+        source: "free_label",
+      };
+    }
+  }
+
+  if (routeConfig.workflowRecoveryAllowDefaultKyc === true) {
+    const defaultWorkflow = eligible.find((workflow) => workflow.is_default === true);
+    const uuid = textValue(defaultWorkflow?.uuid);
+    if (defaultWorkflow && uuid) {
+      return {
+        uuid,
+        label: textValue(defaultWorkflow.workflow_label) ?? "Default KYC",
+        source: "default_kyc",
+      };
+    }
+  }
+
+  if (eligible.length === 1) {
+    const uuid = textValue(eligible[0].uuid);
+    if (uuid) {
+      return {
+        uuid,
+        label: textValue(eligible[0].workflow_label) ?? "KYC",
+        source: "only_eligible_kyc",
+      };
+    }
+  }
+
+  return null;
+}
+
+async function listDiditWorkflows(
+  apiKey: string,
+): Promise<Record<string, unknown>[]> {
+  let response: Response;
+  try {
+    response = await fetch("https://verification.didit.me/v3/workflows/", {
+      method: "GET",
+      headers: {
+        "x-api-key": apiKey,
+        "Content-Type": "application/json",
+      },
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch (error) {
+    throw new VerificationRuntimeError(
+      "verification_provider_unreachable",
+      error instanceof Error && error.name === "TimeoutError"
+        ? "The verification provider took too long to respond while resolving the KYC workflow."
+        : "The verification provider could not be reached while resolving the KYC workflow.",
+      503,
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new VerificationRuntimeError(
+      "verification_provider_response_invalid",
+      "The verification provider returned an unreadable workflow response.",
+      502,
+    );
+  }
+
+  if (!response.ok) {
+    const providerBody = recordValue(body);
+    const providerMessage = extractProviderErrorMessage(providerBody);
+    throw new VerificationRuntimeError(
+      response.status === 401 || response.status === 403
+        ? "verification_provider_authentication_failed"
+        : response.status === 429
+        ? "verification_provider_rate_limited"
+        : "verification_provider_request_failed",
+      providerMessage ?? "The verification provider could not list available KYC workflows.",
+      response.status >= 400 && response.status < 600 ? response.status : 502,
+      {
+        providerHttpStatus: response.status,
+        providerMessage: safeProviderMessage(providerMessage),
+      },
+    );
+  }
+
+  if (!Array.isArray(body)) {
+    throw new VerificationRuntimeError(
+      "verification_provider_response_invalid",
+      "The verification provider returned an invalid workflow list.",
+      502,
+    );
+  }
+
+  return body.map(recordValue).filter((workflow) => textValue(workflow.uuid));
+}
+
+async function persistRecoveredDiditWorkflow(
+  serviceClient: SupabaseClient,
+  route: ActiveVerificationRoute,
+  workflow: { uuid: string; label: string; source: string },
+): Promise<void> {
+  const recoveredAt = new Date().toISOString();
+  const result = await serviceClient
+    .from("verification_provider_routes")
+    .update({
+      workflow_ref: workflow.uuid,
+      config: {
+        ...route.config,
+        providerWorkflowStatus: "available",
+        providerWorkflowRecoveredAt: recoveredAt,
+        providerWorkflowRecoveredFrom: route.workflow_ref,
+        providerWorkflowRecoveredLabel: workflow.label,
+        providerWorkflowRecoverySource: workflow.source,
+      },
+      updated_at: recoveredAt,
+    })
+    .eq("id", route.id)
+    .eq("status", "active");
+
+  if (result.error) {
+    console.info(JSON.stringify({
+      severity: "warning",
+      source: "partner-verification",
+      routeId: route.id,
+      message: "Recovered Didit workflow could not be persisted; this request will still continue.",
+      detail: result.error.message,
+    }));
+  }
+}
+
+function extractProviderErrorMessage(body: Record<string, unknown>): string | null {
+  const direct =
+    textValue(body.message) ??
+    textValue(body.detail) ??
+    textValue(body.description) ??
+    textValue(body.error) ??
+    textValue(recordValue(body.error).message) ??
+    textValue(recordValue(body.error).detail);
+  if (direct) return direct.slice(0, 500);
+
+  for (const [field, value] of Object.entries(body)) {
+    const nested = flattenProviderErrorValue(value);
+    if (nested) return (field + ": " + nested).slice(0, 500);
+  }
+  return null;
+}
+
+function flattenProviderErrorValue(value: unknown, depth = 0): string | null {
+  if (depth > 2) return null;
+  const text = textValue(value);
+  if (text) return text;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = flattenProviderErrorValue(item, depth + 1);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  const record = recordValue(value);
+  for (const nestedValue of Object.values(record)) {
+    const nested = flattenProviderErrorValue(nestedValue, depth + 1);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function safeProviderMessage(value: string | null): string | null {
+  if (!value) return null;
+  return value.toLowerCase().includes("api key") ? null : value;
 }
 
 async function diditRequest(
@@ -626,13 +959,7 @@ async function diditRequest(
   }
 
   if (!response.ok) {
-    const providerMessage =
-      textValue(body.message) ??
-      textValue(body.detail) ??
-      textValue(body.error) ??
-      textValue(body.description) ??
-      textValue(recordValue(body.error).message) ??
-      textValue(recordValue(body.error).detail);
+    const providerMessage = extractProviderErrorMessage(body);
     const providerCode =
       textValue(body.code) ??
       textValue(body.error_code) ??
@@ -664,17 +991,15 @@ async function diditRequest(
         ? "This Didit workflow requires billable credits. SKIMA can retry after the workflow or balance is corrected, and the accepted fallback evidence remains available."
         : response.status === 429
         ? "Automatic verification is temporarily busy. Try again shortly."
-        : providerMessage && !providerMessage.toLowerCase().includes("api key")
-        ? providerMessage
+        : safeProviderMessage(providerMessage)
+        ? safeProviderMessage(providerMessage)!
         : "The verification provider could not complete the request.",
       response.status >= 400 && response.status < 600 ? response.status : 502,
       {
         providerHttpStatus: response.status,
         providerCode,
         providerRequestId,
-        providerMessage: providerMessage && !providerMessage.toLowerCase().includes("api key")
-          ? providerMessage
-          : null,
+        providerMessage: safeProviderMessage(providerMessage),
       },
     );
   }
