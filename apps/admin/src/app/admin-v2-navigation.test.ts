@@ -4,6 +4,7 @@ import type { NavigationItem } from "@skima/frontend-core";
 import {
   buildAdminCategoryNavigation,
   getAdminWorkspaceForRoute,
+  getAdminWorkspaceNavigation,
   resolveAdminPath,
   toAdminV2NavigationItem,
   toLegacyAdminWorkspacePath,
@@ -30,10 +31,35 @@ describe("SKIMA Admin V2 navigation", () => {
       { key: "finance", label: "Balances", href: "/finance", icon: "finance" },
     ].map(toAdminV2NavigationItem);
 
-    expect(buildAdminCategoryNavigation(items).map((item) => item.key)).toEqual([
+    const categories = buildAdminCategoryNavigation(items);
+    expect(categories.map((item) => item.key)).toEqual([
       "dashboard",
       "partners",
       "money",
+    ]);
+    expect(categories.find((item) => item.key === "money")?.href).toBe("/money");
+  });
+
+  it("keeps the Money category root as a real landing screen", () => {
+    expect(resolveAdminPath("/money")).toBe("/money");
+  });
+
+  it("splits Money into focused permission-aware screens", () => {
+    const items: NavigationItem[] = [
+      { key: "revenue", label: "Money & Revenue", href: "/revenue", icon: "revenue" },
+      { key: "finance", label: "Wallets & Settlements", href: "/finance", icon: "finance" },
+      { key: "delivery-pricing", label: "Delivery Pricing", href: "/delivery-pricing", icon: "deliveryPricing" },
+      { key: "driver-pricing", label: "Driver Pricing", href: "/driver-pricing", icon: "driverPricing" },
+    ].map(toAdminV2NavigationItem);
+
+    expect(getAdminWorkspaceNavigation("money", items).map((item) => item.href)).toEqual([
+      "/money",
+      "/money/revenue",
+      "/money/balances",
+      "/money/withdrawals",
+      "/money/settlements",
+      "/money/pricing",
+      "/money/controls",
     ]);
   });
 
