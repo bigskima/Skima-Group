@@ -31,7 +31,16 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Apply Phase 4 intelligence upgrade
-        run: node scripts/apply-phase4-admin-ai-upgrade.mjs
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/apply-phase4-admin-ai-upgrade.mjs")
+          text = path.read_text()
+          text = text.replace("const adminObject = oldAdminReturn\\n  .replace(", "const adminObject = oldAdminReturn\n  .replace(")
+          text = text.replace("`)\\n  .replace(/", "`)\n  .replace(/")
+          path.write_text(text)
+          PY
+          node scripts/apply-phase4-admin-ai-upgrade.mjs
 
       - name: Typecheck platform and edge functions
         run: npm run check
