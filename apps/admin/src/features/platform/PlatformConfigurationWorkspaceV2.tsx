@@ -15,7 +15,7 @@ export function PlatformConfigurationWorkspaceV2(props: {
 }) {
   if (props.route === CONFIG_BASE) return <ConfigurationOverview onNavigate={props.onNavigate} />;
   if (props.route === `${CONFIG_BASE}/business-lines`) return <PlatformBusinessLinesScreen />;
-  if (props.route === `${CONFIG_BASE}/webhooks`) return <PlatformWebhookScreen />;
+  if (props.route === `${CONFIG_BASE}/webhooks`) return <PlatformWebhookScreen onNavigate={props.onNavigate} />;
   if (props.route === `${CONFIG_BASE}/advanced`) return <AdminResourceConsole config={governanceConsoleConfig} />;
 
   return (
@@ -57,7 +57,7 @@ function ConfigurationOverview(props: { readonly onNavigate: (href: string) => v
         {
           key: "webhooks",
           title: "External notifications",
-          description: "Manage HTTPS webhook destinations and see recent delivery health.",
+          description: "Review webhook destinations and recent delivery health while sensitive delivery setup stays protected.",
           href: `${CONFIG_BASE}/webhooks`,
           icon: Webhook,
           meta: "Outbound webhooks",
