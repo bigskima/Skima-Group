@@ -13,15 +13,11 @@ export function PlatformWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
 }) {
-  if (props.route === "/platform") {
-    return <PlatformOverviewScreen onNavigate={props.onNavigate} />;
-  }
-
+  if (props.route === "/platform") return <PlatformOverviewScreen onNavigate={props.onNavigate} />;
   if (props.route === "/platform/people-access") return <AdminAccessWorkspace />;
   if (props.route === "/platform/configuration") return <AdminResourceConsole config={governanceConsoleConfig} />;
   if (props.route === "/platform/integrations") return <AdminResourceConsole config={integrationConsoleConfig} />;
   if (props.route === "/platform/system") return <AdminSystemWorkspace />;
-
   return <PlatformOverviewScreen onNavigate={props.onNavigate} />;
 }
 
@@ -40,7 +36,7 @@ function PlatformOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/platform/people-access",
           icon: UsersRound,
           meta: "Admin authority",
-          requiredPermissions: ["platform.admins.read"],
+          permissionKey: "access",
         },
         {
           key: "configuration",
@@ -49,7 +45,7 @@ function PlatformOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/platform/configuration",
           icon: Settings2,
           meta: "Platform setup",
-          requiredPermissions: ["platform.configuration.read"],
+          permissionKey: "governance",
         },
         {
           key: "integrations",
@@ -58,7 +54,7 @@ function PlatformOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/platform/integrations",
           icon: PlugZap,
           meta: "External connections",
-          requiredPermissions: ["platform.providers.manage"],
+          permissionKey: "providers",
         },
         {
           key: "system",
@@ -67,7 +63,7 @@ function PlatformOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/platform/system",
           icon: ServerCog,
           meta: "Health & diagnostics",
-          requiredPermissions: ["platform.health.read"],
+          permissionKey: "system",
         },
       ]}
     />
