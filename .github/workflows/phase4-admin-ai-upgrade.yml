@@ -1,0 +1,57 @@
+name: Phase 4 admin intelligence upgrade
+
+on:
+  push:
+    branches:
+      - phase-4/admin-ai-layers
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Use Deno 2
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Apply Phase 4 intelligence upgrade
+        run: node scripts/apply-phase4-admin-ai-upgrade.mjs
+
+      - name: Typecheck platform and edge functions
+        run: npm run check
+
+      - name: Verify AI runtime contracts
+        run: npm run ai-runtime:contract
+
+      - name: Build admin production bundle
+        run: npm run deploy:check:admin
+
+      - name: Commit validated source
+        run: |
+          git rm scripts/apply-phase4-admin-ai-upgrade.mjs .github/workflows/phase4-admin-ai-upgrade.yml
+          git add apps/admin/src/admin-ai-workspace.tsx supabase/functions/api-gateway/index.ts scripts/ai-runtime-contract.test.ts
+          if git diff --cached --quiet; then
+            echo "No validated source changes to commit."
+            exit 0
+          fi
+          git config user.name "skima-phase4-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git commit -m "feat: upgrade layered admin intelligence"
+          git push origin HEAD:phase-4/admin-ai-layers
