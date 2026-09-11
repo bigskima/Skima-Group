@@ -1,10 +1,10 @@
 import { PlugZap, ServerCog, Settings2, UsersRound } from "lucide-react";
 
 import { AdminAccessWorkspace } from "../../admin-access-workspace";
-import { AdminSystemWorkspace } from "../../admin-system-workspace";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
 import { PlatformConfigurationWorkspaceV2 } from "./PlatformConfigurationWorkspaceV2";
 import { PlatformIntegrationsWorkspaceV2 } from "./PlatformIntegrationsWorkspaceV2";
+import { PlatformSystemWorkspaceV2 } from "./PlatformSystemWorkspaceV2";
 
 export function PlatformWorkspaceRouter(props: {
   readonly route: string;
@@ -18,7 +18,9 @@ export function PlatformWorkspaceRouter(props: {
   if (props.route === "/platform/integrations" || props.route.startsWith("/platform/integrations/")) {
     return <PlatformIntegrationsWorkspaceV2 route={props.route} onNavigate={props.onNavigate} />;
   }
-  if (props.route === "/platform/system") return <AdminSystemWorkspace />;
+  if (props.route === "/platform/system" || props.route.startsWith("/platform/system/")) {
+    return <PlatformSystemWorkspaceV2 route={props.route} onNavigate={props.onNavigate} />;
+  }
   return <PlatformOverviewScreen onNavigate={props.onNavigate} />;
 }
 
@@ -60,7 +62,7 @@ function PlatformOverviewScreen(props: { readonly onNavigate: (href: string) => 
         {
           key: "system",
           title: "System health",
-          description: "Inspect operational health, runtime status and platform diagnostics without exposing them across business workspaces.",
+          description: "Open focused health, background work, incident, activity and audit workspaces without loading a single command-center page.",
           href: "/platform/system",
           icon: ServerCog,
           meta: "Health & diagnostics",
