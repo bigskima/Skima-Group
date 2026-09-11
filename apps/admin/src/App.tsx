@@ -43,6 +43,7 @@ import {
   canAccessAdminNavigationKey,
   foundationNavigation,
 } from "./admin-navigation-config";
+import { shouldShowWorkspaceRouteUnavailable } from "./app/admin-route-recovery";
 import { AdminV2WorkspaceRouter } from "./app/AdminV2WorkspaceRouter";
 import {
   buildAdminCategoryNavigation,
@@ -134,7 +135,6 @@ export function App() {
   const shellNavItems = categoryNavigation.map(toShellNavItem);
   const workspace = getAdminWorkspaceForRoute(route);
   const workspaceNavigationItems = getAdminWorkspaceNavigation(workspace.key, visibleScreens);
-  const workspaceNavigation = workspaceNavigationItems.map(toShellNavItem);
   const activeCategory = categoryNavigation.find((item) => item.key === workspace.key) ?? categoryNavigation[0];
   const screenLabel = getAdminScreenLabel(route, visibleScreens);
   const isWorkspaceLanding = route === workspace.basePath && workspaceNavigationItems.length > 0;
@@ -143,10 +143,30 @@ export function App() {
   ) || visibleScreens.some((item) =>
     route === item.href || route.startsWith(`${item.href}/`)
   );
-  const safeRoute = hasVisibleScreen ? route : "/dashboard";
-  const safeWorkspace = getAdminWorkspaceForRoute(safeRoute);
-  const safeWorkspaceNavigation = getAdminWorkspaceNavigation(safeWorkspace.key, visibleScreens).map(toShellNavItem);
+  const workspaceVisible = categoryNavigation.some((item) => item.key === workspace.key);
+  const showUnavailableRoute = shouldShowWorkspaceRouteUnavailable({
+    route,
+    workspaceBasePath: workspace.basePath,
+    workspaceVisible,
+    hasVisibleScreen,
+  });
+  const safeRoute = hasVisibleScreen ? route : showUnavailableRoute ? workspace.basePath : "/dashboard";
+  const safeWorkspace = showUnavailableRoute ? workspace : getAdminWorkspaceForRoute(safeRoute);
+  const safeWorkspaceNavigationItems = getAdminWorkspaceNavigation(safeWorkspace.key, visibleScreens);
+  const safeWorkspaceNavigation = safeWorkspaceNavigationItems.map(toShellNavItem);
   const safeCategory = categoryNavigation.find((item) => item.key === safeWorkspace.key) ?? activeCategory;
+  const pageLabel = showUnavailableRoute ? "Page unavailable" : hasVisibleScreen ? screenLabel : "Home";
+  const pageHref = showUnavailableRoute ? safeWorkspace.basePath : safeRoute;
+
+  const workspaceContent = showUnavailableRoute ? (
+    <ErrorState
+      title="Page unavailable"
+      message="This page is not available from your current SKIMA admin access. Open the workspace overview and choose one of the tasks available to you."
+      onRetry={() => navigate(safeWorkspace.basePath, { replace: true })}
+    />
+  ) : (
+    <AdminV2WorkspaceRouter route={safeRoute} onNavigate={navigate} />
+  );
 
   return (
     <PermissionProvider can={can}>
@@ -154,8 +174,8 @@ export function App() {
         brand="Skima"
         navItems={shellNavItems}
         activeHref={safeCategory?.href ?? "/dashboard"}
-        pageLabel={hasVisibleScreen ? screenLabel : "Home"}
-        pageHref={safeRoute}
+        pageLabel={pageLabel}
+        pageHref={pageHref}
         contextLabel={sessionState.context.platformAdmin?.title ?? "Platform administrator"}
         userLabel={sessionState.context.profile?.display_name ??
           sessionState.context.user.email ??
@@ -164,16 +184,16 @@ export function App() {
         onSignOut={sessionState.signOut}
       >
         {safeWorkspace.key === "dashboard" ? (
-          <AdminV2WorkspaceRouter route={safeRoute} onNavigate={navigate} />
+          workspaceContent
         ) : (
           <AdminWorkspaceLayout
             title={safeWorkspace.label}
             description={safeWorkspace.description}
             items={safeWorkspaceNavigation}
-            activeHref={safeRoute}
+            activeHref={showUnavailableRoute ? safeWorkspace.basePath : safeRoute}
             onNavigate={navigate}
           >
-            <AdminV2WorkspaceRouter route={safeRoute} onNavigate={navigate} />
+            {workspaceContent}
           </AdminWorkspaceLayout>
         )}
       </AdminShell>
