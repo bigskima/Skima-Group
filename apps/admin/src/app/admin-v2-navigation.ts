@@ -207,6 +207,14 @@ const experienceScreenLabels: Readonly<Record<string, string>> = {
   "/experience/branding": "App branding",
 };
 
+const platformScreenLabels: Readonly<Record<string, string>> = {
+  "/platform": "Platform overview",
+  "/platform/people-access": "People & access",
+  "/platform/configuration": "Configuration",
+  "/platform/integrations": "Integrations",
+  "/platform/system": "System health",
+};
+
 export function toAdminV2NavigationItem(item: NavigationItem): NavigationItem {
   return {
     ...item,
@@ -222,7 +230,15 @@ export function buildAdminCategoryNavigation(items: readonly NavigationItem[]): 
 
     if (!firstVisibleScreen) return [];
 
-    const hasLanding = ["money", "partners", "operations", "services", "intelligence", "experience"].includes(workspace.key);
+    const hasLanding = [
+      "money",
+      "partners",
+      "operations",
+      "services",
+      "intelligence",
+      "experience",
+      "platform",
+    ].includes(workspace.key);
 
     return [{
       key: workspace.key,
@@ -243,6 +259,7 @@ export function getAdminWorkspaceNavigation(
   if (workspaceKey === "services") return buildServicesWorkspaceNavigation(items);
   if (workspaceKey === "intelligence") return buildIntelligenceWorkspaceNavigation(items);
   if (workspaceKey === "experience") return buildExperienceWorkspaceNavigation(items);
+  if (workspaceKey === "platform") return buildPlatformWorkspaceNavigation(items);
 
   const workspace = adminWorkspaceDefinitions.find((candidate) => candidate.key === workspaceKey);
   if (!workspace) return [];
@@ -267,6 +284,7 @@ export function getAdminScreenLabel(route: string, items: readonly NavigationIte
   if (servicesScreenLabels[path]) return servicesScreenLabels[path];
   if (intelligenceScreenLabels[path]) return intelligenceScreenLabels[path];
   if (experienceScreenLabels[path]) return experienceScreenLabels[path];
+  if (platformScreenLabels[path]) return platformScreenLabels[path];
 
   const exact = items.find((item) => item.href === path);
   if (exact) return exact.label;
@@ -285,7 +303,13 @@ export function resolveAdminPath(rawPath: string): string {
     return `/partners/stations/${path.slice("/stations/".length)}`;
   }
 
-  if (path === "/operations" || path === "/services" || path === "/intelligence" || path === "/experience") {
+  if (
+    path === "/operations" ||
+    path === "/services" ||
+    path === "/intelligence" ||
+    path === "/experience" ||
+    path === "/platform"
+  ) {
     return path;
   }
 
@@ -497,6 +521,33 @@ function buildExperienceWorkspaceNavigation(items: readonly NavigationItem[]): r
       if (item.key === "content") return { ...item, label: "Brand & content" };
       if (item.key === "policies") return { ...item, label: "Terms & policies" };
       if (item.key === "branding") return { ...item, label: "App branding" };
+      return item;
+    }),
+  ];
+}
+
+function buildPlatformWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
+  const orderedKeys = ["access", "governance", "providers", "system"] as const;
+  const visibleItems = orderedKeys
+    .map((key) => items.find((item) => item.key === key))
+    .filter((item): item is NavigationItem => Boolean(item));
+  const first = visibleItems[0];
+
+  if (!first) return [];
+
+  return [
+    {
+      key: "platform-overview",
+      label: "Overview",
+      href: "/platform",
+      icon: "overview",
+      requiredPermissions: first.requiredPermissions,
+    },
+    ...visibleItems.map((item) => {
+      if (item.key === "access") return { ...item, label: "People & access" };
+      if (item.key === "governance") return { ...item, label: "Configuration" };
+      if (item.key === "providers") return { ...item, label: "Integrations" };
+      if (item.key === "system") return { ...item, label: "System health" };
       return item;
     }),
   ];
