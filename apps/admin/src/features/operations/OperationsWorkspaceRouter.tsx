@@ -41,6 +41,7 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/operations/orders",
           icon: ClipboardList,
           meta: "Live operations",
+          requiredPermissions: ["lpg.orders.manage"],
         },
         {
           key: "coverage",
@@ -49,6 +50,7 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/operations/coverage",
           icon: MapPinned,
           meta: "Availability",
+          requiredPermissions: ["platform.coverage.read"],
         },
         {
           key: "inventory",
@@ -57,6 +59,7 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/operations/inventory",
           icon: Boxes,
           meta: "Supply",
+          requiredPermissions: ["platform.inventory.manage"],
         },
         {
           key: "quality",
@@ -65,6 +68,7 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/operations/quality",
           icon: ShieldCheck,
           meta: "Quality",
+          requiredPermissions: ["lpg.quality.read"],
         },
         {
           key: "support",
@@ -73,6 +77,7 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/operations/support",
           icon: LifeBuoy,
           meta: "Cases",
+          requiredPermissions: ["platform.support.read"],
         },
       ]}
     />
