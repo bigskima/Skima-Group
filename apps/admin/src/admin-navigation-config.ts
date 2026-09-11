@@ -33,6 +33,7 @@ export const foundationNavigation: readonly NavigationItem[] = [
 ];
 
 export interface AdminNavigationPermissionRule {
+  readonly known: boolean;
   readonly requiredPermissions?: readonly string[];
   readonly anyOfPermissions?: readonly string[];
 }
@@ -80,11 +81,11 @@ const navigationAnyOfPermissions: Readonly<Record<string, readonly string[]>> = 
 };
 
 export function getAdminNavigationPermissionRule(key: string): AdminNavigationPermissionRule {
-  const anyOfPermissions = navigationAnyOfPermissions[key];
-  if (anyOfPermissions) return { anyOfPermissions };
-
   const item = foundationNavigation.find((candidate) => candidate.key === key);
-  return { requiredPermissions: item?.requiredPermissions };
+  const anyOfPermissions = navigationAnyOfPermissions[key];
+  if (!item && !anyOfPermissions) return { known: false };
+  if (anyOfPermissions) return { known: true, anyOfPermissions };
+  return { known: true, requiredPermissions: item?.requiredPermissions };
 }
 
 export function canAccessAdminNavigationKey(
@@ -92,6 +93,7 @@ export function canAccessAdminNavigationKey(
   can: (permission: string) => boolean,
 ): boolean {
   const rule = getAdminNavigationPermissionRule(key);
+  if (!rule.known) return false;
   const hasAllRequired = (rule.requiredPermissions ?? []).every((permission) => can(permission));
   const anyOf = rule.anyOfPermissions ?? [];
   const hasAnyRequired = anyOf.length === 0 || anyOf.some((permission) => can(permission));
