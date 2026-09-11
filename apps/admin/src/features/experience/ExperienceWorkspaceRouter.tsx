@@ -43,6 +43,7 @@ function ExperienceOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/experience/content",
           icon: Megaphone,
           meta: "Customer-facing content",
+          requiredPermissions: ["platform.content.read"],
         },
         {
           key: "policies",
@@ -51,6 +52,7 @@ function ExperienceOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/experience/policies",
           icon: FileText,
           meta: "Policy governance",
+          requiredPermissions: ["platform.policy.read"],
         },
         {
           key: "branding",
@@ -59,6 +61,7 @@ function ExperienceOverviewScreen(props: { readonly onNavigate: (href: string) =
           href: "/experience/branding",
           icon: Image,
           meta: "Startup experience",
+          requiredPermissions: ["platform.configuration.read"],
         },
       ]}
     />
