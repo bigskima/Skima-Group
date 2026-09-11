@@ -1,0 +1,412 @@
+/*
+ * SKIMA Admin V2 visual foundation.
+ *
+ * This stylesheet is intentionally loaded after the legacy admin styles so the
+ * V2 shell can converge on one brand language without changing domain code or
+ * backend contracts in individual workspaces.
+ */
+:root {
+  --sk-color-primary: #e11d2e;
+  --sk-color-primary-hover: #be1424;
+  --sk-color-primary-soft: #fff0f2;
+  --sk-color-danger: #c81427;
+  --sk-color-ink: #14171d;
+  --sk-color-muted: #68707d;
+  --sk-color-canvas: #f5f6f8;
+  --sk-color-surface: #ffffff;
+  --sk-color-surface-raised: #ffffff;
+  --sk-color-surface-subtle: #f1f3f5;
+  --sk-color-border: #dde1e6;
+  --admin-v2-charcoal: #111318;
+  --admin-v2-charcoal-raised: #191c23;
+  --admin-v2-red: #e11d2e;
+  --admin-v2-red-strong: #b81324;
+  --admin-v2-red-soft: #fff0f2;
+  --admin-v2-shadow: 0 18px 44px rgba(16, 19, 24, 0.08);
+}
+
+html,
+body,
+#root {
+  background: var(--sk-color-canvas);
+}
+
+body {
+  color: var(--sk-color-ink);
+}
+
+/* Global V2 screen rhythm */
+.admin-v2-screen {
+  min-width: 0;
+  display: grid;
+  gap: 20px;
+  animation: admin-v2-enter 160ms ease-out;
+}
+
+@keyframes admin-v2-enter {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.admin-shell {
+  background:
+    radial-gradient(circle at 92% 2%, rgba(225, 29, 46, 0.045), transparent 30%),
+    var(--sk-color-canvas);
+}
+
+.admin-shell__sidebar {
+  background:
+    radial-gradient(circle at 16% 0%, rgba(225, 29, 46, 0.18), transparent 30%),
+    linear-gradient(180deg, #15171c 0%, #0e1014 100%);
+  border-right-color: rgba(255, 255, 255, 0.07);
+}
+
+.admin-shell__brand {
+  min-height: 82px;
+}
+
+.admin-shell__brand strong {
+  letter-spacing: 0.02em;
+}
+
+.admin-shell__brand small {
+  color: rgba(255, 255, 255, 0.54);
+}
+
+.admin-server-logo,
+.admin-shell__brand-mark,
+.admin-login-brand__logo {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.admin-server-logo:not(:has(img)),
+.admin-shell__brand-mark:not(:has(img)),
+.admin-login-brand__logo:not(:has(img)) {
+  background: linear-gradient(145deg, var(--admin-v2-red), var(--admin-v2-red-strong));
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(225, 29, 46, 0.22);
+}
+
+.admin-server-logo img,
+.admin-shell__brand-mark img,
+.admin-login-brand__logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.admin-shell__nav-group > p {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.admin-shell__nav-group > button {
+  min-height: 44px;
+  border-radius: 11px;
+  color: rgba(255, 255, 255, 0.67);
+}
+
+.admin-shell__nav-group > button:hover {
+  background: rgba(255, 255, 255, 0.065);
+}
+
+.admin-shell__nav-group > button.is-active {
+  background: linear-gradient(90deg, rgba(225, 29, 46, 0.19), rgba(225, 29, 46, 0.06));
+  box-shadow: inset 3px 0 0 var(--admin-v2-red);
+}
+
+.admin-shell__sidebar-account {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.admin-shell__topbar {
+  background: rgba(255, 255, 255, 0.93);
+  border-bottom-color: rgba(20, 23, 29, 0.08);
+  box-shadow: 0 8px 30px rgba(20, 23, 29, 0.025);
+}
+
+.admin-shell__content {
+  width: min(100%, 1500px);
+  padding: 26px 30px 40px;
+}
+
+/* Normalize the legacy green-era admin accents to SKIMA red. */
+.admin-section-kicker,
+.admin-command-hero__eyebrow,
+.admin-login-copy__eyebrow,
+.skima-review-status-split span,
+.skima-applicant-card p {
+  color: var(--admin-v2-red) !important;
+}
+
+.admin-login-brand > span,
+.sk-brand__mark,
+.skima-applicant-avatar,
+.admin-launch-card__icon {
+  background: linear-gradient(145deg, var(--admin-v2-red), var(--admin-v2-red-strong));
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(225, 29, 46, 0.2);
+}
+
+.sk-nav__item.is-active {
+  background: rgba(225, 29, 46, 0.14);
+  box-shadow: inset 3px 0 var(--admin-v2-red);
+}
+
+.admin-command-hero {
+  background:
+    radial-gradient(circle at 88% 12%, rgba(255, 80, 96, 0.18), transparent 30%),
+    linear-gradient(125deg, #15171c 0%, #20242c 58%, #55131d 100%);
+}
+
+.admin-command-hero__eyebrow {
+  color: #ffabb4 !important;
+}
+
+.admin-launch-card:hover {
+  border-color: rgba(225, 29, 46, 0.32);
+  box-shadow: 0 10px 26px rgba(20, 23, 29, 0.08);
+}
+
+.admin-launch-card__icon {
+  background: var(--admin-v2-red-soft);
+  color: var(--admin-v2-red);
+  box-shadow: none;
+}
+
+.skima-applicant-card {
+  background: linear-gradient(135deg, #fff8f9, #fff);
+  border-color: #f0dfe2;
+}
+
+.skima-review-item.is-active {
+  background: var(--admin-v2-red-soft);
+}
+
+/* Panels, tables and cards use one production surface language. */
+.sk-panel,
+.sk-table-wrap,
+.sk-metric,
+.sk-dialog,
+.admin-detail-card,
+.admin-setting-section,
+.admin-compact-select-card,
+.workspace-landing__card {
+  border-color: var(--sk-color-border);
+  box-shadow: 0 1px 0 rgba(16, 19, 24, 0.02);
+}
+
+.sk-panel,
+.sk-table-wrap,
+.sk-dialog,
+.admin-detail-card,
+.admin-setting-section {
+  background: var(--sk-color-surface);
+}
+
+.sk-panel {
+  border-radius: 16px;
+}
+
+.sk-table-wrap {
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.sk-table th {
+  color: #59616d;
+  background: #f6f7f9;
+  font-size: 0.72rem;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.sk-table tbody tr:hover {
+  background: #fafafa;
+}
+
+.sk-metric {
+  border-radius: 14px;
+  background: #fff;
+}
+
+/* Consistent form system. Existing workspaces inherit this without API changes. */
+.skima-form,
+.skima-form-grid {
+  gap: 14px;
+}
+
+.skima-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.skima-form-grid > .admin-dialog-guidance,
+.skima-form-grid > .admin-setting-section,
+.skima-form-grid > .admin-sticky-save,
+.skima-form-grid > .skima-form-help,
+.skima-form-grid > [data-form-span="full"] {
+  grid-column: 1 / -1;
+}
+
+.sk-field,
+.skima-field {
+  min-width: 0;
+}
+
+.sk-field > span,
+.skima-field > span,
+.sk-field label,
+.skima-field label {
+  color: #454c57;
+  font-weight: 720;
+}
+
+.sk-input,
+.sk-select,
+.sk-textarea,
+.skima-field input,
+.skima-field select,
+.skima-field textarea {
+  border-color: #d8dde3;
+  border-radius: 11px;
+  background: #fff;
+  color: var(--sk-color-ink);
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.sk-input:focus,
+.sk-select:focus,
+.sk-textarea:focus,
+.skima-field input:focus,
+.skima-field select:focus,
+.skima-field textarea:focus {
+  outline: none;
+  border-color: rgba(225, 29, 46, 0.62);
+  box-shadow: 0 0 0 3px rgba(225, 29, 46, 0.1);
+}
+
+.sk-button {
+  border-radius: 11px;
+  font-weight: 760;
+}
+
+.sk-button--primary,
+.sk-button:not(.sk-button--outline):not(.sk-button--ghost):not(.sk-button--danger) {
+  background: var(--admin-v2-red);
+  border-color: var(--admin-v2-red);
+}
+
+.sk-button--primary:hover,
+.sk-button:not(.sk-button--outline):not(.sk-button--ghost):not(.sk-button--danger):hover {
+  background: var(--admin-v2-red-strong);
+  border-color: var(--admin-v2-red-strong);
+}
+
+.sk-button--outline:hover,
+.sk-button--ghost:hover {
+  border-color: rgba(225, 29, 46, 0.28);
+  color: var(--admin-v2-red);
+  background: var(--admin-v2-red-soft);
+}
+
+.admin-dialog-guidance,
+.skima-form-help {
+  border: 1px solid #eceef1;
+  background: #f7f8fa;
+}
+
+.sk-dialog {
+  border-radius: 18px;
+  box-shadow: 0 30px 90px rgba(8, 10, 14, 0.24);
+}
+
+.sk-dialog__header {
+  border-bottom: 1px solid #eef0f2;
+}
+
+.sk-dialog__footer {
+  background: #fafafa;
+}
+
+/* Workspace section navigation */
+.admin-workspace-sections > button.is-active,
+.admin-compact-select-card.is-active {
+  border-color: rgba(225, 29, 46, 0.4);
+  background: var(--admin-v2-red-soft);
+}
+
+.admin-workspace-sections > button > svg,
+.admin-workspace-sections__badge {
+  color: var(--admin-v2-red);
+}
+
+.admin-workspace-sections__badge {
+  background: var(--admin-v2-red-soft);
+}
+
+.admin-sticky-save {
+  border-color: rgba(225, 29, 46, 0.16);
+  box-shadow: 0 16px 38px rgba(16, 19, 24, 0.12);
+}
+
+/* Authentication now shares the same SKIMA brand instead of the old teal UI. */
+.skima-auth-page {
+  background:
+    radial-gradient(circle at 15% 8%, rgba(225, 29, 46, 0.25), transparent 32%),
+    radial-gradient(circle at 84% 88%, rgba(106, 19, 32, 0.2), transparent 34%),
+    #101216;
+}
+
+.skima-auth-panel {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.4);
+}
+
+.admin-login-copy {
+  border-top-color: #ebeef1;
+}
+
+.admin-login-security-note {
+  color: var(--sk-color-muted);
+  line-height: 1.45;
+}
+
+/* Responsive production behavior */
+@media (max-width: 980px) {
+  .admin-shell__content {
+    padding: 22px 20px 32px;
+  }
+}
+
+@media (max-width: 760px) {
+  .admin-shell__content {
+    padding: 16px 14px 28px;
+  }
+
+  .skima-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .skima-form-grid > * {
+    grid-column: 1;
+  }
+
+  .sk-panel,
+  .sk-dialog__body {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+
+  .sk-dialog__footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-v2-screen {
+    animation: none;
+  }
+}
