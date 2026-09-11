@@ -14,13 +14,17 @@ export interface WorkspaceLandingAction {
   readonly icon: LucideIcon;
   readonly meta?: string;
   readonly requiredPermissions?: readonly string[];
+  readonly anyOfPermissions?: readonly string[];
 }
 
 export function canAccessWorkspaceLandingAction(
   action: WorkspaceLandingAction,
   can: (permission: string) => boolean,
 ): boolean {
-  return (action.requiredPermissions ?? []).every((permission) => can(permission));
+  const hasAllRequired = (action.requiredPermissions ?? []).every((permission) => can(permission));
+  const anyOf = action.anyOfPermissions ?? [];
+  const hasAnyRequired = anyOf.length === 0 || anyOf.some((permission) => can(permission));
+  return hasAllRequired && hasAnyRequired;
 }
 
 export function WorkspaceLanding(props: {
