@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { usePermissionCheck } from "@skima/ui";
 
+import { getAdminNavigationPermissionRule } from "../../admin-navigation-config";
 import "./workspace-landing.css";
 
 export interface WorkspaceLandingAction {
@@ -13,6 +14,7 @@ export interface WorkspaceLandingAction {
   readonly href: string;
   readonly icon: LucideIcon;
   readonly meta?: string;
+  readonly permissionKey?: string;
   readonly requiredPermissions?: readonly string[];
   readonly anyOfPermissions?: readonly string[];
 }
@@ -21,9 +23,11 @@ export function canAccessWorkspaceLandingAction(
   action: WorkspaceLandingAction,
   can: (permission: string) => boolean,
 ): boolean {
-  const hasAllRequired = (action.requiredPermissions ?? []).every((permission) => can(permission));
-  const anyOf = action.anyOfPermissions ?? [];
-  const hasAnyRequired = anyOf.length === 0 || anyOf.some((permission) => can(permission));
+  const inheritedRule = action.permissionKey ? getAdminNavigationPermissionRule(action.permissionKey) : {};
+  const requiredPermissions = action.requiredPermissions ?? inheritedRule.requiredPermissions ?? [];
+  const anyOfPermissions = action.anyOfPermissions ?? inheritedRule.anyOfPermissions ?? [];
+  const hasAllRequired = requiredPermissions.every((permission) => can(permission));
+  const hasAnyRequired = anyOfPermissions.length === 0 || anyOfPermissions.some((permission) => can(permission));
   return hasAllRequired && hasAnyRequired;
 }
 
