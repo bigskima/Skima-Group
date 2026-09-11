@@ -8,15 +8,56 @@ import {
   UserRoundCheck,
 } from "lucide-react";
 
+import { AdminApplicationsWorkspace } from "../../admin-applications-workspace";
 import { AdminWorkspaceRouter } from "../../admin-workspace-router";
 import { toLegacyAdminWorkspacePath } from "../../app/admin-v2-navigation";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
+import {
+  APPLICATIONS_BASE_PATH,
+  buildApplicationRecordPath,
+  parseApplicationRecordRoute,
+} from "./application-record-route";
 
 export function PartnersWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
 }) {
   if (props.route === "/partners") return <PartnersOverviewScreen onNavigate={props.onNavigate} />;
+
+  if (props.route === APPLICATIONS_BASE_PATH || props.route.startsWith(`${APPLICATIONS_BASE_PATH}/`)) {
+    const applicationRoute = parseApplicationRecordRoute(props.route);
+
+    if (applicationRoute.kind === "invalid") {
+      return (
+        <WorkspaceLanding
+          eyebrow="Applications"
+          title="Application link unavailable"
+          description="This application link is not valid. Return to the review queue and choose the application again."
+          onNavigate={props.onNavigate}
+          actions={[
+            {
+              key: "applications",
+              title: "Open review queue",
+              description: "Return to all driver and station applications that your role can review.",
+              href: APPLICATIONS_BASE_PATH,
+              icon: ClipboardCheck,
+              meta: "Applications",
+              permissionKey: "applications",
+            },
+          ]}
+        />
+      );
+    }
+
+    return (
+      <AdminApplicationsWorkspace
+        applicationId={applicationRoute.kind === "record" ? applicationRoute.applicationId : null}
+        onOpenApplication={(applicationId) => props.onNavigate(buildApplicationRecordPath(applicationId))}
+        onOpenQueue={() => props.onNavigate(APPLICATIONS_BASE_PATH)}
+      />
+    );
+  }
+
   return (
     <AdminWorkspaceRouter
       route={toLegacyAdminWorkspacePath(props.route)}
@@ -37,7 +78,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
           key: "applications",
           title: "Applications",
           description: "Review driver and station applications, submitted documents and approval decisions.",
-          href: "/partners/applications",
+          href: APPLICATIONS_BASE_PATH,
           icon: ClipboardCheck,
           meta: "Approvals",
           permissionKey: "applications",

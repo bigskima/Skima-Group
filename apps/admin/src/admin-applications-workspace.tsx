@@ -132,7 +132,13 @@ type ReviewCommand =
 type ApplicationsLayer = "queue" | "review";
 type ReviewLayer = "applicant" | "documents" | "decision";
 
-export function AdminApplicationsWorkspace() {
+export interface AdminApplicationsWorkspaceProps {
+  readonly applicationId?: string | null;
+  readonly onOpenApplication?: (applicationId: string) => void;
+  readonly onOpenQueue?: () => void;
+}
+
+export function AdminApplicationsWorkspace(props: AdminApplicationsWorkspaceProps = {}) {
   const sessionState = useSessionState();
   const queryClient = useQueryClient();
   const applications = useGatewayRecords("applications", "/runtime/applications");
@@ -142,8 +148,13 @@ export function AdminApplicationsWorkspace() {
     "document-requirements",
     "/runtime/documents/requirements",
   );
-  const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
-  const [layer, setLayer] = useState<ApplicationsLayer>("queue");
+  const isRouteControlled = props.applicationId !== undefined;
+  const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(
+    props.applicationId ?? null,
+  );
+  const [layer, setLayer] = useState<ApplicationsLayer>(
+    props.applicationId ? "review" : "queue",
+  );
   const [dialogState, setDialogState] = useState<ReviewDialogState | null>(null);
   const [operationNotice, setOperationNotice] = useState<string | null>(null);
 
@@ -174,11 +185,24 @@ export function AdminApplicationsWorkspace() {
     : [];
 
   useEffect(() => {
-    if (selectedApplicationId && !selectedApplication && !applications.isLoading) {
+    if (!isRouteControlled) return;
+    const routeApplicationId = props.applicationId ?? null;
+    setSelectedApplicationId(routeApplicationId);
+    setLayer(routeApplicationId ? "review" : "queue");
+    setDialogState(null);
+  }, [isRouteControlled, props.applicationId]);
+
+  useEffect(() => {
+    if (
+      !isRouteControlled &&
+      selectedApplicationId &&
+      !selectedApplication &&
+      !applications.isLoading
+    ) {
       setSelectedApplicationId(null);
       setLayer("queue");
     }
-  }, [applications.isLoading, selectedApplication, selectedApplicationId]);
+  }, [applications.isLoading, isRouteControlled, selectedApplication, selectedApplicationId]);
 
   const reviewAction = useMutation({
     mutationFn: (command: ReviewCommand) => executeReviewCommand(sessionState.api, command),
@@ -202,7 +226,22 @@ export function AdminApplicationsWorkspace() {
     setSelectedApplicationId(applicationId);
     setOperationNotice(null);
     setLayer("review");
+    props.onOpenApplication?.(applicationId);
   };
+
+  const openQueue = () => {
+    setOperationNotice(null);
+    setLayer("queue");
+    if (isRouteControlled) {
+      setSelectedApplicationId(null);
+    }
+    props.onOpenQueue?.();
+  };
+
+  const missingRequestedApplication = isRouteControlled &&
+    Boolean(selectedApplicationId) &&
+    !applications.isLoading &&
+    !selectedApplication;
 
   return (
     <>
@@ -243,6 +282,10 @@ export function AdminApplicationsWorkspace() {
         activeKey={layer}
         onChange={(key) => {
           const next = key as ApplicationsLayer;
+          if (next === "queue") {
+            openQueue();
+            return;
+          }
           if (next === "review" && !selectedApplication) return;
           setLayer(next);
         }}
@@ -294,7 +337,7 @@ export function AdminApplicationsWorkspace() {
             requirements={requirements.data ?? []}
             currentUserId={sessionState.context?.user.id ?? null}
             isSubmitting={reviewAction.isPending}
-            onBack={() => setLayer("queue")}
+            onBack={openQueue}
             onOpenAction={(nextDialogState) => {
               reviewAction.reset();
               setOperationNotice(null);
@@ -305,10 +348,12 @@ export function AdminApplicationsWorkspace() {
           <section className="sk-panel">
             <AdminWorkspaceIntro
               kicker="Application review"
-              title="Choose an application first"
-              description="Open the review queue and choose the driver or station application you want to work on."
+              title={missingRequestedApplication ? "Application not found" : "Choose an application first"}
+              description={missingRequestedApplication
+                ? "This application is no longer available to your account. It may have been removed or your access may have changed. Return to the review queue to choose another application."
+                : "Open the review queue and choose the driver or station application you want to work on."}
             />
-            <Button icon={ArrowLeft} variant="outline" onClick={() => setLayer("queue")}>
+            <Button icon={ArrowLeft} variant="outline" onClick={openQueue}>
               Open review queue
             </Button>
           </section>
@@ -1066,7 +1111,7 @@ function ReviewDialogGuidance(props: { readonly state: ReviewDialogState }) {
   } else if (state.type === "deactivate-partner") {
     message = "Pausing live access stops new operational work until an administrator restores access.";
   } else if (state.type === "approve-public-media") {
-    message = "This photo can be shown to customers on the station profile after you confirm it is suitable."
+    message = "This photo can be shown to customers on the station profile after you confirm it is suitable.";
   }
 
   return message ? <p className="admin-dialog-guidance">{message}</p> : null;
