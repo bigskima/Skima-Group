@@ -7,11 +7,15 @@ import {
 } from "lucide-react";
 
 import { AdminOperationsWorkspace } from "../../admin-operations-workspace";
-import { AdminServiceCoverageWorkspace } from "../../admin-service-coverage-workspace";
 import { AdminSupportWorkspace } from "../../admin-support-workspace";
 import { AdminWorkspaceRouter } from "../../admin-workspace-router";
 import { toLegacyAdminWorkspacePath } from "../../app/admin-v2-navigation";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
+import { CoverageDiagnosticsScreen } from "./CoverageDiagnosticsScreen";
+import { CoverageMaintenanceScreen } from "./CoverageMaintenanceScreen";
+import { CoverageMapScreen } from "./CoverageMapScreen";
+import { CoveragePartnerScreen } from "./CoveragePartnerScreen";
+import { CoverageSectionNav, type CoverageSection } from "./CoverageSectionNav";
 import { CoverageWorkspaceV2 } from "./CoverageWorkspaceV2";
 
 export function OperationsWorkspaceRouter(props: {
@@ -26,13 +30,26 @@ export function OperationsWorkspaceRouter(props: {
     return <AdminOperationsWorkspace route={props.route} onNavigate={props.onNavigate} />;
   }
 
-  if (props.route === "/operations/coverage" || props.route.startsWith("/operations/coverage/")) {
+  if (props.route === "/operations/coverage" || props.route === "/operations/coverage/availability") {
     return (
       <CoverageWorkspaceV2
         route={props.route}
         onNavigate={props.onNavigate}
-        renderLegacySection={() => <AdminServiceCoverageWorkspace />}
+        renderLegacySection={() => null}
       />
+    );
+  }
+
+  const coverageSection = coverageSectionFromRoute(props.route);
+  if (coverageSection) {
+    return (
+      <div className="coverage-v2">
+        <CoverageSectionNav active={coverageSection} onNavigate={props.onNavigate} />
+        {coverageSection === "partners" ? <CoveragePartnerScreen /> : null}
+        {coverageSection === "map" ? <CoverageMapScreen /> : null}
+        {coverageSection === "diagnostics" ? <CoverageDiagnosticsScreen /> : null}
+        {coverageSection === "maintenance" ? <CoverageMaintenanceScreen /> : null}
+      </div>
     );
   }
 
@@ -46,6 +63,14 @@ export function OperationsWorkspaceRouter(props: {
       onNavigate={props.onNavigate}
     />
   );
+}
+
+function coverageSectionFromRoute(route: string): Exclude<CoverageSection, "overview" | "availability"> | null {
+  if (route === "/operations/coverage/partners") return "partners";
+  if (route === "/operations/coverage/map") return "map";
+  if (route === "/operations/coverage/diagnostics") return "diagnostics";
+  if (route === "/operations/coverage/maintenance") return "maintenance";
+  return null;
 }
 
 function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) => void }) {
