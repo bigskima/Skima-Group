@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 import { AdminAccessWorkspace } from "./admin-access-workspace";
 import { AdminAiWorkspace } from "./admin-ai-workspace";
 import { AdminApplicationsWorkspace } from "./admin-applications-workspace";
@@ -33,10 +31,6 @@ import { AdminVerificationWorkspace } from "./admin-verification-workspace";
 export function AdminWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
-  /** Temporary compatibility bridge until the legacy inline App.tsx copy is removed. */
-  readonly applicationsWorkspace: ReactNode;
-  /** Temporary compatibility bridge until the legacy inline App.tsx copy is removed. */
-  readonly overviewWorkspace: ReactNode;
 }) {
   if (props.route === "/station-inventory") return <AdminStationInventoryWorkspace />;
   if (props.route === "/stations" || props.route.startsWith("/stations/")) {
