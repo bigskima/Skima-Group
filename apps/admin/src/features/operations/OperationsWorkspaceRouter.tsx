@@ -7,10 +7,12 @@ import {
 } from "lucide-react";
 
 import { AdminOperationsWorkspace } from "../../admin-operations-workspace";
+import { AdminServiceCoverageWorkspace } from "../../admin-service-coverage-workspace";
 import { AdminSupportWorkspace } from "../../admin-support-workspace";
 import { AdminWorkspaceRouter } from "../../admin-workspace-router";
 import { toLegacyAdminWorkspacePath } from "../../app/admin-v2-navigation";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
+import { CoverageWorkspaceV2 } from "./CoverageWorkspaceV2";
 
 export function OperationsWorkspaceRouter(props: {
   readonly route: string;
@@ -22,6 +24,16 @@ export function OperationsWorkspaceRouter(props: {
 
   if (props.route === "/operations/orders" || props.route.startsWith("/operations/orders/")) {
     return <AdminOperationsWorkspace route={props.route} onNavigate={props.onNavigate} />;
+  }
+
+  if (props.route === "/operations/coverage" || props.route.startsWith("/operations/coverage/")) {
+    return (
+      <CoverageWorkspaceV2
+        route={props.route}
+        onNavigate={props.onNavigate}
+        renderLegacySection={() => <AdminServiceCoverageWorkspace />}
+      />
+    );
   }
 
   if (props.route === "/operations/support" || props.route.startsWith("/operations/support/")) {
