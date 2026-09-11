@@ -1,0 +1,151 @@
+.coverage-v2__map-panel {
+  overflow: hidden;
+}
+
+.coverage-v2__map-svg {
+  width: 100%;
+  min-height: 360px;
+  margin-top: 12px;
+  border: 1px solid #d9e0e3;
+  border-radius: 15px;
+  background: #f5f7f8;
+}
+
+.coverage-v2__layer-controls,
+.coverage-v2__maintenance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.coverage-v2__layer-controls > svg {
+  width: 18px;
+  height: 18px;
+  color: var(--sk-color-muted);
+}
+
+.coverage-v2__diagnostic-switch,
+.coverage-v2__maintenance-switch {
+  display: grid;
+  gap: 8px;
+}
+
+.coverage-v2__diagnostic-switch {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.coverage-v2__maintenance-switch {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.coverage-v2__diagnostic-switch > button,
+.coverage-v2__maintenance-switch > button {
+  min-width: 0;
+  padding: 13px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--sk-color-border);
+  border-radius: 13px;
+  background: #fff;
+  color: var(--sk-color-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.coverage-v2__diagnostic-switch > button > svg,
+.coverage-v2__maintenance-switch > button > svg {
+  width: 18px;
+  height: 18px;
+  padding: 7px;
+  box-sizing: content-box;
+  border-radius: 9px;
+  background: var(--sk-color-surface-subtle);
+  color: var(--sk-color-muted);
+}
+
+.coverage-v2__diagnostic-switch strong,
+.coverage-v2__diagnostic-switch small,
+.coverage-v2__maintenance-switch strong,
+.coverage-v2__maintenance-switch small {
+  display: block;
+}
+
+.coverage-v2__diagnostic-switch strong,
+.coverage-v2__maintenance-switch strong {
+  font-size: 0.79rem;
+}
+
+.coverage-v2__diagnostic-switch small,
+.coverage-v2__maintenance-switch small {
+  margin-top: 3px;
+  color: var(--sk-color-muted);
+  font-size: 0.68rem;
+  line-height: 1.3;
+}
+
+.coverage-v2__diagnostic-switch > button:hover,
+.coverage-v2__maintenance-switch > button:hover,
+.coverage-v2__diagnostic-switch > button.is-active,
+.coverage-v2__maintenance-switch > button.is-active {
+  border-color: rgba(225, 29, 46, 0.32);
+  background: var(--admin-v2-red-soft);
+}
+
+.coverage-v2__diagnostic-switch > button.is-active > svg,
+.coverage-v2__maintenance-switch > button.is-active > svg {
+  background: var(--admin-v2-red);
+  color: #fff;
+}
+
+.coverage-v2__diagnostic-result {
+  margin-top: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.coverage-v2__advanced pre {
+  max-height: 420px;
+  overflow: auto;
+  margin: 10px 0 0;
+  padding: 11px;
+  border-radius: 10px;
+  background: #14171d;
+  color: #eef0f3;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.coverage-v2__migration-action {
+  min-width: 240px;
+  display: grid;
+  gap: 7px;
+}
+
+@media (max-width: 1050px) {
+  .coverage-v2__maintenance-switch {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .coverage-v2__diagnostic-switch,
+  .coverage-v2__maintenance-switch {
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 3px;
+  }
+
+  .coverage-v2__diagnostic-switch > button,
+  .coverage-v2__maintenance-switch > button {
+    flex: 0 0 230px;
+  }
+
+  .coverage-v2__map-svg {
+    min-height: 280px;
+  }
+}
