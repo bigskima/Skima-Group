@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { AdminAccessWorkspace } from "./admin-access-workspace";
 import { AdminAiWorkspace } from "./admin-ai-workspace";
+import { AdminApplicationsWorkspace } from "./admin-applications-workspace";
 import { AdminCompanyWorkspace } from "./admin-company-workspace";
 import { AdminContentWorkspace } from "./admin-content-workspace";
 import { AdminDeliveryPricingWorkspace, AdminDriverPricingWorkspace } from "./admin-delivery-pricing-workspace";
@@ -32,8 +33,9 @@ import { AdminVerificationWorkspace } from "./admin-verification-workspace";
 export function AdminWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
+  /** Temporary compatibility bridge until the legacy inline App.tsx copy is removed. */
   readonly applicationsWorkspace: ReactNode;
-  /** Temporary compatibility bridge while the remaining App.tsx workspace is extracted. */
+  /** Temporary compatibility bridge until the legacy inline App.tsx copy is removed. */
   readonly overviewWorkspace: ReactNode;
 }) {
   if (props.route === "/station-inventory") return <AdminStationInventoryWorkspace />;
@@ -45,7 +47,7 @@ export function AdminWorkspaceRouter(props: {
   if (props.route === "/content") return <AdminContentWorkspace />;
   if (props.route === "/branding") return <AdminStartupBrandingWorkspace />;
   if (props.route === "/governance") return <AdminResourceConsole config={governanceConsoleConfig} />;
-  if (props.route === "/applications") return props.applicationsWorkspace;
+  if (props.route === "/applications") return <AdminApplicationsWorkspace />;
   if (props.route === "/verification") {
     return <AdminVerificationWorkspace onOpenApplications={() => props.onNavigate("/applications")} />;
   }
