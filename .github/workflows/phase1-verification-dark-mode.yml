@@ -33,7 +33,7 @@ jobs:
           deno-version: v2.x
 
       - name: Apply guarded source patches
-        run: node scripts/apply-phase1-verification-dark-mode.mjs
+        run: node scripts/run-phase1-patch.mjs
 
       - name: Typecheck platform and verification runtime
         run: npm run check
@@ -50,6 +50,7 @@ jobs:
       - name: Remove one-shot patch infrastructure
         run: |
           rm scripts/apply-phase1-verification-dark-mode.mjs
+          rm scripts/run-phase1-patch.mjs
           rm .github/workflows/phase1-verification-dark-mode.yml
 
       - name: Commit validated Phase 1 source changes
@@ -60,6 +61,7 @@ jobs:
                   apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx \
                   scripts/verification-runtime-contract.test.ts \
                   scripts/apply-phase1-verification-dark-mode.mjs \
+                  scripts/run-phase1-patch.mjs \
                   .github/workflows/phase1-verification-dark-mode.yml
           git commit -m "fix: harden partner KYC and onboarding dark mode"
           git push origin HEAD:${{ github.ref_name }}
