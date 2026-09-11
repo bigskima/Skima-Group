@@ -46,6 +46,7 @@ function ServicesOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/services/utility-billing",
           icon: Zap,
           meta: "Bills & payments",
+          requiredPermissions: ["platform.billing.read"],
         },
         {
           key: "catalog",
@@ -54,6 +55,7 @@ function ServicesOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/services/catalog",
           icon: Boxes,
           meta: "What SKIMA offers",
+          requiredPermissions: ["platform.configuration.read"],
         },
         {
           key: "availability",
@@ -62,6 +64,7 @@ function ServicesOverviewScreen(props: { readonly onNavigate: (href: string) => 
           href: "/services/availability",
           icon: ShieldCheck,
           meta: "Can customers order?",
+          requiredPermissions: ["platform.configuration.read"],
         },
       ]}
     />
