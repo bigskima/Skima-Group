@@ -53,6 +53,10 @@ describe("workspace landing permissions", () => {
     expect(canAccessWorkspaceLandingAction(target, () => false)).toBe(false);
   });
 
+  it("fails closed when a landing references an unknown navigation permission source", () => {
+    expect(canAccessWorkspaceLandingAction(action({ permissionKey: "does-not-exist" }), () => true)).toBe(false);
+  });
+
   it("enforces all-of and any-of requirements together", () => {
     const target = action({
       requiredPermissions: ["platform.workspace.read"],
