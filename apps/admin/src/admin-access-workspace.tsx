@@ -33,6 +33,7 @@ import {
   TextInput,
 } from "@skima/ui";
 
+import { AdminWorkspaceSections } from "./admin-workspace-sections";
 import { useSessionState } from "./session";
 import "./admin-access-workspace.css";
 
@@ -91,6 +92,9 @@ type AccessDialog =
   | { readonly type: "account"; readonly admin: AdminRecord }
   | { readonly type: "revoke"; readonly admin: AdminRecord };
 
+type AccessView = "team" | "roles";
+type RoleEditorStep = "details" | "access";
+
 interface NoticeState {
   readonly tone: "success" | "danger";
   readonly message: string;
@@ -102,7 +106,7 @@ const USER_MANAGEMENT_PERMISSION = "platform.users.manage";
 export function AdminAccessWorkspace() {
   const { api, context, status } = useSessionState();
   const queryClient = useQueryClient();
-  const [activeView, setActiveView] = useState<"team" | "roles">("team");
+  const [activeView, setActiveView] = useState<AccessView>("team");
   const [dialog, setDialog] = useState<AccessDialog | null>(null);
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [teamSearch, setTeamSearch] = useState("");
@@ -147,10 +151,7 @@ export function AdminAccessWorkspace() {
   );
 
   useEffect(() => {
-    if (selectedRoleKey && roles.some((role) => role.key === selectedRoleKey)) {
-      return;
-    }
-
+    if (selectedRoleKey && roles.some((role) => role.key === selectedRoleKey)) return;
     setSelectedRoleKey(roles.find((role) => role.status === "active")?.key ?? roles[0]?.key ?? null);
   }, [roles, selectedRoleKey]);
 
@@ -158,13 +159,13 @@ export function AdminAccessWorkspace() {
   const closeDialog = () => setDialog(null);
 
   if (adminsQuery.isLoading || rolesQuery.isLoading) {
-    return <LoadingState label="Loading administrator access" />;
+    return <LoadingState label="Loading people and access" />;
   }
 
   if (adminsQuery.error || rolesQuery.error) {
     return (
       <ErrorState
-        title="Administrator access is unavailable"
+        title="People and access is unavailable"
         message={readErrorMessage(adminsQuery.error ?? rolesQuery.error)}
         onRetry={refresh}
       />
@@ -173,15 +174,15 @@ export function AdminAccessWorkspace() {
 
   const activeAdmins = admins.filter((admin) => admin.status === "active");
   const ownerCount = activeAdmins.filter((admin) => admin.admin_kind === "super_admin").length;
-  const delegatedCount = activeAdmins.length - ownerCount;
+  const teamAdminCount = activeAdmins.length - ownerCount;
   const activeRoles = roles.filter((role) => role.status === "active");
 
   return (
     <>
       <PageHeader
-        eyebrow="People & authority"
-        title="Administrator access"
-        description="Delegate company and platform responsibilities through governed roles, with every assignment enforced by backend permissions."
+        eyebrow="Team access"
+        title="People & Access"
+        description="Choose who can use the admin workspace and what each person is allowed to do. Roles keep access consistent without exposing technical settings."
         actions={
           <>
             <Button icon={RefreshCcw} variant="outline" onClick={refresh}>Refresh</Button>
@@ -190,91 +191,88 @@ export function AdminAccessWorkspace() {
               requiredPermission={ADMIN_MANAGEMENT_PERMISSION}
               onClick={() => setDialog({ type: "assign" })}
             >
-              Add administrator
+              Add admin
             </Button>
           </>
         }
       />
 
-      {notice
-        ? (
-          <div className={`skima-access-notice is-${notice.tone}`} role="status">
-            {notice.tone === "success" ? <CheckCircle2 /> : <Ban />}
-            <span>{notice.message}</span>
-            <button type="button" onClick={() => setNotice(null)}>Dismiss</button>
-          </div>
-        )
-        : null}
+      {notice ? (
+        <div className={`skima-access-notice is-${notice.tone}`} role="status">
+          {notice.tone === "success" ? <CheckCircle2 /> : <Ban />}
+          <span>{notice.message}</span>
+          <button type="button" onClick={() => setNotice(null)}>Dismiss</button>
+        </div>
+      ) : null}
 
       <section className="skima-access-owner-note">
         <span className="skima-access-owner-note__icon"><Crown /></span>
         <div>
-          <strong>Protected ownership, delegated operations</strong>
+          <strong>Owner account protection</strong>
           <p>
-            One platform owner remains protected for recovery and highest-risk control. There is no
-            limit on role-based administrators for company, operations, finance, support, content,
-            security, or infrastructure work.
+            The main owner account stays protected for recovery and sensitive changes. Add other admins
+            for daily work and give each person only the access they need.
           </p>
         </div>
         <StatusBadge tone={ownerCount === 1 ? "success" : "warning"}>
-          {ownerCount === 1 ? "Owner protected" : `${ownerCount} active owners`}
+          {ownerCount === 1 ? "Owner protected" : `${ownerCount} owner accounts active`}
         </StatusBadge>
       </section>
 
       <section className="skima-grid skima-access-metrics">
-        <MetricTile label="Active administrators" value={activeAdmins.length} icon={UsersRound} />
-        <MetricTile label="Delegated operators" value={delegatedCount} icon={UserCog} tone="info" />
-        <MetricTile label="Active role templates" value={activeRoles.length} icon={ShieldCheck} tone="success" />
-        <MetricTile label="Permission catalog" value={permissions.length} icon={KeyRound} tone="warning" />
+        <MetricTile label="Active admins" value={activeAdmins.length} icon={UsersRound} />
+        <MetricTile label="Team admins" value={teamAdminCount} icon={UserCog} tone="info" />
+        <MetricTile label="Active roles" value={activeRoles.length} icon={ShieldCheck} tone="success" />
+        <MetricTile label="Available access rules" value={permissions.length} icon={KeyRound} tone="warning" />
       </section>
 
-      <div className="skima-access-switcher" role="tablist" aria-label="Access views">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeView === "team"}
-          className={activeView === "team" ? "is-active" : undefined}
-          onClick={() => setActiveView("team")}
-        >
-          <UsersRound /> Administrator team <span>{admins.length}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeView === "roles"}
-          className={activeView === "roles" ? "is-active" : undefined}
-          onClick={() => setActiveView("roles")}
-        >
-          <ShieldCheck /> Roles & permissions <span>{roles.length}</span>
-        </button>
-      </div>
+      <AdminWorkspaceSections
+        compact
+        label="People and access sections"
+        activeKey={activeView}
+        onChange={(key) => setActiveView(key as AccessView)}
+        sections={[
+          {
+            key: "team",
+            label: "Admin team",
+            description: "People who can open the SKIMA admin workspace.",
+            icon: UsersRound,
+            badge: admins.length,
+          },
+          {
+            key: "roles",
+            label: "Roles & access",
+            description: "Reusable access levels for different responsibilities.",
+            icon: ShieldCheck,
+            badge: roles.length,
+          },
+        ]}
+      />
 
-      {activeView === "team"
-        ? (
-          <AdministratorTeam
-            admins={admins}
-            profileById={profileById}
-            roleById={roleById}
-            currentUserId={context?.user.id ?? null}
-            search={teamSearch}
-            onSearch={setTeamSearch}
-            onAssign={() => setDialog({ type: "assign" })}
-            onEdit={(admin) => setDialog({ type: "assign", admin })}
-            onAccount={(admin) => setDialog({ type: "account", admin })}
-            onRevoke={(admin) => setDialog({ type: "revoke", admin })}
-          />
-        )
-        : (
-          <RoleDirectory
-            roles={roles}
-            permissions={permissions}
-            admins={admins}
-            selectedRoleKey={selectedRoleKey}
-            onSelectRole={setSelectedRoleKey}
-            onCreate={() => setDialog({ type: "role" })}
-            onEdit={(role) => setDialog({ type: "role", role })}
-          />
-        )}
+      {activeView === "team" ? (
+        <AdministratorTeam
+          admins={admins}
+          profileById={profileById}
+          roleById={roleById}
+          currentUserId={context?.user.id ?? null}
+          search={teamSearch}
+          onSearch={setTeamSearch}
+          onAssign={() => setDialog({ type: "assign" })}
+          onEdit={(admin) => setDialog({ type: "assign", admin })}
+          onAccount={(admin) => setDialog({ type: "account", admin })}
+          onRevoke={(admin) => setDialog({ type: "revoke", admin })}
+        />
+      ) : (
+        <RoleDirectory
+          roles={roles}
+          permissions={permissions}
+          admins={admins}
+          selectedRoleKey={selectedRoleKey}
+          onSelectRole={setSelectedRoleKey}
+          onCreate={() => setDialog({ type: "role" })}
+          onEdit={(role) => setDialog({ type: "role", role })}
+        />
+      )}
 
       <AssignAdministratorDialog
         state={dialog?.type === "assign" ? dialog : null}
@@ -336,7 +334,7 @@ function AdministratorTeam(props: {
     if (!normalizedSearch) return true;
     const profile = props.profileById.get(admin.user_id);
     const role = admin.primary_role_id ? props.roleById.get(admin.primary_role_id) : undefined;
-    return [admin.user_id, admin.title, admin.status, profile?.display_name, role?.display_name, role?.key]
+    return [admin.user_id, admin.title, admin.status, profile?.display_name, role?.display_name]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(normalizedSearch));
   });
@@ -344,16 +342,16 @@ function AdministratorTeam(props: {
   const columns = useMemo<TableColumn<AdminRecord>[]>(() => [
     {
       key: "administrator",
-      header: "Administrator",
-      minWidth: "240px",
+      header: "Person",
+      minWidth: "220px",
       render: (admin) => {
         const profile = props.profileById.get(admin.user_id);
         return (
           <div className="skima-access-person">
             <Avatar profile={profile} />
             <span>
-              <strong>{profile?.display_name || "Platform administrator"}</strong>
-              <small title={admin.user_id}>{shortIdentifier(admin.user_id)}</small>
+              <strong>{profile?.display_name || "Administrator"}</strong>
+              <small>{admin.title || "SKIMA admin"}</small>
             </span>
           </div>
         );
@@ -361,45 +359,45 @@ function AdministratorTeam(props: {
     },
     {
       key: "responsibility",
-      header: "Responsibility",
-      minWidth: "210px",
+      header: "Role",
+      minWidth: "200px",
       render: (admin) => {
         const role = admin.primary_role_id ? props.roleById.get(admin.primary_role_id) : undefined;
         return (
           <div className="skima-access-responsibility">
-            <strong>{admin.title || role?.display_name || normalizeStatusLabel(admin.admin_kind)}</strong>
-            <small>{role?.display_name ?? "Protected owner role"}</small>
+            <strong>{role?.display_name || (admin.admin_kind === "super_admin" ? "Platform owner" : "Admin")}</strong>
+            <small>{role?.description || "Access set by role"}</small>
           </div>
         );
       },
     },
     {
-      key: "authority",
-      header: "Authority",
+      key: "access-level",
+      header: "Access level",
       render: (admin) => admin.admin_kind === "super_admin"
-        ? <StatusBadge tone="warning">Platform owner</StatusBadge>
-        : <StatusBadge tone="info">Role delegated</StatusBadge>,
+        ? <StatusBadge tone="warning">Owner</StatusBadge>
+        : <StatusBadge tone="info">Team admin</StatusBadge>,
     },
     {
       key: "access",
-      header: "Access",
+      header: "Status",
       render: (admin) => {
         const profile = props.profileById.get(admin.user_id);
         return (
           <div className="skima-access-statuses">
-            <StatusBadge tone={statusTone(admin.status)}>Admin {normalizeStatusLabel(admin.status)}</StatusBadge>
-            {profile && profile.status !== "active"
-              ? <StatusBadge tone={statusTone(profile.status)}>Account {normalizeStatusLabel(profile.status)}</StatusBadge>
-              : null}
+            <StatusBadge tone={statusTone(admin.status)}>{friendlyStatus(admin.status)}</StatusBadge>
+            {profile && profile.status !== "active" ? (
+              <StatusBadge tone={statusTone(profile.status)}>Account {friendlyStatus(profile.status)}</StatusBadge>
+            ) : null}
           </div>
         );
       },
     },
     {
       key: "actions",
-      header: "Controls",
+      header: "Actions",
       align: "right",
-      minWidth: "260px",
+      minWidth: "250px",
       render: (admin) => {
         const isOwner = admin.admin_kind === "super_admin";
         const isSelf = admin.user_id === props.currentUserId;
@@ -413,7 +411,7 @@ function AdministratorTeam(props: {
               requiredPermission={ADMIN_MANAGEMENT_PERMISSION}
               onClick={() => props.onEdit(admin)}
             >
-              Role
+              Change role
             </Button>
             <Button
               size="sm"
@@ -423,7 +421,7 @@ function AdministratorTeam(props: {
               disabled={isSelf}
               onClick={() => props.onAccount(admin)}
             >
-              Account
+              Account status
             </Button>
             <Button
               size="sm"
@@ -432,7 +430,7 @@ function AdministratorTeam(props: {
               disabled={isSelf || admin.status === "revoked"}
               onClick={() => props.onRevoke(admin)}
             >
-              Revoke
+              Remove access
             </Button>
           </div>
         );
@@ -444,36 +442,34 @@ function AdministratorTeam(props: {
     <section className="sk-panel skima-access-team">
       <div className="skima-access-toolbar">
         <div>
-          <h2>Administrator team</h2>
-          <p>Each person receives one primary operating role. Update the template once to change its governed scope everywhere.</p>
+          <h2>Admin team</h2>
+          <p>Give each person a role that matches the work they are responsible for.</p>
         </div>
         <div className="skima-access-search">
           <Search aria-hidden="true" />
           <input
-            aria-label="Search administrators"
-            placeholder="Search team or role"
+            aria-label="Search admins"
+            placeholder="Search people or roles"
             value={props.search}
             onChange={(event) => props.onSearch(event.currentTarget.value)}
           />
         </div>
       </div>
       <DataTable
-        caption="Platform administrators"
+        caption="SKIMA admin team"
         columns={columns}
         records={records}
         getRowKey={(admin) => admin.id}
-        emptyTitle={normalizedSearch ? "No matching administrator" : "No administrators yet"}
+        emptyTitle={normalizedSearch ? "No matching admin" : "No team admins yet"}
         emptyMessage={normalizedSearch
-          ? "Try another name, identifier, title, or role."
-          : "Assign a role-based administrator to delegate platform work."}
+          ? "Try another name or role."
+          : "Add an admin when you are ready to share responsibility for the platform."}
       />
-      {props.admins.length === 0
-        ? (
-          <Button icon={UserPlus} requiredPermission={ADMIN_MANAGEMENT_PERMISSION} onClick={props.onAssign}>
-            Add first administrator
-          </Button>
-        )
-        : null}
+      {props.admins.length === 0 ? (
+        <Button icon={UserPlus} requiredPermission={ADMIN_MANAGEMENT_PERMISSION} onClick={props.onAssign}>
+          Add first admin
+        </Button>
+      ) : null}
     </section>
   );
 }
@@ -501,8 +497,8 @@ function RoleDirectory(props: {
       <aside className="sk-panel skima-access-role-list">
         <div className="skima-access-toolbar">
           <div>
-            <h2>Role templates</h2>
-            <p>Reusable authority sets</p>
+            <h2>Roles</h2>
+            <p>Reusable access levels</p>
           </div>
           <Button
             size="sm"
@@ -513,7 +509,7 @@ function RoleDirectory(props: {
             New role
           </Button>
         </div>
-        <div className="skima-access-role-options" role="listbox" aria-label="Administrator roles">
+        <div className="skima-access-role-options" role="listbox" aria-label="Admin roles">
           {props.roles.map((role) => {
             const count = role.role_id
               ? props.admins.filter((admin) => admin.primary_role_id === role.role_id && admin.status === "active").length
@@ -532,9 +528,9 @@ function RoleDirectory(props: {
                 </span>
                 <span>
                   <strong>{role.display_name}</strong>
-                  <small>{role.permission_keys.length} permissions · {count} assigned</small>
+                  <small>{role.permission_keys.length} allowed actions · {count} people</small>
                 </span>
-                <StatusBadge tone={statusTone(role.status)}>{normalizeStatusLabel(role.status)}</StatusBadge>
+                <StatusBadge tone={statusTone(role.status)}>{friendlyStatus(role.status)}</StatusBadge>
               </button>
             );
           })}
@@ -542,75 +538,76 @@ function RoleDirectory(props: {
       </aside>
 
       <section className="sk-panel skima-access-role-detail">
-        {selectedRole
-          ? (
-            <>
-              <header className="skima-access-role-heading">
-                <div>
-                  <div className="skima-access-role-kicker">
-                    <StatusBadge tone={selectedRole.is_system ? "info" : "neutral"}>
-                      {selectedRole.is_system ? "System template" : "Custom template"}
-                    </StatusBadge>
-                    <span>{selectedRole.key}</span>
-                  </div>
-                  <h2>{selectedRole.display_name}</h2>
-                  <p>{selectedRole.description || "No role description has been added."}</p>
+        {selectedRole ? (
+          <>
+            <header className="skima-access-role-heading">
+              <div>
+                <div className="skima-access-role-kicker">
+                  <StatusBadge tone={selectedRole.is_system ? "info" : "neutral"}>
+                    {selectedRole.is_system ? "Built-in role" : "Custom role"}
+                  </StatusBadge>
                 </div>
-                {selectedRole.key === "platform.super_admin"
-                  ? <span className="skima-access-protected"><Crown /> Deployment protected</span>
-                  : (
-                    <Button
-                      icon={Pencil}
-                      variant="outline"
-                      requiredPermission={ADMIN_MANAGEMENT_PERMISSION}
-                      onClick={() => props.onEdit(selectedRole)}
-                    >
-                      Edit role
-                    </Button>
-                  )}
-              </header>
-              <div className="skima-access-role-facts">
-                <div><span>Assigned administrators</span><strong>{assignedCount}</strong></div>
-                <div><span>Granted permissions</span><strong>{selectedRole.permission_keys.length}</strong></div>
-                <div><span>Template state</span><strong>{normalizeStatusLabel(selectedRole.status)}</strong></div>
+                <h2>{selectedRole.display_name}</h2>
+                <p>{selectedRole.description || "No role description has been added."}</p>
               </div>
-              <div className="skima-access-scope-heading">
-                <div>
-                  <h3>Authority scope</h3>
-                  <p>Permissions are grouped by platform engine so the role is easy to review.</p>
-                </div>
+              {selectedRole.key === "platform.super_admin" ? (
+                <span className="skima-access-protected"><Crown /> Owner role protected</span>
+              ) : (
+                <Button
+                  icon={Pencil}
+                  variant="outline"
+                  requiredPermission={ADMIN_MANAGEMENT_PERMISSION}
+                  onClick={() => props.onEdit(selectedRole)}
+                >
+                  Edit role
+                </Button>
+              )}
+            </header>
+            <div className="skima-access-role-facts">
+              <div><span>People using this role</span><strong>{assignedCount}</strong></div>
+              <div><span>Allowed actions</span><strong>{selectedRole.permission_keys.length}</strong></div>
+              <div><span>Status</span><strong>{friendlyStatus(selectedRole.status)}</strong></div>
+            </div>
+            <div className="skima-access-scope-heading">
+              <div>
+                <h3>What this role can do</h3>
+                <p>Access is grouped by work area so you can review it without reading technical permission names.</p>
               </div>
-              {groupedPermissions.length > 0
-                ? (
-                  <div className="skima-access-permission-groups">
-                    {groupedPermissions.map((group) => (
-                      <section key={group.key}>
-                        <header>
-                          <span>{group.label}</span>
-                          <StatusBadge>{group.permissions.length}</StatusBadge>
-                        </header>
-                        <div>
-                          {group.permissions.map((permission) => (
-                            <span className="skima-access-permission" key={permission.key}>
-                              <KeyRound />
-                              <span>
-                                <strong>{permissionAction(permission.key)}</strong>
-                                <small>{permission.description || permission.key}</small>
-                              </span>
-                              {permission.risk_level === "critical" || permission.risk_level === "high"
-                                ? <StatusBadge tone={permission.risk_level === "critical" ? "danger" : "warning"}>{permission.risk_level}</StatusBadge>
-                                : null}
-                            </span>
-                          ))}
-                        </div>
-                      </section>
-                    ))}
-                  </div>
-                )
-                : <p className="skima-access-empty">This role does not grant any permissions yet.</p>}
-            </>
-          )
-          : <p className="skima-access-empty">Create a role template to begin delegating authority.</p>}
+            </div>
+            {groupedPermissions.length > 0 ? (
+              <div className="skima-access-permission-groups">
+                {groupedPermissions.map((group) => (
+                  <section key={group.key}>
+                    <header>
+                      <span>{friendlyAccessArea(group.key)}</span>
+                      <StatusBadge>{group.permissions.length}</StatusBadge>
+                    </header>
+                    <div>
+                      {group.permissions.map((permission) => (
+                        <span className="skima-access-permission" key={permission.key}>
+                          <KeyRound />
+                          <span>
+                            <strong>{permissionAction(permission.key)}</strong>
+                            <small>{permissionFriendlyDescription(permission, group.key)}</small>
+                          </span>
+                          {permission.risk_level === "critical" || permission.risk_level === "high" ? (
+                            <StatusBadge tone={permission.risk_level === "critical" ? "danger" : "warning"}>
+                              {permission.risk_level === "critical" ? "Sensitive" : "Higher access"}
+                            </StatusBadge>
+                          ) : null}
+                        </span>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <p className="skima-access-empty">This role does not allow any admin actions yet.</p>
+            )}
+          </>
+        ) : (
+          <p className="skima-access-empty">Create a role to define what team admins can do.</p>
+        )}
       </section>
     </section>
   );
@@ -645,7 +642,7 @@ function AssignAdministratorDialog(props: {
       api.post("/admin/users", payload, MutationResponseSchema),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["admin-access"] });
-      props.onComplete(state?.admin ? "Administrator role updated." : "Administrator access assigned.");
+      props.onComplete(state?.admin ? "Admin role updated." : "Admin access added.");
     },
   });
 
@@ -655,28 +652,26 @@ function AssignAdministratorDialog(props: {
     event.preventDefault();
     setFormError(null);
     if (!z.string().uuid().safeParse(userId.trim()).success) {
-      setFormError("Choose a valid platform user ID.");
+      setFormError("Choose a person from the list.");
       return;
     }
     if (!roleKey) {
-      setFormError("Choose an active administrator role.");
+      setFormError("Choose a role for this person.");
       return;
     }
     mutation.mutate({ userId: userId.trim(), roleKey, ...(title.trim() ? { title: title.trim() } : {}) });
   };
 
-  const matchedProfile = props.profiles.find((profile) => profile.id === userId.trim());
-
   return (
     <Dialog
-      title={state.admin ? "Update administrator role" : "Add role-based administrator"}
+      title={state.admin ? "Change admin role" : "Add admin"}
       isOpen
       onClose={props.onClose}
       footer={
         <>
           <Button variant="ghost" disabled={mutation.isPending} onClick={props.onClose}>Cancel</Button>
           <Button type="submit" form="assign-administrator-form" isLoading={mutation.isPending} icon={UserPlus}>
-            {state.admin ? "Save assignment" : "Grant access"}
+            {state.admin ? "Save role" : "Add admin"}
           </Button>
         </>
       }
@@ -684,27 +679,26 @@ function AssignAdministratorDialog(props: {
       <form id="assign-administrator-form" className="skima-form-grid" onSubmit={submit}>
         <div className="skima-access-dialog-intro">
           <ShieldCheck />
-          <p>The selected role controls this administrator’s authority. Reassigning a person updates their operating scope immediately.</p>
+          <p>Choose a person and a role. The role decides which admin areas and actions this person can use.</p>
         </div>
-        <TextInput
-          label="Platform user ID"
-          helperText={matchedProfile
-            ? `Matched account: ${matchedProfile.display_name || "Unnamed platform user"} (${normalizeStatusLabel(matchedProfile.status)})`
-            : "Select an existing authenticated platform user."}
+        <SelectInput
+          label="Person"
+          helperText={state.admin ? "The person cannot be changed while editing an existing admin." : "Choose an existing SKIMA account."}
           value={userId}
-          list="platform-profile-identifiers"
           disabled={Boolean(state.admin)}
+          options={[
+            { label: "Choose a person", value: "" },
+            ...props.profiles.map((profile) => ({
+              label: `${profile.display_name || "Unnamed account"}${profile.status !== "active" ? ` — ${friendlyStatus(profile.status)}` : ""}`,
+              value: profile.id,
+            })),
+          ]}
           required
           onChange={(event) => setUserId(event.currentTarget.value)}
         />
-        <datalist id="platform-profile-identifiers">
-          {props.profiles.map((profile) => (
-            <option key={profile.id} value={profile.id}>{profile.display_name || profile.id}</option>
-          ))}
-        </datalist>
         <SelectInput
-          label="Administrator role"
-          helperText="Only active, delegated role templates can be assigned here."
+          label="Role"
+          helperText="Choose the set of admin actions this person needs for their work."
           value={roleKey}
           options={[
             { label: "Choose a role", value: "" },
@@ -716,8 +710,8 @@ function AssignAdministratorDialog(props: {
           onChange={(event) => setRoleKey(event.currentTarget.value)}
         />
         <TextInput
-          label="Position title"
-          helperText="Shown in the admin workspace; it does not add permissions."
+          label="Job title (optional)"
+          helperText="This is only a display label and does not change the person's access."
           placeholder="For example, Head of Operations"
           value={title}
           onChange={(event) => setTitle(event.currentTarget.value)}
@@ -738,23 +732,23 @@ function RoleEditorDialog(props: {
 }) {
   const { api } = useSessionState();
   const queryClient = useQueryClient();
-  const [roleKey, setRoleKey] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [description, setDescription] = useState("");
   const [roleStatus, setRoleStatus] = useState("active");
   const [selectedPermissions, setSelectedPermissions] = useState<ReadonlySet<string>>(new Set());
   const [permissionSearch, setPermissionSearch] = useState("");
+  const [step, setStep] = useState<RoleEditorStep>("details");
   const [formError, setFormError] = useState<string | null>(null);
   const state = props.state;
 
   useEffect(() => {
     const role = state?.role;
-    setRoleKey(role?.key ?? "platform.");
     setDisplayName(role?.display_name ?? "");
     setDescription(role?.description ?? "");
     setRoleStatus(role?.status ?? "active");
     setSelectedPermissions(new Set(role?.permission_keys ?? []));
     setPermissionSearch("");
+    setStep("details");
     setFormError(null);
   }, [state]);
 
@@ -763,7 +757,7 @@ function RoleEditorDialog(props: {
       api.post("/admin/role-templates", payload, MutationResponseSchema),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["admin-access"] });
-      props.onComplete(state?.role ? "Administrator role updated." : "Administrator role created.");
+      props.onComplete(state?.role ? "Role updated." : "Role created.");
     },
   });
 
@@ -771,7 +765,7 @@ function RoleEditorDialog(props: {
 
   const normalizedSearch = permissionSearch.trim().toLowerCase();
   const visiblePermissions = props.permissions.filter((permission) =>
-    !normalizedSearch || [permission.key, permission.description]
+    !normalizedSearch || [permission.key, permission.description, permissionAction(permission.key)]
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(normalizedSearch))
   );
@@ -801,19 +795,17 @@ function RoleEditorDialog(props: {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFormError(null);
-    const normalizedKey = roleKey.trim().toLowerCase();
-    if (!/^[a-z][a-z0-9_.:-]{2,120}$/.test(normalizedKey)) {
-      setFormError("Use a valid role key such as platform.finance_lead.");
-      return;
-    }
     if (!displayName.trim()) {
       setFormError("Enter a role name.");
+      setStep("details");
       return;
     }
     if (selectedPermissions.size === 0) {
-      setFormError("Select at least one permission for this role.");
+      setFormError("Choose at least one allowed action for this role.");
+      setStep("access");
       return;
     }
+    const normalizedKey = state.role?.key ?? buildRoleKey(displayName);
     mutation.mutate({
       roleKey: normalizedKey,
       displayName: displayName.trim(),
@@ -830,12 +822,12 @@ function RoleEditorDialog(props: {
 
   return (
     <Dialog
-      title={state.role ? "Edit administrator role" : "Create administrator role"}
+      title={state.role ? "Edit role" : "Create role"}
       isOpen
       onClose={props.onClose}
       footer={
         <>
-          <span className="skima-access-selection-count">{selectedPermissions.size} selected</span>
+          <span className="skima-access-selection-count">{selectedPermissions.size} allowed actions</span>
           <Button variant="ghost" disabled={mutation.isPending} onClick={props.onClose}>Cancel</Button>
           <Button type="submit" form="administrator-role-form" isLoading={mutation.isPending} icon={ShieldCheck}>
             {state.role ? "Save role" : "Create role"}
@@ -844,85 +836,120 @@ function RoleEditorDialog(props: {
       }
     >
       <form id="administrator-role-form" className="skima-form-grid" onSubmit={submit}>
-        <div className="skima-access-role-form-grid">
-          <TextInput
-            label="Role key"
-            helperText="Stable configuration key; it cannot be changed after creation."
-            value={roleKey}
-            disabled={Boolean(state.role)}
-            required
-            onChange={(event) => setRoleKey(event.currentTarget.value)}
-          />
-          <TextInput
-            label="Role name"
-            placeholder="Finance Lead"
-            value={displayName}
-            required
-            onChange={(event) => setDisplayName(event.currentTarget.value)}
-          />
-        </div>
-        <TextAreaInput
-          label="Responsibility summary"
-          helperText="Explain what this role owns so assignments are easy to review."
-          value={description}
-          onChange={(event) => setDescription(event.currentTarget.value)}
-        />
-        <SelectInput
-          label="Template state"
-          value={roleStatus}
-          options={[
-            { label: "Active — available for assignment", value: "active" },
-            { label: "Draft — being prepared", value: "draft" },
-            { label: "Retired — no new assignments", value: "retired" },
+        <AdminWorkspaceSections
+          compact
+          label="Role setup sections"
+          activeKey={step}
+          onChange={(key) => {
+            setFormError(null);
+            setStep(key as RoleEditorStep);
+          }}
+          sections={[
+            {
+              key: "details",
+              label: "Role details",
+              description: "Name, purpose and status.",
+              icon: ShieldCheck,
+            },
+            {
+              key: "access",
+              label: "Allowed actions",
+              description: "Choose what people with this role can do.",
+              icon: KeyRound,
+              badge: selectedPermissions.size,
+            },
           ]}
-          onChange={(event) => setRoleStatus(event.currentTarget.value)}
         />
-        <div className="skima-access-permission-picker-heading">
-          <div>
-            <h3>Permission scope</h3>
-            <p>Select explicit engine permissions. Position titles never grant authority.</p>
-          </div>
-          <div className="skima-access-search">
-            <Search aria-hidden="true" />
-            <input
-              aria-label="Search permission catalog"
-              placeholder="Search permissions"
-              value={permissionSearch}
-              onChange={(event) => setPermissionSearch(event.currentTarget.value)}
+
+        {step === "details" ? (
+          <div className="admin-layer-grid">
+            <TextInput
+              label="Role name"
+              placeholder="Finance Lead"
+              helperText="Use a clear name that matches the person's responsibility."
+              value={displayName}
+              required
+              onChange={(event) => setDisplayName(event.currentTarget.value)}
             />
+            <TextAreaInput
+              label="What is this role responsible for?"
+              helperText="A short explanation helps other admins choose the right role later."
+              value={description}
+              onChange={(event) => setDescription(event.currentTarget.value)}
+            />
+            <SelectInput
+              label="Role status"
+              value={roleStatus}
+              options={[
+                { label: "Active — can be assigned", value: "active" },
+                { label: "Draft — still being prepared", value: "draft" },
+                { label: "Retired — keep existing history only", value: "retired" },
+              ]}
+              onChange={(event) => setRoleStatus(event.currentTarget.value)}
+            />
+            <Button type="button" onClick={() => setStep("access")}>
+              Next: choose allowed actions
+            </Button>
           </div>
-        </div>
-        {!props.permissionCatalogAvailable
-          ? <p className="skima-access-catalog-note">The live catalog is unavailable; showing permissions already used by existing roles.</p>
-          : null}
-        <div className="skima-access-permission-picker">
-          {groups.map((group) => {
-            const keys = group.permissions.map((permission) => permission.key);
-            const allSelected = keys.every((key) => selectedPermissions.has(key));
-            return (
-              <section key={group.key}>
-                <header>
-                  <span><strong>{group.label}</strong><small>{keys.filter((key) => selectedPermissions.has(key)).length}/{keys.length} selected</small></span>
-                  <Button size="sm" variant="ghost" onClick={() => toggleGroup(keys)}>
-                    {allSelected ? "Clear group" : "Select group"}
-                  </Button>
-                </header>
-                <div>
-                  {group.permissions.map((permission) => (
-                    <CheckboxField
-                      key={permission.key}
-                      id={`permission-${permission.key.replaceAll(".", "-")}`}
-                      label={permissionAction(permission.key)}
-                      helperText={permission.description || permission.key}
-                      checked={selectedPermissions.has(permission.key)}
-                      onChange={(event) => togglePermission(permission.key, event.currentTarget.checked)}
-                    />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-        </div>
+        ) : null}
+
+        {step === "access" ? (
+          <div className="admin-layer-grid">
+            <div className="skima-access-permission-picker-heading">
+              <div>
+                <h3>What can this role do?</h3>
+                <p>Choose only the work areas and actions this role needs. Technical permission names stay hidden.</p>
+              </div>
+              <div className="skima-access-search">
+                <Search aria-hidden="true" />
+                <input
+                  aria-label="Search allowed actions"
+                  placeholder="Search actions"
+                  value={permissionSearch}
+                  onChange={(event) => setPermissionSearch(event.currentTarget.value)}
+                />
+              </div>
+            </div>
+            {!props.permissionCatalogAvailable ? (
+              <p className="skima-access-catalog-note">The full access list is temporarily unavailable. Showing actions already used by existing roles.</p>
+            ) : null}
+            <div className="skima-access-permission-picker">
+              {groups.map((group) => {
+                const keys = group.permissions.map((permission) => permission.key);
+                const allSelected = keys.every((key) => selectedPermissions.has(key));
+                return (
+                  <section key={group.key}>
+                    <header>
+                      <span>
+                        <strong>{friendlyAccessArea(group.key)}</strong>
+                        <small>{keys.filter((key) => selectedPermissions.has(key)).length}/{keys.length} allowed</small>
+                      </span>
+                      <Button size="sm" variant="ghost" type="button" onClick={() => toggleGroup(keys)}>
+                        {allSelected ? "Clear area" : "Allow all"}
+                      </Button>
+                    </header>
+                    <div>
+                      {group.permissions.map((permission) => (
+                        <CheckboxField
+                          key={permission.key}
+                          id={`permission-${permission.key.replaceAll(".", "-")}`}
+                          label={permissionAction(permission.key)}
+                          helperText={permissionFriendlyDescription(permission, group.key)}
+                          checked={selectedPermissions.has(permission.key)}
+                          onChange={(event) => togglePermission(permission.key, event.currentTarget.checked)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+            <Button type="button" variant="outline" onClick={() => setStep("details")}>
+              Back to role details
+            </Button>
+          </div>
+        ) : null}
+
         {formError ? <StatusBadge tone="danger">{formError}</StatusBadge> : null}
         {mutation.error ? <StatusBadge tone="danger">{readErrorMessage(mutation.error)}</StatusBadge> : null}
       </form>
@@ -959,16 +986,16 @@ function AccountStatusDialog(props: {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["admin-access"] });
-      props.onComplete(`Account status changed to ${normalizeStatusLabel(nextStatus)}.`);
+      props.onComplete(`Account status changed to ${friendlyStatus(nextStatus)}.`);
     },
   });
 
   if (!state) return null;
-  const name = props.profile?.display_name || "this administrator";
+  const name = props.profile?.display_name || "this admin";
 
   return (
     <Dialog
-      title="Confirm account access change"
+      title="Change account status"
       isOpen
       onClose={props.onClose}
       footer={
@@ -988,21 +1015,21 @@ function AccountStatusDialog(props: {
       <div className="skima-form-grid">
         <div className="skima-access-warning">
           <Ban />
-          <p>This changes the complete platform account for <strong>{name}</strong>, not only the admin console. Disabled accounts lose access to every assigned workspace.</p>
+          <p>This changes the whole SKIMA account for <strong>{name}</strong>, not only admin access. A disabled account cannot sign in anywhere.</p>
         </div>
         <SelectInput
-          label="New account status"
+          label="New status"
           value={nextStatus}
           options={[
             { label: "Active — sign-in allowed", value: "active" },
-            { label: "Disabled — all access blocked", value: "disabled" },
-            { label: "Pending — awaiting activation", value: "pending" },
+            { label: "Disabled — sign-in blocked", value: "disabled" },
+            { label: "Pending — waiting to be activated", value: "pending" },
           ]}
           onChange={(event) => setNextStatus(event.currentTarget.value)}
         />
         <TextAreaInput
           label="Reason for change"
-          helperText="Required for the governed audit trail."
+          helperText="Required so other admins can understand why this change was made."
           value={reason}
           required
           onChange={(event) => setReason(event.currentTarget.value)}
@@ -1029,30 +1056,30 @@ function RevokeAdministratorDialog(props: {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["admin-access"] });
-      props.onComplete("Administrator authority revoked.");
+      props.onComplete("Admin access removed.");
     },
   });
 
   if (!state) return null;
-  const name = props.profile?.display_name || shortIdentifier(state.admin.user_id);
+  const name = props.profile?.display_name || "this administrator";
 
   return (
     <Dialog
-      title="Revoke administrator authority?"
+      title="Remove admin access?"
       isOpen
       onClose={props.onClose}
       footer={
         <>
           <Button variant="ghost" disabled={mutation.isPending} onClick={props.onClose}>Keep access</Button>
           <Button variant="destructive" isLoading={mutation.isPending} onClick={() => mutation.mutate()}>
-            Revoke administrator
+            Remove admin access
           </Button>
         </>
       }
     >
       <div className="skima-access-warning is-danger">
         <Ban />
-        <p><strong>{name}</strong> will immediately lose administrator permissions. Their platform profile remains intact and can be assigned again later.</p>
+        <p><strong>{name}</strong> will immediately lose access to the admin workspace. Their normal SKIMA account stays available and admin access can be added again later.</p>
       </div>
       {mutation.error ? <StatusBadge tone="danger">{readErrorMessage(mutation.error)}</StatusBadge> : null}
     </Dialog>
@@ -1087,7 +1114,7 @@ function groupPermissions(permissions: readonly PermissionRecord[]): PermissionG
   }
   return Array.from(groups, ([key, records]) => ({
     key,
-    label: normalizeStatusLabel(key),
+    label: friendlyAccessArea(key),
     permissions: records,
   }));
 }
@@ -1107,15 +1134,78 @@ function mergePermissionCatalog(
 
 function permissionAction(key: string): string {
   const parts = key.split(".");
-  return normalizeStatusLabel(parts.slice(2).join(" ") || parts.at(-1) || key);
+  const raw = parts.slice(2).join(" ") || parts.at(-1) || key;
+  const friendly = normalizeStatusLabel(raw);
+  return friendly
+    .replace(/\bManage\b/i, "Manage")
+    .replace(/\bRead\b/i, "View")
+    .replace(/\bSuper Manage\b/i, "Manage sensitive settings");
+}
+
+function permissionFriendlyDescription(permission: PermissionRecord, groupKey: string): string {
+  if (permission.description && !permission.description.includes(permission.key)) {
+    return permission.description;
+  }
+  return `Allows this role to ${permissionAction(permission.key).toLowerCase()} in ${friendlyAccessArea(groupKey).toLowerCase()}.`;
+}
+
+function friendlyAccessArea(key: string): string {
+  const labels: Readonly<Record<string, string>> = {
+    admins: "Admin team",
+    applications: "Applications",
+    billing: "Utility billing",
+    configuration: "Platform settings",
+    content: "Brand & content",
+    coverage: "Service coverage",
+    documents: "Application documents",
+    drivers: "Drivers",
+    financial: "Finance",
+    financial_policy: "Pricing & financial rules",
+    health: "System health",
+    inventory: "Station stock",
+    organizations: "Companies & stations",
+    policy: "Terms & policies",
+    providers: "Connections & providers",
+    revenue: "Revenue",
+    support: "Support",
+    users: "User accounts",
+    verification: "Identity checks",
+    orders: "Orders",
+    dispatch: "Driver matching",
+    cylinders: "Cylinders",
+    quality: "Service quality",
+    operations: "Operations",
+    safety: "Safety",
+    config: "LPG settings",
+  };
+  return labels[key] ?? normalizeStatusLabel(key);
+}
+
+function buildRoleKey(displayName: string): string {
+  const slug = displayName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 90);
+  return `platform.${slug || "custom_admin"}`;
 }
 
 function readRoleCategory(key: string): string {
   return key.split(".")[1]?.replaceAll("_", "-") || "general";
 }
 
-function shortIdentifier(value: string): string {
-  return value.length > 18 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value;
+function friendlyStatus(value: string): string {
+  const labels: Readonly<Record<string, string>> = {
+    active: "Active",
+    disabled: "Disabled",
+    revoked: "Access removed",
+    retired: "Retired",
+    suspended: "Paused",
+    pending: "Pending",
+    draft: "Draft",
+  };
+  return labels[value] ?? normalizeStatusLabel(value);
 }
 
 function statusTone(value: string): "neutral" | "success" | "warning" | "danger" | "info" {
@@ -1126,5 +1216,5 @@ function statusTone(value: string): "neutral" | "success" | "warning" | "danger"
 }
 
 function readErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "The administrator action could not be completed.";
+  return error instanceof Error ? error.message : "The admin access change could not be completed.";
 }
