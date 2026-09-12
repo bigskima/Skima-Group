@@ -7,29 +7,63 @@ import {
   WalletCards,
 } from "lucide-react";
 
+import { usePermissionCheck } from "@skima/ui";
+
 import { AdminDeliveryPricingWorkspace, AdminDriverPricingWorkspace } from "../../admin-delivery-pricing-workspace";
 import { AdminResourceConsole } from "../../admin-resource-console";
+import { financeConsoleConfig } from "../../admin-resource-config";
 import { AdminRevenueWorkspace } from "../../admin-revenue-workspace";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
 import {
-  moneyBalancesConfig,
-  moneySettlementsConfig,
-  moneyWithdrawalsConfig,
-} from "./money-resource-configs";
+  MoneyBalancesScreenV2,
+  MoneySettlementsScreenV2,
+  MoneyWithdrawalsScreenV2,
+} from "./MoneyFinanceScreensV2";
+import "./money-v2.css";
+
+const ADVANCED_FINANCE_PATH = "/money/balances/advanced";
 
 export function MoneyWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
 }) {
+  const can = usePermissionCheck();
+
   if (props.route === "/money") return <MoneyOverviewScreen onNavigate={props.onNavigate} />;
   if (props.route === "/money/revenue") return <AdminRevenueWorkspace onOpenFinance={() => props.onNavigate("/money/balances")} />;
-  if (props.route === "/money/balances") return <AdminResourceConsole config={moneyBalancesConfig} />;
-  if (props.route === "/money/withdrawals") return <AdminResourceConsole config={moneyWithdrawalsConfig} />;
-  if (props.route === "/money/settlements") return <AdminResourceConsole config={moneySettlementsConfig} />;
+  if (props.route === "/money/balances") return <MoneyBalancesScreenV2 onNavigate={props.onNavigate} />;
+  if (props.route === "/money/withdrawals") return <MoneyWithdrawalsScreenV2 onNavigate={props.onNavigate} />;
+  if (props.route === "/money/settlements") return <MoneySettlementsScreenV2 onNavigate={props.onNavigate} />;
   if (props.route === "/money/pricing") return <MoneyPricingScreen onNavigate={props.onNavigate} />;
   if (props.route === "/money/pricing/delivery") return <AdminDeliveryPricingWorkspace />;
   if (props.route === "/money/pricing/drivers") return <AdminDriverPricingWorkspace />;
   if (props.route === "/money/controls") return <MoneyControlsScreen onNavigate={props.onNavigate} />;
+  if (props.route === ADVANCED_FINANCE_PATH) {
+    if (!can("platform.financial.manage")) {
+      return (
+        <WorkspaceLanding
+          eyebrow="Money · Specialist tools"
+          title="Advanced finance tools unavailable"
+          description="This area contains protected money-moving operations and requires finance management authority."
+          onNavigate={props.onNavigate}
+          actions={[
+            {
+              key: "back-to-balances",
+              title: "Back to balances & deposits",
+              description: "Return to the routine finance view available to your role.",
+              href: "/money/balances",
+              icon: WalletCards,
+              meta: "Money",
+              permissionKey: "finance",
+            },
+          ]}
+        />
+      );
+    }
+
+    return <AdminResourceConsole config={financeConsoleConfig} />;
+  }
+
   return <MoneyOverviewScreen onNavigate={props.onNavigate} />;
 }
 
@@ -62,7 +96,7 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
         {
           key: "withdrawals",
           title: "Withdrawals",
-          description: "Manage beneficiaries, withdrawal requests and provider transfer results.",
+          description: "Review withdrawal requests and provider transfer outcomes without exposing low-level payout fields.",
           href: "/money/withdrawals",
           icon: Landmark,
           meta: "Payout operations",
@@ -71,7 +105,7 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
         {
           key: "settlements",
           title: "Settlements & escrow",
-          description: "Handle commissions, business settlements, escrow release, refunds and reconciliation.",
+          description: "Review commissions and settlement statements while protected money-moving actions stay in specialist tools.",
           href: "/money/settlements",
           icon: ReceiptText,
           meta: "Order money",
@@ -143,7 +177,7 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
     <WorkspaceLanding
       eyebrow="Money · Governance"
       title="Financial controls"
-      description="Financial controls remain owned by their authoritative policy screens. This page directs administrators to the correct control instead of duplicating financial rules."
+      description="Financial controls remain owned by their authoritative policy screens. High-risk manual finance actions are kept in the specialist console rather than mixed into everyday money views."
       onNavigate={props.onNavigate}
       actions={[
         {
@@ -176,11 +210,20 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
         {
           key: "settlement-controls",
           title: "Settlement operations",
-          description: "Open the settlement and escrow screen for controlled release, refund and reconciliation actions.",
+          description: "Review settlement and escrow status without exposing raw money-moving controls.",
           href: "/money/settlements",
           icon: ReceiptText,
-          meta: "Settlement policy",
+          meta: "Settlement status",
           permissionKey: "finance",
+        },
+        {
+          key: "advanced-finance",
+          title: "Advanced finance tools",
+          description: "Use only for deposit verification, beneficiary setup, withdrawal approval, transfer outcomes, escrow release/refund or reconciliation workflows.",
+          href: ADVANCED_FINANCE_PATH,
+          icon: Settings2,
+          meta: "Specialist operations",
+          requiredPermissions: ["platform.financial.manage"],
         },
       ]}
     />

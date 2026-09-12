@@ -7,9 +7,9 @@ import {
 } from "lucide-react";
 
 import { AdminOperationsWorkspace } from "../../admin-operations-workspace";
+import { AdminQualityWorkspace } from "../../admin-quality-workspace";
+import { AdminStationInventoryWorkspace } from "../../admin-station-inventory-workspace";
 import { AdminSupportWorkspace } from "../../admin-support-workspace";
-import { AdminWorkspaceRouter } from "../../admin-workspace-router";
-import { toLegacyAdminWorkspacePath } from "../../app/admin-v2-navigation";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
 import { CoverageDiagnosticsScreen } from "./CoverageDiagnosticsScreen";
 import { CoverageMaintenanceScreen } from "./CoverageMaintenanceScreen";
@@ -54,14 +54,27 @@ export function OperationsWorkspaceRouter(props: {
     );
   }
 
+  if (props.route === "/operations/inventory") return <AdminStationInventoryWorkspace />;
+  if (props.route === "/operations/quality") return <AdminQualityWorkspace />;
+
   if (props.route === "/operations/support" || props.route.startsWith("/operations/support/")) {
     return <AdminSupportWorkspace route={props.route} onNavigate={props.onNavigate} />;
   }
 
   return (
-    <AdminWorkspaceRouter
-      route={toLegacyAdminWorkspacePath(props.route)}
+    <WorkspaceLanding
+      eyebrow="Operations"
+      title="Operations page not found"
+      description="This operations link is not part of the current Admin V2 workspace."
       onNavigate={props.onNavigate}
+      actions={[{
+        key: "operations-home",
+        title: "Back to Operations",
+        description: "Return to orders, coverage, stock, quality and support.",
+        href: "/operations",
+        icon: ClipboardList,
+        meta: "Operations",
+      }]}
     />
   );
 }
