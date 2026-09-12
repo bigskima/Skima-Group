@@ -55,6 +55,25 @@ export function formatMinorMoney(value: number, code = "NGN"): string {
   return formatMoney(value, code);
 }
 
+export function formatMoneyBreakdown(
+  rows: readonly MoneyRow[],
+  amountKey: string,
+  unit: "major" | "minor",
+): string {
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    const code = currency(row);
+    totals.set(code, (totals.get(code) ?? 0) + numberValue(row, amountKey));
+  }
+
+  if (totals.size === 0) return "—";
+
+  return Array.from(totals.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([code, value]) => unit === "minor" ? formatMinorMoney(value, code) : formatMajorMoney(value, code))
+    .join(" · ");
+}
+
 export function formatDate(value: string): string {
   if (!value) return "Not recorded";
   const date = new Date(value);
