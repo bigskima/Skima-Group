@@ -7,6 +7,8 @@ import {
   WalletCards,
 } from "lucide-react";
 
+import { usePermissionCheck } from "@skima/ui";
+
 import { AdminDeliveryPricingWorkspace, AdminDriverPricingWorkspace } from "../../admin-delivery-pricing-workspace";
 import { AdminResourceConsole } from "../../admin-resource-console";
 import { financeConsoleConfig } from "../../admin-resource-config";
@@ -19,10 +21,14 @@ import {
 } from "./MoneyFinanceScreensV2";
 import "./money-v2.css";
 
+const ADVANCED_FINANCE_PATH = "/money/balances/advanced";
+
 export function MoneyWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
 }) {
+  const can = usePermissionCheck();
+
   if (props.route === "/money") return <MoneyOverviewScreen onNavigate={props.onNavigate} />;
   if (props.route === "/money/revenue") return <AdminRevenueWorkspace onOpenFinance={() => props.onNavigate("/money/balances")} />;
   if (props.route === "/money/balances") return <MoneyBalancesScreenV2 onNavigate={props.onNavigate} />;
@@ -32,7 +38,32 @@ export function MoneyWorkspaceRouter(props: {
   if (props.route === "/money/pricing/delivery") return <AdminDeliveryPricingWorkspace />;
   if (props.route === "/money/pricing/drivers") return <AdminDriverPricingWorkspace />;
   if (props.route === "/money/controls") return <MoneyControlsScreen onNavigate={props.onNavigate} />;
-  if (props.route === "/money/advanced") return <AdminResourceConsole config={financeConsoleConfig} />;
+  if (props.route === ADVANCED_FINANCE_PATH) {
+    if (!can("platform.financial.manage")) {
+      return (
+        <WorkspaceLanding
+          eyebrow="Money · Specialist tools"
+          title="Advanced finance tools unavailable"
+          description="This area contains protected money-moving operations and requires finance management authority."
+          onNavigate={props.onNavigate}
+          actions={[
+            {
+              key: "back-to-balances",
+              title: "Back to balances & deposits",
+              description: "Return to the routine finance view available to your role.",
+              href: "/money/balances",
+              icon: WalletCards,
+              meta: "Money",
+              permissionKey: "finance",
+            },
+          ]}
+        />
+      );
+    }
+
+    return <AdminResourceConsole config={financeConsoleConfig} />;
+  }
+
   return <MoneyOverviewScreen onNavigate={props.onNavigate} />;
 }
 
@@ -188,8 +219,8 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
         {
           key: "advanced-finance",
           title: "Advanced finance tools",
-          description: "Use only for manual deposit verification, beneficiary setup, transfer outcomes, escrow release/refund or reconciliation workflows.",
-          href: "/money/advanced",
+          description: "Use only for deposit verification, beneficiary setup, withdrawal approval, transfer outcomes, escrow release/refund or reconciliation workflows.",
+          href: ADVANCED_FINANCE_PATH,
           icon: Settings2,
           meta: "Specialist operations",
           requiredPermissions: ["platform.financial.manage"],
