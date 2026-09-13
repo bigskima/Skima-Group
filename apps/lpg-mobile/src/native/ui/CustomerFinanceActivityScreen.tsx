@@ -11,11 +11,13 @@ import {
 } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { canonicalTransactionStatus, transactionStatusPresentation } from "../utilities/transactionStatus";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
+import { RequestFailureState } from "./RequestFailureState";
 import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
-import { StatusPill } from "./StatusPill";
+import { TransactionStatusPill } from "./TransactionStatusPill";
 
 type TransactionFilter = "all" | "completed" | "pending" | "issues";
 const PAGE_SIZE = 8;
@@ -26,14 +28,14 @@ export function TransactionsScreen() {
   const rows = transactions.data ?? [];
   const [filter, setFilter] = useState<TransactionFilter>("all");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const succeededCount = rows.filter((item) => isSucceeded(displayStatus(item))).length;
-  const pendingCount = rows.filter((item) => isPending(displayStatus(item))).length;
-  const issueCount = rows.filter((item) => isIssue(displayStatus(item))).length;
+  const succeededCount = rows.filter((item) => canonicalTransactionStatus(displayStatus(item)) === "successful").length;
+  const pendingCount = rows.filter((item) => ["pending", "processing"].includes(canonicalTransactionStatus(displayStatus(item)))).length;
+  const issueCount = rows.filter((item) => ["cancelled", "failed", "reversed", "expired"].includes(canonicalTransactionStatus(displayStatus(item)))).length;
   const filteredRows = rows.filter((item) => {
-    const status = displayStatus(item);
-    if (filter === "completed") return isSucceeded(status);
-    if (filter === "pending") return isPending(status);
-    if (filter === "issues") return isIssue(status);
+    const status = canonicalTransactionStatus(displayStatus(item));
+    if (filter === "completed") return status === "successful" || status === "refunded";
+    if (filter === "pending") return status === "pending" || status === "processing";
+    if (filter === "issues") return ["cancelled", "failed", "reversed", "expired"].includes(status);
     return true;
   });
   const visibleRows = filteredRows.slice(0, visibleCount);
@@ -47,17 +49,12 @@ export function TransactionsScreen() {
     <Screen
       eyebrow="SKIMA Wallet"
       title="Transactions"
-      subtitle="Review your wallet top-ups and their current payment status."
+      subtitle="Review your wallet top-ups and their canonical payment status."
     >
       {transactions.isPending ? (
         <ScreenSkeleton cards={4} />
       ) : transactions.error ? (
-        <EmptyState
-          icon={<ReceiptText color={palette.brand} size={27} />}
-          title="Transactions could not be loaded"
-          description="Check your connection and refresh your wallet activity."
-          action={<AppButton label="Retry" onPress={() => void transactions.refetch()} />}
-        />
+        <RequestFailureState error={transactions.error} onRetry={() => void transactions.refetch()} />
       ) : (
         <>
           <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
@@ -66,7 +63,7 @@ export function TransactionsScreen() {
               <Text style={styles.heroEyebrow}>TOP-UP ACTIVITY</Text>
               <Text style={styles.heroTitle}>{rows.length} {rows.length === 1 ? "top-up" : "top-ups"}</Text>
               <Text style={styles.heroBody}>
-                {succeededCount} completed · {pendingCount} pending{issueCount ? ` · ${issueCount} need attention` : ""}
+                {succeededCount} successful · {pendingCount} pending{issueCount ? ` · ${issueCount} need attention` : ""}
               </Text>
             </View>
           </View>
@@ -86,9 +83,10 @@ export function TransactionsScreen() {
                     const id = recordId(item) ?? String(index);
                     const amount = transactionAmount(item);
                     const currency = firstString(item, ["currency_code", "currencyCode"]) ?? "NGN";
-                    const status = displayStatus(item) ?? "recorded";
+                    const rawStatus = displayStatus(item);
+                    const presentation = transactionStatusPresentation(rawStatus);
                     const timestamp = firstString(item, ["initialized_at", "initializedAt", "created_at", "createdAt"]);
-                    const succeeded = isSucceeded(status);
+                    const succeeded = presentation.status === "successful";
                     return (
                       <View
                         key={id}
@@ -100,11 +98,12 @@ export function TransactionsScreen() {
                         <View style={styles.copy}>
                           <Text numberOfLines={1} style={[styles.title, { color: palette.ink }]}>Wallet top up</Text>
                           <Text numberOfLines={1} style={[styles.reference, { color: palette.muted }]}>{displayReference(item) ?? "SKIMA top up"}</Text>
+                          <Text numberOfLines={2} style={[styles.explanation, { color: palette.mutedStrong }]}>{presentation.explanation}</Text>
                           <Text style={[styles.time, { color: palette.muted }]}>{formatDate(timestamp)}</Text>
                         </View>
                         <View style={styles.right}>
-                          <Text style={[styles.amount, { color: succeeded ? palette.success : palette.ink }]}>+{money(amount, currency)}</Text>
-                          <StatusPill label={friendly(status)} tone={transactionTone(status)} />
+                          <Text style={[styles.amount, { color: succeeded ? palette.success : palette.ink }]}>{succeeded ? "+" : ""}{money(amount, currency)}</Text>
+                          <TransactionStatusPill status={rawStatus} />
                         </View>
                       </View>
                     );
@@ -135,7 +134,7 @@ export function TransactionsScreen() {
 
           <View style={[styles.note, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <WalletCards color={palette.mutedStrong} size={18} />
-            <Text style={[styles.noteText, { color: palette.muted }]}>Pending top-ups are not added to your available balance until payment is confirmed.</Text>
+            <Text style={[styles.noteText, { color: palette.muted }]}>A top-up record existing does not mean funds were added. Only a successful backend status is shown as completed.</Text>
           </View>
         </>
       )}
@@ -168,30 +167,6 @@ function transactionAmount(item: Record<string, unknown>) {
   return Math.abs(firstNumber(item, ["amount", "net_amount", "netAmount", "value"]) ?? 0);
 }
 
-function friendly(value: string) {
-  return value.replace(/[_-]/g, " ").replace(/^./, (letter) => letter.toUpperCase());
-}
-
-function isSucceeded(value: string | null) {
-  return Boolean(value && /success|succeeded|completed|confirmed|posted|paid|settled|credited/i.test(value));
-}
-
-function isPending(value: string | null) {
-  return Boolean(value && /pending|processing|reserved|review|hold/i.test(value));
-}
-
-function isIssue(value: string | null) {
-  return Boolean(value && /fail|reject|revers|cancel|error|expired/i.test(value));
-}
-
-function transactionTone(value: string): "neutral" | "brand" | "success" | "warning" | "danger" {
-  const normalized = value.toLowerCase();
-  if (["completed", "confirmed", "posted", "successful", "succeeded", "paid", "settled"].some((part) => normalized.includes(part))) return "success";
-  if (["failed", "rejected", "reversed", "cancelled", "canceled"].some((part) => normalized.includes(part))) return "danger";
-  if (["pending", "processing", "reserved"].some((part) => normalized.includes(part))) return "warning";
-  return "brand";
-}
-
 function money(value: number, currency: string) {
   try {
     return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(value);
@@ -217,11 +192,12 @@ const styles = StyleSheet.create({
   filterChip: { minHeight: 38, justifyContent: "center", borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: 13 },
   filterText: { ...typography.caption, fontSize: 10, fontWeight: "900" },
   list: { gap: spacing.sm },
-  row: { minHeight: 78, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg },
+  row: { minHeight: 90, flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg },
   icon: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   copy: { flex: 1, minWidth: 0, gap: 2 },
   title: { ...typography.bodyStrong, fontSize: 14 },
   reference: { ...typography.caption, fontSize: 10 },
+  explanation: { ...typography.caption, fontSize: 10, lineHeight: 14 },
   time: { ...typography.caption, fontSize: 10 },
   right: { alignItems: "flex-end", gap: 7 },
   amount: { ...typography.bodyStrong, fontSize: 14 },
