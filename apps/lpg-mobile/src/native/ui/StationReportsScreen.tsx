@@ -13,9 +13,9 @@ import {
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
-import { classifyResourceFailure, type ResourceFailureKind } from "../utilities/resourceFailure";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
+import { RequestFailureState } from "./RequestFailureState";
 import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 import { SectionHeader } from "./SectionHeader";
@@ -170,31 +170,41 @@ function SettlementSummary({
   }
 
   if (error) {
-    const failure = classifyResourceFailure(error);
-    const copy = settlementFailureCopy(failure.kind);
     return (
-      <View
-        style={[
-          styles.settlementState,
-          {
-            backgroundColor: failure.kind === "permission" || failure.kind === "role" || failure.kind === "ownership"
-              ? palette.surfaceSubtle
-              : palette.surface,
-            borderColor: palette.border,
+      <RequestFailureState
+        error={error}
+        onRetry={onRetry}
+        overrides={{
+          permission: {
+            title: "Settlement access is restricted",
+            description: "You do not have permission to view settlement information for this station. Access is limited to the Station Owner and operators explicitly granted finance or settlement access.",
           },
-        ]}
-      >
-        <ShieldCheck color={failure.kind === "permission" ? palette.mutedStrong : palette.brand} size={22} />
-        <View style={styles.settlementCopy}>
-          <Text style={[styles.settlementTitle, { color: palette.ink }]}>{copy.title}</Text>
-          <Text style={[styles.settlementBody, { color: palette.muted }]}>{copy.description}</Text>
-          {failure.retryable ? (
-            <View style={styles.retryAction}>
-              <AppButton label="Retry" size="sm" variant="secondary" onPress={onRetry} />
-            </View>
-          ) : null}
-        </View>
-      </View>
+          role: {
+            title: "Your Station role cannot view settlements",
+            description: "This role can continue station operations, but settlement information requires an authorized financial role.",
+          },
+          station_scope: {
+            title: "Settlement information belongs to another Station",
+            description: "Your current Station access does not include these settlement records. Switch to the correct Station or ask the Station Owner to review your access.",
+          },
+          missing: {
+            title: "Settlement information is not available yet",
+            description: "No settlement record is available for this Station at the moment.",
+          },
+          network: {
+            title: "Settlement information could not connect",
+            description: "Check your internet connection and retry. Your Station operations are still available.",
+          },
+          service_unavailable: {
+            title: "Settlement service is temporarily unavailable",
+            description: "The settlement service is not available right now. Retry shortly; this does not affect current Station jobs.",
+          },
+          server: {
+            title: "Settlement information could not be refreshed",
+            description: "SKIMA could not refresh settlement information right now. Retry without leaving the Station workspace.",
+          },
+        }}
+      />
     );
   }
 
@@ -227,54 +237,6 @@ function SettlementSummary({
       </View>
     </View>
   );
-}
-
-function settlementFailureCopy(kind: ResourceFailureKind) {
-  switch (kind) {
-    case "permission":
-      return {
-        title: "Settlement access is restricted",
-        description:
-          "You do not have permission to view settlement information for this station. Access is limited to the Station Owner and operators explicitly granted finance or settlement access.",
-      };
-    case "role":
-      return {
-        title: "Your station role cannot view settlements",
-        description:
-          "This role can continue station operations, but settlement information requires an authorized financial role.",
-      };
-    case "ownership":
-      return {
-        title: "Settlement information belongs to another station",
-        description:
-          "Your current station access does not include these settlement records. Switch to the correct station or ask the Station Owner to review your access.",
-      };
-    case "missing":
-      return {
-        title: "Settlement information is not available yet",
-        description: "No settlement record is available for this station at the moment.",
-      };
-    case "network":
-      return {
-        title: "Settlement information could not connect",
-        description: "Check your internet connection and retry. Your station operations are still available.",
-      };
-    case "temporary":
-      return {
-        title: "Settlement service is temporarily unavailable",
-        description: "The settlement service is not available right now. Retry shortly; this does not affect current station jobs.",
-      };
-    case "server":
-      return {
-        title: "Settlement information could not be refreshed",
-        description: "SKIMA could not refresh settlement information right now. Retry without leaving the station workspace.",
-      };
-    default:
-      return {
-        title: "Settlement information could not be loaded",
-        description: "Retry the settlement section. Other station activity remains available.",
-      };
-  }
 }
 
 function BackButton() {
@@ -329,7 +291,6 @@ const styles = StyleSheet.create({
   settlementCopy: { flex: 1, gap: spacing.xs },
   settlementTitle: { ...typography.bodyStrong, fontSize: 15 },
   settlementBody: { ...typography.caption, lineHeight: 18 },
-  retryAction: { alignSelf: "flex-start", marginTop: spacing.xs },
   reportHero: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
   reportCopy: { flex: 1, minWidth: 0 },
   reportEyebrow: { color: "rgba(255,255,255,.72)", ...typography.eyebrow, fontSize: 9 },
