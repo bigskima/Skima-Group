@@ -1,6 +1,6 @@
 import * as Linking from "expo-linking";
 import { router } from "expo-router";
-import { Bell, BellRing, CheckCheck, ChevronRight, ShieldCheck, Truck, Wallet } from "lucide-react-native";
+import { Bell, BellRing, CheckCheck, ChevronRight, MessageCircle, ShieldCheck, Truck, Wallet } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useOrganizationInvitations } from "../api/domains";
@@ -17,7 +17,7 @@ import { RequestFailureState } from "./RequestFailureState";
 import { Screen } from "./Screen";
 import { StationInvitationNotification } from "./StationInvitationNotification";
 
-type NotificationCategory = "all" | "wallet" | "order" | "partner";
+type NotificationCategory = "all" | "wallet" | "order" | "partner" | "support";
 const PAGE_SIZE = 20;
 
 export function NotificationsScreen() {
@@ -126,7 +126,9 @@ export function NotificationsScreen() {
           ? palette.warningSoft
           : category === "partner"
             ? palette.successSoft
-            : palette.soft;
+            : category === "support"
+              ? palette.brandSofter
+              : palette.soft;
 
     return (
       <Pressable
@@ -184,6 +186,7 @@ export function NotificationsScreen() {
         <TabItem label="Wallet" active={selectedCategory === "wallet"} onPress={() => setSelectedCategory("wallet")} />
         <TabItem label="Orders" active={selectedCategory === "order"} onPress={() => setSelectedCategory("order")} />
         <TabItem label="Partner" active={selectedCategory === "partner"} onPress={() => setSelectedCategory("partner")} />
+        <TabItem label="Support" active={selectedCategory === "support"} onPress={() => setSelectedCategory("support")} />
       </View>
 
       <View style={styles.controlRow}>
@@ -247,7 +250,7 @@ export function NotificationsScreen() {
         <EmptyState
           icon={<Bell color={palette.brand} size={26} />}
           title={!showRead && unreadCount === 0 ? "You’re all caught up" : selectedCategory === "all" ? "No notifications yet" : `No ${selectedCategory} updates`}
-          description={!showRead && unreadCount === 0 ? "There are no unread notifications." : selectedCategory === "all" ? "Important wallet, refill, delivery, and partner updates will appear here." : "There are no notifications in this category right now."}
+          description={!showRead && unreadCount === 0 ? "There are no unread notifications." : selectedCategory === "all" ? "Important wallet, refill, delivery, partner, and support updates will appear here." : "There are no notifications in this category right now."}
         />
       )}
     </Screen>
@@ -294,6 +297,7 @@ function notificationCategory(message: PlatformRecord): Exclude<NotificationCate
   if (category === "wallet" || /wallet|deposit|withdrawal|payment|refund|settlement|commission/.test(purpose)) return "wallet";
   if (category === "order" || /order|refill|delivery|pickup|dispatch|cylinder/.test(purpose)) return "order";
   if (category === "partner" || /application|driver|station|partner|activation|verification|role|delegation|access/.test(purpose)) return "partner";
+  if (category === "support" || /support|complaint|case/.test(purpose)) return "support";
   return "general";
 }
 
@@ -306,6 +310,7 @@ function categoryIcon(category: ReturnType<typeof notificationCategory>, brand: 
   if (category === "wallet") return <Wallet color={brand} size={20} />;
   if (category === "order") return <Truck color="#B76A00" size={20} />;
   if (category === "partner") return <ShieldCheck color={success} size={20} />;
+  if (category === "support") return <MessageCircle color={brand} size={20} />;
   return <Bell color={brand} size={20} />;
 }
 
