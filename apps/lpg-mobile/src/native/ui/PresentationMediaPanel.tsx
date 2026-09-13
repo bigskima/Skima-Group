@@ -15,6 +15,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
+import { PublicEntityImageEditor } from "./PublicEntityImageEditor";
 import { RuntimeMediaImage } from "./RuntimeMediaImage";
 
 const STYLE_OPTIONS = [
@@ -36,6 +37,7 @@ const STYLE_OPTIONS = [
 ] as const;
 
 type StyleKey = (typeof STYLE_OPTIONS)[number]["key"];
+type PresentationSubjectType = "lpg_cylinder" | "vehicle" | "station";
 
 export function PresentationMediaPanel({
   subjectId,
@@ -44,7 +46,59 @@ export function PresentationMediaPanel({
   originalAssetId,
 }: {
   subjectId: string;
-  subjectType: "lpg_cylinder" | "vehicle" | "station";
+  subjectType: PresentationSubjectType;
+  colour?: string | null;
+  originalAssetId?: string | null;
+}) {
+  if (subjectType === "station") {
+    return <StationPublicImageManager stationBranchId={subjectId} />;
+  }
+
+  return (
+    <AiPresentationMediaPanel
+      subjectId={subjectId}
+      subjectType={subjectType}
+      colour={colour}
+      originalAssetId={originalAssetId}
+    />
+  );
+}
+
+function StationPublicImageManager({ stationBranchId }: { stationBranchId: string }) {
+  return (
+    <View style={styles.stationImages}>
+      <PublicEntityImageEditor
+        entityType="station"
+        entityId={stationBranchId}
+        mediaRole="station.logo.public"
+        title="Station logo"
+        description="Your public brand mark. Use a square logo or badge that remains clear at small sizes."
+        label="Station logo"
+        aspect={[1, 1]}
+        variant="card"
+      />
+      <PublicEntityImageEditor
+        entityType="station"
+        entityId={stationBranchId}
+        mediaRole="station.photo.public"
+        title="Station public photo"
+        description="The primary facility image customers see when viewing this Station. This is separate from verification evidence."
+        label="Station public photo"
+        aspect={[4, 3]}
+        variant="hero"
+      />
+    </View>
+  );
+}
+
+function AiPresentationMediaPanel({
+  subjectId,
+  subjectType,
+  colour,
+  originalAssetId,
+}: {
+  subjectId: string;
+  subjectType: "lpg_cylinder" | "vehicle";
   colour?: string | null;
   originalAssetId?: string | null;
 }) {
@@ -115,34 +169,36 @@ export function PresentationMediaPanel({
     }
   };
 
+  const subjectLabel = subjectType === "vehicle" ? "vehicle" : "cylinder";
+
   return (
     <View
       style={[
         styles.panel,
         {
           backgroundColor: palette.surface,
-          borderColor: palette.scheme === "dark" ? "#513879" : "#DDCDF8",
+          borderColor: palette.border,
         },
       ]}
     >
       {presentationId ? (
-        <RuntimeMediaImage assetId={presentationId} label="Presentation image" />
+        <RuntimeMediaImage assetId={presentationId} label={`Presentation ${subjectLabel} image`} previewable />
       ) : originalId ? (
-        <RuntimeMediaImage assetId={originalId} label="Original photo" />
+        <RuntimeMediaImage assetId={originalId} label={`Original ${subjectLabel} photo`} previewable />
       ) : null}
 
       <View style={styles.head}>
-        <View style={styles.icon}>
-          <Sparkles color="#6B35D3" size={22} />
+        <View style={[styles.icon, { backgroundColor: palette.brandSoft }]}>
+          <Sparkles color={palette.brand} size={22} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { color: palette.ink }]}>
-            {presentationId ? "Your studio cylinder image" : originalId ? "Create a studio cylinder image" : "Create a cylinder image"}
+            {presentationId ? `Your studio ${subjectLabel} image` : originalId ? `Create a studio ${subjectLabel} image` : `Create a ${subjectLabel} image`}
           </Text>
           <Text style={[styles.body, { color: palette.muted }]}>
             {presentationId
-              ? "If the image looks wrong, choose another style and regenerate it. Your original photo is never replaced."
-              : "Create a clean display image while keeping your original photo unchanged."}
+              ? `If the image looks wrong, choose another style and regenerate it. Your original ${subjectLabel} photo is never replaced.`
+              : `Create a clean display image while keeping your original ${subjectLabel} photo unchanged.`}
           </Text>
         </View>
       </View>
@@ -158,8 +214,8 @@ export function PresentationMediaPanel({
               style={[
                 styles.styleChip,
                 {
-                  backgroundColor: selected ? "#6B35D3" : palette.input,
-                  borderColor: selected ? "#6B35D3" : palette.border,
+                  backgroundColor: selected ? palette.brand : palette.input,
+                  borderColor: selected ? palette.brand : palette.border,
                 },
               ]}
             >
@@ -173,14 +229,14 @@ export function PresentationMediaPanel({
 
       {queued ? (
         <View style={styles.processing}>
-          <ActivityIndicator color="#6B35D3" />
-          <Text style={styles.queued}>Generating your cylinder image...</Text>
+          <ActivityIndicator color={palette.brand} />
+          <Text style={[styles.queued, { color: palette.brand }]}>Generating your {subjectLabel} image...</Text>
         </View>
       ) : taskKey ? (
         <Pressable
           disabled={queue.isPending}
           onPress={() => void request(presentationId ? "regenerate" : "create")}
-          style={styles.button}
+          style={[styles.button, { backgroundColor: palette.brand }]}
         >
           {queue.isPending ? (
             <ActivityIndicator color="white" />
@@ -192,16 +248,16 @@ export function PresentationMediaPanel({
           )}
         </Pressable>
       ) : (
-        <Text style={styles.unavailable}>Studio images are not available for this cylinder yet.</Text>
+        <Text style={[styles.unavailable, { color: palette.muted }]}>Studio images are not available for this {subjectLabel} yet.</Text>
       )}
 
       {presentationId ? (
         <Text style={[styles.tip, { color: palette.muted }]}>
-          Tip: regenerate if the cylinder shape, colour, or mood feels off.
+          Tip: regenerate if the {subjectLabel} shape, colour, or mood feels off.
         </Text>
       ) : null}
       {queue.error || processError ? (
-        <Text style={styles.error}>
+        <Text style={[styles.error, { color: palette.danger }]}>
           {processError ?? "We couldn't create the studio image. Please try again."}
         </Text>
       ) : null}
@@ -210,24 +266,23 @@ export function PresentationMediaPanel({
 }
 
 const styles = StyleSheet.create({
+  stationImages: { gap: spacing.md },
   panel: {
     gap: spacing.sm,
     padding: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radii.lg,
-    backgroundColor: "#FAF7FF",
   },
   head: { flexDirection: "row", gap: spacing.md },
   icon: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "#EEE6FF",
     alignItems: "center",
     justifyContent: "center",
   },
-  title: { color: colors.ink, fontSize: 15, fontWeight: "900" },
-  body: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: 3 },
+  title: { fontSize: 15, fontWeight: "900" },
+  body: { fontSize: 11, lineHeight: 16, marginTop: 3 },
   styleRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   styleChip: {
     minHeight: 36,
@@ -244,12 +299,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing.sm,
     borderRadius: radii.md,
-    backgroundColor: "#6B35D3",
   },
   buttonText: { color: "white", fontWeight: "900" },
-  queued: { color: "#4A228F", fontWeight: "800" },
+  queued: { fontWeight: "800" },
   processing: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  unavailable: { color: colors.muted, fontStyle: "italic" },
+  unavailable: { fontStyle: "italic" },
   tip: { fontSize: 12, lineHeight: 17 },
   error: { color: colors.danger },
 });
