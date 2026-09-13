@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { Camera, ImagePlus, Maximize2, Trash2 } from "lucide-react-native";
+import { Camera, Check, ImagePlus, Maximize2, Trash2, X } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useEntityMediaLinks } from "../api/domains";
@@ -12,9 +13,15 @@ import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { RuntimeMediaImage } from "./RuntimeMediaImage";
 
-type PublicEntityType = "driver" | "station";
-type PublicMediaRole = "driver.photo.public" | "station.logo.public" | "station.photo.public";
+type PublicEntityType = "profile" | "driver" | "station";
+type PublicMediaRole =
+  | "profile.photo.public"
+  | "driver.photo.public"
+  | "station.logo.public"
+  | "station.photo.public";
 type ImageFit = "cover" | "contain" | "center";
+type EditorAppearance = "panel" | "onBrand";
+type SelectedPhoto = { uri: string; fileName: string | null; mimeType: string | null };
 
 const FIT_OPTIONS: Array<{ key: ImageFit; label: string; detail: string }> = [
   { key: "cover", label: "Cover", detail: "Fill the frame" },
@@ -31,6 +38,7 @@ export function PublicEntityImageEditor({
   label,
   aspect = [4, 3],
   variant = "hero",
+  appearance = "panel",
 }: {
   entityType: PublicEntityType;
   entityId: string;
@@ -40,6 +48,7 @@ export function PublicEntityImageEditor({
   label: string;
   aspect?: [number, number];
   variant?: "card" | "avatar" | "hero";
+  appearance?: EditorAppearance;
 }) {
   const session = useSession();
   const { palette } = useAppTheme();
@@ -70,12 +79,19 @@ export function PublicEntityImageEditor({
   const storedFit = firstString(linkMetadata, ["fit"]);
   const initialFit: ImageFit = storedFit === "contain" || storedFit === "center" ? storedFit : "cover";
   const [fitOverride, setFitOverride] = useState<ImageFit | null>(null);
+  const [candidate, setCandidate] = useState<SelectedPhoto | null>(null);
   const [pending, setPending] = useState<"upload" | "remove" | "fit" | null>(null);
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const fit = fitOverride ?? initialFit;
   const editable = capability.data === true;
   const contentFit = fit === "center" ? "contain" : fit;
+  const onBrand = appearance === "onBrand";
+  const showFitControls = !onBrand || Boolean(candidate);
+
+  const refreshAfterProfileChange = async () => {
+    if (entityType === "profile") await session.refresh();
+  };
 
   const publish = async (mediaAssetId: string, nextFit: ImageFit) => {
     const result = await session.supabase.rpc("set_public_entity_media", {
@@ -106,20 +122,33 @@ export function PublicEntityImageEditor({
     if (result.canceled) return;
 
     const selected = result.assets[0];
+    setCandidate({
+      uri: selected.uri,
+      fileName: selected.fileName ?? null,
+      mimeType: selected.mimeType ?? null,
+    });
+    setMessage("Preview your image and choose the fit before saving.");
+  };
+
+  const saveCandidate = async () => {
+    if (!candidate) return;
     setPending("upload");
     setProgress(0);
+    setMessage(null);
     try {
       const mediaAssetId = await uploadMedia({
         api: session.api,
-        uri: selected.uri,
-        fileName: selected.fileName ?? `${mediaRole.replace(/\./g, "-")}-${Date.now()}.jpg`,
-        contentType: selected.mimeType ?? "image/jpeg",
+        uri: candidate.uri,
+        fileName: candidate.fileName ?? `${mediaRole.replace(/\./g, "-")}-${Date.now()}.jpg`,
+        contentType: candidate.mimeType ?? "image/jpeg",
         ownerUserId: session.context!.user.id,
-        assetTypeKey: `media.${mediaRole}`,
+        assetTypeKey: mediaRole === "profile.photo.public" ? "media.profile.avatar" : `media.${mediaRole}`,
         onProgress: setProgress,
       });
       await publish(mediaAssetId, fit);
       await links.refetch();
+      await refreshAfterProfileChange();
+      setCandidate(null);
       setMessage(`${label} updated. This image is separate from verification and KYC media.`);
     } catch (cause) {
       setMessage(friendlyError(cause, `${label} could not be updated.`));
@@ -131,11 +160,12 @@ export function PublicEntityImageEditor({
   const changeFit = async (nextFit: ImageFit) => {
     setFitOverride(nextFit);
     setMessage(null);
-    if (!assetId || !editable) return;
+    if (candidate || !assetId || !editable) return;
     setPending("fit");
     try {
       await publish(assetId, nextFit);
       await links.refetch();
+      await refreshAfterProfileChange();
       setMessage("Image fit updated.");
     } catch (cause) {
       setFitOverride(null);
@@ -143,6 +173,12 @@ export function PublicEntityImageEditor({
     } finally {
       setPending(null);
     }
+  };
+
+  const cancelCandidate = () => {
+    setCandidate(null);
+    setFitOverride(null);
+    setMessage(null);
   };
 
   const remove = async () => {
@@ -156,7 +192,9 @@ export function PublicEntityImageEditor({
       });
       if (result.error) throw result.error;
       setFitOverride(null);
+      setCandidate(null);
       await links.refetch();
+      await refreshAfterProfileChange();
       setMessage(`${label} removed from the public profile.`);
     } catch (cause) {
       setMessage(friendlyError(cause, `${label} could not be removed.`));
@@ -165,27 +203,57 @@ export function PublicEntityImageEditor({
     }
   };
 
+  const messageIsSuccess = Boolean(message?.includes("updated") || message?.includes("removed"));
+  const messageIsPreview = Boolean(message?.startsWith("Preview"));
+  const controlText = onBrand ? "rgba(255,255,255,.88)" : palette.mutedStrong;
+  const secondaryText = onBrand ? "#FFFFFF" : palette.danger;
+
   return (
-    <View style={[styles.panel, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-      <View style={styles.headingRow}>
-        <View style={[styles.headingIcon, { backgroundColor: palette.brandSoft }]}>
-          <ImagePlus color={palette.brand} size={20} />
+    <View
+      style={[
+        styles.panel,
+        !onBrand && shadows.soft,
+        onBrand
+          ? styles.onBrandPanel
+          : { backgroundColor: palette.surface, borderColor: palette.border },
+      ]}
+    >
+      {!onBrand ? (
+        <View style={styles.headingRow}>
+          <View style={[styles.headingIcon, { backgroundColor: palette.brandSoft }]}>
+            <ImagePlus color={palette.brand} size={20} />
+          </View>
+          <View style={styles.headingCopy}>
+            <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
+            <Text style={[styles.description, { color: palette.muted }]}>{description}</Text>
+          </View>
         </View>
-        <View style={styles.headingCopy}>
-          <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
-          <Text style={[styles.description, { color: palette.muted }]}>{description}</Text>
-        </View>
-      </View>
+      ) : null}
 
-      <RuntimeMediaImage
-        assetId={assetId}
-        label={label}
-        variant={variant}
-        contentFit={contentFit}
-        previewable
-      />
+      {candidate ? (
+        <Image
+          source={candidate.uri}
+          contentFit={contentFit}
+          contentPosition="center"
+          accessibilityLabel={`${label} preview`}
+          style={[
+            styles.candidate,
+            variant === "avatar" && styles.candidateAvatar,
+            variant === "hero" && styles.candidateHero,
+            { backgroundColor: onBrand ? "rgba(255,255,255,.12)" : palette.surfaceSubtle },
+          ]}
+        />
+      ) : (
+        <RuntimeMediaImage
+          assetId={assetId}
+          label={label}
+          variant={variant}
+          contentFit={contentFit}
+          previewable
+        />
+      )}
 
-      {assetId ? (
+      {assetId && !candidate && !onBrand ? (
         <View style={[styles.previewHint, { backgroundColor: palette.surfaceSubtle }]}>
           <Maximize2 color={palette.mutedStrong} size={15} />
           <Text style={[styles.previewHintText, { color: palette.muted }]}>Tap the image for a full-screen preview.</Text>
@@ -194,91 +262,175 @@ export function PublicEntityImageEditor({
 
       {editable ? (
         <>
-          <Text style={[styles.controlLabel, { color: palette.mutedStrong }]}>Image fit</Text>
-          <View style={styles.fitRow}>
-            {FIT_OPTIONS.map((option) => {
-              const active = option.key === fit;
-              return (
+          {showFitControls ? (
+            <>
+              <Text style={[styles.controlLabel, { color: controlText }]}>Image fit</Text>
+              <View style={styles.fitRow}>
+                {FIT_OPTIONS.map((option) => {
+                  const active = option.key === fit;
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      disabled={pending !== null}
+                      key={option.key}
+                      onPress={() => void changeFit(option.key)}
+                      style={({ pressed }) => [
+                        styles.fitChip,
+                        {
+                          backgroundColor: onBrand
+                            ? active ? "rgba(255,255,255,.22)" : "rgba(255,255,255,.08)"
+                            : active ? palette.brandSoft : palette.surfaceSubtle,
+                          borderColor: onBrand
+                            ? active ? "rgba(255,255,255,.62)" : "rgba(255,255,255,.24)"
+                            : active ? palette.brand : palette.border,
+                          opacity: pressed ? 0.75 : 1,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.fitLabel, { color: onBrand ? "#FFFFFF" : active ? palette.brand : palette.ink }]}>{option.label}</Text>
+                      <Text style={[styles.fitDetail, { color: onBrand ? "rgba(255,255,255,.72)" : palette.muted }]}>{option.detail}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+
+          <View style={styles.actions}>
+            {candidate ? (
+              <>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
                   disabled={pending !== null}
-                  key={option.key}
-                  onPress={() => void changeFit(option.key)}
+                  onPress={() => void saveCandidate()}
                   style={({ pressed }) => [
-                    styles.fitChip,
+                    styles.primaryAction,
                     {
-                      backgroundColor: active ? palette.brandSoft : palette.surfaceSubtle,
-                      borderColor: active ? palette.brand : palette.border,
-                      opacity: pressed ? 0.75 : 1,
+                      backgroundColor: onBrand ? "rgba(255,255,255,.18)" : palette.brand,
+                      borderColor: onBrand ? "rgba(255,255,255,.46)" : palette.brand,
+                      opacity: pressed ? 0.78 : pending !== null ? 0.55 : 1,
                     },
                   ]}
                 >
-                  <Text style={[styles.fitLabel, { color: active ? palette.brand : palette.ink }]}>{option.label}</Text>
-                  <Text style={[styles.fitDetail, { color: palette.muted }]}>{option.detail}</Text>
+                  {pending === "upload" ? <ActivityIndicator color="#FFFFFF" /> : <Check color="#FFFFFF" size={17} />}
+                  <Text style={styles.primaryText}>{pending === "upload" ? `Uploading ${Math.round(progress * 100)}%` : "Save image"}</Text>
                 </Pressable>
-              );
-            })}
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={pending !== null}
+                  onPress={cancelCandidate}
+                  style={({ pressed }) => [
+                    styles.secondaryAction,
+                    {
+                      backgroundColor: onBrand ? "rgba(255,255,255,.08)" : "transparent",
+                      borderColor: onBrand ? "rgba(255,255,255,.34)" : palette.border,
+                      opacity: pressed ? 0.72 : pending !== null ? 0.55 : 1,
+                    },
+                  ]}
+                >
+                  <X color={secondaryText} size={17} />
+                  <Text style={[styles.secondaryText, { color: secondaryText }]}>Cancel</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={pending !== null}
+                  onPress={() => void choose()}
+                  style={({ pressed }) => [
+                    styles.primaryAction,
+                    {
+                      backgroundColor: onBrand ? "rgba(255,255,255,.18)" : palette.brand,
+                      borderColor: onBrand ? "rgba(255,255,255,.46)" : palette.brand,
+                      opacity: pressed ? 0.78 : pending !== null ? 0.55 : 1,
+                    },
+                  ]}
+                >
+                  <Camera color="#FFFFFF" size={17} />
+                  <Text style={styles.primaryText}>{assetId ? "Change image" : "Upload image"}</Text>
+                </Pressable>
+                {assetId ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={pending !== null}
+                    onPress={() => void remove()}
+                    style={({ pressed }) => [
+                      styles.secondaryAction,
+                      {
+                        backgroundColor: onBrand ? "rgba(255,255,255,.08)" : "transparent",
+                        borderColor: onBrand ? "rgba(255,255,255,.34)" : palette.border,
+                        opacity: pressed ? 0.72 : pending !== null ? 0.55 : 1,
+                      },
+                    ]}
+                  >
+                    {pending === "remove" ? <ActivityIndicator color={secondaryText} /> : <Trash2 color={secondaryText} size={17} />}
+                    <Text style={[styles.secondaryText, { color: secondaryText }]}>Remove</Text>
+                  </Pressable>
+                ) : null}
+              </>
+            )}
           </View>
-
-          <View style={styles.actions}>
-            <Pressable
-              accessibilityRole="button"
-              disabled={pending !== null}
-              onPress={() => void choose()}
-              style={({ pressed }) => [styles.primaryAction, { backgroundColor: palette.brand, opacity: pressed ? 0.78 : pending !== null ? 0.55 : 1 }]}
-            >
-              {pending === "upload" ? <ActivityIndicator color="#FFFFFF" /> : <Camera color="#FFFFFF" size={17} />}
-              <Text style={styles.primaryText}>
-                {pending === "upload" ? `Uploading ${Math.round(progress * 100)}%` : assetId ? "Change image" : "Upload image"}
-              </Text>
-            </Pressable>
-            {assetId ? (
-              <Pressable
-                accessibilityRole="button"
-                disabled={pending !== null}
-                onPress={() => void remove()}
-                style={({ pressed }) => [styles.secondaryAction, { borderColor: palette.border, opacity: pressed ? 0.72 : pending !== null ? 0.55 : 1 }]}
-              >
-                {pending === "remove" ? <ActivityIndicator color={palette.danger} /> : <Trash2 color={palette.danger} size={17} />}
-                <Text style={[styles.secondaryText, { color: palette.danger }]}>Remove</Text>
-              </Pressable>
-            ) : null}
-          </View>
-          <Text style={[styles.privacyNote, { color: palette.muted }]}>Crop/reposition is available when selecting a new image. SKIMA will never automatically use a KYC or verification image here.</Text>
+          <Text style={[styles.privacyNote, { color: onBrand ? "rgba(255,255,255,.72)" : palette.muted }]}>
+            {candidate
+              ? "Review the crop and fit before saving. This public image remains separate from KYC and verification media."
+              : "SKIMA will never automatically use a KYC or verification image as your public photo."}
+          </Text>
         </>
       ) : capability.isPending ? (
-        <View style={styles.capabilityRow}><ActivityIndicator color={palette.brand} /><Text style={[styles.capabilityText, { color: palette.muted }]}>Checking image permissions…</Text></View>
+        <View style={styles.capabilityRow}>
+          <ActivityIndicator color={onBrand ? "#FFFFFF" : palette.brand} />
+          <Text style={[styles.capabilityText, { color: onBrand ? "rgba(255,255,255,.76)" : palette.muted }]}>Checking image permissions…</Text>
+        </View>
       ) : (
-        <Text style={[styles.privacyNote, { color: palette.muted }]}>This public image is read-only for your current role.</Text>
+        <Text style={[styles.privacyNote, { color: onBrand ? "rgba(255,255,255,.72)" : palette.muted }]}>This public image is read-only for your current role.</Text>
       )}
 
-      {message ? <Text accessibilityRole="alert" style={[styles.message, { color: message.includes("updated") || message.includes("removed") ? palette.success : palette.danger }]}>{message}</Text> : null}
+      {message ? (
+        <Text
+          accessibilityRole="alert"
+          style={[
+            styles.message,
+            {
+              color: onBrand
+                ? "rgba(255,255,255,.92)"
+                : messageIsSuccess ? palette.success : messageIsPreview ? palette.mutedStrong : palette.danger,
+            },
+          ]}
+        >
+          {message}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   panel: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
+  onBrandPanel: { alignItems: "center", width: "100%", borderWidth: 0, padding: 0, backgroundColor: "transparent" },
   headingRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
   headingIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   headingCopy: { flex: 1, minWidth: 0, gap: 3 },
   title: { ...typography.subheading, fontSize: 15 },
   description: { ...typography.caption, lineHeight: 17 },
+  candidate: { width: "100%", aspectRatio: 4 / 3, borderRadius: radii.md, overflow: "hidden" },
+  candidateAvatar: { width: 96, height: 96, aspectRatio: 1, borderRadius: 48 },
+  candidateHero: { aspectRatio: 16 / 10, borderRadius: radii.lg },
   previewHint: { minHeight: 34, flexDirection: "row", alignItems: "center", gap: spacing.sm, borderRadius: radii.md, paddingHorizontal: spacing.sm + 2 },
   previewHintText: { ...typography.caption, flex: 1, fontSize: 10 },
   controlLabel: { ...typography.eyebrow, fontSize: 9 },
-  fitRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  fitRow: { width: "100%", flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   fitChip: { flexGrow: 1, minWidth: 92, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: 11, paddingVertical: 9, gap: 2 },
   fitLabel: { ...typography.bodyStrong, fontSize: 11 },
   fitDetail: { ...typography.caption, fontSize: 9 },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  primaryAction: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.md, paddingHorizontal: spacing.md },
+  actions: { maxWidth: "100%", flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: spacing.sm },
+  primaryAction: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.md, borderWidth: 1, paddingHorizontal: spacing.md },
   primaryText: { color: "#FFFFFF", ...typography.bodyStrong, fontSize: 12 },
   secondaryAction: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.md, borderWidth: 1, paddingHorizontal: spacing.md },
   secondaryText: { ...typography.bodyStrong, fontSize: 12 },
-  privacyNote: { ...typography.caption, lineHeight: 17 },
+  privacyNote: { maxWidth: 420, ...typography.caption, lineHeight: 17, textAlign: "center" },
   capabilityRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   capabilityText: { ...typography.caption },
-  message: { ...typography.caption, lineHeight: 17, fontWeight: "800" },
+  message: { maxWidth: 420, ...typography.caption, lineHeight: 17, fontWeight: "800", textAlign: "center" },
 });
