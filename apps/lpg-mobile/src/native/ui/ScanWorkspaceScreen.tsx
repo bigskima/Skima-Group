@@ -4,6 +4,7 @@ import { CheckCircle2, QrCode, ScanLine, ShieldCheck } from "lucide-react-native
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
+  cylinderPermanentIdentifier,
   displayReference,
   displayStatus,
   firstString,
@@ -39,7 +40,7 @@ export function ScanWorkspaceScreen({
   const jobId = selectedId || (actionable.length === 1 ? (recordId(actionable[0]) ?? "") : "");
   const selectedJob = actionable.find((job) => recordId(job) === jobId) ?? (actionable.length === 1 ? actionable[0] : null);
   const cylinderId = firstString(selectedJob, ["cylinderId", "cylinder_id"]);
-  const cylinderReference = firstString(selectedJob, ["cylinderReference", "cylinderIdentifier", "cylinder_reference", "cylinder_identifier"]);
+  const cylinderReference = cylinderPermanentIdentifier(selectedJob);
   const cylinderTagStatus = firstString(selectedJob, ["cylinderTagStatus", "tagStatus", "cylinder_tag_status", "tag_status"]) ?? "unknown";
   const activeTagReference = firstString(selectedJob, ["activeTagReference", "active_tag_reference"]);
   const canBindFirstTag = Boolean(
@@ -68,9 +69,9 @@ export function ScanWorkspaceScreen({
       const { error } = await session.supabase.rpc("bind_lpg_cylinder_tag", {
         target_public_tag_reference: reference,
         target_cylinder_id: cylinderId,
-        target_idempotency_key: idempotencyKey("driver-bind-first-cylinder-tag", `${jobId}:${reference}`),
+        target_idempotency_key: idempotencyKey(`${workspace}-bind-first-cylinder-tag`, `${jobId}:${reference}`),
         target_lpg_order_id: jobId,
-        target_metadata: { source: "skima.lpg.mobile", operation: "first_service_tag_binding" },
+        target_metadata: { source: "skima.lpg.mobile", operation: "first_service_tag_binding", workspace },
       });
       if (error) throw error;
       setPhysicalTagReference("");
@@ -85,21 +86,23 @@ export function ScanWorkspaceScreen({
 
   return (
     <Screen
-      eyebrow="Cylinder scan"
-      title="Verify SKIMA cylinder"
-      subtitle="Choose the assigned job first. Scan the cylinder when possible, or use its permanent SKIMA Cylinder ID when the physical code cannot be read."
+      eyebrow={workspace === "station" ? "Station reception" : "Cylinder scan"}
+      title={workspace === "station" ? "Verify arriving cylinder" : "Verify SKIMA cylinder"}
+      subtitle={workspace === "station"
+        ? "Verify the assigned cylinder as the driver reaches the station. The refill cannot begin until SKIMA confirms the hand-over."
+        : "Choose the assigned job first. Scan the cylinder when possible, or use its permanent SKIMA Cylinder ID when the physical code cannot be read."}
       action={<Pressable onPress={() => router.back()}><Text style={[styles.back, { color: palette.brand }]}>Back</Text></Pressable>}
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
         <View style={styles.heroIcon}><ScanLine color="#FFFFFF" size={26} /></View>
         <View style={styles.heroCopy}>
-          <Text style={styles.heroEyebrow}>CYLINDER HAND-OVER</Text>
+          <Text style={styles.heroEyebrow}>{workspace === "station" ? "STATION RECEPTION" : "CYLINDER HAND-OVER"}</Text>
           <Text style={styles.heroTitle}>
             {actionable.length
               ? `${actionable.length} ${actionable.length === 1 ? "job" : "jobs"} ready for cylinder verification`
-              : "No job needs verification right now"}
+              : workspace === "station" ? "No arrival needs verification right now" : "No job needs verification right now"}
           </Text>
-          <Text style={styles.heroBody}>Scan or enter the Cylinder ID at pickup, station reception and final delivery.</Text>
+          <Text style={styles.heroBody}>{workspace === "station" ? "Verify the arriving cylinder before refill processing begins." : "Scan or enter the Cylinder ID at pickup, station reception and final delivery."}</Text>
         </View>
       </View>
 
@@ -160,8 +163,10 @@ export function ScanWorkspaceScreen({
       ) : (
         <EmptyState
           icon={<ScanLine color={palette.brand} size={27} />}
-          title="Nothing to verify yet"
-          description="An assigned job appears here only when its current lifecycle stage requires the driver to verify the SKIMA cylinder."
+          title={workspace === "station" ? "No arrival to verify" : "Nothing to verify yet"}
+          description={workspace === "station"
+            ? "An arrival appears here after the assigned driver has collected the cylinder and is approaching this station."
+            : "An assigned job appears here only when its current lifecycle stage requires the driver to verify the SKIMA cylinder."}
         />
       )}
 
@@ -170,7 +175,7 @@ export function ScanWorkspaceScreen({
           <View style={styles.identityHeader}>
             <ShieldCheck color={palette.brand} size={20} />
             <View style={styles.identityCopy}>
-              <Text style={[styles.identityTitle, { color: palette.ink }]}>SKIMA Cylinder ID</Text>
+              <Text style={[styles.identityTitle, { color: palette.ink }]}>Permanent SKIMA Cylinder ID</Text>
               <Text style={[styles.identityBody, { color: palette.muted }]}>
                 {cylinderReference ?? "SKIMA cylinder"} · {tagStatusLabel(cylinderTagStatus)}
               </Text>
@@ -185,7 +190,7 @@ export function ScanWorkspaceScreen({
             <Text style={[styles.identityNote, { color: palette.muted }]}>Active physical tag: {activeTagReference}</Text>
           ) : canBindFirstTag ? (
             <>
-              <Text style={[styles.identityNote, { color: palette.muted }]}>This customer does not need to print anything. At the verified first pickup, attach one unused SKIMA-issued physical tag and bind its reference here.</Text>
+              <Text style={[styles.identityNote, { color: palette.muted }]}>This customer does not need to print anything. At the verified first hand-over, attach one unused SKIMA-issued physical tag and bind its reference here.</Text>
               <TextInput
                 autoCapitalize="characters"
                 autoCorrect={false}
@@ -228,15 +233,15 @@ export function ScanWorkspaceScreen({
           <View style={styles.fallbackCopy}>
             <Text style={[styles.fallbackEyebrow, { color: palette.muted }]}>CAN'T SCAN?</Text>
             <Text style={[styles.fallbackTitle, { color: palette.ink }]}>Enter the permanent Cylinder ID</Text>
-            <Text style={[styles.fallbackBody, { color: palette.muted }]}>Enter the SKIMA Cylinder ID printed on the tag or shown in the order. SKIMA will confirm that it belongs to this job.</Text>
+            <Text style={[styles.fallbackBody, { color: palette.muted }]}>Enter the SKIMA Cylinder ID beginning with “SKIMA-CYL-”. Older “CYL-” registry references are also accepted. SKIMA will confirm that it belongs to this job.</Text>
           </View>
           <TextInput
             autoCapitalize="characters"
             autoCorrect={false}
-            accessibilityLabel="SKIMA Cylinder ID"
+            accessibilityLabel="Permanent SKIMA Cylinder ID"
             onChangeText={setManualCylinderId}
             onSubmitEditing={useManualCylinderId}
-            placeholder="Example: CYL-00000001"
+            placeholder="Example: SKIMA-CYL-6697AECA96A54A"
             placeholderTextColor={palette.muted}
             returnKeyType="go"
             style={[
@@ -246,7 +251,7 @@ export function ScanWorkspaceScreen({
             value={manualCylinderId}
           />
           <AppButton
-            label="Verify with Cylinder ID"
+            label="Verify Cylinder ID"
             fullWidth
             variant="secondary"
             disabled={!manualCylinderId.trim()}
@@ -257,7 +262,7 @@ export function ScanWorkspaceScreen({
 
       <View style={[styles.security, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <ShieldCheck color={palette.mutedStrong} size={18} />
-        <Text style={[styles.securityText, { color: palette.muted }]}>QR is the fastest option, but station staff can also enter the Cylinder ID. SKIMA will confirm the assigned job and driver before reception.</Text>
+        <Text style={[styles.securityText, { color: palette.muted }]}>QR is the fastest option, but the permanent Cylinder ID is always valid for manual verification. SKIMA confirms the assigned order, cylinder and operator before the hand-over advances.</Text>
       </View>
     </Screen>
   );
@@ -265,7 +270,7 @@ export function ScanWorkspaceScreen({
 
 function scanReady(status: string, workspace: "driver" | "station") {
   const value = status.toLowerCase().replace(/[\s-]+/g, "_");
-  if (workspace === "station") return ["refill_confirmed", "station_settled"].includes(value);
+  if (workspace === "station") return ["pickup_verified", "station_en_route"].includes(value);
   return [
     "driver_accepted",
     "pickup_pending",
@@ -285,8 +290,8 @@ function scanStatus(value: string) {
     pickup_pending: "Pickup waiting",
     pickup_arrived: "At customer pickup",
     pickup_en_route: "Heading to customer",
-    pickup_verified: "Verify again at station reception",
-    station_en_route: "Heading to station",
+    pickup_verified: "Ready for station reception",
+    station_en_route: "Driver heading to station",
     delivery_verification_pending: "Ready for final hand-over",
     return_en_route: "Returning to customer",
   };
