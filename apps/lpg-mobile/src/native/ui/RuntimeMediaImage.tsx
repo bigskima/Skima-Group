@@ -1,27 +1,39 @@
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import { ImageOff } from "lucide-react-native";
-import { StyleSheet, Text, View } from "react-native";
+import { ImageOff, X } from "lucide-react-native";
+import { useState } from "react";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { useSession } from "../session/SessionProvider";
-import { colors, radii, spacing } from "../theme/tokens";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { radii, spacing } from "../theme/tokens";
 import { idempotencyKey } from "../utilities/idempotency";
+
 const ReadSchema = z.object({
   assetId: z.string(),
   contentType: z.string().nullable(),
   expiresInSeconds: z.number().positive(),
   signedUrl: z.string().url(),
 });
+
+type MediaFit = "cover" | "contain" | "fill" | "none" | "scale-down";
+
 export function RuntimeMediaImage({
   assetId,
   label,
   variant = "card",
+  contentFit = "cover",
+  previewable = false,
 }: {
   assetId: string | null;
   label: string;
   variant?: "card" | "avatar" | "hero" | "thumbnail";
+  contentFit?: MediaFit;
+  previewable?: boolean;
 }) {
   const session = useSession();
+  const { palette } = useAppTheme();
+  const [previewOpen, setPreviewOpen] = useState(false);
   const query = useQuery({
     queryKey: [
       "lpg-expo",
@@ -61,41 +73,115 @@ export function RuntimeMediaImage({
         : activelyLoading
           ? "Loading image…"
           : `${label} unavailable`;
+  const mediaStyle = [
+    styles.image,
+    variant === "avatar" && styles.avatar,
+    variant === "hero" && styles.hero,
+    variant === "thumbnail" && styles.thumbnail,
+    { backgroundColor: palette.surfaceSubtle },
+  ];
 
-  return query.data?.signedUrl ? (
+  const image = query.data?.signedUrl ? (
     <Image
       source={query.data.signedUrl}
-      contentFit="cover"
+      contentFit={contentFit}
+      contentPosition="center"
       transition={180}
-      style={[styles.image, variant === "avatar" && styles.avatar, variant === "hero" && styles.hero, variant === "thumbnail" && styles.thumbnail]}
+      style={mediaStyle}
       accessibilityLabel={label}
     />
   ) : (
-    <View style={[styles.placeholder, variant === "avatar" && styles.avatar, variant === "hero" && styles.hero, variant === "thumbnail" && styles.thumbnail]}>
-      <ImageOff color={colors.muted} size={28} />
-      <Text numberOfLines={variant === "thumbnail" ? 2 : undefined} style={[styles.label, variant === "thumbnail" && styles.thumbnailLabel]}>{placeholderLabel}</Text>
+    <View style={[styles.placeholder, ...mediaStyle, { backgroundColor: palette.surfaceSubtle }]}>
+      <ImageOff color={palette.muted} size={28} />
+      <Text
+        numberOfLines={variant === "thumbnail" ? 2 : undefined}
+        style={[styles.label, { color: palette.muted }, variant === "thumbnail" && styles.thumbnailLabel]}
+      >
+        {placeholderLabel}
+      </Text>
     </View>
   );
+
+  if (!query.data?.signedUrl || !previewable) return image;
+
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Preview ${label}`}
+        onPress={() => setPreviewOpen(true)}
+        style={({ pressed }) => ({ opacity: pressed ? 0.86 : 1 })}
+      >
+        {image}
+      </Pressable>
+      <Modal
+        animationType="fade"
+        transparent
+        visible={previewOpen}
+        onRequestClose={() => setPreviewOpen(false)}
+      >
+        <View style={styles.previewBackdrop}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close image preview"
+            onPress={() => setPreviewOpen(false)}
+            style={styles.previewClose}
+          >
+            <X color="#FFFFFF" size={24} />
+          </Pressable>
+          <Image
+            source={query.data.signedUrl}
+            contentFit="contain"
+            contentPosition="center"
+            style={styles.previewImage}
+            accessibilityLabel={label}
+          />
+          <Text style={styles.previewLabel}>{label}</Text>
+        </View>
+      </Modal>
+    </>
+  );
 }
+
 const styles = StyleSheet.create({
   image: {
     width: "100%",
     aspectRatio: 4 / 3,
     borderRadius: radii.md,
-    backgroundColor: "#E9ECEA",
+    overflow: "hidden",
   },
   avatar: { width: 96, height: 96, aspectRatio: 1, borderRadius: 48 },
   hero: { aspectRatio: 16 / 10, borderRadius: radii.lg },
   thumbnail: { width: 92, height: 92, aspectRatio: 1, borderRadius: 22 },
   placeholder: {
-    width: "100%",
-    aspectRatio: 4 / 3,
-    borderRadius: radii.md,
-    backgroundColor: "#EEF1EF",
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.sm,
   },
-  label: { color: colors.muted, fontWeight: "700", textAlign: "center" },
+  label: { fontWeight: "700", textAlign: "center" },
   thumbnailLabel: { fontSize: 10, lineHeight: 13, paddingHorizontal: 5 },
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,.94)",
+    paddingHorizontal: spacing.md,
+    paddingTop: 54,
+    paddingBottom: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.md,
+  },
+  previewClose: {
+    position: "absolute",
+    top: 48,
+    right: 18,
+    zIndex: 2,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,.14)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewImage: { width: "100%", height: "78%" },
+  previewLabel: { color: "rgba(255,255,255,.86)", fontSize: 13, fontWeight: "800" },
 });
