@@ -11,7 +11,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
-import { ProfilePhotoEditor } from "./ProfilePhotoEditor";
+import { PublicEntityImageEditor } from "./PublicEntityImageEditor";
 import { Screen } from "./Screen";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
@@ -25,6 +25,7 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
   const primaryRole = roleNames[0] ?? workspace;
   const displayName = session.context?.profile?.display_name ?? "SKIMA member";
   const email = session.context?.user.email ?? "";
+  const userId = session.context?.user.id ?? null;
 
   return (
     <Screen
@@ -37,7 +38,19 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
       <View style={[styles.profileHero, shadows.raised, { backgroundColor: theme.palette.brand }]}>
         <View style={styles.heroGlowOne} />
         <View style={styles.heroGlowTwo} />
-        <ProfilePhotoEditor variant="onBrand" />
+        {userId ? (
+          <PublicEntityImageEditor
+            entityType="profile"
+            entityId={userId}
+            mediaRole="profile.photo.public"
+            title="Public profile photo"
+            description="Choose the photo that represents your SKIMA account publicly."
+            label="Profile photo"
+            aspect={[1, 1]}
+            variant="avatar"
+            appearance="onBrand"
+          />
+        ) : null}
         <View style={styles.identity}>
           <Text numberOfLines={1} style={styles.name}>{displayName}</Text>
           {email ? <Text numberOfLines={1} style={styles.email}>{email}</Text> : null}
