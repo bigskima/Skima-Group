@@ -142,7 +142,7 @@ export function PublicEntityImageEditor({
         fileName: candidate.fileName ?? `${mediaRole.replace(/\./g, "-")}-${Date.now()}.jpg`,
         contentType: candidate.mimeType ?? "image/jpeg",
         ownerUserId: session.context!.user.id,
-        assetTypeKey: mediaRole === "profile.photo.public" ? "media.profile.avatar" : `media.${mediaRole}`,
+        assetTypeKey: uploadAssetTypeForPublicRole(mediaRole),
         onProgress: setProgress,
       });
       await publish(mediaAssetId, fit);
@@ -404,6 +404,12 @@ export function PublicEntityImageEditor({
       ) : null}
     </View>
   );
+}
+
+function uploadAssetTypeForPublicRole(mediaRole: PublicMediaRole) {
+  if (mediaRole === "profile.photo.public") return "media.profile.avatar";
+  if (mediaRole === "driver.photo.public") return "media.driver.profile-photo";
+  return "media.generic";
 }
 
 const styles = StyleSheet.create({
