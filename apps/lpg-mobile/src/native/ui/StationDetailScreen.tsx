@@ -32,18 +32,12 @@ export function StationDetailScreen({ id }: { id: string | null }) {
   const latitude = firstNumber(station, ["latitude", "lat"]);
   const longitude = firstNumber(station, ["longitude", "lng", "lon"]);
   const hours = nestedRecord(station, "operatingHours") ?? nestedRecord(station, "operating_hours");
-  const publicMedia = (media.data ?? [])
-    .filter((item) => {
-      const role = firstString(item, ["media_role", "mediaRole"]) ?? "";
-      return role === "station.photo.public" || role.includes("presentation");
-    })
-    .sort((left, right) => {
-      const leftPrimary = left.is_primary === true || left.isPrimary === true ? 0 : 1;
-      const rightPrimary = right.is_primary === true || right.isPrimary === true ? 0 : 1;
-      if (leftPrimary !== rightPrimary) return leftPrimary - rightPrimary;
-      return (firstNumber(left, ["display_order", "displayOrder"]) ?? 999) -
-        (firstNumber(right, ["display_order", "displayOrder"]) ?? 999);
-    });
+  const activeMedia = (media.data ?? []).filter((item) => (firstString(item, ["status"]) ?? "active") === "active");
+  const logoLink = activeMedia.find((item) => firstString(item, ["media_role", "mediaRole"]) === "station.logo.public") ?? null;
+  const managedPhotos = sortPublicMedia(activeMedia.filter((item) => firstString(item, ["media_role", "mediaRole"]) === "station.photo.public"));
+  const legacyPresentation = sortPublicMedia(activeMedia.filter((item) => (firstString(item, ["media_role", "mediaRole"]) ?? "").includes("presentation")));
+  const publicMedia = managedPhotos.length ? managedPhotos : legacyPresentation;
+  const logoAssetId = firstString(logoLink, ["media_asset_id", "mediaAssetId"]);
   const stationName = firstString(station, ["display_name", "displayName", "name"]) ?? "SKIMA station";
   const status = (station ? displayStatus(station) : null) ??
     firstString(station, ["availability_status", "availabilityStatus"]) ??
@@ -55,7 +49,7 @@ export function StationDetailScreen({ id }: { id: string | null }) {
     <Screen
       eyebrow="Verified SKIMA station"
       title={stationName}
-      subtitle="Public station information that helps customers and drivers confirm this SKIMA LPG location."
+      subtitle="Public Station information that helps customers and Drivers confirm this SKIMA LPG location."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {locations.isPending || stations.isPending || (station && media.isPending) ? (
@@ -64,18 +58,40 @@ export function StationDetailScreen({ id }: { id: string | null }) {
         <EmptyState
           icon={<MapPin color={palette.brand} size={28} />}
           title="Choose a delivery location"
-          description="SKIMA checks your saved delivery location before showing a station profile, so you only open stations that can serve you."
+          description="SKIMA checks your saved delivery location before showing a Station profile, so you only open Stations that can serve you."
           action={<AppButton label="Choose location" onPress={() => router.push("/(customer)/locations")} />}
         />
       ) : !station ? (
         <EmptyState
           icon={<Store color={palette.brand} size={28} />}
           title="Station not available for this location"
-          description="This station is outside your current delivery area, unavailable, or no longer eligible for this location."
-          action={<AppButton label="Back to nearby stations" onPress={() => router.replace("/(customer)/stations")} />}
+          description="This Station is outside your current delivery area, unavailable, or no longer eligible for this location."
+          action={<AppButton label="Back to nearby Stations" onPress={() => router.replace("/(customer)/stations")} />}
         />
       ) : (
         <>
+          <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
+            <View style={styles.heroIcon}>
+              {logoAssetId ? (
+                <RuntimeMediaImage
+                  assetId={logoAssetId}
+                  label={`${stationName} logo`}
+                  variant="avatarCompact"
+                  contentFit={publicMediaFit(logoLink)}
+                  previewable
+                />
+              ) : (
+                <ShieldCheck color="#FFFFFF" size={28} />
+              )}
+            </View>
+            <View style={styles.heroCopy}>
+              <Text style={styles.heroEyebrow}>SKIMA NETWORK VERIFIED</Text>
+              <Text numberOfLines={1} style={styles.heroTitle}>{stationName}</Text>
+              <Text numberOfLines={2} style={styles.heroBody}>{address}</Text>
+            </View>
+            <StatusPill label={friendlyStatus(status)} tone={stationTone(status)} />
+          </View>
+
           {publicMedia.length ? (
             <View style={styles.galleryBlock}>
               <View style={styles.galleryHeading}>
@@ -99,25 +115,20 @@ export function StationDetailScreen({ id }: { id: string | null }) {
                     >
                       <RuntimeMediaImage
                         assetId={mediaAssetId}
-                        label={`${stationName} public station photo ${index + 1}`}
+                        label={`${stationName} public Station photo ${index + 1}`}
                         variant="hero"
+                        contentFit={publicMediaFit(item)}
+                        previewable
                       />
                     </View>
                   );
                 })}
               </ScrollView>
+              {!managedPhotos.length && legacyPresentation.length ? (
+                <Text style={[styles.legacyNote, { color: palette.muted }]}>A legacy Station presentation image is shown until the Station uploads its managed public facility photo.</Text>
+              ) : null}
             </View>
           ) : null}
-
-          <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
-            <View style={styles.heroIcon}><ShieldCheck color="#FFFFFF" size={28} /></View>
-            <View style={styles.heroCopy}>
-              <Text style={styles.heroEyebrow}>SKIMA NETWORK VERIFIED</Text>
-              <Text numberOfLines={1} style={styles.heroTitle}>{stationName}</Text>
-              <Text numberOfLines={2} style={styles.heroBody}>{address}</Text>
-            </View>
-            <StatusPill label={friendlyStatus(status)} tone={stationTone(status)} />
-          </View>
 
           {latitude !== null && longitude !== null ? (
             <View style={[styles.mapShell, shadows.soft]}>
@@ -151,12 +162,28 @@ export function StationDetailScreen({ id }: { id: string | null }) {
 
           <View style={[styles.trust, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <ShieldCheck color={palette.mutedStrong} size={18} />
-            <Text style={[styles.trustText, { color: palette.muted }]}>This profile shows public station information only. Private application documents and verification details are never displayed.</Text>
+            <Text style={[styles.trustText, { color: palette.muted }]}>This profile shows public Station information only. Private application documents, KYC/KYB evidence and verification details are never displayed.</Text>
           </View>
         </>
       )}
     </Screen>
   );
+}
+
+function sortPublicMedia(items: readonly Record<string, unknown>[]) {
+  return [...items].sort((left, right) => {
+    const leftPrimary = left.is_primary === true || left.isPrimary === true ? 0 : 1;
+    const rightPrimary = right.is_primary === true || right.isPrimary === true ? 0 : 1;
+    if (leftPrimary !== rightPrimary) return leftPrimary - rightPrimary;
+    return (firstNumber(left, ["display_order", "displayOrder"]) ?? 999) -
+      (firstNumber(right, ["display_order", "displayOrder"]) ?? 999);
+  });
+}
+
+function publicMediaFit(item: Record<string, unknown> | null): "cover" | "contain" {
+  const metadata = nestedRecord(item, "metadata");
+  const fit = firstString(metadata, ["fit"]);
+  return fit === "contain" || fit === "center" ? "contain" : "cover";
 }
 
 function PublicMetric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
@@ -192,18 +219,19 @@ function stationTone(value: string): "neutral" | "brand" | "success" | "warning"
 }
 
 const styles = StyleSheet.create({
+  hero: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
+  heroIcon: { width: 54, height: 54, borderRadius: 19, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  heroCopy: { flex: 1, minWidth: 0, gap: 3 },
+  heroEyebrow: { color: "rgba(255,255,255,.72)", ...typography.eyebrow, fontSize: 8 },
+  heroTitle: { color: "#FFFFFF", ...typography.heading, fontSize: 20 },
+  heroBody: { color: "rgba(255,255,255,.84)", ...typography.caption, lineHeight: 18 },
   galleryBlock: { gap: spacing.sm },
   galleryHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
   galleryTitle: { ...typography.subheading, fontSize: 16 },
   galleryCount: { ...typography.caption, fontSize: 10, fontWeight: "700" },
   gallery: { gap: spacing.sm, paddingRight: spacing.md },
   media: { width: 300, maxWidth: "82%", overflow: "hidden", borderRadius: radii.xl },
-  hero: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
-  heroIcon: { width: 54, height: 54, borderRadius: 19, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
-  heroCopy: { flex: 1, minWidth: 0, gap: 3 },
-  heroEyebrow: { color: "rgba(255,255,255,.72)", ...typography.eyebrow, fontSize: 8 },
-  heroTitle: { color: "#FFFFFF", ...typography.heading, fontSize: 20 },
-  heroBody: { color: "rgba(255,255,255,.84)", ...typography.caption, lineHeight: 18 },
+  legacyNote: { ...typography.caption, fontSize: 10, lineHeight: 15 },
   mapShell: { overflow: "hidden", borderRadius: radii.xl },
   metrics: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   metric: { flex: 1, minWidth: 150, gap: 6, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
