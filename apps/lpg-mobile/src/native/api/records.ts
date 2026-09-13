@@ -7,7 +7,7 @@ export type PlatformRecord = z.infer<typeof PlatformRecordSchema>;
 export const ActionResponseSchema = z.union([z.string(), PlatformRecordSchema, z.null()]);
 
 export function recordId(record: PlatformRecord): string | null {
-  return firstString(record, ["id", "public_reference", "publicReference"]);
+  return firstString(record, ["id", "lpgOrderId", "lpg_order_id", "public_reference", "publicReference"]);
 }
 export function displayReference(record: PlatformRecord): string | null {
   return firstString(record, ["public_reference", "publicReference", "reference", "cylinder_identifier", "cylinderIdentifier", "id"]);
