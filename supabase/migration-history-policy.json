@@ -93,6 +93,7 @@
     "20260906035426_awka_legacy_area_mapping.sql",
     "20260906043158_super_admin_platform_permission_reconciliation.sql",
     "20260906053855_station_location_management.sql",
-    "20260907010000_atomic_refill_dispatch_and_station_access.sql"
+    "20260907010000_atomic_refill_dispatch_and_station_access.sql",
+    "20260913161409_support_complaint_notifications.sql"
   ]
 }
