@@ -86,23 +86,23 @@ export function ScanWorkspaceScreen({
 
   return (
     <Screen
-      eyebrow={workspace === "station" ? "Station reception" : "Cylinder scan"}
-      title={workspace === "station" ? "Verify arriving cylinder" : "Verify SKIMA cylinder"}
+      eyebrow={workspace === "station" ? "Station release" : "Cylinder scan"}
+      title={workspace === "station" ? "Verify cylinder release" : "Verify SKIMA cylinder"}
       subtitle={workspace === "station"
-        ? "Verify the assigned cylinder as the driver reaches the station. The refill cannot begin until SKIMA confirms the hand-over."
+        ? "After the refill is confirmed, verify the cylinder before releasing it back to the assigned driver."
         : "Choose the assigned job first. Scan the cylinder when possible, or use its permanent SKIMA Cylinder ID when the physical code cannot be read."}
       action={<Pressable onPress={() => router.back()}><Text style={[styles.back, { color: palette.brand }]}>Back</Text></Pressable>}
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
         <View style={styles.heroIcon}><ScanLine color="#FFFFFF" size={26} /></View>
         <View style={styles.heroCopy}>
-          <Text style={styles.heroEyebrow}>{workspace === "station" ? "STATION RECEPTION" : "CYLINDER HAND-OVER"}</Text>
+          <Text style={styles.heroEyebrow}>{workspace === "station" ? "CYLINDER RELEASE" : "CYLINDER HAND-OVER"}</Text>
           <Text style={styles.heroTitle}>
             {actionable.length
               ? `${actionable.length} ${actionable.length === 1 ? "job" : "jobs"} ready for cylinder verification`
-              : workspace === "station" ? "No arrival needs verification right now" : "No job needs verification right now"}
+              : workspace === "station" ? "No cylinder is ready for release" : "No job needs verification right now"}
           </Text>
-          <Text style={styles.heroBody}>{workspace === "station" ? "Verify the arriving cylinder before refill processing begins." : "Scan or enter the Cylinder ID at pickup, station reception and final delivery."}</Text>
+          <Text style={styles.heroBody}>{workspace === "station" ? "Scan or enter the permanent Cylinder ID before the filled cylinder leaves the station." : "Scan or enter the Cylinder ID at pickup, station reception and final delivery."}</Text>
         </View>
       </View>
 
@@ -163,9 +163,9 @@ export function ScanWorkspaceScreen({
       ) : (
         <EmptyState
           icon={<ScanLine color={palette.brand} size={27} />}
-          title={workspace === "station" ? "No arrival to verify" : "Nothing to verify yet"}
+          title={workspace === "station" ? "Nothing ready for release" : "Nothing to verify yet"}
           description={workspace === "station"
-            ? "An arrival appears here after the assigned driver has collected the cylinder and is approaching this station."
+            ? "A job appears here after the Station confirms the refill. The driver performs the inbound station hand-off verification before refill processing."
             : "An assigned job appears here only when its current lifecycle stage requires the driver to verify the SKIMA cylinder."}
         />
       )}
@@ -223,8 +223,8 @@ export function ScanWorkspaceScreen({
           <View style={styles.scannerHead}>
             <View style={[styles.scannerIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
             <View style={styles.scannerCopy}>
-              <Text style={[styles.scannerTitle, { color: palette.ink }]}>Scan the SKIMA cylinder code</Text>
-              <Text style={[styles.scannerBody, { color: palette.muted }]}>After detection, SKIMA opens the selected job and validates the cylinder against its current hand-off stage.</Text>
+              <Text style={[styles.scannerTitle, { color: palette.ink }]}>{workspace === "station" ? "Verify the filled cylinder" : "Scan the SKIMA cylinder code"}</Text>
+              <Text style={[styles.scannerBody, { color: palette.muted }]}>{workspace === "station" ? "SKIMA validates the cylinder against this refill before it can be released to the assigned driver." : "After detection, SKIMA opens the selected job and validates the cylinder against its current hand-off stage."}</Text>
             </View>
           </View>
           <Scanner enabled onDetected={detected} allowManualEntry={false} />
@@ -270,7 +270,7 @@ export function ScanWorkspaceScreen({
 
 function scanReady(status: string, workspace: "driver" | "station") {
   const value = status.toLowerCase().replace(/[\s-]+/g, "_");
-  if (workspace === "station") return ["pickup_verified", "station_en_route"].includes(value);
+  if (workspace === "station") return ["refill_confirmed", "station_settled"].includes(value);
   return [
     "driver_accepted",
     "pickup_pending",
@@ -290,8 +290,10 @@ function scanStatus(value: string) {
     pickup_pending: "Pickup waiting",
     pickup_arrived: "At customer pickup",
     pickup_en_route: "Heading to customer",
-    pickup_verified: "Ready for station reception",
-    station_en_route: "Driver heading to station",
+    pickup_verified: "Ready for station hand-off",
+    station_en_route: "Heading to station",
+    refill_confirmed: "Refill confirmed · release verification ready",
+    station_settled: "Station settlement posted · release verification ready",
     delivery_verification_pending: "Ready for final hand-over",
     return_en_route: "Returning to customer",
   };
