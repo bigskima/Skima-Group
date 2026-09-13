@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { Clock3, PackageCheck, ShieldCheck } from "lucide-react-native";
+import { CheckCircle2, Clock3, PackageCheck, RefreshCw, ShieldCheck, XCircle } from "lucide-react-native";
 import { z } from "zod";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -90,7 +90,17 @@ export function JobDetailRouteScreen({ workspace }: { workspace: "driver" | "sta
 
   if (routeState.data?.state === "unavailable") {
     const reason = routeState.data.reason ?? "unavailable";
-    const expired = reason === "payment_expired";
+    const presentation = staleJobPresentation(reason, workspace);
+    const icon = reason === "payment_expired"
+      ? <Clock3 color={palette.warning} size={28} />
+      : reason === "reassigned"
+        ? <RefreshCw color={palette.brand} size={28} />
+        : reason === "completed"
+          ? <CheckCircle2 color={palette.success} size={28} />
+          : reason === "cancelled" || reason === "failed"
+            ? <XCircle color={palette.danger} size={28} />
+            : <ShieldCheck color={palette.brand} size={28} />;
+
     return (
       <Screen
         eyebrow={workspace === "station" ? "Station job" : "Driver job"}
@@ -99,13 +109,9 @@ export function JobDetailRouteScreen({ workspace }: { workspace: "driver" | "sta
         action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
       >
         <EmptyState
-          icon={expired ? <Clock3 color={palette.warning} size={28} /> : <ShieldCheck color={palette.brand} size={28} />}
-          title={expired ? "Payment window expired" : "Job no longer available"}
-          description={
-            expired
-              ? "The customer did not complete payment within the allowed window. SKIMA expired the order and removed the stale Station/Driver assignment, so no operational action is required."
-              : "This job is no longer active for your current workspace. Refresh your jobs to see current work."
-          }
+          icon={icon}
+          title={presentation.title}
+          description={presentation.description}
           action={<AppButton label="Return to jobs" onPress={() => router.replace(`/${workspace === "station" ? "(station)" : "(driver)"}/jobs` as never)} />}
         />
       </Screen>
@@ -113,4 +119,52 @@ export function JobDetailRouteScreen({ workspace }: { workspace: "driver" | "sta
   }
 
   return <JobDetailScreen workspace={workspace} />;
+}
+
+function staleJobPresentation(reason: string, workspace: "driver" | "station") {
+  if (reason === "payment_expired") {
+    return {
+      title: "Payment window expired",
+      description: "The customer did not complete payment within the allowed window. SKIMA expired the order and removed the stale Station/Driver assignment, so no operational action is required.",
+    };
+  }
+  if (reason === "cancelled") {
+    return {
+      title: "Order was cancelled",
+      description: "This order was cancelled after it had been assigned here. It remains in SKIMA audit history, but there is no further pickup, refill or delivery action to take.",
+    };
+  }
+  if (reason === "failed") {
+    return {
+      title: "Order could not continue",
+      description: "This order reached a failed terminal state after it had been assigned here. Return to your current jobs for work that still needs action.",
+    };
+  }
+  if (reason === "refunded") {
+    return {
+      title: "Order was refunded",
+      description: "This order is closed in a refunded state. Any related money movement is shown in the appropriate wallet or settlement history, and no operational action is required here.",
+    };
+  }
+  if (reason === "completed") {
+    return {
+      title: "Job already completed",
+      description: "This job has already reached its completed state. It is retained for history and no further Station or Driver action is required.",
+    };
+  }
+  if (reason === "reassigned") {
+    return workspace === "station"
+      ? {
+          title: "Order reassigned to another Station",
+          description: "This order was previously assigned to your Station, but its active assignment has changed. Do not process the cylinder from this old job; use your current Station queue instead.",
+        }
+      : {
+          title: "Delivery reassigned",
+          description: "This order was previously assigned to you, but its active Driver assignment has changed. Do not continue pickup or delivery from this old job; use your current delivery queue instead.",
+        };
+  }
+  return {
+    title: "Job no longer available",
+    description: "This job is no longer active for your current workspace. Refresh your jobs to see current work.",
+  };
 }
