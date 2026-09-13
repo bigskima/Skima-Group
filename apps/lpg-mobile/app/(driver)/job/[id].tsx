@@ -1,2 +1,2 @@
-import { JobDetailScreen } from "../../../src/native/ui/JobDetailScreen";
-export default function Job() { return <JobDetailScreen workspace="driver" />; }
+import { JobDetailRouteScreen } from "../../../src/native/ui/JobDetailRouteScreen";
+export default function Job() { return <JobDetailRouteScreen workspace="driver" />; }
