@@ -18,6 +18,10 @@ describe("platform record presentation", () => {
     expect(recordId(record)).toBe(record.id);
     expect(displayReference(record)).toBe("SKM-LPG-100");
   });
+  it("uses the LPG order id as the canonical id for queue projections", () => {
+    expect(recordId({ lpgOrderId: "order-id", publicReference: "SKM-LPG-100" })).toBe("order-id");
+    expect(recordId({ lpg_order_id: "snake-order-id", public_reference: "SKM-LPG-101" })).toBe("snake-order-id");
+  });
   it("normalizes numeric contracts and nested record collections safely", () => {
     expect(firstNumber({ amount: "12.50" }, ["amount"])).toBe(12.5);
     expect(firstNumber({ amount: "invalid" }, ["amount"])).toBeNull();
