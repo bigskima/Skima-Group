@@ -33,9 +33,18 @@ export function StationDetailScreen({ id }: { id: string | null }) {
   const longitude = firstNumber(station, ["longitude", "lng", "lon"]);
   const hours = nestedRecord(station, "operatingHours") ?? nestedRecord(station, "operating_hours");
   const activeMedia = (media.data ?? []).filter((item) => (firstString(item, ["status"]) ?? "active") === "active");
-  const logoLink = activeMedia.find((item) => firstString(item, ["media_role", "mediaRole"]) === "station.logo.public") ?? null;
-  const managedPhotos = sortPublicMedia(activeMedia.filter((item) => firstString(item, ["media_role", "mediaRole"]) === "station.photo.public"));
-  const legacyPresentation = sortPublicMedia(activeMedia.filter((item) => (firstString(item, ["media_role", "mediaRole"]) ?? "").includes("presentation")));
+  const logoLink = activeMedia.find((item) => {
+    const role = firstString(item, ["media_role", "mediaRole"]);
+    return role === "station.logo.public";
+  }) ?? null;
+  const managedPhotos = sortPublicMedia(activeMedia.filter((item) => {
+    const role = firstString(item, ["media_role", "mediaRole"]);
+    return role === "station.photo.public";
+  }));
+  const legacyPresentation = sortPublicMedia(activeMedia.filter((item) => {
+    const role = firstString(item, ["media_role", "mediaRole"]) ?? "";
+    return role.includes("presentation");
+  }));
   const publicMedia = managedPhotos.length ? managedPhotos : legacyPresentation;
   const logoAssetId = firstString(logoLink, ["media_asset_id", "mediaAssetId"]);
   const stationName = firstString(station, ["display_name", "displayName", "name"]) ?? "SKIMA station";
