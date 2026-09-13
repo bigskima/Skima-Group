@@ -1,6 +1,6 @@
 const root = new URL("../", import.meta.url);
 const read = (path: string) => Deno.readTextFile(new URL(path, root));
-const notificationMigration = "supabase/migrations/20260913161409_lpg_support_complaint_notifications.sql";
+const notificationMigration = "supabase/migrations/20260913161409_support_complaint_notifications.sql";
 
 Deno.test("support replies notify only on SKIMA admin messages", async () => {
   const migration = await read(notificationMigration);
