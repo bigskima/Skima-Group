@@ -12,14 +12,16 @@ import {
 } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { transactionStatusPresentation } from "../utilities/transactionStatus";
 import { selectWorkspaceWallet, walletRecordId } from "../utilities/financeWallet";
 import { AiContextAction } from "./AiContextAction";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
+import { RequestFailureState } from "./RequestFailureState";
 import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 import { SectionHeader } from "./SectionHeader";
-import { StatusPill } from "./StatusPill";
+import { TransactionStatusPill } from "./TransactionStatusPill";
 
 export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }) {
   const { palette } = useAppTheme();
@@ -36,16 +38,17 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
     (item) => firstString(item, ["wallet_id", "walletId"]) === walletId,
   );
   const pendingCount = activity.filter((item) => {
-    const status = (displayStatus(item) ?? "").toLowerCase();
-    return ["pending", "processing", "reserved", "earned_pending", "queued"].includes(status);
+    const status = transactionStatusPresentation(displayStatus(item)).status;
+    return status === "pending" || status === "processing";
   }).length;
 
   const withdrawPath = `/${workspace === "driver" ? "(driver)" : "(station)"}/withdraw` as never;
+  const financeError = entries.error ?? wallets.error ?? withdrawals.error;
 
   return (
     <Screen
       eyebrow={workspace === "driver" ? "Driver finance" : "Station finance"}
-      title={workspace === "driver" ? "Earnings" : "Earnings"}
+      title="Earnings"
       subtitle={
         workspace === "driver"
           ? "Available earnings, recent delivery pay and withdrawals."
@@ -66,12 +69,24 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
 
       {entries.isPending || wallets.isPending || withdrawals.isPending ? (
         <ScreenSkeleton cards={3} />
-      ) : entries.error || wallets.error || withdrawals.error ? (
-        <EmptyState
-          icon={<Banknote color={palette.brand} size={27} />}
-          title="Finance activity could not be loaded"
-          description="Check your connection and refresh your finance workspace."
-          action={<AppButton label="Retry" onPress={() => void Promise.all([entries.refetch(), wallets.refetch(), withdrawals.refetch()])} />}
+      ) : financeError ? (
+        <RequestFailureState
+          error={financeError}
+          onRetry={() => void Promise.all([entries.refetch(), wallets.refetch(), withdrawals.refetch()])}
+          overrides={workspace === "station" ? {
+            permission: {
+              title: "Settlement access restricted",
+              description: "You do not have permission to view settlement information for this station. Settlement access is limited to the Station Owner or operators explicitly granted finance permission.",
+            },
+            role: {
+              title: "Finance role required",
+              description: "Your Station role does not include settlement access. Ask the Station Owner to grant the appropriate finance permission if you need it.",
+            },
+            station_scope: {
+              title: "Settlement access restricted",
+              description: "These settlement records belong to another station, or your access to this station has changed.",
+            },
+          } : undefined}
         />
       ) : (
         <>
@@ -106,6 +121,7 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
             {activity.length ? (
               (showAllActivity ? activity : activity.slice(0, 6)).map((item, index) => {
                 const status = displayStatus(item) ?? "recorded";
+                const statusPresentation = transactionStatusPresentation(status);
                 const amount = firstNumber(item, ["net_amount", "netAmount", "amount", "commission_amount", "commissionAmount"]) ?? 0;
                 const itemCurrency = firstString(item, ["currency_code", "currencyCode"]) ?? currency;
                 const timestamp = firstString(item, ["processed_at", "processedAt", "settled_at", "settledAt", "created_at", "createdAt"]);
@@ -119,11 +135,12 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
                     </View>
                     <View style={styles.activityCopy}>
                       <Text numberOfLines={1} style={[styles.activityTitle, { color: palette.ink }]}>{displayReference(item) ?? (workspace === "driver" ? "Delivery earnings" : "Station earnings")}</Text>
+                      <Text numberOfLines={2} style={[styles.activityDescription, { color: palette.mutedStrong }]}>{statusPresentation.explanation}</Text>
                       <Text style={[styles.activityMeta, { color: palette.muted }]}>{formatDate(timestamp)}</Text>
                     </View>
                     <View style={styles.activityRight}>
                       <Text style={[styles.activityAmount, { color: palette.ink }]}>{money(amount, itemCurrency)}</Text>
-                      <StatusPill label={friendlyStatus(status)} tone={statusTone(status)} />
+                      <TransactionStatusPill status={status} />
                     </View>
                   </View>
                 );
@@ -131,8 +148,8 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
             ) : (
               <EmptyState
                 icon={<ReceiptText color={palette.brand} size={26} />}
-                title={workspace === "driver" ? "No earnings yet" : "No earnings yet"}
-                description={workspace === "driver" ? "Your earnings will appear here when completed deliveries reach the payment stage." : "Station earnings will appear here as completed LPG orders are completed."}
+                title="No earnings yet"
+                description={workspace === "driver" ? "Your earnings will appear here when completed deliveries reach the payment stage." : "Station earnings will appear here when completed LPG orders reach settlement."}
               />
             )}
           </View>
@@ -181,32 +198,6 @@ function formatDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-function friendlyStatus(value: string) {
-  const normalized = value.toLowerCase().replace(/[-\s]+/g, "_");
-  const labels: Record<string, string> = {
-    pending: "Pending",
-    processing: "Processing",
-    reserved: "Reserved",
-    earned_pending: "Pending release",
-    released: "Released",
-    paid: "Paid",
-    settled: "Settled",
-    completed: "Completed",
-    failed: "Failed",
-    reversed: "Reversed",
-    cancelled: "Cancelled",
-  };
-  return labels[normalized] ?? normalized.replace(/_/g, " ");
-}
-
-function statusTone(value: string): "neutral" | "brand" | "success" | "warning" | "danger" {
-  const normalized = value.toLowerCase();
-  if (["released", "paid", "settled", "completed"].some((part) => normalized.includes(part))) return "success";
-  if (["failed", "reversed", "cancelled"].some((part) => normalized.includes(part))) return "danger";
-  if (["pending", "processing", "reserved", "queued"].some((part) => normalized.includes(part))) return "warning";
-  return "brand";
-}
-
 const styles = StyleSheet.create({
   hero: { gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
   heroTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md },
@@ -221,10 +212,11 @@ const styles = StyleSheet.create({
   metricValue: { ...typography.heading, fontSize: 21 },
   metricLabel: { ...typography.caption },
   activityList: { gap: spacing.sm },
-  activityCard: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: 13 },
+  activityCard: { minHeight: 86, flexDirection: "row", alignItems: "center", gap: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: 13 },
   activityIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   activityCopy: { flex: 1, minWidth: 0, gap: 3 },
   activityTitle: { ...typography.bodyStrong, fontSize: 13 },
+  activityDescription: { ...typography.caption, fontSize: 10, lineHeight: 14 },
   activityMeta: { ...typography.caption, fontSize: 10 },
   activityRight: { alignItems: "flex-end", gap: 6 },
   activityAmount: { ...typography.bodyStrong, fontSize: 14 },
