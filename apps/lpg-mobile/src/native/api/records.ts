@@ -12,6 +12,16 @@ export function recordId(record: PlatformRecord): string | null {
 export function displayReference(record: PlatformRecord): string | null {
   return firstString(record, ["public_reference", "publicReference", "reference", "cylinder_identifier", "cylinderIdentifier", "id"]);
 }
+export function cylinderPermanentIdentifier(record: PlatformRecord | null | undefined): string | null {
+  const identifier = firstString(record, ["cylinder_identifier", "cylinderIdentifier"]);
+  if (identifier && !["none", "null", "n/a", "na", "unknown"].includes(identifier.trim().toLowerCase())) {
+    return identifier.trim();
+  }
+  return firstString(record, ["public_reference", "publicReference", "cylinder_reference", "cylinderReference", "reference"]);
+}
+export function cylinderRegistryReference(record: PlatformRecord | null | undefined): string | null {
+  return firstString(record, ["public_reference", "publicReference", "cylinder_reference", "cylinderReference", "reference"]);
+}
 export function firstNumber(record: PlatformRecord | null | undefined, keys: readonly string[]): number | null {
   for (const key of keys) { const value = record?.[key]; if (typeof value === "number" && Number.isFinite(value)) return value; if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value); }
   return null;
