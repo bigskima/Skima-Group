@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { ChevronRight, Plus, QrCode } from "lucide-react-native";
 import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useEntityMediaLinks } from "../api/domains";
-import { displayReference, displayStatus, displayTitle, firstNumber, firstString, recordId, type PlatformRecord } from "../api/records";
+import { cylinderPermanentIdentifier, displayStatus, displayTitle, firstNumber, firstString, recordId, type PlatformRecord } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { AppButton } from "./AppButton";
@@ -65,7 +65,7 @@ function CylinderRow({ cylinder }: { cylinder: PlatformRecord }) {
   const originalId = firstAssetId(cylinder.image_asset_ids ?? cylinder.imageAssetIds);
   const status = displayStatus(cylinder) ?? "registered";
   const size = firstNumber(cylinder, ["size_kg", "sizeKg"]);
-  const reference = displayReference(cylinder) ?? "SKIMA cylinder";
+  const reference = cylinderPermanentIdentifier(cylinder) ?? "SKIMA cylinder";
   const tagStatus = physicalTagStatus(cylinder);
   const showTagWarning = ["tag_damaged", "tag_lost", "replacement_pending"].includes(normalizeStatus(tagStatus));
 
