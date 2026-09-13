@@ -89,7 +89,7 @@ export function AiAssistantLauncher({ workspace }: { readonly workspace: AiAssis
         ) : null}
       </View>
       <View style={styles.action}>
-        <Text numberOfLines={1} style={styles.actionText}>{brandedAction}</Text>
+        <Text numberOfLines={2} style={styles.actionText}>{brandedAction}</Text>
         <View style={styles.arrow}>
           <ArrowUpRight color="#FFFFFF" size={17} strokeWidth={2.5} />
         </View>
@@ -108,7 +108,7 @@ function friendlyInsight(value: string) {
 
 const styles = StyleSheet.create({
   shell: {
-    minHeight: 98,
+    minHeight: 102,
     overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
@@ -129,17 +129,18 @@ const styles = StyleSheet.create({
   icon: {
     width: 42,
     height: 42,
+    flexShrink: 0,
     borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,.12)",
     overflow: "hidden",
   },
-  copy: { flex: 1, gap: 1, minWidth: 0 },
+  copy: { flex: 1, gap: 2, minWidth: 0 },
   eyebrow: {
-    color: "rgba(255,255,255,.64)",
+    color: "rgba(255,255,255,.68)",
     ...typography.eyebrow,
-    fontSize: 8,
+    fontSize: 10,
   },
   title: {
     color: "#FFFFFF",
@@ -149,35 +150,36 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   body: {
-    color: "rgba(255,255,255,.76)",
+    color: "rgba(255,255,255,.80)",
     ...typography.caption,
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 11,
+    lineHeight: 15,
     marginTop: 2,
   },
   estimate: {
-    color: "rgba(255,255,255,.58)",
+    color: "rgba(255,255,255,.64)",
     ...typography.caption,
-    fontSize: 8,
-    lineHeight: 11,
+    fontSize: 10,
+    lineHeight: 13,
     marginTop: 3,
     fontWeight: "800",
   },
   action: {
     alignItems: "flex-end",
     gap: 5,
-    maxWidth: 86,
+    maxWidth: 96,
   },
   actionText: {
-    color: "rgba(255,255,255,.76)",
+    color: "rgba(255,255,255,.82)",
     ...typography.caption,
-    fontSize: 8,
+    fontSize: 10,
+    lineHeight: 13,
     fontWeight: "900",
     textAlign: "right",
   },
   arrow: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
