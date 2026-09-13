@@ -93,7 +93,7 @@ const toolGroups: Record<Workspace, readonly ToolGroup[]> = {
     {
       title: "Money",
       items: [
-        { label: "Earnings & activity", detail: "Settlements, withdrawals, refunds and Station wallet history", href: "/(station)/earnings", icon: Banknote },
+        { label: "Earnings & activity", detail: "Settlements, withdrawals, refunds and Station wallet history", href: "/(station)/settlements", icon: Banknote },
       ],
     },
     {
