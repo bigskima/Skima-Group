@@ -1,6 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "expo-image";
-import { Camera, Trash2, UserRound } from "lucide-react-native";
+import { Camera, Check, Trash2, UserRound, X } from "lucide-react-native";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { ActionResponseSchema } from "../api/records";
@@ -14,6 +14,7 @@ import { RuntimeMediaImage } from "./RuntimeMediaImage";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type ProfilePhotoEditorVariant = "default" | "onBrand";
+type SelectedPhoto = { uri: string; fileName: string | null; mimeType: string | null };
 
 export function ProfilePhotoEditor({ variant = "default" }: { variant?: ProfilePhotoEditorVariant }) {
   const session = useSession();
@@ -21,6 +22,7 @@ export function ProfilePhotoEditor({ variant = "default" }: { variant?: ProfileP
   const [pending, setPending] = useState<"upload" | "delete" | null>(null);
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
+  const [candidate, setCandidate] = useState<SelectedPhoto | null>(null);
   const avatar = session.context?.profile?.avatar_url ?? null;
   const onBrand = variant === "onBrand";
   const controlColor = onBrand ? "#FFFFFF" : colors.danger;
@@ -41,14 +43,25 @@ export function ProfilePhotoEditor({ variant = "default" }: { variant?: ProfileP
     if (result.canceled) return;
 
     const selected = result.assets[0];
+    setCandidate({
+      uri: selected.uri,
+      fileName: selected.fileName ?? null,
+      mimeType: selected.mimeType ?? null,
+    });
+    setMessage("Preview your photo, then save when it looks right.");
+  };
+
+  const saveCandidate = async () => {
+    if (!candidate) return;
     setPending("upload");
     setProgress(0);
+    setMessage(null);
     try {
       const mediaAssetId = await uploadMedia({
         api: session.api,
-        uri: selected.uri,
-        fileName: selected.fileName ?? `profile-${Date.now()}.jpg`,
-        contentType: selected.mimeType ?? "image/jpeg",
+        uri: candidate.uri,
+        fileName: candidate.fileName ?? `profile-${Date.now()}.jpg`,
+        contentType: candidate.mimeType ?? "image/jpeg",
         ownerUserId: session.context!.user.id,
         assetTypeKey: "media.profile.avatar",
         onProgress: setProgress,
@@ -59,6 +72,7 @@ export function ProfilePhotoEditor({ variant = "default" }: { variant?: ProfileP
         ActionResponseSchema,
       );
       await session.refresh();
+      setCandidate(null);
       setMessage("Profile image updated.");
     } catch (cause) {
       setMessage(friendlyError(cause, "Your profile image could not be updated."));
@@ -75,6 +89,7 @@ export function ProfilePhotoEditor({ variant = "default" }: { variant?: ProfileP
         method: "DELETE",
       });
       await session.refresh();
+      setCandidate(null);
       setMessage("Profile image deleted.");
     } catch (cause) {
       setMessage(friendlyError(cause, "Your profile image could not be deleted."));
@@ -96,8 +111,10 @@ export function ProfilePhotoEditor({ variant = "default" }: { variant?: ProfileP
           },
         ]}
       >
-        {avatar && UUID.test(avatar) ? (
-          <RuntimeMediaImage assetId={avatar} label="Profile image" variant="avatar" />
+        {candidate ? (
+          <Image source={candidate.uri} contentFit="cover" style={styles.avatar} accessibilityLabel="New profile image preview" />
+        ) : avatar && UUID.test(avatar) ? (
+          <RuntimeMediaImage assetId={avatar} label="Profile image" variant="avatar" previewable />
         ) : avatar ? (
           <Image source={avatar} contentFit="cover" style={styles.avatar} accessibilityLabel="Profile image" />
         ) : (
@@ -106,41 +123,81 @@ export function ProfilePhotoEditor({ variant = "default" }: { variant?: ProfileP
       </View>
 
       <View style={styles.actions}>
-        <Pressable
-          disabled={pending !== null}
-          onPress={() => void choose()}
-          style={({ pressed }) => [
-            styles.primary,
-            {
-              backgroundColor: onBrand ? "rgba(255,255,255,.16)" : colors.brand,
-              borderColor: onBrand ? "rgba(255,255,255,.42)" : colors.brand,
-              opacity: pressed ? 0.76 : pending !== null ? 0.62 : 1,
-            },
-          ]}
-        >
-          {pending === "upload" ? <ActivityIndicator color="#FFFFFF" /> : <Camera color="#FFFFFF" size={17} />}
-          <Text numberOfLines={1} style={styles.primaryText}>
-            {pending === "upload" ? `Uploading ${Math.round(progress * 100)}%` : avatar ? "Change photo" : "Upload photo"}
-          </Text>
-        </Pressable>
+        {candidate ? (
+          <>
+            <Pressable
+              disabled={pending !== null}
+              onPress={() => void saveCandidate()}
+              style={({ pressed }) => [
+                styles.primary,
+                {
+                  backgroundColor: onBrand ? "rgba(255,255,255,.16)" : colors.brand,
+                  borderColor: onBrand ? "rgba(255,255,255,.42)" : colors.brand,
+                  opacity: pressed ? 0.76 : pending !== null ? 0.62 : 1,
+                },
+              ]}
+            >
+              {pending === "upload" ? <ActivityIndicator color="#FFFFFF" /> : <Check color="#FFFFFF" size={17} />}
+              <Text numberOfLines={1} style={styles.primaryText}>
+                {pending === "upload" ? `Uploading ${Math.round(progress * 100)}%` : "Save photo"}
+              </Text>
+            </Pressable>
+            <Pressable
+              disabled={pending !== null}
+              onPress={() => {
+                setCandidate(null);
+                setMessage(null);
+              }}
+              style={({ pressed }) => [
+                styles.delete,
+                {
+                  backgroundColor: onBrand ? "rgba(255,255,255,.08)" : "transparent",
+                  borderColor: onBrand ? "rgba(255,255,255,.34)" : palette.border,
+                  opacity: pressed ? 0.76 : pending !== null ? 0.62 : 1,
+                },
+              ]}
+            >
+              <X color={controlColor} size={17} />
+              <Text numberOfLines={1} style={[styles.deleteText, { color: controlColor }]}>Cancel</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Pressable
+              disabled={pending !== null}
+              onPress={() => void choose()}
+              style={({ pressed }) => [
+                styles.primary,
+                {
+                  backgroundColor: onBrand ? "rgba(255,255,255,.16)" : colors.brand,
+                  borderColor: onBrand ? "rgba(255,255,255,.42)" : colors.brand,
+                  opacity: pressed ? 0.76 : pending !== null ? 0.62 : 1,
+                },
+              ]}
+            >
+              <Camera color="#FFFFFF" size={17} />
+              <Text numberOfLines={1} style={styles.primaryText}>{avatar ? "Change photo" : "Upload photo"}</Text>
+            </Pressable>
 
-        {avatar ? (
-          <Pressable
-            disabled={pending !== null}
-            onPress={() => void remove()}
-            style={({ pressed }) => [
-              styles.delete,
-              {
-                backgroundColor: onBrand ? "rgba(255,255,255,.08)" : "transparent",
-                borderColor: onBrand ? "rgba(255,255,255,.34)" : palette.border,
-                opacity: pressed ? 0.76 : pending !== null ? 0.62 : 1,
-              },
-            ]}
-          >
-            {pending === "delete" ? <ActivityIndicator color={controlColor} /> : <Trash2 color={controlColor} size={17} />}
-            <Text numberOfLines={1} style={[styles.deleteText, { color: controlColor }]}>Delete</Text>
-          </Pressable>
-        ) : null}
+            {avatar ? (
+              <Pressable
+                disabled={pending !== null}
+                onPress={() => void remove()}
+                style={({ pressed }) => [
+                  styles.delete,
+                  {
+                    backgroundColor: onBrand ? "rgba(255,255,255,.08)" : "transparent",
+                    borderColor: onBrand ? "rgba(255,255,255,.34)" : palette.border,
+                    opacity: pressed ? 0.76 : pending !== null ? 0.62 : 1,
+                  },
+                ]}
+              >
+                {pending === "delete" ? <ActivityIndicator color={controlColor} /> : <Trash2 color={controlColor} size={17} />}
+                <Text numberOfLines={1} style={[styles.deleteText, { color: controlColor }]}>Delete</Text>
+              </Pressable>
+            ) : null}
+          </>
+        )}
       </View>
 
       {message ? (
@@ -148,10 +205,15 @@ export function ProfilePhotoEditor({ variant = "default" }: { variant?: ProfileP
           accessibilityRole="alert"
           style={[
             styles.message,
-            { color: onBrand ? "rgba(255,255,255,.92)" : messageSucceeded ? colors.success : colors.danger },
+            { color: onBrand ? "rgba(255,255,255,.92)" : messageSucceeded ? colors.success : candidate ? palette.mutedStrong : colors.danger },
           ]}
         >
           {message}
+        </Text>
+      ) : null}
+      {!candidate ? (
+        <Text style={[styles.privacy, { color: onBrand ? "rgba(255,255,255,.72)" : palette.muted }]}>
+          This account photo is separate from KYC, identity documents and verification evidence.
         </Text>
       ) : null}
     </View>
@@ -167,5 +229,6 @@ const styles = StyleSheet.create({
   primaryText: { color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
   delete: { minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.pill, borderWidth: StyleSheet.hairlineWidth },
   deleteText: { fontSize: 13, fontWeight: "900" },
-  message: { maxWidth: 280, fontSize: 12, lineHeight: 17, fontWeight: "700", textAlign: "center" },
+  message: { maxWidth: 300, fontSize: 12, lineHeight: 17, fontWeight: "700", textAlign: "center" },
+  privacy: { maxWidth: 310, fontSize: 10, lineHeight: 14, textAlign: "center" },
 });
