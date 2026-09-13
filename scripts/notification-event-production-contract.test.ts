@@ -1,8 +1,9 @@
 const root = new URL("../", import.meta.url);
 const read = (path: string) => Deno.readTextFile(new URL(path, root));
+const notificationMigration = "supabase/migrations/20260913161409_lpg_support_complaint_notifications.sql";
 
 Deno.test("support replies notify only on SKIMA admin messages", async () => {
-  const migration = await read("supabase/migrations/20260913161409_support_complaint_notifications.sql");
+  const migration = await read(notificationMigration);
 
   assertIncludes(migration, "new.author_kind <> 'admin'");
   assertIncludes(migration, "support.thread.reply");
@@ -15,7 +16,7 @@ Deno.test("support replies notify only on SKIMA admin messages", async () => {
 });
 
 Deno.test("complaint review notifications expose public-safe state only", async () => {
-  const migration = await read("supabase/migrations/20260913161409_support_complaint_notifications.sql");
+  const migration = await read(notificationMigration);
 
   assertIncludes(migration, "new.event_type <> 'complaint.status_changed'");
   assertIncludes(migration, "nullif(btrim(new.public_message), '')");
