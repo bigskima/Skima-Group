@@ -9,7 +9,7 @@ import Svg, {
   Text as SvgText,
 } from "react-native-svg";
 import { domainQueries } from "../api/domains";
-import { displayReference, firstString, recordId } from "../api/records";
+import { firstString, recordId } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
@@ -28,8 +28,9 @@ type SvgExportHandle = {
 };
 
 const QR_SIZE = 220;
-const EXPORT_WIDTH = 320;
-const EXPORT_HEIGHT = 390;
+const EXPORT_WIDTH = 640;
+const EXPORT_HEIGHT = 760;
+const EXPORT_QR_SIZE = 420;
 
 export function CylinderIdentityScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -39,13 +40,15 @@ export function CylinderIdentityScreen() {
   const exportRef = useRef<SvgExportHandle | null>(null);
   const [exportQrDataUrl, setExportQrDataUrl] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const cylinder = cylinders.data?.find((item) => recordId(item) === id || displayReference(item) === id);
-  const reference = cylinder ? displayReference(cylinder) : null;
+  const cylinder = cylinders.data?.find((item) => recordId(item) === id || firstString(item, ["public_reference", "publicReference"]) === id);
+  const publicReference = cylinder ? firstString(cylinder, ["public_reference", "publicReference"]) : null;
+  const cylinderIdentifier = cylinder ? validCylinderIdentifier(firstString(cylinder, ["cylinder_identifier", "cylinderIdentifier"])) : null;
+  const permanentId = cylinderIdentifier ?? publicReference;
   const qrValue = cylinder ? firstString(cylinder, ["qr_payload", "qrPayload"]) : null;
 
   const download = async () => {
     setMessage(null);
-    if (!qrValue || !qrRef.current || !reference) {
+    if (!qrValue || !qrRef.current || !permanentId) {
       setMessage("The optional QR code is not ready yet.");
       return;
     }
@@ -62,9 +65,9 @@ export function CylinderIdentityScreen() {
       const identityCardDataUrl = await readSvgDataUrl(exportRef.current);
       await saveQrPng(
         identityCardDataUrl,
-        safeFileName(reference) + "-identity-qr.png",
+        safeFileName(permanentId) + "-identity-qr.png",
       );
-      setMessage("Cylinder ID and QR are ready to save or share.");
+      setMessage("Permanent Cylinder ID and QR are ready to save or share.");
     } catch (cause) {
       setMessage(friendlyError(cause, "The cylinder identity QR could not be saved."));
     } finally {
@@ -95,8 +98,11 @@ export function CylinderIdentityScreen() {
           <QrCodeIcon color={palette.brand} size={22} />
         </View>
         <View style={styles.copy}>
-          <Text style={[styles.label, { color: palette.muted }]}>SKIMA CYLINDER ID</Text>
-          <Text selectable style={[styles.reference, { color: palette.ink }]}>{reference ?? "Unavailable"}</Text>
+          <Text style={[styles.label, { color: palette.muted }]}>PERMANENT CYLINDER ID</Text>
+          <Text selectable style={[styles.reference, { color: palette.ink }]}>{permanentId ?? "Unavailable"}</Text>
+          {publicReference && publicReference !== permanentId ? (
+            <Text selectable style={[styles.registryReference, { color: palette.muted }]}>Registry ref · {publicReference}</Text>
+          ) : null}
         </View>
       </View>
 
@@ -113,12 +119,15 @@ export function CylinderIdentityScreen() {
             />
           </View>
           <View style={styles.qrIdentityCopy}>
-            <Text style={[styles.qrLabel, { color: palette.muted }]}>SKIMA CYLINDER</Text>
+            <Text style={[styles.qrLabel, { color: palette.muted }]}>SKIMA CYLINDER ID</Text>
             <Text selectable style={[styles.qrReference, { color: palette.ink }]}>
-              {reference ?? "Unavailable"}
+              {permanentId ?? "Unavailable"}
             </Text>
+            {publicReference && publicReference !== permanentId ? (
+              <Text selectable style={[styles.qrRegistryReference, { color: palette.muted }]}>Registry ref · {publicReference}</Text>
+            ) : null}
             <Text style={[styles.qrHelper, { color: palette.muted }]}>
-              Save the complete identity card so the QR and permanent cylinder reference stay together.
+              Save the complete identity card so the QR, permanent Cylinder ID and registry reference stay together.
             </Text>
           </View>
           <AppButton
@@ -136,7 +145,7 @@ export function CylinderIdentityScreen() {
         </View>
       )}
 
-      {exportQrDataUrl && reference ? (
+      {exportQrDataUrl && permanentId ? (
         <View pointerEvents="none" style={styles.exportSurface}>
           <Svg
             ref={(value) => { exportRef.current = value as unknown as SvgExportHandle | null; }}
@@ -144,53 +153,65 @@ export function CylinderIdentityScreen() {
             height={EXPORT_HEIGHT}
             viewBox={`0 0 ${EXPORT_WIDTH} ${EXPORT_HEIGHT}`}
           >
-            <Rect x="0" y="0" width={EXPORT_WIDTH} height={EXPORT_HEIGHT} rx="28" fill="#FFFFFF" />
+            <Rect x="0" y="0" width={EXPORT_WIDTH} height={EXPORT_HEIGHT} rx="52" fill="#FFFFFF" />
             <SvgText
               x={EXPORT_WIDTH / 2}
-              y="31"
+              y="64"
               fill="#151A17"
-              fontSize="14"
-              fontWeight="800"
+              fontSize="30"
+              fontWeight="900"
               textAnchor="middle"
             >
               SKIMA CYLINDER
             </SvgText>
             <SvgImage
               href={exportQrDataUrl}
-              x={(EXPORT_WIDTH - QR_SIZE) / 2}
-              y="48"
-              width={QR_SIZE}
-              height={QR_SIZE}
+              x={(EXPORT_WIDTH - EXPORT_QR_SIZE) / 2}
+              y="92"
+              width={EXPORT_QR_SIZE}
+              height={EXPORT_QR_SIZE}
               preserveAspectRatio="xMidYMid meet"
             />
             <SvgText
               x={EXPORT_WIDTH / 2}
-              y="307"
+              y="560"
               fill="#6E717A"
-              fontSize="11"
-              fontWeight="700"
+              fontSize="20"
+              fontWeight="800"
               textAnchor="middle"
             >
-              CYLINDER ID
+              PERMANENT CYLINDER ID
             </SvgText>
             <SvgText
               x={EXPORT_WIDTH / 2}
-              y="334"
+              y="608"
               fill="#151A17"
-              fontSize="20"
+              fontSize="31"
               fontWeight="900"
               textAnchor="middle"
             >
-              {reference}
+              {permanentId}
             </SvgText>
+            {publicReference && publicReference !== permanentId ? (
+              <SvgText
+                x={EXPORT_WIDTH / 2}
+                y="654"
+                fill="#6E717A"
+                fontSize="20"
+                fontWeight="700"
+                textAnchor="middle"
+              >
+                Registry ref · {publicReference}
+              </SvgText>
+            ) : null}
             <SvgText
               x={EXPORT_WIDTH / 2}
-              y="363"
+              y="708"
               fill="#6E717A"
-              fontSize="10"
+              fontSize="18"
               textAnchor="middle"
             >
-              Scan or use the cylinder ID for verification
+              Scan the QR or enter the permanent Cylinder ID
             </SvgText>
           </Svg>
         </View>
@@ -199,6 +220,13 @@ export function CylinderIdentityScreen() {
       {message ? <Text style={[styles.message, { color: palette.mutedStrong }]}>{message}</Text> : null}
     </Screen>
   );
+}
+
+function validCylinderIdentifier(value: string | null) {
+  if (!value) return null;
+  const normalized = value.trim();
+  if (!normalized || ["none", "null", "n/a", "na", "unknown"].includes(normalized.toLowerCase())) return null;
+  return normalized;
 }
 
 function readQrDataUrl(handle: QrHandle): Promise<string> {
@@ -248,7 +276,7 @@ function waitForExportSurface(): Promise<void> {
 }
 
 function safeFileName(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "skima-cylinder";
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64) || "skima-cylinder";
 }
 
 const styles = StyleSheet.create({
@@ -265,6 +293,7 @@ const styles = StyleSheet.create({
   copy: { flex: 1, gap: 3 },
   label: { ...typography.caption, fontSize: 8, fontWeight: "900" },
   reference: { ...typography.subheading, fontSize: 15 },
+  registryReference: { ...typography.caption, fontSize: 10 },
   qrCard: {
     alignItems: "center",
     gap: spacing.md,
@@ -273,9 +302,10 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   qrFrame: { backgroundColor: "#FFFFFF", padding: spacing.sm, borderRadius: radii.lg },
-  qrIdentityCopy: { alignItems: "center", gap: 3, maxWidth: 300 },
+  qrIdentityCopy: { alignItems: "center", gap: 3, maxWidth: 320 },
   qrLabel: { ...typography.eyebrow, fontSize: 8 },
-  qrReference: { ...typography.subheading, fontSize: 17 },
+  qrReference: { ...typography.subheading, fontSize: 17, textAlign: "center" },
+  qrRegistryReference: { ...typography.caption, fontSize: 10, textAlign: "center" },
   qrHelper: { ...typography.caption, fontSize: 10, lineHeight: 15, textAlign: "center" },
   exportSurface: {
     position: "absolute",
