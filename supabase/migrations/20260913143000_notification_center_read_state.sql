@@ -60,8 +60,6 @@ as $$
             where membership.organization_id = message.recipient_entity_id
               and membership.user_id = target_user_id
               and membership.status = 'active'
-              and membership.starts_at <= timezone('utc', now())
-              and (membership.ends_at is null or membership.ends_at > timezone('utc', now()))
           )
         )
       )
@@ -86,22 +84,14 @@ declare
   result_items jsonb;
   unread_count integer;
   total_count integer;
+  visible_count integer;
 begin
   if resolved_user_id is null then
     raise exception 'authenticated user context is required';
   end if;
 
   with accessible as (
-    select
-      message.id,
-      message.channel,
-      message.purpose,
-      message.status,
-      message.payload,
-      message.metadata,
-      message.created_at,
-      state.read_at,
-      state.hidden_at
+    select message.id, state.read_at, state.hidden_at
     from public.communication_messages message
     left join public.communication_message_user_states state
       on state.communication_message_id = message.id
@@ -136,18 +126,20 @@ begin
     offset resolved_offset
     limit resolved_limit
   )
-  select coalesce(jsonb_agg(jsonb_build_object(
-    'id', id,
-    'channel', channel,
-    'purpose', purpose,
-    'status', status,
-    'payload', payload,
-    'metadata', metadata,
-    'createdAt', created_at,
-    'readAt', read_at,
-    'isRead', read_at is not null
-  ) order by created_at desc, id desc), '[]'::jsonb)
-  into result_items
+  select
+    coalesce(jsonb_agg(jsonb_build_object(
+      'id', id,
+      'channel', channel,
+      'purpose', purpose,
+      'status', status,
+      'payload', payload,
+      'metadata', metadata,
+      'createdAt', created_at,
+      'readAt', read_at,
+      'isRead', read_at is not null
+    ) order by created_at desc, id desc), '[]'::jsonb),
+    count(*)::integer
+  into result_items, visible_count
   from accessible;
 
   return jsonb_build_object(
@@ -156,7 +148,10 @@ begin
     'totalCount', coalesce(total_count, 0),
     'offset', resolved_offset,
     'limit', resolved_limit,
-    'hasMore', resolved_offset + jsonb_array_length(result_items) < coalesce(total_count, 0)
+    'hasMore', resolved_offset + coalesce(visible_count, 0) < case
+      when target_include_read then coalesce(total_count, 0)
+      else coalesce(unread_count, 0)
+    end
   );
 end;
 $$;
