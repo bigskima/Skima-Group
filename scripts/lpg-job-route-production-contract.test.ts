@@ -1,10 +1,9 @@
 const root = new URL("../", import.meta.url);
 const read = (path: string) => Deno.readTextFile(new URL(path, root));
+const routeMigration = "supabase/migrations/20260913160707_lpg_historical_job_route_safe_uuid_casts.sql";
 
 Deno.test("stale LPG job routes require historical assignment evidence", async () => {
-  const migration = await read(
-    "supabase/migrations/20260913160448_lpg_historical_job_route_states.sql",
-  );
+  const migration = await read(routeMigration);
 
   assertIncludes(migration, "public.can_access_lpg_order(target_lpg_order_id)");
   assertIncludes(migration, "public.lpg_station_capacity_reservations");
@@ -16,10 +15,17 @@ Deno.test("stale LPG job routes require historical assignment evidence", async (
   assertIncludes(migration, "raise exception 'LPG order access permission is required'");
 });
 
+Deno.test("historical assignment metadata is UUID-safe", async () => {
+  const migration = await read(routeMigration);
+
+  assertIncludes(migration, "cross join lateral");
+  assertIncludes(migration, "else null::uuid");
+  assertIncludes(migration, "historical.station_branch_id is not null");
+  assertIncludes(migration, "historical.driver_profile_id is not null");
+});
+
 Deno.test("stale LPG job routes expose only minimal reason states", async () => {
-  const migration = await read(
-    "supabase/migrations/20260913160448_lpg_historical_job_route_states.sql",
-  );
+  const migration = await read(routeMigration);
 
   for (const reason of [
     "payment_expired",
