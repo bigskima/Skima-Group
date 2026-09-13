@@ -11,7 +11,8 @@ import type { ComponentType } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useEntityMediaLinks } from "../api/domains";
 import {
-  displayReference,
+  cylinderPermanentIdentifier,
+  cylinderRegistryReference,
   displayStatus,
   firstNumber,
   firstString,
@@ -33,7 +34,7 @@ export function CylinderDetailScreen() {
   const { palette } = useAppTheme();
   const cylinders = domainQueries.cylinders();
   const cylinder = cylinders.data?.find(
-    (item) => recordId(item) === id || displayReference(item) === id,
+    (item) => recordId(item) === id || cylinderPermanentIdentifier(item) === id || cylinderRegistryReference(item) === id,
   );
   const cylinderId = cylinder ? recordId(cylinder) : null;
   const media = useEntityMediaLinks("lpg_cylinder", cylinderId);
@@ -43,7 +44,8 @@ export function CylinderDetailScreen() {
   const presentationId = firstString(presentation, ["media_asset_id", "mediaAssetId"]);
   const originalId = cylinder ? firstAssetId(cylinder.image_asset_ids ?? cylinder.imageAssetIds) : null;
   const displayName = firstString(cylinder, ["display_name", "displayName"]) ?? "Cylinder";
-  const reference = cylinder ? displayReference(cylinder) : null;
+  const permanentId = cylinderPermanentIdentifier(cylinder);
+  const registryReference = cylinderRegistryReference(cylinder);
   const status = cylinder ? displayStatus(cylinder) ?? "registered" : "registered";
   const sizeKg = firstNumber(cylinder, ["size_kg", "sizeKg"]);
   const brand = firstString(cylinder, ["brand", "manufacturer"]) ?? "Not added";
@@ -80,9 +82,13 @@ export function CylinderDetailScreen() {
           variant="thumbnail"
         />
         <View style={styles.heroCopy}>
+          <Text style={[styles.identityLabel, { color: palette.muted }]}>PERMANENT CYLINDER ID</Text>
           <Text numberOfLines={1} style={[styles.reference, { color: palette.ink }]}>
-            {reference ?? "SKIMA cylinder"}
+            {permanentId ?? "SKIMA cylinder"}
           </Text>
+          {registryReference && registryReference !== permanentId ? (
+            <Text numberOfLines={1} style={[styles.registryReference, { color: palette.muted }]}>Registry ref · {registryReference}</Text>
+          ) : null}
           <Text style={[styles.meta, { color: palette.muted }]}>
             {sizeKg === null ? "Size not added" : String(sizeKg) + " kg"} · {colour}
           </Text>
@@ -106,7 +112,7 @@ export function CylinderDetailScreen() {
         <CylinderRouteCard
           icon={QrCode}
           title="ID & QR"
-          description="View or save the cylinder identity"
+          description="View or save the permanent cylinder identity"
           onPress={() => router.push(("/(customer)/cylinder/" + cylinderId + "/identity") as never)}
         />
         <CylinderRouteCard
@@ -212,7 +218,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   heroCopy: { flex: 1, minWidth: 0, alignItems: "flex-start", gap: 5 },
+  identityLabel: { ...typography.eyebrow, fontSize: 8 },
   reference: { ...typography.subheading, fontSize: 16 },
+  registryReference: { ...typography.caption, fontSize: 9.5 },
   meta: { ...typography.caption, fontSize: 10 },
   quickGrid: { gap: spacing.sm },
   routeCard: {
