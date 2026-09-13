@@ -1,5 +1,6 @@
 import { router } from "expo-router";
 import {
+  Banknote,
   Building2,
   ChevronRight,
   FileCheck2,
@@ -58,8 +59,14 @@ const toolGroups: Record<Workspace, readonly ToolGroup[]> = {
       title: "Identity & approval",
       items: [
         { label: "SKIMA Driver Pass", detail: "Your public driver identity", href: "/(driver)/id-card", icon: FileCheck2 },
-        { label: "Driver profile", detail: "Profile and approval details", href: "/(driver)/profile", icon: UserRound },
+        { label: "Driver profile", detail: "Public photo, profile and approval", href: "/(driver)/profile", icon: UserRound },
         { label: "Application status", detail: "Review approval progress", href: "/(driver)/application", icon: FileCheck2 },
+      ],
+    },
+    {
+      title: "Money",
+      items: [
+        { label: "Earnings & activity", detail: "Delivery earnings, withdrawals, refunds and wallet history", href: "/(driver)/earnings", icon: Banknote },
       ],
     },
     {
@@ -76,25 +83,31 @@ const toolGroups: Record<Workspace, readonly ToolGroup[]> = {
     {
       title: "Station operations",
       items: [
-        { label: "Branch profile", detail: "Station profile and status", href: "/(station)/profile", icon: Building2 },
+        { label: "Branch profile", detail: "Public images, station profile and status", href: "/(station)/profile", icon: Building2 },
         { label: "Station locations", detail: "Main address and reviewed locations", href: "/(station)/locations", icon: MapPin },
         { label: "LPG stock", detail: "Availability and incoming cylinders", href: "/(station)/inventory", icon: Settings2 },
-        { label: "Station reports", detail: "Completed orders and earnings", href: "/(station)/reports", icon: ReceiptText },
+        { label: "Station reports", detail: "Completed orders and operational totals", href: "/(station)/reports", icon: ReceiptText },
         { label: "Settings & pricing", detail: "Hours, availability and price", href: "/(station)/settings", icon: Settings2 },
+      ],
+    },
+    {
+      title: "Money",
+      items: [
+        { label: "Earnings & activity", detail: "Settlements, withdrawals, refunds and Station wallet history", href: "/(station)/earnings", icon: Banknote },
       ],
     },
     {
       title: "Team & access",
       items: [
-        { label: "Team members", detail: "Manage station team access", href: "/(station)/staff", icon: Building2 },
+        { label: "Team members", detail: "Manage Station team access", href: "/(station)/staff", icon: Building2 },
         { label: "Roles", detail: "Control team permissions", href: "/(station)/roles", icon: ShieldCheck },
       ],
     },
     {
       title: "Approval & documents",
       items: [
-        { label: "Application status", detail: "Review station approval", href: "/(station)/application", icon: FileCheck2 },
-        { label: "Documents", detail: "Submitted station documents", href: "/(station)/documents", icon: FileCheck2 },
+        { label: "Application status", detail: "Review Station approval", href: "/(station)/application", icon: FileCheck2 },
+        { label: "Documents", detail: "Submitted Station documents", href: "/(station)/documents", icon: FileCheck2 },
       ],
     },
   ],
