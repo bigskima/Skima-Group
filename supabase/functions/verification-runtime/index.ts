@@ -1,4 +1,4 @@
-import { createClient, type User } from "npm:@supabase/supabase-js@2.110.9";
+import { createClient, type SupabaseClient, type User } from "npm:@supabase/supabase-js@2.110.9";
 import {
   readPartnerVerificationRequirements,
   reconcilePartnerVerificationApplication,
@@ -14,6 +14,9 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Content-Type": "application/json",
 };
+
+const PERSONAL_KYC_KEY = "verification.person.identity";
+const PERSONAL_KYC_CALLBACK_URL = "https://skima-lpg.vercel.app/verification-return";
 
 Deno.serve(async (request: Request): Promise<Response> => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
@@ -52,11 +55,11 @@ Deno.serve(async (request: Request): Promise<Response> => {
     }
 
     if (path === "/sessions" && request.method === "POST") {
-      const data = await startPartnerVerificationSession(
-        serviceClient,
-        user,
-        await readBody(request),
-      );
+      const body = await readBody(request);
+      if (body.verificationKey === PERSONAL_KYC_KEY) {
+        await ensurePersonalKycCallback(serviceClient);
+      }
+      const data = await startPartnerVerificationSession(serviceClient, user, body);
       return json({ ok: true, data, requestId });
     }
 
@@ -83,6 +86,66 @@ Deno.serve(async (request: Request): Promise<Response> => {
     return verificationErrorResponse(error, requestId, user);
   }
 });
+
+async function ensurePersonalKycCallback(serviceClient: SupabaseClient): Promise<void> {
+  const definition = await serviceClient
+    .from("verification_definitions")
+    .select("id")
+    .eq("key", PERSONAL_KYC_KEY)
+    .eq("status", "active")
+    .maybeSingle();
+  if (definition.error || !definition.data?.id) return;
+
+  const routes = await serviceClient
+    .from("verification_provider_routes")
+    .select("id,config")
+    .eq("verification_definition_id", definition.data.id)
+    .eq("status", "active");
+  if (routes.error) return;
+
+  await Promise.all(
+    (routes.data ?? []).map(async (route) => {
+      const config = route.config && typeof route.config === "object" && !Array.isArray(route.config)
+        ? route.config as Record<string, unknown>
+        : {};
+      const callbackUrl = typeof config.callback_url === "string"
+        ? config.callback_url
+        : typeof config.callbackUrl === "string"
+        ? config.callbackUrl
+        : null;
+      const callbackMethod = typeof config.callback_method === "string"
+        ? config.callback_method
+        : typeof config.callbackMethod === "string"
+        ? config.callbackMethod
+        : null;
+
+      if (callbackUrl === PERSONAL_KYC_CALLBACK_URL && callbackMethod === "both") return;
+
+      const result = await serviceClient
+        .from("verification_provider_routes")
+        .update({
+          config: {
+            ...config,
+            callback_url: PERSONAL_KYC_CALLBACK_URL,
+            callback_method: "both",
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", route.id)
+        .eq("status", "active");
+
+      if (result.error) {
+        console.info(JSON.stringify({
+          severity: "warning",
+          source: "verification-runtime",
+          routeId: route.id,
+          message: "Personal KYC callback configuration could not be synchronized.",
+          detail: result.error.message,
+        }));
+      }
+    }),
+  );
+}
 
 function verificationPath(urlValue: string): string {
   let path = new URL(urlValue).pathname.replace(/\/+$/, "");
