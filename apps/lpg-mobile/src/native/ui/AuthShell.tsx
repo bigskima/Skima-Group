@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1.2,
   },
-  brandDescriptor: { fontSize: 10, lineHeight: 14, fontWeight: "700" },
+  brandDescriptor: { fontSize: 11, lineHeight: 15, fontWeight: "700" },
   brandAction: { marginLeft: "auto" },
   heroCopy: { maxWidth: 590, gap: 13 },
   heroCopyMobile: { gap: 9 },
@@ -347,10 +347,10 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   heroEyebrowText: {
-    fontSize: 9,
-    lineHeight: 13,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: "900",
-    letterSpacing: 1.1,
+    letterSpacing: 1.05,
   },
   promise: {
     maxWidth: 600,
@@ -395,8 +395,8 @@ const styles = StyleSheet.create({
     borderRadius: 11,
   },
   roleText: { flex: 1, minWidth: 0, gap: 1 },
-  roleTitle: { fontSize: 10, lineHeight: 14, fontWeight: "900" },
-  roleBody: { fontSize: 8, lineHeight: 11, fontWeight: "600" },
+  roleTitle: { fontSize: 11, lineHeight: 15, fontWeight: "900" },
+  roleBody: { fontSize: 10, lineHeight: 14, fontWeight: "600" },
   securityStrip: {
     maxWidth: 590,
     flexDirection: "row",
@@ -446,17 +446,14 @@ const styles = StyleSheet.create({
   tabActive: {},
   tabLabel: { fontSize: 12, lineHeight: 16, fontWeight: "900" },
   heading: { gap: 7 },
-
   eyebrow: {
     color: colors.brand,
-    fontSize: 9,
-    lineHeight: 13,
+    fontSize: 10,
+    lineHeight: 14,
     fontWeight: "900",
-    letterSpacing: 1.25,
+    letterSpacing: 1.15,
     textTransform: "uppercase",
   },
-
-
   body: { maxWidth: 430, fontSize: 12, lineHeight: 18, fontWeight: "500" },
   title: {
     fontSize: 30,
@@ -474,7 +471,6 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 8,
   },
-
-  privacyText: { fontSize: 9, lineHeight: 13, fontWeight: "600", textAlign: "center" },
+  privacyText: { fontSize: 10, lineHeight: 14, fontWeight: "600", textAlign: "center" },
   pressed: { opacity: 0.76 },
 });
