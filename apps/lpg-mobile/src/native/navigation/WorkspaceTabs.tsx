@@ -10,6 +10,7 @@ import {
 } from "lucide-react-native";
 import type { ComponentType } from "react";
 import { StyleSheet, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows } from "../theme/tokens";
 import { GuideTarget } from "../onboarding/InAppGuideProvider";
@@ -23,6 +24,8 @@ type Tab = {
 export function WorkspaceTabs({ tabs, hidden = [] }: { tabs: readonly Tab[]; hidden?: readonly string[] }) {
   const { scheme, palette } = useAppTheme();
   const desktop = useWindowDimensions().width >= 900;
+  const insets = useSafeAreaInsets();
+  const mobileBottom = Math.max(12, insets.bottom);
 
   return (
     <Tabs
@@ -43,14 +46,14 @@ export function WorkspaceTabs({ tabs, hidden = [] }: { tabs: readonly Tab[]; hid
               borderRightColor: palette.border,
               borderRightWidth: StyleSheet.hairlineWidth,
               width: 224,
-              paddingTop: 26,
+              paddingTop: Math.max(26, insets.top + 10),
               paddingHorizontal: 10,
             }
           : {
               position: "absolute",
               left: 14,
               right: 14,
-              bottom: 12,
+              bottom: mobileBottom,
               height: 72,
               overflow: "hidden",
               borderTopWidth: 0,
@@ -64,7 +67,7 @@ export function WorkspaceTabs({ tabs, hidden = [] }: { tabs: readonly Tab[]; hid
           ? { marginVertical: 3, borderRadius: radii.md }
           : { paddingVertical: 7, marginHorizontal: 2 },
         tabBarLabelStyle: {
-          fontSize: desktop ? 13 : 9.5,
+          fontSize: desktop ? 13 : 10,
           fontWeight: "900",
           paddingBottom: desktop ? 0 : 3,
         },

@@ -83,7 +83,7 @@ export function AppButton({
       ) : (
         <View style={styles.content}>
           {icon ? <View style={styles.icon}>{icon}</View> : null}
-          <Text numberOfLines={1} style={[styles.label, { color: textColor }]}>{label}</Text>
+          <Text numberOfLines={2} style={[styles.label, { color: textColor }]}>{label}</Text>
           {trailingIcon ? <View style={styles.icon}>{trailingIcon}</View> : null}
         </View>
       )}
@@ -98,13 +98,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: spacing.md,
+    paddingVertical: 7,
     overflow: "hidden",
   },
   sm: { minHeight: controlHeights.sm + 2, paddingHorizontal: 14 },
   md: { minHeight: controlHeights.md + 2, paddingHorizontal: 18 },
   lg: { minHeight: controlHeights.lg + 2, paddingHorizontal: spacing.lg },
   fullWidth: { width: "100%" },
-  content: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm },
-  icon: { alignItems: "center", justifyContent: "center" },
-  label: { ...typography.bodyStrong, fontSize: 14, letterSpacing: -0.08 },
+  content: { maxWidth: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  icon: { flexShrink: 0, alignItems: "center", justifyContent: "center" },
+  label: { flexShrink: 1, minWidth: 0, ...typography.bodyStrong, fontSize: 14, lineHeight: 18, letterSpacing: -0.08, textAlign: "center" },
 });
