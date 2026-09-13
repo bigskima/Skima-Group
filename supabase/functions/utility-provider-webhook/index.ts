@@ -44,7 +44,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const rawBody = await readBoundedBody(request);
     await verifyProviderWebhook(request, rawBody, provider.webhook, providerKey);
     const payload = parsePayload(rawBody);
-    const references = extractUtilityReferences(payload);
+    const references = extractUtilityReferences(payload, provider.webhook);
 
     if (references.length === 0) {
       await recordWebhookExecution(serviceClient, provider, {
@@ -71,8 +71,6 @@ Deno.serve(async (request: Request): Promise<Response> => {
     );
 
     if (!resolved) {
-      // A signed provider callback can race the SKIMA request update. A 503
-      // asks the provider to retry without ever creating a second purchase.
       return jsonResponse({
         ok: false,
         error: "utility_request_not_ready",
@@ -107,8 +105,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
       });
     }
 
-    // Never settle from callback contents alone. The signed callback wakes
-    // reconciliation; SKIMA independently queries the provider using tx_ref.
+    // A callback is only a wake-up signal. SKIMA independently re-queries the
+    // configured provider status endpoint before money is settled or refunded.
     const authoritative = await readUtilityPurchaseStatus(serviceClient, {
       providerKey,
       reference: publicReference,
@@ -229,7 +227,7 @@ async function verifyProviderWebhook(
   providerKey: string,
 ): Promise<void> {
   const secretRef = optionalString(webhook.secretRef);
-  const scheme = optionalString(webhook.signatureScheme);
+  const scheme = (optionalString(webhook.signatureScheme) ?? "").toLowerCase();
 
   if (!secretRef || !/^SUPABASE_SECRET:[A-Z][A-Z0-9_]{2,100}$/.test(secretRef)) {
     throw new WebhookRuntimeError("webhook_secret_reference_missing", 503);
@@ -240,18 +238,55 @@ async function verifyProviderWebhook(
     throw new WebhookRuntimeError("webhook_secret_missing", 503);
   }
 
-  if (scheme === "flutterwave-hmac-or-verif-hash" || providerKey === "provider.utility.flutterwave") {
+  if (scheme === "flutterwave-hmac-or-verif-hash" || (!scheme && providerKey === "provider.utility.flutterwave")) {
     const legacyHash = request.headers.get("verif-hash")?.trim() ?? "";
     const signature = request.headers.get("flutterwave-signature")?.trim() ?? "";
-
-    const legacyValid = legacyHash
-      ? timingSafeEqualText(legacyHash, secret)
-      : false;
+    const legacyValid = legacyHash ? timingSafeEqualText(legacyHash, secret) : false;
     const modernValid = signature
       ? timingSafeEqualText(signature, await hmacSha256Base64(secret, rawBody))
       : false;
-
     if (!legacyValid && !modernValid) {
+      throw new WebhookRuntimeError("invalid_webhook_signature", 401);
+    }
+    return;
+  }
+
+  const headerName = safeWebhookHeaderName(optionalString(webhook.signatureHeader) ?? defaultSignatureHeader(scheme));
+  const receivedRaw = request.headers.get(headerName)?.trim() ?? "";
+  const prefix = optionalString(webhook.signaturePrefix) ?? "";
+  const received = prefix && receivedRaw.startsWith(prefix)
+    ? receivedRaw.slice(prefix.length).trim()
+    : receivedRaw;
+
+  if (scheme === "header-secret") {
+    if (!received || !timingSafeEqualText(received, secret)) {
+      throw new WebhookRuntimeError("invalid_webhook_signature", 401);
+    }
+    return;
+  }
+
+  if (scheme === "bearer") {
+    const authorization = request.headers.get("authorization")?.trim() ?? "";
+    const token = authorization.toLowerCase().startsWith("bearer ")
+      ? authorization.slice(7).trim()
+      : "";
+    if (!token || !timingSafeEqualText(token, secret)) {
+      throw new WebhookRuntimeError("invalid_webhook_signature", 401);
+    }
+    return;
+  }
+
+  if (scheme === "hmac-sha256-base64") {
+    const expected = await hmacSha256Base64(secret, rawBody);
+    if (!received || !timingSafeEqualText(received, expected)) {
+      throw new WebhookRuntimeError("invalid_webhook_signature", 401);
+    }
+    return;
+  }
+
+  if (scheme === "hmac-sha256-hex") {
+    const expected = await hmacSha256Hex(secret, rawBody);
+    if (!received || !timingSafeEqualText(received.toLowerCase(), expected)) {
       throw new WebhookRuntimeError("invalid_webhook_signature", 401);
     }
     return;
@@ -260,24 +295,72 @@ async function verifyProviderWebhook(
   throw new WebhookRuntimeError("webhook_signature_scheme_not_supported", 503);
 }
 
-function extractUtilityReferences(payload: JsonRecord): string[] {
-  const data = optionalRecord(payload.data) ?? {};
-  const candidates = [
-    optionalString(data.tx_ref),
-    optionalString(data.customer_reference),
-    optionalString(data.flw_ref),
-    optionalString(data.reference),
-    optionalString(payload.tx_ref),
-    optionalString(payload.customer_reference),
-    optionalString(payload.reference),
+function extractUtilityReferences(payload: JsonRecord, webhook: JsonRecord): string[] {
+  const configuredPaths = Array.isArray(webhook.referencePaths)
+    ? webhook.referencePaths
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .map((value) => value.trim())
+      .slice(0, 20)
+    : [];
+  const defaultPaths = [
+    "data.tx_ref",
+    "data.customer_reference",
+    "data.flw_ref",
+    "data.reference",
+    "data.request_id",
+    "data.requestId",
+    "data.transaction_id",
+    "data.transactionId",
+    "tx_ref",
+    "customer_reference",
+    "reference",
+    "request_id",
+    "requestId",
+    "transaction_id",
+    "transactionId",
   ];
+  const candidates = [...configuredPaths, ...defaultPaths]
+    .map((path) => optionalString(readPath(payload, path)))
+    .filter((value): value is string => Boolean(value));
 
   return [...new Set(
     candidates
-      .filter((value): value is string => Boolean(value))
       .map((value) => value.trim())
       .filter((value) => value.length > 0 && value.length <= 200),
-  )].slice(0, 8);
+  )].slice(0, 12);
+}
+
+function readPath(value: unknown, path: string): unknown {
+  const segments = path
+    .replace(/\[(\d+)\]/g, ".$1")
+    .split(".")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  let current: unknown = value;
+  for (const segment of segments) {
+    if (Array.isArray(current)) {
+      const index = Number(segment);
+      if (!Number.isInteger(index) || index < 0 || index >= current.length) return undefined;
+      current = current[index];
+      continue;
+    }
+    if (!current || typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+function defaultSignatureHeader(scheme: string): string {
+  if (scheme === "bearer") return "authorization";
+  if (scheme.includes("hmac")) return "x-signature";
+  return "x-webhook-secret";
+}
+
+function safeWebhookHeaderName(value: string): string {
+  if (!/^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,80}$/.test(value)) {
+    throw new WebhookRuntimeError("webhook_signature_header_invalid", 503);
+  }
+  return value;
 }
 
 async function recordWebhookExecution(
@@ -350,6 +433,18 @@ async function webhookEventId(rawBody: string): Promise<string> {
 }
 
 async function hmacSha256Base64(secret: string, body: string): Promise<string> {
+  const signature = await hmacSha256(secret, body);
+  return bytesToBase64(signature);
+}
+
+async function hmacSha256Hex(secret: string, body: string): Promise<string> {
+  const signature = await hmacSha256(secret, body);
+  return Array.from(signature)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function hmacSha256(secret: string, body: string): Promise<Uint8Array> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw",
@@ -359,7 +454,7 @@ async function hmacSha256Base64(secret: string, body: string): Promise<string> {
     ["sign"],
   );
   const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
-  return bytesToBase64(new Uint8Array(signature));
+  return new Uint8Array(signature);
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -444,5 +539,6 @@ function requireString(value: unknown): string {
 }
 
 function optionalString(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
