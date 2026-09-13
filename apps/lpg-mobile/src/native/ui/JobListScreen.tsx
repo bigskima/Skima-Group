@@ -4,6 +4,8 @@ import { useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries, useLpgConfig } from "../api/domains";
 import {
+  cylinderPermanentIdentifier,
+  cylinderRegistryReference,
   displayReference,
   displayStatus,
   firstNumber,
@@ -96,7 +98,7 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
             </View>
             <View style={styles.searchCopy}>
               <Text style={[styles.searchTitle, { color: palette.ink }]}>Find an arrival</Text>
-              <Text style={[styles.searchBody, { color: palette.muted }]}>Search your station queue by order, cylinder or driver.</Text>
+              <Text style={[styles.searchBody, { color: palette.muted }]}>Search your station queue by order, permanent Cylinder ID, registry reference or driver.</Text>
             </View>
           </View>
           <TextInput
@@ -154,8 +156,8 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
             const tone = jobStatusTone(status);
             const reference = displayReference(order) ?? displayReference(job) ?? "Refill order";
             const cylinderReference = cylinder
-              ? displayReference(cylinder)
-              : firstString(job, ["cylinderReference", "cylinderIdentifier", "cylinder_reference", "cylinder_identifier"]);
+              ? cylinderPermanentIdentifier(cylinder)
+              : firstString(job, ["cylinderIdentifier", "cylinder_identifier", "cylinderReference", "cylinder_reference"]);
             const size = cylinder
               ? firstNumber(cylinder, ["sizeKg", "size_kg"])
               : firstNumber(job, ["cylinderSizeKg", "cylinder_size_kg"]);
@@ -254,9 +256,10 @@ function matchesStationVerificationSearch(job: PlatformRecord, rawQuery: string)
   const candidates = [
     displayReference(job),
     displayReference(order),
-    firstString(job, ["cylinderReference", "cylinderIdentifier", "cylinder_reference", "cylinder_identifier"]),
-    cylinder ? displayReference(cylinder) : null,
-    cylinder ? firstString(cylinder, ["cylinderIdentifier", "cylinder_identifier"]) : null,
+    firstString(job, ["cylinderIdentifier", "cylinder_identifier"]),
+    firstString(job, ["cylinderReference", "cylinder_reference"]),
+    cylinder ? cylinderPermanentIdentifier(cylinder) : null,
+    cylinder ? cylinderRegistryReference(cylinder) : null,
     firstString(job, ["driverReference", "driver_reference"]),
     firstString(job, ["driverDisplayName", "driver_display_name"]),
     driver ? displayReference(driver) : null,
