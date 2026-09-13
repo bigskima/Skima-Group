@@ -18,6 +18,8 @@ const ReadSchema = z.object({
 
 type MediaFit = "cover" | "contain" | "fill" | "none" | "scale-down";
 
+type RuntimeMediaVariant = "card" | "avatar" | "avatarCompact" | "hero" | "thumbnail";
+
 export function RuntimeMediaImage({
   assetId,
   label,
@@ -27,13 +29,14 @@ export function RuntimeMediaImage({
 }: {
   assetId: string | null;
   label: string;
-  variant?: "card" | "avatar" | "hero" | "thumbnail";
+  variant?: RuntimeMediaVariant;
   contentFit?: MediaFit;
   previewable?: boolean;
 }) {
   const session = useSession();
   const { palette } = useAppTheme();
   const [previewOpen, setPreviewOpen] = useState(false);
+  const compactAvatar = variant === "avatarCompact";
   const query = useQuery({
     queryKey: [
       "lpg-expo",
@@ -76,6 +79,7 @@ export function RuntimeMediaImage({
   const mediaStyle = [
     styles.image,
     variant === "avatar" && styles.avatar,
+    compactAvatar && styles.avatarCompact,
     variant === "hero" && styles.hero,
     variant === "thumbnail" && styles.thumbnail,
     { backgroundColor: palette.surfaceSubtle },
@@ -92,13 +96,15 @@ export function RuntimeMediaImage({
     />
   ) : (
     <View style={[styles.placeholder, ...mediaStyle, { backgroundColor: palette.surfaceSubtle }]}>
-      <ImageOff color={palette.muted} size={28} />
-      <Text
-        numberOfLines={variant === "thumbnail" ? 2 : undefined}
-        style={[styles.label, { color: palette.muted }, variant === "thumbnail" && styles.thumbnailLabel]}
-      >
-        {placeholderLabel}
-      </Text>
+      <ImageOff color={palette.muted} size={compactAvatar ? 18 : 28} />
+      {!compactAvatar ? (
+        <Text
+          numberOfLines={variant === "thumbnail" ? 2 : undefined}
+          style={[styles.label, { color: palette.muted }, variant === "thumbnail" && styles.thumbnailLabel]}
+        >
+          {placeholderLabel}
+        </Text>
+      ) : null}
     </View>
   );
 
@@ -151,6 +157,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   avatar: { width: 96, height: 96, aspectRatio: 1, borderRadius: 48 },
+  avatarCompact: { width: 46, height: 46, aspectRatio: 1, borderRadius: 16 },
   hero: { aspectRatio: 16 / 10, borderRadius: radii.lg },
   thumbnail: { width: 92, height: 92, aspectRatio: 1, borderRadius: 22 },
   placeholder: {
