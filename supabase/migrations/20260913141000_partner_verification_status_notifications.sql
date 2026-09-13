@@ -84,24 +84,12 @@ begin
   message_key := 'verification-session:' || new.id::text || ':' || new.status;
 
   begin
-    insert into public.communication_messages (
-      channel,
-      purpose,
-      recipient_entity_type,
-      recipient_entity_id,
-      status,
-      payload,
-      source,
-      idempotency_key,
-      metadata,
-      created_by
-    )
-    values (
+    perform public.queue_communication_message(
       'in_app',
       purpose_key,
       'user',
       application_record.applicant_user_id,
-      'queued',
+      null,
       jsonb_build_object(
         'title', notification_title,
         'body', notification_body,
@@ -112,6 +100,7 @@ begin
         'applicationId', new.application_id,
         'verificationSessionId', new.id
       ),
+      'provider.communication.sandbox',
       'skima.verification.status',
       message_key,
       jsonb_strip_nulls(jsonb_build_object(
@@ -124,24 +113,11 @@ begin
         'verificationStatus', new.status,
         'providerStatus', new.provider_status,
         'failureCode', new.failure_code
-      )),
-      auth.uid()
-    )
-    on conflict (source, idempotency_key) do update
-    set purpose = excluded.purpose,
-        recipient_entity_type = excluded.recipient_entity_type,
-        recipient_entity_id = excluded.recipient_entity_id,
-        status = case
-          when public.communication_messages.status in ('sent','delivered')
-            then public.communication_messages.status
-          else excluded.status
-        end,
-        payload = excluded.payload,
-        metadata = public.communication_messages.metadata || excluded.metadata,
-        updated_at = timezone('utc', now());
+      ))
+    );
   exception when others then
     -- Provider/webhook processing is authoritative. Never fail verification
-    -- reconciliation solely because the notification read model is unavailable.
+    -- reconciliation solely because notification delivery is unavailable.
     raise warning 'verification status notification could not be queued for session %: %',
       new.id,
       sqlerrm;
