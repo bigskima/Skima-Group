@@ -34,15 +34,20 @@ Deno.test("LPG shared mobile chrome protects compact layouts and safe areas", as
   requireText(modal, 'keyboardShouldPersistTaps="handled"', "Shared dialogs must remain usable with forms and the on-screen keyboard.");
 });
 
-Deno.test("LPG public entry and AI surfaces avoid unreadably small helper text", async () => {
-  const [welcome, launcher] = await Promise.all([
+Deno.test("LPG public entry, auth and AI surfaces avoid unreadably small helper text", async () => {
+  const [welcome, auth, launcher] = await Promise.all([
     read("apps/lpg-mobile/app/(auth)/welcome.tsx"),
+    read("apps/lpg-mobile/src/native/ui/AuthShell.tsx"),
     read("apps/lpg-mobile/src/native/ui/AiAssistantLauncher.tsx"),
   ]);
 
   rejectText(welcome, 'roleNote: { fontSize: 8', "Welcome role guidance must not regress to 8px text.");
   rejectText(welcome, 'trustText: { fontSize: 9', "Welcome trust labels must remain readable.");
   requireText(welcome, 'roleNote: { fontSize: 10', "Welcome role notes must retain the readability pass.");
+  rejectText(auth, 'roleBody: { fontSize: 8', "Login and registration role guidance must not regress to 8px text.");
+  rejectText(auth, 'privacyText: { fontSize: 9', "Login and registration security guidance must remain readable.");
+  requireText(auth, 'roleBody: { fontSize: 10', "Login and registration role guidance must retain the readability pass.");
+  requireText(auth, 'privacyText: { fontSize: 10', "Login and registration privacy guidance must retain the readability pass.");
   rejectText(launcher, 'fontSize: 8', "AI launcher helper and action text must not regress to 8px.");
   requireText(launcher, '<Text numberOfLines={2} style={styles.actionText}', "AI launcher actions must remain readable when labels are longer.");
 });
