@@ -33,6 +33,8 @@ import { SectionHeader } from "./SectionHeader";
 import { StatusPill } from "./StatusPill";
 import { presentVehicleEligibility } from "./vehicleEligibility";
 
+type VehicleFormStep = "details" | "capacity" | "review";
+
 export function VehicleWorkflowScreen() {
   const session = useSession();
   const { palette } = useAppTheme();
@@ -84,6 +86,7 @@ export function VehicleWorkflowScreen() {
   );
 
   const [showForm, setShowForm] = useState(false);
+  const [formStep, setFormStep] = useState<VehicleFormStep>("details");
   const [typeKey, setTypeKey] = useState("");
   const [manufacturer, setManufacturer] = useState("");
   const [model, setModel] = useState("");
@@ -109,6 +112,13 @@ export function VehicleWorkflowScreen() {
         setColour(String(draft.values.colour ?? ""));
         setOwnership(String(draft.values.ownership ?? "owned"));
         setCapacity(String(draft.values.capacity ?? ""));
+        setFormStep(
+          draft.step === "vehicle-review"
+            ? "review"
+            : draft.step === "vehicle-capacity"
+              ? "capacity"
+              : "details",
+        );
         setShowForm(true);
       }
       setHydrated(true);
@@ -124,17 +134,50 @@ export function VehicleWorkflowScreen() {
       version: 1,
       type: "driver-vehicle-registration",
       ownerProfileId: owner,
-      step: "vehicle-details",
+      step: `vehicle-${formStep}`,
       values: { typeKey, manufacturer, model, year, registration, colour, ownership, capacity },
       pendingMedia: [],
       createdAt: draftCreatedAt.current,
       updatedAt: now,
     });
-  }, [capacity, colour, hydrated, manufacturer, model, owner, ownership, registration, typeKey, year]);
+  }, [capacity, colour, formStep, hydrated, manufacturer, model, owner, ownership, registration, typeKey, year]);
 
   const create = useGatewayMutation({ path: "/runtime/applications", schema: ActionResponseSchema });
   const update = useGatewayMutation({ path: "/runtime/applications/payload", schema: ActionResponseSchema });
   const submit = useGatewayMutation({ path: "/runtime/applications/submit", schema: ActionResponseSchema });
+
+  const openForm = () => {
+    setMessage(null);
+    setFormStep("details");
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setMessage(null);
+    setFormStep("details");
+    setShowForm(false);
+  };
+
+  const continueFromDetails = () => {
+    setMessage(null);
+    if (!typeKey || !manufacturer.trim() || !model.trim() || !year.trim() || !registration.trim() || !colour.trim()) {
+      setMessageSuccess(false);
+      setMessage("Complete the vehicle details before continuing to ownership and capacity.");
+      return;
+    }
+    setFormStep("capacity");
+  };
+
+  const continueToReview = () => {
+    setMessage(null);
+    const load = Number(capacity);
+    if (!ownership || !Number.isFinite(load) || load <= 0) {
+      setMessageSuccess(false);
+      setMessage("Choose the ownership type and enter a valid maximum load before reviewing the vehicle.");
+      return;
+    }
+    setFormStep("review");
+  };
 
   const send = async () => {
     setMessage(null);
@@ -202,7 +245,7 @@ export function VehicleWorkflowScreen() {
         idempotencyKey: idempotencyKey("vehicle-application-submit", applicationId),
       });
       await client.invalidateQueries({ queryKey: ["lpg-expo", "applications"] });
-      setShowForm(false);
+      closeForm();
       setMessageSuccess(true);
       setMessage("Vehicle submitted for SKIMA review.");
     } catch (cause) {
@@ -228,6 +271,7 @@ export function VehicleWorkflowScreen() {
     ? assignedVehicle.eligibility as PlatformRecord
     : null;
   const eligibilityPresentation = presentVehicleEligibility(assignedEligibility);
+  const selectedVehicleType = (vehicleTypes.data ?? []).find((item) => firstString(item, ["key"]) === typeKey);
 
   return (
     <Screen
@@ -240,7 +284,7 @@ export function VehicleWorkflowScreen() {
           size="sm"
           variant={showForm ? "ghost" : "primary"}
           icon={!showForm ? <Plus color="#FFFFFF" size={16} /> : undefined}
-          onPress={() => setShowForm((value) => !value)}
+          onPress={showForm ? closeForm : openForm}
         />
       }
     >
@@ -316,95 +360,130 @@ export function VehicleWorkflowScreen() {
                 <View style={[styles.formIcon, { backgroundColor: palette.brandSoft }]}><CarFront color={palette.brand} size={22} /></View>
                 <View style={styles.formCopy}>
                   <Text style={[styles.formTitle, { color: palette.ink }]}>Vehicle approval application</Text>
-                  <Text style={[styles.formBody, { color: palette.muted }]}>Add the vehicle you intend to use. SKIMA will verify what it can automatically and request only the remaining legal or safety evidence.</Text>
+                  <Text style={[styles.formBody, { color: palette.muted }]}>Complete one focused section at a time. Your draft is saved automatically and the existing SKIMA verification flow stays unchanged.</Text>
                 </View>
               </View>
 
-              <FieldSection label="Vehicle type">
-                <View style={styles.options}>
-                  {(vehicleTypes.data ?? [])
-                    .filter((item) => firstString(item, ["status"]) === "active")
-                    .map((item) => {
-                      const key = firstString(item, ["key"]) ?? "";
-                      const selected = typeKey === key;
-                      return (
-                        <Pressable
-                          key={key}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected }}
-                          onPress={() => setTypeKey(key)}
-                          style={({ pressed }) => [
-                            styles.option,
-                            {
-                              backgroundColor: selected ? palette.brand : palette.surfaceSubtle,
-                              borderColor: selected ? palette.brand : palette.border,
-                              opacity: pressed ? 0.82 : 1,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.optionText, { color: selected ? "#FFFFFF" : palette.ink }]}>{firstString(item, ["display_name", "displayName"]) ?? key}</Text>
-                          {selected ? <ShieldCheck color="#FFFFFF" size={16} /> : null}
-                        </Pressable>
-                      );
-                    })}
-                </View>
-              </FieldSection>
+              <VehicleFormProgress step={formStep} />
 
-              <View style={styles.twoColumn}>
-                <TextField label="Manufacturer" value={manufacturer} onChangeText={setManufacturer} placeholder="e.g. Toyota" />
-                <TextField label="Model" value={model} onChangeText={setModel} placeholder="e.g. Hiace" />
-              </View>
-              <View style={styles.twoColumn}>
-                <TextField label="Year" value={year} onChangeText={setYear} placeholder="2022" keyboardType="number-pad" />
-                <TextField label="Colour" value={colour} onChangeText={setColour} placeholder="White" />
-              </View>
-              <TextField label="Registration number" value={registration} onChangeText={setRegistration} placeholder="Vehicle plate number" autoCapitalize="characters" />
+              {formStep === "details" ? (
+                <>
+                  <FieldSection label="Vehicle type">
+                    <View style={styles.options}>
+                      {(vehicleTypes.data ?? [])
+                        .filter((item) => firstString(item, ["status"]) === "active")
+                        .map((item) => {
+                          const key = firstString(item, ["key"]) ?? "";
+                          const selected = typeKey === key;
+                          return (
+                            <Pressable
+                              key={key}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected }}
+                              onPress={() => setTypeKey(key)}
+                              style={({ pressed }) => [
+                                styles.option,
+                                {
+                                  backgroundColor: selected ? palette.brand : palette.surfaceSubtle,
+                                  borderColor: selected ? palette.brand : palette.border,
+                                  opacity: pressed ? 0.82 : 1,
+                                },
+                              ]}
+                            >
+                              <Text style={[styles.optionText, { color: selected ? "#FFFFFF" : palette.ink }]}>{firstString(item, ["display_name", "displayName"]) ?? key}</Text>
+                              {selected ? <ShieldCheck color="#FFFFFF" size={16} /> : null}
+                            </Pressable>
+                          );
+                        })}
+                    </View>
+                  </FieldSection>
 
-              <FieldSection label="Ownership">
-                <View style={styles.options}>
-                  {["owned", "leased", "rented"].map((value) => {
-                    const selected = ownership === value;
-                    return (
-                      <Pressable
-                        key={value}
-                        onPress={() => setOwnership(value)}
-                        style={({ pressed }) => [
-                          styles.option,
-                          {
-                            backgroundColor: selected ? palette.brand : palette.surfaceSubtle,
-                            borderColor: selected ? palette.brand : palette.border,
-                            opacity: pressed ? 0.82 : 1,
-                          },
-                        ]}
-                      >
-                        <Text style={[styles.optionText, { color: selected ? "#FFFFFF" : palette.ink }]}>{friendly(value)}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </FieldSection>
+                  <View style={styles.twoColumn}>
+                    <TextField label="Manufacturer" value={manufacturer} onChangeText={setManufacturer} placeholder="e.g. Toyota" />
+                    <TextField label="Model" value={model} onChangeText={setModel} placeholder="e.g. Hiace" />
+                  </View>
+                  <View style={styles.twoColumn}>
+                    <TextField label="Year" value={year} onChangeText={setYear} placeholder="2022" keyboardType="number-pad" />
+                    <TextField label="Colour" value={colour} onChangeText={setColour} placeholder="White" />
+                  </View>
+                  <TextField label="Registration number" value={registration} onChangeText={setRegistration} placeholder="Vehicle plate number" autoCapitalize="characters" />
 
-              <TextField
-                label="Verified maximum load (kg)"
-                value={capacity}
-                onChangeText={setCapacity}
-                placeholder="Enter safe load capacity"
-                keyboardType="decimal-pad"
-                hint="Use the supported vehicle load figure that should be reviewed for LPG dispatch eligibility."
-              />
+                  <AppButton label="Continue to ownership & capacity" fullWidth size="lg" onPress={continueFromDetails} />
+                </>
+              ) : null}
 
-              <View style={[styles.policyNote, { backgroundColor: palette.surfaceSubtle }]}>
-                <Gauge color={palette.mutedStrong} size={18} />
-                <Text style={[styles.policyText, { color: palette.muted }]}>Job offers depend on your availability, approved service areas, vehicle and the order requirements.</Text>
-              </View>
+              {formStep === "capacity" ? (
+                <>
+                  <FieldSection label="Ownership">
+                    <View style={styles.options}>
+                      {["owned", "leased", "rented"].map((value) => {
+                        const selected = ownership === value;
+                        return (
+                          <Pressable
+                            key={value}
+                            onPress={() => setOwnership(value)}
+                            style={({ pressed }) => [
+                              styles.option,
+                              {
+                                backgroundColor: selected ? palette.brand : palette.surfaceSubtle,
+                                borderColor: selected ? palette.brand : palette.border,
+                                opacity: pressed ? 0.82 : 1,
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.optionText, { color: selected ? "#FFFFFF" : palette.ink }]}>{friendly(value)}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </FieldSection>
 
-              <AppButton
-                label="Continue vehicle verification"
-                fullWidth
-                size="lg"
-                loading={create.isPending || update.isPending || submit.isPending}
-                onPress={() => void send()}
-              />
+                  <TextField
+                    label="Verified maximum load (kg)"
+                    value={capacity}
+                    onChangeText={setCapacity}
+                    placeholder="Enter safe load capacity"
+                    keyboardType="decimal-pad"
+                    hint="Use the supported vehicle load figure that should be reviewed for LPG dispatch eligibility."
+                  />
+
+                  <View style={[styles.policyNote, { backgroundColor: palette.surfaceSubtle }]}>
+                    <Gauge color={palette.mutedStrong} size={18} />
+                    <Text style={[styles.policyText, { color: palette.muted }]}>Job offers depend on your availability, approved service areas, vehicle and the order requirements.</Text>
+                  </View>
+
+                  <AppButton label="Back to vehicle details" fullWidth variant="ghost" onPress={() => setFormStep("details")} />
+                  <AppButton label="Review vehicle" fullWidth size="lg" onPress={continueToReview} />
+                </>
+              ) : null}
+
+              {formStep === "review" ? (
+                <>
+                  <View style={[styles.reviewSummary, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+                    <Text style={[styles.reviewSummaryTitle, { color: palette.ink }]}>Review before verification</Text>
+                    <VehicleReviewRow label="Vehicle type" value={firstString(selectedVehicleType, ["display_name", "displayName"]) ?? friendly(typeKey)} />
+                    <VehicleReviewRow label="Vehicle" value={`${manufacturer.trim()} ${model.trim()} · ${year.trim()}`} />
+                    <VehicleReviewRow label="Registration" value={registration.trim().toUpperCase()} />
+                    <VehicleReviewRow label="Colour" value={colour.trim()} />
+                    <VehicleReviewRow label="Ownership" value={friendly(ownership)} />
+                    <VehicleReviewRow label="Maximum load" value={`${capacity.trim()} kg`} />
+                  </View>
+
+                  <View style={[styles.policyNote, { backgroundColor: palette.brandSoft }]}>
+                    <ShieldCheck color={palette.brand} size={18} />
+                    <Text style={[styles.policyText, { color: palette.mutedStrong }]}>Continuing uses the existing SKIMA vehicle application and automatic-verification rules. Required documents are requested only when the runtime says they are still needed.</Text>
+                  </View>
+
+                  <AppButton label="Back to ownership & capacity" fullWidth variant="ghost" onPress={() => setFormStep("capacity")} />
+                  <AppButton
+                    label="Continue vehicle verification"
+                    fullWidth
+                    size="lg"
+                    loading={create.isPending || update.isPending || submit.isPending}
+                    onPress={() => void send()}
+                  />
+                </>
+              ) : null}
             </View>
           ) : null}
 
@@ -446,7 +525,7 @@ export function VehicleWorkflowScreen() {
                 icon={<Truck color={palette.brand} size={27} />}
                 title="No approved vehicle yet"
                 description="Add the vehicle you intend to use so SKIMA can review its type and capacity."
-                action={<AppButton label="Add vehicle" onPress={() => setShowForm(true)} />}
+                action={<AppButton label="Add vehicle" onPress={openForm} />}
               />
             )}
           </View>
@@ -459,6 +538,41 @@ export function VehicleWorkflowScreen() {
         </View>
       ) : null}
     </Screen>
+  );
+}
+
+function VehicleFormProgress({ step }: { step: VehicleFormStep }) {
+  const { palette } = useAppTheme();
+  const steps: Array<{ key: VehicleFormStep; label: string }> = [
+    { key: "details", label: "Vehicle" },
+    { key: "capacity", label: "Capacity" },
+    { key: "review", label: "Review" },
+  ];
+  const activeIndex = steps.findIndex((item) => item.key === step);
+
+  return (
+    <View style={styles.progressRow} accessibilityLabel={`Vehicle application step ${activeIndex + 1} of ${steps.length}`}>
+      {steps.map((item, index) => {
+        const active = item.key === step;
+        const complete = index < activeIndex;
+        return (
+          <View key={item.key} style={[styles.progressStep, { backgroundColor: active ? palette.brand : complete ? palette.successSoft : palette.surfaceSubtle, borderColor: active ? palette.brand : complete ? palette.success : palette.border }]}>
+            <Text style={[styles.progressNumber, { color: active ? "#FFFFFF" : complete ? palette.success : palette.mutedStrong }]}>{complete ? "✓" : index + 1}</Text>
+            <Text style={[styles.progressLabel, { color: active ? "#FFFFFF" : complete ? palette.success : palette.mutedStrong }]}>{item.label}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function VehicleReviewRow({ label, value }: { label: string; value: string }) {
+  const { palette } = useAppTheme();
+  return (
+    <View style={[styles.reviewSummaryRow, { borderBottomColor: palette.border }]}>
+      <Text style={[styles.reviewSummaryLabel, { color: palette.muted }]}>{label}</Text>
+      <Text style={[styles.reviewSummaryValue, { color: palette.ink }]}>{value || "Not provided"}</Text>
+    </View>
   );
 }
 
@@ -551,6 +665,10 @@ const styles = StyleSheet.create({
   formCopy: { flex: 1, gap: 3 },
   formTitle: { ...typography.subheading, fontSize: 16 },
   formBody: { ...typography.caption, lineHeight: 18 },
+  progressRow: { flexDirection: "row", gap: spacing.sm },
+  progressStep: { flex: 1, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.pill, paddingHorizontal: spacing.sm },
+  progressNumber: { ...typography.caption, fontWeight: "900", fontSize: 11 },
+  progressLabel: { ...typography.caption, fontWeight: "900", fontSize: 11 },
   fieldSection: { gap: spacing.sm },
   fieldLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" },
   options: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
@@ -562,6 +680,11 @@ const styles = StyleSheet.create({
   hint: { ...typography.caption, lineHeight: 17 },
   policyNote: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, borderRadius: radii.md, padding: spacing.md },
   policyText: { flex: 1, ...typography.caption, lineHeight: 18 },
+  reviewSummary: { gap: 0, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, paddingHorizontal: spacing.md },
+  reviewSummaryTitle: { ...typography.bodyStrong, fontSize: 15, paddingVertical: spacing.md },
+  reviewSummaryRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: spacing.sm + 2 },
+  reviewSummaryLabel: { ...typography.caption, flex: 0.8 },
+  reviewSummaryValue: { ...typography.bodyStrong, fontSize: 13, flex: 1.2, textAlign: "right" },
   vehicleList: { gap: spacing.md },
   vehicleCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
   vehicleHead: { flexDirection: "row", alignItems: "center", gap: spacing.md },
