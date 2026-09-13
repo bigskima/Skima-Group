@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+// Shared contract and normalization helpers for the guided utility setup and advanced screens.
 export const UtilityRowSchema = z.record(z.unknown());
 export const UtilitySnapshotSchema = z.object({
   categories: z.array(UtilityRowSchema),
