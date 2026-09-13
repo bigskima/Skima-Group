@@ -121,14 +121,14 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
             <AiContextAction
               workspace="driver"
               label="Explain my earnings"
-              detail="Ask about posted delivery pay, pending movements or withdrawals. Nothing is moved until you choose an action."
+              detail="Ask about posted delivery pay, pending movements or withdrawals. Nothing is sent until you choose Send. Nothing is moved until you choose an action."
               prompt="Explain my recent Driver wallet activity using only records I can access. Distinguish posted delivery earnings, pending or processing movements, withdrawals, refunds and reversals. Do not estimate earnings, expose internal ledger accounts, move funds or change a payout."
             />
           ) : (
             <AiContextAction
               workspace="station"
               label="Explain station earnings"
-              detail="Ask about LPG earnings, pending movements, withdrawals or refunds. Nothing is moved until you choose an action."
+              detail="Ask about LPG earnings, pending movements, withdrawals or refunds. Nothing is sent until you choose Send. Nothing is moved until you choose an action."
               prompt="Explain my recent Station wallet activity using only records I can access. Distinguish posted LPG earnings, pending or processing movements, withdrawals, refunds and reversals. Do not expose platform margin, Driver payout, escrow accounts or internal ledger implementation, and do not move funds."
             />
           )}
