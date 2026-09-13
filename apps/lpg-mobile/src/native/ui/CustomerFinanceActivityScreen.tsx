@@ -21,7 +21,8 @@ import { ScreenSkeleton } from "./ScreenSkeleton";
 import { TransactionStatusPill } from "./TransactionStatusPill";
 
 type TransactionFilter = "all" | "completed" | "pending" | "issues";
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 8;
+const HISTORY_WINDOW = 100;
 
 export function TransactionsScreen() {
   const { palette } = useAppTheme();
@@ -30,7 +31,7 @@ export function TransactionsScreen() {
   const walletId = walletRecordId(wallet);
   const [filter, setFilter] = useState<TransactionFilter>("all");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const activity = useWalletActivity(walletId, visibleCount);
+  const activity = useWalletActivity(walletId, HISTORY_WINDOW);
   const rows = activity.data?.items ?? [];
   const succeededCount = rows.filter((item) => canonicalTransactionStatus(displayStatus(item)) === "successful").length;
   const pendingCount = rows.filter((item) => ["pending", "processing"].includes(canonicalTransactionStatus(displayStatus(item)))).length;
@@ -42,11 +43,14 @@ export function TransactionsScreen() {
     if (filter === "issues") return ["cancelled", "failed", "reversed", "expired"].includes(status);
     return true;
   });
+  const visibleRows = filteredRows.slice(0, visibleCount);
+  const remainingRows = Math.max(filteredRows.length - visibleCount, 0);
   const loading = wallets.isPending || (Boolean(walletId) && activity.isPending);
   const error = wallets.error ?? activity.error;
 
   const selectFilter = (nextFilter: TransactionFilter) => {
     setFilter(nextFilter);
+    setVisibleCount(PAGE_SIZE);
   };
 
   return (
@@ -76,7 +80,7 @@ export function TransactionsScreen() {
               <Text style={styles.heroEyebrow}>WALLET ACTIVITY</Text>
               <Text style={styles.heroTitle}>{activity.data?.totalCount ?? rows.length} {(activity.data?.totalCount ?? rows.length) === 1 ? "transaction" : "transactions"}</Text>
               <Text style={styles.heroBody}>
-                {succeededCount} completed in view · {pendingCount} pending{issueCount ? ` · ${issueCount} need attention` : ""}
+                {succeededCount} completed in recent history · {pendingCount} pending{issueCount ? ` · ${issueCount} need attention` : ""}
               </Text>
             </View>
           </View>
@@ -90,26 +94,32 @@ export function TransactionsScreen() {
                 {issueCount ? <FilterChip label="Issues" active={filter === "issues"} onPress={() => selectFilter("issues")} /> : null}
               </View>
 
-              {filteredRows.length ? (
+              {visibleRows.length ? (
                 <View style={styles.list}>
-                  {filteredRows.map((item, index) => (
+                  {visibleRows.map((item, index) => (
                     <WalletActivityRow key={firstString(item, ["activityKey"]) ?? String(index)} item={item} />
                   ))}
                 </View>
               ) : (
                 <View style={[styles.filteredEmpty, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
-                  <Text style={[styles.filteredEmptyTitle, { color: palette.ink }]}>No {filter} transactions in this view</Text>
-                  <Text style={[styles.filteredEmptyText, { color: palette.muted }]}>Choose another filter or load older activity.</Text>
+                  <Text style={[styles.filteredEmptyTitle, { color: palette.ink }]}>No {filter} transactions in recent history</Text>
+                  <Text style={[styles.filteredEmptyText, { color: palette.muted }]}>Choose another filter to review your wallet activity.</Text>
                 </View>
               )}
 
-              {activity.data?.hasMore ? (
+              {remainingRows > 0 ? (
                 <AppButton
-                  label="Load older transactions"
+                  label={`Show ${Math.min(PAGE_SIZE, remainingRows)} older transactions`}
                   variant="secondary"
-                  loading={activity.isFetching}
                   onPress={() => setVisibleCount((count) => count + PAGE_SIZE)}
                 />
+              ) : null}
+
+              {activity.data?.hasMore ? (
+                <View style={[styles.historyLimit, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+                  <ReceiptText color={palette.mutedStrong} size={17} />
+                  <Text style={[styles.historyLimitText, { color: palette.muted }]}>Showing the latest {HISTORY_WINDOW} wallet records. Older financial records remain preserved by SKIMA.</Text>
+                </View>
               ) : null}
             </>
           ) : (
@@ -255,6 +265,8 @@ const styles = StyleSheet.create({
   filteredEmpty: { alignItems: "center", gap: 4, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.lg },
   filteredEmptyTitle: { ...typography.bodyStrong, fontSize: 13 },
   filteredEmptyText: { ...typography.caption, textAlign: "center" },
+  historyLimit: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  historyLimitText: { flex: 1, ...typography.caption, lineHeight: 17 },
   note: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm + 2, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg },
   noteText: { flex: 1, ...typography.caption, lineHeight: 18 },
 });
