@@ -106,8 +106,16 @@ export function UtilityBillsScreen() {
   const fixedAmount = firstNumber(product, ["fixed_amount", "fixedAmount"]);
   const minimumAmount = firstNumber(product, ["minimum_amount", "minimumAmount"]);
   const maximumAmount = firstNumber(product, ["maximum_amount", "maximumAmount"]);
+  const serviceFeePercent =
+    firstNumber(product, ["service_fee_percent", "serviceFeePercent"]) ?? 0;
+  const serviceFeeFixed =
+    firstNumber(product, ["service_fee_fixed", "serviceFeeFixed"]) ?? 0;
   const numericAmount = fixedAmount ?? Number(amount);
   const amountIsValidNumber = Number.isFinite(numericAmount) && numericAmount > 0;
+  const serviceFee = amountIsValidNumber
+    ? Math.max(0, numericAmount * serviceFeePercent / 100 + serviceFeeFixed)
+    : 0;
+  const estimatedTotal = amountIsValidNumber ? numericAmount + serviceFee : 0;
   const belowMinimum = Boolean(
     amountIsValidNumber &&
       minimumAmount !== null &&
@@ -119,7 +127,7 @@ export function UtilityBillsScreen() {
       numericAmount > maximumAmount,
   );
   const insufficientBalance = Boolean(
-    amountIsValidNumber && numericAmount > balance,
+    amountIsValidNumber && estimatedTotal > balance,
   );
   const amountError = !amount.trim() && fixedAmount === null
     ? null
@@ -298,21 +306,16 @@ export function UtilityBillsScreen() {
               <Text style={[styles.sectionEyebrow, { color: palette.brand }]}>
                 OFFERS
               </Text>
-              <Text style={[styles.sectionTitle, { color: palette.ink }]}>
-                Available savings
-              </Text>
+              <Text style={[styles.sectionTitle, { color: palette.ink }]}>Available savings</Text>
             </View>
             {extraOffers ? (
-              <Text style={[styles.sectionCount, { color: palette.muted }]}>
-                +{extraOffers} more
-              </Text>
+              <Text style={[styles.sectionCount, { color: palette.muted }]}>+{extraOffers} more</Text>
             ) : null}
           </View>
 
           <View style={styles.offerStrip}>
             {visibleOffers.map((offer) => {
-              const cashback =
-                firstString(offer, ["offer_type"]) === "cashback";
+              const cashback = firstString(offer, ["offer_type"]) === "cashback";
               const offerKey = firstString(offer, ["offer_key"]) ?? "";
               const applied = !cashback && promo === offerKey;
               return (
@@ -330,9 +333,7 @@ export function UtilityBillsScreen() {
                   style={({ pressed }) => [
                     styles.offerCard,
                     {
-                      backgroundColor: cashback
-                        ? palette.successSoft
-                        : palette.brandSoft,
+                      backgroundColor: cashback ? palette.successSoft : palette.brandSoft,
                       borderColor: applied ? palette.brand : palette.border,
                       opacity: pressed ? 0.76 : 1,
                     },
@@ -352,10 +353,7 @@ export function UtilityBillsScreen() {
                     >
                       {firstString(offer, ["value_label"]) ?? "Offer"}
                     </Text>
-                    <Text
-                      numberOfLines={1}
-                      style={[styles.offerName, { color: palette.ink }]}
-                    >
+                    <Text numberOfLines={1} style={[styles.offerName, { color: palette.ink }]}>
                       {firstString(offer, ["offer_name"]) ?? "Bill offer"}
                     </Text>
                   </View>
@@ -379,17 +377,13 @@ export function UtilityBillsScreen() {
       {catalog.isPending ? (
         <View style={styles.loading}>
           <ActivityIndicator color={palette.brand} size="large" />
-          <Text style={[styles.loadingText, { color: palette.muted }]}>
-            Loading bill services…
-          </Text>
+          <Text style={[styles.loadingText, { color: palette.muted }]}>Loading bill services…</Text>
         </View>
       ) : catalog.error ? (
         <EmptyState
           title="Bills are unavailable"
           description="We could not load bill services. Try again shortly."
-          action={
-            <AppButton label="Retry" onPress={() => void catalog.refetch()} />
-          }
+          action={<AppButton label="Retry" onPress={() => void catalog.refetch()} />}
         />
       ) : categories.length === 0 ? (
         <EmptyState
@@ -401,16 +395,10 @@ export function UtilityBillsScreen() {
           <View style={styles.categorySection}>
             <View style={styles.sectionHeader}>
               <View>
-                <Text style={[styles.sectionEyebrow, { color: palette.brand }]}>
-                  CHOOSE SERVICE
-                </Text>
-                <Text style={[styles.sectionTitle, { color: palette.ink }]}>
-                  What are you paying for?
-                </Text>
+                <Text style={[styles.sectionEyebrow, { color: palette.brand }]}>CHOOSE SERVICE</Text>
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>What are you paying for?</Text>
               </View>
-              <Text style={[styles.sectionCount, { color: palette.muted }]}>
-                {categories.length} services
-              </Text>
+              <Text style={[styles.sectionCount, { color: palette.muted }]}>{categories.length} services</Text>
             </View>
 
             <ScrollView
@@ -429,12 +417,8 @@ export function UtilityBillsScreen() {
                     style={({ pressed }) => [
                       styles.categoryChip,
                       {
-                        backgroundColor: selected
-                          ? palette.brandSoft
-                          : palette.surface,
-                        borderColor: selected
-                          ? palette.brand
-                          : palette.border,
+                        backgroundColor: selected ? palette.brandSoft : palette.surface,
+                        borderColor: selected ? palette.brand : palette.border,
                         opacity: pressed ? 0.78 : 1,
                       },
                     ]}
@@ -442,18 +426,10 @@ export function UtilityBillsScreen() {
                     <View
                       style={[
                         styles.categoryIcon,
-                        {
-                          backgroundColor: selected
-                            ? palette.brand
-                            : palette.surfaceSubtle,
-                        },
+                        { backgroundColor: selected ? palette.brand : palette.surfaceSubtle },
                       ]}
                     >
-                      {serviceIcon(
-                        category.icon,
-                        selected ? "#FFFFFF" : palette.brand,
-                        18,
-                      )}
+                      {serviceIcon(category.icon, selected ? "#FFFFFF" : palette.brand, 18)}
                     </View>
                     <Text
                       numberOfLines={1}
@@ -479,30 +455,15 @@ export function UtilityBillsScreen() {
             >
               <View style={styles.productPanelHeader}>
                 <View style={styles.productPanelLead}>
-                  <View
-                    style={[
-                      styles.productPanelIcon,
-                      { backgroundColor: palette.brandSoft },
-                    ]}
-                  >
+                  <View style={[styles.productPanelIcon, { backgroundColor: palette.brandSoft }]}>
                     {serviceIcon(activeGroup.icon, palette.brand, 21)}
                   </View>
                   <View style={styles.productPanelCopy}>
-                    <Text
-                      style={[styles.productPanelTitle, { color: palette.ink }]}
-                    >
-                      {activeGroup.name}
-                    </Text>
-                    <Text
-                      style={[styles.productPanelMeta, { color: palette.muted }]}
-                    >
-                      Choose a plan or company to continue
-                    </Text>
+                    <Text style={[styles.productPanelTitle, { color: palette.ink }]}>{activeGroup.name}</Text>
+                    <Text style={[styles.productPanelMeta, { color: palette.muted }]}>Choose a plan or company to continue</Text>
                   </View>
                 </View>
-                <Text style={[styles.sectionCount, { color: palette.muted }]}>
-                  {activeGroup.products.length}
-                </Text>
+                <Text style={[styles.sectionCount, { color: palette.muted }]}>{activeGroup.products.length}</Text>
               </View>
 
               <View style={styles.productGrid}>
@@ -525,11 +486,7 @@ export function UtilityBillsScreen() {
                       <View
                         style={[
                           styles.productAccent,
-                          {
-                            backgroundColor: available
-                              ? palette.brandSoft
-                              : palette.soft,
-                          },
+                          { backgroundColor: available ? palette.brandSoft : palette.soft },
                         ]}
                       >
                         {available ? (
@@ -539,10 +496,7 @@ export function UtilityBillsScreen() {
                         )}
                       </View>
                       <View style={styles.productCopy}>
-                        <Text
-                          numberOfLines={2}
-                          style={[styles.productTitle, { color: palette.ink }]}
-                        >
+                        <Text numberOfLines={2} style={[styles.productTitle, { color: palette.ink }]}>
                           {firstString(item, ["product_name"]) ?? "Bill payment"}
                         </Text>
                         <Text
@@ -554,9 +508,7 @@ export function UtilityBillsScreen() {
                           {available ? "Pay now" : "Coming soon"}
                         </Text>
                       </View>
-                      {available ? (
-                        <ChevronRight color={palette.muted} size={17} />
-                      ) : null}
+                      {available ? <ChevronRight color={palette.muted} size={17} /> : null}
                     </Pressable>
                   );
                 })}
@@ -588,16 +540,10 @@ export function UtilityBillsScreen() {
         >
           <View style={styles.sectionHeader}>
             <View>
-              <Text style={[styles.sectionEyebrow, { color: palette.brand }]}>
-                RECENT ACTIVITY
-              </Text>
-              <Text style={[styles.sectionTitle, { color: palette.ink }]}>
-                Bill requests
-              </Text>
+              <Text style={[styles.sectionEyebrow, { color: palette.brand }]}>RECENT ACTIVITY</Text>
+              <Text style={[styles.sectionTitle, { color: palette.ink }]}>Bill requests</Text>
             </View>
-            <Text style={[styles.sectionCount, { color: palette.muted }]}>
-              {paymentRows.length}
-            </Text>
+            <Text style={[styles.sectionCount, { color: palette.muted }]}>{paymentRows.length}</Text>
           </View>
 
           <View>
@@ -617,26 +563,14 @@ export function UtilityBillsScreen() {
                 ]}
               >
                 <View style={styles.historyCopy}>
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.historyTitle, { color: palette.ink }]}
-                  >
+                  <Text numberOfLines={1} style={[styles.historyTitle, { color: palette.ink }]}>
                     {firstString(item, ["public_reference"]) ?? "Bill request"}
                   </Text>
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.historyMeta, { color: palette.muted }]}
-                  >
-                    {firstString(item, ["customer_identifier"]) ??
-                      "Customer details saved"}
+                  <Text numberOfLines={1} style={[styles.historyMeta, { color: palette.muted }]}>
+                    {firstString(item, ["customer_identifier"]) ?? "Customer details saved"}
                   </Text>
                 </View>
-                <View
-                  style={[
-                    styles.statusPill,
-                    { backgroundColor: palette.brandSoft },
-                  ]}
-                >
+                <View style={[styles.statusPill, { backgroundColor: palette.brandSoft }]}>
                   <Text style={[styles.statusText, { color: palette.brand }]}>
                     {friendlyStatus(firstString(item, ["status"]) ?? "pending")}
                   </Text>
@@ -669,22 +603,34 @@ export function UtilityBillsScreen() {
           ]}
         >
           <View style={styles.modalSummaryRow}>
-            <Text style={[styles.modalSummaryLabel, { color: palette.muted }]}>
-              Available balance
-            </Text>
+            <Text style={[styles.modalSummaryLabel, { color: palette.muted }]}>Available balance</Text>
             <Text style={[styles.modalSummaryValue, { color: palette.ink }]}>
               {formatMajorMoney(balance, selectedCurrency)}
             </Text>
           </View>
           {fixedAmount !== null ? (
             <View style={styles.modalSummaryRow}>
-              <Text style={[styles.modalSummaryLabel, { color: palette.muted }]}>
-                Amount
-              </Text>
+              <Text style={[styles.modalSummaryLabel, { color: palette.muted }]}>Bill amount</Text>
               <Text style={[styles.modalSummaryValue, { color: palette.ink }]}>
                 {formatMajorMoney(fixedAmount, selectedCurrency)}
               </Text>
             </View>
+          ) : null}
+          {amountIsValidNumber && serviceFee > 0 ? (
+            <>
+              <View style={styles.modalSummaryRow}>
+                <Text style={[styles.modalSummaryLabel, { color: palette.muted }]}>SKIMA service fee</Text>
+                <Text style={[styles.modalSummaryValue, { color: palette.ink }]}>
+                  {formatMajorMoney(serviceFee, selectedCurrency)}
+                </Text>
+              </View>
+              <View style={styles.modalSummaryRow}>
+                <Text style={[styles.modalSummaryLabel, { color: palette.muted }]}>Total before discounts</Text>
+                <Text style={[styles.modalSummaryValue, { color: palette.ink }]}>
+                  {formatMajorMoney(estimatedTotal, selectedCurrency)}
+                </Text>
+              </View>
+            </>
           ) : null}
         </View>
 
