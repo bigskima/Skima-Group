@@ -4,6 +4,7 @@ import {
   ReceiptText,
   Settings2,
   SlidersHorizontal,
+  UsersRound,
   WalletCards,
 } from "lucide-react";
 
@@ -11,6 +12,7 @@ import { usePermissionCheck } from "@skima/ui";
 
 import { AdminDeliveryPricingWorkspace, AdminDriverPricingWorkspace } from "../../admin-delivery-pricing-workspace";
 import { AdminLaunchAssuranceWorkspace } from "../../admin-launch-assurance-workspace";
+import { AdminManagedDriverPayrollWorkspace } from "../../admin-managed-driver-payroll-workspace";
 import { AdminResourceConsole } from "../../admin-resource-console";
 import { financeConsoleConfig } from "../../admin-resource-config";
 import { AdminRevenueWorkspace } from "../../admin-revenue-workspace";
@@ -23,6 +25,7 @@ import {
 import "./money-v2.css";
 
 const ADVANCED_FINANCE_PATH = "/money/balances/advanced";
+const MANAGED_DRIVER_PAYROLL_PATH = "/money/managed-driver-payroll";
 
 export function MoneyWorkspaceRouter(props: {
   readonly route: string;
@@ -35,6 +38,7 @@ export function MoneyWorkspaceRouter(props: {
   if (props.route === "/money/balances") return <MoneyBalancesScreenV2 onNavigate={props.onNavigate} />;
   if (props.route === "/money/withdrawals") return <MoneyWithdrawalsScreenV2 onNavigate={props.onNavigate} />;
   if (props.route === "/money/settlements") return <MoneySettlementsScreenV2 onNavigate={props.onNavigate} />;
+  if (props.route === MANAGED_DRIVER_PAYROLL_PATH) return <AdminManagedDriverPayrollWorkspace />;
   if (props.route === "/money/pricing") return <MoneyPricingScreen onNavigate={props.onNavigate} />;
   if (props.route === "/money/pricing/delivery") return <AdminDeliveryPricingWorkspace />;
   if (props.route === "/money/pricing/drivers") return <AdminDriverPricingWorkspace />;
@@ -112,6 +116,15 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           icon: ReceiptText,
           meta: "Order money",
           permissionKey: "finance",
+        },
+        {
+          key: "managed-driver-payroll",
+          title: "Managed Driver Payroll",
+          description: "Pay approved SKIMA Managed Driver earnings into their SKIMA Wallets, including partial or batch payments.",
+          href: MANAGED_DRIVER_PAYROLL_PATH,
+          icon: UsersRound,
+          meta: "Driver payments",
+          requiredPermissions: ["platform.financial.manage"],
         },
         {
           key: "pricing",
@@ -217,6 +230,15 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
           icon: WalletCards,
           meta: "Driver policy",
           permissionKey: "driver-pricing",
+        },
+        {
+          key: "managed-driver-payroll-controls",
+          title: "Managed Driver Payroll",
+          description: "Pay approved Managed Driver earnings into SKIMA Wallets and review payroll history.",
+          href: MANAGED_DRIVER_PAYROLL_PATH,
+          icon: UsersRound,
+          meta: "Driver payments",
+          requiredPermissions: ["platform.financial.manage"],
         },
         {
           key: "launch-assurance-controls",
