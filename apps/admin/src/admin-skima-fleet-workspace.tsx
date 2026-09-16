@@ -114,6 +114,17 @@ export function AdminSkimaFleetWorkspace(props: { readonly onNavigate: (href: st
       context?.permissions.includes("platform.vehicles.manage"),
   );
 
+  const updateVehicleField = <K extends keyof VehicleForm>(field: K, value: VehicleForm[K]) => {
+    setVehicleForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const closeRegisterDialog = () => {
+    if (registerVehicle.isPending) return;
+    setRegisterOpen(false);
+    setVehicleForm(emptyVehicleForm);
+    registerVehicle.reset();
+  };
+
   const vehicleTypes = useQuery({
     queryKey: ["platform-fleet-vehicle-types"],
     enabled: status === "authenticated",
@@ -332,26 +343,36 @@ export function AdminSkimaFleetWorkspace(props: { readonly onNavigate: (href: st
       <Dialog
         isOpen={registerOpen}
         title="Add SKIMA Vehicle"
-        onClose={() => setRegisterOpen(false)}
-        footer={<><Button variant="secondary" onClick={() => setRegisterOpen(false)}>Cancel</Button><Button isLoading={registerVehicle.isPending} disabled={!canManageFleet} onClick={() => registerVehicle.mutate()}>Register SKIMA Vehicle</Button></>}
+        onClose={closeRegisterDialog}
+        footer={<><Button variant="secondary" disabled={registerVehicle.isPending} onClick={closeRegisterDialog}>Cancel</Button><Button isLoading={registerVehicle.isPending} disabled={!canManageFleet} onClick={() => registerVehicle.mutate()}>Register SKIMA Vehicle</Button></>}
       >
         <div className="stack-md">
           <p className="skima-muted">This records the vehicle as SKIMA property. It will start as Pending until the existing compliance checks are complete and an admin approves it.</p>
-          <SelectInput label="Vehicle type" value={vehicleForm.vehicleTypeId} onChange={(event) => setVehicleForm((current) => ({ ...current, vehicleTypeId: event.currentTarget.value }))} options={[{ label: "Choose vehicle type", value: "" }, ...(vehicleTypes.data ?? []).map((type) => ({ label: type.label, value: type.vehicleTypeId }))]} />
+          <SelectInput
+            label="Vehicle type"
+            value={vehicleForm.vehicleTypeId}
+            onChange={(event) => updateVehicleField("vehicleTypeId", event.currentTarget.value)}
+            options={[{ label: "Choose vehicle type", value: "" }, ...(vehicleTypes.data ?? []).map((type) => ({ label: type.label, value: type.vehicleTypeId }))]}
+          />
           <div className="skima-form-grid">
-            <TextInput label="Registration number" value={vehicleForm.registrationNumber} onChange={(event) => setVehicleForm((current) => ({ ...current, registrationNumber: event.currentTarget.value }))} />
-            <TextInput label="Manufacturer" value={vehicleForm.manufacturer} onChange={(event) => setVehicleForm((current) => ({ ...current, manufacturer: event.currentTarget.value }))} />
-            <TextInput label="Model" value={vehicleForm.model} onChange={(event) => setVehicleForm((current) => ({ ...current, model: event.currentTarget.value }))} />
-            <TextInput label="Model year" type="number" value={vehicleForm.modelYear} onChange={(event) => setVehicleForm((current) => ({ ...current, modelYear: event.currentTarget.value }))} />
-            <TextInput label="Colour" value={vehicleForm.color} onChange={(event) => setVehicleForm((current) => ({ ...current, color: event.currentTarget.value }))} />
-            <TextInput label="Maximum load (kg)" type="number" min="0" step="0.01" value={vehicleForm.maxLoadKg} onChange={(event) => setVehicleForm((current) => ({ ...current, maxLoadKg: event.currentTarget.value }))} />
-            <TextInput label="VIN / chassis number" value={vehicleForm.vin} onChange={(event) => setVehicleForm((current) => ({ ...current, vin: event.currentTarget.value }))} />
-            <TextInput label="Fuel type" value={vehicleForm.fuelType} onChange={(event) => setVehicleForm((current) => ({ ...current, fuelType: event.currentTarget.value }))} />
-            <TextInput label="Insurance expiry" type="date" value={vehicleForm.insuranceExpiresAt} onChange={(event) => setVehicleForm((current) => ({ ...current, insuranceExpiresAt: event.currentTarget.value }))} />
-            <TextInput label="Inspection expiry" type="date" value={vehicleForm.inspectionExpiresAt} onChange={(event) => setVehicleForm((current) => ({ ...current, inspectionExpiresAt: event.currentTarget.value }))} />
-            <TextInput label="Roadworthiness expiry" type="date" value={vehicleForm.roadworthinessExpiresAt} onChange={(event) => setVehicleForm((current) => ({ ...current, roadworthinessExpiresAt: event.currentTarget.value }))} />
+            <TextInput label="Registration number" value={vehicleForm.registrationNumber} onChange={(event) => updateVehicleField("registrationNumber", event.currentTarget.value)} />
+            <TextInput label="Manufacturer" value={vehicleForm.manufacturer} onChange={(event) => updateVehicleField("manufacturer", event.currentTarget.value)} />
+            <TextInput label="Model" value={vehicleForm.model} onChange={(event) => updateVehicleField("model", event.currentTarget.value)} />
+            <TextInput label="Model year" type="number" value={vehicleForm.modelYear} onChange={(event) => updateVehicleField("modelYear", event.currentTarget.value)} />
+            <TextInput label="Colour" value={vehicleForm.color} onChange={(event) => updateVehicleField("color", event.currentTarget.value)} />
+            <TextInput label="Maximum load (kg)" type="number" min="0" step="0.01" value={vehicleForm.maxLoadKg} onChange={(event) => updateVehicleField("maxLoadKg", event.currentTarget.value)} />
+            <TextInput label="VIN / chassis number" value={vehicleForm.vin} onChange={(event) => updateVehicleField("vin", event.currentTarget.value)} />
+            <TextInput label="Fuel type" value={vehicleForm.fuelType} onChange={(event) => updateVehicleField("fuelType", event.currentTarget.value)} />
+            <TextInput label="Insurance expiry" type="date" value={vehicleForm.insuranceExpiresAt} onChange={(event) => updateVehicleField("insuranceExpiresAt", event.currentTarget.value)} />
+            <TextInput label="Inspection expiry" type="date" value={vehicleForm.inspectionExpiresAt} onChange={(event) => updateVehicleField("inspectionExpiresAt", event.currentTarget.value)} />
+            <TextInput label="Roadworthiness expiry" type="date" value={vehicleForm.roadworthinessExpiresAt} onChange={(event) => updateVehicleField("roadworthinessExpiresAt", event.currentTarget.value)} />
           </div>
-          <TextAreaInput label="Why is this vehicle being added?" value={vehicleForm.reason} onChange={(event) => setVehicleForm((current) => ({ ...current, reason: event.currentTarget.value }))} placeholder="Example: Purchased for Awka Managed Driver launch operations" />
+          <TextAreaInput
+            label="Why is this vehicle being added?"
+            value={vehicleForm.reason}
+            onChange={(event) => updateVehicleField("reason", event.currentTarget.value)}
+            placeholder="Example: Purchased for Awka Managed Driver launch operations"
+          />
           {registerVehicle.error ? <ErrorState error={registerVehicle.error} /> : null}
         </div>
       </Dialog>
