@@ -52,7 +52,6 @@ function UtilitySimpleDashboardContent(props: {
 }) {
   const { supabase } = useSessionState();
   const provider = props.data.providers.find((item) => utilityText(item, "status") !== "disabled") ?? props.data.providers[0] ?? null;
-  const treasury = props.data.treasury.find((item) => utilityText(item, "provider_key") === utilityText(provider, "key")) ?? props.data.treasury[0] ?? null;
   const serviceFee = props.data.serviceFees.find((item) => utilityText(item, "currency_code") === "NGN") ?? props.data.serviceFees[0] ?? null;
 
   const [feePercent, setFeePercent] = useState(String(utilityNumber(serviceFee, "fee_percent")));
@@ -62,9 +61,9 @@ function UtilitySimpleDashboardContent(props: {
   const [selectedProviderKey, setSelectedProviderKey] = useState(utilityText(provider, "key"));
   const selectedProvider = props.data.providers.find((item) => utilityText(item, "key") === selectedProviderKey) ?? provider;
   const selectedTreasury = props.data.treasury.find((item) => utilityText(item, "provider_key") === selectedProviderKey) ?? null;
-  const [currentBalance, setCurrentBalance] = useState(selectedTreasury?.last_known_balance == null ? "" : String(utilityNumber(selectedTreasury, "last_known_balance")));
-  const [lowThreshold, setLowThreshold] = useState(selectedTreasury?.low_balance_threshold == null ? "" : String(utilityNumber(selectedTreasury, "low_balance_threshold")));
-  const [targetBalance, setTargetBalance] = useState(selectedTreasury?.target_balance == null ? "" : String(utilityNumber(selectedTreasury, "target_balance")));
+  const [currentBalance, setCurrentBalance] = useState(selectedTreasury?.["last_known_balance"] == null ? "" : String(utilityNumber(selectedTreasury, "last_known_balance")));
+  const [lowThreshold, setLowThreshold] = useState(selectedTreasury?.["low_balance_threshold"] == null ? "" : String(utilityNumber(selectedTreasury, "low_balance_threshold")));
+  const [targetBalance, setTargetBalance] = useState(selectedTreasury?.["target_balance"] == null ? "" : String(utilityNumber(selectedTreasury, "target_balance")));
 
   useEffect(() => {
     setFeePercent(String(utilityNumber(serviceFee, "fee_percent")));
@@ -73,9 +72,9 @@ function UtilitySimpleDashboardContent(props: {
   }, [serviceFee]);
 
   useEffect(() => {
-    setCurrentBalance(selectedTreasury?.last_known_balance == null ? "" : String(utilityNumber(selectedTreasury, "last_known_balance")));
-    setLowThreshold(selectedTreasury?.low_balance_threshold == null ? "" : String(utilityNumber(selectedTreasury, "low_balance_threshold")));
-    setTargetBalance(selectedTreasury?.target_balance == null ? "" : String(utilityNumber(selectedTreasury, "target_balance")));
+    setCurrentBalance(selectedTreasury?.["last_known_balance"] == null ? "" : String(utilityNumber(selectedTreasury, "last_known_balance")));
+    setLowThreshold(selectedTreasury?.["low_balance_threshold"] == null ? "" : String(utilityNumber(selectedTreasury, "low_balance_threshold")));
+    setTargetBalance(selectedTreasury?.["target_balance"] == null ? "" : String(utilityNumber(selectedTreasury, "target_balance")));
   }, [selectedTreasury]);
 
   const saveFee = useMutation({
@@ -119,9 +118,9 @@ function UtilitySimpleDashboardContent(props: {
   const readyProviders = props.data.providers.filter((item) => utilityFlag(item, "runtime_ready")).length;
   const activeRoutes = props.data.routes.filter((item) => utilityText(item, "status") === "active").length;
   const unresolved = props.data.payments.filter((item) => ["processing", "reconciliation_required"].includes(utilityText(item, "status"))).length;
-  const balanceLow = selectedTreasury?.balance_low === true;
-  const lastKnownBalance = selectedTreasury?.last_known_balance == null ? null : utilityNumber(selectedTreasury, "last_known_balance");
-  const recommendedTopUp = selectedTreasury?.recommended_top_up == null ? null : utilityNumber(selectedTreasury, "recommended_top_up");
+  const balanceLow = selectedTreasury?.["balance_low"] === true;
+  const lastKnownBalance = selectedTreasury?.["last_known_balance"] == null ? null : utilityNumber(selectedTreasury, "last_known_balance");
+  const recommendedTopUp = selectedTreasury?.["recommended_top_up"] == null ? null : utilityNumber(selectedTreasury, "recommended_top_up");
 
   const providerOptions = useMemo(() => [
     { label: "Choose provider", value: "" },
