@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Gauge, RefreshCcw, ShieldCheck, Star, Truck, UsersRound } from "lucide-react";
+import { Gauge, RefreshCcw, ShieldCheck, Star, Truck, UsersRound, WalletCards } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { z } from "zod";
 
@@ -21,28 +21,32 @@ import {
 
 import { useSessionState } from "./session";
 
-const DriverParticipationSchema = z.object({
+const DriverSchema = z.object({
   driverProfileId: z.string().uuid(),
   userId: z.string().uuid(),
-  organizationId: z.string().uuid().nullable(),
   displayName: z.string(),
   publicDriverId: z.string().nullable(),
   verificationStatus: z.string(),
   operationalStatus: z.string(),
-  approvedAt: z.string().nullable(),
-  programKey: z.enum(["driver.independent", "driver.skima_special"]),
-  programLabel: z.string(),
-  programPublicLabel: z.string(),
-  programType: z.enum(["baseline", "priority"]),
-  membershipId: z.string().uuid().nullable(),
-  programStartsAt: z.string().nullable(),
+  isManaged: z.boolean(),
+  driverTypeLabel: z.string(),
+  managedSince: z.string().nullable(),
   activeVehicleCount: z.coerce.number().int().nonnegative(),
-  vehicleRelationshipTypes: z.array(z.string()),
   serviceAreaCount: z.coerce.number().int().nonnegative(),
+  vehicleReady: z.boolean(),
+  coverageReady: z.boolean(),
+  pendingEarnings: z.coerce.number(),
+  availableForPayout: z.coerce.number(),
+  paidToWallet: z.coerce.number(),
+  lifetimeEarnings: z.coerce.number(),
+  driverWalletId: z.string().uuid().nullable(),
+  driverWalletBalance: z.coerce.number(),
+  currencyCode: z.string(),
+  lastPaidAt: z.string().nullable(),
 });
 
-const DriverParticipationListSchema = z.array(DriverParticipationSchema);
-type DriverParticipation = z.infer<typeof DriverParticipationSchema>;
+const DriverListSchema = z.array(DriverSchema);
+type Driver = z.infer<typeof DriverSchema>;
 
 const PriorityPolicySchema = z.object({
   specialDriverPriorityEnabled: z.boolean(),
@@ -57,7 +61,7 @@ type PriorityPolicy = z.infer<typeof PriorityPolicySchema>;
 export function AdminDriverParticipationWorkspace() {
   const { supabase, status, context } = useSessionState();
   const queryClient = useQueryClient();
-  const [assignmentTarget, setAssignmentTarget] = useState<DriverParticipation | null>(null);
+  const [assignmentTarget, setAssignmentTarget] = useState<Driver | null>(null);
   const [priorityOpen, setPriorityOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -69,15 +73,15 @@ export function AdminDriverParticipationWorkspace() {
     false;
 
   const drivers = useQuery({
-    queryKey: ["driver-participation-admin"],
+    queryKey: ["lpg-managed-drivers-admin"],
     enabled: status === "authenticated",
     retry: false,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("read_driver_participation_admin", {
+      const { data, error } = await supabase.rpc("read_lpg_managed_driver_admin", {
         target_driver_profile_id: null,
       });
       if (error) throw error;
-      return DriverParticipationListSchema.parse(data ?? []);
+      return DriverListSchema.parse(data ?? []);
     },
   });
 
@@ -92,34 +96,28 @@ export function AdminDriverParticipationWorkspace() {
     },
   });
 
-  const assignProgram = useMutation({
-    mutationFn: async ({
-      driver,
-      programKey,
-      reason,
-    }: {
-      driver: DriverParticipation;
-      programKey: "driver.independent" | "driver.skima_special";
-      reason: string;
-    }) => {
-      const { data, error } = await supabase.rpc("set_driver_participation_program", {
+  const assignDriverType = useMutation({
+    mutationFn: async ({ driver, managed, reason }: { driver: Driver; managed: boolean; reason: string }) => {
+      const { data, error } = await supabase.rpc("set_lpg_managed_driver_assignment", {
         target_driver_profile_id: driver.driverProfileId,
-        target_program_key: programKey,
+        target_managed: managed,
         target_reason: reason.trim(),
         target_idempotency_key: createClientIdempotencyKey(
-          "admin.driver.participation",
-          `${driver.driverProfileId}:${programKey}`,
+          "admin.driver.type",
+          `${driver.driverProfileId}:${managed}`,
         ),
-        target_metadata: { surface: "admin_driver_participation_workspace" },
-        target_source: "skima.admin.driver_participation",
+        target_metadata: { surface: "admin_driver_management" },
       });
       if (error) throw error;
       return data;
     },
     onSuccess: async (_data, variables) => {
       setAssignmentTarget(null);
-      setNotice(`${variables.driver.displayName} is now ${programLabel(variables.programKey)}.`);
-      await queryClient.invalidateQueries({ queryKey: ["driver-participation-admin"] });
+      setNotice(`${variables.driver.displayName} is now ${variables.managed ? "a SKIMA Managed Driver" : "an Independent Driver"}.`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["lpg-managed-drivers-admin"] }),
+        queryClient.invalidateQueries({ queryKey: ["lpg-launch-assurance-readiness"] }),
+      ]);
     },
   });
 
@@ -137,24 +135,24 @@ export function AdminDriverParticipationWorkspace() {
           "admin.driver.priority",
           `${enabled}:${bonusKilometers}`,
         ),
-        target_metadata: { surface: "admin_driver_participation_workspace" },
+        target_metadata: { surface: "admin_driver_management" },
       });
       if (error) throw error;
       return PriorityPolicySchema.parse(data);
     },
     onSuccess: async () => {
       setPriorityOpen(false);
-      setNotice("Special Driver dispatch preference updated.");
+      setNotice("Managed Driver dispatch preference updated.");
       await queryClient.invalidateQueries({ queryKey: ["driver-priority-policy"] });
     },
   });
 
   const rows = drivers.data ?? [];
-  const specialCount = rows.filter((driver) => driver.programKey === "driver.skima_special").length;
-  const independentCount = rows.filter((driver) => driver.programKey === "driver.independent").length;
+  const managedCount = rows.filter((driver) => driver.isManaged).length;
+  const independentCount = rows.filter((driver) => !driver.isManaged).length;
   const approvedCount = rows.filter((driver) => driver.verificationStatus === "approved").length;
 
-  const columns = useMemo<TableColumn<DriverParticipation>[]>(() => [
+  const columns = useMemo<TableColumn<Driver>[]>(() => [
     {
       key: "driver",
       header: "Driver",
@@ -166,11 +164,11 @@ export function AdminDriverParticipationWorkspace() {
       ),
     },
     {
-      key: "participation",
-      header: "Participation",
+      key: "type",
+      header: "Driver type",
       render: (driver) => (
-        <StatusBadge tone={driver.programKey === "driver.skima_special" ? "warning" : "neutral"}>
-          {driver.programPublicLabel}
+        <StatusBadge tone={driver.isManaged ? "warning" : "neutral"}>
+          {driver.isManaged ? "SKIMA Managed Driver" : "Independent Driver"}
         </StatusBadge>
       ),
     },
@@ -184,27 +182,33 @@ export function AdminDriverParticipationWorkspace() {
       ),
     },
     {
-      key: "operations",
-      header: "Operations",
+      key: "readiness",
+      header: "Fulfillment readiness",
       render: (driver) => (
         <span>
-          {normalizeStatusLabel(driver.operationalStatus)}<br />
-          <small>{driver.activeVehicleCount} active vehicle{driver.activeVehicleCount === 1 ? "" : "s"} • {driver.serviceAreaCount} service area{driver.serviceAreaCount === 1 ? "" : "s"}</small>
+          {driver.isManaged ? (
+            <>
+              {driver.vehicleReady ? "Vehicle ready" : "Vehicle setup needed"}<br />
+              <small>{driver.coverageReady ? "Coverage ready" : "Coverage approval needed"}</small>
+            </>
+          ) : (
+            <>{normalizeStatusLabel(driver.operationalStatus)}<br /><small>{driver.activeVehicleCount} active vehicle{driver.activeVehicleCount === 1 ? "" : "s"}</small></>
+          )}
         </span>
       ),
     },
     {
-      key: "vehicleRelationship",
-      header: "Vehicle relationship",
-      render: (driver) => driver.vehicleRelationshipTypes.length
-        ? driver.vehicleRelationshipTypes.map(normalizeStatusLabel).join(", ")
-        : "No active vehicle",
+      key: "earnings",
+      header: "Managed earnings",
+      render: (driver) => driver.isManaged
+        ? <span><strong>{money(driver.availableForPayout, driver.currencyCode)}</strong><br /><small>available for payout</small></span>
+        : <span className="skima-muted">Not applicable</span>,
     },
     {
       key: "action",
       header: "Action",
       render: (driver) => canManageDrivers
-        ? <Button size="sm" variant="outline" onClick={() => setAssignmentTarget(driver)}>Change class</Button>
+        ? <Button size="sm" variant="outline" onClick={() => setAssignmentTarget(driver)}>Manage Driver</Button>
         : <span className="skima-muted">View only</span>,
     },
   ], [canManageDrivers]);
@@ -213,11 +217,11 @@ export function AdminDriverParticipationWorkspace() {
     <>
       <PageHeader
         eyebrow="Driver network"
-        title="Driver Participation"
-        description="Manage Independent Driver Partners and admin-assigned SKIMA Special Drivers. Participation class is separate from who owns the vehicle."
+        title="Driver Management"
+        description="Manage normal Independent Drivers and the Drivers SKIMA directly uses for its own fulfillment. Technical participation codes are handled automatically."
         actions={(
           <>
-            {canManageDispatch ? <Button icon={Gauge} variant="outline" onClick={() => setPriorityOpen(true)}>Dispatch priority</Button> : null}
+            {canManageDispatch ? <Button icon={Gauge} variant="outline" onClick={() => setPriorityOpen(true)}>Dispatch preference</Button> : null}
             <Button icon={RefreshCcw} variant="outline" onClick={() => void Promise.all([drivers.refetch(), priorityPolicy.refetch()])}>Refresh</Button>
           </>
         )}
@@ -226,10 +230,10 @@ export function AdminDriverParticipationWorkspace() {
       {notice ? <StatusBadge tone="success" className="skima-status-note">{notice}</StatusBadge> : null}
 
       <section className="skima-grid skima-grid--compact">
-        <MetricTile label="Approved drivers" value={approvedCount} icon={ShieldCheck} tone="success" />
-        <MetricTile label="Independent" value={independentCount} icon={UsersRound} tone="info" />
-        <MetricTile label="SKIMA Special" value={specialCount} icon={Star} tone={specialCount ? "warning" : "neutral"} />
-        <MetricTile label="Active vehicles" value={rows.reduce((sum, driver) => sum + driver.activeVehicleCount, 0)} icon={Truck} tone="info" />
+        <MetricTile label="Approved Drivers" value={approvedCount} icon={ShieldCheck} tone="success" />
+        <MetricTile label="Independent Drivers" value={independentCount} icon={UsersRound} tone="info" />
+        <MetricTile label="SKIMA Managed Drivers" value={managedCount} icon={Star} tone={managedCount ? "warning" : "neutral"} />
+        <MetricTile label="Managed Wallet Value" value={money(rows.filter((driver) => driver.isManaged).reduce((sum, driver) => sum + driver.driverWalletBalance, 0), "NGN")} icon={WalletCards} tone="info" />
       </section>
 
       <section className="sk-panel">
@@ -237,14 +241,14 @@ export function AdminDriverParticipationWorkspace() {
           <div>
             <h2>Dispatch fairness</h2>
             <p className="skima-muted">
-              SKIMA Special status gives a bounded preference only. Distance, active workload, vehicle capacity, route bundling and eligibility still affect assignment.
+              SKIMA Managed Drivers can receive a bounded dispatch preference when that policy is enabled. Distance, workload, vehicle capacity, route bundling and eligibility still affect assignment.
             </p>
           </div>
           {priorityPolicy.data ? (
             <StatusBadge tone={priorityPolicy.data.specialDriverPriorityEnabled ? "success" : "neutral"}>
               {priorityPolicy.data.specialDriverPriorityEnabled
                 ? `${priorityPolicy.data.specialDriverPriorityBonusKilometers.toFixed(2)} km bounded advantage`
-                : "Special priority disabled"}
+                : "Managed Driver preference disabled"}
             </StatusBadge>
           ) : null}
         </div>
@@ -255,38 +259,36 @@ export function AdminDriverParticipationWorkspace() {
       <section className="sk-panel">
         <div className="sk-panel__header">
           <div>
-            <h2>Driver network</h2>
-            <p className="skima-muted">
-              Fleet-assigned, leased, rented and third-party-authorized vehicles remain vehicle relationships; they do not create another driver identity.
-            </p>
+            <h2>Drivers</h2>
+            <p className="skima-muted">Change a Driver between Independent and SKIMA Managed without creating another Driver account.</p>
           </div>
         </div>
-        {drivers.isLoading ? <LoadingState label="Loading drivers" /> : null}
+        {drivers.isLoading ? <LoadingState label="Loading Drivers" /> : null}
         {drivers.error ? <ErrorState title="Drivers unavailable" message={readError(drivers.error)} onRetry={() => void drivers.refetch()} /> : null}
         {!drivers.isLoading && !drivers.error ? (
           <DataTable
-            caption="SKIMA driver participation"
+            caption="SKIMA Driver management"
             columns={columns}
             records={rows}
             getRowKey={(driver) => driver.driverProfileId}
-            emptyTitle="No drivers yet"
-            emptyMessage="Approved driver profiles will appear here after onboarding."
+            emptyTitle="No Drivers yet"
+            emptyMessage="Driver profiles will appear here after onboarding."
           />
         ) : null}
       </section>
 
-      <AssignmentDialog
+      <DriverTypeDialog
         driver={assignmentTarget}
-        isSubmitting={assignProgram.isPending}
-        error={assignProgram.error}
+        isSubmitting={assignDriverType.isPending}
+        error={assignDriverType.error}
         onClose={() => {
-          if (assignProgram.isPending) return;
-          assignProgram.reset();
+          if (assignDriverType.isPending) return;
+          assignDriverType.reset();
           setAssignmentTarget(null);
         }}
-        onSubmit={(programKey, reason) => {
+        onSubmit={(managed, reason) => {
           if (!assignmentTarget) return;
-          assignProgram.mutate({ driver: assignmentTarget, programKey, reason });
+          assignDriverType.mutate({ driver: assignmentTarget, managed, reason });
         }}
       />
 
@@ -306,61 +308,61 @@ export function AdminDriverParticipationWorkspace() {
   );
 }
 
-function AssignmentDialog({
+function DriverTypeDialog({
   driver,
   isSubmitting,
   error,
   onClose,
   onSubmit,
 }: {
-  driver: DriverParticipation | null;
+  driver: Driver | null;
   isSubmitting: boolean;
   error: unknown;
   onClose: () => void;
-  onSubmit: (programKey: "driver.independent" | "driver.skima_special", reason: string) => void;
+  onSubmit: (managed: boolean, reason: string) => void;
 }) {
-  const [programKey, setProgramKey] = useState<"driver.independent" | "driver.skima_special">("driver.independent");
+  const [driverType, setDriverType] = useState<"independent" | "managed">(driver?.isManaged ? "managed" : "independent");
   const [reason, setReason] = useState("");
 
   if (!driver) return null;
 
+  const managed = driverType === "managed";
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onSubmit(programKey, reason);
+    onSubmit(managed, reason.trim() || (managed ? "Added to SKIMA Managed Drivers" : "Returned to Independent Driver"));
   };
 
   return (
     <Dialog
-      title={`Driver class • ${driver.displayName}`}
+      title={`Manage Driver • ${driver.displayName}`}
       isOpen
       onClose={onClose}
       footer={(
         <>
           <Button variant="ghost" disabled={isSubmitting} onClick={onClose}>Cancel</Button>
-          <Button type="submit" form="driver-class-form" isLoading={isSubmitting}>Save class</Button>
+          <Button type="submit" form="driver-type-form" isLoading={isSubmitting}>Save Driver type</Button>
         </>
       )}
     >
-      <form id="driver-class-form" className="skima-form-grid" onSubmit={submit}>
-        <p className="admin-dialog-guidance">Current class: {driver.programPublicLabel}. SKIMA Special is only available to approved drivers.</p>
+      <form id="driver-type-form" className="skima-form-grid" onSubmit={submit}>
+        <p className="admin-dialog-guidance">Current type: {driver.isManaged ? "SKIMA Managed Driver" : "Independent Driver"}.</p>
         <SelectInput
-          label="Participation class"
-          value={programKey}
+          label="Driver type"
+          value={driverType}
           options={[
-            { label: "Independent Driver Partner", value: "driver.independent" },
-            { label: "SKIMA Special Driver", value: "driver.skima_special" },
+            { label: "Independent Driver", value: "independent" },
+            { label: "SKIMA Managed Driver", value: "managed" },
           ]}
-          onChange={(event) => setProgramKey(event.currentTarget.value as typeof programKey)}
+          onChange={(event) => setDriverType(event.currentTarget.value as typeof driverType)}
         />
         <TextAreaInput
-          label="Reason for change"
-          helperText="This reason is retained in the driver participation history."
-          required
+          label="Admin note (optional)"
+          helperText="The change is retained in Driver history for audit."
           value={reason}
           onChange={(event) => setReason(event.currentTarget.value)}
         />
-        {programKey === "driver.skima_special" && driver.verificationStatus !== "approved" ? (
-          <StatusBadge tone="danger">This driver must be approved before Special status can be assigned.</StatusBadge>
+        {managed && driver.verificationStatus !== "approved" ? (
+          <StatusBadge tone="danger">This Driver must be approved before they can become a SKIMA Managed Driver.</StatusBadge>
         ) : null}
         {error ? <StatusBadge tone="danger">{readError(error)}</StatusBadge> : null}
       </form>
@@ -383,8 +385,8 @@ function PriorityDialog({
   onClose: () => void;
   onSubmit: (enabled: boolean, bonusKilometers: number, reason: string) => void;
 }) {
-  const [enabledValue, setEnabledValue] = useState("enabled");
-  const [bonusValue, setBonusValue] = useState("1");
+  const [enabledValue, setEnabledValue] = useState(policy?.specialDriverPriorityEnabled === false ? "disabled" : "enabled");
+  const [bonusValue, setBonusValue] = useState(String(policy?.specialDriverPriorityBonusKilometers ?? 1));
   const [reason, setReason] = useState("");
 
   if (!isOpen) return null;
@@ -396,12 +398,12 @@ function PriorityDialog({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onSubmit(resolvedEnabled, resolvedBonus, reason);
+    onSubmit(resolvedEnabled, resolvedBonus, reason.trim() || "Updated Managed Driver dispatch preference");
   };
 
   return (
     <Dialog
-      title="Special Driver dispatch preference"
+      title="Managed Driver dispatch preference"
       isOpen
       onClose={onClose}
       footer={(
@@ -413,10 +415,10 @@ function PriorityDialog({
     >
       <form id="driver-priority-form" className="skima-form-grid" onSubmit={submit}>
         <p className="admin-dialog-guidance">
-          Current rule: {currentEnabled ? `${currentBonus.toFixed(2)} km bounded advantage` : "disabled"}. This is a ranking adjustment, not guaranteed assignment.
+          Current rule: {currentEnabled ? `${currentBonus.toFixed(2)} km bounded advantage` : "disabled"}. This helps SKIMA Managed Drivers rank when appropriate; it does not guarantee assignment.
         </p>
         <SelectInput
-          label="Special Driver preference"
+          label="Managed Driver preference"
           value={enabledValue}
           options={[
             { label: "Enabled", value: "enabled" },
@@ -436,8 +438,7 @@ function PriorityDialog({
           required
         />
         <TextAreaInput
-          label="Reason for policy change"
-          required
+          label="Admin note (optional)"
           value={reason}
           onChange={(event) => setReason(event.currentTarget.value)}
         />
@@ -450,16 +451,16 @@ function PriorityDialog({
   );
 }
 
-function programLabel(programKey: "driver.independent" | "driver.skima_special") {
-  return programKey === "driver.skima_special" ? "SKIMA Special Driver" : "Independent Driver Partner";
-}
-
 function shortId(value: string) {
   return `Driver ${value.slice(0, 8).toUpperCase()}`;
+}
+
+function money(value: number, currency: string) {
+  return new Intl.NumberFormat("en-NG", { style: "currency", currency, maximumFractionDigits: 2 }).format(value);
 }
 
 function readError(error: unknown) {
   if (error instanceof Error && error.message.trim()) return error.message;
   if (error && typeof error === "object" && typeof (error as Record<string, unknown>).message === "string") return String((error as Record<string, unknown>).message);
-  return "The driver participation action could not be completed. Please try again.";
+  return "The Driver action could not be completed. Please try again.";
 }
