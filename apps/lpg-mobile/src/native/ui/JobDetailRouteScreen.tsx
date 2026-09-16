@@ -6,6 +6,7 @@ import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
+import { InternalDriverJobDetailScreen } from "./InternalDriverJobDetailScreen";
 import { JobDetailScreen } from "./JobDetailScreen";
 import { RequestFailureState } from "./RequestFailureState";
 import { Screen } from "./Screen";
@@ -17,6 +18,7 @@ const RouteStateSchema = z.object({
   status: z.string().nullable().optional(),
   paymentStatus: z.string().nullable().optional(),
   publicReference: z.string().nullable().optional(),
+  fulfillmentChannel: z.enum(["marketplace", "skima_internal"]).nullable().optional(),
 });
 
 export function JobDetailRouteScreen({ workspace }: { workspace: "driver" | "station" }) {
@@ -116,6 +118,10 @@ export function JobDetailRouteScreen({ workspace }: { workspace: "driver" | "sta
         />
       </Screen>
     );
+  }
+
+  if (workspace === "driver" && routeState.data?.fulfillmentChannel === "skima_internal") {
+    return <InternalDriverJobDetailScreen />;
   }
 
   return <JobDetailScreen workspace={workspace} />;
