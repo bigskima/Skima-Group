@@ -7,6 +7,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import { AdminManagedDriverCoverageWorkspace } from "../../admin-managed-driver-coverage-workspace";
 import { AdminOperationsWorkspace } from "../../admin-operations-workspace";
 import { AdminQualityWorkspace } from "../../admin-quality-workspace";
 import { AdminStationInventoryWorkspace } from "../../admin-station-inventory-workspace";
@@ -20,6 +21,8 @@ import { CoverageSectionNav, type CoverageSection } from "./CoverageSectionNav";
 import { CoverageWorkspaceV2 } from "./CoverageWorkspaceV2";
 import "./coverage-v2-operations.css";
 
+const MANAGED_DRIVER_COVERAGE_PATH = "/operations/managed-driver-coverage";
+
 export function OperationsWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
@@ -30,6 +33,10 @@ export function OperationsWorkspaceRouter(props: {
 
   if (props.route === "/operations/orders" || props.route.startsWith("/operations/orders/")) {
     return <AdminOperationsWorkspace route={props.route} onNavigate={props.onNavigate} />;
+  }
+
+  if (props.route === MANAGED_DRIVER_COVERAGE_PATH) {
+    return <AdminManagedDriverCoverageWorkspace onNavigate={props.onNavigate} />;
   }
 
   if (props.route === "/operations/coverage" || props.route === "/operations/coverage/availability") {
@@ -113,6 +120,15 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
           icon: Settings2,
           meta: "Managed fulfillment",
           anyOfPermissions: ["platform.dispatch.manage", "platform.financial_policy.read", "platform.drivers.manage", "platform.financial.manage"],
+        },
+        {
+          key: "managed-driver-coverage",
+          title: "Managed Driver Coverage",
+          description: "Assign SKIMA Managed Drivers to service areas using normal area names and review whether their vehicle and LPG coverage are ready.",
+          href: MANAGED_DRIVER_COVERAGE_PATH,
+          icon: MapPinned,
+          meta: "Driver service areas",
+          requiredPermissions: ["platform.drivers.manage", "platform.coverage.manage"],
         },
         {
           key: "coverage",
