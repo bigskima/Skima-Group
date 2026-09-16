@@ -3,8 +3,9 @@ import { ArrowDownToLine, Clock3, ReceiptText, WalletCards } from "lucide-react-
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { domainQueries } from "../api/domains";
-import { useWalletActivity } from "../api/walletActivity";
+import { useManagedDriverEarnings } from "../api/managedDriverEarnings";
 import { firstNumber, firstString, type PlatformRecord } from "../api/records";
+import { useWalletActivity } from "../api/walletActivity";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { canonicalTransactionStatus } from "../utilities/transactionStatus";
@@ -27,10 +28,11 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
   const wallet = selectWorkspaceWallet(wallets.data ?? [], workspace);
   const walletId = walletRecordId(wallet);
   const history = useWalletActivity(walletId, 100);
+  const managedEarnings = useManagedDriverEarnings(workspace === "driver");
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const currency = firstString(wallet, ["currency_code", "currencyCode"]) ?? "NGN";
+  const currency = firstString(wallet, ["currency_code", "currencyCode"]) ?? managedEarnings.data?.currencyCode ?? "NGN";
   const available = firstNumber(wallet, ["available_balance", "availableBalance", "balance"]) ?? 0;
   const activity = history.data?.items ?? [];
   const pendingCount = activity.filter((item) => {
@@ -53,7 +55,8 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
   );
   const visibleActivity = filteredActivity.slice(0, visibleCount);
   const withdrawPath = `/${workspace === "driver" ? "(driver)" : "(station)"}/withdraw` as never;
-  const financeError = wallets.error ?? history.error;
+  const financeError = wallets.error ?? history.error ?? managedEarnings.error;
+  const managed = workspace === "driver" && managedEarnings.data?.isManaged ? managedEarnings.data : null;
 
   const selectFilter = (next: ActivityFilter) => {
     setFilter(next);
@@ -66,7 +69,7 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
       title="Earnings & activity"
       subtitle={
         workspace === "driver"
-          ? "See your available balance, delivery earnings, withdrawals and other wallet movements."
+          ? "See your SKIMA Wallet balance, delivery earnings, payouts, withdrawals and other wallet movements."
           : "See your available balance, LPG earnings, withdrawals and other station wallet movements."
       }
       action={<AppButton label="Withdraw" size="sm" icon={<ArrowDownToLine color="#FFFFFF" size={16} />} onPress={() => router.push(withdrawPath)} />}
@@ -79,15 +82,19 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
           </View>
           <View style={styles.heroIcon}><WalletCards color="#FFFFFF" size={27} /></View>
         </View>
-        <Text style={styles.heroBody}>This is your spendable wallet balance, not a sum of every activity record shown below.</Text>
+        <Text style={styles.heroBody}>
+          {managed
+            ? "This is your spendable SKIMA Wallet balance. Managed Driver earnings become withdrawable after SKIMA pays them into this wallet."
+            : "This is your spendable wallet balance, not a sum of every activity record shown below."}
+        </Text>
       </View>
 
-      {wallets.isPending || (Boolean(walletId) && history.isPending) ? (
+      {wallets.isPending || (Boolean(walletId) && history.isPending) || (workspace === "driver" && managedEarnings.isPending) ? (
         <ScreenSkeleton cards={4} />
       ) : financeError ? (
         <RequestFailureState
           error={financeError}
-          onRetry={() => void Promise.all([wallets.refetch(), history.refetch()])}
+          onRetry={() => void Promise.all([wallets.refetch(), history.refetch(), managedEarnings.refetch()])}
           overrides={workspace === "station" ? {
             permission: {
               title: "Financial activity access restricted",
@@ -111,6 +118,26 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
         />
       ) : (
         <>
+          {managed ? (
+            <>
+              <SectionHeader
+                title="SKIMA Managed Driver pay"
+                description="These earnings are separate from your wallet until SKIMA pays them. You cannot withdraw the unpaid amount directly."
+              />
+              <View style={styles.metricGrid}>
+                <Metric icon={<ReceiptText color={palette.brand} size={19} />} label="Available for payout" value={money(managed.availableForPayout, managed.currencyCode)} />
+                <Metric icon={<Clock3 color={palette.warning} size={19} />} label="Pending completion" value={money(managed.pendingEarnings, managed.currencyCode)} />
+                <Metric icon={<WalletCards color={palette.brand} size={19} />} label="Paid to Wallet" value={money(managed.paidToWallet, managed.currencyCode)} />
+              </View>
+              {managed.lastPaidAt ? (
+                <View style={[styles.limitNote, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+                  <WalletCards color={palette.mutedStrong} size={17} />
+                  <Text style={[styles.limitText, { color: palette.muted }]}>Last SKIMA payment: {formatDate(managed.lastPaidAt)}. Once paid, the money becomes part of your normal withdrawable wallet balance.</Text>
+                </View>
+              ) : null}
+            </>
+          ) : null}
+
           <View style={styles.metricGrid}>
             <Metric icon={<ReceiptText color={palette.brand} size={19} />} label="Recent activity" value={String(history.data?.totalCount ?? activity.length)} />
             <Metric icon={<Clock3 color={palette.warning} size={19} />} label="Pending" value={String(pendingCount)} />
@@ -121,8 +148,8 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
             <AiContextAction
               workspace="driver"
               label="Explain my earnings"
-              detail="Ask about posted delivery pay, pending movements or withdrawals. Nothing is sent until you choose Send. Nothing is moved until you choose an action."
-              prompt="Explain my recent Driver wallet activity using only records I can access. Distinguish posted delivery earnings, pending or processing movements, withdrawals, refunds and reversals. Do not estimate earnings, expose internal ledger accounts, move funds or change a payout."
+              detail="Ask about wallet activity, managed Driver pay or withdrawals. Nothing is sent until you choose Send. Nothing is moved until you choose an action."
+              prompt="Explain my recent Driver wallet activity using only records I can access. If I am a SKIMA Managed Driver, distinguish unpaid approved earnings from money already paid into my SKIMA Wallet. Distinguish posted delivery earnings, pending or processing movements, withdrawals, refunds and reversals. Do not estimate earnings, expose internal ledger accounts, move funds or change a payout."
             />
           ) : (
             <AiContextAction
@@ -158,7 +185,7 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
             <EmptyState
               icon={<ReceiptText color={palette.brand} size={26} />}
               title={filter === "all" ? "No financial activity yet" : "No matching activity"}
-              description={filter === "all" ? (workspace === "driver" ? "Delivery earnings, withdrawals, refunds and other Driver wallet activity will appear here." : "Station earnings, withdrawals, refunds and other Station wallet activity will appear here.") : "Choose another filter to review the wallet history."}
+              description={filter === "all" ? (workspace === "driver" ? "Payments into your Driver wallet, withdrawals, refunds and other wallet activity will appear here." : "Station earnings, withdrawals, refunds and other Station wallet activity will appear here.") : "Choose another filter to review the wallet history."}
             />
           )}
 
@@ -230,6 +257,11 @@ function money(value: number, currency: string) {
   } catch {
     return `${currency} ${value.toFixed(2)}`;
   }
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 const styles = StyleSheet.create({
