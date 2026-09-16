@@ -17,6 +17,7 @@ import { AdminResourceConsole } from "../../admin-resource-console";
 import { financeConsoleConfig } from "../../admin-resource-config";
 import { AdminRevenueWorkspace } from "../../admin-revenue-workspace";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
+import { FulfillmentWorkspaceV2 } from "./FulfillmentWorkspaceV2";
 import {
   MoneyBalancesScreenV2,
   MoneySettlementsScreenV2,
@@ -26,6 +27,7 @@ import "./money-v2.css";
 
 const ADVANCED_FINANCE_PATH = "/money/balances/advanced";
 const MANAGED_DRIVER_PAYROLL_PATH = "/money/managed-driver-payroll";
+const FULFILLMENT_PATH = "/money/pricing/launch-assurance";
 
 export function MoneyWorkspaceRouter(props: {
   readonly route: string;
@@ -42,7 +44,15 @@ export function MoneyWorkspaceRouter(props: {
   if (props.route === "/money/pricing") return <MoneyPricingScreen onNavigate={props.onNavigate} />;
   if (props.route === "/money/pricing/delivery") return <AdminDeliveryPricingWorkspace />;
   if (props.route === "/money/pricing/drivers") return <AdminDriverPricingWorkspace />;
-  if (props.route === "/money/pricing/launch-assurance") return <AdminLaunchAssuranceWorkspace />;
+  if (props.route === FULFILLMENT_PATH || props.route.startsWith(`${FULFILLMENT_PATH}/`)) {
+    return (
+      <FulfillmentWorkspaceV2
+        route={props.route}
+        onNavigate={props.onNavigate}
+        renderAdvanced={() => <AdminLaunchAssuranceWorkspace />}
+      />
+    );
+  }
   if (props.route === "/money/controls") return <MoneyControlsScreen onNavigate={props.onNavigate} />;
   if (props.route === ADVANCED_FINANCE_PATH) {
     if (!can("platform.financial.manage")) {
@@ -184,11 +194,11 @@ function MoneyPricingScreen(props: { readonly onNavigate: (href: string) => void
         },
         {
           key: "launch-assurance",
-          title: "SKIMA Fulfillment Setup",
-          description: "Set the backup fulfillment mode, local LPG buying prices, Managed Drivers, Driver pay and payments to SKIMA Wallets.",
-          href: "/money/pricing/launch-assurance",
+          title: "SKIMA Fulfillment",
+          description: "Configure order routing, service availability, Managed Driver pay, local LPG buying prices and fleet readiness in focused steps.",
+          href: FULFILLMENT_PATH,
           icon: Settings2,
-          meta: "Launch fulfillment",
+          meta: "Managed fulfillment",
           anyOfPermissions: ["platform.dispatch.manage", "platform.financial_policy.read", "platform.drivers.manage", "platform.financial.manage"],
         },
       ]}
@@ -242,11 +252,11 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
         },
         {
           key: "launch-assurance-controls",
-          title: "SKIMA Fulfillment Setup",
-          description: "Manage SKIMA backup fulfillment, Managed Driver pay, local LPG reference prices and Driver wallet payouts.",
-          href: "/money/pricing/launch-assurance",
+          title: "SKIMA Fulfillment",
+          description: "Open the layered fulfillment workspace for routing, Managed Driver pay, LPG buying prices and readiness.",
+          href: FULFILLMENT_PATH,
           icon: Settings2,
-          meta: "Launch fulfillment",
+          meta: "Managed fulfillment",
           anyOfPermissions: ["platform.dispatch.manage", "platform.financial_policy.read", "platform.drivers.manage", "platform.financial.manage"],
         },
         {
