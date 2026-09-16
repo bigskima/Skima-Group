@@ -116,11 +116,11 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
         },
         {
           key: "skima-fulfillment",
-          title: "Fulfillment setup",
-          description: "Manage which fulfillment routes are available, Managed Driver pay, local LPG buying prices and other launch settings. Order priority is controlled directly above.",
+          title: "SKIMA Fulfillment",
+          description: "Open the layered workspace for service availability, Managed Driver pay, local LPG buying prices, team readiness and recent activity. Order priority stays visible directly above.",
           href: "/money/pricing/launch-assurance",
           icon: Settings2,
-          meta: "Detailed settings",
+          meta: "Focused setup",
           anyOfPermissions: ["platform.dispatch.manage", "platform.financial_policy.read", "platform.drivers.manage", "platform.financial.manage"],
         },
         {
