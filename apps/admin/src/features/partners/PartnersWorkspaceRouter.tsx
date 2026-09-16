@@ -13,6 +13,7 @@ import { AdminCompanyWorkspace } from "../../admin-company-workspace";
 import { AdminDriverParticipationWorkspace } from "../../admin-driver-participation-workspace";
 import { AdminFleetWorkspace } from "../../admin-fleet-workspace";
 import { AdminPartnerLocationReviewWorkspace } from "../../admin-partner-location-review-workspace";
+import { AdminSkimaFleetWorkspace } from "../../admin-skima-fleet-workspace";
 import { AdminStationPricingWorkspace } from "../../admin-station-pricing-workspace";
 import { AdminVerificationWorkspace } from "../../admin-verification-workspace";
 import { toLegacyAdminWorkspacePath } from "../../app/admin-v2-navigation";
@@ -69,7 +70,8 @@ export function PartnersWorkspaceRouter(props: {
     return <AdminVerificationWorkspace onOpenApplications={() => props.onNavigate(APPLICATIONS_BASE_PATH)} />;
   }
   if (props.route === "/partners/location-review") return <AdminPartnerLocationReviewWorkspace />;
-  if (props.route === "/partners/fleet") return <AdminFleetWorkspace />;
+  if (props.route === "/partners/fleet") return <AdminSkimaFleetWorkspace onNavigate={props.onNavigate} />;
+  if (props.route === "/partners/fleet/advanced") return <AdminFleetWorkspace />;
   if (props.route === "/partners/stations" || props.route.startsWith("/partners/stations/")) {
     return (
       <AdminStationPricingWorkspace
@@ -161,11 +163,11 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
         },
         {
           key: "fleet",
-          title: "Fleet & vehicles",
-          description: "Review vehicles and the fleet records linked to delivery operations.",
+          title: "SKIMA Fleet & Vehicles",
+          description: "Register company-owned vehicles, approve them for service and assign them to SKIMA Managed Drivers.",
           href: "/partners/fleet",
           icon: Truck,
-          meta: "Vehicles",
+          meta: "Company vehicles",
           permissionKey: "fleet",
         },
       ]}
