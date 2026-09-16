@@ -3,6 +3,7 @@ import {
   ClipboardList,
   LifeBuoy,
   MapPinned,
+  Settings2,
   ShieldCheck,
 } from "lucide-react";
 
@@ -103,6 +104,15 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
           icon: ClipboardList,
           meta: "Live operations",
           permissionKey: "operations",
+        },
+        {
+          key: "skima-fulfillment",
+          title: "SKIMA Fulfillment Setup",
+          description: "Set launch backup fulfillment, local LPG buying prices, Managed Drivers, Driver pay and payments to their SKIMA Wallets.",
+          href: "/money/pricing/launch-assurance",
+          icon: Settings2,
+          meta: "Managed fulfillment",
+          anyOfPermissions: ["platform.dispatch.manage", "platform.financial_policy.read", "platform.drivers.manage", "platform.financial.manage"],
         },
         {
           key: "coverage",
