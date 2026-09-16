@@ -7,6 +7,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+import { AdminFulfillmentPriorityControl } from "../../admin-fulfillment-priority-control";
 import { AdminManagedDriverCoverageWorkspace } from "../../admin-managed-driver-coverage-workspace";
 import { AdminOperationsWorkspace } from "../../admin-operations-workspace";
 import { AdminQualityWorkspace } from "../../admin-quality-workspace";
@@ -100,8 +101,9 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
     <WorkspaceLanding
       eyebrow="Operations"
       title="Operations"
-      description="Run SKIMA's day-to-day service operation from focused workspaces. Orders, coverage, station stock, quality and support stay connected without being placed on one endless page."
+      description="Run SKIMA's day-to-day LPG operation from one place. The order-routing control is kept here because it affects which delivery network receives new orders first."
       onNavigate={props.onNavigate}
+      aside={<AdminFulfillmentPriorityControl onNavigate={props.onNavigate} />}
       actions={[
         {
           key: "orders",
@@ -114,17 +116,17 @@ function OperationsOverviewScreen(props: { readonly onNavigate: (href: string) =
         },
         {
           key: "skima-fulfillment",
-          title: "SKIMA Fulfillment Setup",
-          description: "Set launch backup fulfillment, local LPG buying prices, Managed Drivers, Driver pay and payments to their SKIMA Wallets.",
+          title: "Fulfillment setup",
+          description: "Manage which fulfillment routes are available, Managed Driver pay, local LPG buying prices and other launch settings. Order priority is controlled directly above.",
           href: "/money/pricing/launch-assurance",
           icon: Settings2,
-          meta: "Managed fulfillment",
+          meta: "Detailed settings",
           anyOfPermissions: ["platform.dispatch.manage", "platform.financial_policy.read", "platform.drivers.manage", "platform.financial.manage"],
         },
         {
           key: "managed-driver-coverage",
           title: "Managed Driver Coverage",
-          description: "Assign SKIMA Managed Drivers to service areas using normal area names and review whether their vehicle and LPG coverage are ready.",
+          description: "Assign SKIMA Managed Drivers to service areas using normal area names and review whether their SKIMA vehicle and LPG coverage are ready.",
           href: MANAGED_DRIVER_COVERAGE_PATH,
           icon: MapPinned,
           meta: "Driver service areas",
