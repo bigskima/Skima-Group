@@ -4,13 +4,17 @@ import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
 import { ServiceAvailabilityWorkspaceV2 } from "./ServiceAvailabilityWorkspaceV2";
 import { ServiceCatalogWorkspaceV2 } from "./ServiceCatalogWorkspaceV2";
 import { UtilityBillingWorkspaceV2 } from "./UtilityBillingWorkspaceV2";
+import { UtilitySimpleDashboard } from "./UtilitySimpleDashboard";
 
 export function ServicesWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
 }) {
   if (props.route === "/services") return <ServicesOverviewScreen onNavigate={props.onNavigate} />;
-  if (props.route === "/services/utility-billing" || props.route.startsWith("/services/utility-billing/")) {
+  if (props.route === "/services/utility-billing") {
+    return <UtilitySimpleDashboard onNavigate={props.onNavigate} />;
+  }
+  if (props.route.startsWith("/services/utility-billing/")) {
     return <UtilityBillingWorkspaceV2 route={props.route} onNavigate={props.onNavigate} />;
   }
   if (props.route === "/services/catalog" || props.route.startsWith("/services/catalog/")) {
@@ -33,7 +37,7 @@ function ServicesOverviewScreen(props: { readonly onNavigate: (href: string) => 
         {
           key: "utility-billing",
           title: "Utility billing",
-          description: "Run airtime, data and electricity providers through focused catalogue, routing, economics, campaign and payment workspaces.",
+          description: "Use a simple control center for utility fees, provider float and daily operations, with technical provider setup available only when needed.",
           href: "/services/utility-billing",
           icon: Zap,
           meta: "Bills & payments",
