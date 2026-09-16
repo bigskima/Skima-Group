@@ -171,12 +171,12 @@ function MoneyPricingScreen(props: { readonly onNavigate: (href: string) => void
         },
         {
           key: "launch-assurance",
-          title: "LPG Launch Assurance",
-          description: "Configure marketplace fallback, internal Driver share and service-area LPG reference buying prices with readiness guards.",
+          title: "SKIMA Fulfillment Setup",
+          description: "Set the backup fulfillment mode, local LPG buying prices, Managed Drivers, Driver pay and payments to SKIMA Wallets.",
           href: "/money/pricing/launch-assurance",
           icon: Settings2,
-          meta: "Internal fulfillment",
-          anyOfPermissions: ["platform.dispatch.manage", "platform.financial_policy.read"],
+          meta: "Launch fulfillment",
+          anyOfPermissions: ["platform.dispatch.manage", "platform.financial_policy.read", "platform.drivers.manage", "platform.financial.manage"],
         },
       ]}
     />
@@ -220,12 +220,12 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
         },
         {
           key: "launch-assurance-controls",
-          title: "LPG Launch Assurance",
-          description: "Manage guarded internal LPG fulfillment and its separate Driver accrual policy.",
+          title: "SKIMA Fulfillment Setup",
+          description: "Manage SKIMA backup fulfillment, Managed Driver pay, local LPG reference prices and Driver wallet payouts.",
           href: "/money/pricing/launch-assurance",
           icon: Settings2,
-          meta: "Launch fallback",
-          anyOfPermissions: ["platform.dispatch.manage", "platform.financial_policy.read"],
+          meta: "Launch fulfillment",
+          anyOfPermissions: ["platform.dispatch.manage", "platform.financial_policy.read", "platform.drivers.manage", "platform.financial.manage"],
         },
         {
           key: "settlement-controls",
