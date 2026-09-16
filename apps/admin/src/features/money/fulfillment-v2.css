@@ -1,0 +1,302 @@
+.fulfillment-v2 {
+  min-width: 0;
+}
+
+.fulfillment-v2__nav {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(150px, 1fr);
+  gap: 10px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  scrollbar-width: thin;
+  overscroll-behavior-inline: contain;
+}
+
+.fulfillment-v2__nav button {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-height: 68px;
+  padding: 11px 12px;
+  border: 1px solid var(--sk-border, rgba(148, 163, 184, 0.22));
+  border-radius: 16px;
+  background: var(--sk-surface, #fff);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fulfillment-v2__nav button > svg {
+  width: 19px;
+  height: 19px;
+  color: var(--sk-muted, #64748b);
+}
+
+.fulfillment-v2__nav button > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fulfillment-v2__nav strong {
+  color: var(--sk-text, #0f172a);
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+
+.fulfillment-v2__nav small {
+  color: var(--sk-muted, #64748b);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.fulfillment-v2__nav button.is-active {
+  border-color: rgba(220, 38, 38, 0.32);
+  background: rgba(220, 38, 38, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.06);
+}
+
+.fulfillment-v2__nav button.is-active > svg,
+.fulfillment-v2__nav button.is-active strong {
+  color: #dc2626;
+}
+
+.fulfillment-v2__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fulfillment-v2__setup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fulfillment-v2__setup-card {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 10px;
+  min-height: 80px;
+  padding: 12px;
+  border: 1px solid var(--sk-border, rgba(148, 163, 184, 0.22));
+  border-radius: 15px;
+  background: var(--sk-surface, #fff);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fulfillment-v2__setup-card > span:first-child {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 12px;
+}
+
+.fulfillment-v2__setup-card > span:first-child svg {
+  width: 18px;
+  height: 18px;
+}
+
+.fulfillment-v2__setup-card > span:first-child.is-ready {
+  background: rgba(22, 163, 74, 0.1);
+  color: #16a34a;
+}
+
+.fulfillment-v2__setup-card > span:first-child.needs-work {
+  background: rgba(217, 119, 6, 0.1);
+  color: #d97706;
+}
+
+.fulfillment-v2__setup-card > span:nth-child(2) {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.fulfillment-v2__setup-card strong {
+  color: var(--sk-text, #0f172a);
+  font-size: 0.9rem;
+}
+
+.fulfillment-v2__setup-card small {
+  color: var(--sk-muted, #64748b);
+  line-height: 1.4;
+}
+
+.fulfillment-v2__setup-card > svg {
+  width: 17px;
+  color: var(--sk-muted, #94a3b8);
+}
+
+.fulfillment-v2__next-step {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(217, 119, 6, 0.08);
+}
+
+.fulfillment-v2__next-step strong {
+  color: #b45309;
+}
+
+.fulfillment-v2__next-step span {
+  color: var(--sk-muted, #64748b);
+}
+
+.fulfillment-v2__choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fulfillment-v2__choice {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 180px;
+  padding: 16px;
+  border: 1px solid var(--sk-border, rgba(148, 163, 184, 0.22));
+  border-radius: 16px;
+  background: var(--sk-surface, #fff);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fulfillment-v2__choice > svg {
+  width: 22px;
+  height: 22px;
+  color: var(--sk-muted, #64748b);
+}
+
+.fulfillment-v2__choice strong {
+  color: var(--sk-text, #0f172a);
+}
+
+.fulfillment-v2__choice > span:not(.status-badge) {
+  color: var(--sk-muted, #64748b);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.fulfillment-v2__choice.is-selected {
+  border-color: rgba(220, 38, 38, 0.34);
+  background: rgba(220, 38, 38, 0.06);
+}
+
+.fulfillment-v2__choice.is-selected > svg,
+.fulfillment-v2__choice.is-selected strong {
+  color: #dc2626;
+}
+
+.fulfillment-v2__compact-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  max-width: 760px;
+}
+
+.fulfillment-v2__single-task {
+  max-width: 900px;
+}
+
+.fulfillment-v2__action-grid,
+.fulfillment-v2__activity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.fulfillment-v2__action-title {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.fulfillment-v2__action-title > svg {
+  width: 19px;
+  height: 19px;
+  color: #dc2626;
+}
+
+.fulfillment-v2__advanced > .stack-lg {
+  margin-top: 0;
+}
+
+@media (max-width: 900px) {
+  .fulfillment-v2__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fulfillment-v2__choice-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .fulfillment-v2 {
+    gap: 14px;
+  }
+
+  .fulfillment-v2__nav {
+    margin-inline: -2px;
+    grid-auto-columns: minmax(142px, 72vw);
+    scroll-snap-type: inline proximity;
+  }
+
+  .fulfillment-v2__nav button {
+    min-height: 62px;
+    scroll-snap-align: start;
+  }
+
+  .fulfillment-v2__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .fulfillment-v2__setup-grid,
+  .fulfillment-v2__compact-form,
+  .fulfillment-v2__action-grid,
+  .fulfillment-v2__activity-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fulfillment-v2__setup-card {
+    grid-template-columns: 36px minmax(0, 1fr) 16px;
+    min-height: 72px;
+  }
+
+  .fulfillment-v2__setup-card .status-badge {
+    display: none;
+  }
+
+  .fulfillment-v2__setup-card > svg {
+    grid-column: 3;
+  }
+
+  .fulfillment-v2__choice {
+    min-height: 0;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .fulfillment-v2__nav button,
+  .fulfillment-v2__setup-card,
+  .fulfillment-v2__choice {
+    background: rgba(15, 23, 42, 0.82);
+  }
+
+  .fulfillment-v2__nav strong,
+  .fulfillment-v2__setup-card strong,
+  .fulfillment-v2__choice strong {
+    color: #f8fafc;
+  }
+}
