@@ -52,6 +52,18 @@ const AssignedAreaSchema = z.object({
 });
 const AssignedAreaListSchema = z.array(AssignedAreaSchema);
 
+const FleetVehicleSchema = z.object({
+  vehicleId: z.string().uuid(),
+  registrationNumber: z.string().nullable(),
+  manufacturer: z.string().nullable(),
+  model: z.string().nullable(),
+  status: z.string(),
+  complianceReady: z.boolean(),
+  currentDriverProfileId: z.string().uuid().nullable(),
+  currentAssignmentId: z.string().uuid().nullable(),
+});
+const FleetVehicleListSchema = z.array(FleetVehicleSchema.passthrough());
+
 export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate: (href: string) => void }) {
   const { supabase, status, context } = useSessionState();
   const queryClient = useQueryClient();
@@ -77,6 +89,17 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
     },
   });
 
+  const fleetVehicles = useQuery({
+    queryKey: ["platform-fleet-vehicles"],
+    enabled: status === "authenticated",
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("read_platform_fleet_vehicle_options");
+      if (error) throw error;
+      return FleetVehicleListSchema.parse(data ?? []);
+    },
+  });
+
   const serviceAreas = useQuery({
     queryKey: ["lpg-internal-service-area-options"],
     enabled: status === "authenticated",
@@ -90,6 +113,7 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
 
   const managedDrivers = useMemo(() => (drivers.data ?? []).filter((driver) => driver.isManaged), [drivers.data]);
   const selectedDriver = managedDrivers.find((driver) => driver.driverProfileId === driverId) ?? null;
+  const assignedFleetVehicle = (fleetVehicles.data ?? []).find((vehicle) => vehicle.currentDriverProfileId === driverId) ?? null;
 
   useEffect(() => {
     if (driverId && managedDrivers.some((driver) => driver.driverProfileId === driverId)) return;
@@ -120,6 +144,7 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["lpg-managed-drivers-admin"] }),
+      queryClient.invalidateQueries({ queryKey: ["platform-fleet-vehicles"] }),
       queryClient.invalidateQueries({ queryKey: ["lpg-managed-driver-service-areas"] }),
       queryClient.invalidateQueries({ queryKey: ["lpg-launch-assurance-readiness"] }),
     ]);
@@ -149,15 +174,16 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
     },
   });
 
-  if (drivers.isPending || serviceAreas.isPending) return <LoadingState label="Loading Managed Driver coverage…" />;
-  if (drivers.error || serviceAreas.error) return <ErrorState error={drivers.error ?? serviceAreas.error} onRetry={() => void refresh()} />;
+  if (drivers.isPending || serviceAreas.isPending || fleetVehicles.isPending) return <LoadingState label="Loading Managed Driver coverage…" />;
+  const queryError = drivers.error ?? serviceAreas.error ?? fleetVehicles.error;
+  if (queryError) return <ErrorState error={queryError} onRetry={() => void refresh()} />;
 
   return (
     <div className="stack-lg">
       <PageHeader
         eyebrow="Operations · Managed Drivers"
         title="Managed Driver Coverage"
-        description="Choose where each SKIMA Managed Driver can fulfil LPG orders. Select normal service-area names; SKIMA handles the underlying geography and dispatch coverage records."
+        description="Choose where each SKIMA Managed Driver can fulfil LPG orders and verify that a SKIMA-owned fleet vehicle is assigned. Personal Driver vehicles are not used for Managed Fulfillment."
         actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button>}
       />
 
@@ -165,7 +191,7 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
 
       <section className="skima-grid skima-grid--compact">
         <MetricTile label="Managed Drivers" value={managedDrivers.length} icon={UsersRound} />
-        <MetricTile label="Vehicle ready" value={managedDrivers.filter((driver) => driver.vehicleReady).length} icon={Truck} />
+        <MetricTile label="SKIMA vehicle ready" value={managedDrivers.filter((driver) => driver.vehicleReady).length} icon={Truck} />
         <MetricTile label="Coverage ready" value={managedDrivers.filter((driver) => driver.coverageReady).length} icon={MapPinned} />
         <MetricTile label="Fully ready" value={managedDrivers.filter((driver) => driver.vehicleReady && driver.coverageReady).length} icon={ShieldCheck} tone={managedDrivers.some((driver) => driver.vehicleReady && driver.coverageReady) ? "success" : "warning"} />
       </section>
@@ -184,17 +210,29 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
 
         {selectedDriver ? (
           <div className="skima-grid skima-grid--compact">
-            <div className="sk-panel"><StatusBadge tone={selectedDriver.vehicleReady ? "success" : "warning"}>{selectedDriver.vehicleReady ? "Vehicle ready" : "Vehicle setup needed"}</StatusBadge><h3>{selectedDriver.activeVehicleCount} active vehicle{selectedDriver.activeVehicleCount === 1 ? "" : "s"}</h3></div>
+            <div className="sk-panel">
+              <StatusBadge tone={selectedDriver.vehicleReady ? "success" : "warning"}>{selectedDriver.vehicleReady ? "SKIMA vehicle ready" : "SKIMA vehicle needed"}</StatusBadge>
+              <h3>{assignedFleetVehicle?.registrationNumber ?? "No company vehicle assigned"}</h3>
+              <span>{assignedFleetVehicle ? `${assignedFleetVehicle.manufacturer ?? "Vehicle"} ${assignedFleetVehicle.model ?? ""}`.trim() : "Assign an existing SKIMA-owned vehicle"}</span>
+            </div>
             <div className="sk-panel"><StatusBadge tone={selectedDriver.coverageReady ? "success" : "warning"}>{selectedDriver.coverageReady ? "Coverage ready" : "Coverage setup needed"}</StatusBadge><h3>{selectedDriver.serviceAreaCount} service area{selectedDriver.serviceAreaCount === 1 ? "" : "s"}</h3></div>
             <div className="sk-panel"><StatusBadge tone={selectedDriver.verificationStatus === "approved" ? "success" : "warning"}>{normalizeStatusLabel(selectedDriver.verificationStatus)}</StatusBadge><h3>{normalizeStatusLabel(selectedDriver.operationalStatus)}</h3></div>
           </div>
         ) : null}
 
-        {selectedDriver && !selectedDriver.vehicleReady ? (
+        {selectedDriver && !assignedFleetVehicle ? (
           <div className="sk-panel stack-md">
-            <strong>Vehicle setup is still required.</strong>
-            <p className="skima-muted">Use the existing Fleet & Vehicles workspace to approve or link an LPG-eligible vehicle. The Managed Driver setup will update automatically when the vehicle becomes ready.</p>
-            <Button variant="outline" icon={Truck} onClick={() => props.onNavigate("/partners/fleet")}>Open Fleet & Vehicles</Button>
+            <strong>No SKIMA vehicle is assigned to this Managed Driver.</strong>
+            <p className="skima-muted">Managed Drivers use vehicles owned by SKIMA. Open SKIMA Fleet to register a company vehicle or assign an existing available vehicle to this Driver.</p>
+            <Button variant="outline" icon={Truck} onClick={() => props.onNavigate("/partners/fleet")}>Open SKIMA Fleet</Button>
+          </div>
+        ) : null}
+
+        {selectedDriver && assignedFleetVehicle && !selectedDriver.vehicleReady ? (
+          <div className="sk-panel stack-md">
+            <strong>The assigned SKIMA vehicle is not service-ready yet.</strong>
+            <p className="skima-muted">Complete the vehicle's compliance checks and approval before it can be used for live LPG dispatch.</p>
+            <Button variant="outline" icon={Truck} onClick={() => props.onNavigate("/partners/fleet")}>Review assigned vehicle</Button>
           </div>
         ) : null}
       </section>
