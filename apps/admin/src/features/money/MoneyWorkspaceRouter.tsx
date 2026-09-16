@@ -10,6 +10,7 @@ import {
 import { usePermissionCheck } from "@skima/ui";
 
 import { AdminDeliveryPricingWorkspace, AdminDriverPricingWorkspace } from "../../admin-delivery-pricing-workspace";
+import { AdminLaunchAssuranceWorkspace } from "../../admin-launch-assurance-workspace";
 import { AdminResourceConsole } from "../../admin-resource-console";
 import { financeConsoleConfig } from "../../admin-resource-config";
 import { AdminRevenueWorkspace } from "../../admin-revenue-workspace";
@@ -37,6 +38,7 @@ export function MoneyWorkspaceRouter(props: {
   if (props.route === "/money/pricing") return <MoneyPricingScreen onNavigate={props.onNavigate} />;
   if (props.route === "/money/pricing/delivery") return <AdminDeliveryPricingWorkspace />;
   if (props.route === "/money/pricing/drivers") return <AdminDriverPricingWorkspace />;
+  if (props.route === "/money/pricing/launch-assurance") return <AdminLaunchAssuranceWorkspace />;
   if (props.route === "/money/controls") return <MoneyControlsScreen onNavigate={props.onNavigate} />;
   if (props.route === ADVANCED_FINANCE_PATH) {
     if (!can("platform.financial.manage")) {
@@ -167,6 +169,15 @@ function MoneyPricingScreen(props: { readonly onNavigate: (href: string) => void
           meta: "Driver earnings",
           permissionKey: "driver-pricing",
         },
+        {
+          key: "launch-assurance",
+          title: "LPG Launch Assurance",
+          description: "Configure marketplace fallback, internal Driver share and service-area LPG reference buying prices with readiness guards.",
+          href: "/money/pricing/launch-assurance",
+          icon: Settings2,
+          meta: "Internal fulfillment",
+          anyOfPermissions: ["platform.dispatch.manage", "platform.financial_policy.read"],
+        },
       ]}
     />
   );
@@ -206,6 +217,15 @@ function MoneyControlsScreen(props: { readonly onNavigate: (href: string) => voi
           icon: WalletCards,
           meta: "Driver policy",
           permissionKey: "driver-pricing",
+        },
+        {
+          key: "launch-assurance-controls",
+          title: "LPG Launch Assurance",
+          description: "Manage guarded internal LPG fulfillment and its separate Driver accrual policy.",
+          href: "/money/pricing/launch-assurance",
+          icon: Settings2,
+          meta: "Launch fallback",
+          anyOfPermissions: ["platform.dispatch.manage", "platform.financial_policy.read"],
         },
         {
           key: "settlement-controls",
