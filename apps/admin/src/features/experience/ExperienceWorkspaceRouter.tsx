@@ -5,6 +5,7 @@ import { AdminPolicyWorkspace } from "../../admin-policy-workspace";
 import { AdminStartupBrandingWorkspace } from "../../admin-startup-branding-workspace";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
 import { ContentWorkspaceV2 } from "./ContentWorkspaceV2";
+import { PolicyWorkspaceV2 } from "./PolicyWorkspaceV2";
 
 export function ExperienceWorkspaceRouter(props: {
   readonly route: string;
@@ -13,7 +14,8 @@ export function ExperienceWorkspaceRouter(props: {
   if (props.route === "/experience") return <ExperienceOverviewScreen onNavigate={props.onNavigate} />;
   if (props.route === "/experience/content") return <ContentWorkspaceV2 onNavigate={props.onNavigate} />;
   if (props.route === "/experience/content/advanced") return <AdminContentWorkspace />;
-  if (props.route === "/experience/policies") return <AdminPolicyWorkspace />;
+  if (props.route === "/experience/policies") return <PolicyWorkspaceV2 />;
+  if (props.route === "/experience/policies/advanced") return <AdminPolicyWorkspace />;
   if (props.route === "/experience/branding") return <AdminStartupBrandingWorkspace />;
   return <ExperienceOverviewScreen onNavigate={props.onNavigate} />;
 }
@@ -38,7 +40,7 @@ function ExperienceOverviewScreen(props: { readonly onNavigate: (href: string) =
         {
           key: "policies",
           title: "Terms & policies",
-          description: "Review policy documents, create controlled drafts, publish approved versions and manage re-acceptance requirements.",
+          description: "Move through policy documents, version drafting/publishing and acceptance status as separate steps.",
           href: "/experience/policies",
           icon: FileText,
           meta: "Policy governance",
@@ -47,7 +49,7 @@ function ExperienceOverviewScreen(props: { readonly onNavigate: (href: string) =
         {
           key: "branding",
           title: "App branding",
-          description: "Manage the SKIMA startup screen, logo presentation and branded launch experience without rebuilding the app.",
+          description: "Configure startup appearance, images and preview as separate steps without rebuilding the app.",
           href: "/experience/branding",
           icon: Image,
           meta: "Startup experience",
