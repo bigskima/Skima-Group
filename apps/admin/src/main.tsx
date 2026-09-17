@@ -6,6 +6,7 @@ import "@skima/ui/styles.css";
 import "./styles.css";
 import "./production-ui.css";
 import "./admin-grade.css";
+import "./dialog-scroll-fix.css";
 import "./admin-workspace-sections.css";
 import "./admin-v2-theme.css";
 
