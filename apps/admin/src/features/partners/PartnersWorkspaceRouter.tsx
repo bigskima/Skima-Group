@@ -24,6 +24,7 @@ import {
   buildApplicationRecordPath,
   parseApplicationRecordRoute,
 } from "./application-record-route";
+import { DriverManagementHub, FleetManagementHub } from "./PartnerTaskHubs";
 
 export function PartnersWorkspaceRouter(props: {
   readonly route: string;
@@ -66,14 +67,30 @@ export function PartnersWorkspaceRouter(props: {
   }
 
   if (props.route === "/partners/companies") return <AdminCompanyWorkspace />;
-  if (props.route === "/partners/drivers") return <AdminDriverParticipationWorkspace />;
+
+  if (props.route === "/partners/drivers") {
+    return <DriverManagementHub onNavigate={props.onNavigate} />;
+  }
+  if (props.route === "/partners/drivers/directory") {
+    return <AdminDriverParticipationWorkspace />;
+  }
+
   if (props.route === "/partners/verification") {
     return <AdminVerificationWorkspace onOpenApplications={() => props.onNavigate(APPLICATIONS_BASE_PATH)} />;
   }
   if (props.route === "/partners/location-review") return <AdminPartnerLocationReviewWorkspace />;
-  if (props.route === "/partners/fleet") return <AdminSkimaFleetWorkspace onNavigate={props.onNavigate} />;
-  if (props.route === "/partners/fleet/advanced") return <AdminSkimaFleetComplianceWorkspace onNavigate={props.onNavigate} />;
+
+  if (props.route === "/partners/fleet") {
+    return <FleetManagementHub onNavigate={props.onNavigate} />;
+  }
+  if (props.route === "/partners/fleet/vehicles") {
+    return <AdminSkimaFleetWorkspace onNavigate={props.onNavigate} />;
+  }
+  if (props.route === "/partners/fleet/compliance" || props.route === "/partners/fleet/advanced") {
+    return <AdminSkimaFleetComplianceWorkspace onNavigate={props.onNavigate} />;
+  }
   if (props.route === "/partners/fleet/legacy") return <AdminFleetWorkspace />;
+
   if (props.route === "/partners/stations" || props.route.startsWith("/partners/stations/")) {
     return (
       <AdminStationPricingWorkspace
@@ -139,7 +156,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
         {
           key: "drivers",
           title: "Drivers",
-          description: "Manage driver participation, eligibility and operational availability.",
+          description: "Choose Driver records, SKIMA Managed coverage, company fleet, payroll or LPG order routing from a focused Driver workspace.",
           href: "/partners/drivers",
           icon: UserRoundCheck,
           meta: "Delivery partners",
@@ -166,7 +183,7 @@ function PartnersOverviewScreen(props: { readonly onNavigate: (href: string) => 
         {
           key: "fleet",
           title: "SKIMA Fleet & Vehicles",
-          description: "Register company-owned vehicles, maintain their compliance and assign them to SKIMA Managed Drivers.",
+          description: "Choose vehicle registration and assignment, compliance documents, or Managed Driver coverage without one long fleet page.",
           href: "/partners/fleet",
           icon: Truck,
           meta: "Company vehicles",
