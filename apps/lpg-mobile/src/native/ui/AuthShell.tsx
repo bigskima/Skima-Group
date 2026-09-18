@@ -14,7 +14,6 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, shadows } from "../theme/tokens";
 import { BrandMark } from "./BrandMark";
 
-type AuthMode = "login" | "register";
 
 export function AuthShell({
   eyebrow,
@@ -30,7 +29,6 @@ export function AuthShell({
   readonly action?: ReactNode;
   readonly children: ReactNode;
   readonly footer?: ReactNode;
-  readonly activeMode?: AuthMode;
 }) {
   const { palette, scheme } = useAppTheme();
   const { width } = useWindowDimensions();
