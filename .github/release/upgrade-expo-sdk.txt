@@ -1,1 +1,1 @@
-Upgrade SKIMA LPG to Expo SDK 57 and align RN/Jest dependencies. Retry 2. No EAS build.
+Upgrade SKIMA LPG to Expo SDK 57. Retry 3 after dynamic plugin alignment. No EAS build.
