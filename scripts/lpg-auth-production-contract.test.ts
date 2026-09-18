@@ -57,11 +57,12 @@ Deno.test("authenticated Supabase sessions are not rejected when role context is
   );
 });
 
-Deno.test("LPG auth keeps the premium mode switch and browser autofill hardening", () => {
-  assertStringIncludes(authShell, 'activeMode === "login"');
-  assertStringIncludes(authShell, 'activeMode === "register"');
+Deno.test("LPG auth stays premium without duplicating onboarding content", () => {
   assertStringIncludes(authShell, "BlurView");
-  assertStringIncludes(login, 'activeMode="login"');
-  assertStringIncludes(register, 'activeMode="register"');
+  assertStringIncludes(authShell, "<BrandMark compact />");
+  assert(!authShell.includes("RoleSignal"), "Auth must not duplicate role/onboarding cards.");
+  assert(!authShell.includes("ONE IDENTITY · EVERY SKIMA WORKSPACE"), "Auth must remain focused on account fields.");
+  assertStringIncludes(login, 'title="Welcome back"');
+  assertStringIncludes(register, 'title="Join SKIMA"');
   assertStringIncludes(html, "input:-webkit-autofill");
 });
