@@ -1,0 +1,57 @@
+name: Upgrade SKIMA Expo SDK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/release/upgrade-expo-sdk.txt"
+
+permissions:
+  contents: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/lpg-mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/lpg-mobile/package-lock.json
+
+      - name: Install current dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Upgrade to Expo SDK 57 and align native dependencies
+        run: |
+          npx expo install expo@^57.0.9 --fix
+          npx expo install --fix
+
+      - name: Typecheck upgraded app
+        run: npm run check
+
+      - name: Expo Doctor
+        run: npx --yes expo-doctor@latest
+
+      - name: Commit SDK upgrade
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/lpg-mobile/package.json apps/lpg-mobile/package-lock.json
+          if git diff --cached --quiet; then
+            echo "No dependency changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(lpg): upgrade Expo SDK 57"
+          git push origin HEAD:main
