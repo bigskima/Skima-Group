@@ -56,7 +56,6 @@ export default function Login() {
 
   return (
     <AuthShell
-      activeMode="login"
       eyebrow="Sign in"
       title="Welcome back"
       body="Enter your SKIMA account details."
