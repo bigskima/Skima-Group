@@ -34,6 +34,7 @@ jobs:
 
       - name: Upgrade to Expo SDK 57 and align native dependencies
         run: |
+          npm pkg set 'devDependencies.@react-native/jest-preset=^0.86.3'
           npx expo install expo@^57.0.9 --fix
           npx expo install --fix
 
