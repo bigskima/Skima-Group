@@ -1,1 +1,1 @@
-Stop the current chained release immediately after production APK finishes.
+Stop the current chained release immediately after production APK finishes. Retry 2.
