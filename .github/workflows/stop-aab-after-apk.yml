@@ -39,8 +39,12 @@ jobs:
         run: |
           set -euo pipefail
           for i in {1..120}; do
-            JSON="$(npx --yes eas-cli@latest build:view "$TARGET_BUILD_ID" --json --non-interactive)"
-            STATUS="$(printf '%s' "$JSON" | jq -r '.status')"
+            JSON="$(npx --yes eas-cli@latest build:list --platform android --limit 10 --json --non-interactive)"
+            STATUS="$(printf '%s' "$JSON" | jq -r --arg id "$TARGET_BUILD_ID" '.[] | select(.id == $id) | .status')" 
+            if [ -z "$STATUS" ]; then
+              echo "::error::Target APK build was not found."
+              exit 1
+            fi
             echo "APK status: $STATUS"
             case "$STATUS" in
               FINISHED|ERRORED|CANCELED)
