@@ -67,6 +67,7 @@ const ReadinessSchema = z.object({
   managedApprovedDriverCount: z.coerce.number().int().nonnegative(),
   vehicleReadyDriverCount: z.coerce.number().int().nonnegative(),
   coverageReadyDriverCount: z.coerce.number().int().nonnegative(),
+  fullyReadyDriverCount: z.coerce.number().int().nonnegative(),
   reasons: z.array(z.string()),
 });
 
