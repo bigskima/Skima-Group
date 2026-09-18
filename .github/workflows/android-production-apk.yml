@@ -17,7 +17,6 @@ on:
           - preview
           - development
           - production
-          - production-aab
           - production-apk
         default: production
       clear_cache:
