@@ -1,0 +1,35 @@
+name: SKIMA EAS build status
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/release/skima-eas-status.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    name: Read EAS Android build status
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/lpg-mobile
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Show latest Android builds
+        run: |
+          test -n "$EXPO_TOKEN" || (echo "::error::Missing GitHub secret EXPO_TOKEN." && exit 1)
+          npx --yes eas-cli@latest build:list --platform android --limit 10 --json --non-interactive
