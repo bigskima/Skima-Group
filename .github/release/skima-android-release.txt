@@ -1,6 +1,6 @@
 SKIMA LPG Android release trigger
 
-Requested: 2026-09-18
+Requested: 2026-09-18 retry 2
 Artifacts:
 - production APK (EAS profile: production)
 - production AAB (EAS profile: production-aab)
