@@ -29,6 +29,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
       - name: Show latest Android builds
         run: |
           test -n "$EXPO_TOKEN" || (echo "::error::Missing GitHub secret EXPO_TOKEN." && exit 1)
