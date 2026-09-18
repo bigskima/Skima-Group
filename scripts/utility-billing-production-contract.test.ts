@@ -11,6 +11,8 @@ const dashboard = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/Premium
 const guide = await Deno.readTextFile("apps/admin/src/admin-utility-provider-guide.tsx");
 const customerBills = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/UtilityBillsScreen.tsx");
 const utilityProviderRuntime = await Deno.readTextFile("supabase/functions/_shared/utility-provider-runtime.ts");
+const genericHttpAdapter = await Deno.readTextFile("supabase/functions/_shared/utility-provider-generic-http-adapter.ts");
+const flutterwaveAdapter = await Deno.readTextFile("supabase/functions/_shared/utility-provider-flutterwave-adapter.ts");
 const flutterwaveAdapterInstall = await Deno.readTextFile("supabase/migrations/20260909030000_flutterwave_utility_adapter_installation.sql");
 const fulfillmentRuntime = await Deno.readTextFile("supabase/migrations/20260909033000_utility_financial_fulfillment_runtime.sql");
 const settlementAllocation = await Deno.readTextFile("supabase/migrations/20260909033500_utility_settlement_profit_allocation.sql");
@@ -266,19 +268,19 @@ Deno.test("post-success provider reversal is explicitly outside initial retry se
 });
 
 Deno.test("duplicate provider references are reconciled instead of refunded", () => {
-  assertStringIncludes(utilityProviderRuntime, "utility_provider_duplicate_reference");
-  assertStringIncludes(utilityProviderRuntime, 'normalizedMessage.includes("duplicate")');
-  assertStringIncludes(utilityProviderRuntime, 'normalizedMessage.includes("reference")');
+  assertStringIncludes(genericHttpAdapter, "utility_provider_duplicate_reference");
+  assertStringIncludes(genericHttpAdapter, 'normalizedMessage.includes("duplicate")');
+  assertStringIncludes(genericHttpAdapter, 'normalizedMessage.includes("reference")');
   assertStringIncludes(runtimeWorker, "ambiguousDuplicate");
   assertStringIncludes(runtimeWorker, 'normalized?.code === "utility_provider_duplicate_reference"');
   assertStringIncludes(runtimeWorker, "target_provider_reference: ambiguousDuplicate");
 });
 
 Deno.test("Flutterwave status reconciliation uses tx_ref instead of flw_ref", () => {
-  assertStringIncludes(utilityProviderRuntime, "const transactionReference");
-  assertStringIncludes(utilityProviderRuntime, "optionalString(data.tx_ref)");
-  assertStringIncludes(utilityProviderRuntime, "providerFulfillmentReference: optionalString(data.flw_ref)");
-  assertStringIncludes(utilityProviderRuntime, "providerReference: transactionReference");
+  assertStringIncludes(flutterwaveAdapter, "const transactionReference");
+  assertStringIncludes(flutterwaveAdapter, "optionalString(data.tx_ref)");
+  assertStringIncludes(flutterwaveAdapter, "providerFulfillmentReference: optionalString(data.flw_ref)");
+  assertStringIncludes(flutterwaveAdapter, "providerReference: transactionReference");
 });
 
 Deno.test("unresolved real-money utility payments escalate without automatic refund", () => {
@@ -299,7 +301,8 @@ Deno.test("utility provider webhook is signed and wakes authoritative reconcilia
   assertStringIncludes(utilityProviderWebhook, 'request.headers.get("verif-hash")');
   assertStringIncludes(utilityProviderWebhook, "hmacSha256Base64");
   assertStringIncludes(utilityProviderWebhook, "readUtilityPurchaseStatus");
-  assertStringIncludes(utilityProviderWebhook, "Never settle from callback contents alone");
+  assertStringIncludes(utilityProviderWebhook, "A callback is only a wake-up signal");
+  assertStringIncludes(utilityProviderWebhook, "independently re-queries the");
   assertStringIncludes(utilityProviderWebhook, "finalize_utility_payment_request");
   assertStringIncludes(utilityProviderWebhook, "resolve_utility_webhook_request");
   assertStringIncludes(utilityProviderRuntime, "resolveUtilityWebhookCallbackUrl");
