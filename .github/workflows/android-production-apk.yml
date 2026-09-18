@@ -16,8 +16,10 @@ on:
         options:
           - preview
           - development
+          - production
+          - production-aab
           - production-apk
-        default: preview
+        default: production
       clear_cache:
         description: Clear the EAS build cache before building
         required: false
