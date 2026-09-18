@@ -49,6 +49,7 @@ const ReadinessSchema = z.object({
   managedApprovedDriverCount: z.coerce.number().int().nonnegative(),
   vehicleReadyDriverCount: z.coerce.number().int().nonnegative(),
   coverageReadyDriverCount: z.coerce.number().int().nonnegative(),
+  fullyReadyDriverCount: z.coerce.number().int().nonnegative(),
   reasons: z.array(z.string()),
 });
 
@@ -447,7 +448,7 @@ export function AdminLaunchAssuranceWorkspace() {
       <section className="skima-grid skima-grid--compact">
         <MetricTile label="Launch status" value={ready?.ready ? "Ready" : "Setup needed"} icon={ready?.ready ? CircleCheck : CircleOff} tone={ready?.ready ? "success" : "warning"} />
         <MetricTile label="Managed Drivers" value={ready?.managedApprovedDriverCount ?? 0} icon={Truck} />
-        <MetricTile label="Drivers fully ready" value={Math.min(ready?.vehicleReadyDriverCount ?? 0, ready?.coverageReadyDriverCount ?? 0)} icon={ShieldCheck} />
+        <MetricTile label="Drivers fully ready" value={ready?.fullyReadyDriverCount ?? 0} icon={ShieldCheck} />
         <MetricTile label="Priced areas" value={ready?.internalReferencePriceScopeCount ?? 0} icon={MapPinned} />
       </section>
 
