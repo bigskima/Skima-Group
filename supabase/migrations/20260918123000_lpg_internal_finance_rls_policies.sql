@@ -24,6 +24,26 @@ create policy lpg_internal_driver_earnings_deny_direct_authenticated
   using (false)
   with check (false);
 
+drop policy if exists lpg_internal_driver_payouts_deny_direct_authenticated
+  on public.lpg_internal_driver_payouts;
+
+create policy lpg_internal_driver_payouts_deny_direct_authenticated
+  on public.lpg_internal_driver_payouts
+  for all
+  to authenticated
+  using (false)
+  with check (false);
+
+drop policy if exists lpg_internal_driver_payout_allocations_deny_direct_authenticated
+  on public.lpg_internal_driver_payout_allocations;
+
+create policy lpg_internal_driver_payout_allocations_deny_direct_authenticated
+  on public.lpg_internal_driver_payout_allocations
+  for all
+  to authenticated
+  using (false)
+  with check (false);
+
 notify pgrst, 'reload schema';
 
 commit;
