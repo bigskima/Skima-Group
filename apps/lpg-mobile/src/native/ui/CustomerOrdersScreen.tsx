@@ -3,6 +3,7 @@ import { ChevronRight, ClipboardList, MapPin, PackageCheck, ShieldCheck, Truck }
 import { useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useJobDetails } from "../api/domains";
+import { isSkimaInternalFulfillmentChannel } from "../api/lpgFulfillment";
 import { useResolvedLocationLabel } from "../domains/maps/readableLocation";
 import {
   displayReference,
@@ -70,7 +71,7 @@ export function CustomerOrdersScreen() {
     <Screen
       eyebrow="Refills"
       title="My orders"
-      subtitle="Track every refill from payment and pickup through station processing and return delivery."
+      subtitle="Track every refill from payment and pickup through fulfillment and return delivery."
       action={<AppButton label="New refill" size="sm" onPress={() => router.push("/(customer)/orders/new")} />}
       refreshControl={
         <RefreshControl
@@ -122,9 +123,13 @@ export function CustomerOrdersScreen() {
             const status = displayStatus(order) ?? "created";
             const currency = firstString(order, ["currency_code", "currencyCode"]) ?? "NGN";
             const total = firstNumber(order, ["total_amount", "totalAmount", "quoted_total", "quotedTotal"]);
-            const stationText = station
-              ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned station")
-              : "Finding the best station";
+            const fulfillmentChannel = firstString(order, ["fulfillment_channel", "fulfillmentChannel"]);
+            const internalFulfillment = isSkimaInternalFulfillmentChannel(fulfillmentChannel);
+            const stationText = internalFulfillment
+              ? "SKIMA-managed fulfillment"
+              : station
+                ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned partner station")
+                : "Finding an available partner station";
             const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? status;
             const paymentNeeded = isPaymentActionRequired(status, paymentStatus);
 
@@ -235,12 +240,20 @@ export function CustomerOrderDetailScreen() {
   const canVerifyDelivery = DELIVERY_CONFIRMATION_STATES.has(normalized);
   const canShowReceipt = FINAL_ORDER_STATES.has(normalized) || ["paid", "settled"].includes(normalizeStatus(paymentStatus));
   const aiOrderReference = order ? (displayReference(order) ?? id ?? "this refill") : "this refill";
+  const fulfillmentChannel = firstString(order, ["fulfillment_channel", "fulfillmentChannel"]);
+  const internalFulfillment = isSkimaInternalFulfillmentChannel(fulfillmentChannel);
+  const fulfillmentLabel = internalFulfillment
+    ? "SKIMA-managed fulfillment"
+    : station
+      ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned partner station")
+      : "Finding an available partner station";
+
 
   return (
     <Screen
       eyebrow="Order details"
       title={order ? (displayReference(order) ?? "Refill order") : "Refill order"}
-      subtitle="One trusted view of your cylinder, station, payment and current delivery stage."
+      subtitle="One trusted view of your cylinder, fulfillment route, payment and current delivery stage."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
       refreshControl={
         <RefreshControl
@@ -293,7 +306,7 @@ export function CustomerOrderDetailScreen() {
             </View>
             <View style={styles.infoGrid}>
               <InfoField label="Cylinder" value={cylinderSummary(cylinder)} />
-              <InfoField label="Station" value={station ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned station") : "Finding the best station"} />
+              <InfoField label="Fulfillment" value={fulfillmentLabel} />
               <InfoField label="Pickup" value={pickupAddress} />
               <InfoField label="Return" value={returnAddress} />
             </View>
