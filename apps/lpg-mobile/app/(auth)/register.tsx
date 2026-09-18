@@ -73,7 +73,6 @@ export default function Register() {
 
   return (
     <AuthShell
-      activeMode="register"
       eyebrow="Create account"
       title="Join SKIMA"
       body="Create your SKIMA account to get started."
