@@ -584,7 +584,10 @@ function normalizeCatalog(
       { arrayPath },
     );
   }
-  const mapping = optionalRecord(response.mapping) ?? optionalRecord((optionalRecord((optionalRecord(context.config.genericContract)?.operations))?.catalog)?.mapping) ?? {};
+  const genericContract = optionalRecord(context.config.genericContract);
+  const genericOperations = optionalRecord(genericContract?.operations);
+  const catalogContract = optionalRecord(genericOperations?.catalog);
+  const mapping = optionalRecord(response.mapping) ?? optionalRecord(catalogContract?.mapping) ?? {};
   const defaults = optionalRecord(response.defaults) ?? {};
   const requested = new Set((options.categoryCodes ?? []).map((item) => item.trim().toLowerCase()).filter(Boolean));
   const categories = new Set<string>();

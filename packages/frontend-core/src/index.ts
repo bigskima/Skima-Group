@@ -367,6 +367,43 @@ export function createSkimaSupabaseClient(config: ClientRuntimeConfig): Supabase
   });
 }
 
+function createRuntimeUuid(): string {
+  const runtimeCrypto = (globalThis as unknown as {
+    crypto?: {
+      randomUUID?: () => string;
+      getRandomValues?: (buffer: Uint8Array) => Uint8Array;
+    };
+  }).crypto;
+
+  if (typeof runtimeCrypto?.randomUUID === "function") {
+    return runtimeCrypto.randomUUID();
+  }
+
+  const bytes = new Uint8Array(16);
+  if (typeof runtimeCrypto?.getRandomValues === "function") {
+    runtimeCrypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  // Keep the fallback UUID-shaped so request tracing and idempotency keys stay
+  // compatible on native runtimes (including React Native/Hermes) that do not
+  // expose the browser Web Crypto randomUUID API.
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20),
+  ].join("-");
+}
+
 export function createClientIdempotencyKey(scope: string, targetId?: string): string {
   const normalizedScope = scope.trim().toLowerCase().replace(/[^a-z0-9._:-]+/g, "-");
 
@@ -378,7 +415,7 @@ export function createClientIdempotencyKey(scope: string, targetId?: string): st
     "frontend",
     normalizedScope,
     targetId?.trim() || "record",
-    crypto.randomUUID(),
+    createRuntimeUuid(),
   ].join(":");
 }
 
@@ -426,7 +463,7 @@ export class ApiGatewayClient {
     options: GatewayRequestOptions = {},
   ): Promise<z.output<TSchema>> {
     const startedAt = performance.now();
-    const requestId = crypto.randomUUID();
+    const requestId = createRuntimeUuid();
     const method = options.method ?? "GET";
     const timeoutMs = options.timeoutMs ?? this.defaultTimeoutMs;
     const controller = new AbortController();

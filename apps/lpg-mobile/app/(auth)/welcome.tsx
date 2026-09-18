@@ -1,17 +1,8 @@
-import { BlurView } from "expo-blur";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import {
-  ArrowRight,
-  BadgeCheck,
-  ChevronRight,
-  LockKeyhole,
-  ShieldCheck,
-  Sparkles,
-  Truck,
-  Warehouse,
-} from "lucide-react-native";
-import type { ReactNode } from "react";
+import { ArrowLeft, ArrowRight, Flame } from "lucide-react-native";
+import { useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -22,333 +13,288 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import {
+  type ProductContentRecord,
+  usePublishedProductContent,
+} from "../../src/native/api/productContent";
 import { useAppTheme } from "../../src/native/theme/ThemeProvider";
 import { colors, radii, shadows } from "../../src/native/theme/tokens";
 import { BrandMark } from "../../src/native/ui/BrandMark";
 
+const ONBOARDING_STEPS = [
+  {
+    placementKey: "mobile.onboarding.customer.request",
+    title: "Request your refill",
+    body: "Choose your cylinder and tell SKIMA where to collect it.",
+  },
+  {
+    placementKey: "mobile.onboarding.customer.pickup",
+    title: "We collect with care",
+    body: "A verified driver collects your identified cylinder and confirms the hand-off.",
+  },
+  {
+    placementKey: "mobile.onboarding.customer.track",
+    title: "Follow every step",
+    body: "Track progress as SKIMA coordinates pickup, refill and return.",
+  },
+  {
+    placementKey: "mobile.onboarding.customer.refill",
+    title: "Refilled through SKIMA",
+    body: "SKIMA uses the available fulfillment route for your area while keeping your order protected.",
+  },
+  {
+    placementKey: "mobile.onboarding.customer.return",
+    title: "Returned to your door",
+    body: "Your driver brings the same identified cylinder safely back to you.",
+  },
+] as const;
+
+const CONTENT_KEYS = [
+  "mobile.welcome.hero",
+  ...ONBOARDING_STEPS.map((step) => step.placementKey),
+] as const;
+
 export default function Welcome() {
   const { palette, scheme } = useAppTheme();
   const { width } = useWindowDimensions();
-  const wide = width >= 900;
+  const [stepIndex, setStepIndex] = useState(0);
+  const content = usePublishedProductContent(CONTENT_KEYS, {
+    audience: "public",
+    moduleKey: "lpg",
+  });
   const dark = scheme === "dark";
+  const wide = width >= 760;
+
+  const slides = useMemo(() => {
+    const publications = content.data ?? [];
+    const fallbackArtwork = bestPublication(publications, "mobile.welcome.hero")?.mediaUrl ?? null;
+    return ONBOARDING_STEPS.map((fallback) => {
+      const publication = bestPublication(publications, fallback.placementKey);
+      return {
+        placementKey: fallback.placementKey,
+        title: publication?.title ?? fallback.title,
+        body: publication?.body ?? fallback.body,
+        mediaUrl: publication?.mediaUrl ?? fallbackArtwork,
+        accessibilityLabel: publication?.accessibilityLabel ?? publication?.title ?? fallback.title,
+      };
+    });
+  }, [content.data]);
+
+  const slide = slides[stepIndex] ?? slides[0]!;
+  const finalStep = stepIndex === slides.length - 1;
+
+  const next = () => {
+    if (finalStep) {
+      router.push("/(auth)/register");
+      return;
+    }
+    setStepIndex((current) => Math.min(current + 1, slides.length - 1));
+  };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: dark ? "#08090B" : "#F7F7F8" }]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: dark ? "#08090B" : "#F8F8F9" }]}>
       <LinearGradient
-        colors={
-          dark
-            ? ["#08090B", "#140B0E", "#090A0C"]
-            : ["#FFFFFF", "#FFF5F6", "#F7F7F8"]
-        }
+        colors={dark ? ["#08090B", "#150B0F", "#090A0C"] : ["#FFFFFF", "#FFF5F6", "#F8F8F9"]}
         end={{ x: 1, y: 1 }}
         start={{ x: 0, y: 0 }}
         style={StyleSheet.absoluteFill}
       />
-      <View style={styles.heroOrb} />
-      <View style={styles.heroOrbSmall} />
+      <View style={styles.glow} />
 
       <ScrollView contentContainerStyle={styles.outer} showsVerticalScrollIndicator={false}>
         <View style={[styles.shell, wide && styles.shellWide]}>
-          <View style={[styles.hero, wide && styles.heroWide]}>
+          <View style={styles.topBar}>
             <View style={styles.brandRow}>
-              <View style={[styles.logoPlate, { backgroundColor: palette.surface }]}>
+              <View style={[styles.logoPlate, { backgroundColor: palette.surface, borderColor: palette.border }]}>
                 <BrandMark compact />
               </View>
-              <View>
-                <Text style={[styles.brandName, { color: palette.ink }]}>SKIMA</Text>
-                <Text style={[styles.brandSub, { color: palette.muted }]}>LPG network</Text>
-              </View>
+              <Text style={[styles.brandName, { color: palette.ink }]}>SKIMA</Text>
             </View>
-
-            <View style={styles.copy}>
-              <View style={styles.kickerRow}>
-                <Sparkles color={palette.brand} size={14} strokeWidth={2.5} />
-                <Text style={[styles.kicker, { color: palette.brand }]}>
-                  ONE ACCOUNT · REAL LPG OPERATIONS
-                </Text>
-              </View>
-              <Text style={[styles.title, !wide && styles.titleMobile, { color: palette.ink }]}>
-                Your LPG journey, coordinated from pickup to return.
-              </Text>
-              <Text style={[styles.body, { color: palette.muted }]}>
-                Request refills, follow your cylinder, work approved delivery jobs, or operate an approved station without juggling separate accounts.
-              </Text>
-            </View>
-
-            <View style={[styles.trustStrip, { borderColor: palette.border }]}>
-              <TrustPoint icon={<LockKeyhole color={palette.success} size={15} />} text="Protected account" />
-              <TrustPoint icon={<BadgeCheck color={palette.success} size={15} />} text="Role-based access" />
-              <TrustPoint icon={<ShieldCheck color={palette.success} size={15} />} text="Audited operations" />
-            </View>
-          </View>
-
-          <BlurView
-            intensity={dark ? 24 : 70}
-            tint={dark ? "dark" : "light"}
-            style={[
-              styles.entryCard,
-              shadows.floating,
-              {
-                borderColor: dark ? "rgba(255,255,255,.10)" : "rgba(25,25,27,.08)",
-                backgroundColor: dark ? "rgba(18,18,21,.88)" : "rgba(255,255,255,.88)",
-              },
-            ]}
-          >
-            <View style={styles.entryAccent} />
-            <View style={styles.entryHeading}>
-              <Text style={styles.entryEyebrow}>Choose how to continue</Text>
-              <Text style={[styles.entryTitle, { color: palette.ink }]}>Your SKIMA account starts here.</Text>
-              <Text style={[styles.entryBody, { color: palette.muted }]}>
-                Everyone starts with customer access. Driver and station workspaces appear only after approval.
-              </Text>
-            </View>
-
-            <View style={styles.roles}>
-              <RoleCard
-                icon={<ShieldCheck color={palette.brand} size={19} />}
-                title="Customer"
-                body="Refill, wallet, tracking"
-                note="Available after account creation"
-              />
-              <RoleCard
-                icon={<Truck color={palette.brand} size={19} />}
-                title="Driver"
-                body="Pickup and delivery work"
-                note="Requires approved driver application"
-              />
-              <RoleCard
-                icon={<Warehouse color={palette.brand} size={19} />}
-                title="Station"
-                body="Refill and settlement"
-                note="Requires approved station access"
-              />
-            </View>
-
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push("/(auth)/register")}
-              style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
-            >
-              <LinearGradient
-                colors={[colors.brand, "#F33C4E", colors.brandDark]}
-                end={{ x: 1, y: 1 }}
-                start={{ x: 0, y: 0 }}
-                style={styles.primaryFill}
-              >
-                <Text style={styles.primaryText}>Create my SKIMA account</Text>
-                <View style={styles.primaryIcon}>
-                  <ArrowRight color="#FFFFFF" size={17} strokeWidth={2.5} />
-                </View>
-              </LinearGradient>
-            </Pressable>
-
             <Pressable
               accessibilityRole="button"
               onPress={() => router.push("/(auth)/login")}
-              style={({ pressed }) => [
-                styles.secondary,
-                { borderColor: palette.border, backgroundColor: palette.surfaceSubtle },
-                pressed && styles.pressed,
-              ]}
+              style={({ pressed }) => [styles.signInLink, pressed && styles.pressed]}
             >
-              <Text style={[styles.secondaryText, { color: palette.ink }]}>I already have an account</Text>
-              <ChevronRight color={palette.mutedStrong} size={18} />
+              <Text style={styles.signInText}>Sign in</Text>
             </Pressable>
+          </View>
 
-            <Text style={[styles.note, { color: palette.muted }]}>
-              After sign-in, SKIMA loads the policy and guided onboarding that apply to your actual workspace.
-            </Text>
-          </BlurView>
+          <View
+            style={[
+              styles.storyCard,
+              wide && styles.storyCardWide,
+              shadows.floating,
+              { backgroundColor: palette.surface, borderColor: palette.border },
+            ]}
+          >
+            <View style={[styles.artwork, !wide && styles.artworkMobile, wide && styles.artworkWide, { backgroundColor: palette.surfaceSubtle }]}>
+              {slide.mediaUrl ? (
+                <Image
+                  accessibilityLabel={slide.accessibilityLabel}
+                  contentFit="cover"
+                  source={{ uri: slide.mediaUrl }}
+                  style={StyleSheet.absoluteFill}
+                  transition={220}
+                />
+              ) : (
+                <LinearGradient
+                  colors={dark ? ["#2B1017", "#111216"] : ["#FFE9EC", "#FFF7F8"]}
+                  end={{ x: 1, y: 1 }}
+                  start={{ x: 0, y: 0 }}
+                  style={StyleSheet.absoluteFill}
+                >
+                  <View style={styles.fallbackArtwork}>
+                    <View style={styles.fallbackIcon}>
+                      <Flame color="#FFFFFF" size={32} strokeWidth={2.3} />
+                    </View>
+                    <Text style={[styles.fallbackWordmark, { color: palette.ink }]}>SKIMA LPG</Text>
+                  </View>
+                </LinearGradient>
+              )}
+              <View style={styles.artworkShade} />
+              <View style={styles.stepBadge}>
+                <Text style={styles.stepBadgeText}>{stepIndex + 1} / {slides.length}</Text>
+              </View>
+            </View>
+
+            <View style={[styles.copyPanel, wide && styles.copyPanelWide]}>
+              <View style={styles.copy}>
+                <Text style={styles.kicker}>YOUR REFILL, STEP BY STEP</Text>
+                <Text style={[styles.title, { color: palette.ink }]}>{slide.title}</Text>
+                <Text style={[styles.body, { color: palette.muted }]}>{slide.body}</Text>
+              </View>
+
+              <View style={styles.dots} accessibilityLabel={"Step " + (stepIndex + 1) + " of " + slides.length}>
+                {slides.map((item, index) => (
+                  <Pressable
+                    key={item.placementKey}
+                    accessibilityLabel={"Go to onboarding step " + (index + 1)}
+                    accessibilityRole="button"
+                    onPress={() => setStepIndex(index)}
+                    style={[
+                      styles.dot,
+                      {
+                        backgroundColor: index === stepIndex ? palette.brand : palette.borderStrong,
+                        width: index === stepIndex ? 24 : 7,
+                      },
+                    ]}
+                  />
+                ))}
+              </View>
+
+              <View style={styles.actions}>
+                {stepIndex > 0 ? (
+                  <Pressable
+                    accessibilityLabel="Previous onboarding step"
+                    accessibilityRole="button"
+                    onPress={() => setStepIndex((current) => Math.max(0, current - 1))}
+                    style={({ pressed }) => [
+                      styles.backButton,
+                      { backgroundColor: palette.surfaceSubtle, borderColor: palette.border },
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <ArrowLeft color={palette.ink} size={18} />
+                  </Pressable>
+                ) : null}
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={next}
+                  style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
+                >
+                  <LinearGradient
+                    colors={[colors.brand, "#F33C4E", colors.brandDark]}
+                    end={{ x: 1, y: 1 }}
+                    start={{ x: 0, y: 0 }}
+                    style={styles.primaryFill}
+                  >
+                    <Text style={styles.primaryText}>{finalStep ? "Create my account" : "Next"}</Text>
+                    <ArrowRight color="#FFFFFF" size={18} strokeWidth={2.5} />
+                  </LinearGradient>
+                </Pressable>
+              </View>
+
+              {finalStep ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push("/(auth)/login")}
+                  style={({ pressed }) => [styles.existingAccount, pressed && styles.pressed]}
+                >
+                  <Text style={[styles.existingAccountText, { color: palette.mutedStrong }]}>
+                    Already have an account? <Text style={styles.existingAccountStrong}>Sign in</Text>
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function RoleCard({
-  icon,
-  title,
-  body,
-  note,
-}: {
-  readonly icon: ReactNode;
-  readonly title: string;
-  readonly body: string;
-  readonly note: string;
-}) {
-  const { palette } = useAppTheme();
-
-  return (
-    <View style={[styles.role, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
-      <View style={[styles.roleIcon, { backgroundColor: palette.brandSoft }]}>{icon}</View>
-      <View style={styles.roleCopy}>
-        <Text style={[styles.roleTitle, { color: palette.ink }]}>{title}</Text>
-        <Text style={[styles.roleBody, { color: palette.mutedStrong }]}>{body}</Text>
-        <Text style={[styles.roleNote, { color: palette.muted }]}>{note}</Text>
-      </View>
-    </View>
-  );
-}
-
-function TrustPoint({ icon, text }: { readonly icon: ReactNode; readonly text: string }) {
-  const { palette } = useAppTheme();
-
-  return (
-    <View style={styles.trustPoint}>
-      {icon}
-      <Text style={[styles.trustText, { color: palette.mutedStrong }]}>{text}</Text>
-    </View>
-  );
+function bestPublication(
+  publications: readonly ProductContentRecord[],
+  placementKey: string,
+) {
+  return publications
+    .filter((publication) => publication.placementKey === placementKey)
+    .sort((left, right) => right.priority - left.priority || right.revision - left.revision)[0];
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  heroOrb: {
+  glow: {
     position: "absolute",
-    width: 500,
-    height: 500,
-    borderRadius: 250,
-    right: -260,
+    width: 470,
+    height: 470,
+    borderRadius: 235,
+    right: -250,
     top: -210,
-    backgroundColor: "rgba(226,29,47,.13)",
-  },
-  heroOrbSmall: {
-    position: "absolute",
-    width: 270,
-    height: 270,
-    borderRadius: 135,
-    left: -170,
-    bottom: -110,
-    backgroundColor: "rgba(226,29,47,.055)",
+    backgroundColor: "rgba(226,29,47,.12)",
   },
   outer: {
     flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 17,
-    paddingVertical: 22,
+    paddingVertical: 20,
   },
-  shell: { width: "100%", maxWidth: 1120, gap: 28 },
-  shellWide: { minHeight: 690, flexDirection: "row", alignItems: "center", gap: 72 },
-  hero: { gap: 24 },
-  heroWide: { flex: 1.05, gap: 34 },
-  brandRow: { flexDirection: "row", alignItems: "center", gap: 11 },
-  logoPlate: {
-    width: 53,
-    height: 53,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,.04)",
-  },
-  brandName: { fontSize: 15, lineHeight: 18, fontWeight: "900", letterSpacing: 1.15 },
-  brandSub: { fontSize: 11, lineHeight: 15, fontWeight: "700" },
-  copy: { maxWidth: 610, gap: 13 },
-  kickerRow: { flexDirection: "row", alignItems: "center", gap: 7 },
-  kicker: { fontSize: 10, lineHeight: 14, fontWeight: "900", letterSpacing: 1.05 },
-  title: {
-    fontSize: 49,
-    lineHeight: 52,
-    fontWeight: "900",
-    letterSpacing: -1.8,
-  },
-  titleMobile: { fontSize: 32, lineHeight: 36, letterSpacing: -1.05 },
-  body: { maxWidth: 580, fontSize: 15, lineHeight: 23, fontWeight: "500" },
-  trustStrip: {
-    maxWidth: 600,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    borderTopWidth: 1,
-    paddingTop: 15,
-  },
-  trustPoint: { flexDirection: "row", alignItems: "center", gap: 6 },
-  trustText: { fontSize: 10, lineHeight: 14, fontWeight: "700" },
-  entryCard: {
-    overflow: "hidden",
-    width: "100%",
-    maxWidth: 480,
-    gap: 17,
-    borderWidth: 1,
-    borderRadius: 30,
-    padding: 18,
-  },
-  entryAccent: {
-    position: "absolute",
-    top: 0,
-    left: 28,
-    right: 28,
-    height: 2,
-    backgroundColor: colors.brand,
-  },
-  entryHeading: { gap: 7 },
-  entryEyebrow: {
-    color: colors.brand,
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: "900",
-    letterSpacing: 1.05,
-    textTransform: "uppercase",
-  },
-  entryTitle: { fontSize: 28, lineHeight: 32, fontWeight: "900", letterSpacing: -0.75 },
-  entryBody: { fontSize: 12, lineHeight: 18, fontWeight: "500" },
-  roles: { gap: 8 },
-  role: {
-    minHeight: 74,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 11,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    padding: 11,
-  },
-  roleIcon: {
-    width: 39,
-    height: 39,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 12,
-  },
-  roleCopy: { flex: 1, minWidth: 0, gap: 2 },
-  roleTitle: { fontSize: 12, lineHeight: 16, fontWeight: "900" },
-  roleBody: { fontSize: 11, lineHeight: 15, fontWeight: "800" },
-  roleNote: { fontSize: 10, lineHeight: 14, fontWeight: "600" },
-  primary: {
-    minHeight: 60,
-    overflow: "hidden",
-    borderRadius: radii.lg,
-    ...shadows.raised,
-  },
-  primaryFill: {
-    minHeight: 60,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 20,
-  },
-  primaryText: { flexShrink: 1, color: "#FFFFFF", fontSize: 14, lineHeight: 19, fontWeight: "900", textAlign: "center" },
-  primaryIcon: {
-    width: 29,
-    height: 29,
-    flexShrink: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 15,
-    backgroundColor: "rgba(255,255,255,.16)",
-  },
-  secondary: {
-    minHeight: 55,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    borderWidth: 1,
-    borderRadius: radii.lg,
-    paddingHorizontal: 14,
-  },
-  secondaryText: { flexShrink: 1, fontSize: 12, lineHeight: 17, fontWeight: "900", textAlign: "center" },
-  note: { fontSize: 10, lineHeight: 15, textAlign: "center", fontWeight: "600" },
-  pressed: { opacity: 0.78, transform: [{ scale: 0.993 }] },
+  shell: { width: "100%", maxWidth: 980, gap: 18 },
+  shellWide: { gap: 24 },
+  topBar: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  logoPlate: { width: 46, height: 46, alignItems: "center", justifyContent: "center", borderRadius: 15, borderWidth: StyleSheet.hairlineWidth },
+  brandName: { fontSize: 15, lineHeight: 18, fontWeight: "900", letterSpacing: 1.2 },
+  signInLink: { paddingHorizontal: 9, paddingVertical: 8 },
+  signInText: { color: colors.brand, fontSize: 12, lineHeight: 16, fontWeight: "900" },
+  storyCard: { overflow: "hidden", borderWidth: 1, borderRadius: 30 },
+  storyCardWide: { minHeight: 560, flexDirection: "row" },
+  artwork: { position: "relative", width: "100%", overflow: "hidden" },
+  artworkMobile: { aspectRatio: 1.18 },
+  artworkWide: { flex: 1.08, width: "auto", minHeight: 560 },
+  artworkShade: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(0,0,0,.08)" },
+  stepBadge: { position: "absolute", top: 16, right: 16, paddingHorizontal: 10, paddingVertical: 7, borderRadius: radii.pill, backgroundColor: "rgba(12,13,15,.68)" },
+  stepBadgeText: { color: "#FFFFFF", fontSize: 10, lineHeight: 13, fontWeight: "900" },
+  fallbackArtwork: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16 },
+  fallbackIcon: { width: 74, height: 74, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand, ...shadows.raised },
+  fallbackWordmark: { fontSize: 16, lineHeight: 20, fontWeight: "900", letterSpacing: 1.8 },
+  copyPanel: { gap: 22, padding: 22 },
+  copyPanelWide: { flex: 0.92, justifyContent: "center", padding: 34 },
+  copy: { gap: 9 },
+  kicker: { color: colors.brand, fontSize: 9, lineHeight: 13, fontWeight: "900", letterSpacing: 1.1 },
+  title: { fontSize: 30, lineHeight: 35, fontWeight: "900", letterSpacing: -0.9 },
+  body: { fontSize: 13, lineHeight: 20, fontWeight: "500" },
+  dots: { minHeight: 10, flexDirection: "row", alignItems: "center", gap: 6 },
+  dot: { height: 7, borderRadius: 4 },
+  actions: { flexDirection: "row", alignItems: "stretch", gap: 10 },
+  backButton: { width: 54, minHeight: 56, alignItems: "center", justifyContent: "center", borderWidth: 1, borderRadius: radii.lg },
+  primary: { flex: 1, minHeight: 56, overflow: "hidden", borderRadius: radii.lg, ...shadows.raised },
+  primaryFill: { flex: 1, minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 18 },
+  primaryText: { color: "#FFFFFF", fontSize: 13, lineHeight: 18, fontWeight: "900" },
+  existingAccount: { alignItems: "center", paddingVertical: 2 },
+  existingAccountText: { fontSize: 11, lineHeight: 16, fontWeight: "600" },
+  existingAccountStrong: { color: colors.brand, fontWeight: "900" },
+  pressed: { opacity: 0.76, transform: [{ scale: 0.994 }] },
 });

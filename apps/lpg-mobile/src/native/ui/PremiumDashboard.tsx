@@ -544,7 +544,7 @@ function DriverCockpit({ record }: { record?: PlatformRecord }) {
   const pickup = firstString(record, ["pickup_address", "pickupAddress", "customer_address", "customerAddress"])
     ?? "Customer pickup";
   const station = firstString(record, ["station_name", "stationName", "partner_name", "partnerName"])
-    ?? "Refill station";
+    ?? "Refill stop";
   const destination = firstString(record, ["delivery_address", "deliveryAddress", "dropoff_address", "dropoffAddress"])
     ?? "Customer return";
   const activeStop = driverRouteStep(status);
@@ -978,7 +978,7 @@ function humanStatus(value: string) {
     pending: "In progress",
     awaiting_payment: "Awaiting payment",
     payment_reserved: "Payment confirmed",
-    matching_station: "Finding a station",
+    matching_station: "Finding a refill route",
     matching_driver: "Finding a driver",
     driver_offered: "Driver notified",
     driver_accepted: "Driver assigned",

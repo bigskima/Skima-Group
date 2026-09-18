@@ -348,14 +348,21 @@ export function EmptyState(props: { readonly title: string; readonly message: st
 }
 
 export function ErrorState(props: {
-  readonly title: string;
-  readonly message: string;
+  readonly title?: string;
+  readonly message?: string;
+  readonly error?: unknown;
   readonly onRetry?: () => void;
 }) {
+  const errorMessage = props.error instanceof Error
+    ? props.error.message
+    : typeof props.error === "string"
+    ? props.error
+    : null;
+
   return (
     <StatePanel
-      title={props.title}
-      message={props.message}
+      title={props.title ?? "Could not load this section"}
+      message={props.message ?? errorMessage ?? "Something went wrong while loading this section."}
       tone="danger"
       action={props.onRetry ? { label: "Retry", onClick: props.onRetry } : undefined}
     />

@@ -1,7 +1,7 @@
 import { Redirect, router } from "expo-router";
 import { Eye, EyeOff, LockKeyhole, Mail, UserRound } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text } from "react-native";
 
 import { useSession } from "../../src/native/session/SessionProvider";
 import { useAppTheme } from "../../src/native/theme/ThemeProvider";
@@ -73,22 +73,16 @@ export default function Register() {
 
   return (
     <AuthShell
-      activeMode="register"
-      eyebrow="Create your SKIMA identity"
-      title="One account. Start as a customer."
-      body="Create your account here. Driver and station access is added later only after the required application and approval."
+      eyebrow="Create account"
+      title="Join SKIMA"
+      body="Create your SKIMA account to get started."
       footer={
-        <View style={styles.footerStack}>
-          <Text style={[styles.footerText, { color: palette.muted }]}>
-            Already use SKIMA?{" "}
-            <Text onPress={() => router.replace("/(auth)/login")} style={styles.linkStrong}>
-              Sign in instead
-            </Text>
+        <Text style={[styles.footerText, { color: palette.muted }]}>
+          Already use SKIMA?{" "}
+          <Text onPress={() => router.replace("/(auth)/login")} style={styles.linkStrong}>
+            Sign in
           </Text>
-          <Text style={[styles.policyText, { color: palette.muted }]}>
-            SKIMA will show the policies that apply to your account before the guided app tour begins.
-          </Text>
-        </View>
+        </Text>
       }
     >
       <AuthTextField
@@ -124,7 +118,6 @@ export default function Register() {
       <AuthTextField
         accessibilityLabel="Password"
         autoComplete="new-password"
-        helper="SKIMA does not invent a separate password rule here. Your Supabase Auth policy is the authority."
         icon={<LockKeyhole color={palette.mutedStrong} size={18} strokeWidth={2.2} />}
         label="Password"
         onChangeText={(value) => {
@@ -174,7 +167,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: radii.md,
   },
-  footerStack: { gap: 9 },
   footerText: {
     textAlign: "center",
     fontSize: 11,
@@ -182,10 +174,4 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   linkStrong: { color: colors.brand, fontWeight: "900" },
-  policyText: {
-    textAlign: "center",
-    fontSize: 9,
-    lineHeight: 14,
-    fontWeight: "600",
-  },
 });
