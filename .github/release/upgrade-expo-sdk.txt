@@ -1,1 +1,1 @@
-Upgrade SKIMA LPG from Expo SDK 56 to SDK 57, align dependencies, validate, and commit. Do not run EAS build.
+Upgrade SKIMA LPG to Expo SDK 57 and align RN/Jest dependencies. Retry 2. No EAS build.
