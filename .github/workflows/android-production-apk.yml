@@ -85,6 +85,9 @@ jobs:
             exit 1
           fi
 
+      - name: Validate EAS production profile
+        run: npx --yes eas-cli@latest config --platform android --profile production-apk --non-interactive > /dev/null
+
       - name: Build production APK on EAS
         shell: bash
         run: |
