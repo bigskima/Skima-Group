@@ -1,17 +1,7 @@
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
-import {
-  Check,
-  LockKeyhole,
-  ShieldCheck,
-  Sparkles,
-  Truck,
-  Warehouse,
-} from "lucide-react-native";
 import type { ReactNode } from "react";
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,7 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAppTheme } from "../theme/ThemeProvider";
-import { colors, radii, shadows, spacing } from "../theme/tokens";
+import { colors, shadows } from "../theme/tokens";
 import { BrandMark } from "./BrandMark";
 
 type AuthMode = "login" | "register";
@@ -33,7 +23,6 @@ export function AuthShell({
   action,
   children,
   footer,
-  activeMode,
 }: {
   readonly eyebrow: string;
   readonly title: string;
@@ -45,432 +34,150 @@ export function AuthShell({
 }) {
   const { palette, scheme } = useAppTheme();
   const { width } = useWindowDimensions();
-  const wide = width >= 920;
+  const compact = width < 520;
   const dark = scheme === "dark";
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: dark ? "#090A0C" : "#F7F7F8" }]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: dark ? "#090A0C" : "#F8F8F9" }]}>
       <LinearGradient
-        colors={
-          dark
-            ? ["#08090B", "#140B0E", "#0B0C0F", "#08090B"]
-            : ["#FFFFFF", "#FFF6F7", "#F7F7F8", "#FFFFFF"]
-        }
-        locations={[0, 0.34, 0.72, 1]}
+        colors={dark ? ["#08090B", "#130B0E", "#090A0C"] : ["#FFFFFF", "#FFF6F7", "#F8F8F9"]}
         end={{ x: 1, y: 1 }}
         start={{ x: 0, y: 0 }}
         style={StyleSheet.absoluteFill}
       />
-
-      <View style={styles.orbPrimary} />
-      <View style={styles.orbSecondary} />
-      <View style={[styles.gridLine, styles.gridLineOne]} />
-      <View style={[styles.gridLine, styles.gridLineTwo]} />
+      <View style={styles.glow} />
 
       <ScrollView
         automaticallyAdjustKeyboardInsets
-        contentContainerStyle={[styles.outer, wide && styles.outerWide]}
+        contentContainerStyle={styles.outer}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.shell, wide && styles.shellWide]}>
-          <View style={[styles.hero, wide && styles.heroWide]}>
-            <View style={styles.brandRow}>
-              <View style={[styles.brandBadge, { backgroundColor: dark ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.78)" }]}>
-                <BrandMark compact />
-              </View>
-              <View style={styles.brandCopy}>
-                <Text style={[styles.brandName, { color: palette.ink }]}>SKIMA</Text>
-                <Text style={[styles.brandDescriptor, { color: palette.muted }]}>LPG network</Text>
-              </View>
-              <View style={styles.brandAction}>{action}</View>
+        <View style={[styles.shell, compact && styles.shellCompact]}>
+          <View style={styles.brandBar}>
+            <View style={[styles.logoPlate, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <BrandMark compact />
+            </View>
+            <View style={styles.brandCopy}>
+              <Text style={[styles.brandName, { color: palette.ink }]}>SKIMA</Text>
+              <Text style={[styles.brandCaption, { color: palette.muted }]}>LPG</Text>
+            </View>
+            {action ? <View style={styles.action}>{action}</View> : null}
+          </View>
+
+          <BlurView
+            intensity={dark ? 22 : 64}
+            tint={dark ? "dark" : "light"}
+            style={[
+              styles.card,
+              shadows.floating,
+              {
+                borderColor: dark ? "rgba(255,255,255,.10)" : "rgba(25,25,27,.08)",
+                backgroundColor: dark ? "rgba(18,18,21,.90)" : "rgba(255,255,255,.90)",
+              },
+            ]}
+          >
+            <View style={styles.accent} />
+            <View style={styles.heading}>
+              <Text style={styles.eyebrow}>{eyebrow}</Text>
+              <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
+              <Text style={[styles.body, { color: palette.muted }]}>{body}</Text>
             </View>
 
-            <View style={[styles.heroCopy, !wide && styles.heroCopyMobile]}>
-              <View style={styles.heroEyebrow}>
-                <Sparkles color={palette.brand} size={14} strokeWidth={2.5} />
-                <Text style={[styles.heroEyebrowText, { color: palette.brand }]}>
-                  ONE IDENTITY · EVERY SKIMA WORKSPACE
-                </Text>
-              </View>
+            <View style={styles.form}>{children}</View>
 
-              <Text style={[styles.promise, !wide && styles.promiseMobile, { color: palette.ink }]}>
-                Refill, deliver and operate with one secure account.
-              </Text>
-
-              <Text style={[styles.promiseBody, !wide && styles.promiseBodyMobile, { color: palette.muted }]}>
-                Customers, approved drivers and approved stations move through the same protected SKIMA account without mixing permissions.
-              </Text>
-            </View>
-
-            <View style={[styles.roleRail, wide && styles.roleRailWide]}>
-              <RoleSignal
-                icon={<ShieldCheck color={palette.brand} size={17} />}
-                title="Customer"
-                body="Order & track"
-              />
-              <RoleSignal
-                icon={<Truck color={palette.brand} size={17} />}
-                title="Driver"
-                body="Approved jobs"
-              />
-              <RoleSignal
-                icon={<Warehouse color={palette.brand} size={17} />}
-                title="Station"
-                body="Operate & settle"
-              />
-            </View>
-
-            {wide ? (
-              <View style={[styles.securityStrip, { borderColor: palette.border }]}>
-                <LockKeyhole color={palette.mutedStrong} size={16} />
-                <Text style={[styles.securityStripText, { color: palette.muted }]}>
-                  Supabase authentication · role-scoped workspaces · protected account recovery
-                </Text>
-              </View>
+            {footer ? (
+              <>
+                <View style={[styles.divider, { backgroundColor: palette.border }]} />
+                <View style={styles.footer}>{footer}</View>
+              </>
             ) : null}
-          </View>
-
-          <View style={[styles.formColumn, wide && styles.formColumnWide]}>
-            <BlurView
-              intensity={dark ? 24 : 68}
-              tint={dark ? "dark" : "light"}
-              style={[
-                styles.formCard,
-                shadows.floating,
-                {
-                  borderColor: dark ? "rgba(255,255,255,.10)" : "rgba(25,25,27,.08)",
-                  backgroundColor: dark ? "rgba(18,18,21,.88)" : "rgba(255,255,255,.86)",
-                },
-              ]}
-            >
-              <View style={styles.formCardAccent} />
-
-              {activeMode ? <AuthModeTabs activeMode={activeMode} /> : null}
-
-              <View style={styles.heading}>
-                <Text style={styles.eyebrow}>{eyebrow}</Text>
-                <Text style={[styles.title, { color: palette.ink }]}>{title}</Text>
-                <Text style={[styles.body, { color: palette.muted }]}>{body}</Text>
-              </View>
-
-              <View style={styles.form}>{children}</View>
-              {footer ? (
-                <>
-                  <View style={[styles.footerDivider, { backgroundColor: palette.border }]} />
-                  <View style={styles.footer}>{footer}</View>
-                </>
-              ) : null}
-            </BlurView>
-
-            <View style={styles.privacyRow}>
-              <Check color={palette.success} size={14} strokeWidth={2.7} />
-              <Text style={[styles.privacyText, { color: palette.muted }]}>
-                SKIMA never asks for your password outside this secure account screen.
-              </Text>
-            </View>
-          </View>
+          </BlurView>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function AuthModeTabs({ activeMode }: { readonly activeMode: AuthMode }) {
-  const { palette } = useAppTheme();
-
-  return (
-    <View style={[styles.tabs, { backgroundColor: palette.soft, borderColor: palette.border }]}>
-      <AuthModeTab
-        active={activeMode === "login"}
-        label="Sign in"
-        onPress={() => router.replace("/(auth)/login")}
-      />
-      <AuthModeTab
-        active={activeMode === "register"}
-        label="Create account"
-        onPress={() => router.replace("/(auth)/register")}
-      />
-    </View>
-  );
-}
-
-function AuthModeTab({
-  active,
-  label,
-  onPress,
-}: {
-  readonly active: boolean;
-  readonly label: string;
-  readonly onPress: () => void;
-}) {
-  const { palette } = useAppTheme();
-
-  return (
-    <Pressable
-      accessibilityRole="tab"
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.tab,
-        active && [
-          styles.tabActive,
-          shadows.subtle,
-          { backgroundColor: palette.surface, borderColor: palette.border },
-        ],
-        pressed && styles.pressed,
-      ]}
-    >
-      <Text style={[styles.tabLabel, { color: active ? palette.ink : palette.muted }]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function RoleSignal({
-  icon,
-  title,
-  body,
-}: {
-  readonly icon: ReactNode;
-  readonly title: string;
-  readonly body: string;
-}) {
-  const { palette } = useAppTheme();
-
-  return (
-    <View
-      style={[
-        styles.roleSignal,
-        {
-          backgroundColor: palette.surfaceSubtle,
-          borderColor: palette.border,
-        },
-      ]}
-    >
-      <View style={[styles.roleIcon, { backgroundColor: palette.brandSoft }]}>{icon}</View>
-      <View style={styles.roleText}>
-        <Text style={[styles.roleTitle, { color: palette.ink }]}>{title}</Text>
-        <Text style={[styles.roleBody, { color: palette.muted }]}>{body}</Text>
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  orbPrimary: {
+  glow: {
     position: "absolute",
-    width: 470,
-    height: 470,
-    borderRadius: 235,
-    right: -245,
-    top: -210,
-    backgroundColor: "rgba(226,29,47,.14)",
+    width: 390,
+    height: 390,
+    borderRadius: 195,
+    right: -210,
+    top: -190,
+    backgroundColor: "rgba(226,29,47,.12)",
   },
-  orbSecondary: {
-    position: "absolute",
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    left: -190,
-    bottom: -150,
-    backgroundColor: "rgba(226,29,47,.065)",
-  },
-  gridLine: {
-    position: "absolute",
-    height: 1,
-    width: "150%",
-    left: "-20%",
-    backgroundColor: "rgba(226,29,47,.055)",
-    transform: [{ rotate: "-12deg" }],
-  },
-  gridLineOne: { top: "27%" },
-  gridLineTwo: { top: "67%" },
   outer: {
     flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 28,
   },
-  outerWide: { paddingHorizontal: 34, paddingVertical: 34 },
-  shell: {
-    width: "100%",
-    maxWidth: 1120,
-    gap: 20,
-  },
-  shellWide: {
-    minHeight: 680,
+  shell: { width: "100%", maxWidth: 460, gap: 18 },
+  shellCompact: { gap: 14 },
+  brandBar: {
+    minHeight: 50,
     flexDirection: "row",
     alignItems: "center",
-    gap: 72,
-  },
-  hero: { gap: 18 },
-  heroWide: {
-    flex: 1.05,
-    alignSelf: "stretch",
     justifyContent: "center",
-    gap: 30,
-    paddingVertical: 36,
+    gap: 10,
   },
-  brandRow: {
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 11,
-  },
-  brandBadge: {
-    width: 52,
-    height: 52,
+  logoPlate: {
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,.08)",
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   brandCopy: { gap: 1 },
-  brandName: {
-    fontSize: 15,
-    lineHeight: 18,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-  brandDescriptor: { fontSize: 11, lineHeight: 15, fontWeight: "700" },
-  brandAction: { marginLeft: "auto" },
-  heroCopy: { maxWidth: 590, gap: 13 },
-  heroCopyMobile: { gap: 9 },
-  heroEyebrow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  heroEyebrowText: {
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: "900",
-    letterSpacing: 1.05,
-  },
-  promise: {
-    maxWidth: 600,
-    fontSize: 47,
-    lineHeight: 50,
-    fontWeight: "900",
-    letterSpacing: -1.75,
-  },
-  promiseMobile: {
-    maxWidth: 500,
-    fontSize: 29,
-    lineHeight: 33,
-    letterSpacing: -0.9,
-  },
-  promiseBody: {
-    maxWidth: 560,
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: "500",
-  },
-  promiseBodyMobile: { fontSize: 13, lineHeight: 19 },
-  roleRail: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  roleRailWide: { maxWidth: 590, gap: 10 },
-  roleSignal: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    padding: 9,
-  },
-  roleIcon: {
-    width: 34,
-    height: 34,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 11,
-  },
-  roleText: { flex: 1, minWidth: 0, gap: 1 },
-  roleTitle: { fontSize: 11, lineHeight: 15, fontWeight: "900" },
-  roleBody: { fontSize: 10, lineHeight: 14, fontWeight: "600" },
-  securityStrip: {
-    maxWidth: 590,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-    borderTopWidth: 1,
-    paddingTop: 16,
-  },
-  securityStripText: { flex: 1, fontSize: 10, lineHeight: 15, fontWeight: "600" },
-  formColumn: { width: "100%", gap: 11 },
-  formColumnWide: { flex: 0.86, maxWidth: 480 },
-  formCard: {
+  brandName: { fontSize: 15, lineHeight: 18, fontWeight: "900", letterSpacing: 1.1 },
+  brandCaption: { fontSize: 10, lineHeight: 13, fontWeight: "700", letterSpacing: 1.4 },
+  action: { position: "absolute", right: 0 },
+  card: {
     overflow: "hidden",
     width: "100%",
-    gap: 19,
+    gap: 18,
     borderWidth: 1,
-    borderRadius: 30,
-    padding: 18,
+    borderRadius: 28,
+    padding: 19,
   },
-  formCardAccent: {
+  accent: {
     position: "absolute",
     top: 0,
-    left: 28,
-    right: 28,
+    left: 34,
+    right: 34,
     height: 2,
-    borderBottomLeftRadius: 2,
-    borderBottomRightRadius: 2,
     backgroundColor: colors.brand,
-    opacity: 0.82,
   },
-  tabs: {
-    flexDirection: "row",
-    gap: 4,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 4,
-  },
-  tab: {
-    flex: 1,
-    minHeight: 42,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  tabActive: {},
-  tabLabel: { fontSize: 12, lineHeight: 16, fontWeight: "900" },
-  heading: { gap: 7 },
+  heading: { alignItems: "center", gap: 6, paddingHorizontal: 6 },
   eyebrow: {
     color: colors.brand,
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 9,
+    lineHeight: 13,
     fontWeight: "900",
-    letterSpacing: 1.15,
+    letterSpacing: 1.05,
     textTransform: "uppercase",
   },
-  body: { maxWidth: 430, fontSize: 12, lineHeight: 18, fontWeight: "500" },
   title: {
-    fontSize: 30,
-    lineHeight: 34,
+    fontSize: 27,
+    lineHeight: 32,
     fontWeight: "900",
-    letterSpacing: -0.9,
+    letterSpacing: -0.75,
+    textAlign: "center",
+  },
+  body: {
+    maxWidth: 360,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "500",
+    textAlign: "center",
   },
   form: { gap: 15 },
-  footerDivider: { height: StyleSheet.hairlineWidth },
+  divider: { height: StyleSheet.hairlineWidth },
   footer: { paddingTop: 1 },
-  privacyRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 8,
-  },
-  privacyText: { fontSize: 10, lineHeight: 14, fontWeight: "600", textAlign: "center" },
-  pressed: { opacity: 0.76 },
 });
