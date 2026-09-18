@@ -19,6 +19,14 @@
         "buildType": "apk"
       }
     },
+    "production": {
+      "distribution": "internal",
+      "environment": "production",
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "production-apk": {
       "distribution": "internal",
       "environment": "production",
@@ -27,7 +35,7 @@
         "buildType": "apk"
       }
     },
-    "production": {
+    "production-aab": {
       "environment": "production",
       "autoIncrement": true,
       "android": {
@@ -36,6 +44,6 @@
     }
   },
   "submit": {
-    "production": {}
+    "production-aab": {}
   }
 }
