@@ -1,5 +1,5 @@
 import { Redirect, router } from "expo-router";
-import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react-native";
+import { Eye, EyeOff, LockKeyhole, Mail } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -57,24 +57,16 @@ export default function Login() {
   return (
     <AuthShell
       activeMode="login"
-      eyebrow="Secure account access"
+      eyebrow="Sign in"
       title="Welcome back"
-      body="Sign in once. SKIMA will unlock only the customer, driver or station workspaces your account is allowed to use."
+      body="Enter your SKIMA account details."
       footer={
-        <View style={styles.footerStack}>
-          <Text style={[styles.footerText, { color: palette.muted }]}>
-            New to SKIMA?{" "}
-            <Text onPress={() => router.replace("/(auth)/register")} style={styles.linkStrong}>
-              Create your account
-            </Text>
+        <Text style={[styles.footerText, { color: palette.muted }]}>
+          New to SKIMA?{" "}
+          <Text onPress={() => router.replace("/(auth)/register")} style={styles.linkStrong}>
+            Create account
           </Text>
-          <View style={[styles.footerTrust, { backgroundColor: palette.soft }]}>
-            <ShieldCheck color={palette.success} size={15} />
-            <Text style={[styles.footerTrustText, { color: palette.mutedStrong }]}>
-              Your account decides access. Signing in never grants driver or station authority by itself.
-            </Text>
-          </View>
-        </View>
+        </Text>
       }
     >
       <AuthTextField
@@ -178,7 +170,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: radii.md,
   },
-  footerStack: { gap: 12 },
   footerText: {
     textAlign: "center",
     fontSize: 11,
@@ -186,17 +177,4 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   linkStrong: { color: colors.brand, fontWeight: "900" },
-  footerTrust: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    borderRadius: radii.md,
-    padding: 10,
-  },
-  footerTrustText: {
-    flex: 1,
-    fontSize: 9,
-    lineHeight: 14,
-    fontWeight: "600",
-  },
 });
