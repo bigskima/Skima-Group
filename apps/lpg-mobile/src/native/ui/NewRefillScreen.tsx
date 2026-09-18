@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries, useEntityMediaLinks } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
+import { isSkimaInternalFulfillmentId } from "../api/lpgFulfillment";
 import {
   ActionResponseSchema,
   displayTitle,
@@ -270,15 +271,15 @@ export function NewRefillScreen() {
       return;
     }
     if (eligibleStations.isPending) {
-      setError("SKIMA is still checking which stations can fulfil this refill. Please wait a moment.");
+      setError("SKIMA is still checking which refill options can serve this trip. Please wait a moment.");
       return;
     }
     if (eligibleStations.isError) {
-      setError("SKIMA couldn't check station availability right now. Try the station check again.");
+      setError("SKIMA couldn't check refill availability right now. Try the availability check again.");
       return;
     }
     if (!stationId || !displayedStations.some((station) => station.station_branch_id === stationId)) {
-      setError("No eligible SKIMA station is selected for this refill. Check the station options and try again.");
+      setError("No available SKIMA fulfillment option is selected for this refill. Check the options and try again.");
       return;
     }
 
@@ -409,11 +410,11 @@ export function NewRefillScreen() {
               : exceedsCylinderCapacity
                 ? "Correct refill amount to continue"
                 : eligibleStations.isPending
-                  ? "Finding eligible stations…"
+                  ? "Finding refill options…"
                   : eligibleStations.isError
                     ? "Check stations to continue"
                     : stationUnavailable
-                      ? "No station can fulfil this refill"
+                      ? "No refill option is available right now"
                       : "See my price";
   const registerExpansionInterest = async () => {
     const locationIds = [...new Set([
@@ -436,7 +437,7 @@ export function NewRefillScreen() {
       subtitle={
         quoteId
           ? "Check the full price before confirming the order."
-          : "Choose the cylinder, locations, refill amount and station for this trip."
+          : "Choose the cylinder, locations, refill amount and fulfillment route for this trip."
       }
       action={<AppButton label={quoteId ? "Edit" : "Cancel"} variant="ghost" size="sm" onPress={() => quoteId ? setQuoteId(null) : router.back()} />}
     >
@@ -454,7 +455,7 @@ export function NewRefillScreen() {
               </View>
               <View style={styles.quoteHeroIcon}><WalletCards color="#FFFFFF" size={25} /></View>
             </View>
-            <Text style={styles.quoteHeroBody}>This quote is based on your cylinder, station, refill amount, pickup and return locations.</Text>
+            <Text style={styles.quoteHeroBody}>This quote is based on your cylinder, selected fulfillment route, refill amount, pickup and return locations.</Text>
           </View>
 
           <View style={[styles.quoteCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -601,7 +602,7 @@ export function NewRefillScreen() {
           ) : null}
 
           {refillStep === 3 ? <View style={[styles.formCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <SectionLead eyebrow="REFILL AMOUNT" icon={<Scale color={palette.brand} size={20} />} title="Choose how much gas you need" description="Order by weight or enter the amount you want to spend. SKIMA converts money to kilograms using the selected station's live price." />
+            <SectionLead eyebrow="REFILL AMOUNT" icon={<Scale color={palette.brand} size={20} />} title="Choose how much gas you need" description="Order by weight or enter the amount you want to spend. SKIMA converts money to kilograms using the selected refill option's current price." />
 
             <View style={styles.modeSwitch}>
               <AppButton label="Buy by kg" size="sm" variant={purchaseMode === "kg" ? "primary" : "secondary"} onPress={() => changePurchaseMode("kg")} />
@@ -697,7 +698,7 @@ export function NewRefillScreen() {
               <Text style={[styles.fieldLabel, { color: palette.ink }]}>Amount to spend (NGN)</Text>
               <TextInput value={requestedAmount} onChangeText={changeRequestedAmount} keyboardType="decimal-pad" placeholder="e.g. 5000" placeholderTextColor={palette.muted} style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]} />
               <View style={styles.amountPresets}>{[2000, 5000, 10000].map((amount) => <AppButton key={amount} label={`₦${amount.toLocaleString()}`} size="sm" variant={requestedAmount === String(amount) ? "primary" : "secondary"} onPress={() => changeRequestedAmount(String(amount))} />)}</View>
-              <Text style={[styles.capacityBody, { color: palette.muted }]}>{selectedStation?.price_per_kg ? `${money(Number(requestedAmount) || 0, "NGN")} buys approximately ${requestedKg || "0"} kg at ${selectedStation.display_name}.` : "Choose a station below to calculate the exact kilograms its current price can provide."}</Text>
+              <Text style={[styles.capacityBody, { color: palette.muted }]}>{selectedStation?.price_per_kg ? `${money(Number(requestedAmount) || 0, "NGN")} buys approximately ${requestedKg || "0"} kg with ${selectedStation.display_name}.` : "Choose a refill option below to calculate the exact kilograms its current price can provide."}</Text>
             </View>}
 
             {exceedsCylinderCapacity && cylinderCapacityKg !== null ? (
@@ -729,7 +730,7 @@ export function NewRefillScreen() {
                 style={[styles.input, styles.multiline, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
               />
             </View>
-            <View style={styles.stepActions}><AppButton label="Back" variant="secondary" onPress={() => setRefillStep(2)} /><AppButton label="Find stations" disabled={!validPurchase || exceedsCylinderCapacity} onPress={() => setRefillStep(4)} /></View>
+            <View style={styles.stepActions}><AppButton label="Back" variant="secondary" onPress={() => setRefillStep(2)} /><AppButton label="Find refill options" disabled={!validPurchase || exceedsCylinderCapacity} onPress={() => setRefillStep(4)} /></View>
           </View> : null}
 
           {refillStep === 4 && tripServiceable ? (
@@ -945,10 +946,10 @@ function StationSelectionSection({
   return (
     <View style={[styles.selectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
       <SectionLead
-        eyebrow="STATION"
+        eyebrow="FULFILLMENT"
         icon={<Store color={palette.brand} size={20} />}
-        title="Choose a station"
-        description="Only stations currently able to complete this refill are shown. The closest options appear first."
+        title="Choose a refill option"
+        description="SKIMA shows the fulfillment routes currently available for this refill. Partner stations and SKIMA-managed fulfillment can appear here."
       />
 
       {!ready ? (
@@ -962,13 +963,18 @@ function StationSelectionSection({
         </View>
       ) : stations.length === 0 ? (
         <View style={styles.stationQueryState}>
-          <Text style={[styles.stationEmptyTitle, { color: palette.ink }]}>No station is available for this refill right now</Text>
-          <Text style={[styles.emptyText, { color: palette.muted }]}>A station may be outside its service radius, unavailable, low on stock, missing a current price, or unable to handle this cylinder size. Try another location or check again later.</Text>
+          <Text style={[styles.stationEmptyTitle, { color: palette.ink }]}>No refill option is available right now</Text>
+          <Text style={[styles.emptyText, { color: palette.muted }]}>A partner station may be unavailable, or SKIMA-managed fulfillment may not have a ready driver and vehicle for this trip. Try another location or check again later.</Text>
         </View>
       ) : (
         <View style={styles.stationOptions}>
           {visibleStations.map((station, index) => {
             const active = station.station_branch_id === selected;
+            const internal = isSkimaInternalFulfillmentId(station.station_branch_id);
+            const marketplaceIndex = visibleStations
+              .slice(0, index)
+              .filter((item) => !isSkimaInternalFulfillmentId(item.station_branch_id))
+              .length;
             return (
               <Pressable
                 accessibilityRole="button"
@@ -988,16 +994,28 @@ function StationSelectionSection({
                   <View style={styles.stationOptionCopy}>
                     <View style={styles.stationNameRow}>
                       <Text style={[styles.stationName, { color: palette.ink }]}>{station.display_name}</Text>
-                      {index === 0 ? <Text style={[styles.recommendedTag, { color: palette.brand }]}>CLOSEST</Text> : null}
+                      {internal ? (
+                        <Text style={[styles.recommendedTag, { color: palette.brand }]}>SKIMA MANAGED</Text>
+                      ) : marketplaceIndex === 0 ? (
+                        <Text style={[styles.recommendedTag, { color: palette.brand }]}>CLOSEST PARTNER</Text>
+                      ) : null}
                     </View>
                     <Text style={[styles.stationAddress, { color: palette.muted }]} numberOfLines={2}>{station.formatted_address}</Text>
                   </View>
                   {active ? <CheckCircle2 color={palette.brand} size={21} /> : null}
                 </View>
                 <View style={styles.stationFacts}>
-                  <Text style={[styles.stationFact, { color: palette.ink }]}>{money(station.price_per_kg, station.currency_code)}/kg</Text>
-                  <Text style={[styles.stationFactMuted, { color: palette.muted }]}>~{formatDistance(station.route_proxy_distance_meters)} trip</Text>
-                  <Text style={[styles.stationFactMuted, { color: palette.muted }]}>{formatKg(station.current_available_kg)} kg available</Text>
+                  <Text style={[styles.stationFact, { color: palette.ink }]}>
+                    {internal ? "Reference " : ""}{money(station.price_per_kg, station.currency_code)}/kg
+                  </Text>
+                  {internal ? (
+                    <Text style={[styles.stationFactMuted, { color: palette.muted }]}>SKIMA driver + SKIMA fleet vehicle</Text>
+                  ) : (
+                    <>
+                      <Text style={[styles.stationFactMuted, { color: palette.muted }]}>~{formatDistance(station.route_proxy_distance_meters)} trip</Text>
+                      <Text style={[styles.stationFactMuted, { color: palette.muted }]}>{formatKg(station.current_available_kg)} kg available</Text>
+                    </>
+                  )}
                 </View>
               </Pressable>
             );
@@ -1018,7 +1036,7 @@ function StationSelectionSection({
         />
       ) : null}
 
-      <Text style={[styles.stationFootnote, { color: palette.muted }]}>The final delivery route and full price are calculated when you request the quote.</Text>
+      <Text style={[styles.stationFootnote, { color: palette.muted }]}>The final route and full protected price are calculated when you request the quote.</Text>
     </View>
   );
 }
