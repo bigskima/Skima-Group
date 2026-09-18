@@ -1,0 +1,97 @@
+name: Android production APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      clear_cache:
+        description: Clear the EAS build cache before building
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: skima-lpg-android-production-apk
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Expo app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/lpg-mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/lpg-mobile/package-lock.json
+
+      - name: Install LPG dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Validate Expo dependencies and native configuration
+        run: |
+          npx --yes expo-doctor@latest
+          npx expo config --type public > /dev/null
+
+  build:
+    name: Build signed production APK
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: production
+    defaults:
+      run:
+        working-directory: apps/lpg-mobile
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_PUBLIC_EAS_PROJECT_ID: ${{ vars.EXPO_PUBLIC_EAS_PROJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/lpg-mobile/package-lock.json
+
+      - name: Install LPG dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify Expo release configuration
+        shell: bash
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Missing GitHub secret EXPO_TOKEN."
+            exit 1
+          fi
+
+          if [ -z "$EXPO_PUBLIC_EAS_PROJECT_ID" ]; then
+            echo "::error::Missing GitHub repository variable EXPO_PUBLIC_EAS_PROJECT_ID."
+            exit 1
+          fi
+
+      - name: Build production APK on EAS
+        shell: bash
+        run: |
+          BUILD_ARGS=(build --platform android --profile production-apk --non-interactive --wait)
+
+          if [ "${{ inputs.clear_cache }}" = "true" ]; then
+            BUILD_ARGS+=(--clear-cache)
+          fi
+
+          npx --yes eas-cli@latest "${BUILD_ARGS[@]}"
