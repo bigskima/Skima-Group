@@ -8,7 +8,7 @@ loadEnvironment({
   quiet: true,
 });
 
-const easProjectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim();
+const easProjectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() || "dfa8a21f-0a5c-4d9c-b0ef-49c9ebe2da66";
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
