@@ -41,13 +41,13 @@ Deno.test("LPG public entry, auth and AI surfaces avoid unreadably small helper 
     read("apps/lpg-mobile/src/native/ui/AiAssistantLauncher.tsx"),
   ]);
 
-  rejectText(welcome, 'roleNote: { fontSize: 8', "Welcome role guidance must not regress to 8px text.");
-  rejectText(welcome, 'trustText: { fontSize: 9', "Welcome trust labels must remain readable.");
-  requireText(welcome, 'roleNote: { fontSize: 10', "Welcome role notes must retain the readability pass.");
-  rejectText(auth, 'roleBody: { fontSize: 8', "Login and registration role guidance must not regress to 8px text.");
-  rejectText(auth, 'privacyText: { fontSize: 9', "Login and registration security guidance must remain readable.");
-  requireText(auth, 'roleBody: { fontSize: 10', "Login and registration role guidance must retain the readability pass.");
-  requireText(auth, 'privacyText: { fontSize: 10', "Login and registration privacy guidance must retain the readability pass.");
+  requireText(welcome, "ONBOARDING_STEPS", "Welcome must keep progressive onboarding instead of a long static entry page.");
+  requireText(welcome, "usePublishedProductContent", "Welcome must consume Admin Brand & Content publications.");
+  requireText(welcome, 'title: { fontSize: 30', "Progressive welcome titles must remain readable.");
+  rejectText(welcome, "function RoleCard", "Welcome must not regress to stacked role cards.");
+  requireText(auth, "<BrandMark compact />", "Authentication screens must retain the SKIMA brand mark.");
+  requireText(auth, 'body: {', "Authentication screens must retain concise supporting text.");
+  rejectText(auth, "function RoleSignal", "Authentication screens must not duplicate onboarding role rails.");
   rejectText(launcher, 'fontSize: 8', "AI launcher helper and action text must not regress to 8px.");
   requireText(launcher, '<Text numberOfLines={2} style={styles.actionText}', "AI launcher actions must remain readable when labels are longer.");
 });
