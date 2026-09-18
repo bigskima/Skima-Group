@@ -127,7 +127,7 @@ export default function Welcome() {
               { backgroundColor: palette.surface, borderColor: palette.border },
             ]}
           >
-            <View style={[styles.artwork, wide && styles.artworkWide, { backgroundColor: palette.surfaceSubtle }]}>
+            <View style={[styles.artwork, !wide && styles.artworkMobile, wide && styles.artworkWide, { backgroundColor: palette.surfaceSubtle }]}>
               {slide.mediaUrl ? (
                 <Image
                   accessibilityLabel={slide.accessibilityLabel}
@@ -271,8 +271,9 @@ const styles = StyleSheet.create({
   signInText: { color: colors.brand, fontSize: 12, lineHeight: 16, fontWeight: "900" },
   storyCard: { overflow: "hidden", borderWidth: 1, borderRadius: 30 },
   storyCardWide: { minHeight: 560, flexDirection: "row" },
-  artwork: { position: "relative", width: "100%", aspectRatio: 1.18, overflow: "hidden" },
-  artworkWide: { flex: 1.08, width: "auto", aspectRatio: undefined, minHeight: 560 },
+  artwork: { position: "relative", width: "100%", overflow: "hidden" },
+  artworkMobile: { aspectRatio: 1.18 },
+  artworkWide: { flex: 1.08, width: "auto", minHeight: 560 },
   artworkShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,.08)" },
   stepBadge: { position: "absolute", top: 16, right: 16, paddingHorizontal: 10, paddingVertical: 7, borderRadius: radii.pill, backgroundColor: "rgba(12,13,15,.68)" },
   stepBadgeText: { color: "#FFFFFF", fontSize: 10, lineHeight: 13, fontWeight: "900" },
