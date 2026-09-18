@@ -44,6 +44,16 @@ create policy lpg_internal_driver_payout_allocations_deny_direct_authenticated
   using (false)
   with check (false);
 
+drop policy if exists lpg_internal_driver_payout_batches_deny_direct_authenticated
+  on public.lpg_internal_driver_payout_batches;
+
+create policy lpg_internal_driver_payout_batches_deny_direct_authenticated
+  on public.lpg_internal_driver_payout_batches
+  for all
+  to authenticated
+  using (false)
+  with check (false);
+
 notify pgrst, 'reload schema';
 
 commit;
