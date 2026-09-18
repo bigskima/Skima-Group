@@ -268,7 +268,7 @@ export function InternalDriverJobDetailScreen() {
               <Text style={styles.heroTitle}>{friendlyStatus(status)}</Text>
               <Text style={styles.heroBody}>{stageDescription(status)}</Text>
             </View>
-            <StatusPill label={friendlyStatus(status)} tone={["completed", "delivered"].includes(status) ? "success" : "info"} />
+            <StatusPill label={friendlyStatus(status)} tone={["completed", "delivered"].includes(status) ? "success" : "brand"} />
           </View>
 
           <View style={[styles.noticeCard, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}>
