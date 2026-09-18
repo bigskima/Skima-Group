@@ -27,6 +27,18 @@ Deno.test("complaint review notifications expose public-safe state only", async 
   assertNotIncludes(migration, "complaint_record.description");
 });
 
+Deno.test("LPG notifications distinguish SKIMA internal fulfillment from station fulfillment", async () => {
+  const migration = await read("supabase/migrations/20260918121700_lpg_internal_fulfillment_notification_copy.sql");
+
+  assertIncludes(migration, "order_record.fulfillment_channel='skima_internal'");
+  assertIncludes(migration, "Preparing SKIMA fulfillment");
+  assertIncludes(migration, "Heading to a refill supplier");
+  assertIncludes(migration, "Source the refill");
+  assertIncludes(migration, "Supplier handoff confirmed");
+  assertIncludes(migration, "Finding a station");
+  assertIncludes(migration, "Proceed to the station");
+});
+
 Deno.test("notification center has a first-class support filter", async () => {
   const screen = await read("apps/lpg-mobile/src/native/ui/NotificationsScreen.tsx");
 
