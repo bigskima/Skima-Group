@@ -45,6 +45,7 @@ The project ID is not a private credential. The Expo token is.
 Both Android release profiles consume the EAS `production` environment. Configure these client-safe values in Expo/EAS before the first remote build:
 
 ```text
+EXPO_PUBLIC_EAS_PROJECT_ID
 EXPO_PUBLIC_SUPABASE_URL
 EXPO_PUBLIC_SUPABASE_ANON_KEY
 EXPO_PUBLIC_API_GATEWAY_URL
