@@ -50,11 +50,6 @@ jobs:
           test -n "$EXPO_TOKEN" || (echo "::error::Missing GitHub secret EXPO_TOKEN." && exit 1)
           npx --yes eas-cli@latest config --platform android --profile production --non-interactive > /dev/null
 
-      - name: Validate production AAB profile
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx --yes eas-cli@latest config --platform android --profile production-aab --non-interactive > /dev/null
-
   production-apk:
     name: Build production APK
     needs: validate
@@ -82,29 +77,3 @@ jobs:
       - name: Build signed production APK
         run: npx --yes eas-cli@latest build --platform android --profile production --non-interactive --wait
 
-  production-aab:
-    name: Build production AAB
-    needs: production-apk
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    defaults:
-      run:
-        working-directory: apps/lpg-mobile
-    env:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Use Node 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: apps/lpg-mobile/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Build signed production AAB
-        run: npx --yes eas-cli@latest build --platform android --profile production-aab --non-interactive --wait
