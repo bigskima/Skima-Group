@@ -1,6 +1,12 @@
 name: Android production APK
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/lpg-mobile/**"
+      - "packages/frontend-core/**"
+      - ".github/workflows/android-production-apk.yml"
   workflow_dispatch:
     inputs:
       clear_cache:
@@ -48,6 +54,7 @@ jobs:
 
   build:
     name: Build signed production APK
+    if: github.event_name == 'workflow_dispatch'
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 120
