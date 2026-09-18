@@ -36,7 +36,6 @@ jobs:
         run: |
           npm pkg set 'devDependencies.@react-native/jest-preset=^0.86.3'
           npx expo install expo@^57.0.9 --fix
-          npx expo install --fix
 
       - name: Typecheck upgraded app
         run: npm run check
