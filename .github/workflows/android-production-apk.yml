@@ -64,7 +64,6 @@ jobs:
         working-directory: apps/lpg-mobile
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      EXPO_PUBLIC_EAS_PROJECT_ID: ${{ vars.EXPO_PUBLIC_EAS_PROJECT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -84,11 +83,6 @@ jobs:
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
             echo "::error::Missing GitHub secret EXPO_TOKEN."
-            exit 1
-          fi
-
-          if [ -z "$EXPO_PUBLIC_EAS_PROJECT_ID" ]; then
-            echo "::error::Missing GitHub repository variable EXPO_PUBLIC_EAS_PROJECT_ID."
             exit 1
           fi
 
