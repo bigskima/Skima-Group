@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { z } from "zod";
 import { useSession } from "../session/SessionProvider";
-
-const SKIMA_INTERNAL_STATION_ID = "00000000-0000-0000-0000-000000000001";
+import { SKIMA_INTERNAL_FULFILLMENT_ID } from "./lpgFulfillment";
 
 export function useGatewayQuery<TSchema extends z.ZodTypeAny>(input: {
   key: readonly unknown[];
@@ -48,7 +47,7 @@ export function useGatewayMutation<T, V>(input: {
       // builds marketplace route snapshots around physical station branches,
       // so resolve the internal policy route and quote directly through the
       // authenticated Supabase RPC when the digital sentinel is selected.
-      if (input.path === "/lpg/quotes" && payload.stationBranchId === SKIMA_INTERNAL_STATION_ID) {
+      if (input.path === "/lpg/quotes" && payload.stationBranchId === SKIMA_INTERNAL_FULFILLMENT_ID) {
         const pickupLocationId = requirePayloadString(payload.pickupLocationId, "pickupLocationId");
         const deliveryLocationId = requirePayloadString(payload.deliveryLocationId, "deliveryLocationId");
         const cylinderId = requirePayloadString(payload.cylinderId, "cylinderId");
@@ -76,7 +75,7 @@ export function useGatewayMutation<T, V>(input: {
           target_requested_kg: requestedKg,
           target_route_snapshot: routeResult.data ?? {},
           target_source: optionalPayloadString(payload.source) ?? "skima.lpg.mobile",
-          target_station_branch_id: SKIMA_INTERNAL_STATION_ID,
+          target_station_branch_id: SKIMA_INTERNAL_FULFILLMENT_ID,
         });
         if (quoteResult.error) throw quoteResult.error;
         return input.schema.parse(quoteResult.data);
