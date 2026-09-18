@@ -1,4 +1,4 @@
-name: Android production APK
+name: Android EAS build
 
 on:
   push:
@@ -9,6 +9,15 @@ on:
       - ".github/workflows/android-production-apk.yml"
   workflow_dispatch:
     inputs:
+      build_profile:
+        description: EAS Android build profile
+        required: true
+        type: choice
+        options:
+          - preview
+          - development
+          - production-apk
+        default: preview
       clear_cache:
         description: Clear the EAS build cache before building
         required: false
@@ -16,7 +25,7 @@ on:
         default: false
 
 concurrency:
-  group: skima-lpg-android-production-apk
+  group: skima-lpg-android-${{ github.event_name == 'workflow_dispatch' && inputs.build_profile || 'validate' }}
   cancel-in-progress: false
 
 permissions:
@@ -53,12 +62,11 @@ jobs:
           npx expo config --type public > /dev/null
 
   build:
-    name: Build signed production APK
+    name: Build Android (${{ inputs.build_profile }})
     if: github.event_name == 'workflow_dispatch'
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    environment: production
     defaults:
       run:
         working-directory: apps/lpg-mobile
@@ -78,7 +86,7 @@ jobs:
       - name: Install LPG dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Verify Expo release configuration
+      - name: Verify Expo CI token
         shell: bash
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
@@ -86,13 +94,13 @@ jobs:
             exit 1
           fi
 
-      - name: Validate EAS production profile
-        run: npx --yes eas-cli@latest config --platform android --profile production-apk --non-interactive > /dev/null
+      - name: Validate selected EAS profile
+        run: npx --yes eas-cli@latest config --platform android --profile "${{ inputs.build_profile }}" --non-interactive > /dev/null
 
-      - name: Build production APK on EAS
+      - name: Build selected Android profile on EAS
         shell: bash
         run: |
-          BUILD_ARGS=(build --platform android --profile production-apk --non-interactive --wait)
+          BUILD_ARGS=(build --platform android --profile "${{ inputs.build_profile }}" --non-interactive --wait)
 
           if [ "${{ inputs.clear_cache }}" = "true" ]; then
             BUILD_ARGS+=(--clear-cache)
