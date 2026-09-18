@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
   artwork: { position: "relative", width: "100%", overflow: "hidden" },
   artworkMobile: { aspectRatio: 1.18 },
   artworkWide: { flex: 1.08, width: "auto", minHeight: 560 },
-  artworkShade: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,.08)" },
+  artworkShade: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(0,0,0,.08)" },
   stepBadge: { position: "absolute", top: 16, right: 16, paddingHorizontal: 10, paddingVertical: 7, borderRadius: radii.pill, backgroundColor: "rgba(12,13,15,.68)" },
   stepBadgeText: { color: "#FFFFFF", fontSize: 10, lineHeight: 13, fontWeight: "900" },
   fallbackArtwork: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16 },
