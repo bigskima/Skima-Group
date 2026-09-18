@@ -1,0 +1,66 @@
+name: Stop chained AAB after APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/release/stop-aab-after-apk.txt"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  stop-aab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      TARGET_RUN_ID: "35322651277"
+      TARGET_BUILD_ID: "42b1f3ca-fa53-4279-9cf3-56842d15f37e"
+    defaults:
+      run:
+        working-directory: apps/lpg-mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/lpg-mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Wait for APK terminal state
+        id: wait
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in {1..120}; do
+            JSON="$(npx --yes eas-cli@latest build:view "$TARGET_BUILD_ID" --json --non-interactive)"
+            STATUS="$(printf '%s' "$JSON" | jq -r '.status')"
+            echo "APK status: $STATUS"
+            case "$STATUS" in
+              FINISHED|ERRORED|CANCELED)
+                echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
+            sleep 15
+          done
+          echo "::error::Timed out waiting for APK build."
+          exit 1
+
+      - name: Cancel chained release run before AAB
+        if: steps.wait.outputs.status == 'FINISHED'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST "/repos/${GITHUB_REPOSITORY}/actions/runs/${TARGET_RUN_ID}/cancel"
+
+      - name: Fail if APK did not finish successfully
+        if: steps.wait.outputs.status != 'FINISHED'
+        run: |
+          echo "::error::APK ended with ${{ steps.wait.outputs.status }}; no AAB should run."
+          exit 1
