@@ -15,12 +15,13 @@ Deno.test("refill UI preserves amount-mode drafts and limits long station lists"
 });
 
 Deno.test("layered fulfillment stays aligned with SKIMA-owned fleet requirements", async () => {
-  const [screen, orders, gateway, helper, alignment] = await Promise.all([
+  const [screen, orders, gateway, helper, alignment, sameDriverReadiness] = await Promise.all([
     read("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/CustomerOrdersScreen.tsx"),
     read("apps/lpg-mobile/src/native/api/gateway.ts"),
     read("apps/lpg-mobile/src/native/api/lpgFulfillment.ts"),
     read("supabase/migrations/20260918121500_lpg_internal_fulfillment_fleet_alignment.sql"),
+    read("supabase/migrations/20260918121800_lpg_internal_fulfillment_same_driver_readiness.sql"),
   ]);
   assertIncludes(helper, "SKIMA_INTERNAL_FULFILLMENT_ID");
   assertIncludes(gateway, "SKIMA_INTERNAL_FULFILLMENT_ID");
@@ -33,6 +34,10 @@ Deno.test("layered fulfillment stays aligned with SKIMA-owned fleet requirements
   assertIncludes(alignment, "relationship_type='fleet_owned'");
   assertIncludes(alignment, "read_lpg_internal_launch_readiness");
   assertIncludes(alignment, "dispatch_lpg_internal_order");
+  assertIncludes(sameDriverReadiness, "fullyReadyDriverCount");
+  assertIncludes(sameDriverReadiness, "relationship_type='fleet_owned'");
+  assertIncludes(sameDriverReadiness, "vehicle.platform_owned");
+  assertIncludes(sameDriverReadiness, "operational_coverage_assignments");
 });
 
 Deno.test("amount-mode station eligibility remains database authoritative", async () => {
