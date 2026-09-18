@@ -162,7 +162,7 @@ export function CustomerOrdersScreen() {
                     <Text numberOfLines={1} style={[styles.orderRef, { color: palette.ink }]}>{displayReference(order) ?? "Refill order"}</Text>
                     <Text style={[styles.date, { color: palette.muted }]}>{formatDate(firstString(order, ["created_at", "createdAt"]))}</Text>
                   </View>
-                  <StatusPill label={friendlyOrderStatus(status)} tone={orderStatusTone(status)} />
+                  <StatusPill label={friendlyOrderStatus(status, fulfillmentChannel)} tone={orderStatusTone(status)} />
                 </View>
 
                 <View style={[styles.divider, { backgroundColor: palette.border }]} />
@@ -288,7 +288,7 @@ export function CustomerOrderDetailScreen() {
             </View>
             <View style={styles.heroCopy}>
               <Text style={styles.heroLabel}>CURRENT REFILL STAGE</Text>
-              <Text style={styles.heroStatus}>{friendlyOrderStatus(status)}</Text>
+              <Text style={styles.heroStatus}>{friendlyOrderStatus(status, fulfillmentChannel)}</Text>
               <Text style={styles.heroBody}>Updated {formatDate(firstString(order, ["updated_at", "updatedAt", "created_at"]))}</Text>
             </View>
           </View>
@@ -296,13 +296,13 @@ export function CustomerOrderDetailScreen() {
           <AiContextAction
             workspace="customer"
             label="Explain this refill"
-            prompt={`Explain my refill order ${aiOrderReference}. Its current SKIMA stage is ${friendlyOrderStatus(status)} and payment status is ${friendlyPaymentStatus(paymentStatus)}. Tell me what these mean and what normally happens next. Do not change the order or payment.`}
+            prompt={`Explain my refill order ${aiOrderReference}. Its current SKIMA stage is ${friendlyOrderStatus(status, fulfillmentChannel)} and payment status is ${friendlyPaymentStatus(paymentStatus)}. Tell me what these mean and what normally happens next. Do not change the order or payment.`}
           />
 
           <Card padding="lg">
             <View style={styles.detailStatusRow}>
               <Text style={[styles.detailSectionTitle, { color: palette.ink }]}>Order summary</Text>
-              <StatusPill label={friendlyOrderStatus(status)} tone={orderStatusTone(status)} />
+              <StatusPill label={friendlyOrderStatus(status, fulfillmentChannel)} tone={orderStatusTone(status)} />
             </View>
             <View style={styles.infoGrid}>
               <InfoField label="Cylinder" value={cylinderSummary(cylinder)} />
@@ -458,8 +458,17 @@ function normalizeStatus(value: string) {
   return value.toLowerCase().replace(/[-\s]+/g, "_");
 }
 
-function friendlyOrderStatus(value: string) {
+function friendlyOrderStatus(value: string, fulfillmentChannel?: string | null) {
   const normalized = normalizeStatus(value);
+  if (isSkimaInternalFulfillmentChannel(fulfillmentChannel)) {
+    const internalLabels: Record<string, string> = {
+      matching_station: "Preparing SKIMA fulfillment",
+      station_en_route: "Heading to refill supplier",
+      station_verified: "Cylinder received for refill",
+      station_settled: "Refill complete · preparing return",
+    };
+    if (internalLabels[normalized]) return internalLabels[normalized];
+  }
   const labels: Record<string, string> = {
     created: "Order started",
     awaiting_payment: "Waiting for payment",
