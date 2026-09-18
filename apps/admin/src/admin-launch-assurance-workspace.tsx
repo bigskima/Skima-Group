@@ -429,7 +429,7 @@ export function AdminLaunchAssuranceWorkspace() {
     { label: "Driver pay", detail: ready?.driverCompensationPercent ? `${ready.driverCompensationPercent}% of delivery fee` : "Set a Driver share", done: Boolean(ready?.driverCompensationPercent && ready.driverCompensationPercent > 0) },
     { label: "Local LPG price", detail: ready?.internalReferencePriceScopeCount ? `${ready.internalReferencePriceScopeCount} area${ready.internalReferencePriceScopeCount === 1 ? "" : "s"} configured` : "Set at least one area price", done: Boolean(ready?.internalReferencePriceScopeCount) },
     { label: "Managed Driver", detail: ready?.managedApprovedDriverCount ? `${ready.managedApprovedDriverCount} approved` : "Add at least one approved Driver", done: Boolean(ready?.managedApprovedDriverCount) },
-    { label: "Vehicle", detail: ready?.vehicleReadyDriverCount ? `${ready.vehicleReadyDriverCount} Driver${ready.vehicleReadyDriverCount === 1 ? "" : "s"} ready` : "A managed Driver needs an LPG-ready vehicle", done: Boolean(ready?.vehicleReadyDriverCount) },
+    { label: "Vehicle", detail: ready?.vehicleReadyDriverCount ? `${ready.vehicleReadyDriverCount} Driver${ready.vehicleReadyDriverCount === 1 ? "" : "s"} ready` : "A managed Driver needs an LPG-ready SKIMA-owned vehicle", done: Boolean(ready?.vehicleReadyDriverCount) },
     { label: "Coverage", detail: ready?.coverageReadyDriverCount ? `${ready.coverageReadyDriverCount} Driver${ready.coverageReadyDriverCount === 1 ? "" : "s"} covered` : "Approve LPG service coverage for a managed Driver", done: Boolean(ready?.coverageReadyDriverCount) },
   ];
 
@@ -438,7 +438,7 @@ export function AdminLaunchAssuranceWorkspace() {
       <PageHeader
         eyebrow="LPG · SKIMA operations"
         title="SKIMA Fulfillment Setup"
-        description="Set up SKIMA's own backup fulfillment in normal business terms. Marketplace Stations and Independent Drivers remain available; SKIMA Managed Drivers can cover orders when your launch network is still thin."
+        description="Configure the Partner Network and SKIMA Fleet as two fulfillment routes. Choose which routes are available, which one gets first chance, and when SKIMA Fleet is used as fallback."
         actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button>}
       />
 
@@ -469,9 +469,9 @@ export function AdminLaunchAssuranceWorkspace() {
         <div className="section-heading"><div><span className="section-kicker">1 · Order coverage</span><h2>How should SKIMA fulfil LPG orders?</h2></div></div>
         <div className="skima-form-grid">
           <SelectInput label="Fulfillment mode" value={mode} onChange={(event) => setMode(event.currentTarget.value as FulfillmentMode)} options={[
-            { label: "Marketplace + SKIMA backup", value: "hybrid" },
-            { label: "Marketplace only", value: "marketplace_only" },
-            { label: "SKIMA Managed Drivers only", value: "internal_only" },
+            { label: "Partner Network + SKIMA Fleet", value: "hybrid" },
+            { label: "Partner Network only", value: "marketplace_only" },
+            { label: "SKIMA Fleet only", value: "internal_only" },
           ]} />
           <SelectInput label="Who gets the first chance?" value={priority} onChange={(event) => setPriority(event.currentTarget.value as FulfillmentPriority)} options={[
             { label: "Marketplace first", value: "marketplace_first" },
@@ -486,7 +486,7 @@ export function AdminLaunchAssuranceWorkspace() {
             { label: "Show both marketplace and SKIMA options", value: "show_both" },
           ]} />
         </div>
-        <TextAreaInput label="Admin note (optional)" value={configurationReason} onChange={(event) => setConfigurationReason(event.currentTarget.value)} placeholder="Example: Use SKIMA as launch backup in Awka" />
+        <TextAreaInput label="Admin note (optional)" value={configurationReason} onChange={(event) => setConfigurationReason(event.currentTarget.value)} placeholder="Example: Partner Network first, SKIMA Fleet as fallback in Awka" />
         <Button disabled={!canManageDispatch || updateConfiguration.isPending || (enabled && !ready?.ready)} onClick={() => updateConfiguration.mutate()}>
           {updateConfiguration.isPending ? "Saving…" : enabled && !ready?.ready ? "Complete setup before turning on" : "Save fulfillment settings"}
         </Button>
