@@ -16,11 +16,20 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   slug: "skima-lpg",
   scheme: "skima-lpg",
   version: "1.0.0",
+  icon: "./assets/skima-splash-logo.png",
   orientation: "default",
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
   experiments: { typedRoutes: true },
-  web: { bundler: "metro", output: "static", splash: { image: "./assets/skima-splash-logo.png", backgroundColor: "#0B1510", resizeMode: "contain" } },
+  web: {
+    bundler: "metro",
+    output: "static",
+    splash: {
+      image: "./assets/skima-splash-logo.png",
+      backgroundColor: "#0B1510",
+      resizeMode: "contain",
+    },
+  },
   android: {
     package: "com.skima.lpg",
     blockedPermissions: ["android.permission.RECORD_AUDIO"],
@@ -69,6 +78,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           "Allow SKIMA to use your location during fulfilment.",
         locationAlwaysAndWhenInUsePermission:
           "Allow SKIMA to share an active driver's location during assigned work.",
+        isAndroidBackgroundLocationEnabled: true,
+        isAndroidForegroundServiceEnabled: true,
+        isIosBackgroundLocationEnabled: true,
       },
     ],
     ["expo-notifications", { defaultChannel: "operations" }],
