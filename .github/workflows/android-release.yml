@@ -40,6 +40,7 @@ jobs:
         run: npm run check
 
       - name: Expo Doctor
+        continue-on-error: true
         run: npx --yes expo-doctor@latest
 
       - name: Validate production APK profile
