@@ -26,11 +26,7 @@ npx eas-cli@latest credentials -p android
 
 During credential setup, allow EAS to generate and manage the Android keystore if SKIMA does not already have one. Do not commit the keystore to Git.
 
-Copy the EAS project ID into this GitHub repository variable:
-
-```text
-EXPO_PUBLIC_EAS_PROJECT_ID
-```
+The Expo project ID is committed in the dynamic app configuration because it is not a secret. CI therefore does not need a GitHub project-ID variable.
 
 Create an Expo personal access token and save it as this GitHub repository secret:
 
@@ -38,14 +34,13 @@ Create an Expo personal access token and save it as this GitHub repository secre
 EXPO_TOKEN
 ```
 
-The project ID is not a private credential. The Expo token is.
+The Expo token is private and must never be committed to Git.
 
 ## EAS production environment
 
 Both Android release profiles consume the EAS `production` environment. Configure these client-safe values in Expo/EAS before the first remote build:
 
 ```text
-EXPO_PUBLIC_EAS_PROJECT_ID
 EXPO_PUBLIC_SUPABASE_URL
 EXPO_PUBLIC_SUPABASE_ANON_KEY
 EXPO_PUBLIC_API_GATEWAY_URL
