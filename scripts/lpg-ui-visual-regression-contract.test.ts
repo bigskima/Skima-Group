@@ -41,9 +41,13 @@ Deno.test("LPG public entry, auth and AI surfaces avoid unreadably small helper 
     read("apps/lpg-mobile/src/native/ui/AiAssistantLauncher.tsx"),
   ]);
 
-  requireText(welcome, "ONBOARDING_STEPS", "Welcome must keep progressive onboarding instead of a long static entry page.");
+  requireText(welcome, "JOURNEY", "Welcome must keep the service journey compact instead of stacking long onboarding sections.");
   requireText(welcome, "usePublishedProductContent", "Welcome must consume Admin Brand & Content publications.");
-  requireText(welcome, 'title: { fontSize: 30', "Progressive welcome titles must remain readable.");
+  requireText(welcome, '"mobile.welcome.hero"', "Welcome hero content and visuals must remain Admin-controlled.");
+  requireText(welcome, "numberOfLines={3}", "Welcome marketing copy must stay bounded on compact screens.");
+  requireText(welcome, 'title: {', "Welcome hero title styling must remain explicit and readable.");
+  requireText(welcome, 'fontSize: 33', "Welcome hero title must remain readable.");
+  rejectText(welcome, "ONBOARDING_STEPS", "Welcome must not regress to five mandatory onboarding slides.");
   rejectText(welcome, "function RoleCard", "Welcome must not regress to stacked role cards.");
   requireText(auth, "<BrandMark compact />", "Authentication screens must retain the SKIMA brand mark.");
   requireText(auth, 'body: {', "Authentication screens must retain concise supporting text.");
