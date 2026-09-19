@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     fontSize: 15,
     lineHeight: 20,
-    fontWeight: "650",
+    fontWeight: "600",
     backgroundColor: "transparent",
   },
   rightAction: {
