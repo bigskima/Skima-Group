@@ -40,10 +40,10 @@ export function AuthTextField({
             backgroundColor: palette.input,
             borderColor: focused ? palette.brand : palette.border,
           },
-          focused && { shadowColor: palette.brand, shadowOpacity: 0.12 },
+          focused && styles.fieldFocused,
         ]}
       >
-        <View style={[styles.iconTile, { backgroundColor: focused ? palette.brandSoft : palette.soft }]}>
+        <View style={[styles.iconWrap, focused && { backgroundColor: palette.brandSoft }]}>
           {icon}
         </View>
         <TextInput
@@ -101,7 +101,7 @@ export function AuthPrimaryButton({
           <>
             <Text style={styles.primaryLabel}>{label}</Text>
             <View style={styles.primaryArrow}>
-              <ArrowRight color="#FFFFFF" size={17} strokeWidth={2.5} />
+              <ArrowRight color="#FFFFFF" size={17} strokeWidth={2.6} />
             </View>
           </>
         )}
@@ -120,10 +120,22 @@ export function AuthFeedback({
   const { palette } = useAppTheme();
   const toneStyle =
     tone === "error"
-      ? { backgroundColor: palette.dangerSoft, borderColor: palette.danger + "42", color: palette.danger }
+      ? {
+          backgroundColor: palette.dangerSoft,
+          borderColor: palette.danger + "42",
+          color: palette.danger,
+        }
       : tone === "success"
-        ? { backgroundColor: palette.successSoft, borderColor: palette.success + "42", color: palette.success }
-        : { backgroundColor: palette.soft, borderColor: palette.border, color: palette.mutedStrong };
+        ? {
+            backgroundColor: palette.successSoft,
+            borderColor: palette.success + "42",
+            color: palette.success,
+          }
+        : {
+            backgroundColor: palette.soft,
+            borderColor: palette.border,
+            color: palette.mutedStrong,
+          };
   const Icon = tone === "error" ? CircleAlert : tone === "success" ? CheckCircle2 : ShieldCheck;
 
   return (
@@ -146,34 +158,42 @@ export function AuthFeedback({
 const styles = StyleSheet.create({
   fieldBlock: { gap: 7 },
   label: {
+    paddingHorizontal: 2,
     fontSize: 11,
     lineHeight: 15,
     fontWeight: "800",
-    letterSpacing: 0.25,
+    letterSpacing: 0.2,
   },
   field: {
-    minHeight: 60,
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
-    gap: 11,
+    gap: 10,
     borderWidth: 1,
-    borderRadius: radii.lg,
-    paddingHorizontal: 10,
+    borderRadius: 18,
+    paddingHorizontal: 12,
   },
-  iconTile: {
-    width: 38,
-    height: 38,
+  fieldFocused: {
+    shadowColor: colors.brand,
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  iconWrap: {
+    width: 34,
+    height: 34,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 12,
+    borderRadius: 11,
   },
   input: {
     flex: 1,
     minWidth: 0,
-    minHeight: 58,
+    minHeight: 56,
     paddingVertical: 0,
     fontSize: 15,
-    fontWeight: "700",
+    lineHeight: 20,
+    fontWeight: "650",
     backgroundColor: "transparent",
   },
   rightAction: {
@@ -189,13 +209,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   primaryButton: {
-    minHeight: 60,
+    minHeight: 58,
     overflow: "hidden",
-    borderRadius: radii.lg,
+    borderRadius: 18,
     ...shadows.raised,
   },
   primaryFill: {
-    minHeight: 60,
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -207,7 +227,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
     fontWeight: "900",
-    letterSpacing: -0.15,
+    letterSpacing: -0.18,
   },
   primaryArrow: {
     width: 29,
@@ -232,6 +252,6 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontWeight: "700",
   },
-  disabled: { opacity: 0.48 },
-  pressed: { transform: [{ scale: 0.992 }], opacity: 0.9 },
+  disabled: { opacity: 0.46 },
+  pressed: { transform: [{ scale: 0.992 }], opacity: 0.92 },
 });
