@@ -54,7 +54,7 @@ export default function Register() {
       setSuccess(true);
       setMessage(
         result.confirmationRequired
-          ? "Your account was created. Check your email to confirm it, then return here and sign in."
+          ? "Account created. Check your email to confirm it, then come back and sign in."
           : "Your SKIMA account is ready.",
       );
     } catch (cause) {
@@ -73,9 +73,8 @@ export default function Register() {
 
   return (
     <AuthShell
-      eyebrow="Create account"
-      title="Join SKIMA"
-      body="Create your SKIMA account to get started."
+      title="Create your account"
+      body="A few details and you're ready."
       footer={
         <Text style={[styles.footerText, { color: palette.muted }]}>
           Already use SKIMA?{" "}
@@ -95,6 +94,7 @@ export default function Register() {
           clearFeedback();
         }}
         placeholder="Your name"
+        returnKeyType="next"
         textContentType="name"
         value={name}
       />
@@ -103,6 +103,7 @@ export default function Register() {
         accessibilityLabel="Email address"
         autoCapitalize="none"
         autoComplete="email"
+        autoCorrect={false}
         icon={<Mail color={palette.mutedStrong} size={18} strokeWidth={2.2} />}
         keyboardType="email-address"
         label="Email address"
@@ -111,6 +112,7 @@ export default function Register() {
           clearFeedback();
         }}
         placeholder="you@example.com"
+        returnKeyType="next"
         textContentType="emailAddress"
         value={email}
       />
@@ -151,7 +153,7 @@ export default function Register() {
 
       <AuthPrimaryButton
         disabled={!ready}
-        label="Create my SKIMA account"
+        label="Create account"
         onPress={() => void submit()}
         pending={pending}
       />

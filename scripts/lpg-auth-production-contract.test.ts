@@ -65,7 +65,8 @@ Deno.test("LPG auth stays premium without duplicating onboarding content", () =>
   assert(!authShell.includes("RoleSignal"), "Auth must not duplicate role/onboarding cards.");
   assert(!authShell.includes("ONE IDENTITY · EVERY SKIMA WORKSPACE"), "Auth must remain focused on account fields.");
   assertStringIncludes(login, 'title="Welcome back"');
-  assertStringIncludes(register, 'title="Join SKIMA"');
+  assertStringIncludes(register, 'title="Create your account"');
+  assertStringIncludes(register, 'body="A few details and you\'re ready."');
   assertStringIncludes(html, "input:-webkit-autofill");
 });
 

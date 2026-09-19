@@ -56,9 +56,8 @@ export default function Login() {
 
   return (
     <AuthShell
-      eyebrow="Sign in"
       title="Welcome back"
-      body="Enter your SKIMA account details."
+      body="Sign in to continue."
       footer={
         <Text style={[styles.footerText, { color: palette.muted }]}>
           New to SKIMA?{" "}
@@ -72,6 +71,7 @@ export default function Login() {
         accessibilityLabel="Email address"
         autoCapitalize="none"
         autoComplete="email"
+        autoCorrect={false}
         icon={<Mail color={palette.mutedStrong} size={18} strokeWidth={2.2} />}
         keyboardType="email-address"
         label="Email address"
@@ -81,6 +81,7 @@ export default function Login() {
         }}
         placeholder="you@example.com"
         returnKeyType="next"
+        textContentType="emailAddress"
         value={email}
       />
 
@@ -124,6 +125,7 @@ export default function Login() {
             </Pressable>
           }
           secureTextEntry={!showPassword}
+          textContentType="password"
           value={password}
         />
       </View>
@@ -132,7 +134,7 @@ export default function Login() {
 
       <AuthPrimaryButton
         disabled={!ready}
-        label="Continue to SKIMA"
+        label="Sign in"
         onPress={() => void submit()}
         pending={pending}
       />
@@ -154,11 +156,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
     fontWeight: "800",
-    letterSpacing: 0.25,
+    letterSpacing: 0.2,
   },
   forgotLink: {
     color: colors.brand,
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 15,
     fontWeight: "900",
   },
