@@ -75,6 +75,29 @@ Deno.test("LPG auth stays premium without duplicating onboarding content", () =>
 });
 
 
+Deno.test("workspace policy centre separates privacy and role operations with progressive read aloud", async () => {
+  const [reader, settings, privacyRoute, driverRoute, stationRoute] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/PolicyDocumentScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/WorkspaceAccountSettingsScreen.tsx"),
+    read("apps/lpg-mobile/app/policies/privacy.tsx"),
+    read("apps/lpg-mobile/app/policies/driver-operations.tsx"),
+    read("apps/lpg-mobile/app/policies/station-operations.tsx"),
+  ]);
+
+  assertStringIncludes(reader, 'from "expo-speech"');
+  assertStringIncludes(reader, "buildPolicySections");
+  assertStringIncludes(reader, "Contents");
+  assertStringIncludes(reader, "Read aloud");
+  assertStringIncludes(reader, "Review unread chapters");
+  assertStringIncludes(reader, "visited.size >= sections.length");
+  assertStringIncludes(settings, '"/policies/driver-operations"');
+  assertStringIncludes(settings, '"/policies/station-operations"');
+  assertStringIncludes(settings, '"/policies/privacy"');
+  assertStringIncludes(privacyRoute, '"policy.privacy.notice"');
+  assertStringIncludes(driverRoute, '"policy.driver.operations"');
+  assertStringIncludes(stationRoute, '"policy.station.operations"');
+});
+
 Deno.test("native LPG gateway does not require browser crypto.randomUUID", () => {
   assertStringIncludes(frontendCore, "function createRuntimeUuid()");
   assertStringIncludes(frontendCore, "runtimeCrypto?.randomUUID");

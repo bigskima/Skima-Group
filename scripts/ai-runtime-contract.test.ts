@@ -614,6 +614,34 @@ Deno.test("assistant screens stay contextual instead of becoming bottom navigati
   }
 });
 
+Deno.test("admin Ask SKIMA is grounded in the synchronized operations handbook", () => {
+  assertIncludes(
+    gatewaySource,
+    'supabase.rpc("read_admin_operational_guide")',
+    "admin assistant context must load the synchronized handbook",
+  );
+  assertIncludes(
+    gatewaySource,
+    "adminOperationalGuide:",
+    "admin assistant context must expose handbook knowledge under a dedicated field",
+  );
+  assertIncludes(
+    gatewaySource,
+    "Use adminOperationalGuide as the synchronized SKIMA operations handbook",
+    "admin system prompt must use the handbook for safe operating guidance",
+  );
+  assertIncludes(
+    gatewaySource,
+    "If adminOperationalGuide conflicts with current SKIMA runtime",
+    "live SKIMA state must remain authoritative over handbook prose",
+  );
+  assertIncludes(
+    gatewaySource,
+    'routePath === "/admin/guide"',
+    "the admin app needs a protected guide endpoint backed by the same synchronized source",
+  );
+});
+
 Deno.test("admin SKIMA Intelligence can switch providers without exposing API keys", () => {
   assertIncludes(
     adminAiWorkspace,

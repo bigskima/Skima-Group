@@ -18,7 +18,7 @@ const PolicyDocumentSchema = z.object({
   summary: z.string().optional(),
   content: z.string().optional(),
   contentFormat: z.enum(["markdown", "plain_text", "html"]).optional(),
-  contentHash: z.string().optional(),
+  contentHash: z.string().nullable().optional(),
   effectiveFrom: z.string().nullable().optional(),
   publishedAt: z.string().nullable().optional(),
   requiresReacceptance: z.boolean().optional(),

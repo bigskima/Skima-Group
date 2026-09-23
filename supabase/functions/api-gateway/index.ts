@@ -76,6 +76,7 @@ const ROUTES = new Set([
   "/admin/verification/exceptions",
   "/admin/verification/provider-route",
   "/admin/ai/runtime",
+  "/admin/guide",
   "/admin/ai/provider-route",
   "/admin/ai/free-fallback-route",
   "/admin/ai/usage-policy",
@@ -557,6 +558,12 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
   if (routePath === "/admin/ai/runtime" && request.method === "GET") {
     return adminAiRuntimeResponse(supabase, authResult.user, supabaseUrl, id);
+  }
+
+  if (routePath === "/admin/guide" && request.method === "GET") {
+    const guide = await supabase.rpc("read_admin_operational_guide");
+    if (guide.error) return databaseError(guide.error, id);
+    return jsonResponse({ ok: true, data: guide.data, requestId: id });
   }
 
   if (routePath === "/admin/ai/provider-route" && request.method === "POST") {
@@ -11840,6 +11847,7 @@ async function buildAiAssistantContext(
       supportTriageAssessments,
       applicationReviewReadiness,
       stationInventoryOutlook,
+      adminOperationalGuide,
     ] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
@@ -11892,6 +11900,7 @@ async function buildAiAssistantContext(
       supabase.rpc("read_ai_station_inventory_outlook", {
         target_station_branch_id: null,
       }),
+      supabase.rpc("read_admin_operational_guide"),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(applications.error);
@@ -11935,6 +11944,9 @@ async function buildAiAssistantContext(
       supportTriageAssessments: supportTriageRows,
       applicationReviewReadiness: applicationReviewRows,
       stationInventoryOutlook: stationInventoryOutlookRows,
+      adminOperationalGuide: adminOperationalGuide.error
+        ? null
+        : adminOperationalGuide.data ?? null,
     };
     return {
       ...adminContext,
@@ -12328,6 +12340,9 @@ function aiSystemPrompt(workspace: string): string {
     ...(workspace === "admin" ? [
       "For admin questions, reason across the entire supplied platform context rather than describing the current page, route, component or source file.",
       "When asked what needs attention, start with the answer and rank the highest-impact verified signals first. Consider severity, overdue work, blocked workflows, money/custody exposure, stock pressure, partner risk, support SLA, application readiness and AI runtime failures.",
+      "Use adminOperationalGuide as the synchronized SKIMA operations handbook for page purpose, workflow sequence, troubleshooting, terminology and safe operator guidance. It is guidance, not authority to mutate state.",
+      "If adminOperationalGuide conflicts with current SKIMA runtime, permission, money, provider or workflow state, explain the difference and treat the current authoritative SKIMA state as controlling.",
+      "The administration handbook never contains or grants access to passwords, API keys, service-role credentials or private KYC. If asked for protected credentials, explain that they are not available through Ask SKIMA and direct the operator to the authorised credential-management process.",
       "Use adminAttentionDigest as the deterministic priority summary, then use operationalInsights, supportTriageAssessments, applicationReviewReadiness, financeReconciliationFindings, partnerRiskAssessments, stationInventoryOutlook, recentOrders, aiRuns, demandForecasts, expansionOpportunities, dispatchShadowAssessments and pricingIntelligence as supporting evidence.",
       "Separate verified SKIMA facts from forecasts, simulations and advisory risk scores. Never turn an advisory score into an accusation or a forecast into a guaranteed outcome.",
       "Prefer human-facing names, public references and workflow labels. Avoid raw UUIDs unless the administrator explicitly asks for a technical reference.",

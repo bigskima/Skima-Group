@@ -24,7 +24,14 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
   const theme = useAppTheme();
   const policyHref = workspace === "customer"
     ? "/policies/customer-terms"
-    : "/policies/partner-participation";
+    : workspace === "driver"
+      ? "/policies/driver-operations"
+      : "/policies/station-operations";
+  const policyLabel = workspace === "customer"
+    ? "Customer terms"
+    : workspace === "driver"
+      ? "Driver policy"
+      : "Station policy";
 
   return (
     <Screen
@@ -61,9 +68,19 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
         <View style={[styles.list, shadows.soft, { backgroundColor: theme.palette.surface, borderColor: theme.palette.border }]}>
           <SettingsRow
             icon={FileText}
-            label={workspace === "customer" ? "Customer terms" : "Partner terms"}
-            detail="Service rules, privacy and your rights"
+            label={policyLabel}
+            detail={workspace === "customer"
+              ? "LPG service rules, payments, refunds and your rights"
+              : workspace === "driver"
+                ? "Driver operations, location, custody, earnings and safety"
+                : "Station operations, refills, settlements, staff and safety"}
             onPress={() => router.push(policyHref as never)}
+          />
+          <SettingsRow
+            icon={ShieldCheck}
+            label="Privacy notice"
+            detail="How SKIMA uses location, account, payment, verification and AI data"
+            onPress={() => router.push("/policies/privacy" as never)}
           />
           <SettingsRow
             icon={ShieldCheck}

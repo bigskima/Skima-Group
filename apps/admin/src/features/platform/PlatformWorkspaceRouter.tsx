@@ -1,6 +1,7 @@
-import { PlugZap, ServerCog, Settings2, UsersRound } from "lucide-react";
+import { BookOpen, PlugZap, ServerCog, Settings2, UsersRound } from "lucide-react";
 
 import { AdminAccessWorkspace } from "../../admin-access-workspace";
+import { AdminGuideWorkspace } from "../../admin-guide-workspace";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
 import { PlatformConfigurationWorkspaceV2 } from "./PlatformConfigurationWorkspaceV2";
 import { PlatformIntegrationsWorkspaceV2 } from "./PlatformIntegrationsWorkspaceV2";
@@ -21,6 +22,7 @@ export function PlatformWorkspaceRouter(props: {
   if (props.route === "/platform/system" || props.route.startsWith("/platform/system/")) {
     return <PlatformSystemWorkspaceV2 route={props.route} onNavigate={props.onNavigate} />;
   }
+  if (props.route === "/platform/guide") return <AdminGuideWorkspace />;
   return <PlatformOverviewScreen onNavigate={props.onNavigate} />;
 }
 
@@ -67,6 +69,15 @@ function PlatformOverviewScreen(props: { readonly onNavigate: (href: string) => 
           icon: ServerCog,
           meta: "Health & diagnostics",
           permissionKey: "system",
+        },
+        {
+          key: "guide",
+          title: "Admin guide",
+          description: "Read the synchronized SKIMA operations handbook used by administrators and Ask SKIMA.",
+          href: "/platform/guide",
+          icon: BookOpen,
+          meta: "Operating handbook",
+          permissionKey: "guide",
         },
       ]}
     />
