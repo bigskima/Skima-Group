@@ -2,7 +2,7 @@ import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import { ArrowLeft, Mail } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { Platform, Pressable, StyleSheet, Text } from "react-native";
 
 import { useSession } from "../../src/native/session/SessionProvider";
 import { useAppTheme } from "../../src/native/theme/ThemeProvider";
@@ -33,7 +33,7 @@ export default function ForgotPassword() {
     try {
       await session.requestPasswordReset(
         email,
-        Linking.createURL("reset-password"),
+        passwordResetRedirectUrl(),
       );
       setSuccess(true);
       setMessage(
@@ -94,6 +94,13 @@ export default function ForgotPassword() {
       />
     </AuthShell>
   );
+}
+
+
+function passwordResetRedirectUrl() {
+  return Platform.OS === "web"
+    ? Linking.createURL("reset-password")
+    : "skima-lpg://reset-password";
 }
 
 function BackAction() {
