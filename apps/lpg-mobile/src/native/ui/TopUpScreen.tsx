@@ -103,7 +103,6 @@ export function TopUpScreen() {
         amount: value,
         currencyCode: currency,
         walletId: resolvedWalletId ?? undefined,
-        callbackUrl: Linking.createURL("payment-return"),
         idempotencyKey: idempotencyKey("wallet-top-up", walletId ?? "wallet"),
         metadata: {
           returnUrl: Linking.createURL("payment-return"),
