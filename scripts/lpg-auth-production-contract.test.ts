@@ -33,6 +33,10 @@ Deno.test("LPG auth screens use one centralized Supabase session authority", () 
   assertStringIncludes(session, "supabase.auth.updateUser");
   assertStringIncludes(session, "persistSession: true");
   assertStringIncludes(session, "autoRefreshToken: true");
+  assertStringIncludes(session, "Linking.getInitialURL");
+  assertStringIncludes(session, "supabase.auth.setSession");
+  assertStringIncludes(session, "exchangeCodeForSession");
+  assertStringIncludes(forgot, '"skima-lpg://reset-password"');
 
   assertStringIncludes(login, "session.signIn(");
   assertStringIncludes(register, "session.signUp(");

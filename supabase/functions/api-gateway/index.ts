@@ -10514,10 +10514,14 @@ async function initializePaystackDeposit(
     );
   }
 
+  const requestedCallbackUrl = optionalString(params.payload.callbackUrl);
+  const configuredCallbackUrl = Deno.env.get("SKIMA_PAYSTACK_CALLBACK_URL") ?? null;
+
   const paystackRequestPayload = buildPaystackInitializePayload({
     amount: Number(depositRecord.amount),
-    callbackUrl: optionalString(params.payload.callbackUrl) ??
-      Deno.env.get("SKIMA_PAYSTACK_CALLBACK_URL") ?? null,
+    callbackUrl: isHttpsUrl(requestedCallbackUrl)
+      ? requestedCallbackUrl
+      : configuredCallbackUrl,
     currencyCode: String(depositRecord.currency_code),
     depositId,
     email,
@@ -12588,6 +12592,16 @@ function toMinorCurrencyUnit(amount: number, label: string): number {
   }
 
   return minorAmount;
+}
+
+function isHttpsUrl(value: string | null): boolean {
+  if (!value) return false;
+
+  try {
+    return new URL(value).protocol === "https:";
+  } catch (_error) {
+    return false;
+  }
 }
 
 function resolveOptionalHttpsUrl(value: string | null, fieldName: string): string | null {

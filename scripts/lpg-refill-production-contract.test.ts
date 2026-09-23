@@ -178,6 +178,17 @@ Deno.test("customer wallet top up uses the canonical gateway runtime", async () 
   assertNotIncludes(topUp, 'useFinanceMutation');
 });
 
+Deno.test("wallet top up keeps native return links out of Paystack callback_url", async () => {
+  const [topUp, gateway] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/TopUpScreen.tsx"),
+    read("supabase/functions/api-gateway/index.ts"),
+  ]);
+  assertNotIncludes(topUp, 'callbackUrl: Linking.createURL("payment-return")');
+  assertIncludes(topUp, 'returnUrl: Linking.createURL("payment-return")');
+  assertIncludes(gateway, "isHttpsUrl(requestedCallbackUrl)");
+  assertIncludes(gateway, 'Deno.env.get("SKIMA_PAYSTACK_CALLBACK_URL")');
+});
+
 Deno.test("customer wallet activity stays compact as history grows", async () => {
   const [topUp, transactions] = await Promise.all([
     read("apps/lpg-mobile/src/native/ui/TopUpScreen.tsx"),

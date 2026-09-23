@@ -19,7 +19,7 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import { AppState, Platform } from "react-native";
+import { AppState, Linking, Platform } from "react-native";
 import { stopDriverTracking } from "../device/driverTracking";
 import { secureSessionStorage } from "../storage/secureStorage";
 import { friendlyError } from "../utilities/friendlyError";
@@ -129,6 +129,72 @@ export function SessionProvider({ children }: PropsWithChildren) {
     [api],
   );
 
+  const handleNativeAuthUrl = useCallback(
+    async (url: string | null) => {
+      if (Platform.OS === "web" || !url) return;
+
+      try {
+        const parsed = new URL(url);
+        const query = parsed.searchParams;
+        const hash = new URLSearchParams(parsed.hash.replace(/^#/, ""));
+        const callbackError =
+          query.get("error_description") ??
+          hash.get("error_description") ??
+          query.get("error") ??
+          hash.get("error");
+
+        if (callbackError) {
+          setError(
+            friendlyError(
+              callbackError,
+              "We couldn't complete the secure recovery link. Request a new reset email and try again.",
+            ),
+          );
+          return;
+        }
+
+        const code = query.get("code");
+        if (code) {
+          const { data, error: exchangeError } =
+            await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) {
+            throw exchangeError;
+          }
+          if (data.session) {
+            await apply(data.session);
+          }
+          return;
+        }
+
+        const accessToken =
+          hash.get("access_token") ?? query.get("access_token");
+        const refreshToken =
+          hash.get("refresh_token") ?? query.get("refresh_token");
+
+        if (!accessToken || !refreshToken) return;
+
+        const { data, error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (sessionError) {
+          throw sessionError;
+        }
+        if (data.session) {
+          await apply(data.session);
+        }
+      } catch (cause) {
+        setError(
+          friendlyError(
+            cause,
+            "We couldn't complete the secure recovery link. Request a new reset email and try again.",
+          ),
+        );
+      }
+    },
+    [apply, supabase],
+  );
+
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => apply(data.session));
     const { data } = supabase.auth.onAuthStateChange(
@@ -143,11 +209,23 @@ export function SessionProvider({ children }: PropsWithChildren) {
               void apply(sessionRef.current);
             } else supabase.auth.stopAutoRefresh();
           });
+    const deepLink =
+      Platform.OS === "web"
+        ? null
+        : Linking.addEventListener("url", ({ url }) => {
+            void handleNativeAuthUrl(url);
+          });
+
+    if (Platform.OS !== "web") {
+      void Linking.getInitialURL().then((url) => handleNativeAuthUrl(url));
+    }
+
     return () => {
       data.subscription.unsubscribe();
       appState?.remove();
+      deepLink?.remove();
     };
-  }, [apply, supabase]);
+  }, [apply, handleNativeAuthUrl, supabase]);
 
   const value = useMemo<SessionValue>(
     () => ({
