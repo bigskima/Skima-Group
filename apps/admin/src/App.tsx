@@ -6,6 +6,7 @@
 import {
   Activity,
   BadgeDollarSign,
+  BookOpen,
   Boxes,
   Building2,
   ClipboardList,
@@ -92,6 +93,7 @@ const navIconMap = {
   system: ServerCog,
   support: LifeBuoy,
   billing: BadgeDollarSign,
+  guide: BookOpen,
 } as const;
 
 export function App() {
