@@ -30,6 +30,7 @@ export const foundationNavigation: readonly NavigationItem[] = [
   { key: "governance", label: "Configuration", href: "/governance", icon: "governance", requiredPermissions: ["platform.configuration.read"] },
   { key: "providers", label: "Integrations", href: "/providers", icon: "providers", requiredPermissions: ["platform.providers.manage"] },
   { key: "system", label: "System Health & History", href: "/system", icon: "system", requiredPermissions: ["platform.health.read"] },
+  { key: "guide", label: "Admin Guide", href: "/admin-guide", icon: "guide" },
 ];
 
 export interface AdminNavigationPermissionRule {
