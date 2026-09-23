@@ -11808,7 +11808,6 @@ async function buildAiAssistantContext(
       supabase.rpc("read_ai_station_inventory_outlook", {
         target_station_branch_id: null,
       }),
-      supabase.rpc("read_admin_operational_guide"),
     ]);
     assertAiContextQuery(jobs.error);
     assertAiContextQuery(runtime.error);
@@ -11901,6 +11900,7 @@ async function buildAiAssistantContext(
       supabase.rpc("read_ai_station_inventory_outlook", {
         target_station_branch_id: null,
       }),
+      supabase.rpc("read_admin_operational_guide"),
     ]);
     assertAiContextQuery(orders.error);
     assertAiContextQuery(applications.error);
