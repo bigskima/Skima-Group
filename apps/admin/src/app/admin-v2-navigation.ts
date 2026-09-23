@@ -47,6 +47,7 @@ const screenRoutes: Readonly<Record<string, string>> = {
   governance: "/platform/configuration",
   providers: "/platform/integrations",
   system: "/platform/system",
+  guide: "/platform/guide",
 };
 
 export const adminWorkspaceDefinitions: readonly AdminWorkspaceDefinition[] = [
@@ -112,7 +113,7 @@ export const adminWorkspaceDefinitions: readonly AdminWorkspaceDefinition[] = [
     description: "Admin access, configuration, integrations and system health.",
     basePath: "/platform",
     icon: "platform",
-    screenKeys: ["access", "governance", "providers", "system"],
+    screenKeys: ["access", "governance", "providers", "system", "guide"],
   },
 ] as const;
 
@@ -144,6 +145,7 @@ const legacyExactRoutes: Readonly<Record<string, string>> = {
   "/governance": "/platform/configuration",
   "/providers": "/platform/integrations",
   "/system": "/platform/system",
+  "/admin-guide": "/platform/guide",
   "/services": "/services/utility-billing",
   "/intelligence": "/intelligence/ask",
   "/experience": "/experience/content",
@@ -213,6 +215,7 @@ const platformScreenLabels: Readonly<Record<string, string>> = {
   "/platform/configuration": "Configuration",
   "/platform/integrations": "Integrations",
   "/platform/system": "System health",
+  "/platform/guide": "Admin guide",
 };
 
 export function toAdminV2NavigationItem(item: NavigationItem): NavigationItem {
@@ -527,7 +530,7 @@ function buildExperienceWorkspaceNavigation(items: readonly NavigationItem[]): r
 }
 
 function buildPlatformWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
-  const orderedKeys = ["access", "governance", "providers", "system"] as const;
+  const orderedKeys = ["access", "governance", "providers", "system", "guide"] as const;
   const visibleItems = orderedKeys
     .map((key) => items.find((item) => item.key === key))
     .filter((item): item is NavigationItem => Boolean(item));
@@ -548,6 +551,7 @@ function buildPlatformWorkspaceNavigation(items: readonly NavigationItem[]): rea
       if (item.key === "governance") return { ...item, label: "Configuration" };
       if (item.key === "providers") return { ...item, label: "Integrations" };
       if (item.key === "system") return { ...item, label: "System health" };
+      if (item.key === "guide") return { ...item, label: "Admin guide" };
       return item;
     }),
   ];
