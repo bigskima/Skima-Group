@@ -1,5 +1,14 @@
+import * as Speech from "expo-speech";
 import { router } from "expo-router";
-import { CheckCircle2, ExternalLink, FileText, ShieldCheck } from "lucide-react-native";
+import {
+  CheckCircle2,
+  ExternalLink,
+  FileText,
+  ListTree,
+  ShieldCheck,
+  Square,
+  Volume2,
+} from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -14,8 +23,20 @@ import { radii, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { AppButton } from "./AppButton";
 import { Card } from "./Card";
-import { paginatePolicyBlocks, type PolicyBlock } from "./policyPagination";
+import type { PolicyBlock } from "./policyPagination";
 import { Screen } from "./Screen";
+
+export type PolicyKey =
+  | "policy.customer.terms"
+  | "policy.partner.participation"
+  | "policy.privacy.notice"
+  | "policy.driver.operations"
+  | "policy.station.operations";
+
+type PolicySection = {
+  title: string;
+  blocks: PolicyBlock[];
+};
 
 export function PolicyDocumentScreen({
   policyKey,
@@ -23,7 +44,7 @@ export function PolicyDocumentScreen({
   roleKey = null,
   allowAcceptance = true,
 }: {
-  readonly policyKey: "policy.customer.terms" | "policy.partner.participation";
+  readonly policyKey: PolicyKey;
   readonly applicationId?: string | null;
   readonly roleKey?: string | null;
   readonly allowAcceptance?: boolean;
@@ -35,26 +56,43 @@ export function PolicyDocumentScreen({
   const acceptance = useCurrentPolicyAcceptance(
     policyKey,
     applicationId,
-    document?.published === true,
+    document?.published === true && allowAcceptance,
   );
   const accept = useAcceptPolicy(policyKey, applicationId);
   const [confirmedRead, setConfirmedRead] = useState(false);
-  const [page, setPage] = useState(0);
+  const [sectionIndex, setSectionIndex] = useState(0);
+  const [visited, setVisited] = useState<Set<number>>(() => new Set());
+  const [contentsOpen, setContentsOpen] = useState(false);
+  const [reading, setReading] = useState(false);
   const [acceptanceError, setAcceptanceError] = useState<string | null>(null);
 
   const blocks = useMemo(
     () => parsePolicyBlocks(document?.content ?? ""),
     [document?.content],
   );
-  const pages = useMemo(() => paginatePolicyBlocks(blocks), [blocks]);
-  const currentPage = pages[Math.min(page, Math.max(pages.length - 1, 0))] ?? [];
-  const reachedFinalPage = pages.length > 0 && page === pages.length - 1;
+  const sections = useMemo(
+    () => buildPolicySections(blocks, document?.title),
+    [blocks, document?.title],
+  );
+  const safeIndex = Math.min(sectionIndex, Math.max(sections.length - 1, 0));
+  const currentSection = sections[safeIndex] ?? null;
+  const allRead = sections.length > 0 && visited.size >= sections.length;
+  const progress = sections.length ? visited.size / sections.length : 0;
 
   useEffect(() => {
-    setPage(0);
+    setSectionIndex(0);
+    setVisited(sections.length ? new Set([0]) : new Set());
     setConfirmedRead(false);
+    setContentsOpen(false);
     setAcceptanceError(null);
-  }, [document?.versionId]);
+    void Speech.stop();
+    setReading(false);
+  }, [document?.versionId, sections.length]);
+
+  useEffect(() => () => {
+    void Speech.stop();
+  }, []);
+
   const canAccept = Boolean(
     allowAcceptance &&
     document?.published &&
@@ -68,6 +106,39 @@ export function PolicyDocumentScreen({
     await Linking.openURL(document.sourceUrl);
   };
 
+  const goToSection = (next: number) => {
+    const bounded = Math.max(0, Math.min(next, sections.length - 1));
+    void Speech.stop();
+    setReading(false);
+    setSectionIndex(bounded);
+    setVisited((current) => {
+      const updated = new Set(current);
+      updated.add(bounded);
+      return updated;
+    });
+  };
+
+  const readCurrentSection = async () => {
+    if (!currentSection) return;
+    if (reading) {
+      await Speech.stop();
+      setReading(false);
+      return;
+    }
+    const speechText = [
+      currentSection.title,
+      ...currentSection.blocks.map((block) => block.text),
+    ].join(". ");
+    setReading(true);
+    Speech.speak(speechText, {
+      language: "en-NG",
+      rate: 0.94,
+      onDone: () => setReading(false),
+      onStopped: () => setReading(false),
+      onError: () => setReading(false),
+    });
+  };
+
   const submitAcceptance = async () => {
     if (!document?.versionId || !document.acceptanceStatement) return;
     setAcceptanceError(null);
@@ -78,17 +149,19 @@ export function PolicyDocumentScreen({
         roleKey,
       });
     } catch (cause) {
-      setAcceptanceError(friendlyError(cause, "We couldn't record your acceptance. Please try again."));
+      setAcceptanceError(
+        friendlyError(cause, "We couldn't record your acceptance. Please try again."),
+      );
     }
   };
 
   return (
     <Screen
-      eyebrow="SKIMA terms"
-      title={document?.title ?? "Terms and privacy"}
+      eyebrow="SKIMA policy centre"
+      title={document?.title ?? "Privacy & policy"}
       subtitle={document?.published
-        ? `Version ${document.versionLabel ?? "current"} • Read the full terms before accepting.`
-        : "Read the summary here. If the full document is not available in the app, you can open the official version."}
+        ? `Version ${document.versionLabel ?? "current"} • Read chapter by chapter or use Read aloud.`
+        : "Read the summary here. The external source remains available when a published in-app copy is unavailable."}
       action={
         <Pressable accessibilityRole="button" onPress={() => router.back()}>
           <Text style={[styles.back, { color: palette.brand }]}>Back</Text>
@@ -97,14 +170,14 @@ export function PolicyDocumentScreen({
     >
       {policy.isLoading ? (
         <Card>
-          <Text style={[styles.body, { color: palette.muted }]}>Loading current terms…</Text>
+          <Text style={[styles.body, { color: palette.muted }]}>Loading current policy…</Text>
         </Card>
       ) : null}
 
       {policy.error ? (
         <Card>
           <Text style={[styles.error, { color: palette.danger }]}>
-            {friendlyError(policy.error, "We couldn't load the current terms. Please try again.")}
+            {friendlyError(policy.error, "We couldn't load the current policy. Please try again.")}
           </Text>
           <AppButton label="Try again" variant="secondary" onPress={() => void policy.refetch()} />
         </Card>
@@ -112,9 +185,14 @@ export function PolicyDocumentScreen({
 
       {document?.summary ? (
         <Card>
-          <Text style={[styles.sectionTitle, { color: palette.ink }]}>Summary</Text>
-          <Text style={[styles.body, { color: palette.muted }]}>{cleanInlineMarkdown(document.summary)}</Text>
-          <Text style={[styles.notice, { color: palette.muted }]}>This summary is for convenience. Read the full terms for complete details.</Text>
+          <Text style={[styles.kicker, { color: palette.brand }]}>AT A GLANCE</Text>
+          <Text style={[styles.sectionTitle, { color: palette.ink }]}>What this document covers</Text>
+          <Text style={[styles.body, { color: palette.muted }]}>
+            {cleanInlineMarkdown(document.summary)}
+          </Text>
+          <Text style={[styles.notice, { color: palette.muted }]}>
+            The summary is only a reading aid. The published version below is the full policy.
+          </Text>
         </Card>
       ) : null}
 
@@ -125,13 +203,17 @@ export function PolicyDocumentScreen({
               <FileText color={palette.brand} size={22} />
             </View>
             <View style={styles.iconCopy}>
-              <Text style={[styles.sectionTitle, { color: palette.ink }]}>Full terms are not available in the app yet</Text>
-              <Text style={[styles.body, { color: palette.muted }]}>Open the official version below to read the complete terms.</Text>
+              <Text style={[styles.sectionTitle, { color: palette.ink }]}>
+                Full policy is not available in the app yet
+              </Text>
+              <Text style={[styles.body, { color: palette.muted }]}>
+                Open the official source below to read the complete document.
+              </Text>
             </View>
           </View>
           {document.sourceUrl ? (
             <AppButton
-              label="Open full terms"
+              label="Open Google Drive copy"
               variant="secondary"
               trailingIcon={<ExternalLink color={palette.brand} size={17} />}
               onPress={() => void openSource()}
@@ -146,37 +228,153 @@ export function PolicyDocumentScreen({
             <View style={styles.metaRow}>
               <ShieldCheck color={palette.brand} size={19} />
               <View style={styles.metaCopy}>
-                <Text style={[styles.metaTitle, { color: palette.ink }]}>Current version</Text>
-                <Text style={[styles.meta, { color: palette.muted }]}>Version {document.versionLabel} • {formatDate(document.effectiveFrom ?? document.publishedAt)}</Text>
-                {document.contentHash ? (
-                  <Text numberOfLines={1} style={[styles.hash, { color: palette.muted }]}>Document reference: {document.contentHash}</Text>
-                ) : null}
+                <Text style={[styles.metaTitle, { color: palette.ink }]}>Published source</Text>
+                <Text style={[styles.meta, { color: palette.muted }]}>
+                  Version {document.versionLabel} • {formatDate(document.effectiveFrom ?? document.publishedAt)}
+                </Text>
+                <Text style={[styles.meta, { color: palette.muted }]}>
+                  {sections.length} chapters • about {estimateMinutes(blocks)} min read
+                </Text>
               </View>
             </View>
           </Card>
 
           <Card>
             <View style={styles.progressHeader}>
-              <Text style={[styles.metaTitle, { color: palette.ink }]}>Section {page + 1} of {pages.length}</Text>
-              <Text style={[styles.meta, { color: palette.muted }]}>{Math.round(((page + 1) / Math.max(pages.length, 1)) * 100)}% read</Text>
+              <View style={styles.progressCopy}>
+                <Text style={[styles.kicker, { color: palette.brand }]}>PROGRESSIVE READING</Text>
+                <Text style={[styles.metaTitle, { color: palette.ink }]}>
+                  Chapter {safeIndex + 1} of {sections.length}
+                </Text>
+              </View>
+              <Text style={[styles.progressValue, { color: palette.brand }]}>
+                {Math.round(progress * 100)}%
+              </Text>
             </View>
             <View style={[styles.progressTrack, { backgroundColor: palette.border }]}>
-              <View style={[styles.progressFill, { backgroundColor: palette.brand, width: `${((page + 1) / Math.max(pages.length, 1)) * 100}%` }]} />
+              <View
+                style={[
+                  styles.progressFill,
+                  { backgroundColor: palette.brand, width: `${progress * 100}%` },
+                ]}
+              />
             </View>
-            <View style={styles.documentBody}>
-              {currentPage.map((block, index) => (
-                <PolicyBlock key={`${block.kind}-${index}`} block={block} />
-              ))}
+
+            <View style={styles.readerToolbar}>
+              <AppButton
+                label={contentsOpen ? "Hide contents" : "Contents"}
+                size="sm"
+                variant="secondary"
+                icon={<ListTree color={palette.brand} size={16} />}
+                onPress={() => setContentsOpen((value) => !value)}
+              />
+              <AppButton
+                label={reading ? "Stop" : "Read aloud"}
+                size="sm"
+                variant={reading ? "secondary" : "ghost"}
+                icon={reading
+                  ? <Square color={palette.brand} size={15} />
+                  : <Volume2 color={palette.brand} size={17} />}
+                onPress={() => void readCurrentSection()}
+              />
             </View>
+
+            {contentsOpen ? (
+              <View style={[styles.contents, { borderColor: palette.border }]}>
+                {sections.map((section, index) => {
+                  const active = index === safeIndex;
+                  const done = visited.has(index);
+                  return (
+                    <Pressable
+                      key={`${index}:${section.title}`}
+                      accessibilityRole="button"
+                      onPress={() => {
+                        goToSection(index);
+                        setContentsOpen(false);
+                      }}
+                      style={[
+                        styles.contentsRow,
+                        { borderBottomColor: palette.border },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.chapterBadge,
+                          {
+                            backgroundColor: active ? palette.brand : done ? palette.successSoft : palette.soft,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.chapterBadgeText,
+                            { color: active ? "#FFFFFF" : done ? palette.success : palette.mutedStrong },
+                          ]}
+                        >
+                          {done && !active ? "✓" : index + 1}
+                        </Text>
+                      </View>
+                      <Text
+                        numberOfLines={2}
+                        style={[
+                          styles.contentsLabel,
+                          { color: active ? palette.brand : palette.ink },
+                        ]}
+                      >
+                        {section.title}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+
+            {currentSection ? (
+              <View style={styles.chapter}>
+                <Text style={[styles.chapterEyebrow, { color: palette.muted }]}>
+                  CHAPTER {safeIndex + 1} • {estimateMinutes(currentSection.blocks)} MIN
+                </Text>
+                <Text style={[styles.chapterTitle, { color: palette.ink }]}>
+                  {currentSection.title}
+                </Text>
+                <View style={styles.documentBody}>
+                  {currentSection.blocks.map((block, index) => (
+                    <PolicyBlock key={`${block.kind}-${index}`} block={block} />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
             <View style={styles.pageActions}>
-              <AppButton label="Previous" variant="secondary" disabled={page === 0} onPress={() => setPage((value) => Math.max(value - 1, 0))} />
-              {!reachedFinalPage ? <AppButton label="Next section" onPress={() => setPage((value) => Math.min(value + 1, pages.length - 1))} /> : null}
+              <AppButton
+                label="Previous"
+                variant="secondary"
+                disabled={safeIndex === 0}
+                onPress={() => goToSection(safeIndex - 1)}
+              />
+              {safeIndex < sections.length - 1 ? (
+                <AppButton
+                  label="Continue reading"
+                  onPress={() => goToSection(safeIndex + 1)}
+                />
+              ) : (
+                <AppButton
+                  label={allRead ? "Reading complete" : "Review unread chapters"}
+                  variant={allRead ? "secondary" : "primary"}
+                  onPress={() => {
+                    if (!allRead) {
+                      const firstUnread = sections.findIndex((_, index) => !visited.has(index));
+                      if (firstUnread >= 0) goToSection(firstUnread);
+                    }
+                  }}
+                />
+              )}
             </View>
           </Card>
 
           {document.sourceUrl ? (
             <AppButton
-              label="Open official terms"
+              label="Open Google Drive source"
               variant="ghost"
               trailingIcon={<ExternalLink color={palette.brand} size={16} />}
               onPress={() => void openSource()}
@@ -190,33 +388,52 @@ export function PolicyDocumentScreen({
                   <CheckCircle2 color={palette.success} size={22} />
                   <View style={styles.iconCopy}>
                     <Text style={[styles.sectionTitle, { color: palette.ink }]}>Accepted</Text>
-                    <Text style={[styles.body, { color: palette.muted }]}>SKIMA has saved your acceptance of this version.</Text>
+                    <Text style={[styles.body, { color: palette.muted }]}>
+                      SKIMA has saved your acceptance of this published version.
+                    </Text>
                   </View>
                 </View>
               ) : session.status !== "authenticated" ? (
                 <>
                   <Text style={[styles.sectionTitle, { color: palette.ink }]}>Sign in to accept</Text>
-                  <Text style={[styles.body, { color: palette.muted }]}>You can read these terms without signing in. Sign in to accept them for your account.</Text>
+                  <Text style={[styles.body, { color: palette.muted }]}>
+                    You can read this policy without signing in. Sign in to accept it for your account.
+                  </Text>
                 </>
               ) : canAccept ? (
                 <>
                   <Pressable
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: confirmedRead }}
-                    onPress={() => reachedFinalPage && setConfirmedRead((value) => !value)}
+                    onPress={() => allRead && setConfirmedRead((value) => !value)}
                     style={styles.checkboxRow}
                   >
-                    <View style={[
-                      styles.checkbox,
-                      { borderColor: confirmedRead ? palette.brand : palette.borderStrong, backgroundColor: confirmedRead ? palette.brand : palette.surface, opacity: reachedFinalPage ? 1 : 0.5 },
-                    ]}>
+                    <View
+                      style={[
+                        styles.checkbox,
+                        {
+                          borderColor: confirmedRead ? palette.brand : palette.borderStrong,
+                          backgroundColor: confirmedRead ? palette.brand : palette.surface,
+                          opacity: allRead ? 1 : 0.5,
+                        },
+                      ]}
+                    >
                       {confirmedRead ? <CheckCircle2 color="#FFFFFF" size={16} /> : null}
                     </View>
-                    <Text style={[styles.acceptanceStatement, { color: palette.ink }]}>{document.acceptanceStatement}</Text>
+                    <Text style={[styles.acceptanceStatement, { color: palette.ink }]}>
+                      {document.acceptanceStatement}
+                    </Text>
                   </Pressable>
-                  {!reachedFinalPage ? <Text style={[styles.notice, { color: palette.muted }]}>Read each section above before confirming acceptance.</Text> : null}
+                  {!allRead ? (
+                    <Text style={[styles.notice, { color: palette.muted }]}>
+                      Open every chapter before confirming acceptance. Read aloud is available for each chapter.
+                    </Text>
+                  ) : null}
                   {acceptanceError || accept.error ? (
-                    <Text style={[styles.error, { color: palette.danger }]}>{acceptanceError ?? friendlyError(accept.error, "We couldn't record your acceptance. Please try again.")}</Text>
+                    <Text style={[styles.error, { color: palette.danger }]}>
+                      {acceptanceError ??
+                        friendlyError(accept.error, "We couldn't record your acceptance. Please try again.")}
+                    </Text>
                   ) : null}
                   <AppButton
                     label="Accept current terms"
@@ -243,12 +460,54 @@ function parsePolicyBlocks(content: string): PolicyBlock[] {
     .filter(Boolean)
     .flatMap((line): PolicyBlock[] => {
       const heading = /^(#{1,4})\s+(.+)$/.exec(line);
-      if (heading) return [{ kind: "heading", level: heading[1].length, text: cleanInlineMarkdown(heading[2]) }];
+      if (heading) {
+        return [{
+          kind: "heading",
+          level: heading[1].length,
+          text: cleanInlineMarkdown(heading[2]),
+        }];
+      }
       const bullet = /^[-*]\s+(.+)$/.exec(line);
       if (bullet) return [{ kind: "bullet", text: cleanInlineMarkdown(bullet[1]) }];
       if (/^<\/?(?:callout|page|ancestor|properties|content)/.test(line)) return [];
       return [{ kind: "paragraph", text: cleanInlineMarkdown(line) }];
     });
+}
+
+function buildPolicySections(blocks: PolicyBlock[], documentTitle?: string | null): PolicySection[] {
+  const sections: PolicySection[] = [];
+  let title = "Overview";
+  let body: PolicyBlock[] = [];
+
+  const push = () => {
+    const cleaned = body.filter((block) => !(block.kind === "heading" && block.text === title));
+    if (cleaned.length || sections.length === 0) sections.push({ title, blocks: cleaned });
+    body = [];
+  };
+
+  for (const block of blocks) {
+    if (block.kind === "heading" && block.level <= 2) {
+      if (
+        sections.length === 0 &&
+        body.length === 0 &&
+        documentTitle &&
+        normalize(block.text) === normalize(documentTitle)
+      ) {
+        continue;
+      }
+      if (body.length || sections.length) push();
+      title = block.text;
+      continue;
+    }
+    body.push(block);
+  }
+  if (body.length || !sections.length) push();
+
+  return sections.filter((section) => section.blocks.length > 0 || section.title !== "Overview");
+}
+
+function normalize(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function cleanInlineMarkdown(value: string) {
@@ -260,21 +519,32 @@ function cleanInlineMarkdown(value: string) {
     .trim();
 }
 
+function estimateMinutes(blocks: readonly PolicyBlock[]) {
+  const words = blocks.reduce((count, block) => count + block.text.split(/\s+/).filter(Boolean).length, 0);
+  return Math.max(1, Math.ceil(words / 190));
+}
+
 function PolicyBlock({ block }: { readonly block: PolicyBlock }) {
   const { palette } = useAppTheme();
   if (block.kind === "heading") {
     return (
-      <Text style={[
-        block.level === 1 ? styles.h1 : styles.h2,
-        { color: palette.ink },
-      ]}>{block.text}</Text>
+      <Text
+        style={[
+          block.level <= 2 ? styles.h2 : styles.h3,
+          { color: palette.ink },
+        ]}
+      >
+        {block.text}
+      </Text>
     );
   }
   if (block.kind === "bullet") {
     return (
       <View style={styles.bulletRow}>
         <Text style={[styles.bulletMark, { color: palette.brand }]}>•</Text>
-        <Text style={[styles.body, styles.bulletText, { color: palette.ink }]}>{block.text}</Text>
+        <Text style={[styles.body, styles.bulletText, { color: palette.ink }]}>
+          {block.text}
+        </Text>
       </View>
     );
   }
@@ -294,6 +564,7 @@ const styles = StyleSheet.create({
   acceptedRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   iconBox: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   iconCopy: { flex: 1, minWidth: 0, gap: 4 },
+  kicker: { ...typography.eyebrow, fontSize: 9 },
   sectionTitle: { ...typography.subheading, fontSize: 16 },
   body: { ...typography.body, fontSize: 14, lineHeight: 22 },
   notice: { ...typography.caption, lineHeight: 18, marginTop: spacing.sm },
@@ -301,14 +572,24 @@ const styles = StyleSheet.create({
   metaCopy: { flex: 1, gap: 3 },
   metaTitle: { ...typography.bodyStrong },
   meta: { ...typography.caption },
-  hash: { ...typography.caption, fontSize: 9 },
+  progressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md },
+  progressCopy: { flex: 1, gap: 2 },
+  progressValue: { fontSize: 22, fontWeight: "900" },
+  progressTrack: { height: 7, borderRadius: radii.pill, overflow: "hidden", marginTop: spacing.sm },
+  progressFill: { height: 7, borderRadius: radii.pill },
+  readerToolbar: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md },
+  contents: { marginTop: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, overflow: "hidden" },
+  contentsRow: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth },
+  chapterBadge: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  chapterBadgeText: { fontSize: 11, fontWeight: "900" },
+  contentsLabel: { flex: 1, ...typography.bodyStrong, fontSize: 12, lineHeight: 17 },
+  chapter: { marginTop: spacing.lg, gap: spacing.sm },
+  chapterEyebrow: { ...typography.eyebrow, fontSize: 9 },
+  chapterTitle: { ...typography.heading, fontSize: 22, lineHeight: 28 },
   documentBody: { gap: spacing.sm },
-  progressHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.sm },
-  progressTrack: { height: 6, borderRadius: radii.pill, overflow: "hidden", marginBottom: spacing.md },
-  progressFill: { height: 6, borderRadius: radii.pill },
-  pageActions: { flexDirection: "row", justifyContent: "space-between", gap: spacing.sm, marginTop: spacing.md },
-  h1: { ...typography.heading, fontSize: 20, lineHeight: 26, marginTop: spacing.md },
+  pageActions: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: spacing.sm, marginTop: spacing.lg },
   h2: { ...typography.subheading, fontSize: 16, lineHeight: 22, marginTop: spacing.sm },
+  h3: { ...typography.bodyStrong, fontSize: 14, lineHeight: 20, marginTop: spacing.sm },
   bulletRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingLeft: 2 },
   bulletMark: { fontSize: 18, lineHeight: 22, fontWeight: "900" },
   bulletText: { flex: 1 },
