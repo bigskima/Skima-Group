@@ -77,11 +77,11 @@ export function AdminAiAssistant(props: { readonly pageLabel: string; readonly p
           </header>
           <div className="admin-ai-help-panel__body">
             <p className="skima-muted">
-              Ask what this page does, what an option means, or what you should do next. This uses the same server-side SKIMA AI already configured for the app.
+              Ask what this page does, what an option means, or what you should do next. Ask SKIMA uses the synchronized administration handbook plus the current SKIMA records your administrator role is allowed to read.
             </p>
             {reply ? <div className="admin-ai-help-panel__reply">{reply}</div> : (
               <div className="admin-ai-help-panel__reply admin-ai-help-panel__reply--intro">
-                I can explain this page and the safest next action in plain language.
+                I can guide you through this page, explain the relevant operating procedure and compare it with current SKIMA records without changing anything.
               </div>
             )}
             {ask.error ? <p className="admin-ai-help-panel__error">{readError(ask.error)}</p> : null}
