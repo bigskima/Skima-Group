@@ -294,7 +294,7 @@ function Field({ label, value, onChangeText, palette, keyboardType, multiline = 
 
 const styles = StyleSheet.create({
   section: { borderWidth: 1, borderRadius: radii.lg, padding: spacing.md, gap: spacing.sm, marginBottom: spacing.md },
-  sectionTitle: { fontSize: 17, fontWeight: "800", fontFamily: typography.heading },
+  sectionTitle: { ...typography.heading, fontSize: 17 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
   choice: { borderWidth: 1, borderRadius: radii.md, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 4 },
   field: { gap: 6, marginBottom: 8 },
