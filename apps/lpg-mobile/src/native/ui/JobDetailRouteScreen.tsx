@@ -114,7 +114,7 @@ export function JobDetailRouteScreen({ workspace }: { workspace: "driver" | "sta
           icon={icon}
           title={presentation.title}
           description={presentation.description}
-          action={<AppButton label="Return to jobs" onPress={() => router.replace(`/${workspace === "station" ? "(station)" : "(driver)"}/jobs` as never)} />}
+          action={<AppButton label="Return to jobs" onPress={() => router.replace(workspace === "station" ? "/(station)/jobs" as never : workspace === "station_driver" ? "/(station-driver)" as never : "/(driver)/jobs" as never)} />}
         />
       </Screen>
     );
