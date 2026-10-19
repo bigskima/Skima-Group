@@ -1096,7 +1096,7 @@ language plpgsql
 security definer
 set search_path=public,pg_temp
 as $station_driver_status$
-declare driver_record public.lpg_station_managed_drivers%rowtype; assignment_record public.lpg_station_managed_driver_assignments%rowtype;
+declare driver_record public.lpg_station_managed_drivers%rowtype; assignment_record public.lpg_station_managed_driver_assignments%rowtype; order_status_before text;
 begin
   if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
   if target_assignment_id is null or nullif(btrim(target_idempotency_key),'') is null
@@ -1119,28 +1119,37 @@ begin
   if target_status='en_route' and assignment_record.status<>'accepted' then
     raise exception using errcode='55000',message='accept the delivery before starting the route';
   end if;
-  if exists(select 1 from public.lpg_refill_orders where id=assignment_record.lpg_order_id and status in ('cancelled','failed','refunded')) then
-    raise exception using errcode='55000',message='cancelled or failed deliveries cannot be advanced';
+  select status into order_status_before from public.lpg_refill_orders where id=assignment_record.lpg_order_id for update;
+  if order_status_before in ('cancelled','failed','refunded','delivered','completed') then
+    raise exception using errcode='55000',message='terminal deliveries cannot be advanced';
   end if;
+  if target_status='en_route' and order_status_before<>'station_settled' then
+    raise exception using errcode='55000',message='the station must complete refill settlement before delivery can start';
+  end if;
+
   update public.lpg_station_managed_driver_assignments
   set status=target_status,
       metadata=metadata||target_metadata||jsonb_build_object('lastStatusIdempotencyKey',target_idempotency_key,'lastStatusUpdatedAt',timezone('utc',now())),
       completed_at=null
   where id=assignment_record.id;
 
-  update public.lpg_refill_orders
-  set status=case when target_status='accepted' then 'driver_accepted' else 'station_en_route' end,
-      updated_at=timezone('utc',now())
-  where id=assignment_record.lpg_order_id
-    and status not in ('cancelled','failed','refunded','delivered','completed');
-  perform public.record_lpg_order_event(
-    assignment_record.lpg_order_id,
-    case when target_status='accepted' then 'lpg.station_managed.driver_accepted' else 'lpg.station_managed.driver_en_route' end,
-    case when target_status='accepted' then 'driver_offered' else 'driver_accepted' end,
-    case when target_status='accepted' then 'driver_accepted' else 'station_en_route' end,
-    target_idempotency_key||':order-event',
-    target_metadata||jsonb_build_object('station_driver_id',driver_record.id,'assignment_id',assignment_record.id)
-  );
+  if target_status='accepted' then
+    if order_status_before='driver_offered' then
+      update public.lpg_refill_orders set status='driver_accepted',updated_at=timezone('utc',now())
+      where id=assignment_record.lpg_order_id;
+      perform public.record_lpg_order_event(
+        assignment_record.lpg_order_id,'lpg.station_managed.driver_accepted','driver_offered','driver_accepted',
+        target_idempotency_key||':order-event',
+        target_metadata||jsonb_build_object('station_driver_id',driver_record.id,'assignment_id',assignment_record.id)
+      );
+    end if;
+  else
+    perform public.process_lpg_order_action(
+      assignment_record.lpg_order_id,'lpg.return.start',target_idempotency_key||':order-action',
+      target_metadata||jsonb_build_object('station_driver_id',driver_record.id,'assignment_id',assignment_record.id),
+      'lpg.station_managed_driver.mobile'
+    );
+  end if;
   return assignment_record.id;
 end;
 $station_driver_status$;
