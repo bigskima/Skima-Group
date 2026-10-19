@@ -737,6 +737,7 @@ as $$
      and driver.station_branch_id=assignment.station_branch_id
     where assignment.lpg_order_id=target_lpg_order_id
       and driver.user_id=target_user_id
+      and (target_user_id=auth.uid() or coalesce(auth.role(),'')='service_role')
       and driver.status='active'
       and assignment.status in ('assigned','accepted','en_route')
   );
