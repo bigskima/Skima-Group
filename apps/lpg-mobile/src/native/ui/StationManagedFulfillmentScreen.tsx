@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { domainQueries, useStationRuntime } from "../api/domains";
-import { firstString, nestedRecord, type PlatformRecord } from "../api/records";
+import { useStationRuntime } from "../api/domains";
+import { firstString, nestedRecord } from "../api/records";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { spacing, typography, radii } from "../theme/tokens";
@@ -197,6 +197,13 @@ export function StationManagedFulfillmentScreen() {
         <EmptyState title="Station branch unavailable" description="Complete station setup before configuring managed delivery." />
       ) : (
         <>
+          <Section title="Station Managed availability" palette={palette}>
+            <Text style={{ color: palette.muted, fontSize: 13 }}>Enable this option to let customers choose delivery by your own station driver. Existing independent-driver and SKIMA Fleet orders are unchanged.</Text>
+            <View style={styles.row}>
+              <Choice label={enabled ? "Enabled for customers" : "Disabled for customers"} active={enabled} onPress={() => setEnabled(!enabled)} palette={palette} />
+            </View>
+          </Section>
+
           <Section title="Customer delivery pricing" palette={palette}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Choose how delivery appears on the customer's SKIMA checkout. Refill and delivery remain separately tracked where a separate fee is selected.</Text>
             <View style={styles.row}>
@@ -216,9 +223,7 @@ export function StationManagedFulfillmentScreen() {
             {compensationMode === "in_app_plan" ? <Field label="Compensation plan (JSON object)" value={compensationPlan} onChangeText={setCompensationPlan} multiline palette={palette} /> : <Text style={{ color: palette.muted }}>Record the agreement and later confirm payments here. Payment is handled by your station outside SKIMA.</Text>}
           </Section>
 
-          <AppButton label={enabled ? "Save settings (enabled)" : "Save settings and enable Station Managed"} fullWidth loading={settingsMutation.isPending} onPress={() => void settingsMutation.mutateAsync()} />
-          <View style={{ height: 8 }} />
-          <AppButton label={enabled ? "Disable Station Managed" : "Keep Station Managed disabled"} variant="secondary" fullWidth loading={settingsMutation.isPending} onPress={() => { setEnabled(!enabled); }} />
+          <AppButton label="Save Station Managed settings" fullWidth loading={settingsMutation.isPending} onPress={() => void settingsMutation.mutateAsync()} />
 
           <Section title="Register a station driver" palette={palette}>
             <Field label="Driver SKIMA profile/user ID" value={driverUserId} onChangeText={setDriverUserId} palette={palette} autoCapitalize="none" />
