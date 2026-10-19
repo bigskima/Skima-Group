@@ -905,4 +905,79 @@ comment on table public.lpg_station_managed_driver_payment_records is
 comment on column public.lpg_refill_orders.fulfillment_mode is
   'Operational fulfillment mode, distinct from fulfillment_channel (marketplace vs skima_internal).';
 
+
+-- Admin oversight mirrors Station Managed settings and records in the SKIMA dashboard.
+-- This is read-only: station drivers and offline payment confirmations never enter
+-- SKIMA driver payout or commission ledgers.
+create or replace function public.read_lpg_admin_station_managed_fulfillment(
+  target_station_branch_id uuid default null
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=public,pg_temp
+as $
+begin
+  if coalesce(auth.jwt() ->> 'role','') <> 'service_role'
+    and not public.is_platform_super_admin()
+    and not public.can_manage_lpg_operations()
+    and not public.has_permission('platform.partner_price.manage',null) then
+    raise exception using errcode='42501',message='platform station fulfillment oversight permission is required';
+  end if;
+
+  return coalesce((
+    select jsonb_agg(
+      jsonb_build_object(
+        'stationBranchId',station.id,
+        'stationName',station.display_name,
+        'organizationName',organization.display_name,
+        'approvalStatus',station.approval_status,
+        'complianceStatus',station.compliance_status,
+        'stationManagedEnabled',coalesce(settings.station_managed_enabled,false),
+        'deliveryPricingMode',coalesce(settings.delivery_pricing_mode,'separate'),
+        'deliveryFeeAmount',coalesce(settings.delivery_fee_amount,0),
+        'driverCompensationMode',coalesce(settings.driver_compensation_mode,'in_app_plan'),
+        'currencyCode',coalesce(settings.currency_code,'NGN'),
+        'updatedAt',settings.updated_at,
+        'driverCount',(select count(*) from public.lpg_station_managed_drivers d where d.station_branch_id=station.id and d.status<>'removed'),
+        'activeDriverCount',(select count(*) from public.lpg_station_managed_drivers d where d.station_branch_id=station.id and d.status='active'),
+        'activeOrderCount',(select count(*) from public.lpg_refill_orders o where o.station_branch_id=station.id and o.fulfillment_mode='station_managed' and o.status not in ('delivered','cancelled','failed','refunded')),
+        'assignmentCount',(select count(*) from public.lpg_station_managed_driver_assignments a where a.station_branch_id=station.id and a.status<>'cancelled'),
+        'activeAgreementCount',(select count(*) from public.lpg_station_managed_driver_agreements a where a.station_branch_id=station.id and a.agreement_status='active'),
+        'paymentRecordCount',(select count(*) from public.lpg_station_managed_driver_payment_records p where p.station_branch_id=station.id),
+        'drivers',coalesce((
+          select jsonb_agg(jsonb_build_object('id',d.id,'displayName',d.display_name,'status',d.status,'createdAt',d.created_at) order by d.created_at desc)
+          from (select * from public.lpg_station_managed_drivers where station_branch_id=station.id and status<>'removed' order by created_at desc limit 20) d
+        ),'[]'::jsonb),
+        'assignments',coalesce((
+          select jsonb_agg(jsonb_build_object('id',a.id,'orderId',a.lpg_order_id,'publicReference',o.public_reference,'driverName',d.display_name,'status',a.status,'assignedAt',a.assigned_at,'completedAt',a.completed_at) order by a.assigned_at desc)
+          from (select * from public.lpg_station_managed_driver_assignments where station_branch_id=station.id and status<>'cancelled' order by assigned_at desc limit 20) a
+          join public.lpg_refill_orders o on o.id=a.lpg_order_id
+          join public.lpg_station_managed_drivers d on d.id=a.station_driver_id
+        ),'[]'::jsonb),
+        'agreements',coalesce((
+          select jsonb_agg(jsonb_build_object('id',a.id,'driverName',d.display_name,'agreementMode',a.agreement_mode,'agreementStatus',a.agreement_status,'terms',a.terms,'notes',a.notes,'effectiveFrom',a.effective_from,'effectiveUntil',a.effective_until) order by a.created_at desc)
+          from (select * from public.lpg_station_managed_driver_agreements where station_branch_id=station.id order by created_at desc limit 20) a
+          join public.lpg_station_managed_drivers d on d.id=a.station_driver_id
+        ),'[]'::jsonb),
+        'payments',coalesce((
+          select jsonb_agg(jsonb_build_object('id',p.id,'driverName',d.display_name,'publicReference',o.public_reference,'currencyCode',p.currency_code,'amount',p.amount,'paymentMethod',p.payment_method,'paymentStatus',p.payment_status,'externalReference',p.external_reference,'confirmationNotes',p.confirmation_notes,'confirmedAt',p.confirmed_at) order by p.confirmed_at desc)
+          from (select * from public.lpg_station_managed_driver_payment_records where station_branch_id=station.id order by confirmed_at desc limit 20) p
+          join public.lpg_station_managed_drivers d on d.id=p.station_driver_id
+          left join public.lpg_refill_orders o on o.id=p.lpg_order_id
+        ),'[]'::jsonb)
+      ) order by station.display_name
+    )
+    from public.lpg_station_branches station
+    join public.organizations organization on organization.id=station.organization_id
+    left join public.lpg_station_fulfillment_settings settings on settings.station_branch_id=station.id
+    where target_station_branch_id is null or station.id=target_station_branch_id
+  ),'[]'::jsonb);
+end;
+$;
+
+revoke all on function public.read_lpg_admin_station_managed_fulfillment(uuid) from public,anon;
+grant execute on function public.read_lpg_admin_station_managed_fulfillment(uuid) to authenticated,service_role;
+
 commit;
