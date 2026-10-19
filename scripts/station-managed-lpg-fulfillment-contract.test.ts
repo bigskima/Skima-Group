@@ -62,7 +62,7 @@ Deno.test("Admin dashboard has read-only Station Managed oversight", () => {
   requireText(migration, "read_lpg_admin_station_managed_fulfillment", "admin oversight RPC");
   requireText(migration, "platform station fulfillment oversight permission is required", "admin permission guard");
   requireText(admin, "read_lpg_admin_station_managed_fulfillment", "admin dashboard data source");
-  requireText(admin, "Station-entered confirmations only. SKIMA did not execute these driver payments.", "admin payment disclaimer");
+  requireText(admin, "These are station-entered confirmations only. SKIMA did not execute these driver payments.", "admin payment disclaimer");
   requireText(admin, "Review drivers, assignments, agreements and payment confirmations", "admin record review");
   requireText(adminRouter, "/partners/stations/managed-fulfillment", "admin route");
 });
@@ -72,7 +72,7 @@ Deno.test("Station Managed drivers have a separate authenticated job workspace",
   requireText(migration, "'stationDriverId',driver_record.id", "station driver workspace identity");
   requireText(migration, "lpg_station_managed_drivers_active_user_unique", "single active station identity");
   requireText(migration, "status='driver_offered'", "assigned delivery remains offered until driver acceptance");
-  requireText(migration, "the station must complete refill and settlement before delivery can start", "delivery cannot start before station settlement");
+  requireText(migration, "the station must complete refill settlement before delivery can start", "delivery cannot start before station settlement");
   requireText(migration, "quote_record.delivery_pricing_mode = ''included'' then quote_record.station_delivery_fee_amount", "included delivery excluded from LPG underfill refund");
   requireText(migration, "quote_record.delivery_pricing_mode in (''separate'',''included'') then quote_record.station_delivery_fee_amount", "station delivery fee settlement for included and separate pricing");
 
