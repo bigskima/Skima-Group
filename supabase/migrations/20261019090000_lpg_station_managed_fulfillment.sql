@@ -920,7 +920,7 @@ language plpgsql
 stable
 security definer
 set search_path=public,pg_temp
-as $
+as $station_admin$
 begin
   if coalesce(auth.jwt() ->> 'role','') <> 'service_role'
     and not public.is_platform_super_admin()
@@ -978,7 +978,7 @@ begin
     where target_station_branch_id is null or station.id=target_station_branch_id
   ),'[]'::jsonb);
 end;
-$;
+$station_admin$;
 
 revoke all on function public.read_lpg_admin_station_managed_fulfillment(uuid) from public,anon;
 grant execute on function public.read_lpg_admin_station_managed_fulfillment(uuid) to authenticated,service_role;
@@ -991,7 +991,7 @@ language plpgsql
 stable
 security definer
 set search_path=public,pg_temp
-as $
+as $station_driver_access$
 declare driver_record public.lpg_station_managed_drivers%rowtype; station_record public.lpg_station_branches%rowtype;
 begin
   if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
@@ -1003,7 +1003,7 @@ begin
   if not found then return jsonb_build_object('enabled',false); end if;
   return jsonb_build_object('enabled',true,'stationDriverId',driver_record.id,'stationBranchId',station_record.id,'stationName',station_record.display_name);
 end;
-$;
+$station_driver_access$;
 
 create or replace function public.read_lpg_station_managed_driver_jobs(
   target_limit integer default 50
@@ -1013,7 +1013,7 @@ language plpgsql
 stable
 security definer
 set search_path=public,pg_temp
-as $
+as $station_driver_jobs$
 declare driver_record public.lpg_station_managed_drivers%rowtype;
 begin
   if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
@@ -1050,7 +1050,7 @@ begin
     left join public.lpg_customer_locations location on location.id=order_record.delivery_location_id
   ),'[]'::jsonb);
 end;
-$;
+$station_driver_jobs$;
 
 create or replace function public.update_lpg_station_managed_driver_assignment_status(
   target_assignment_id uuid,
@@ -1062,7 +1062,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path=public,pg_temp
-as $
+as $station_driver_status$
 declare driver_record public.lpg_station_managed_drivers%rowtype; assignment_record public.lpg_station_managed_driver_assignments%rowtype;
 begin
   if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
@@ -1110,7 +1110,7 @@ begin
   );
   return assignment_record.id;
 end;
-$;
+$station_driver_status$;
 
 revoke all on function public.read_lpg_station_managed_driver_access() from public,anon;
 revoke all on function public.read_lpg_station_managed_driver_jobs(integer) from public,anon;
