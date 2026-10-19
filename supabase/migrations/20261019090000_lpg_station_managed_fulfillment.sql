@@ -739,7 +739,7 @@ begin
   );
   execute function_sql;
 end
-$;
+$$;
 
 -- Keep the generic dispatch pipeline away from Station Managed orders. The
 -- station assignment RPC owns those orders; existing independent and SKIMA Fleet
