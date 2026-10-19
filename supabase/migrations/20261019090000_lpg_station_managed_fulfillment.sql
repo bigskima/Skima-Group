@@ -149,6 +149,18 @@ alter table public.lpg_station_managed_driver_assignments enable row level secur
 alter table public.lpg_station_managed_driver_agreements enable row level security;
 alter table public.lpg_station_managed_driver_payment_records enable row level security;
 
+-- Raw table access stays closed; branch-scoped SECURITY DEFINER RPCs enforce access.
+create policy lpg_station_fulfillment_settings_no_direct_access
+  on public.lpg_station_fulfillment_settings for all to authenticated using (false) with check (false);
+create policy lpg_station_managed_drivers_no_direct_access
+  on public.lpg_station_managed_drivers for all to authenticated using (false) with check (false);
+create policy lpg_station_managed_assignments_no_direct_access
+  on public.lpg_station_managed_driver_assignments for all to authenticated using (false) with check (false);
+create policy lpg_station_managed_agreements_no_direct_access
+  on public.lpg_station_managed_driver_agreements for all to authenticated using (false) with check (false);
+create policy lpg_station_managed_payments_no_direct_access
+  on public.lpg_station_managed_driver_payment_records for all to authenticated using (false) with check (false);
+
 revoke all on public.lpg_station_fulfillment_settings, public.lpg_station_managed_drivers,
   public.lpg_station_managed_driver_assignments, public.lpg_station_managed_driver_agreements,
   public.lpg_station_managed_driver_payment_records from public, anon, authenticated;
