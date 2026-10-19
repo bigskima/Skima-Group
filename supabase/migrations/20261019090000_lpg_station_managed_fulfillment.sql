@@ -272,8 +272,9 @@ begin
   if not public.can_operate_lpg_station_branch(target_station_branch_id,'lpg.stations.manage') then
     raise exception using errcode='42501',message='branch-scoped station management permission is required';
   end if;
-  if target_delivery_pricing_mode not in ('separate','included','free')
-    or target_driver_compensation_mode not in ('in_app_plan','offline')
+  if target_enabled is null
+    or target_delivery_pricing_mode is null or target_delivery_pricing_mode not in ('separate','included','free')
+    or target_driver_compensation_mode is null or target_driver_compensation_mode not in ('in_app_plan','offline')
     or target_delivery_fee_amount is null or target_delivery_fee_amount < 0
     or target_currency_code is null
     or target_driver_compensation_plan is null or jsonb_typeof(target_driver_compensation_plan)<>'object'
@@ -427,8 +428,9 @@ begin
   if not found or not public.can_operate_lpg_station_branch(driver_record.station_branch_id,'lpg.stations.manage') then
     raise exception using errcode='42501',message='branch-scoped station management permission is required';
   end if;
-  if target_agreement_mode not in ('in_app_plan','offline')
-    or target_agreement_status not in ('draft','active','superseded','ended')
+  if target_agreement_mode is null or target_agreement_mode not in ('in_app_plan','offline')
+    or target_agreement_status is null or target_agreement_status not in ('draft','active','superseded','ended')
+    or target_effective_from is null
     or target_terms is null or jsonb_typeof(target_terms)<>'object'
     or target_metadata is null or jsonb_typeof(target_metadata)<>'object'
     or (target_effective_until is not null and target_effective_until<=target_effective_from) then
@@ -476,8 +478,9 @@ begin
   if not found or not public.can_operate_lpg_station_branch(driver_record.station_branch_id,'lpg.stations.manage') then
     raise exception using errcode='42501',message='branch-scoped station management permission is required';
   end if;
-  if target_amount is null or target_amount<0 or target_payment_method not in ('cash','bank_transfer','wallet_external','other')
-    or target_payment_status not in ('recorded','confirmed','reversed')
+  if target_currency_code is null or target_amount is null or target_amount<0
+    or target_payment_method is null or target_payment_method not in ('cash','bank_transfer','wallet_external','other')
+    or target_payment_status is null or target_payment_status not in ('recorded','confirmed','reversed')
     or target_idempotency_key is null or btrim(target_idempotency_key)=''
     or target_metadata is null or jsonb_typeof(target_metadata)<>'object' then
     raise exception using errcode='22023',message='invalid station driver payment record';
