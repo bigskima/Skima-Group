@@ -695,6 +695,107 @@ as $
   );
 $;
 
+
+-- Keep the generic dispatch pipeline away from Station Managed orders. The
+-- station assignment RPC owns those orders; existing independent and SKIMA Fleet
+-- dispatch paths retain their original behavior.
+do $
+declare function_sql text; old_block text; new_block text;
+begin
+  function_sql:=pg_get_functiondef('public.reserve_and_dispatch_lpg_refill_order(uuid,uuid,text,uuid,uuid,text,jsonb)'::regprocedure);
+  old_block:='declare'||E'\n'||
+    '  resolved_order_id uuid;'||E'\n'||
+    '  fulfillment_channel text;';
+  new_block:='declare'||E'\n'||
+    '  resolved_order_id uuid;'||E'\n'||
+    '  fulfillment_channel text;'||E'\n'||
+    '  fulfillment_mode text;';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed dispatch guard could not locate reservation declaration'; end if;
+  function_sql:=replace(function_sql,old_block,new_block);
+  old_block:='  select coalesce(target_order.fulfillment_channel,''marketplace'') into fulfillment_channel'||E'\n'||
+    '  from public.lpg_refill_orders target_order where target_order.id=resolved_order_id;';
+  new_block:='  select coalesce(target_order.fulfillment_channel,''marketplace''),target_order.fulfillment_mode'||E'\n'||
+    '    into fulfillment_channel,fulfillment_mode'||E'\n'||
+    '  from public.lpg_refill_orders target_order where target_order.id=resolved_order_id;';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed dispatch guard could not locate channel lookup'; end if;
+  function_sql:=replace(function_sql,old_block,new_block);
+  old_block:='  if fulfillment_channel=''skima_internal'' then';
+  new_block:='  if fulfillment_mode=''station_managed'' then'||E'\n'||
+    '    return resolved_order_id;'||E'\n'||
+    '  elsif fulfillment_channel=''skima_internal'' then';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed dispatch guard could not locate channel branch'; end if;
+  execute replace(function_sql,old_block,new_block);
+end
+$;
+
+do $
+declare function_sql text; old_block text; new_block text;
+begin
+  function_sql:=pg_get_functiondef('public.process_lpg_order_lifecycle(integer)'::regprocedure);
+  old_block:='where target_order.status=''payment_reserved'' and not (target_order.metadata ? ''dispatch_request_id'')';
+  new_block:='where target_order.status=''payment_reserved'''||E'\n'||
+    '      and target_order.fulfillment_mode<>''station_managed'''||E'\n'||
+    '      and not (target_order.metadata ? ''dispatch_request_id'')';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed lifecycle guard could not locate automatic dispatch query'; end if;
+  execute replace(function_sql,old_block,new_block);
+end
+$;
+
+do $
+declare function_sql text; old_block text; new_block text;
+begin
+  function_sql:=pg_get_functiondef('public.auto_release_lpg_driver_payout_after_delivery()'::regprocedure);
+  old_block:='declare'||E'\n'||
+    '  assigned_driver_user_id uuid;'||E'\n'||
+    '  fulfillment_channel text;';
+  new_block:='declare'||E'\n'||
+    '  assigned_driver_user_id uuid;'||E'\n'||
+    '  fulfillment_channel text;'||E'\n'||
+    '  fulfillment_mode text;'||E'\n'||
+    '  station_driver_user_id uuid;';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed payout trigger patch could not locate declaration'; end if;
+  function_sql:=replace(function_sql,old_block,new_block);
+  old_block:='  select coalesce(target_order.fulfillment_channel,''marketplace''),driver.user_id'||E'\n'||
+    '  into fulfillment_channel,assigned_driver_user_id'||E'\n'||
+    '  from public.lpg_refill_orders target_order'||E'\n'||
+    '  join public.driver_profiles driver on driver.id=target_order.driver_profile_id'||E'\n'||
+    '  where target_order.id=new.lpg_order_id;';
+  new_block:='  select coalesce(target_order.fulfillment_channel,''marketplace''),target_order.fulfillment_mode,driver.user_id,station_driver.user_id'||E'\n'||
+    '  into fulfillment_channel,fulfillment_mode,assigned_driver_user_id,station_driver_user_id'||E'\n'||
+    '  from public.lpg_refill_orders target_order'||E'\n'||
+    '  left join public.driver_profiles driver on driver.id=target_order.driver_profile_id'||E'\n'||
+    '  left join public.lpg_station_managed_driver_assignments station_assignment'||E'\n'||
+    '    on station_assignment.lpg_order_id=target_order.id and station_assignment.status in (''assigned'',''accepted'',''en_route'',''delivered'')'||E'\n'||
+    '  left join public.lpg_station_managed_drivers station_driver on station_driver.id=station_assignment.station_driver_id'||E'\n'||
+    '  where target_order.id=new.lpg_order_id;';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed payout trigger patch could not locate assigned driver lookup'; end if;
+  function_sql:=replace(function_sql,old_block,new_block);
+  old_block:='  if assigned_driver_user_id is null then'||E'\n'||
+    '    raise exception ''verified LPG delivery requires an assigned driver before completion'';'||E'\n'||
+    '  end if;';
+  new_block:='  if fulfillment_mode=''station_managed'' then'||E'\n'||
+    '    if station_driver_user_id is null then raise exception ''verified Station Managed delivery requires an active station driver assignment''; end if;'||E'\n'||
+    '    return new; -- Station drivers are compensated by their station, never by SKIMA.'||E'\n'||
+    '  end if;'||E'\n'||old_block;
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed payout trigger patch could not locate payout precondition'; end if;
+  execute replace(function_sql,old_block,new_block);
+end
+$;
+
+do $
+declare function_sql text; old_block text; new_block text;
+begin
+  function_sql:=pg_get_functiondef('public.dispatch_lpg_order(uuid,integer,text,text)'::regprocedure);
+  old_block:='  if not found then raise exception ''target_lpg_order_id must reference an LPG order''; end if;';
+  new_block:=old_block||E'\n'||
+    '  if order_record.fulfillment_mode=''station_managed'' then'||E'\n'||
+    '    raise exception using errcode=''55000'',message=''Station Managed orders must use station-owned driver assignment, not SKIMA dispatch'';'||E'\n'||
+    '  end if;';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed direct-dispatch guard could not locate order lookup'; end if;
+  execute replace(function_sql,old_block,new_block);
+end
+$;
+
 -- Permit the assigned station-owned driver to perform the existing cylinder
 -- handoff scans for their own Station Managed order without creating a driver_profiles
 -- record or granting the account independent-driver/SKIMA Fleet capabilities.
