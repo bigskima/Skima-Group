@@ -283,8 +283,8 @@ begin
   if target_driver_compensation_mode='offline' and target_driver_compensation_plan<>'{}'::jsonb then
     raise exception using errcode='22023',message='offline driver compensation must be recorded as an offline agreement, not an in-app payout plan';
   end if;
-  perform 1 from public.currency_definitions where code=target_currency_code and status='active';
-  if not found then raise exception using errcode='22023',message='active currency is required'; end if;
+  perform 1 from public.currency_definitions where code=target_currency_code and status='enabled';
+  if not found then raise exception using errcode='22023',message='enabled currency is required'; end if;
   insert into public.lpg_station_fulfillment_settings(
     station_branch_id,station_managed_enabled,delivery_pricing_mode,delivery_fee_amount,
     driver_compensation_mode,driver_compensation_plan,currency_code,updated_by,updated_at,metadata
