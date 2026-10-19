@@ -431,7 +431,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             </View>
           ) : null}
 
-          {driverWorkspace && status === "driver_offered" ? (
+          {workspace === "driver" && status === "driver_offered" ? (
             <InfoNotice
               icon={<ShieldCheck color={palette.brand} size={19} />}
               text="SKIMA is finalising this automatic assignment. No driver acceptance action is required."
