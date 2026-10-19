@@ -156,6 +156,35 @@ grant all on public.lpg_station_fulfillment_settings, public.lpg_station_managed
   public.lpg_station_managed_driver_assignments, public.lpg_station_managed_driver_agreements,
   public.lpg_station_managed_driver_payment_records to service_role;
 
+
+create or replace function public.read_lpg_station_managed_fulfillment_option(
+  target_station_branch_id uuid
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=public,pg_temp
+as $
+declare settings public.lpg_station_fulfillment_settings%rowtype; station_record public.lpg_station_branches%rowtype;
+begin
+  if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
+  select * into station_record from public.lpg_station_branches
+  where id=target_station_branch_id and approval_status='approved'
+    and compliance_status='approved' and availability_status='available';
+  if not found then return jsonb_build_object('enabled',false); end if;
+  select * into settings from public.lpg_station_fulfillment_settings
+  where station_branch_id=target_station_branch_id and station_managed_enabled;
+  if not found then return jsonb_build_object('enabled',false); end if;
+  return jsonb_build_object(
+    'enabled',true,
+    'deliveryPricingMode',settings.delivery_pricing_mode,
+    'deliveryFeeAmount',case when settings.delivery_pricing_mode='separate' then settings.delivery_fee_amount else 0 end,
+    'currencyCode',settings.currency_code
+  );
+end;
+$;
+
 create or replace function public.configure_lpg_station_managed_fulfillment(
   target_station_branch_id uuid,
   target_enabled boolean,
@@ -608,6 +637,7 @@ begin
 end
 $$;
 
+grant execute on function public.read_lpg_station_managed_fulfillment_option(uuid) to authenticated,service_role;
 grant execute on function public.configure_lpg_station_managed_fulfillment(uuid,boolean,text,numeric,text,jsonb,text,jsonb) to authenticated,service_role;
 grant execute on function public.register_lpg_station_managed_driver(uuid,uuid,text,text,jsonb) to authenticated,service_role;
 grant execute on function public.assign_lpg_station_managed_driver(uuid,uuid,text,jsonb) to authenticated,service_role;
