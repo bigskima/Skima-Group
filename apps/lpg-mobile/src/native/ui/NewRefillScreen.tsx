@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, MapPin, Scale, ShieldCheck, Store, WalletCards } from "lucide-react-native";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -41,6 +42,7 @@ export function NewRefillScreen() {
   const [pickupLocationId, setPickupLocationId] = useState("");
   const [deliveryLocationId, setDeliveryLocationId] = useState("");
   const [stationId, setStationId] = useState("");
+  const [fulfillmentMode, setFulfillmentMode] = useState<"independent_driver" | "station_managed">("independent_driver");
   const [requestedKg, setRequestedKg] = useState("");
   const [purchaseMode, setPurchaseMode] = useState<"kg" | "amount">("kg");
   const [requestedAmount, setRequestedAmount] = useState("");
@@ -122,6 +124,20 @@ export function NewRefillScreen() {
   });
   const displayedStations = eligibleStations.data ?? [];
   const selectedStation = displayedStations.find((station) => station.station_branch_id === stationId) ?? null;
+  const stationManagedOption = useQuery({
+    queryKey: ["station-managed-fulfillment-option", stationId],
+    enabled: session.status === "authenticated" && Boolean(stationId) && !isSkimaInternalFulfillmentId(stationId),
+    retry: false,
+    queryFn: async () => {
+      const result = await session.supabase.rpc("read_lpg_station_managed_fulfillment_option", {
+        target_station_branch_id: stationId,
+      });
+      if (result.error) throw result.error;
+      return result.data && typeof result.data === "object" && !Array.isArray(result.data)
+        ? result.data as Record<string, unknown>
+        : { enabled: false };
+    },
+  });
 
   useEffect(() => {
     if (purchaseMode !== "amount" || !selectedStation?.price_per_kg) return;
@@ -159,6 +175,7 @@ export function NewRefillScreen() {
         setPickupLocationId(String(draft.values.pickupLocationId ?? ""));
         setDeliveryLocationId(String(draft.values.deliveryLocationId ?? ""));
         setStationId(String(draft.values.stationId ?? ""));
+        setFulfillmentMode(draft.values.fulfillmentMode === "station_managed" ? "station_managed" : "independent_driver");
         setRequestedKg(String(draft.values.requestedKg ?? ""));
         setRequestedAmount(String(draft.values.requestedAmount ?? ""));
         setPurchaseMode(draft.values.purchaseMode === "amount" ? "amount" : "kg");
@@ -209,6 +226,7 @@ export function NewRefillScreen() {
         pickupLocationId,
         deliveryLocationId,
         stationId,
+        fulfillmentMode,
         requestedKg,
         requestedAmount,
         purchaseMode,
@@ -235,6 +253,7 @@ export function NewRefillScreen() {
     requestedKg,
     purchaseMode,
     stationId,
+    fulfillmentMode,
   ]);
 
   const requestQuote = async () => {
@@ -293,7 +312,8 @@ export function NewRefillScreen() {
         requestedAmount: purchaseMode === "amount" ? requestedAmountNumber : undefined,
         deliveryInstructions: instructions.trim() || undefined,
         source: "skima.lpg.mobile",
-        idempotencyKey: idempotencyKey("create-quote", cylinderId),
+        metadata: { fulfillment_mode: fulfillmentMode },
+        idempotencyKey: idempotencyKey("create-quote", `${cylinderId}-${fulfillmentMode}`),
       });
       const id = resultId(result);
       if (!id) throw new Error("Your quote could not be prepared. Please try again.");
@@ -346,6 +366,7 @@ export function NewRefillScreen() {
   const selectPickupLocation = (id: string) => {
     setPickupLocationId(id);
     setStationId("");
+    setFulfillmentMode("independent_driver");
     setQuoteId(null);
     setQuoteRecord(null);
     setError(null);
@@ -466,8 +487,20 @@ export function NewRefillScreen() {
                 <Text style={[styles.quoteSub, { color: palette.muted }]}>Review what makes up this refill before confirming.</Text>
               </View>
             </View>
-            <QuoteLine label="Gas refill" value={money(firstNumber(quoteRecord, ["refillAmount", "refill_amount", "lpg_amount", "lpgAmount"]), currency)} />
-            <QuoteLine label="Delivery" value={money(firstNumber(quoteRecord, ["deliveryAmount", "delivery_amount", "delivery_fee_amount", "deliveryFeeAmount"]), currency)} />
+            <QuoteLine
+              label={firstString(quoteRecord, ["deliveryPricingMode", "delivery_pricing_mode"]) === "included" ? "Gas refill (delivery included)" : "Gas refill"}
+              value={money(firstNumber(quoteRecord, ["refillAmount", "refill_amount", "lpg_amount", "lpgAmount"]), currency)}
+            />
+            <QuoteLine
+              label={
+                firstString(quoteRecord, ["deliveryPricingMode", "delivery_pricing_mode"]) === "included"
+                  ? "Delivery (included)"
+                  : firstString(quoteRecord, ["deliveryPricingMode", "delivery_pricing_mode"]) === "free"
+                    ? "Delivery (free)"
+                    : "Delivery"
+              }
+              value={money(firstNumber(quoteRecord, ["deliveryAmount", "delivery_amount", "delivery_fee_amount", "deliveryFeeAmount"]), currency)}
+            />
             <QuoteLine label="SKIMA service fee" value={money(firstNumber(quoteRecord, ["platformFeeAmount", "platform_fee_amount", "platformAmount", "platform_amount"]), currency)} />
             <View style={[styles.quoteDivider, { backgroundColor: palette.border }]} />
             <QuoteLine label="Total" value={money(total, currency)} strong />
@@ -739,6 +772,7 @@ export function NewRefillScreen() {
               selected={stationId}
               onSelect={(id) => {
                 setStationId(id);
+                setFulfillmentMode("independent_driver");
                 setQuoteId(null);
                 setQuoteRecord(null);
                 setError(null);
@@ -748,6 +782,49 @@ export function NewRefillScreen() {
               failed={eligibleStations.isError}
               onRetry={() => void eligibleStations.refetch()}
             />
+          ) : null}
+
+          {refillStep === 4 && Boolean(stationManagedOption.data?.enabled) ? (
+            <View style={[styles.selectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <SectionLead
+                eyebrow="DELIVERY METHOD"
+                icon={<Store color={palette.brand} size={20} />}
+                title="Who delivers your cylinder?"
+                description="Choose the independent driver route or let this station deliver with its own driver."
+              />
+              <View style={styles.choices}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: fulfillmentMode === "independent_driver" }}
+                  onPress={() => { setFulfillmentMode("independent_driver"); setQuoteId(null); setQuoteRecord(null); }}
+                  style={[styles.recordChoice, { backgroundColor: fulfillmentMode === "independent_driver" ? palette.brandSoft : palette.surfaceSubtle, borderColor: fulfillmentMode === "independent_driver" ? palette.brand : palette.border }]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.recordChoiceText, { color: palette.ink }]}>Independent driver</Text>
+                    <Text style={[styles.capacityBody, { color: palette.muted }]}>A driver from SKIMA’s independent partner network handles delivery.</Text>
+                  </View>
+                  {fulfillmentMode === "independent_driver" ? <CheckCircle2 color={palette.brand} size={20} /> : null}
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: fulfillmentMode === "station_managed" }}
+                  onPress={() => { setFulfillmentMode("station_managed"); setQuoteId(null); setQuoteRecord(null); }}
+                  style={[styles.recordChoice, { backgroundColor: fulfillmentMode === "station_managed" ? palette.brandSoft : palette.surfaceSubtle, borderColor: fulfillmentMode === "station_managed" ? palette.brand : palette.border }]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.recordChoiceText, { color: palette.ink }]}>This station’s own driver</Text>
+                    <Text style={[styles.capacityBody, { color: palette.muted }]}>
+                      {stationManagedOption.data?.deliveryPricingMode === "included"
+                        ? "Delivery is included in the refill price."
+                        : stationManagedOption.data?.deliveryPricingMode === "free"
+                          ? "This station offers free delivery."
+                          : `Separate delivery fee: ${money(Number(stationManagedOption.data?.deliveryFeeAmount ?? 0), String(stationManagedOption.data?.currencyCode ?? "NGN"))}.`}
+                    </Text>
+                  </View>
+                  {fulfillmentMode === "station_managed" ? <CheckCircle2 color={palette.brand} size={20} /> : null}
+                </Pressable>
+              </View>
+            </View>
           ) : null}
 
           {refillStep === 4 ? <><AppButton
