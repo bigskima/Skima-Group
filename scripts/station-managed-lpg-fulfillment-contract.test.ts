@@ -2,6 +2,8 @@ const migration = await Deno.readTextFile("supabase/migrations/20261019090000_lp
 const customer = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx");
 const station = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedFulfillmentScreen.tsx");
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
+const admin = await Deno.readTextFile("apps/admin/src/admin-station-managed-fulfillment-workspace.tsx");
+const adminRouter = await Deno.readTextFile("apps/admin/src/features/partners/PartnersWorkspaceRouter.tsx");
 
 function requireText(source: string, fragment: string, label: string) {
   if (!source.includes(fragment)) throw new Error(`${label}: missing required contract fragment: ${fragment}`);
@@ -47,4 +49,13 @@ Deno.test("Station workspace and API surfaces are wired", () => {
   requireText(station, "record_lpg_station_managed_driver_agreement", "agreement records");
   requireText(station, "record_lpg_station_managed_driver_payment", "payment confirmation records");
   requireText(gateway, "fulfillment_mode,delivery_pricing_mode,station_delivery_fee_amount", "quote and order API projections");
+});
+
+Deno.test("Admin dashboard has read-only Station Managed oversight", () => {
+  requireText(migration, "read_lpg_admin_station_managed_fulfillment", "admin oversight RPC");
+  requireText(migration, "platform station fulfillment oversight permission is required", "admin permission guard");
+  requireText(admin, "read_lpg_admin_station_managed_fulfillment", "admin dashboard data source");
+  requireText(admin, "Station-entered confirmations only. SKIMA did not execute these driver payments.", "admin payment disclaimer");
+  requireText(admin, "Review drivers, assignments, agreements and payment confirmations", "admin record review");
+  requireText(adminRouter, "/partners/stations/managed-fulfillment", "admin route");
 });
