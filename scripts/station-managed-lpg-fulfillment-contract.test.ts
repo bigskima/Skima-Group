@@ -22,6 +22,7 @@ Deno.test("Station Managed remains a fulfillment mode distinct from the channel"
 
 Deno.test("Station delivery pricing is snapshotted and totals are recalculated", () => {
   requireText(migration, "delivery_pricing_mode text not null default 'separate'", "pricing mode");
+  requireText(migration, "where code=target_currency_code and status='enabled'", "enabled currency validation");
   requireText(migration, "new.total_amount:=new.lpg_amount+new.delivery_fee_amount+new.platform_fee_amount+new.tax_amount", "quote total");
   requireText(migration, "'station_fulfillment_pricing_locked',true", "pricing idempotency");
   requireText(customer, "metadata: { fulfillment_mode: fulfillmentMode }", "customer quote mode");
