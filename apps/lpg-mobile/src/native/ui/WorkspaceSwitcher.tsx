@@ -7,7 +7,7 @@ import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 
-type Workspace = "customer" | "driver" | "station";
+type Workspace = "customer" | "driver" | "station" | "station-driver";
 
 export function WorkspaceSwitcher({ current }: { current: Workspace }) {
   const session = useSession();
@@ -21,6 +21,7 @@ export function WorkspaceSwitcher({ current }: { current: Workspace }) {
     { key: "customer" as const, label: "Customer", icon: UserRound },
     ...(workspaces.includes("driver") ? [{ key: "driver" as const, label: "Driver", icon: Truck }] : []),
     ...(workspaces.includes("station") ? [{ key: "station" as const, label: "Station", icon: Building2 }] : []),
+    ...(workspaces.includes("station_driver") ? [{ key: "station-driver" as const, label: "Station driver", icon: Truck }] : []),
   ];
 
   if (options.length < 2) return null;
