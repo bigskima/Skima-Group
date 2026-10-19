@@ -71,6 +71,9 @@ Deno.test("Station Managed drivers have a separate authenticated job workspace",
   requireText(migration, "lpg_station_managed_drivers_active_user_unique", "single active station identity");
   requireText(migration, "status='driver_offered'", "assigned delivery remains offered until driver acceptance");
   requireText(migration, "else 'station_en_route' end", "driver route status propagation");
+  requireText(migration, "quote_record.delivery_pricing_mode = ''included'' then quote_record.station_delivery_fee_amount", "included delivery excluded from LPG underfill refund");
+  requireText(migration, "quote_record.delivery_pricing_mode in (''separate'',''included'') then quote_record.station_delivery_fee_amount", "station delivery fee settlement for included and separate pricing");
+
   requireText(migration, "read_lpg_station_managed_driver_jobs", "station driver job list");
   requireText(migration, "update_lpg_station_managed_driver_assignment_status", "station driver status RPC");
   requireText(migration, "order_record.delivery_location_id", "canonical delivery location");
