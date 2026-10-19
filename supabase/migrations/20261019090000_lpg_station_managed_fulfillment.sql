@@ -659,6 +659,31 @@ begin
   if position(old_block in function_sql)=0 then raise exception 'Station Managed settlement patch could not locate delivery margin calculation'; end if;
   function_sql:=replace(function_sql,old_block,new_block);
 
+  old_block:='  quote_station_amount := quote_record.lpg_amount;';
+  new_block:='  quote_station_amount := quote_record.lpg_amount - case when order_record.fulfillment_mode = ''station_managed'' and quote_record.delivery_pricing_mode = ''included'' then quote_record.station_delivery_fee_amount else 0 end;';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed settlement patch could not locate quoted station principal'; end if;
+  function_sql:=replace(function_sql,old_block,new_block);
+
+  old_block:='  set subtotal_amount = actual_station_amount + quote_record.delivery_fee_amount,';
+  new_block:='  set subtotal_amount = actual_station_amount + case when order_record.fulfillment_mode = ''station_managed'' then quote_record.station_delivery_fee_amount else quote_record.delivery_fee_amount end,';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed settlement patch could not locate order subtotal'; end if;
+  function_sql:=replace(function_sql,old_block,new_block);
+
+  old_block:='        + quote_record.delivery_fee_amount + tax_amount,';
+  new_block:='        + case when order_record.fulfillment_mode = ''station_managed'' then quote_record.station_delivery_fee_amount else quote_record.delivery_fee_amount end + tax_amount,';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed settlement patch could not locate order total'; end if;
+  function_sql:=replace(function_sql,old_block,new_block);
+
+  old_block:='          ''deliveryFeeAmount'', quote_record.delivery_fee_amount,';
+  new_block:='          ''deliveryFeeAmount'', case when order_record.fulfillment_mode = ''station_managed'' then quote_record.station_delivery_fee_amount else quote_record.delivery_fee_amount end,';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed settlement patch could not locate fulfilled delivery amount'; end if;
+  function_sql:=replace(function_sql,old_block,new_block);
+
+  old_block:='            + quote_record.delivery_fee_amount + tax_amount';
+  new_block:='            + case when order_record.fulfillment_mode = ''station_managed'' then quote_record.station_delivery_fee_amount else quote_record.delivery_fee_amount end + tax_amount';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed settlement patch could not locate fulfilled order total'; end if;
+  function_sql:=replace(function_sql,old_block,new_block);
+
   old_block:='  if actual_station_amount > 0 then'||E'\n'||
     '    distribution := distribution || jsonb_build_array(jsonb_build_object('||E'\n'||
     '      ''wallet_id'', station_wallet_id,'||E'\n'||
@@ -670,16 +695,16 @@ begin
   new_block:='  if actual_station_amount > 0 then'||E'\n'||
     '    distribution := distribution || jsonb_build_array(jsonb_build_object('||E'\n'||
     '      ''wallet_id'', station_wallet_id,'||E'\n'||
-    '      ''amount'', actual_station_amount + case when order_record.fulfillment_mode = ''station_managed'' and quote_record.delivery_pricing_mode = ''separate'' then quote_record.delivery_fee_amount else 0 end,'||E'\n'||
+    '      ''amount'', actual_station_amount + case when order_record.fulfillment_mode = ''station_managed'' and quote_record.delivery_pricing_mode in (''separate'',''included'') then quote_record.station_delivery_fee_amount else 0 end,'||E'\n'||
     '      ''entry_type'', ''principal'','||E'\n'||
-    '      ''metadata'', jsonb_build_object(''role'', ''station_lpg_principal'', ''station_delivery_fee_amount'', case when order_record.fulfillment_mode = ''station_managed'' and quote_record.delivery_pricing_mode = ''separate'' then quote_record.delivery_fee_amount else 0 end)'||E'\n'||
+    '      ''metadata'', jsonb_build_object(''role'', ''station_lpg_principal'', ''station_delivery_fee_amount'', case when order_record.fulfillment_mode = ''station_managed'' and quote_record.delivery_pricing_mode in (''separate'',''included'') then quote_record.station_delivery_fee_amount else 0 end)'||E'\n'||
     '    ));'||E'\n'||
     '  end if;';
   if position(old_block in function_sql)=0 then raise exception 'Station Managed settlement patch could not locate station distribution block'; end if;
   function_sql:=replace(function_sql,old_block,new_block);
 
   old_block:='    actual_station_amount, 0, actual_station_amount, ''posted'',';
-  new_block:='    actual_station_amount + case when order_record.fulfillment_mode = ''station_managed'' and quote_record.delivery_pricing_mode = ''separate'' then quote_record.delivery_fee_amount else 0 end, 0, actual_station_amount + case when order_record.fulfillment_mode = ''station_managed'' and quote_record.delivery_pricing_mode = ''separate'' then quote_record.delivery_fee_amount else 0 end, ''posted'',';
+  new_block:='    actual_station_amount + case when order_record.fulfillment_mode = ''station_managed'' and quote_record.delivery_pricing_mode in (''separate'',''included'') then quote_record.station_delivery_fee_amount else 0 end, 0, actual_station_amount + case when order_record.fulfillment_mode = ''station_managed'' and quote_record.delivery_pricing_mode in (''separate'',''included'') then quote_record.station_delivery_fee_amount else 0 end, ''posted'',';
   if position(old_block in function_sql)=0 then raise exception 'Station Managed settlement patch could not locate settlement statement amounts'; end if;
   function_sql:=replace(function_sql,old_block,new_block);
 
