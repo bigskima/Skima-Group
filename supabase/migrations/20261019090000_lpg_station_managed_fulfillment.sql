@@ -418,9 +418,10 @@ returns trigger
 language plpgsql
 security definer
 set search_path=public,pg_temp
-as $$
-declare settings public.lpg_station_fulfillment_settings%rowtype; requested_mode text;
+as $
+declare settings public.lpg_station_fulfillment_settings%rowtype; requested_mode text; base_lpg_amount numeric(28,8);
 begin
+  if coalesce(new.metadata->>'station_fulfillment_pricing_locked','false')='true' then return new; end if;
   requested_mode:=coalesce(nullif(new.metadata->>'fulfillment_mode',''),new.fulfillment_mode,'independent_driver');
   if requested_mode not in ('station_managed','independent_driver','skima_fleet','partner_managed') then
     raise exception using errcode='22023',message='unsupported LPG fulfillment mode';
@@ -443,12 +444,19 @@ begin
   new.delivery_pricing_mode:=settings.delivery_pricing_mode;
   new.station_delivery_fee_amount:=case when settings.delivery_pricing_mode='free' then 0 else settings.delivery_fee_amount end;
   new.driver_commission_amount:=0;
+  base_lpg_amount:=coalesce(
+    nullif(new.metadata->'commercial_policy_snapshot'->>'stationLpgAmount','')::numeric,
+    nullif(new.breakdown->>'stationLpgAmount','')::numeric,
+    new.lpg_amount
+  );
   if settings.delivery_pricing_mode='separate' then
+    new.lpg_amount:=base_lpg_amount;
     new.delivery_fee_amount:=settings.delivery_fee_amount;
   elsif settings.delivery_pricing_mode='included' then
-    new.lpg_amount:=new.lpg_amount+settings.delivery_fee_amount;
+    new.lpg_amount:=base_lpg_amount+settings.delivery_fee_amount;
     new.delivery_fee_amount:=0;
   else
+    new.lpg_amount:=base_lpg_amount;
     new.delivery_fee_amount:=0;
   end if;
   new.total_amount:=new.lpg_amount+new.delivery_fee_amount+new.platform_fee_amount+new.tax_amount;
@@ -462,7 +470,8 @@ begin
   new.metadata:=coalesce(new.metadata,'{}'::jsonb)||jsonb_build_object(
     'fulfillment_mode','station_managed',
     'delivery_pricing_mode',settings.delivery_pricing_mode,
-    'station_delivery_fee_amount',new.station_delivery_fee_amount
+    'station_delivery_fee_amount',new.station_delivery_fee_amount,
+    'station_fulfillment_pricing_locked',true
   );
   return new;
 end;
@@ -470,7 +479,7 @@ $$;
 
 drop trigger if exists trg_lpg_station_managed_quote_policy on public.lpg_refill_quotes;
 create trigger trg_lpg_station_managed_quote_policy
-before insert on public.lpg_refill_quotes
+before update on public.lpg_refill_quotes
 for each row execute function public.apply_lpg_station_managed_quote_policy();
 
 create or replace function public.copy_lpg_station_fulfillment_snapshot_to_order()
@@ -500,6 +509,40 @@ drop trigger if exists trg_lpg_station_fulfillment_order_snapshot on public.lpg_
 create trigger trg_lpg_station_fulfillment_order_snapshot
 before insert on public.lpg_refill_orders
 for each row execute function public.copy_lpg_station_fulfillment_snapshot_to_order();
+
+
+-- The commercial snapshot writer updates the quote after its initial insert. Make
+-- its generic price quote projection follow the final, trigger-validated quote
+-- amounts (especially the Station Managed delivery pricing mode).
+do $
+declare function_sql text; old_block text; new_block text;
+begin
+  function_sql:=pg_get_functiondef('public.create_lpg_refill_quote_from_commercial_snapshot(uuid,numeric,uuid,uuid,uuid,jsonb,text,timestamp with time zone,text,jsonb,text)'::regprocedure);
+  old_block:='  update public.price_quotes'||E'\n'||
+    '  set subtotal_amount = (commercial_snapshot ->> ''stationLpgAmount'')::numeric'||E'\n'||
+    '        + (commercial_snapshot ->> ''customerDeliveryFee'')::numeric,'||E'\n'||
+    '      fee_amount = (commercial_snapshot ->> ''platformLpgMarkup'')::numeric,'||E'\n'||
+    '      tax_amount = 0,'||E'\n'||
+    '      total_amount = (commercial_snapshot ->> ''stationLpgAmount'')::numeric'||E'\n'||
+    '        + (commercial_snapshot ->> ''platformLpgMarkup'')::numeric'||E'\n'||
+    '        + (commercial_snapshot ->> ''customerDeliveryFee'')::numeric,'||E'\n'||
+    '      pricing_context = commercial_snapshot,'||E'\n'||
+    '      calculation_breakdown = commercial_snapshot,'||E'\n'||
+    '      updated_at = timezone(''utc'', now())'||E'\n'||
+    '  where id = generic_quote_id and status = ''calculated'';';
+  new_block:='  update public.price_quotes'||E'\n'||
+    '  set subtotal_amount = (select lpg_amount + delivery_fee_amount from public.lpg_refill_quotes where id=quote_id),'||E'\n'||
+    '      fee_amount = (select platform_fee_amount from public.lpg_refill_quotes where id=quote_id),'||E'\n'||
+    '      tax_amount = (select tax_amount from public.lpg_refill_quotes where id=quote_id),'||E'\n'||
+    '      total_amount = (select total_amount from public.lpg_refill_quotes where id=quote_id),'||E'\n'||
+    '      pricing_context = (select breakdown from public.lpg_refill_quotes where id=quote_id),'||E'\n'||
+    '      calculation_breakdown = (select breakdown from public.lpg_refill_quotes where id=quote_id),'||E'\n'||
+    '      updated_at = timezone(''utc'', now())'||E'\n'||
+    '  where id = generic_quote_id and status = ''calculated'';';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed pricing patch could not locate generic quote projection'; end if;
+  execute replace(function_sql,old_block,new_block);
+end
+$;
 
 -- Settlement keeps the existing station-principal and platform accounting. In
 -- Station Managed separate-fee mode, delivery revenue belongs to the station;
