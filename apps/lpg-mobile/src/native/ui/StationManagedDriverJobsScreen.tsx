@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { RefreshControl, ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import type { ReactNode } from "react";
 import { BriefcaseBusiness, CheckCircle2, Clock3, MapPin, UserRound } from "lucide-react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -133,7 +134,7 @@ export function StationManagedDriverJobsScreen() {
                 <Text style={[styles.metaText, { color: palette.ink }]}>{formatMoney(job.totalAmount, job.currencyCode)}</Text>
               </View>
               {job.status === "assigned" ? (
-                <AppButton label="Accept delivery" isLoading={busy} disabled={updateStatus.isPending} onPress={() => updateStatus.mutate({ job, nextStatus: "accepted" })} />
+                <AppButton label="Accept delivery" loading={busy} disabled={updateStatus.isPending} onPress={() => updateStatus.mutate({ job, nextStatus: "accepted" })} />
               ) : null}
               {job.status === "accepted" ? (
                 <AppButton label="Start delivery" isLoading={busy} disabled={updateStatus.isPending} onPress={() => updateStatus.mutate({ job, nextStatus: "en_route" })} />
