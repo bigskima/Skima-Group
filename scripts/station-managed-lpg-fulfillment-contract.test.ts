@@ -67,6 +67,10 @@ Deno.test("Admin dashboard has read-only Station Managed oversight", () => {
 
 Deno.test("Station Managed drivers have a separate authenticated job workspace", () => {
   requireText(migration, "read_lpg_station_managed_driver_access", "station driver access RPC");
+  requireText(migration, "'stationDriverId',driver_record.id", "station driver workspace identity");
+  requireText(migration, "lpg_station_managed_drivers_active_user_unique", "single active station identity");
+  requireText(migration, "status='driver_offered'", "assigned delivery remains offered until driver acceptance");
+  requireText(migration, "else 'station_en_route' end", "driver route status propagation");
   requireText(migration, "read_lpg_station_managed_driver_jobs", "station driver job list");
   requireText(migration, "update_lpg_station_managed_driver_assignment_status", "station driver status RPC");
   requireText(migration, "order_record.delivery_location_id", "canonical delivery location");
