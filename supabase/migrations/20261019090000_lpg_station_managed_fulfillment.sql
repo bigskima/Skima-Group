@@ -195,15 +195,16 @@ stable
 security definer
 set search_path=public,pg_temp
 as $
-declare settings_record public.lpg_station_fulfillment_settings%rowtype; result jsonb;
+declare settings_record public.lpg_station_fulfillment_settings%rowtype; result jsonb; settings_found boolean:=false;
 begin
   if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
   if not public.can_operate_lpg_station_branch(target_station_branch_id,'lpg.stations.manage') then
     raise exception using errcode='42501',message='branch-scoped station management permission is required';
   end if;
   select * into settings_record from public.lpg_station_fulfillment_settings where station_branch_id=target_station_branch_id;
+  settings_found:=found;
   result:=jsonb_build_object(
-    'settings',case when found then jsonb_build_object(
+    'settings',case when settings_found then jsonb_build_object(
       'stationManagedEnabled',settings_record.station_managed_enabled,
       'deliveryPricingMode',settings_record.delivery_pricing_mode,
       'deliveryFeeAmount',settings_record.delivery_fee_amount,
@@ -502,7 +503,10 @@ as $
 declare settings public.lpg_station_fulfillment_settings%rowtype; requested_mode text; base_lpg_amount numeric(28,8);
 begin
   if coalesce(new.metadata->>'station_fulfillment_pricing_locked','false')='true' then return new; end if;
-  requested_mode:=coalesce(nullif(new.metadata->>'fulfillment_mode',''),new.fulfillment_mode,'independent_driver');
+  requested_mode:=case
+    when new.fulfillment_channel='skima_internal' and coalesce(nullif(new.metadata->>'fulfillment_mode',''),new.fulfillment_mode,'independent_driver')='independent_driver' then 'skima_fleet'
+    else coalesce(nullif(new.metadata->>'fulfillment_mode',''),new.fulfillment_mode,'independent_driver')
+  end;
   if requested_mode not in ('station_managed','independent_driver','skima_fleet','partner_managed') then
     raise exception using errcode='22023',message='unsupported LPG fulfillment mode';
   end if;
@@ -805,6 +809,9 @@ begin
     '  end if;';
   new_block:='  if fulfillment_mode=''station_managed'' then'||E'\n'||
     '    if station_driver_user_id is null then raise exception ''verified Station Managed delivery requires an active station driver assignment''; end if;'||E'\n'||
+    '    update public.lpg_station_managed_driver_assignments'||E'\n'||
+    '    set status=''delivered'',completed_at=coalesce(completed_at,timezone(''utc'',now()))'||E'\n'||
+    '    where lpg_order_id=new.lpg_order_id and status in (''assigned'',''accepted'',''en_route'');'||E'\n'||
     '    return new; -- Station drivers are compensated by their station, never by SKIMA.'||E'\n'||
     '  end if;'||E'\n'||old_block;
   if position(old_block in function_sql)=0 then raise exception 'Station Managed payout trigger patch could not locate payout precondition'; end if;
