@@ -91,6 +91,12 @@ export function StationManagedDriverJobsScreen() {
             action={<AppButton label="Try again" variant="secondary" onPress={refresh} />}
           />
         ) : null}
+
+        {updateStatus.error ? (
+          <View style={[styles.notice, { backgroundColor: palette.dangerSoft }]}>
+            <Text accessibilityRole="alert" style={[styles.noticeText, { color: palette.danger }]}>{friendlyError(updateStatus.error, "This delivery status could not be updated. Refresh and try again.")}</Text>
+          </View>
+        ) : null}
         {jobs.data && jobs.data.length === 0 ? (
           <EmptyState
             icon={<CheckCircle2 color={palette.brand} size={26} />}
