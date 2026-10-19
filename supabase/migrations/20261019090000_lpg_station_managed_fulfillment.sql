@@ -1067,6 +1067,10 @@ begin
       select a.* from public.lpg_station_managed_driver_assignments a
       where a.station_driver_id=driver_record.id
         and a.status in ('assigned','accepted','en_route','delivered')
+        and not exists (
+          select 1 from public.lpg_refill_orders terminal_order
+          where terminal_order.id=a.lpg_order_id and terminal_order.status in ('cancelled','failed','refunded')
+        )
       order by a.assigned_at desc
       limit greatest(1,least(coalesce(target_limit,50),100))
     ) assignment
