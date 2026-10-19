@@ -375,6 +375,7 @@ export function NewRefillScreen() {
   const selectDeliveryLocation = (id: string) => {
     setDeliveryLocationId(id);
     setStationId("");
+    setFulfillmentMode("independent_driver");
     setQuoteId(null);
     setQuoteRecord(null);
     setError(null);
@@ -383,6 +384,7 @@ export function NewRefillScreen() {
   const selectCylinder = (id: string) => {
     setCylinderId(id);
     setStationId("");
+    setFulfillmentMode("independent_driver");
     setQuoteId(null);
     setQuoteRecord(null);
     setError(null);
@@ -391,6 +393,7 @@ export function NewRefillScreen() {
   const changeRequestedKg = (value: string) => {
     setRequestedKg(value);
     setStationId("");
+    setFulfillmentMode("independent_driver");
     setQuoteId(null);
     setQuoteRecord(null);
     setError(null);
@@ -399,6 +402,7 @@ export function NewRefillScreen() {
   const changeRequestedAmount = (value: string) => {
     setRequestedAmount(value);
     setStationId("");
+    setFulfillmentMode("independent_driver");
     setQuoteId(null);
     setQuoteRecord(null);
     setError(null);
@@ -408,6 +412,7 @@ export function NewRefillScreen() {
     if (nextMode === purchaseMode) return;
     setPurchaseMode(nextMode);
     setStationId("");
+    setFulfillmentMode("independent_driver");
     setQuoteId(null);
     setQuoteRecord(null);
     setError(null);
