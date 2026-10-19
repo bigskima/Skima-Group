@@ -21,7 +21,7 @@ const RouteStateSchema = z.object({
   fulfillmentChannel: z.enum(["marketplace", "skima_internal"]).nullable().optional(),
 });
 
-export function JobDetailRouteScreen({ workspace }: { workspace: "driver" | "station" }) {
+export function JobDetailRouteScreen({ workspace }: { workspace: "driver" | "station" | "station_driver" }) {
   const params = useLocalSearchParams<{ id?: string }>();
   const id = params.id ?? null;
   const session = useSession();
@@ -42,12 +42,12 @@ export function JobDetailRouteScreen({ workspace }: { workspace: "driver" | "sta
 
   if (!id) {
     return (
-      <Screen eyebrow={workspace === "station" ? "Station job" : "Driver job"} title="Job unavailable">
+      <Screen eyebrow={workspace === "station" ? "Station job" : workspace === "station_driver" ? "Station Managed delivery" : "Driver job"} title="Job unavailable">
         <EmptyState
           icon={<PackageCheck color={palette.brand} size={28} />}
           title="Job reference is missing"
           description="Return to your jobs and open the item again."
-          action={<AppButton label="Back to jobs" onPress={() => router.replace(`/${workspace === "station" ? "(station)" : "(driver)"}/jobs` as never)} />}
+          action={<AppButton label="Back to jobs" onPress={() => router.replace(workspace === "station" ? "/(station)/jobs" as never : workspace === "station_driver" ? "/(station-driver)" as never : "/(driver)/jobs" as never)} />}
         />
       </Screen>
     );
@@ -127,7 +127,7 @@ export function JobDetailRouteScreen({ workspace }: { workspace: "driver" | "sta
   return <JobDetailScreen workspace={workspace} />;
 }
 
-function staleJobPresentation(reason: string, workspace: "driver" | "station") {
+function staleJobPresentation(reason: string, workspace: "driver" | "station" | "station_driver") {
   if (reason === "payment_expired") {
     return {
       title: "Payment window expired",
