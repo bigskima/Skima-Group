@@ -165,7 +165,7 @@ language plpgsql
 stable
 security definer
 set search_path=public,pg_temp
-as $
+as $$
 declare settings public.lpg_station_fulfillment_settings%rowtype; station_record public.lpg_station_branches%rowtype;
 begin
   if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
@@ -183,7 +183,7 @@ begin
     'currencyCode',settings.currency_code
   );
 end;
-$;
+$$;
 
 
 create or replace function public.read_lpg_station_managed_workspace(
@@ -194,7 +194,7 @@ language plpgsql
 stable
 security definer
 set search_path=public,pg_temp
-as $
+as $$
 declare settings_record public.lpg_station_fulfillment_settings%rowtype; result jsonb; settings_found boolean:=false;
 begin
   if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
@@ -235,7 +235,7 @@ begin
   );
   return result;
 end;
-$;
+$$;
 
 create or replace function public.configure_lpg_station_managed_fulfillment(
   target_station_branch_id uuid,
@@ -499,7 +499,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path=public,pg_temp
-as $
+as $$
 declare settings public.lpg_station_fulfillment_settings%rowtype; requested_mode text; base_lpg_amount numeric(28,8);
 begin
   if coalesce(new.metadata->>'station_fulfillment_pricing_locked','false')='true' then return new; end if;
@@ -598,7 +598,7 @@ for each row execute function public.copy_lpg_station_fulfillment_snapshot_to_or
 -- The commercial snapshot writer updates the quote after its initial insert. Make
 -- its generic price quote projection follow the final, trigger-validated quote
 -- amounts (especially the Station Managed delivery pricing mode).
-do $
+do $$
 declare function_sql text; old_block text; new_block text;
 begin
   function_sql:=pg_get_functiondef('public.create_lpg_refill_quote_from_commercial_snapshot(uuid,numeric,uuid,uuid,uuid,jsonb,text,timestamp with time zone,text,jsonb,text)'::regprocedure);
@@ -626,7 +626,7 @@ begin
   if position(old_block in function_sql)=0 then raise exception 'Station Managed pricing patch could not locate generic quote projection'; end if;
   execute replace(function_sql,old_block,new_block);
 end
-$;
+$$;
 
 -- Settlement keeps the existing station-principal and platform accounting. In
 -- Station Managed separate-fee mode, delivery revenue belongs to the station;
@@ -685,7 +685,7 @@ language sql
 stable
 security definer
 set search_path=public,pg_temp
-as $
+as $$
   select exists(
     select 1
     from public.lpg_station_managed_driver_assignments assignment
@@ -697,12 +697,12 @@ as $
       and driver.status='active'
       and assignment.status in ('assigned','accepted','en_route')
   );
-$;
+$$;
 
 
 
 -- Station-owned drivers can access only their own actively assigned orders.
-do $
+do $$
 declare function_sql text; old_block text; new_block text;
 begin
   function_sql:=pg_get_functiondef('public.can_access_lpg_order(uuid)'::regprocedure);
@@ -728,12 +728,12 @@ begin
   if position(old_block in function_sql)=0 then raise exception 'Station Managed order access patch could not locate station access branch'; end if;
   execute replace(function_sql,old_block,new_block);
 end
-$;
+$$;
 
 -- Keep the generic dispatch pipeline away from Station Managed orders. The
 -- station assignment RPC owns those orders; existing independent and SKIMA Fleet
 -- dispatch paths retain their original behavior.
-do $
+do $$
 declare function_sql text; old_block text; new_block text;
 begin
   function_sql:=pg_get_functiondef('public.reserve_and_dispatch_lpg_refill_order(uuid,uuid,text,uuid,uuid,text,jsonb)'::regprocedure);
@@ -760,9 +760,9 @@ begin
   if position(old_block in function_sql)=0 then raise exception 'Station Managed dispatch guard could not locate channel branch'; end if;
   execute replace(function_sql,old_block,new_block);
 end
-$;
+$$;
 
-do $
+do $$
 declare function_sql text; old_block text; new_block text;
 begin
   function_sql:=pg_get_functiondef('public.process_lpg_order_lifecycle(integer)'::regprocedure);
@@ -773,9 +773,9 @@ begin
   if position(old_block in function_sql)=0 then raise exception 'Station Managed lifecycle guard could not locate automatic dispatch query'; end if;
   execute replace(function_sql,old_block,new_block);
 end
-$;
+$$;
 
-do $
+do $$
 declare function_sql text; old_block text; new_block text;
 begin
   function_sql:=pg_get_functiondef('public.auto_release_lpg_driver_payout_after_delivery()'::regprocedure);
@@ -817,9 +817,9 @@ begin
   if position(old_block in function_sql)=0 then raise exception 'Station Managed payout trigger patch could not locate payout precondition'; end if;
   execute replace(function_sql,old_block,new_block);
 end
-$;
+$$;
 
-do $
+do $$
 declare function_sql text; old_block text; new_block text;
 begin
   function_sql:=pg_get_functiondef('public.dispatch_lpg_order(uuid,integer,text,text)'::regprocedure);
@@ -831,12 +831,12 @@ begin
   if position(old_block in function_sql)=0 then raise exception 'Station Managed direct-dispatch guard could not locate order lookup'; end if;
   execute replace(function_sql,old_block,new_block);
 end
-$;
+$$;
 
 -- Permit the assigned station-owned driver to perform the existing cylinder
 -- handoff scans for their own Station Managed order without creating a driver_profiles
 -- record or granting the account independent-driver/SKIMA Fleet capabilities.
-do $
+do $$
 declare function_sql text; old_block text; new_block text;
 begin
   function_sql:=pg_get_functiondef('public.record_lpg_cylinder_scan(uuid,text,text,numeric,numeric,numeric,jsonb,text)'::regprocedure);
@@ -846,7 +846,7 @@ begin
   if position(old_block in function_sql)=0 then raise exception 'Station Managed scan authorization patch could not locate driver identity check'; end if;
   execute replace(function_sql,old_block,new_block);
 end
-$;
+$$;
 
 -- The existing generic driver commission executor must never issue a SKIMA payout
 -- for a station-managed order, even if called manually or by a stale client.
