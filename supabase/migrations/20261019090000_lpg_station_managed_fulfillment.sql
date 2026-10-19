@@ -134,6 +134,9 @@ create table if not exists public.lpg_station_managed_driver_payment_records (
   unique (station_branch_id,idempotency_key)
 );
 
+create unique index if not exists lpg_station_managed_drivers_active_user_unique
+  on public.lpg_station_managed_drivers(user_id) where status='active';
+
 create index if not exists lpg_station_managed_drivers_branch_status_idx
   on public.lpg_station_managed_drivers(station_branch_id,status,created_at desc);
 create index if not exists lpg_station_managed_driver_assignments_driver_idx
