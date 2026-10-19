@@ -385,7 +385,7 @@ begin
   end if;
   update public.lpg_refill_orders
   set fulfillment_mode='station_managed',driver_profile_id=null,vehicle_id=null,
-      status='driver_accepted',assignment_status='driver_assigned',updated_at=timezone('utc',now()),
+      status='driver_offered',assignment_status='driver_assigned',updated_at=timezone('utc',now()),
       metadata=metadata || jsonb_build_object('stationManagedDriverId',driver_record.id,'stationManagedDriverUserId',driver_record.user_id)
   where id=order_record.id;
   insert into public.lpg_station_managed_driver_assignments(
@@ -394,7 +394,7 @@ begin
     order_record.id,order_record.station_branch_id,driver_record.id,auth.uid(),target_idempotency_key,target_metadata
   ) returning id into result_id;
   perform public.record_lpg_order_event(
-    order_record.id,'lpg.station_managed.driver_assigned',order_record.status,'driver_accepted',
+    order_record.id,'lpg.station_managed.driver_assigned',order_record.status,'driver_offered',
     target_idempotency_key||':event',
     target_metadata||jsonb_build_object('station_driver_id',driver_record.id,'station_driver_user_id',driver_record.user_id)
   );
@@ -1091,6 +1091,20 @@ begin
       metadata=metadata||target_metadata||jsonb_build_object('lastStatusIdempotencyKey',target_idempotency_key,'lastStatusUpdatedAt',timezone('utc',now())),
       completed_at=null
   where id=assignment_record.id;
+
+  update public.lpg_refill_orders
+  set status=case when target_status='accepted' then 'driver_accepted' else 'station_en_route' end,
+      updated_at=timezone('utc',now())
+  where id=assignment_record.lpg_order_id
+    and status not in ('cancelled','failed','refunded','delivered','completed');
+  perform public.record_lpg_order_event(
+    assignment_record.lpg_order_id,
+    case when target_status='accepted' then 'lpg.station_managed.driver_accepted' else 'lpg.station_managed.driver_en_route' end,
+    case when target_status='accepted' then 'driver_offered' else 'driver_accepted' end,
+    case when target_status='accepted' then 'driver_accepted' else 'station_en_route' end,
+    target_idempotency_key||':order-event',
+    target_metadata||jsonb_build_object('station_driver_id',driver_record.id,'assignment_id',assignment_record.id)
+  );
   return assignment_record.id;
 end;
 $;
