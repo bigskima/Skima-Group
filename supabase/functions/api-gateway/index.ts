@@ -7362,13 +7362,14 @@ async function resolveLpgMobileWorkspaceAccess(
   }
 
   const stationDriverEnabled = getRecordValue(stationManagedDriverAccess.data, "enabled") === true;
+  const stationDriverId = stringOrNull(getRecordValue(stationManagedDriverAccess.data, "stationDriverId"));
   const stationDriverBranchId = stringOrNull(getRecordValue(stationManagedDriverAccess.data, "stationBranchId"));
-  if (stationDriverEnabled && stationDriverBranchId) {
+  if (stationDriverEnabled && stationDriverId && stationDriverBranchId) {
     workspaces.push({
       key: "station_driver",
       status: "active",
       subjectType: "lpg_station_managed_driver",
-      subjectId: stationDriverBranchId,
+      subjectId: stationDriverId,
       capabilityKeys: ["station_managed.delivery.accept", "station_managed.delivery.update"],
       organizationIds: [],
       branchIds: [],
