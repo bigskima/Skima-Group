@@ -238,6 +238,9 @@ begin
   if not exists(select 1 from public.profiles where id=target_user_id) then
     raise exception using errcode='22023',message='station driver must have a SKIMA account';
   end if;
+  if exists(select 1 from public.driver_profiles where user_id=target_user_id) then
+    raise exception using errcode='22023',message='a SKIMA Managed or independent driver profile cannot also be registered as a Station Managed driver';
+  end if;
   insert into public.lpg_station_managed_drivers(station_branch_id,user_id,display_name,phone,created_by,metadata)
   values(target_station_branch_id,target_user_id,btrim(target_display_name),nullif(btrim(target_phone),''),auth.uid(),target_metadata)
   on conflict(station_branch_id,user_id) do update set
@@ -275,8 +278,8 @@ begin
   if order_record.status not in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route') then
     raise exception using errcode='55000',message='order is not in a state that allows station driver assignment';
   end if;
-  if order_record.fulfillment_channel<>'marketplace' then
-    raise exception using errcode='55000',message='Station Managed is available only for marketplace station orders';
+  if order_record.fulfillment_channel<>'marketplace' or order_record.fulfillment_mode<>'station_managed' then
+    raise exception using errcode='55000',message='order must already be quoted and paid as Station Managed marketplace fulfillment';
   end if;
   select * into driver_record from public.lpg_station_managed_drivers
   where id=target_station_driver_id and station_branch_id=order_record.station_branch_id and status='active';
@@ -395,7 +398,7 @@ begin
     external_reference,confirmation_notes,confirmed_by,idempotency_key,metadata
   ) values (
     driver_record.station_branch_id,target_station_driver_id,target_lpg_order_id,target_currency_code,target_amount,
-    target_payment_method,target_payment_status,nullif(btrim(target_external_reference),'),
+    target_payment_method,target_payment_status,nullif(btrim(target_external_reference),''),
     nullif(btrim(target_confirmation_notes),''),auth.uid(),target_idempotency_key,target_metadata
   ) on conflict(station_branch_id,idempotency_key) do update set
     payment_status=excluded.payment_status,
