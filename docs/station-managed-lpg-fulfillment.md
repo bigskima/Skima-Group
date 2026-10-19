@@ -6,7 +6,7 @@
 - Customer checkout remains through SKIMA. Refill and delivery amounts are separately represented and reconciled to their beneficiaries.
 - Station drivers are branch-owned identities, not SKIMA Managed Drivers or independent `driver_profiles`.
 - The SKIMA admin dashboard has read-only oversight for station settings, driver assignments, agreements, and station-entered payment confirmations; it does not execute station-driver payments.
-- Station Managed drivers have a separate authenticated job workspace, can accept assignments, start delivery only after station settlement, record customer arrival, complete the verified cylinder hand-over, and cannot trigger SKIMA driver payouts. The station remains responsible for driver compensation.
+- Station Managed drivers have a separate authenticated job workspace, can accept assignments, start delivery only after station settlement, record customer arrival, complete customer verification and the final cylinder scan, and cannot trigger SKIMA driver payouts. The station remains responsible for driver compensation.
 - Driver compensation is either an in-app station-defined plan or an offline agreement. The station records agreements and payment confirmations; SKIMA does not pay station-managed drivers.
 - SKIMA Fleet and independent-driver paths remain the defaults for existing orders and retain their existing dispatch logic.
 
