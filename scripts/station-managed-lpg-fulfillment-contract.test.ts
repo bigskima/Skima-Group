@@ -76,11 +76,17 @@ Deno.test("Station Managed drivers have a separate authenticated job workspace",
 
   requireText(migration, "read_lpg_station_managed_driver_jobs", "station driver job list");
   requireText(migration, "update_lpg_station_managed_driver_assignment_status", "station driver status RPC");
+  requireText(migration, "public.process_lpg_order_action(", "standard LPG delivery lifecycle integration");
+  requireText(migration, "lpg.return.start", "station driver starts only the return-delivery lifecycle");
+  requireText(migration, "target_workspace not in (''station'',''driver'',''customer'',''station_driver'')", "station driver job-detail route access");
+  requireText(migration, "not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())", "assigned-driver action guard");
+
   requireText(migration, "order_record.delivery_location_id", "canonical delivery location");
   requireText(workspaceResolver, 'key: "station_driver"', "station driver workspace resolver");
   requireText(workspaceGate, '"station_driver"', "station driver workspace gate");
   requireText(workspaceSwitcher, 'workspaces.includes("station_driver")', "station driver workspace switcher");
   requireText(driverScreen, "Accept delivery", "driver accepts station assignment");
   requireText(driverScreen, "Start delivery", "driver starts assigned route");
+  requireText(driverScreen, "Open delivery details & hand-over", "driver opens customer hand-over");
   requireText(driverScreen, "station's normal safety and cylinder-verification process", "verified completion guard");
 });
