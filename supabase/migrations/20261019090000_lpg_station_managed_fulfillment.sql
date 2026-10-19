@@ -980,4 +980,126 @@ $;
 revoke all on function public.read_lpg_admin_station_managed_fulfillment(uuid) from public,anon;
 grant execute on function public.read_lpg_admin_station_managed_fulfillment(uuid) to authenticated,service_role;
 
+
+-- Station-managed drivers use a dedicated workspace and never need a driver_profiles row.
+create or replace function public.read_lpg_station_managed_driver_access()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=public,pg_temp
+as $
+declare driver_record public.lpg_station_managed_drivers%rowtype; station_record public.lpg_station_branches%rowtype;
+begin
+  if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
+  select * into driver_record from public.lpg_station_managed_drivers
+  where user_id=auth.uid() and status='active' limit 1;
+  if not found then return jsonb_build_object('enabled',false); end if;
+  select * into station_record from public.lpg_station_branches
+  where id=driver_record.station_branch_id and approval_status='approved' and compliance_status='approved';
+  if not found then return jsonb_build_object('enabled',false); end if;
+  return jsonb_build_object('enabled',true,'stationBranchId',station_record.id,'stationName',station_record.display_name);
+end;
+$;
+
+create or replace function public.read_lpg_station_managed_driver_jobs(
+  target_limit integer default 50
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=public,pg_temp
+as $
+declare driver_record public.lpg_station_managed_drivers%rowtype;
+begin
+  if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
+  select * into driver_record from public.lpg_station_managed_drivers
+  where user_id=auth.uid() and status='active' limit 1;
+  if not found then raise exception using errcode='42501',message='active Station Managed driver identity is required'; end if;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'id',assignment.id,
+      'lpgOrderId',order_record.id,
+      'publicReference',order_record.public_reference,
+      'status',assignment.status,
+      'orderStatus',order_record.status,
+      'requestedKg',order_record.requested_kg,
+      'totalAmount',order_record.total_amount,
+      'currencyCode',order_record.currency_code,
+      'assignedAt',assignment.assigned_at,
+      'completedAt',assignment.completed_at,
+      'stationName',station.display_name,
+      'stationAddress',station.formatted_address,
+      'deliveryAddress',location.formatted_address,
+      'deliveryInstructions',location.delivery_instructions,
+      'customerName',location.contact_name
+    ) order by assignment.assigned_at desc)
+    from (
+      select a.* from public.lpg_station_managed_driver_assignments a
+      where a.station_driver_id=driver_record.id
+        and a.status in ('assigned','accepted','en_route','delivered')
+      order by a.assigned_at desc
+      limit greatest(1,least(coalesce(target_limit,50),100))
+    ) assignment
+    join public.lpg_refill_orders order_record on order_record.id=assignment.lpg_order_id
+    join public.lpg_station_branches station on station.id=assignment.station_branch_id
+    left join public.lpg_customer_locations location on location.id=order_record.customer_location_id
+  ),'[]'::jsonb);
+end;
+$;
+
+create or replace function public.update_lpg_station_managed_driver_assignment_status(
+  target_assignment_id uuid,
+  target_status text,
+  target_idempotency_key text,
+  target_metadata jsonb default '{}'::jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $
+declare driver_record public.lpg_station_managed_drivers%rowtype; assignment_record public.lpg_station_managed_driver_assignments%rowtype;
+begin
+  if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
+  if target_assignment_id is null or nullif(btrim(target_idempotency_key),'') is null
+    or target_status not in ('accepted','en_route')
+    or target_metadata is null or jsonb_typeof(target_metadata)<>'object' then
+    raise exception using errcode='22023',message='invalid Station Managed driver status request';
+  end if;
+  select * into driver_record from public.lpg_station_managed_drivers
+  where user_id=auth.uid() and status='active' limit 1;
+  if not found then raise exception using errcode='42501',message='active Station Managed driver identity is required'; end if;
+  select * into assignment_record from public.lpg_station_managed_driver_assignments
+  where id=target_assignment_id and station_driver_id=driver_record.id and station_branch_id=driver_record.station_branch_id
+  for update;
+  if not found then raise exception using errcode='42501',message='assignment is not assigned to this Station Managed driver'; end if;
+  if assignment_record.metadata->>'lastStatusIdempotencyKey'=target_idempotency_key
+    or assignment_record.status=target_status then return assignment_record.id; end if;
+  if target_status='accepted' and assignment_record.status<>'assigned' then
+    raise exception using errcode='55000',message='only an assigned delivery can be accepted';
+  end if;
+  if target_status='en_route' and assignment_record.status<>'accepted' then
+    raise exception using errcode='55000',message='accept the delivery before starting the route';
+  end if;
+  if exists(select 1 from public.lpg_refill_orders where id=assignment_record.lpg_order_id and status in ('cancelled','failed','refunded')) then
+    raise exception using errcode='55000',message='cancelled or failed deliveries cannot be advanced';
+  end if;
+  update public.lpg_station_managed_driver_assignments
+  set status=target_status,
+      metadata=metadata||target_metadata||jsonb_build_object('lastStatusIdempotencyKey',target_idempotency_key,'lastStatusUpdatedAt',timezone('utc',now())),
+      completed_at=null
+  where id=assignment_record.id;
+  return assignment_record.id;
+end;
+$;
+
+revoke all on function public.read_lpg_station_managed_driver_access() from public,anon;
+revoke all on function public.read_lpg_station_managed_driver_jobs(integer) from public,anon;
+revoke all on function public.update_lpg_station_managed_driver_assignment_status(uuid,text,text,jsonb) from public,anon;
+grant execute on function public.read_lpg_station_managed_driver_access() to authenticated,service_role;
+grant execute on function public.read_lpg_station_managed_driver_jobs(integer) to authenticated,service_role;
+grant execute on function public.update_lpg_station_managed_driver_assignment_status(uuid,text,text,jsonb) to authenticated,service_role;
+
 commit;
