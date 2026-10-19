@@ -372,7 +372,7 @@ begin
   end if;
   update public.lpg_refill_orders
   set fulfillment_mode='station_managed',driver_profile_id=null,vehicle_id=null,
-      assignment_status='station_assigned',updated_at=timezone('utc',now()),
+      status='driver_accepted',assignment_status='driver_assigned',updated_at=timezone('utc',now()),
       metadata=metadata || jsonb_build_object('stationManagedDriverId',driver_record.id,'stationManagedDriverUserId',driver_record.user_id)
   where id=order_record.id;
   insert into public.lpg_station_managed_driver_assignments(
@@ -381,7 +381,7 @@ begin
     order_record.id,order_record.station_branch_id,driver_record.id,auth.uid(),target_idempotency_key,target_metadata
   ) returning id into result_id;
   perform public.record_lpg_order_event(
-    order_record.id,'lpg.station_managed.driver_assigned',order_record.status,order_record.status,
+    order_record.id,'lpg.station_managed.driver_assigned',order_record.status,'driver_accepted',
     target_idempotency_key||':event',
     target_metadata||jsonb_build_object('station_driver_id',driver_record.id,'station_driver_user_id',driver_record.user_id)
   );
@@ -695,6 +695,36 @@ as $
   );
 $;
 
+
+
+-- Station-owned drivers can access only their own actively assigned orders.
+do $
+declare function_sql text; old_block text; new_block text;
+begin
+  function_sql:=pg_get_functiondef('public.can_access_lpg_order(uuid)'::regprocedure);
+  old_block:='    or exists ('||E'\n'||
+    '      select 1 from public.lpg_refill_orders target_order'||E'\n'||
+    '      join public.lpg_station_branches station on station.id = target_order.station_branch_id'||E'\n'||
+    '      where target_order.id = target_lpg_order_id'||E'\n'||
+    '        and public.user_can_operate_lpg_station_branch(auth.uid(), station.id, ''lpg.orders.read'')'||E'\n'||
+    '    );';
+  new_block:='    or exists ('||E'\n'||
+    '      select 1 from public.lpg_refill_orders target_order'||E'\n'||
+    '      join public.lpg_station_branches station on station.id = target_order.station_branch_id'||E'\n'||
+    '      where target_order.id = target_lpg_order_id'||E'\n'||
+    '        and public.user_can_operate_lpg_station_branch(auth.uid(), station.id, ''lpg.orders.read'')'||E'\n'||
+    '    )'||E'\n'||
+    '    or exists ('||E'\n'||
+    '      select 1 from public.lpg_station_managed_driver_assignments assignment'||E'\n'||
+    '      join public.lpg_station_managed_drivers station_driver on station_driver.id=assignment.station_driver_id'||E'\n'||
+    '      where assignment.lpg_order_id=target_lpg_order_id'||E'\n'||
+    '        and station_driver.user_id=auth.uid() and station_driver.status=''active'''||E'\n'||
+    '        and assignment.status in (''assigned'',''accepted'',''en_route'',''delivered'')'||E'\n'||
+    '    );';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed order access patch could not locate station access branch'; end if;
+  execute replace(function_sql,old_block,new_block);
+end
+$;
 
 -- Keep the generic dispatch pipeline away from Station Managed orders. The
 -- station assignment RPC owns those orders; existing independent and SKIMA Fleet
