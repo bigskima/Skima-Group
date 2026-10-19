@@ -922,6 +922,22 @@ do $$
 declare function_sql text; old_block text; new_block text;
 begin
   function_sql:=pg_get_functiondef('public.record_lpg_cylinder_scan(uuid,text,text,numeric,numeric,numeric,jsonb,text)'::regprocedure);
+
+  old_block:='  if not public.can_access_lpg_order(target_lpg_order_id) then'||E'\n'||
+    '    raise exception ''LPG order access permission is required'';'||E'\n'||
+    '  end if;';
+  new_block:=old_block||E'\n'||
+    '  if order_record.fulfillment_mode=''station_managed'' and target_scan_type in (''customer_pickup'',''station_receipt'') then'||E'\n'||
+    '    raise exception using errcode=''55000'',message=''Station Managed orders use station-owned refill and customer hand-over scans, not SKIMA driver pickup or station-receipt scans'';'||E'\n'||
+    '  end if;';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed scan policy patch could not locate order access guard'; end if;
+  function_sql:=replace(function_sql,old_block,new_block);
+
+  old_block:='(driver_record.user_id is distinct from auth.uid())';
+  new_block:='(driver_record.user_id is distinct from auth.uid() and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid()))';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed scan authorization patch could not locate parenthesized driver identity check'; end if;
+  function_sql:=replace(function_sql,old_block,new_block);
+
   old_block:='and driver_record.user_id is distinct from auth.uid()';
   new_block:='and driver_record.user_id is distinct from auth.uid()'||E'\n'||
     '      and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())';
