@@ -948,22 +948,22 @@ begin
         'paymentRecordCount',(select count(*) from public.lpg_station_managed_driver_payment_records p where p.station_branch_id=station.id),
         'drivers',coalesce((
           select jsonb_agg(jsonb_build_object('id',d.id,'displayName',d.display_name,'status',d.status,'createdAt',d.created_at) order by d.created_at desc)
-          from (select * from public.lpg_station_managed_drivers where station_branch_id=station.id and status<>'removed' order by created_at desc limit 20) d
+          from lateral (select * from public.lpg_station_managed_drivers where station_branch_id=station.id and status<>'removed' order by created_at desc limit 20) d
         ),'[]'::jsonb),
         'assignments',coalesce((
           select jsonb_agg(jsonb_build_object('id',a.id,'orderId',a.lpg_order_id,'publicReference',o.public_reference,'driverName',d.display_name,'status',a.status,'assignedAt',a.assigned_at,'completedAt',a.completed_at) order by a.assigned_at desc)
-          from (select * from public.lpg_station_managed_driver_assignments where station_branch_id=station.id and status<>'cancelled' order by assigned_at desc limit 20) a
+          from lateral (select * from public.lpg_station_managed_driver_assignments where station_branch_id=station.id and status<>'cancelled' order by assigned_at desc limit 20) a
           join public.lpg_refill_orders o on o.id=a.lpg_order_id
           join public.lpg_station_managed_drivers d on d.id=a.station_driver_id
         ),'[]'::jsonb),
         'agreements',coalesce((
           select jsonb_agg(jsonb_build_object('id',a.id,'driverName',d.display_name,'agreementMode',a.agreement_mode,'agreementStatus',a.agreement_status,'terms',a.terms,'notes',a.notes,'effectiveFrom',a.effective_from,'effectiveUntil',a.effective_until) order by a.created_at desc)
-          from (select * from public.lpg_station_managed_driver_agreements where station_branch_id=station.id order by created_at desc limit 20) a
+          from lateral (select * from public.lpg_station_managed_driver_agreements where station_branch_id=station.id order by created_at desc limit 20) a
           join public.lpg_station_managed_drivers d on d.id=a.station_driver_id
         ),'[]'::jsonb),
         'payments',coalesce((
           select jsonb_agg(jsonb_build_object('id',p.id,'driverName',d.display_name,'publicReference',o.public_reference,'currencyCode',p.currency_code,'amount',p.amount,'paymentMethod',p.payment_method,'paymentStatus',p.payment_status,'externalReference',p.external_reference,'confirmationNotes',p.confirmation_notes,'confirmedAt',p.confirmed_at) order by p.confirmed_at desc)
-          from (select * from public.lpg_station_managed_driver_payment_records where station_branch_id=station.id order by confirmed_at desc limit 20) p
+          from lateral (select * from public.lpg_station_managed_driver_payment_records where station_branch_id=station.id order by confirmed_at desc limit 20) p
           join public.lpg_station_managed_drivers d on d.id=p.station_driver_id
           left join public.lpg_refill_orders o on o.id=p.lpg_order_id
         ),'[]'::jsonb)
