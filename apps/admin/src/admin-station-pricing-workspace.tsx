@@ -53,7 +53,7 @@ function StationList({ onNavigate }: { readonly onNavigate: (href: string) => vo
         eyebrow="Station operations"
         title="Stations"
         description="Review each station's current LPG selling price and open a station-specific price editor."
-        actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void query.refetch()}>Refresh</Button>}
+        actions={<div style={{ display: "flex", gap: "0.55rem", flexWrap: "wrap" }}><Button icon={Building2} variant="outline" onClick={() => onNavigate("/partners/stations/managed-fulfillment")}>Managed fulfillment</Button><Button icon={RefreshCcw} variant="outline" onClick={() => void query.refetch()}>Refresh</Button></div>}
       />
       {query.isLoading ? <LoadingState label="Loading stations" /> : null}
       {query.error ? <ErrorState title="Stations unavailable" message={readError(query.error)} onRetry={() => void query.refetch()} /> : null}
