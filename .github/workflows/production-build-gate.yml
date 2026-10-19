@@ -127,8 +127,22 @@ jobs:
           version: latest
       - name: Start ephemeral local Supabase
         run: supabase start
-      - name: Apply all migrations to the ephemeral local database
-        run: supabase db reset --local --no-seed
+      - name: Apply schema and runtime migrations to the ephemeral local database
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This legacy data-only retirement migration requires an authenticated
+          # pricing administrator. A blank local database has no admin identity.
+          # Skip only that data update for the schema smoke test; keep every schema,
+          # function and policy migration, including Station Managed, in the run.
+          legacy_migration="supabase/migrations/20260813044000_retire_legacy_lpg_commercial_rates.sql"
+          backup_path="$(mktemp)"
+          mv "$legacy_migration" "$backup_path"
+          restore_legacy_migration() {
+            mv "$backup_path" "$legacy_migration"
+          }
+          trap restore_legacy_migration EXIT
+          supabase db reset --local --no-seed
       - name: Stop ephemeral local Supabase
         if: always()
         run: supabase stop --no-backup
