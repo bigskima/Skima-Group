@@ -7361,17 +7361,18 @@ async function resolveLpgMobileWorkspaceAccess(
     });
   }
 
-  const stationDriverAccess = asRecord(stationManagedDriverAccess.data);
-  if (stationDriverAccess.enabled === true && typeof stationDriverAccess.stationBranchId === "string") {
+  const stationDriverEnabled = getRecordValue(stationManagedDriverAccess.data, "enabled") === true;
+  const stationDriverBranchId = stringOrNull(getRecordValue(stationManagedDriverAccess.data, "stationBranchId"));
+  if (stationDriverEnabled && stationDriverBranchId) {
     workspaces.push({
       key: "station_driver",
       status: "active",
       subjectType: "lpg_station_managed_driver",
-      subjectId: stationDriverAccess.stationBranchId,
+      subjectId: stationDriverBranchId,
       capabilityKeys: ["station_managed.delivery.accept", "station_managed.delivery.update"],
       organizationIds: [],
       branchIds: [],
-      stationIds: [stationDriverAccess.stationBranchId],
+      stationIds: [stationDriverBranchId],
     });
   }
 
