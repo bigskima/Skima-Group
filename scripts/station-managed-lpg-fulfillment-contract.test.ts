@@ -10,7 +10,7 @@ function requireText(source: string, fragment: string, label: string) {
 Deno.test("Station Managed remains a fulfillment mode distinct from the channel", () => {
   requireText(migration, "fulfillment_mode text not null default 'independent_driver'", "additive mode");
   requireText(migration, "check (fulfillment_mode in ('station_managed','independent_driver','skima_fleet','partner_managed'))", "mode constraint");
-  requireText(migration, "fulfillment_channel='skima_internal' then 'skima_fleet'", "legacy SKIMA Fleet mapping");
+  requireText(migration, "fulfillment_channel = 'skima_internal' then 'skima_fleet'", "legacy SKIMA Fleet mapping");
   requireText(migration, "fulfillment_channel<>'marketplace' or order_record.fulfillment_mode<>'station_managed'", "assignment guard");
 });
 
