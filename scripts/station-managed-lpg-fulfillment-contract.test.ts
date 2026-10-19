@@ -4,6 +4,10 @@ const station = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationMa
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const admin = await Deno.readTextFile("apps/admin/src/admin-station-managed-fulfillment-workspace.tsx");
 const adminRouter = await Deno.readTextFile("apps/admin/src/features/partners/PartnersWorkspaceRouter.tsx");
+const driverScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedDriverJobsScreen.tsx");
+const workspaceGate = await Deno.readTextFile("apps/lpg-mobile/src/native/navigation/WorkspaceGate.tsx");
+const workspaceSwitcher = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/WorkspaceSwitcher.tsx");
+const workspaceResolver = gateway.slice(gateway.indexOf("async function resolveLpgMobileWorkspaceAccess"));
 
 function requireText(source: string, fragment: string, label: string) {
   if (!source.includes(fragment)) throw new Error(`${label}: missing required contract fragment: ${fragment}`);
@@ -58,4 +62,17 @@ Deno.test("Admin dashboard has read-only Station Managed oversight", () => {
   requireText(admin, "Station-entered confirmations only. SKIMA did not execute these driver payments.", "admin payment disclaimer");
   requireText(admin, "Review drivers, assignments, agreements and payment confirmations", "admin record review");
   requireText(adminRouter, "/partners/stations/managed-fulfillment", "admin route");
+});
+
+Deno.test("Station Managed drivers have a separate authenticated job workspace", () => {
+  requireText(migration, "read_lpg_station_managed_driver_access", "station driver access RPC");
+  requireText(migration, "read_lpg_station_managed_driver_jobs", "station driver job list");
+  requireText(migration, "update_lpg_station_managed_driver_assignment_status", "station driver status RPC");
+  requireText(migration, "order_record.delivery_location_id", "canonical delivery location");
+  requireText(workspaceResolver, 'key: "station_driver"', "station driver workspace resolver");
+  requireText(workspaceGate, '"station_driver"', "station driver workspace gate");
+  requireText(workspaceSwitcher, 'workspaces.includes("station_driver")', "station driver workspace switcher");
+  requireText(driverScreen, "Accept delivery", "driver accepts station assignment");
+  requireText(driverScreen, "Start delivery", "driver starts assigned route");
+  requireText(driverScreen, "station's normal safety and cylinder-verification process", "verified completion guard");
 });
