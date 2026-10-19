@@ -785,6 +785,33 @@ begin
 end
 $$;
 
+-- Allow an authenticated Station Managed driver to use only the assigned-driver
+-- lifecycle actions for their own active assignment. This does not create driver_profiles.
+do $station_driver_action_patch$
+declare function_sql text; old_block text; new_block text;
+begin
+  function_sql:=pg_get_functiondef('public.process_lpg_order_action(uuid,text,text,jsonb,text)'::regprocedure);
+  old_block:='      and driver_record.user_id is distinct from auth.uid()';
+  new_block:='      and driver_record.user_id is distinct from auth.uid()'||E'\n'||
+    '      and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed action permission patch could not locate assigned-driver guard'; end if;
+  function_sql:=replace(function_sql,old_block,new_block);
+  execute function_sql;
+end
+$station_driver_action_patch$;
+
+-- A station-owned driver can open only the active order route for their own workspace.
+do $station_driver_route_patch$
+declare function_sql text; old_block text; new_block text;
+begin
+  function_sql:=pg_get_functiondef('public.read_lpg_job_route_state(uuid,text)'::regprocedure);
+  old_block:='target_workspace not in (''station'',''driver'',''customer'')';
+  new_block:='target_workspace not in (''station'',''driver'',''customer'',''station_driver'')';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed job route patch could not locate workspace guard'; end if;
+  execute replace(function_sql,old_block,new_block);
+end
+$station_driver_route_patch$;
+
 -- Keep the generic dispatch pipeline away from Station Managed orders. The
 -- station assignment RPC owns those orders; existing independent and SKIMA Fleet
 -- dispatch paths retain their original behavior.
