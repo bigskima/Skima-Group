@@ -209,6 +209,7 @@ export function NewRefillScreen() {
     const options = displayedStations;
     if (!options) return;
     if (stationId && options.some((station) => station.station_branch_id === stationId)) return;
+    setFulfillmentMode("independent_driver");
     setStationId(options[0]?.station_branch_id ?? "");
   }, [displayedStations, stationId]);
 
