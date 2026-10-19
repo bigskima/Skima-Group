@@ -108,7 +108,7 @@ export function StationManagedDriverJobsScreen() {
                   <Text style={[styles.orderRef, { color: palette.ink }]}>{job.publicReference || "Station delivery"}</Text>
                   <Text style={[styles.muted, { color: palette.muted }]}>{job.stationName}</Text>
                 </View>
-                <StatusPill label={statusLabel(job.status)} tone={job.status === "delivered" ? "success" : job.status === "en_route" ? "info" : "neutral"} />
+                <StatusPill label={statusLabel(job.status)} tone={job.status === "delivered" ? "success" : job.status === "en_route" ? "brand" : "neutral"} />
               </View>
               <View style={styles.detailRow}>
                 <Clock3 color={palette.muted} size={16} />
