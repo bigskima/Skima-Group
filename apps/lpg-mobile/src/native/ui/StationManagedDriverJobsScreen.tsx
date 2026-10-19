@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { RefreshControl, StyleSheet, Text, View } from "react-native";
 import type { ReactNode } from "react";
 import { BriefcaseBusiness, CheckCircle2, Clock3, MapPin, UserRound } from "lucide-react-native";
 import { useSession } from "../session/SessionProvider";
@@ -67,17 +67,13 @@ export function StationManagedDriverJobsScreen() {
   const refresh = () => void jobs.refetch();
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: palette.canvas }}
-      contentContainerStyle={styles.page}
+    <Screen
+      eyebrow="STATION DRIVER"
+      title="My deliveries"
+      subtitle="Accept station-assigned LPG deliveries and update your progress. Delivery completion is confirmed through the station's normal safety and cylinder-verification process."
+      action={<AppButton label="Account" size="sm" variant="ghost" onPress={() => router.push("/(station-driver)/account" as never)} />}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={palette.brand} />}
     >
-      <Screen
-        eyebrow="STATION DRIVER"
-        title="My deliveries"
-        subtitle="Accept station-assigned LPG deliveries and update your progress. Delivery completion is confirmed through the station's normal safety and cylinder-verification process."
-        action={<AppButton label="Account" size="sm" variant="ghost" onPress={() => router.push("/(station-driver)/account" as never)} />}
-      >
         <View style={[styles.summary, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <BriefcaseBusiness color={palette.brand} size={22} />
           <View style={{ flex: 1 }}>
@@ -148,8 +144,7 @@ export function StationManagedDriverJobsScreen() {
             </View>
           );
         })}
-      </Screen>
-    </ScrollView>
+    </Screen>
   );
 }
 
@@ -166,7 +161,6 @@ function formatMoney(amount: number, currency: string) {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: spacing.lg, paddingBottom: 120, gap: spacing.md },
   summary: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 1, borderRadius: radii.xl, padding: spacing.md },
   summaryTitle: { ...typography.body, fontWeight: "900" },
   muted: { ...typography.caption, marginTop: 3 },
