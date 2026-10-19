@@ -726,9 +726,20 @@ begin
     '        and assignment.status in (''assigned'',''accepted'',''en_route'',''delivered'')'||E'\n'||
     '    );';
   if position(old_block in function_sql)=0 then raise exception 'Station Managed order access patch could not locate station access branch'; end if;
-  execute replace(function_sql,old_block,new_block);
+  function_sql:=replace(function_sql,old_block,new_block);
+  function_sql:=replace(
+    function_sql,
+    '(driver_record.user_id is distinct from auth.uid())',
+    '(driver_record.user_id is distinct from auth.uid() and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid()))'
+  );
+  function_sql:=replace(
+    function_sql,
+    'if not public.can_operate_lpg_station_branch(order_record.station_branch_id, ''lpg.stations.scan'')',
+    'if not public.can_operate_lpg_station_branch(order_record.station_branch_id, ''lpg.stations.scan'') and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())'
+  );
+  execute function_sql;
 end
-$$;
+$;
 
 -- Keep the generic dispatch pipeline away from Station Managed orders. The
 -- station assignment RPC owns those orders; existing independent and SKIMA Fleet
