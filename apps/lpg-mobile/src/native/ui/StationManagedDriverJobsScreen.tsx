@@ -132,15 +132,23 @@ export function StationManagedDriverJobsScreen() {
               {job.status === "assigned" ? (
                 <AppButton label="Accept delivery" loading={busy} disabled={updateStatus.isPending} onPress={() => updateStatus.mutate({ job, nextStatus: "accepted" })} />
               ) : null}
-              {job.status === "accepted" ? (
+              {job.status === "accepted" && job.orderStatus === "station_settled" ? (
                 <AppButton label="Start delivery" loading={busy} disabled={updateStatus.isPending} onPress={() => updateStatus.mutate({ job, nextStatus: "en_route" })} />
               ) : null}
-              {job.status === "en_route" ? (
+              {job.status === "accepted" && job.orderStatus !== "station_settled" ? (
                 <View style={[styles.notice, { backgroundColor: palette.brandSofter }]}>
-                  <Text style={[styles.noticeText, { color: palette.ink }]}>You are en route. Follow the station's delivery and cylinder verification process to complete this order.</Text>
+                  <Text style={[styles.noticeText, { color: palette.ink }]}>Waiting for the station to complete the refill and settlement. Delivery cannot start before the station confirms it is ready.</Text>
                 </View>
               ) : null}
-              {job.status === "delivered" ? <Text style={[styles.muted, { color: palette.muted }]}>Delivery completion verified by the station.</Text> : null}
+              {job.status === "en_route" ? (
+                <>
+                  <View style={[styles.notice, { backgroundColor: palette.brandSofter }]}>
+                    <Text style={[styles.noticeText, { color: palette.ink }]}>You are en route. Open the delivery details to record arrival, follow customer verification and scan the cylinder at hand-over.</Text>
+                  </View>
+                  <AppButton label="Open delivery details & hand-over" variant="secondary" onPress={() => router.push(`/(station-driver)/job/${encodeURIComponent(job.lpgOrderId)}` as never)} />
+                </>
+              ) : null}
+              {job.status === "delivered" ? <Text style={[styles.muted, { color: palette.muted }]}>Delivery completion verified. Any driver compensation remains the station's responsibility.</Text> : null}
             </View>
           );
         })}
