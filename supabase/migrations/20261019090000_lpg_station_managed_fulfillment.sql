@@ -671,6 +671,45 @@ begin
 end
 $$;
 
+
+create or replace function public.is_lpg_station_managed_order_driver(
+  target_lpg_order_id uuid,
+  target_user_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path=public,pg_temp
+as $
+  select exists(
+    select 1
+    from public.lpg_station_managed_driver_assignments assignment
+    join public.lpg_station_managed_drivers driver
+      on driver.id=assignment.station_driver_id
+     and driver.station_branch_id=assignment.station_branch_id
+    where assignment.lpg_order_id=target_lpg_order_id
+      and driver.user_id=target_user_id
+      and driver.status='active'
+      and assignment.status in ('assigned','accepted','en_route')
+  );
+$;
+
+-- Permit the assigned station-owned driver to perform the existing cylinder
+-- handoff scans for their own Station Managed order without creating a driver_profiles
+-- record or granting the account independent-driver/SKIMA Fleet capabilities.
+do $
+declare function_sql text; old_block text; new_block text;
+begin
+  function_sql:=pg_get_functiondef('public.record_lpg_cylinder_scan(uuid,text,text,numeric,numeric,numeric,jsonb,text)'::regprocedure);
+  old_block:='and driver_record.user_id is distinct from auth.uid()';
+  new_block:='and driver_record.user_id is distinct from auth.uid()'||E'\n'||
+    '      and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())';
+  if position(old_block in function_sql)=0 then raise exception 'Station Managed scan authorization patch could not locate driver identity check'; end if;
+  execute replace(function_sql,old_block,new_block);
+end
+$;
+
 -- The existing generic driver commission executor must never issue a SKIMA payout
 -- for a station-managed order, even if called manually or by a stale client.
 do $$
