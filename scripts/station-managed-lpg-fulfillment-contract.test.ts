@@ -5,6 +5,8 @@ const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts
 const admin = await Deno.readTextFile("apps/admin/src/admin-station-managed-fulfillment-workspace.tsx");
 const adminRouter = await Deno.readTextFile("apps/admin/src/features/partners/PartnersWorkspaceRouter.tsx");
 const driverScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedDriverJobsScreen.tsx");
+const driverDetailRoute = await Deno.readTextFile("apps/lpg-mobile/app/(station-driver)/job/[id].tsx");
+const jobDetailScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx");
 const workspaceGate = await Deno.readTextFile("apps/lpg-mobile/src/native/navigation/WorkspaceGate.tsx");
 const workspaceSwitcher = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/WorkspaceSwitcher.tsx");
 const workspaceResolver = gateway.slice(gateway.indexOf("async function resolveLpgMobileWorkspaceAccess"));
@@ -88,5 +90,8 @@ Deno.test("Station Managed drivers have a separate authenticated job workspace",
   requireText(driverScreen, "Accept delivery", "driver accepts station assignment");
   requireText(driverScreen, "Start delivery", "driver starts assigned route");
   requireText(driverScreen, "Open delivery details & hand-over", "driver opens customer hand-over");
+  requireText(driverDetailRoute, 'workspace="station_driver"', "dedicated station driver hand-over route");
+  requireText(jobDetailScreen, "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments.", "station driver hand-over has no SKIMA payout messaging");
+  requireText(jobDetailScreen, "stationManagedDriverScanTypeForStatus", "station driver uses customer hand-over scan");
   requireText(driverScreen, "station's normal safety and cylinder-verification process", "verified completion guard");
 });
