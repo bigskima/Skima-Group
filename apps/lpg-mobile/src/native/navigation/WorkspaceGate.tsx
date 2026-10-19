@@ -8,7 +8,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { useInAppGuide } from "../onboarding/InAppGuideProvider";
 
-type Workspace = "customer" | "driver" | "station";
+type Workspace = "customer" | "driver" | "station" | "station_driver";
 
 export function WorkspaceGate({
   workspace,
@@ -22,7 +22,7 @@ export function WorkspaceGate({
   );
 
   useEffect(() => {
-    if (session.status === "authenticated") guide.setWorkspace(workspace);
+    if (session.status === "authenticated") guide.setWorkspace(workspace === "station_driver" ? "driver" : workspace);
   }, [guide, session.status, workspace]);
 
   if (session.status === "loading") {
