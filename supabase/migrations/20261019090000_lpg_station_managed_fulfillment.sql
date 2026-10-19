@@ -185,6 +185,57 @@ begin
 end;
 $;
 
+
+create or replace function public.read_lpg_station_managed_workspace(
+  target_station_branch_id uuid
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=public,pg_temp
+as $
+declare settings_record public.lpg_station_fulfillment_settings%rowtype; result jsonb;
+begin
+  if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
+  if not public.can_operate_lpg_station_branch(target_station_branch_id,'lpg.stations.manage') then
+    raise exception using errcode='42501',message='branch-scoped station management permission is required';
+  end if;
+  select * into settings_record from public.lpg_station_fulfillment_settings where station_branch_id=target_station_branch_id;
+  result:=jsonb_build_object(
+    'settings',case when found then jsonb_build_object(
+      'stationManagedEnabled',settings_record.station_managed_enabled,
+      'deliveryPricingMode',settings_record.delivery_pricing_mode,
+      'deliveryFeeAmount',settings_record.delivery_fee_amount,
+      'driverCompensationMode',settings_record.driver_compensation_mode,
+      'driverCompensationPlan',settings_record.driver_compensation_plan,
+      'currencyCode',settings_record.currency_code
+    ) else jsonb_build_object('stationManagedEnabled',false,'deliveryPricingMode','separate','deliveryFeeAmount',0,'driverCompensationMode','in_app_plan','driverCompensationPlan',jsonb_build_object(),'currencyCode','NGN') end,
+    'drivers',coalesce((select jsonb_agg(jsonb_build_object(
+      'id',d.id,'userId',d.user_id,'displayName',d.display_name,'phone',d.phone,'status',d.status
+    ) order by d.created_at desc) from public.lpg_station_managed_drivers d where d.station_branch_id=target_station_branch_id),'[]'::jsonb),
+    'agreements',coalesce((select jsonb_agg(jsonb_build_object(
+      'id',a.id,'stationDriverId',a.station_driver_id,'agreementMode',a.agreement_mode,
+      'agreementStatus',a.agreement_status,'terms',a.terms,'notes',a.notes,'effectiveFrom',a.effective_from
+    ) order by a.created_at desc) from public.lpg_station_managed_driver_agreements a where a.station_branch_id=target_station_branch_id limit 20),'[]'::jsonb),
+    'payments',coalesce((select jsonb_agg(jsonb_build_object(
+      'id',p.id,'stationDriverId',p.station_driver_id,'lpgOrderId',p.lpg_order_id,
+      'currencyCode',p.currency_code,'amount',p.amount,'paymentMethod',p.payment_method,
+      'paymentStatus',p.payment_status,'externalReference',p.external_reference,'confirmedAt',p.confirmed_at
+    ) order by p.confirmed_at desc) from public.lpg_station_managed_driver_payment_records p where p.station_branch_id=target_station_branch_id limit 20),'[]'::jsonb),
+    'assignableOrders',coalesce((select jsonb_agg(jsonb_build_object(
+      'id',o.id,'publicReference',o.public_reference,'status',o.status,'requestedKg',o.requested_kg,
+      'totalAmount',o.total_amount,'currencyCode',o.currency_code,'fulfillmentMode',o.fulfillment_mode
+    ) order by o.created_at desc) from public.lpg_refill_orders o
+      where o.station_branch_id=target_station_branch_id and o.fulfillment_mode='station_managed'
+        and o.status in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route')
+        and not exists(select 1 from public.lpg_station_managed_driver_assignments a where a.lpg_order_id=o.id and a.status<>'cancelled')
+    ),'[]'::jsonb)
+  );
+  return result;
+end;
+$;
+
 create or replace function public.configure_lpg_station_managed_fulfillment(
   target_station_branch_id uuid,
   target_enabled boolean,
@@ -638,6 +689,7 @@ end
 $$;
 
 grant execute on function public.read_lpg_station_managed_fulfillment_option(uuid) to authenticated,service_role;
+grant execute on function public.read_lpg_station_managed_workspace(uuid) to authenticated,service_role;
 grant execute on function public.configure_lpg_station_managed_fulfillment(uuid,boolean,text,numeric,text,jsonb,text,jsonb) to authenticated,service_role;
 grant execute on function public.register_lpg_station_managed_driver(uuid,uuid,text,text,jsonb) to authenticated,service_role;
 grant execute on function public.assign_lpg_station_managed_driver(uuid,uuid,text,jsonb) to authenticated,service_role;
