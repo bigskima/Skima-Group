@@ -1067,7 +1067,7 @@ declare driver_record public.lpg_station_managed_drivers%rowtype; assignment_rec
 begin
   if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
   if target_assignment_id is null or nullif(btrim(target_idempotency_key),'') is null
-    or target_status not in ('accepted','en_route')
+    or target_status is null or target_status not in ('accepted','en_route')
     or target_metadata is null or jsonb_typeof(target_metadata)<>'object' then
     raise exception using errcode='22023',message='invalid Station Managed driver status request';
   end if;
