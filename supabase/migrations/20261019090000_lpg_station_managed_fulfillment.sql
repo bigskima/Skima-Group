@@ -1044,7 +1044,7 @@ begin
     ) assignment
     join public.lpg_refill_orders order_record on order_record.id=assignment.lpg_order_id
     join public.lpg_station_branches station on station.id=assignment.station_branch_id
-    left join public.lpg_customer_locations location on location.id=order_record.customer_location_id
+    left join public.lpg_customer_locations location on location.id=order_record.delivery_location_id
   ),'[]'::jsonb);
 end;
 $;
