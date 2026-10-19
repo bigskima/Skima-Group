@@ -171,6 +171,12 @@ export function StationDashboardScreen() {
                 description="Complete the safety check, then enter the kilograms filled."
                 onPress={() => router.push((processingId ? `/(station)/job/${processingId}` : "/(station)/jobs") as never)}
               />
+              <OperationAction
+                icon={<PackageCheck color={palette.brand} size={24} />}
+                title="Station Managed delivery"
+                description="Set your delivery fee, manage your own drivers and record station-held compensation."
+                onPress={() => router.push("/(station)/managed-fulfillment" as never)}
+              />
             </GuideTarget>
 
             <View style={styles.statusGrid}>
