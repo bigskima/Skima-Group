@@ -125,12 +125,11 @@ jobs:
         uses: supabase/setup-cli@v1
         with:
           version: latest
-      - name: Start ephemeral local Supabase
-        run: supabase start
-      - name: Apply schema and runtime migrations to the ephemeral local database
+      - name: Start ephemeral local Supabase and apply schema migrations
         shell: bash
         run: |
           set -euo pipefail
+          # `supabase start` applies migrations while booting the local database.
           # This legacy data-only retirement migration requires an authenticated
           # pricing administrator. A blank local database has no admin identity.
           # Skip only that data update for the schema smoke test; keep every schema,
@@ -142,7 +141,7 @@ jobs:
             mv "$backup_path" "$legacy_migration"
           }
           trap restore_legacy_migration EXIT
-          supabase db reset --local --no-seed
+          supabase start
       - name: Stop ephemeral local Supabase
         if: always()
         run: supabase stop --no-backup
