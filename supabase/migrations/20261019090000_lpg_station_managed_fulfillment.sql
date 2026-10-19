@@ -998,7 +998,7 @@ begin
   select * into station_record from public.lpg_station_branches
   where id=driver_record.station_branch_id and approval_status='approved' and compliance_status='approved';
   if not found then return jsonb_build_object('enabled',false); end if;
-  return jsonb_build_object('enabled',true,'stationBranchId',station_record.id,'stationName',station_record.display_name);
+  return jsonb_build_object('enabled',true,'stationDriverId',driver_record.id,'stationBranchId',station_record.id,'stationName',station_record.display_name);
 end;
 $;
 
