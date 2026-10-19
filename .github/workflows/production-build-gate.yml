@@ -113,3 +113,22 @@ jobs:
         run: npm --prefix apps/lpg-mobile ci --no-audit --no-fund
       - name: Typecheck and build LPG web
         run: npm run deploy:check:lpg
+
+  station-managed-db-validation:
+    name: Station Managed local database migration validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start ephemeral local Supabase
+        run: supabase start
+      - name: Apply all migrations to the ephemeral local database
+        run: supabase db reset --local --no-seed
+      - name: Stop ephemeral local Supabase
+        if: always()
+        run: supabase stop --no-backup
