@@ -133,7 +133,7 @@ export function StationManagedDriverJobsScreen() {
                 <AppButton label="Accept delivery" loading={busy} disabled={updateStatus.isPending} onPress={() => updateStatus.mutate({ job, nextStatus: "accepted" })} />
               ) : null}
               {job.status === "accepted" ? (
-                <AppButton label="Start delivery" isLoading={busy} disabled={updateStatus.isPending} onPress={() => updateStatus.mutate({ job, nextStatus: "en_route" })} />
+                <AppButton label="Start delivery" loading={busy} disabled={updateStatus.isPending} onPress={() => updateStatus.mutate({ job, nextStatus: "en_route" })} />
               ) : null}
               {job.status === "en_route" ? (
                 <View style={[styles.notice, { backgroundColor: palette.brandSofter }]}>
