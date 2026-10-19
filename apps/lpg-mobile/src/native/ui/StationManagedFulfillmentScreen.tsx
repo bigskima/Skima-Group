@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { useStationRuntime } from "../api/domains";
 import { firstString, nestedRecord } from "../api/records";
@@ -82,7 +82,7 @@ export function StationManagedFulfillmentScreen() {
     await Promise.allSettled([workspace.refetch(), runtime.refetch()]);
   };
   const runRpc = async (name: string, args: Record<string, unknown>) => {
-    const result = await session.supabase.rpc(name, args as never);
+    const result = await session.supabase.rpc(name as never, args as never);
     if (result.error) throw result.error;
     return result.data;
   };
