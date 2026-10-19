@@ -7196,6 +7196,11 @@ async function resolveLpgMobileWorkspaceAccess(
     return databaseError(driverResult.error, id);
   }
 
+  const stationManagedDriverAccess = await supabase.rpc("read_lpg_station_managed_driver_access");
+  if (stationManagedDriverAccess.error) {
+    return databaseError(stationManagedDriverAccess.error, id);
+  }
+
   const userRolesResult = await supabase
     .from("user_roles")
     .select("id,organization_id,branch_id,role_id,status")
@@ -7353,6 +7358,20 @@ async function resolveLpgMobileWorkspaceAccess(
       organizationIds: stationOrganizationIds,
       branchIds: approvedBranchIds,
       stationIds: approvedStationIds,
+    });
+  }
+
+  const stationDriverAccess = asRecord(stationManagedDriverAccess.data);
+  if (stationDriverAccess.enabled === true && typeof stationDriverAccess.stationBranchId === "string") {
+    workspaces.push({
+      key: "station_driver",
+      status: "active",
+      subjectType: "lpg_station_managed_driver",
+      subjectId: stationDriverAccess.stationBranchId,
+      capabilityKeys: ["station_managed.delivery.accept", "station_managed.delivery.update"],
+      organizationIds: [],
+      branchIds: [],
+      stationIds: [stationDriverAccess.stationBranchId],
     });
   }
 
