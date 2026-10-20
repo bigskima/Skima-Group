@@ -55,7 +55,7 @@ Deno.test("Station Managed orders bypass SKIMA dispatch automation", () => {
 Deno.test("Station workspace and API surfaces are wired", () => {
   requireText(migration, "read_lpg_station_managed_workspace", "station workspace read API");
   requireText(station, "configure_lpg_station_managed_fulfillment", "station pricing settings");
-  requireText(station, "register_lpg_station_managed_driver", "station driver registration");
+  requireText(station, "api-gateway/runtime/station-driver-invitations", "station driver email invitation");
   requireText(station, "Automatic order dispatch", "automatic station order dispatch UI");
   requireText(station, "api-gateway/runtime/station-driver-invitations", "email invitation endpoint");
   requireText(inviteDispatchMigration, "accept_lpg_station_managed_driver_invite", "driver invitation acceptance RPC");
