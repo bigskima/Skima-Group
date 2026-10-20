@@ -257,6 +257,58 @@ begin
 end;
 $dispatch_one_station_order$;
 
+-- Settings or driver onboarding may occur after an order has already entered the
+-- station queue. Drain that queue whenever the branch becomes dispatch-ready.
+create or replace function public.auto_dispatch_pending_station_orders_for_branch(target_station_branch_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $auto_dispatch_branch$
+declare order_id uuid; count_dispatched integer:=0; assigned_id uuid;
+begin
+  if target_station_branch_id is null then return 0; end if;
+  for order_id in
+    select o.id from public.lpg_refill_orders o
+    where o.station_branch_id=target_station_branch_id
+      and o.fulfillment_channel='marketplace' and o.fulfillment_mode='station_managed'
+      and o.status in ('payment_reserved','matching_station','matching_driver')
+      and not exists(select 1 from public.lpg_station_managed_driver_assignments a where a.lpg_order_id=o.id and a.status<>'cancelled')
+    order by o.created_at,o.id
+  loop
+    assigned_id:=public.auto_assign_lpg_station_managed_order_for_id(order_id);
+    if assigned_id is not null then count_dispatched:=count_dispatched+1; end if;
+  end loop;
+  return count_dispatched;
+end;
+$auto_dispatch_branch$;
+
+create or replace function public.on_station_managed_dispatch_readiness_changed()
+returns trigger
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $dispatch_readiness$
+begin
+  if tg_table_name='lpg_station_fulfillment_settings' then
+    if new.station_managed_enabled then perform public.auto_dispatch_pending_station_orders_for_branch(new.station_branch_id); end if;
+  elsif tg_table_name='lpg_station_managed_drivers' then
+    if new.status='active' then perform public.auto_dispatch_pending_station_orders_for_branch(new.station_branch_id); end if;
+  end if;
+  return new;
+end;
+$dispatch_readiness$;
+
+drop trigger if exists trg_station_managed_settings_dispatch_pending on public.lpg_station_fulfillment_settings;
+create trigger trg_station_managed_settings_dispatch_pending
+after insert or update of station_managed_enabled on public.lpg_station_fulfillment_settings
+for each row execute function public.on_station_managed_dispatch_readiness_changed();
+
+drop trigger if exists trg_station_managed_driver_dispatch_pending on public.lpg_station_managed_drivers;
+create trigger trg_station_managed_driver_dispatch_pending
+after insert or update of status on public.lpg_station_managed_drivers
+for each row execute function public.on_station_managed_dispatch_readiness_changed();
+
 revoke all on function public.auto_assign_lpg_station_managed_order() from public,anon,authenticated;
 revoke all on function public.auto_assign_lpg_station_managed_order_for_id(uuid) from public,anon,authenticated;
 revoke all on function public.dispatch_pending_lpg_station_managed_orders(uuid) from public,anon;
