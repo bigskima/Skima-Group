@@ -94,6 +94,22 @@ end $$;
 drop trigger if exists trg_auto_dispatch_lpg_station_managed_order on public.lpg_refill_orders;
 create trigger trg_auto_dispatch_lpg_station_managed_order after insert on public.lpg_refill_orders for each row execute function public.auto_dispatch_lpg_station_managed_order();
 
+create or replace function public.read_lpg_station_managed_driver_invitation_access()
+returns jsonb language plpgsql stable security definer set search_path=public,pg_temp as $
+declare current_email text; invite_record public.lpg_station_managed_driver_invites%rowtype;
+begin
+ if auth.uid() is null then return jsonb_build_object('enabled',false); end if;
+ select lower(email) into current_email from auth.users where id=auth.uid();
+ select i.* into invite_record from public.lpg_station_managed_driver_invites i
+ join public.lpg_station_fulfillment_settings s on s.station_branch_id=i.station_branch_id and s.station_managed_enabled
+ where lower(i.email)=current_email and i.status='pending' and i.expires_at>now()
+ order by i.created_at desc limit 1;
+ if not found then return jsonb_build_object('enabled',false); end if;
+ return jsonb_build_object('enabled',true,'stationBranchId',invite_record.station_branch_id,'invitationId',invite_record.id);
+end $;
+revoke all on function public.read_lpg_station_managed_driver_invitation_access() from public,anon;
+grant execute on function public.read_lpg_station_managed_driver_invitation_access() to authenticated,service_role;
+
 revoke all on function public.accept_lpg_station_managed_driver_invite() from public,anon;
 grant execute on function public.accept_lpg_station_managed_driver_invite() to authenticated,service_role;
 revoke all on function public.auto_dispatch_lpg_station_managed_order() from public,anon,authenticated;
