@@ -41,14 +41,14 @@ export function StationManagedFulfillmentScreen() {
   const [pricingMode, setPricingMode] = useState<DeliveryPricingMode>("separate");
   const [deliveryFee, setDeliveryFee] = useState("0");
   const [compensationMode, setCompensationMode] = useState<CompensationMode>("in_app_plan");
-  const [compensationPlan, setCompensationPlan] = useState('{"calculation":"per_delivery","amount":0}');
+  const [compensationAmount, setCompensationAmount] = useState("0");
   const [driverUserId, setDriverUserId] = useState("");
   const [driverName, setDriverName] = useState("");
   const [driverPhone, setDriverPhone] = useState("");
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [agreementMode, setAgreementMode] = useState<CompensationMode>("in_app_plan");
-  const [agreementTerms, setAgreementTerms] = useState('{"calculation":"per_delivery","amount":0}');
+  const [agreementAmount, setAgreementAmount] = useState("0");
   const [agreementNotes, setAgreementNotes] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "bank_transfer" | "wallet_external" | "other">("bank_transfer");
@@ -77,7 +77,7 @@ export function StationManagedFulfillmentScreen() {
     setPricingMode(settings.deliveryPricingMode ?? "separate");
     setDeliveryFee(String(settings.deliveryFeeAmount ?? 0));
     setCompensationMode(settings.driverCompensationMode ?? "in_app_plan");
-    setCompensationPlan(JSON.stringify(settings.driverCompensationPlan ?? {}, null, 2));
+    setCompensationAmount(String(settings.driverCompensationPlan?.amount ?? 0));
   }, [workspace.data?.settings]);
 
   const refresh = async () => {
@@ -93,12 +93,9 @@ export function StationManagedFulfillmentScreen() {
       if (!branchId) throw new Error("Your station branch is not available.");
       const fee = Number(deliveryFee);
       if (!Number.isFinite(fee) || fee < 0) throw new Error("Enter a valid delivery fee.");
-      let plan: Record<string, unknown> = {};
-      if (compensationMode === "in_app_plan") {
-        const parsed: unknown = JSON.parse(compensationPlan);
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Driver compensation plan must be a JSON object.");
-        plan = parsed as Record<string, unknown>;
-      }
+      const compensation = Number(compensationAmount);
+      if (!Number.isFinite(compensation) || compensation < 0) throw new Error("Enter a valid driver payment amount.");
+      const plan: Record<string, unknown> = { calculation: "per_delivery", amount: compensation, currencyCode };
       return runRpc("configure_lpg_station_managed_fulfillment", {
         target_station_branch_id: branchId,
         target_enabled: enabled,
@@ -144,13 +141,14 @@ export function StationManagedFulfillmentScreen() {
   const agreementMutation = useMutation({
     mutationFn: async () => {
       if (!selectedDriverId) throw new Error("Choose a station driver first.");
-      const parsed: unknown = JSON.parse(agreementTerms);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Agreement terms must be a JSON object.");
+      const amount = Number(agreementAmount);
+      if (!Number.isFinite(amount) || amount < 0) throw new Error("Enter a valid agreement amount.");
+      const terms: Record<string, unknown> = { calculation: "per_delivery", amount, currencyCode };
       return runRpc("record_lpg_station_managed_driver_agreement", {
         target_station_driver_id: selectedDriverId,
         target_agreement_mode: agreementMode,
         target_agreement_status: "active",
-        target_terms: parsed,
+        target_terms: terms,
         target_notes: agreementNotes.trim() || null,
         target_metadata: { source: "station-managed-settings-screen" },
       });
@@ -189,8 +187,8 @@ export function StationManagedFulfillmentScreen() {
   return (
     <Screen
       eyebrow="Station operations"
-      title="Station Managed delivery"
-      subtitle="Manage your own drivers, customer delivery pricing and station-held compensation records. SKIMA does not pay station drivers."
+      title="Your delivery service"
+      subtitle="Set delivery prices, add your station drivers and keep a record of agreements and payments. Your station pays its own drivers."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {loading ? <Text style={{ color: palette.muted }}>Loading branch settings…</Text> : failed ? (
@@ -199,14 +197,14 @@ export function StationManagedFulfillmentScreen() {
         <EmptyState title="Station branch unavailable" description="Complete station setup before configuring managed delivery." />
       ) : (
         <>
-          <Section title="Station Managed availability" palette={palette}>
+          <Section title="1. Customer delivery option" palette={palette}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Enable this option to let customers choose delivery by your own station driver. Existing independent-driver and SKIMA Fleet orders are unchanged.</Text>
             <View style={styles.row}>
               <Choice label={enabled ? "Enabled for customers" : "Disabled for customers"} active={enabled} onPress={() => setEnabled(!enabled)} palette={palette} />
             </View>
           </Section>
 
-          <Section title="Customer delivery pricing" palette={palette}>
+          <Section title="2. Delivery price" palette={palette}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Choose how delivery appears on the customer's SKIMA checkout. Refill and delivery remain separately tracked where a separate fee is selected.</Text>
             <View style={styles.row}>
               <Choice label="Separate fee" active={pricingMode === "separate"} onPress={() => setPricingMode("separate")} palette={palette} />
@@ -217,25 +215,25 @@ export function StationManagedFulfillmentScreen() {
             <Text style={{ color: palette.muted, fontSize: 13 }}>Driver compensation is a station responsibility. These settings do not create SKIMA driver earnings or payouts.</Text>
           </Section>
 
-          <Section title="Station driver compensation" palette={palette}>
+          <Section title="3. Driver payment plan" palette={palette}>
             <View style={styles.row}>
               <Choice label="In-app plan" active={compensationMode === "in_app_plan"} onPress={() => { setCompensationMode("in_app_plan"); setAgreementMode("in_app_plan"); }} palette={palette} />
               <Choice label="Offline agreement" active={compensationMode === "offline"} onPress={() => { setCompensationMode("offline"); setAgreementMode("offline"); }} palette={palette} />
             </View>
-            {compensationMode === "in_app_plan" ? <Field label="Compensation plan (JSON object)" value={compensationPlan} onChangeText={setCompensationPlan} multiline palette={palette} /> : <Text style={{ color: palette.muted }}>Record the agreement and later confirm payments here. Payment is handled by your station outside SKIMA.</Text>}
+            {compensationMode === "in_app_plan" ? <Field label={`Amount paid to driver per delivery (${currencyCode})`} value={compensationAmount} onChangeText={setCompensationAmount} keyboardType="decimal-pad" palette={palette} /> : <Text style={{ color: palette.muted }}>Use a separate agreement with your driver. You can record the agreed terms and confirm payments below. SKIMA does not pay station drivers.</Text>}
           </Section>
 
-          <AppButton label="Save Station Managed settings" fullWidth loading={settingsMutation.isPending} onPress={() => void settingsMutation.mutateAsync()} />
+          <AppButton label="Save delivery settings" fullWidth loading={settingsMutation.isPending} onPress={() => void settingsMutation.mutateAsync()} />
 
-          <Section title="Register a station driver" palette={palette}>
-            <Field label="Driver SKIMA profile/user ID" value={driverUserId} onChangeText={setDriverUserId} palette={palette} autoCapitalize="none" />
+          <Section title="4. Add a station driver" palette={palette}>
+            <Field label="Driver account ID (ask SKIMA support if needed)" value={driverUserId} onChangeText={setDriverUserId} palette={palette} autoCapitalize="none" />
             <Field label="Driver full name" value={driverName} onChangeText={setDriverName} palette={palette} />
             <Field label="Phone (optional)" value={driverPhone} onChangeText={setDriverPhone} palette={palette} keyboardType="phone-pad" />
             <AppButton label="Register station driver" fullWidth loading={registerMutation.isPending} disabled={!driverUserId.trim() || !driverName.trim()} onPress={() => void registerMutation.mutateAsync()} />
             <Text style={{ color: palette.muted, fontSize: 12 }}>Station drivers must not already have a SKIMA Managed or independent driver profile.</Text>
           </Section>
 
-          <Section title="Assign a station driver" palette={palette}>
+          <Section title="5. Assign a delivery" palette={palette}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Only orders already quoted and paid as Station Managed appear here.</Text>
             {(data?.assignableOrders ?? []).length ? (data?.assignableOrders ?? []).map((order) => (
               <Choice key={order.id} label={`${order.publicReference ?? order.id.slice(0, 8)} · ${order.requestedKg ?? "—"} kg · ${order.status}`} active={selectedOrderId === order.id} onPress={() => setSelectedOrderId(order.id)} palette={palette} />
@@ -246,18 +244,18 @@ export function StationManagedFulfillmentScreen() {
             <AppButton label="Assign selected driver" fullWidth loading={assignMutation.isPending} disabled={!selectedOrderId || !selectedDriverId} onPress={() => void assignMutation.mutateAsync()} />
           </Section>
 
-          <Section title="Driver agreement record" palette={palette}>
+          <Section title="6. Record driver agreement" palette={palette}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>{selectedDriver ? `Selected driver: ${selectedDriver.displayName}` : "Select a station driver in the assignment section above."}</Text>
             <View style={styles.row}>
               <Choice label="In-app plan" active={agreementMode === "in_app_plan"} onPress={() => setAgreementMode("in_app_plan")} palette={palette} />
               <Choice label="Offline" active={agreementMode === "offline"} onPress={() => setAgreementMode("offline")} palette={palette} />
             </View>
-            <Field label="Agreement terms (JSON object)" value={agreementTerms} onChangeText={setAgreementTerms} multiline palette={palette} />
+            <Field label={`Agreed payment per delivery (${currencyCode})`} value={agreementAmount} onChangeText={setAgreementAmount} keyboardType="decimal-pad" palette={palette} />
             <Field label="Notes (optional)" value={agreementNotes} onChangeText={setAgreementNotes} multiline palette={palette} />
             <AppButton label="Record agreement" fullWidth loading={agreementMutation.isPending} disabled={!selectedDriverId} onPress={() => void agreementMutation.mutateAsync()} />
           </Section>
 
-          <Section title="Record station driver payment" palette={palette}>
+          <Section title="7. Record a payment you made" palette={palette}>
             <Field label={`Amount (${currencyCode})`} value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" palette={palette} />
             <View style={styles.row}>
               <Choice label="Bank transfer" active={paymentMethod === "bank_transfer"} onPress={() => setPaymentMethod("bank_transfer")} palette={palette} />
@@ -269,7 +267,7 @@ export function StationManagedFulfillmentScreen() {
             <Text style={{ color: palette.muted, fontSize: 12 }}>This creates a station record only. It does not move money through SKIMA or create a SKIMA payout.</Text>
           </Section>
 
-          <Section title="Recent station records" palette={palette}>
+          <Section title="Recent agreements and payments" palette={palette}>
             <Text style={{ color: palette.ink, fontWeight: "700" }}>Agreements</Text>
             {(data?.agreements ?? []).slice(0, 5).map((record, index) => <Text key={String(record.id ?? index)} style={{ color: palette.muted, paddingVertical: 4 }}>{String(record.agreementMode ?? "agreement")} · {String(record.agreementStatus ?? "recorded")} · {String(record.stationDriverId ?? "")}</Text>)}
             <Text style={{ color: palette.ink, fontWeight: "700", marginTop: 8 }}>Payment confirmations</Text>
@@ -295,8 +293,8 @@ function Field({ label, value, onChangeText, palette, keyboardType, multiline = 
 }
 
 const styles = StyleSheet.create({
-  section: { borderWidth: 1, borderRadius: radii.lg, padding: spacing.md, gap: spacing.sm, marginBottom: spacing.md },
-  sectionTitle: { ...typography.heading, fontSize: 17 },
+  section: { borderWidth: 1, borderRadius: radii.lg, padding: spacing.sm + 2, gap: spacing.sm, marginBottom: spacing.sm },
+  sectionTitle: { ...typography.heading, fontSize: 15, lineHeight: 20 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
   choice: { borderWidth: 1, borderRadius: radii.md, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 4 },
   field: { gap: 6, marginBottom: 8 },
