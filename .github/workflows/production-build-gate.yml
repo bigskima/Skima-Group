@@ -129,19 +129,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # This legacy data-only retirement migration requires an authenticated
-          # pricing administrator. A blank local database has no admin identity.
-          # Skip only this legacy data update during isolated schema validation.
-          # All other schema, function, policy and Station Managed migrations run.
-          legacy_migration="supabase/migrations/20260813044000_retire_legacy_lpg_commercial_rates.sql"
-          backup_path="$(mktemp)"
-          mv "$legacy_migration" "$backup_path"
-          restore_legacy_migration() {
-            if [ -f "$backup_path" ]; then
-              mv "$backup_path" "$legacy_migration"
-            fi
+          # These two legacy data-only migrations require live owner/admin identities.
+          # A blank local database intentionally has no such identity. Skip only these
+          # one-time data updates; retain all schema, function, policy and feature migrations.
+          backup_dir="$(mktemp -d)"
+          legacy_migrations=(
+            "supabase/migrations/20260813044000_retire_legacy_lpg_commercial_rates.sql"
+            "supabase/migrations/20260906035426_awka_legacy_area_mapping.sql"
+          )
+          restore_legacy_migrations() {
+            for backup_file in "$backup_dir"/*.sql; do
+              [ -f "$backup_file" ] || continue
+              mv "$backup_file" "supabase/migrations/$(basename "$backup_file")"
+            done
+            rmdir "$backup_dir" 2>/dev/null || true
           }
-          trap restore_legacy_migration EXIT
+          for migration in "${legacy_migrations[@]}"; do
+            mv "$migration" "$backup_dir/"
+          done
+          trap restore_legacy_migrations EXIT
           supabase start
           # Startup only launches the local stack; reset explicitly applies every
           # remaining migration to a clean ephemeral database. Never targets remote.
