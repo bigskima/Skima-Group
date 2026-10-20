@@ -447,7 +447,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     if (displayName.length < 2 || displayName.length > 160) throw new RequestValidationError("Driver name must contain 2 to 160 characters.");
     const permission = await supabase.rpc("can_operate_lpg_station_branch", {
       target_station_branch_id: stationBranchId,
-      target_permission: "lpg.stations.manage",
+      target_permission_key: "lpg.stations.manage",
     });
     if (permission.error) return databaseError(permission.error, id);
     const superAdmin = await supabase.rpc("is_platform_super_admin");
