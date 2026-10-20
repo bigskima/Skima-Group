@@ -1,5 +1,12 @@
 begin;
 
+-- Retire the earlier draft dispatcher before installing the single canonical trigger.
+drop trigger if exists trg_lpg_station_managed_auto_dispatch on public.lpg_refill_orders;
+drop function if exists public.trigger_dispatch_lpg_station_managed_order();
+drop function if exists public.dispatch_lpg_station_managed_order(uuid);
+drop function if exists public.dispatch_pending_lpg_station_managed_orders(uuid);
+drop function if exists public.accept_lpg_station_managed_driver_invitation();
+
 -- Station-owned invitations are separate from independent driver_profiles.
 create table if not exists public.lpg_station_managed_driver_invites (
   id uuid primary key default gen_random_uuid(),
@@ -56,10 +63,16 @@ begin
   where user_id=auth.uid() and status='active' limit 1;
 
   if not found and current_email<>'' and current_email_verified then
+    if exists(select 1 from public.driver_profiles where user_id=auth.uid()) then
+      raise exception using errcode='55000',message='an independent or SKIMA Managed driver account cannot accept a Station Managed invitation';
+    end if;
     select * into invite_record from public.lpg_station_managed_driver_invites
     where email=current_email and status='pending' and expires_at>timezone('utc',now())
     order by created_at desc limit 1 for update;
     if found then
+      if exists(select 1 from public.driver_profiles where user_id=auth.uid()) then
+        raise exception using errcode='55000',message='an independent or SKIMA Managed driver profile cannot accept a Station Managed invitation';
+      end if;
       if exists(select 1 from public.lpg_station_managed_drivers where user_id=auth.uid() and status='active') then
         raise exception using errcode='23505',message='this account already belongs to an active Station Managed driver';
       end if;
@@ -203,6 +216,9 @@ end;
 $station_managed_auto_dispatch$;
 
 drop trigger if exists trg_auto_dispatch_lpg_station_managed_order on public.lpg_refill_orders;
+-- Replace the earlier dispatcher, whose nested status update could re-enter itself.
+drop trigger if exists trg_lpg_station_managed_auto_dispatch on public.lpg_refill_orders;
+drop function if exists public.trigger_dispatch_lpg_station_managed_order();
 create trigger trg_auto_dispatch_lpg_station_managed_order
 after insert or update of status on public.lpg_refill_orders
 for each row execute function public.auto_assign_lpg_station_managed_order();
@@ -329,26 +345,55 @@ revoke all on function public.dispatch_pending_lpg_station_managed_orders(uuid) 
 grant execute on function public.dispatch_pending_lpg_station_managed_orders(uuid) to authenticated,service_role;
 grant execute on function public.read_lpg_station_managed_driver_access() to authenticated,service_role;
 
+-- Keep the legacy invitation RPC as a safe alias to the same confirmed-email flow.
+create or replace function public.accept_lpg_station_managed_driver_invitation()
+returns uuid
+language sql
+volatile
+security definer
+set search_path=public,pg_temp
+as $accept_station_driver_invitation$
+  select public.accept_lpg_station_managed_driver_invite();
+$accept_station_driver_invitation$;
+
+revoke all on function public.accept_lpg_station_managed_driver_invitation() from public,anon;
+grant execute on function public.accept_lpg_station_managed_driver_invitation() to authenticated,service_role;
+
 -- Named acceptance/access RPCs let the authenticated invitation landing flow
 -- explicitly finalize an invite and then resolve the station-driver workspace.
+drop function if exists public.accept_lpg_station_managed_driver_invite();
 create or replace function public.accept_lpg_station_managed_driver_invite()
-returns jsonb
+returns uuid
 language sql
 volatile
 security definer
 set search_path=public,pg_temp
 as $accept_station_driver_invite$
-  select public.read_lpg_station_managed_driver_access();
+  select nullif(public.read_lpg_station_managed_driver_access()->>'stationDriverId','')::uuid;
 $accept_station_driver_invite$;
 
 create or replace function public.read_lpg_station_managed_driver_invitation_access()
 returns jsonb
-language sql
-volatile
+language plpgsql
+stable
 security definer
 set search_path=public,pg_temp
 as $station_driver_invitation_access$
-  select public.read_lpg_station_managed_driver_access();
+declare current_email text; invite_record public.lpg_station_managed_driver_invites%rowtype;
+begin
+  if auth.uid() is null then return jsonb_build_object('enabled',false); end if;
+  select lower(u.email) into current_email from auth.users u
+  where u.id=auth.uid() and u.email_confirmed_at is not null;
+  if current_email is null then return jsonb_build_object('enabled',false); end if;
+  select i.* into invite_record
+  from public.lpg_station_managed_driver_invites i
+  join public.lpg_station_fulfillment_settings settings
+    on settings.station_branch_id=i.station_branch_id and settings.station_managed_enabled
+  where lower(i.email)=current_email and i.status='pending' and i.expires_at>timezone('utc',now())
+  order by i.created_at desc limit 1;
+  if not found then return jsonb_build_object('enabled',false); end if;
+  return jsonb_build_object('enabled',true,'stationBranchId',invite_record.station_branch_id,'invitationId',invite_record.id);
+end;
 $station_driver_invitation_access$;
 
 revoke all on function public.accept_lpg_station_managed_driver_invite() from public,anon;
