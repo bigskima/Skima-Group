@@ -1,5 +1,5 @@
 import { Redirect } from "expo-router";
-import { useEffect, type PropsWithChildren } from "react";
+import { useEffect, useState, type PropsWithChildren } from "react";
 import { StyleSheet, View } from "react-native";
 import { domainQueries } from "../api/domains";
 import { firstString, nestedRecords, type PlatformRecord } from "../api/records";
@@ -17,6 +17,7 @@ export function WorkspaceGate({
   const session = useSession();
   const { palette } = useAppTheme();
   const guide = useInAppGuide();
+  const [stationInviteChecked, setStationInviteChecked] = useState(workspace !== "station_driver");
   const access = domainQueries.workspaceAccess(
     session.status === "authenticated" && workspace !== "customer",
   );
@@ -24,6 +25,22 @@ export function WorkspaceGate({
   useEffect(() => {
     if (session.status === "authenticated") guide.setWorkspace(workspace === "station_driver" ? "driver" : workspace);
   }, [guide, session.status, workspace]);
+
+  useEffect(() => {
+    if (workspace !== "station_driver" || session.status !== "authenticated") {
+      setStationInviteChecked(true);
+      return;
+    }
+    let active = true;
+    setStationInviteChecked(false);
+    void session.supabase.rpc("accept_lpg_station_managed_driver_invite").then(async ({ error }) => {
+      if (!active) return;
+      // No matching invitation is expected for users who already have workspace access.
+      if (!error) await access.refetch();
+      if (active) setStationInviteChecked(true);
+    }).catch(() => { if (active) setStationInviteChecked(true); });
+    return () => { active = false; };
+  }, [workspace, session.status, session.supabase, access.refetch]);
 
   if (session.status === "loading") {
     return <Loading canvas={palette.canvas} />;
@@ -37,7 +54,7 @@ export function WorkspaceGate({
     return <>{children}</>;
   }
 
-  if (access.isPending) {
+  if (access.isPending || (workspace === "station_driver" && !stationInviteChecked)) {
     return <Loading canvas={palette.canvas} />;
   }
 
