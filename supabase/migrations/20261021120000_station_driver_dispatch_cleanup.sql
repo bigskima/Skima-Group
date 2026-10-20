@@ -189,7 +189,7 @@ begin
 
   if assignment_id is not null then
     update public.lpg_refill_orders
-    set driver_profile_id=null,vehicle_id=null,status='driver_offered',
+    set driver_profile_id=null,vehicle_id=null,driver_commission_amount=0,status='driver_offered',
         assignment_status='driver_assigned',updated_at=timezone('utc',now()),
         metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object(
           'stationManagedDriverId',driver_record.id,
@@ -271,7 +271,7 @@ begin
   values(order_record.id,order_record.station_branch_id,driver_record.id,driver_record.created_by,auto_key,jsonb_build_object('source','automatic_station_dispatch','policy','least_active_assignments'))
   on conflict(lpg_order_id) do nothing returning id into result_id;
   if result_id is null then return null; end if;
-  update public.lpg_refill_orders set driver_profile_id=null,vehicle_id=null,status='driver_offered',assignment_status='driver_assigned',
+  update public.lpg_refill_orders set driver_profile_id=null,vehicle_id=null,driver_commission_amount=0,status='driver_offered',assignment_status='driver_assigned',
     updated_at=timezone('utc',now()),metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object('stationManagedDriverId',driver_record.id,'stationManagedDriverUserId',driver_record.user_id,'stationManagedDispatch','automatically_assigned')
   where id=order_record.id;
   perform public.record_lpg_order_event(order_record.id,'lpg.station_managed.driver_assigned',order_record.status,'driver_offered',auto_key||':event',
