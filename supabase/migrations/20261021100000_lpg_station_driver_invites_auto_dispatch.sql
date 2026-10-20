@@ -27,7 +27,7 @@ create policy lpg_station_managed_driver_invites_no_direct_access on public.lpg_
 revoke all on public.lpg_station_managed_driver_invites from public,anon,authenticated;
 grant all on public.lpg_station_managed_driver_invites to service_role;
 
-create or replace function public.accept_lpg_station_managed_driver_invitation()
+create or replace function public.accept_lpg_station_managed_driver_invite()
 returns jsonb
 language plpgsql
 security definer
@@ -76,8 +76,31 @@ begin
 end;
 $accept_station_driver_invite$;
 
-revoke all on function public.accept_lpg_station_managed_driver_invitation() from public,anon;
-grant execute on function public.accept_lpg_station_managed_driver_invitation() to authenticated,service_role;
+revoke all on function public.accept_lpg_station_managed_driver_invite() from public,anon;
+grant execute on function public.accept_lpg_station_managed_driver_invite() to authenticated,service_role;
+
+-- Read-only invitation discovery for the workspace resolver. Email details are not
+-- exposed; only whether a valid invite exists and its station branch are returned.
+create or replace function public.read_lpg_station_managed_driver_invitation_access()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path=public,pg_temp
+as $station_driver_invitation_access$
+declare current_email text; invite_record public.lpg_station_managed_driver_invites%rowtype;
+begin
+  if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
+  current_email:=lower(btrim(coalesce(auth.jwt()->>'email','')));
+  select * into invite_record from public.lpg_station_managed_driver_invites
+  where email=current_email and status='pending' and expires_at>timezone('utc',now())
+  order by created_at desc limit 1;
+  if not found then return jsonb_build_object('invited',false); end if;
+  return jsonb_build_object('invited',true,'stationBranchId',invite_record.station_branch_id,'expiresAt',invite_record.expires_at);
+end;
+$station_driver_invitation_access$;
+revoke all on function public.read_lpg_station_managed_driver_invitation_access() from public,anon;
+grant execute on function public.read_lpg_station_managed_driver_invitation_access() to authenticated,service_role;
 
 -- A newly authenticated invited user accepts through the normal station-driver
 -- access check. The access RPC performs acceptance before reading the identity.
@@ -91,7 +114,7 @@ as $station_driver_access_invite$
 declare driver_record public.lpg_station_managed_drivers%rowtype; station_record public.lpg_station_branches%rowtype;
 begin
   if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
-  perform public.accept_lpg_station_managed_driver_invitation();
+  perform public.accept_lpg_station_managed_driver_invite();
   select * into driver_record from public.lpg_station_managed_drivers
   where user_id=auth.uid() and status='active' limit 1;
   if not found then return jsonb_build_object('enabled',false); end if;
@@ -164,8 +187,8 @@ begin
 end;
 $auto_station_driver$;
 
-drop trigger if exists trg_lpg_station_managed_auto_dispatch on public.lpg_refill_orders;
-create trigger trg_lpg_station_managed_auto_dispatch
+drop trigger if exists trg_auto_dispatch_lpg_station_managed_order on public.lpg_refill_orders;
+create trigger trg_auto_dispatch_lpg_station_managed_order
 after insert or update of fulfillment_mode,station_branch_id,status,metadata on public.lpg_refill_orders
 for each row execute function public.auto_assign_lpg_station_managed_order();
 
