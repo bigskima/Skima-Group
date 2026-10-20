@@ -129,7 +129,6 @@ begin
     where a.lpg_order_id=new.id and a.status<>'cancelled') then
     return new;
   end if;
-  -- Deterministic least-loaded selection; lock the chosen row to serialize dispatch.
   select d.* into chosen_driver
   from public.lpg_station_managed_drivers d
   where d.station_branch_id=new.station_branch_id and d.status='active'
@@ -139,29 +138,27 @@ begin
     (select max(a.assigned_at) from public.lpg_station_managed_driver_assignments a where a.station_driver_id=d.id),
     d.created_at,d.id
   limit 1 for update skip locked;
-  if not found then
-    -- Leave the order unassigned and retry on a later status change / dispatch call.
-    return new;
-  end if;
+  if not found then return new; end if;
+
   assignment_key:='auto-station-managed:'||new.id::text;
   insert into public.lpg_station_managed_driver_assignments(
     lpg_order_id,station_branch_id,station_driver_id,assigned_by,idempotency_key,metadata
   ) values (
-    new.id,new.station_branch_id,chosen_driver.id,coalesce(auth.uid(),chosen_driver.created_by),
+    new.id,new.station_branch_id,chosen_driver.id,chosen_driver.created_by,
     assignment_key,jsonb_build_object('source','automatic_station_dispatch','policy','least_loaded')
   )
   on conflict(lpg_order_id) do nothing
   returning id into assigned_id;
   if assigned_id is not null then
-    new.driver_profile_id:=null;
-    new.vehicle_id:=null;
-    new.status:='driver_offered';
-    new.assignment_status:='driver_assigned';
-    new.metadata:=coalesce(new.metadata,'{}'::jsonb)||jsonb_build_object(
-      'stationManagedDriverId',chosen_driver.id,
-      'stationManagedDriverUserId',chosen_driver.user_id,
-      'station_managed_auto_dispatch_attempted',true
-    );
+    update public.lpg_refill_orders
+    set driver_profile_id=null,vehicle_id=null,status='driver_offered',
+        assignment_status='driver_assigned',updated_at=timezone('utc',now()),
+        metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object(
+          'stationManagedDriverId',chosen_driver.id,
+          'stationManagedDriverUserId',chosen_driver.user_id,
+          'station_managed_auto_dispatch_attempted',true
+        )
+    where id=new.id;
   end if;
   return new;
 end;
@@ -169,7 +166,7 @@ $auto_station_driver$;
 
 drop trigger if exists trg_lpg_station_managed_auto_dispatch on public.lpg_refill_orders;
 create trigger trg_lpg_station_managed_auto_dispatch
-before insert or update of fulfillment_mode,station_branch_id,status,metadata on public.lpg_refill_orders
+after insert or update of fulfillment_mode,station_branch_id,status,metadata on public.lpg_refill_orders
 for each row execute function public.auto_assign_lpg_station_managed_order();
 
 revoke all on function public.auto_assign_lpg_station_managed_order() from public,anon,authenticated;
