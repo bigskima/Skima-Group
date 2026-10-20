@@ -20,6 +20,8 @@ Deno.test("Station Managed remains a fulfillment mode distinct from the channel"
   requireText(migration, "check (fulfillment_mode in ('station_managed','independent_driver','skima_fleet','partner_managed'))", "mode constraint");
   requireText(migration, "fulfillment_channel = 'skima_internal' then 'skima_fleet'", "legacy SKIMA Fleet mapping");
   requireText(migration, "fulfillment_channel<>'marketplace' or order_record.fulfillment_mode<>'station_managed'", "assignment guard");
+  requireText(customer, '"Independent driver"', "existing independent-driver option remains available");
+  requireText(customer, "SKIMA driver + SKIMA fleet vehicle", "existing SKIMA Fleet option remains available");
 });
 
 Deno.test("Station delivery pricing is snapshotted and totals are recalculated", () => {
