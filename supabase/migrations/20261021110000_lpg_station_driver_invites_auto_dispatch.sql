@@ -41,8 +41,13 @@ begin
  on conflict(station_branch_id,user_id) do update set display_name=excluded.display_name,phone=excluded.phone,status='active',updated_at=now()
  returning id into result_id;
  update public.lpg_station_managed_driver_invites set status='accepted',accepted_user_id=auth.uid(),accepted_at=now() where id=invite_record.id;
+ update public.lpg_refill_orders set status=status, updated_at=now()
+ where station_branch_id=invite_record.station_branch_id and fulfillment_mode='station_managed'
+   and fulfillment_channel='marketplace'
+   and status in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route')
+   and not exists(select 1 from public.lpg_station_managed_driver_assignments a where a.lpg_order_id=public.lpg_refill_orders.id and a.status<>'cancelled');
  return result_id;
-end $$;
+end $;
 
 create or replace function public.assign_lpg_station_managed_driver(
  target_lpg_order_id uuid, target_station_driver_id uuid, target_idempotency_key text,
@@ -92,7 +97,7 @@ begin
  return new;
 end $$;
 drop trigger if exists trg_auto_dispatch_lpg_station_managed_order on public.lpg_refill_orders;
-create trigger trg_auto_dispatch_lpg_station_managed_order after insert on public.lpg_refill_orders for each row execute function public.auto_dispatch_lpg_station_managed_order();
+create trigger trg_auto_dispatch_lpg_station_managed_order after insert or update of fulfillment_mode,status on public.lpg_refill_orders for each row execute function public.auto_dispatch_lpg_station_managed_order();
 
 create or replace function public.read_lpg_station_managed_driver_invitation_access()
 returns jsonb language plpgsql stable security definer set search_path=public,pg_temp as $
