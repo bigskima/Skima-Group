@@ -114,7 +114,7 @@ export function StationManagedFulfillmentScreen() {
   const registerMutation = useMutation({
     mutationFn: async () => {
       if (!branchId) throw new Error("Your station branch is not available.");
-      if (!driverUserId.trim() || !driverName.trim()) throw new Error("Enter the driver's SKIMA user/profile ID and full name.");
+      if (!driverUserId.trim() || !driverName.trim()) throw new Error("Select the driver’s existing SKIMA account and enter their name. If you do not have the account ID, ask the driver to open their SKIMA profile or contact station support.");
       return runRpc("register_lpg_station_managed_driver", {
         target_station_branch_id: branchId,
         target_user_id: driverUserId.trim(),
@@ -189,7 +189,7 @@ export function StationManagedFulfillmentScreen() {
     <Screen
       eyebrow="Station operations"
       title="Your delivery service"
-      subtitle="Set delivery prices, add your station drivers and keep a record of agreements and payments. Your station pays its own drivers."
+      subtitle="Follow the steps below to set delivery prices, add station drivers and record driver payments. Only authorised station managers can change delivery settings."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {loading ? <Text style={{ color: palette.muted }}>Loading branch settings…</Text> : failed ? (
