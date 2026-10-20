@@ -228,6 +228,7 @@ const ROUTES = new Set([
   "/runtime/organization-memberships",
   "/runtime/organization-user-roles",
   "/runtime/organization-invitations",
+  "/runtime/station-driver-invitations",
   "/runtime/organization-invitations/accept",
   "/runtime/organization-invitations/decline",
   "/runtime/organization-staff/directory",
@@ -432,6 +433,53 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       },
       429,
     );
+  }
+
+  if (routePath === "/runtime/station-driver-invitations" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const value = requireRecord(body.value, "invitation");
+    const stationBranchId = requireUuid(value.stationBranchId, "stationBranchId");
+    const email = requireString(value.email, "email").trim().toLowerCase();
+    const displayName = requireString(value.displayName, "displayName").trim();
+    const phone = stringOrNull(value.phone);
+    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) throw new RequestValidationError("Enter a valid driver email address.");
+    if (displayName.length < 2 || displayName.length > 160) throw new RequestValidationError("Driver name must contain 2 to 160 characters.");
+    const permission = await supabase.rpc("can_operate_lpg_station_branch", {
+      target_station_branch_id: stationBranchId,
+      target_permission: "lpg.stations.manage",
+    });
+    if (permission.error) return databaseError(permission.error, id);
+    const superAdmin = await supabase.rpc("is_platform_super_admin");
+    if (superAdmin.error) return databaseError(superAdmin.error, id);
+    if (permission.data !== true && superAdmin.data !== true) {
+      return jsonResponse({ ok: false, error: "forbidden", message: "Branch-scoped station management permission is required.", requestId: id }, 403);
+    }
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", message: "Station driver invitations are not configured.", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const existing = await serviceClient.from("lpg_station_managed_driver_invites")
+      .select("id,status,expires_at").eq("station_branch_id", stationBranchId).eq("email", email).maybeSingle();
+    if (existing.error) return databaseError(existing.error, id);
+    if (existing.data?.status === "accepted") {
+      return jsonResponse({ ok: false, error: "already_registered", message: "This email has already accepted a Station Managed driver invitation for this branch.", requestId: id }, 409);
+    }
+    const inviteRedirectTo = Deno.env.get("AUTH_INVITE_REDIRECT_URL") ?? Deno.env.get("SITE_URL");
+    const invitation = await serviceClient.auth.admin.inviteUserByEmail(email, {
+      data: { full_name: displayName, station_managed_driver_invite: true },
+      ...(inviteRedirectTo ? { redirectTo: inviteRedirectTo } : {}),
+    });
+    if (invitation.error) {
+      return jsonResponse({ ok: false, error: "invitation_delivery_failed", message: invitation.error.message, requestId: id }, 400);
+    }
+    const saved = await serviceClient.from("lpg_station_managed_driver_invites").upsert({
+      station_branch_id: stationBranchId, email, display_name: displayName, phone,
+      invited_by: authResult.user.id, status: "pending", accepted_user_id: null,
+      accepted_at: null, expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      metadata: { source: "api-gateway", invitationUserId: invitation.data.user?.id ?? null },
+    }, { onConflict: "station_branch_id,email" }).select("id,status,expires_at").single();
+    if (saved.error) return databaseError(saved.error, id);
+    return jsonResponse({ ok: true, data: { id: saved.data.id, email, status: saved.data.status, expiresAt: saved.data.expires_at }, requestId: id });
   }
 
   if (routePath === "/health") {
