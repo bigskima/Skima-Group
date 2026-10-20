@@ -338,6 +338,19 @@ revoke all on function public.dispatch_pending_lpg_station_managed_orders(uuid) 
 grant execute on function public.dispatch_pending_lpg_station_managed_orders(uuid) to authenticated,service_role;
 grant execute on function public.read_lpg_station_managed_driver_access() to authenticated,service_role;
 
+-- Named acceptance/access RPCs let the authenticated invitation landing flow
+-- explicitly finalize an invite and then resolve the station-driver workspace.
+drop function if exists public.accept_lpg_station_managed_driver_invite();
+create or replace function public.accept_lpg_station_managed_driver_invite()
+returns uuid
+language sql
+volatile
+security definer
+set search_path=public,pg_temp
+as $accept_station_driver_invite$
+  select nullif(public.read_lpg_station_managed_driver_access()->>'stationDriverId','')::uuid;
+$accept_station_driver_invite$;
+
 -- Keep the legacy invitation RPC as a safe alias to the same confirmed-email flow.
 create or replace function public.accept_lpg_station_managed_driver_invitation()
 returns uuid
@@ -351,19 +364,6 @@ $accept_station_driver_invitation$;
 
 revoke all on function public.accept_lpg_station_managed_driver_invitation() from public,anon;
 grant execute on function public.accept_lpg_station_managed_driver_invitation() to authenticated,service_role;
-
--- Named acceptance/access RPCs let the authenticated invitation landing flow
--- explicitly finalize an invite and then resolve the station-driver workspace.
-drop function if exists public.accept_lpg_station_managed_driver_invite();
-create or replace function public.accept_lpg_station_managed_driver_invite()
-returns uuid
-language sql
-volatile
-security definer
-set search_path=public,pg_temp
-as $accept_station_driver_invite$
-  select nullif(public.read_lpg_station_managed_driver_access()->>'stationDriverId','')::uuid;
-$accept_station_driver_invite$;
 
 create or replace function public.read_lpg_station_managed_driver_invitation_access()
 returns jsonb
