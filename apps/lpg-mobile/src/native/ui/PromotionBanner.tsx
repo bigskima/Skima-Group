@@ -27,7 +27,7 @@ export function PromotionBanner({ audience = "customer" }: { audience?: "custome
     .filter((item) => item.placementKey === "mobile.home.promotion")
     .sort((left, right) => right.priority - left.priority);
 
-  const cardWidth = Math.min(Math.max(width - 56, 296), 604);
+  const cardWidth = Math.min(Math.max(width - 40, 312), 640);
   const pageWidth = cardWidth + 12;
   const scrollViewRef = useRef<ScrollView>(null);
   const rawPageRef = useRef(0);
@@ -185,7 +185,7 @@ function PromotionCard({ publication, width }: {
 const styles = StyleSheet.create({
   carousel: { gap: 9 },
   carouselContent: { gap: 12, paddingRight: spacing.sm },
-  banner: { minHeight: 118, overflow: "hidden", flexDirection: "row", alignItems: "center", gap: 12, padding: 16, borderRadius: 22 },
+  banner: { minHeight: 150, overflow: "hidden", flexDirection: "row", alignItems: "center", gap: 12, padding: 16, borderRadius: 22 },
   copy: { flex: 1, gap: 3 },
   title: { color: "white", fontSize: 17, lineHeight: 21, fontWeight: "900" },
   body: { color: "rgba(255,255,255,.70)", fontSize: 11, lineHeight: 15 },
