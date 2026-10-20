@@ -189,8 +189,8 @@ begin
 end;
 $station_managed_auto_dispatch$;
 
-drop trigger if exists trg_auto_assign_lpg_station_managed_order on public.lpg_refill_orders;
-create trigger trg_auto_assign_lpg_station_managed_order
+drop trigger if exists trg_auto_dispatch_lpg_station_managed_order on public.lpg_refill_orders;
+create trigger trg_auto_dispatch_lpg_station_managed_order
 after insert on public.lpg_refill_orders
 for each row execute function public.auto_assign_lpg_station_managed_order();
 
