@@ -745,45 +745,54 @@ $$;
 
 
 
--- Station-owned drivers can access only their own actively assigned orders.
-do $$
-declare function_sql text; old_block text; new_block text;
-begin
-  function_sql:=pg_get_functiondef('public.can_access_lpg_order(uuid)'::regprocedure);
-  old_block:='    or exists ('||E'\n'||
-    '      select 1 from public.lpg_refill_orders target_order'||E'\n'||
-    '      join public.lpg_station_branches station on station.id = target_order.station_branch_id'||E'\n'||
-    '      where target_order.id = target_lpg_order_id'||E'\n'||
-    '        and public.user_can_operate_lpg_station_branch(auth.uid(), station.id, ''lpg.orders.read'')'||E'\n'||
-    '    );';
-  new_block:='    or exists ('||E'\n'||
-    '      select 1 from public.lpg_refill_orders target_order'||E'\n'||
-    '      join public.lpg_station_branches station on station.id = target_order.station_branch_id'||E'\n'||
-    '      where target_order.id = target_lpg_order_id'||E'\n'||
-    '        and public.user_can_operate_lpg_station_branch(auth.uid(), station.id, ''lpg.orders.read'')'||E'\n'||
-    '    )'||E'\n'||
-    '    or exists ('||E'\n'||
-    '      select 1 from public.lpg_station_managed_driver_assignments assignment'||E'\n'||
-    '      join public.lpg_station_managed_drivers station_driver on station_driver.id=assignment.station_driver_id'||E'\n'||
-    '      where assignment.lpg_order_id=target_lpg_order_id'||E'\n'||
-    '        and station_driver.user_id=auth.uid() and station_driver.status=''active'''||E'\n'||
-    '        and assignment.status in (''assigned'',''accepted'',''en_route'',''delivered'')'||E'\n'||
-    '    );';
-  if position(old_block in function_sql)=0 then raise exception 'Station Managed order access patch could not locate station access branch'; end if;
-  function_sql:=replace(function_sql,old_block,new_block);
-  function_sql:=replace(
-    function_sql,
-    '(driver_record.user_id is distinct from auth.uid())',
-    '(driver_record.user_id is distinct from auth.uid() and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid()))'
-  );
-  function_sql:=replace(
-    function_sql,
-    'if not public.can_operate_lpg_station_branch(order_record.station_branch_id, ''lpg.stations.scan'')',
-    'if not public.can_operate_lpg_station_branch(order_record.station_branch_id, ''lpg.stations.scan'') and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())'
-  );
-  execute function_sql;
-end
-$$;
+-- Preserve every existing order-access path and add only the station driver's own assignment.
+-- Replacing this small SQL function avoids brittle text matching against pg_get_functiondef
+-- while retaining its existing SECURITY DEFINER/search_path contract.
+create or replace function public.can_access_lpg_order(target_lpg_order_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $station_managed_order_access$
+  select auth.role() = 'service_role'
+    or public.can_manage_lpg_operations()
+    or exists (
+      select 1
+      from public.lpg_refill_orders target_order
+      where target_order.id = target_lpg_order_id
+        and target_order.customer_user_id = auth.uid()
+    )
+    or exists (
+      select 1
+      from public.lpg_refill_orders target_order
+      join public.driver_profiles driver
+        on driver.id = target_order.driver_profile_id
+      where target_order.id = target_lpg_order_id
+        and driver.user_id = auth.uid()
+    )
+    or exists (
+      select 1
+      from public.lpg_refill_orders target_order
+      join public.lpg_station_branches station
+        on station.id = target_order.station_branch_id
+      where target_order.id = target_lpg_order_id
+        and public.user_can_operate_lpg_station_branch(
+          auth.uid(), station.id, 'lpg.orders.read'
+        )
+    )
+    or exists (
+      select 1
+      from public.lpg_station_managed_driver_assignments assignment
+      join public.lpg_station_managed_drivers station_driver
+        on station_driver.id = assignment.station_driver_id
+       and station_driver.station_branch_id = assignment.station_branch_id
+      where assignment.lpg_order_id = target_lpg_order_id
+        and station_driver.user_id = auth.uid()
+        and station_driver.status = 'active'
+        and assignment.status in ('assigned', 'accepted', 'en_route', 'delivered')
+    );
+$station_managed_order_access$;
 
 -- Allow an authenticated Station Managed driver to use only the assigned-driver
 -- lifecycle actions for their own active assignment. This does not create driver_profiles.
