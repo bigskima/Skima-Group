@@ -154,12 +154,20 @@ begin
 
   if not found then
     -- Keep the paid order in the station's pending queue until a driver is invited
-    -- and accepts. Never route it to an independent driver as a fallback.
-    update public.lpg_refill_orders
-    set status=case when status in ('payment_reserved','matching_station','matching_driver') then 'matching_driver' else status end,
-        metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object('stationManagedDispatch','waiting_for_station_driver'),
-        updated_at=timezone('utc',now())
-    where id=new.id;
+    -- and accepts. Never route it to an independent driver as a fallback. Do not
+    -- write status=matching_driver again from its own UPDATE trigger.
+    if new.status<>'matching_driver' then
+      update public.lpg_refill_orders
+      set status='matching_driver',
+          metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object('stationManagedDispatch','waiting_for_station_driver'),
+          updated_at=timezone('utc',now())
+      where id=new.id;
+    else
+      update public.lpg_refill_orders
+      set metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object('stationManagedDispatch','waiting_for_station_driver'),
+          updated_at=timezone('utc',now())
+      where id=new.id;
+    end if;
     return new;
   end if;
 
