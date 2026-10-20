@@ -42,7 +42,7 @@ export function StationManagedFulfillmentScreen() {
   const [deliveryFee, setDeliveryFee] = useState("0");
   const [compensationMode, setCompensationMode] = useState<CompensationMode>("in_app_plan");
   const [compensationAmount, setCompensationAmount] = useState("0");
-  const [driverUserId, setDriverUserId] = useState("");
+  const [driverEmail, setDriverEmail] = useState("");
   const [driverName, setDriverName] = useState("");
   const [driverPhone, setDriverPhone] = useState("");
   const [selectedDriverId, setSelectedDriverId] = useState("");
@@ -114,16 +114,10 @@ export function StationManagedFulfillmentScreen() {
   const registerMutation = useMutation({
     mutationFn: async () => {
       if (!branchId) throw new Error("Your station branch is not available.");
-      if (!driverUserId.trim() || !driverName.trim()) throw new Error("Choose the driver’s existing SKIMA account and enter their full name.");
-      return runRpc("register_lpg_station_managed_driver", {
-        target_station_branch_id: branchId,
-        target_user_id: driverUserId.trim(),
-        target_display_name: driverName.trim(),
-        target_phone: driverPhone.trim() || null,
-        target_metadata: { source: "station-managed-settings-screen" },
-      });
+      if (!driverEmail.trim() || !/^\S+@\S+\.\S+$/.test(driverEmail.trim())) throw new Error("Enter a valid driver email address.");
+      throw new Error("Email invitations need the station-driver invitation service deployed first. No driver was added; do not use a profile ID as a workaround.");
     },
-    onSuccess: async () => { setDriverUserId(""); setDriverName(""); setDriverPhone(""); setErrorMessage(null); await workspace.refetch(); },
+    onSuccess: async () => { setDriverEmail(""); setDriverName(""); setDriverPhone(""); setErrorMessage(null); await workspace.refetch(); },
     onError: (error) => setErrorMessage(friendlyError(error, "Station driver could not be registered.")),
   });
   const assignMutation = useMutation({
@@ -228,10 +222,10 @@ export function StationManagedFulfillmentScreen() {
 
           <Section title="4. Add a driver to this station" palette={palette} expanded={expandedSection === "4. Add a station driver"} onPress={() => setExpandedSection(expandedSection === "4. Add a station driver" ? "" : "4. Add a station driver")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Use the existing SKIMA profile ID for the driver. This registration does not create a new login. A profile search is not available in this version, so do not guess an ID.</Text>
-            <Field label="Existing SKIMA profile ID" value={driverUserId} onChangeText={setDriverUserId} palette={palette} autoCapitalize="none" />
+            <Field label="Driver email address" value={driverEmail} onChangeText={setDriverEmail} palette={palette} autoCapitalize="none" />
             <Field label="Driver full name" value={driverName} onChangeText={setDriverName} palette={palette} />
             <Field label="Phone (optional)" value={driverPhone} onChangeText={setDriverPhone} palette={palette} keyboardType="phone-pad" />
-            <AppButton label="Register station driver" fullWidth loading={registerMutation.isPending} disabled={!driverUserId.trim() || !driverName.trim()} onPress={() => void registerMutation.mutateAsync()} />
+            <AppButton label="Invite station driver" fullWidth loading={registerMutation.isPending} disabled={!driverUserId.trim() || !driverName.trim()} onPress={() => void registerMutation.mutateAsync()} />
             <Text style={{ color: palette.muted, fontSize: 12 }}>Station drivers must not already have a SKIMA Managed or independent driver profile.</Text>
           </Section>
 
