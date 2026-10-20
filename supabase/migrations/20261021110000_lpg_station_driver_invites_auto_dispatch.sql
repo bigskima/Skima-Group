@@ -1,5 +1,12 @@
 begin;
 
+-- Retire the earlier draft dispatcher before installing the single canonical trigger.
+drop trigger if exists trg_lpg_station_managed_auto_dispatch on public.lpg_refill_orders;
+drop function if exists public.trigger_dispatch_lpg_station_managed_order();
+drop function if exists public.dispatch_lpg_station_managed_order(uuid);
+drop function if exists public.dispatch_pending_lpg_station_managed_orders(uuid);
+drop function if exists public.accept_lpg_station_managed_driver_invitation();
+
 -- Station-owned invitations are separate from independent driver_profiles.
 create table if not exists public.lpg_station_managed_driver_invites (
   id uuid primary key default gen_random_uuid(),
