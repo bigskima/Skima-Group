@@ -38,6 +38,10 @@ export function StationManagedDriverJobsScreen() {
   const jobs = useQuery({
     queryKey: ["station-managed-driver-jobs"],
     queryFn: async (): Promise<ManagedJob[]> => {
+      // Accept a pending email invitation on first authenticated entry. The RPC is
+      // idempotent for drivers who have already completed acceptance.
+      const acceptance = await supabase.rpc("accept_lpg_station_managed_driver_invitation");
+      if (acceptance.error) throw acceptance.error;
       const result = await supabase.rpc("read_lpg_station_managed_driver_jobs", { target_limit: 50 });
       if (result.error) throw result.error;
       if (!Array.isArray(result.data)) throw new Error("Station delivery jobs were returned in an unexpected format.");
