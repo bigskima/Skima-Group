@@ -17,6 +17,7 @@ import {
   WalletCards,
   Zap,
 } from "lucide-react-native";
+import { useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import {
   Pressable,
@@ -25,7 +26,6 @@ import {
   Text,
   View,
   useWindowDimensions,
-  useState,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { domainQueries, useEntityMediaLinks } from "../api/domains";
