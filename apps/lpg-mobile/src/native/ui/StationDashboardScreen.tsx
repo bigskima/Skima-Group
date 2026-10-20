@@ -153,7 +153,7 @@ export function StationDashboardScreen() {
             <View style={styles.headingRow}>
               <View>
                 <Text style={[styles.eyebrow, { color: palette.brand }]}>TODAY AT RECEPTION</Text>
-                <Text style={[styles.heading, { color: palette.ink }]}>Verify, fill and release safely.</Text>
+                <Text style={[styles.heading, { color: palette.ink }]}>Reception tasks</Text>
               </View>
             </View>
 
@@ -161,20 +161,20 @@ export function StationDashboardScreen() {
               <OperationAction
                 primary
                 icon={<ShieldCheck color="#FFFFFF" size={24} />}
-                title="Verify arrivals"
-                description="Confirm the driver and cylinder after the driver scans at reception."
+                title="Verify arrival"
+                description="Check the driver and cylinder."
                 onPress={() => router.push((currentId ? `/(station)/job/${currentId}` : "/(station)/jobs") as never)}
               />
               <OperationAction
                 icon={<CircleCheck color={palette.brand} size={24} />}
-                title="Safety & refill"
-                description="Complete the safety check, then enter the kilograms filled."
+                title="Safety and refill"
+                description="Run the safety check and record kg filled."
                 onPress={() => router.push((processingId ? `/(station)/job/${processingId}` : "/(station)/jobs") as never)}
               />
               <OperationAction
                 icon={<PackageCheck color={palette.brand} size={24} />}
-                title="Station Managed delivery"
-                description="Set your delivery fee, manage your own drivers and record station-held compensation."
+                title="Your drivers"
+                description="Manage delivery prices, station drivers and payment records."
                 onPress={() => router.push("/(station)/managed-fulfillment" as never)}
               />
             </GuideTarget>
@@ -396,14 +396,14 @@ const styles = StyleSheet.create({
   heroDivider: { width: StyleSheet.hairlineWidth, height: 36, marginHorizontal: spacing.lg, backgroundColor: "rgba(255,255,255,.22)" },
   headingRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   eyebrow: { ...typography.eyebrow, fontSize: 8 },
-  heading: { maxWidth: 320, fontSize: 22, lineHeight: 27, fontWeight: "900", letterSpacing: -0.45, marginTop: 4 },
-  actionGrid: { flexDirection: "row", gap: spacing.sm },
-  action: { flex: 1, minHeight: 205, justifyContent: "space-between", borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
-  actionIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  heading: { maxWidth: 320, fontSize: 19, lineHeight: 24, fontWeight: "800", letterSpacing: -0.35, marginTop: 4 },
+  actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  action: { flex: 1, minWidth: 150, minHeight: 138, justifyContent: "space-between", borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.sm + 2 },
+  actionIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   actionCopy: { gap: 5 },
-  actionTitle: { fontSize: 17, lineHeight: 21, fontWeight: "900" },
-  actionBody: { ...typography.caption, fontSize: 10, lineHeight: 15 },
-  actionArrow: { width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  actionTitle: { fontSize: 14, lineHeight: 18, fontWeight: "800" },
+  actionBody: { ...typography.caption, fontSize: 10, lineHeight: 14 },
+  actionArrow: { width: 28, height: 28, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   statusGrid: { flexDirection: "row", gap: spacing.sm },
   statusMetric: { flex: 1, minWidth: 0, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md, gap: 3 },
   statusValue: { fontSize: 20, fontWeight: "900" },
