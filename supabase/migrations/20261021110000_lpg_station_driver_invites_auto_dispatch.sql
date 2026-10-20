@@ -336,13 +336,13 @@ grant execute on function public.read_lpg_station_managed_driver_access() to aut
 -- explicitly finalize an invite and then resolve the station-driver workspace.
 drop function if exists public.accept_lpg_station_managed_driver_invite();
 create or replace function public.accept_lpg_station_managed_driver_invite()
-returns jsonb
+returns uuid
 language sql
 volatile
 security definer
 set search_path=public,pg_temp
 as $accept_station_driver_invite$
-  select public.read_lpg_station_managed_driver_access();
+  select nullif(public.read_lpg_station_managed_driver_access()->>'stationDriverId','')::uuid;
 $accept_station_driver_invite$;
 
 create or replace function public.read_lpg_station_managed_driver_invitation_access()
