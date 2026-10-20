@@ -60,6 +60,9 @@ begin
     where email=current_email and status='pending' and expires_at>timezone('utc',now())
     order by created_at desc limit 1 for update;
     if found then
+      if exists(select 1 from public.driver_profiles where user_id=auth.uid()) then
+        raise exception using errcode='55000',message='an independent or SKIMA Managed driver profile cannot accept a Station Managed invitation';
+      end if;
       if exists(select 1 from public.lpg_station_managed_drivers where user_id=auth.uid() and status='active') then
         raise exception using errcode='23505',message='this account already belongs to an active Station Managed driver';
       end if;
