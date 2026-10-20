@@ -247,7 +247,11 @@ export function StationManagedFulfillmentScreen() {
           </Section>
 
           <Section title="6. Record the driver agreement" palette={palette} expanded={expandedSection === "6. Record driver agreement"} onPress={() => setExpandedSection(expandedSection === "6. Record driver agreement" ? "" : "6. Record driver agreement")}>
-            <Text style={{ color: palette.muted, fontSize: 13 }}>{selectedDriver ? `Selected driver: ${selectedDriver.displayName}` : "Select a station driver in the assignment section above."}</Text>
+            <Text style={{ color: palette.muted, fontSize: 13 }}>Select which station driver's agreement or payment record you want to manage. This selection does not assign individual orders.</Text>
+            {drivers.map((driver) => (
+              <Choice key={driver.id} label={driver.displayName} active={selectedDriverId === driver.id} onPress={() => setSelectedDriverId(driver.id)} palette={palette} />
+            ))}
+            <Text style={{ color: palette.muted, fontSize: 13 }}>{selectedDriver ? `Selected driver: ${selectedDriver.displayName}` : "Choose an active station driver below."}</Text>
             <View style={styles.row}>
               <Choice label="In-app plan" active={agreementMode === "in_app_plan"} onPress={() => setAgreementMode("in_app_plan")} palette={palette} />
               <Choice label="Offline" active={agreementMode === "offline"} onPress={() => setAgreementMode("offline")} palette={palette} />
