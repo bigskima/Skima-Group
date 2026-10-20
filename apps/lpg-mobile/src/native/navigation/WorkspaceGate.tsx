@@ -33,7 +33,7 @@ export function WorkspaceGate({
     }
     let active = true;
     setStationInviteChecked(false);
-    void session.supabase.rpc("accept_lpg_station_managed_driver_invite").then(async ({ error }) => {
+    void Promise.resolve(session.supabase.rpc("accept_lpg_station_managed_driver_invite")).then(async ({ error }) => {
       if (!active) return;
       // No matching invitation is expected for users who already have workspace access.
       if (!error) await access.refetch();
