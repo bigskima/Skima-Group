@@ -229,6 +229,7 @@ const ROUTES = new Set([
   "/runtime/organization-user-roles",
   "/runtime/organization-invitations",
   "/runtime/station-driver-invitations",
+  "/runtime/station-driver-invitations/accept",
   "/runtime/organization-invitations/accept",
   "/runtime/organization-invitations/decline",
   "/runtime/organization-staff/directory",
@@ -480,6 +481,12 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }, { onConflict: "station_branch_id,email" }).select("id,status,expires_at").single();
     if (saved.error) return databaseError(saved.error, id);
     return jsonResponse({ ok: true, data: { id: saved.data.id, email, status: saved.data.status, expiresAt: saved.data.expires_at }, requestId: id });
+  }
+
+  if (routePath === "/runtime/station-driver-invitations/accept" && request.method === "POST") {
+    const result = await supabase.rpc("accept_lpg_station_managed_driver_invitation");
+    if (result.error) return databaseError(result.error, id);
+    return jsonResponse({ ok: true, data: { stationDriverId: result.data }, requestId: id });
   }
 
   if (routePath === "/health") {
