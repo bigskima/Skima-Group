@@ -130,7 +130,7 @@ declare
 begin
   if new.fulfillment_channel<>'marketplace' or new.fulfillment_mode<>'station_managed'
     or new.station_branch_id is null
-    or new.status not in ('payment_reserved','matching_station','matching_driver') then
+    or new.status not in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route') then
     return new;
   end if;
 
@@ -233,7 +233,7 @@ begin
     select o.* from public.lpg_refill_orders o
     where o.station_branch_id=target_station_branch_id
       and o.fulfillment_channel='marketplace' and o.fulfillment_mode='station_managed'
-      and o.status in ('payment_reserved','matching_station','matching_driver')
+      and o.status in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route')
       and not exists(select 1 from public.lpg_station_managed_driver_assignments a where a.lpg_order_id=o.id and a.status<>'cancelled')
     order by o.created_at,o.id
     for update skip locked
@@ -256,7 +256,7 @@ declare order_record public.lpg_refill_orders%rowtype; settings_enabled boolean;
 begin
   select * into order_record from public.lpg_refill_orders where id=target_order_id for update;
   if not found or order_record.fulfillment_channel<>'marketplace' or order_record.fulfillment_mode<>'station_managed'
-    or order_record.status not in ('payment_reserved','matching_station','matching_driver') then return null; end if;
+    or order_record.status not in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route') then return null; end if;
   select station_managed_enabled into settings_enabled from public.lpg_station_fulfillment_settings where station_branch_id=order_record.station_branch_id;
   if coalesce(settings_enabled,false) is not true then return null; end if;
   perform pg_advisory_xact_lock(hashtextextended(order_record.station_branch_id::text,0));
