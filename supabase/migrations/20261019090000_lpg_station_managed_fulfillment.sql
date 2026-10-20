@@ -857,10 +857,10 @@ do $$
 declare function_sql text; old_block text; new_block text;
 begin
   function_sql:=pg_get_functiondef('public.process_lpg_order_lifecycle(integer)'::regprocedure);
-  old_block:='where target_order.status=''payment_reserved'' and not (target_order.metadata ? ''dispatch_request_id'')';
-  new_block:='where target_order.status=''payment_reserved'''||E'\n'||
-    '      and target_order.fulfillment_mode<>''station_managed'''||E'\n'||
-    '      and not (target_order.metadata ? ''dispatch_request_id'')';
+  -- Match only the stable status predicate; formatting of the legacy worker query
+  -- differs between migration history and pg_get_functiondef output.
+  old_block:='where target_order.status=''payment_reserved''';
+  new_block:='where target_order.status=''payment_reserved'' and target_order.fulfillment_mode<>''station_managed''';
   if position(old_block in function_sql)=0 then raise exception 'Station Managed lifecycle guard could not locate automatic dispatch query'; end if;
   execute replace(function_sql,old_block,new_block);
 end
