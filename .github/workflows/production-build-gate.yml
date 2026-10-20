@@ -129,20 +129,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # `supabase start` applies migrations while booting the local database.
           # This legacy data-only retirement migration requires an authenticated
           # pricing administrator. A blank local database has no admin identity.
-          # Skip only that legacy data-retirement update for the schema smoke test.
-          # All schema, function, policy and Station Managed migrations remain enabled.
-          # The trap restores the tracked migration file even when Supabase startup fails.
+          # Skip only this legacy data update during isolated schema validation.
+          # All other schema, function, policy and Station Managed migrations run.
           legacy_migration="supabase/migrations/20260813044000_retire_legacy_lpg_commercial_rates.sql"
           backup_path="$(mktemp)"
           mv "$legacy_migration" "$backup_path"
           restore_legacy_migration() {
-            mv "$backup_path" "$legacy_migration"
+            if [ -f "$backup_path" ]; then
+              mv "$backup_path" "$legacy_migration"
+            fi
           }
           trap restore_legacy_migration EXIT
           supabase start
+          # Startup only launches the local stack; reset explicitly applies every
+          # remaining migration to a clean ephemeral database. Never targets remote.
+          supabase db reset --local --no-seed
       - name: Stop ephemeral local Supabase
         if: always()
         run: supabase stop --no-backup
