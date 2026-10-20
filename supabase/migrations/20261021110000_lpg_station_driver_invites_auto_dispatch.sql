@@ -56,6 +56,9 @@ begin
   where user_id=auth.uid() and status='active' limit 1;
 
   if not found and current_email<>'' and current_email_verified then
+    if exists(select 1 from public.driver_profiles where user_id=auth.uid()) then
+      raise exception using errcode='55000',message='an independent or SKIMA Managed driver account cannot accept a Station Managed invitation';
+    end if;
     select * into invite_record from public.lpg_station_managed_driver_invites
     where email=current_email and status='pending' and expires_at>timezone('utc',now())
     order by created_at desc limit 1 for update;
@@ -206,6 +209,9 @@ end;
 $station_managed_auto_dispatch$;
 
 drop trigger if exists trg_auto_dispatch_lpg_station_managed_order on public.lpg_refill_orders;
+-- Replace the earlier dispatcher, whose nested status update could re-enter itself.
+drop trigger if exists trg_lpg_station_managed_auto_dispatch on public.lpg_refill_orders;
+drop function if exists public.trigger_dispatch_lpg_station_managed_order();
 create trigger trg_auto_dispatch_lpg_station_managed_order
 after insert or update of status on public.lpg_refill_orders
 for each row execute function public.auto_assign_lpg_station_managed_order();
@@ -331,6 +337,20 @@ revoke all on function public.auto_assign_lpg_station_managed_order_for_id(uuid)
 revoke all on function public.dispatch_pending_lpg_station_managed_orders(uuid) from public,anon;
 grant execute on function public.dispatch_pending_lpg_station_managed_orders(uuid) to authenticated,service_role;
 grant execute on function public.read_lpg_station_managed_driver_access() to authenticated,service_role;
+
+-- Keep the legacy invitation RPC as a safe alias to the same confirmed-email flow.
+create or replace function public.accept_lpg_station_managed_driver_invitation()
+returns uuid
+language sql
+volatile
+security definer
+set search_path=public,pg_temp
+as $accept_station_driver_invitation$
+  select public.accept_lpg_station_managed_driver_invite();
+$accept_station_driver_invitation$;
+
+revoke all on function public.accept_lpg_station_managed_driver_invitation() from public,anon;
+grant execute on function public.accept_lpg_station_managed_driver_invitation() to authenticated,service_role;
 
 -- Named acceptance/access RPCs let the authenticated invitation landing flow
 -- explicitly finalize an invite and then resolve the station-driver workspace.
