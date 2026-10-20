@@ -100,7 +100,7 @@ begin
  ) values (
    new.id,new.station_branch_id,chosen_driver.id,chosen_driver.created_by,'auto:'||new.id::text,
    jsonb_build_object('automaticDispatch',true,'source','order_insert_trigger','policy','least_loaded')
- ) on conflict(lpg_order_id) do update set station_driver_id=excluded.station_driver_id,status='assigned',assigned_by=excluded.assigned_by,assigned_at=now(),completed_at=null,metadata=excluded.metadata where public.lpg_station_managed_driver_assignments.status='cancelled' returning id into assignment_id;
+ ) on conflict(lpg_order_id) do update set station_driver_id=excluded.station_driver_id,status='assigned',assigned_by=excluded.assigned_by,assigned_at=now(),completed_at=null,metadata=excluded.metadata where lpg_station_managed_driver_assignments.status='cancelled' returning id into assignment_id;
  if assignment_id is not null then
    update public.lpg_refill_orders set driver_profile_id=null,vehicle_id=null,driver_commission_amount=0,
      status='driver_offered',assignment_status='driver_assigned',updated_at=now(),
