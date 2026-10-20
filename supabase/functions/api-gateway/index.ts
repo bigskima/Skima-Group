@@ -443,7 +443,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const email = requireString(value.email, "email").trim().toLowerCase();
     const displayName = requireString(value.displayName, "displayName").trim();
     const phone = stringOrNull(value.phone);
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) throw new RequestValidationError("Enter a valid driver email address.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new RequestValidationError("Enter a valid driver email address.");
     if (displayName.length < 2 || displayName.length > 160) throw new RequestValidationError("Driver name must contain 2 to 160 characters.");
     const permission = await supabase.rpc("can_operate_lpg_station_branch", {
       target_station_branch_id: stationBranchId,
