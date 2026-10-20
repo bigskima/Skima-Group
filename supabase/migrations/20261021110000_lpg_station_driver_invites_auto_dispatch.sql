@@ -77,22 +77,36 @@ end $$;
 
 create or replace function public.auto_dispatch_lpg_station_managed_order()
 returns trigger language plpgsql security definer set search_path=public,pg_temp as $$
-declare chosen_driver public.lpg_station_managed_drivers%rowtype;
+declare chosen_driver public.lpg_station_managed_drivers%rowtype; assignment_id uuid;
 begin
  if new.fulfillment_mode<>'station_managed' or new.fulfillment_channel<>'marketplace' or new.station_branch_id is null then return new; end if;
- if new.status not in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route') then return new; end if;
+ if new.status not in ('payment_reserved','matching_station','matching_driver','driver_offered') then return new; end if;
+ if coalesce(new.metadata->>'stationManagedAutoDispatch','false')='true' then return new; end if;
  if not exists(select 1 from public.lpg_station_fulfillment_settings s where s.station_branch_id=new.station_branch_id and s.station_managed_enabled) then return new; end if;
  if exists(select 1 from public.lpg_station_managed_driver_assignments a where a.lpg_order_id=new.id and a.status<>'cancelled') then return new; end if;
  select d.* into chosen_driver from public.lpg_station_managed_drivers d
  where d.station_branch_id=new.station_branch_id and d.status='active'
- order by (select count(*) from public.lpg_station_managed_driver_assignments a where a.station_driver_id=d.id and a.status in ('assigned','accepted','en_route')), d.created_at, d.id
- limit 1;
+ order by
+   (select count(*) from public.lpg_station_managed_driver_assignments a where a.station_driver_id=d.id and a.status in ('assigned','accepted','en_route')),
+   (select max(a.assigned_at) from public.lpg_station_managed_driver_assignments a where a.station_driver_id=d.id),
+   d.created_at,d.id
+ limit 1 for update skip locked;
  if not found then return new; end if;
- insert into public.lpg_station_managed_driver_assignments(lpg_order_id,station_branch_id,station_driver_id,assigned_by,idempotency_key,metadata)
- values(new.id,new.station_branch_id,chosen_driver.id,chosen_driver.created_by,'auto:'||new.id::text,jsonb_build_object('automaticDispatch',true,'source','order_insert_trigger'))
- on conflict(lpg_order_id) do nothing;
- if found then
-   update public.lpg_refill_orders set driver_profile_id=null,vehicle_id=null,driver_commission_amount=0,status='driver_offered',assignment_status='driver_assigned',updated_at=now(),metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object('stationManagedDriverId',chosen_driver.id,'stationManagedDriverUserId',chosen_driver.user_id,'stationManagedAutoDispatch',true) where id=new.id;
+ insert into public.lpg_station_managed_driver_assignments(
+   lpg_order_id,station_branch_id,station_driver_id,assigned_by,idempotency_key,metadata
+ ) values (
+   new.id,new.station_branch_id,chosen_driver.id,chosen_driver.created_by,'auto:'||new.id::text,
+   jsonb_build_object('automaticDispatch',true,'source','order_insert_trigger','policy','least_loaded')
+ ) on conflict(lpg_order_id) do nothing returning id into assignment_id;
+ if assignment_id is not null then
+   update public.lpg_refill_orders set driver_profile_id=null,vehicle_id=null,driver_commission_amount=0,
+     status='driver_offered',assignment_status='driver_assigned',updated_at=now(),
+     metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object(
+       'stationManagedDriverId',chosen_driver.id,
+       'stationManagedDriverUserId',chosen_driver.user_id,
+       'stationManagedAutoDispatch',true
+     )
+   where id=new.id;
  end if;
  return new;
 end $$;
