@@ -124,7 +124,7 @@ declare
 begin
   if new.fulfillment_channel<>'marketplace' or new.fulfillment_mode<>'station_managed'
     or new.station_branch_id is null
-    or new.status in ('cancelled','failed','refunded','delivered','completed') then
+    or new.status not in ('payment_reserved','matching_station','matching_driver') then
     return new;
   end if;
 
@@ -196,7 +196,7 @@ $station_managed_auto_dispatch$;
 
 drop trigger if exists trg_auto_dispatch_lpg_station_managed_order on public.lpg_refill_orders;
 create trigger trg_auto_dispatch_lpg_station_managed_order
-after insert on public.lpg_refill_orders
+after insert or update of status on public.lpg_refill_orders
 for each row execute function public.auto_assign_lpg_station_managed_order();
 
 -- A newly accepted station driver also drains pending Station Managed orders
@@ -238,7 +238,8 @@ as $dispatch_one_station_order$
 declare order_record public.lpg_refill_orders%rowtype; settings_enabled boolean; driver_record public.lpg_station_managed_drivers%rowtype; result_id uuid; auto_key text;
 begin
   select * into order_record from public.lpg_refill_orders where id=target_order_id for update;
-  if not found or order_record.fulfillment_channel<>'marketplace' or order_record.fulfillment_mode<>'station_managed' then return null; end if;
+  if not found or order_record.fulfillment_channel<>'marketplace' or order_record.fulfillment_mode<>'station_managed'
+    or order_record.status not in ('payment_reserved','matching_station','matching_driver') then return null; end if;
   select station_managed_enabled into settings_enabled from public.lpg_station_fulfillment_settings where station_branch_id=order_record.station_branch_id;
   if coalesce(settings_enabled,false) is not true then return null; end if;
   perform pg_advisory_xact_lock(hashtextextended(order_record.station_branch_id::text,0));
