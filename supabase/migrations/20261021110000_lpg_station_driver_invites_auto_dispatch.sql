@@ -99,7 +99,7 @@ begin
       where pending_order.station_branch_id=driver_record.station_branch_id
         and pending_order.fulfillment_channel='marketplace'
         and pending_order.fulfillment_mode='station_managed'
-        and pending_order.status in ('payment_reserved','matching_station','matching_driver')
+        and pending_order.status in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route')
         and not exists (
           select 1 from public.lpg_station_managed_driver_assignments assignment
           where assignment.lpg_order_id=pending_order.id and assignment.status<>'cancelled'
@@ -137,7 +137,7 @@ declare
 begin
   if new.fulfillment_channel<>'marketplace' or new.fulfillment_mode<>'station_managed'
     or new.station_branch_id is null
-    or new.status not in ('payment_reserved','matching_station','matching_driver') then
+    or new.status not in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route') then
     return new;
   end if;
 
@@ -191,12 +191,16 @@ begin
     new.id,new.station_branch_id,driver_record.id,driver_record.created_by,auto_key,
     jsonb_build_object('source','automatic_station_dispatch','policy','least_active_assignments')
   )
-  on conflict (lpg_order_id) do nothing
+  on conflict (lpg_order_id) do update
+    set station_driver_id=excluded.station_driver_id,status='assigned',
+        assigned_at=timezone('utc',now()),assigned_by=excluded.assigned_by,
+        completed_at=null,metadata=excluded.metadata
+    where public.lpg_station_managed_driver_assignments.status='cancelled'
   returning id into assignment_id;
 
   if assignment_id is not null then
     update public.lpg_refill_orders
-    set driver_profile_id=null,vehicle_id=null,status='driver_offered',
+    set driver_profile_id=null,vehicle_id=null,driver_commission_amount=0,status='driver_offered',
         assignment_status='driver_assigned',updated_at=timezone('utc',now()),
         metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object(
           'stationManagedDriverId',driver_record.id,
@@ -231,7 +235,7 @@ language plpgsql
 security definer
 set search_path=public,pg_temp
 as $dispatch_pending_station_orders$
-declare order_record public.lpg_refill_orders%rowtype; dispatched_count integer:=0;
+declare order_record public.lpg_refill_orders%rowtype; dispatched_count integer:=0; assigned_id uuid;
 begin
   if auth.uid() is null or not public.can_operate_lpg_station_branch(target_station_branch_id,'lpg.stations.manage') then
     raise exception using errcode='42501',message='branch-scoped station management permission is required';
@@ -240,13 +244,13 @@ begin
     select o.* from public.lpg_refill_orders o
     where o.station_branch_id=target_station_branch_id
       and o.fulfillment_channel='marketplace' and o.fulfillment_mode='station_managed'
-      and o.status in ('payment_reserved','matching_station','matching_driver')
+      and o.status in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route')
       and not exists(select 1 from public.lpg_station_managed_driver_assignments a where a.lpg_order_id=o.id and a.status<>'cancelled')
     order by o.created_at,o.id
     for update skip locked
   loop
-    perform public.auto_assign_lpg_station_managed_order_for_id(order_record.id);
-    dispatched_count:=dispatched_count+1;
+    assigned_id:=public.auto_assign_lpg_station_managed_order_for_id(order_record.id);
+    if assigned_id is not null then dispatched_count:=dispatched_count+1; end if;
   end loop;
   return dispatched_count;
 end;
@@ -263,7 +267,7 @@ declare order_record public.lpg_refill_orders%rowtype; settings_enabled boolean;
 begin
   select * into order_record from public.lpg_refill_orders where id=target_order_id for update;
   if not found or order_record.fulfillment_channel<>'marketplace' or order_record.fulfillment_mode<>'station_managed'
-    or order_record.status not in ('payment_reserved','matching_station','matching_driver') then return null; end if;
+    or order_record.status not in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route') then return null; end if;
   select station_managed_enabled into settings_enabled from public.lpg_station_fulfillment_settings where station_branch_id=order_record.station_branch_id;
   if coalesce(settings_enabled,false) is not true then return null; end if;
   perform pg_advisory_xact_lock(hashtextextended(order_record.station_branch_id::text,0));
@@ -276,9 +280,12 @@ begin
   auto_key:='station-managed-auto:'||order_record.id::text;
   insert into public.lpg_station_managed_driver_assignments(lpg_order_id,station_branch_id,station_driver_id,assigned_by,idempotency_key,metadata)
   values(order_record.id,order_record.station_branch_id,driver_record.id,driver_record.created_by,auto_key,jsonb_build_object('source','automatic_station_dispatch','policy','least_active_assignments'))
-  on conflict(lpg_order_id) do nothing returning id into result_id;
+  on conflict(lpg_order_id) do update set station_driver_id=excluded.station_driver_id,status='assigned',
+    assigned_at=timezone('utc',now()),assigned_by=excluded.assigned_by,completed_at=null,metadata=excluded.metadata
+    where public.lpg_station_managed_driver_assignments.status='cancelled'
+  returning id into result_id;
   if result_id is null then return null; end if;
-  update public.lpg_refill_orders set driver_profile_id=null,vehicle_id=null,status='driver_offered',assignment_status='driver_assigned',
+  update public.lpg_refill_orders set driver_profile_id=null,vehicle_id=null,driver_commission_amount=0,status='driver_offered',assignment_status='driver_assigned',
     updated_at=timezone('utc',now()),metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object('stationManagedDriverId',driver_record.id,'stationManagedDriverUserId',driver_record.user_id,'stationManagedDispatch','automatically_assigned')
   where id=order_record.id;
   perform public.record_lpg_order_event(order_record.id,'lpg.station_managed.driver_assigned',order_record.status,'driver_offered',auto_key||':event',
@@ -302,7 +309,7 @@ begin
     select o.id from public.lpg_refill_orders o
     where o.station_branch_id=target_station_branch_id
       and o.fulfillment_channel='marketplace' and o.fulfillment_mode='station_managed'
-      and o.status in ('payment_reserved','matching_station','matching_driver')
+      and o.status in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route')
       and not exists(select 1 from public.lpg_station_managed_driver_assignments a where a.lpg_order_id=o.id and a.status<>'cancelled')
     order by o.created_at,o.id
   loop
