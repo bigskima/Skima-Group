@@ -127,19 +127,6 @@ export function StationManagedFulfillmentScreen() {
     onSuccess: async () => { setDriverEmail(""); setDriverName(""); setDriverPhone(""); setErrorMessage(null); await workspace.refetch(); },
     onError: (error) => setErrorMessage(friendlyError(error, "Station driver invitation could not be sent.")),
   });
-  const assignMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedOrderId || !selectedDriverId) throw new Error("Choose an order and an active station driver.");
-      return runRpc("assign_lpg_station_managed_driver", {
-        target_lpg_order_id: selectedOrderId,
-        target_station_driver_id: selectedDriverId,
-        target_idempotency_key: idempotencyKey("station-managed-assignment", selectedOrderId),
-        target_metadata: { source: "station-managed-settings-screen" },
-      });
-    },
-    onSuccess: async () => { setErrorMessage(null); setSelectedOrderId(""); await workspace.refetch(); },
-    onError: (error) => setErrorMessage(friendlyError(error, "Station driver could not be assigned.")),
-  });
   const agreementMutation = useMutation({
     mutationFn: async () => {
       if (!selectedDriverId) throw new Error("Choose a station driver first.");
