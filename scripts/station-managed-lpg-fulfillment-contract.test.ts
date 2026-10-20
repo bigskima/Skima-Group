@@ -1,4 +1,5 @@
 const migration = await Deno.readTextFile("supabase/migrations/20261019090000_lpg_station_managed_fulfillment.sql");
+const aclMigration = await Deno.readTextFile("supabase/migrations/20261020142000_lpg_station_managed_acl_hardening.sql");
 const customer = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx");
 const station = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedFulfillmentScreen.tsx");
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
@@ -67,6 +68,14 @@ Deno.test("Admin dashboard has read-only Station Managed oversight", () => {
   requireText(admin, "These are station-entered confirmations only. SKIMA did not execute these driver payments.", "admin payment disclaimer");
   requireText(admin, "Review drivers, assignments, agreements and payment confirmations", "admin record review");
   requireText(adminRouter, "/partners/stations/managed-fulfillment", "admin route");
+});
+
+Deno.test("Station Managed RPCs do not inherit anonymous execution", () => {
+  requireText(aclMigration, "revoke all on function public.configure_lpg_station_managed_fulfillment", "anonymous configuration denied");
+  requireText(aclMigration, "revoke all on function public.record_lpg_station_managed_driver_payment", "anonymous payment-record write denied");
+  requireText(aclMigration, "revoke all on function public.apply_lpg_station_managed_quote_policy() from public, anon, authenticated", "quote policy trigger helper is not an API");
+  requireText(aclMigration, "revoke all on function public.copy_lpg_station_fulfillment_snapshot_to_order() from public, anon, authenticated", "snapshot trigger helper is not an API");
+  requireText(aclMigration, "grant execute on function public.configure_lpg_station_managed_fulfillment", "authenticated station settings RPC remains available");
 });
 
 Deno.test("Station Managed drivers have a separate authenticated job workspace", () => {
