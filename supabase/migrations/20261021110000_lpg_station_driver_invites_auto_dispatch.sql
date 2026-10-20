@@ -280,7 +280,10 @@ begin
   auto_key:='station-managed-auto:'||order_record.id::text;
   insert into public.lpg_station_managed_driver_assignments(lpg_order_id,station_branch_id,station_driver_id,assigned_by,idempotency_key,metadata)
   values(order_record.id,order_record.station_branch_id,driver_record.id,driver_record.created_by,auto_key,jsonb_build_object('source','automatic_station_dispatch','policy','least_active_assignments'))
-  on conflict(lpg_order_id) do nothing returning id into result_id;
+  on conflict(lpg_order_id) do update set station_driver_id=excluded.station_driver_id,status='assigned',
+    assigned_at=timezone('utc',now()),assigned_by=excluded.assigned_by,completed_at=null,metadata=excluded.metadata
+    where public.lpg_station_managed_driver_assignments.status='cancelled'
+  returning id into result_id;
   if result_id is null then return null; end if;
   update public.lpg_refill_orders set driver_profile_id=null,vehicle_id=null,driver_commission_amount=0,status='driver_offered',assignment_status='driver_assigned',
     updated_at=timezone('utc',now()),metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object('stationManagedDriverId',driver_record.id,'stationManagedDriverUserId',driver_record.user_id,'stationManagedDispatch','automatically_assigned')
