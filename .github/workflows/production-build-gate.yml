@@ -132,8 +132,9 @@ jobs:
           # `supabase start` applies migrations while booting the local database.
           # This legacy data-only retirement migration requires an authenticated
           # pricing administrator. A blank local database has no admin identity.
-          # Skip only that data update for the schema smoke test; keep every schema,
-          # function and policy migration, including Station Managed, in the run.
+          # Skip only that legacy data-retirement update for the schema smoke test.
+          # All schema, function, policy and Station Managed migrations remain enabled.
+          # The trap restores the tracked migration file even when Supabase startup fails.
           legacy_migration="supabase/migrations/20260813044000_retire_legacy_lpg_commercial_rates.sql"
           backup_path="$(mktemp)"
           mv "$legacy_migration" "$backup_path"
