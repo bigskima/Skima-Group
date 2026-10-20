@@ -40,7 +40,7 @@ export function StationManagedDriverJobsScreen() {
     queryFn: async (): Promise<ManagedJob[]> => {
       // Accept a pending email invitation on first authenticated entry. The RPC is
       // idempotent for drivers who have already completed acceptance.
-      const acceptance = await supabase.rpc("accept_lpg_station_managed_driver_invitation");
+      const acceptance = await supabase.rpc("accept_lpg_station_managed_driver_invite");
       if (acceptance.error) throw acceptance.error;
       const result = await supabase.rpc("read_lpg_station_managed_driver_jobs", { target_limit: 50 });
       if (result.error) throw result.error;
