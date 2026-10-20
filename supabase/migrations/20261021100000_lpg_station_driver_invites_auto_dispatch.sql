@@ -175,4 +175,34 @@ comment on table public.lpg_station_managed_driver_invites is
 comment on function public.auto_assign_lpg_station_managed_order() is
   'Idempotent station-managed marketplace dispatch; does not affect independent-driver or SKIMA Fleet orders.';
 
+
+-- If a station adds its first active driver after an order was created, retry
+-- dispatch for that branch's eligible waiting orders without touching other modes.
+create or replace function public.retry_lpg_station_managed_dispatch_for_branch()
+returns trigger
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $retry_station_dispatch$
+begin
+  if new.status='active' then
+    update public.lpg_refill_orders o
+    set metadata=coalesce(o.metadata,'{}'::jsonb)-'station_managed_auto_dispatch_attempted',
+        updated_at=timezone('utc',now())
+    where o.station_branch_id=new.station_branch_id
+      and o.fulfillment_channel='marketplace'
+      and o.fulfillment_mode='station_managed'
+      and o.status in ('payment_reserved','matching_station','matching_driver','driver_offered')
+      and not exists(select 1 from public.lpg_station_managed_driver_assignments a
+        where a.lpg_order_id=o.id and a.status<>'cancelled');
+  end if;
+  return new;
+end;
+$retry_station_dispatch$;
+drop trigger if exists trg_lpg_station_managed_driver_added_dispatch on public.lpg_station_managed_drivers;
+create trigger trg_lpg_station_managed_driver_added_dispatch
+after insert or update of status on public.lpg_station_managed_drivers
+for each row execute function public.retry_lpg_station_managed_dispatch_for_branch();
+revoke all on function public.retry_lpg_station_managed_dispatch_for_branch() from public,anon,authenticated;
+
 commit;
