@@ -320,29 +320,6 @@ begin
 end;
 $auto_dispatch_branch$;
 
--- If a station driver declines/cancels an assignment, immediately route the
--- still-eligible order to another active station driver.
-create or replace function public.on_station_managed_assignment_cancelled()
-returns trigger
-language plpgsql
-security definer
-set search_path=public,pg_temp
-as $station_assignment_cancelled$
-begin
-  if new.status='cancelled' and old.status is distinct from 'cancelled' then
-    perform public.auto_assign_lpg_station_managed_order_for_id(new.lpg_order_id);
-  end if;
-  return new;
-end;
-$station_assignment_cancelled$;
-
-drop trigger if exists trg_station_managed_assignment_cancelled on public.lpg_station_managed_driver_assignments;
-create trigger trg_station_managed_assignment_cancelled
-after update of status on public.lpg_station_managed_driver_assignments
-for each row execute function public.on_station_managed_assignment_cancelled();
-
-revoke all on function public.on_station_managed_assignment_cancelled() from public,anon,authenticated;
-
 create or replace function public.on_station_managed_dispatch_readiness_changed()
 returns trigger
 language plpgsql
