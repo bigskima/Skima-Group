@@ -269,7 +269,7 @@ export function StationManagedFulfillmentScreen() {
           </Section>
         </>
       )}
-      {successMessage ? <Text accessibilityRole="summary" style={{ color: palette.success ?? palette.brand, marginTop: 12 }}>{successMessage}</Text> : null}
+      {successMessage ? <Text accessibilityRole="summary" style={{ color: palette.brand, marginTop: 12 }}>{successMessage}</Text> : null}
       {errorMessage ? <Text accessibilityRole="alert" style={{ color: palette.danger, marginTop: 12 }}>{errorMessage}</Text> : null}
     </Screen>
   );
