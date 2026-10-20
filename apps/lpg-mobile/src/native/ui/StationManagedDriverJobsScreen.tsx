@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { router } from "expo-router";
 import { RefreshControl, StyleSheet, Text, View } from "react-native";
 import type { ReactNode } from "react";
@@ -35,6 +36,18 @@ export function StationManagedDriverJobsScreen() {
   const { supabase } = useSession();
   const { palette } = useAppTheme();
   const queryClient = useQueryClient();
+  useEffect(() => {
+    let active = true;
+    void supabase.rpc("accept_lpg_station_managed_driver_invite").then(({ error }) => {
+      if (!active) return;
+      // A driver without a pending invitation may still open this screen; no invite is a normal no-op.
+      if (!error) {
+        void queryClient.invalidateQueries({ queryKey: ["station-managed-driver-jobs"] });
+        void queryClient.invalidateQueries({ queryKey: ["station-managed-driver-access"] });
+      }
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [supabase, queryClient]);
   const jobs = useQuery({
     queryKey: ["station-managed-driver-jobs"],
     queryFn: async (): Promise<ManagedJob[]> => {
@@ -101,7 +114,7 @@ export function StationManagedDriverJobsScreen() {
           <EmptyState
             icon={<CheckCircle2 color={palette.brand} size={26} />}
             title="No station deliveries assigned"
-            description="When your station assigns a delivery to you, it will appear here. You do not need an independent-driver profile for Station Managed work."
+            description="When your station enables Station Managed and an eligible order is created, the system routes it to an active station driver automatically. You do not need an independent-driver profile."
           />
         ) : null}
 
