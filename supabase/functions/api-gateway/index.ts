@@ -7248,6 +7248,10 @@ async function resolveLpgMobileWorkspaceAccess(
   if (stationManagedDriverAccess.error) {
     return databaseError(stationManagedDriverAccess.error, id);
   }
+  const stationDriverInvitationAccess = await supabase.rpc("read_lpg_station_managed_driver_invitation_access");
+  if (stationDriverInvitationAccess.error) {
+    return databaseError(stationDriverInvitationAccess.error, id);
+  }
 
   const userRolesResult = await supabase
     .from("user_roles")
@@ -7412,6 +7416,8 @@ async function resolveLpgMobileWorkspaceAccess(
   const stationDriverEnabled = getRecordValue(stationManagedDriverAccess.data, "enabled") === true;
   const stationDriverId = stringOrNull(getRecordValue(stationManagedDriverAccess.data, "stationDriverId"));
   const stationDriverBranchId = stringOrNull(getRecordValue(stationManagedDriverAccess.data, "stationBranchId"));
+  const invitationEnabled = getRecordValue(stationDriverInvitationAccess.data, "enabled") === true;
+  const invitationBranchId = stringOrNull(getRecordValue(stationDriverInvitationAccess.data, "stationBranchId"));
   if (stationDriverEnabled && stationDriverId && stationDriverBranchId) {
     workspaces.push({
       key: "station_driver",
@@ -7422,6 +7428,17 @@ async function resolveLpgMobileWorkspaceAccess(
       organizationIds: [],
       branchIds: [],
       stationIds: [stationDriverBranchId],
+    });
+  } else if (invitationEnabled && invitationBranchId) {
+    workspaces.push({
+      key: "station_driver",
+      status: "active",
+      subjectType: "lpg_station_managed_driver_invitation",
+      subjectId: stringOrNull(getRecordValue(stationDriverInvitationAccess.data, "invitationId")),
+      capabilityKeys: ["station_managed.invitation.accept"],
+      organizationIds: [],
+      branchIds: [],
+      stationIds: [invitationBranchId],
     });
   }
 
