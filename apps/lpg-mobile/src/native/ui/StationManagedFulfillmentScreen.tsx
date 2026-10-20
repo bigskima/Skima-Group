@@ -213,7 +213,7 @@ export function StationManagedFulfillmentScreen() {
               <Choice label="Included" active={pricingMode === "included"} onPress={() => setPricingMode("included")} palette={palette} />
               <Choice label="Free" active={pricingMode === "free"} onPress={() => { setPricingMode("free"); setDeliveryFee("0"); }} palette={palette} />
             </View>
-            {pricingMode !== "free" ? <Field label={pricingMode === "included" ? "Delivery amount included in refill price (${currencyCode})" : "Customer delivery fee (${currencyCode})"} value={deliveryFee} onChangeText={setDeliveryFee} keyboardType="decimal-pad" palette={palette} /> : <Text style={{ color: palette.muted }}>The customer delivery fee is ${currencyCode} 0.00.</Text>}
+            {pricingMode !== "free" ? <Field label={pricingMode === "included" ? `Delivery amount included in refill price (${currencyCode})` : `Customer delivery fee (${currencyCode})`} value={deliveryFee} onChangeText={setDeliveryFee} keyboardType="decimal-pad" palette={palette} /> : <Text style={{ color: palette.muted }}>{`The customer delivery fee is ${currencyCode} 0.00.`}</Text>}
             <Text style={{ color: palette.muted, fontSize: 13 }}>Driver compensation is a station responsibility. These settings do not create SKIMA driver earnings or payouts.</Text>
           </Section>
 
