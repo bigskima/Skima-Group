@@ -191,7 +191,11 @@ begin
     new.id,new.station_branch_id,driver_record.id,driver_record.created_by,auto_key,
     jsonb_build_object('source','automatic_station_dispatch','policy','least_active_assignments')
   )
-  on conflict (lpg_order_id) do nothing
+  on conflict (lpg_order_id) do update
+    set station_driver_id=excluded.station_driver_id,status='assigned',
+        assigned_at=timezone('utc',now()),assigned_by=excluded.assigned_by,
+        completed_at=null,metadata=excluded.metadata
+    where public.lpg_station_managed_driver_assignments.status='cancelled'
   returning id into assignment_id;
 
   if assignment_id is not null then
