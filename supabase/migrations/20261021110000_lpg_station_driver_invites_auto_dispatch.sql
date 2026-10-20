@@ -334,6 +334,7 @@ grant execute on function public.read_lpg_station_managed_driver_access() to aut
 
 -- Named acceptance/access RPCs let the authenticated invitation landing flow
 -- explicitly finalize an invite and then resolve the station-driver workspace.
+drop function if exists public.accept_lpg_station_managed_driver_invite();
 create or replace function public.accept_lpg_station_managed_driver_invite()
 returns jsonb
 language sql
