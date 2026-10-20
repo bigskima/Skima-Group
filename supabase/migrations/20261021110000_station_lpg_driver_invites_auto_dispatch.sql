@@ -45,7 +45,12 @@ declare
 begin
   if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
   current_email:=lower(btrim(coalesce(auth.jwt()->>'email','')));
-  current_email_verified:=coalesce((auth.jwt()->>'email_verified')::boolean,false);
+  select exists(
+    select 1 from auth.users authenticated_user
+    where authenticated_user.id=auth.uid()
+      and authenticated_user.email_confirmed_at is not null
+      and lower(btrim(coalesce(authenticated_user.email,'')))=current_email
+  ) into current_email_verified;
 
   select * into driver_record from public.lpg_station_managed_drivers
   where user_id=auth.uid() and status='active' limit 1;
