@@ -68,6 +68,8 @@ export function StationManagedFulfillmentScreen() {
     },
   });
 
+  const currencyCode = workspace.data?.settings?.currencyCode || firstString(branch, ["currencyCode", "currency_code"]) || "NGN";
+
   useEffect(() => {
     const settings = workspace.data?.settings;
     if (!settings) return;
@@ -104,7 +106,7 @@ export function StationManagedFulfillmentScreen() {
         target_delivery_fee_amount: pricingMode === "free" ? 0 : fee,
         target_driver_compensation_mode: compensationMode,
         target_driver_compensation_plan: plan,
-        target_currency_code: workspace.data?.settings?.currencyCode ?? "NGN",
+        target_currency_code: currencyCode,
         target_metadata: { source: "station-managed-settings-screen" },
       });
     },
@@ -164,7 +166,7 @@ export function StationManagedFulfillmentScreen() {
       return runRpc("record_lpg_station_managed_driver_payment", {
         target_station_driver_id: selectedDriverId,
         target_lpg_order_id: selectedOrderId || null,
-        target_currency_code: workspace.data?.settings?.currencyCode ?? "NGN",
+        target_currency_code: currencyCode,
         target_amount: amount,
         target_payment_method: paymentMethod,
         target_payment_status: "confirmed",
@@ -211,7 +213,7 @@ export function StationManagedFulfillmentScreen() {
               <Choice label="Included" active={pricingMode === "included"} onPress={() => setPricingMode("included")} palette={palette} />
               <Choice label="Free" active={pricingMode === "free"} onPress={() => { setPricingMode("free"); setDeliveryFee("0"); }} palette={palette} />
             </View>
-            {pricingMode !== "free" ? <Field label={pricingMode === "included" ? "Delivery amount included in refill price (NGN)" : "Customer delivery fee (NGN)"} value={deliveryFee} onChangeText={setDeliveryFee} keyboardType="decimal-pad" palette={palette} /> : <Text style={{ color: palette.muted }}>The customer delivery fee is ₦0.00.</Text>}
+            {pricingMode !== "free" ? <Field label={pricingMode === "included" ? "Delivery amount included in refill price (${currencyCode})" : "Customer delivery fee (${currencyCode})"} value={deliveryFee} onChangeText={setDeliveryFee} keyboardType="decimal-pad" palette={palette} /> : <Text style={{ color: palette.muted }}>The customer delivery fee is ${currencyCode} 0.00.</Text>}
             <Text style={{ color: palette.muted, fontSize: 13 }}>Driver compensation is a station responsibility. These settings do not create SKIMA driver earnings or payouts.</Text>
           </Section>
 
@@ -256,7 +258,7 @@ export function StationManagedFulfillmentScreen() {
           </Section>
 
           <Section title="Record station driver payment" palette={palette}>
-            <Field label="Amount (NGN)" value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" palette={palette} />
+            <Field label={`Amount (${currencyCode})`} value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" palette={palette} />
             <View style={styles.row}>
               <Choice label="Bank transfer" active={paymentMethod === "bank_transfer"} onPress={() => setPaymentMethod("bank_transfer")} palette={palette} />
               <Choice label="Cash" active={paymentMethod === "cash"} onPress={() => setPaymentMethod("cash")} palette={palette} />
@@ -271,7 +273,7 @@ export function StationManagedFulfillmentScreen() {
             <Text style={{ color: palette.ink, fontWeight: "700" }}>Agreements</Text>
             {(data?.agreements ?? []).slice(0, 5).map((record, index) => <Text key={String(record.id ?? index)} style={{ color: palette.muted, paddingVertical: 4 }}>{String(record.agreementMode ?? "agreement")} · {String(record.agreementStatus ?? "recorded")} · {String(record.stationDriverId ?? "")}</Text>)}
             <Text style={{ color: palette.ink, fontWeight: "700", marginTop: 8 }}>Payment confirmations</Text>
-            {(data?.payments ?? []).slice(0, 5).map((record, index) => <Text key={String(record.id ?? index)} style={{ color: palette.muted, paddingVertical: 4 }}>{String(record.currencyCode ?? "NGN")} {String(record.amount ?? "0")} · {String(record.paymentMethod ?? "other")} · {String(record.paymentStatus ?? "recorded")}</Text>)}
+            {(data?.payments ?? []).slice(0, 5).map((record, index) => <Text key={String(record.id ?? index)} style={{ color: palette.muted, paddingVertical: 4 }}>{String(record.currencyCode ?? currencyCode)} {String(record.amount ?? "0")} · {String(record.paymentMethod ?? "other")} · {String(record.paymentStatus ?? "recorded")}</Text>)}
           </Section>
         </>
       )}
