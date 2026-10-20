@@ -54,6 +54,7 @@ export function StationManagedFulfillmentScreen() {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "bank_transfer" | "wallet_external" | "other">("bank_transfer");
   const [paymentReference, setPaymentReference] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [expandedSection, setExpandedSection] = useState("1. Customer delivery option");
 
   const workspace = useQuery<WorkspaceData>({
@@ -124,7 +125,7 @@ export function StationManagedFulfillmentScreen() {
       if (result.data?.ok !== true) throw new Error(result.data?.message || "Station driver invitation could not be sent.");
       return result.data.data;
     },
-    onSuccess: async () => { setDriverEmail(""); setDriverName(""); setDriverPhone(""); setErrorMessage(null); await workspace.refetch(); },
+    onSuccess: async (invitation) => { setDriverEmail(""); setDriverName(""); setDriverPhone(""); setErrorMessage(null); setSuccessMessage(`Invitation email sent to ${String(invitation?.email ?? "the driver")}. They must accept using that email address.`); await workspace.refetch(); },
     onError: (error) => setErrorMessage(friendlyError(error, "Station driver invitation could not be sent.")),
   });
   const agreementMutation = useMutation({
@@ -268,6 +269,7 @@ export function StationManagedFulfillmentScreen() {
           </Section>
         </>
       )}
+      {successMessage ? <Text style={{ color: palette.brand, marginTop: 12 }}>{successMessage}</Text> : null}
       {errorMessage ? <Text accessibilityRole="alert" style={{ color: palette.danger, marginTop: 12 }}>{errorMessage}</Text> : null}
     </Screen>
   );
