@@ -224,13 +224,13 @@ export function StationManagedFulfillmentScreen() {
           </Section>
 
           <Section title="5. Automatic order dispatch" palette={palette} expanded={expandedSection === "5. Automatic order dispatch"} onPress={() => setExpandedSection(expandedSection === "5. Automatic order dispatch" ? "" : "5. Automatic order dispatch")}>
-            <Text style={{ color: palette.muted, fontSize: 13 }}>When Station Managed is enabled and this branch has an active, accepted station driver, eligible new orders are routed automatically. Orders already assigned to a driver are never reassigned. Independent-driver and SKIMA Fleet orders keep their existing dispatch paths.</Text>
+            <Text style={{ color: palette.muted, fontSize: 13 }}>When Station Managed is enabled, eligible new orders are assigned automatically to the least-loaded active driver at this station. Orders waiting here are not sent to independent drivers or SKIMA Fleet; invite a station driver and let them accept the invitation to make this queue dispatch-ready. Existing independent-driver and SKIMA Fleet orders are unchanged.</Text>
             {(data?.assignableOrders ?? []).length ? (data?.assignableOrders ?? []).map((order) => (
               <View key={order.id} style={[styles.row, { borderColor: palette.border }]}>
                 <Text style={{ color: palette.ink, fontWeight: "700" }}>{order.publicReference ?? order.id.slice(0, 8)}</Text>
                 <Text style={{ color: palette.muted, fontSize: 12 }}>{order.requestedKg ?? "—"} kg · {order.status}</Text>
               </View>
-            )) : <Text style={{ color: palette.muted }}>No pending Station Managed orders for this branch.</Text>}
+            )) : <Text style={{ color: palette.muted }}>No waiting Station Managed orders. New eligible orders will be routed automatically.</Text>}
           </Section>
 
           <Section title="6. Record the driver agreement" palette={palette} expanded={expandedSection === "6. Record driver agreement"} onPress={() => setExpandedSection(expandedSection === "6. Record driver agreement" ? "" : "6. Record driver agreement")}>
