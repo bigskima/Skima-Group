@@ -61,7 +61,7 @@ Deno.test("Station workspace and API surfaces are wired", () => {
   requireText(inviteDispatchMigration, "accept_lpg_station_managed_driver_invite", "driver invitation acceptance RPC");
   requireText(inviteDispatchMigration, "trg_auto_dispatch_lpg_station_managed_order", "automatic dispatch trigger");
   requireText(inviteDispatchMigration, "email_confirmed_at is not null", "invitation acceptance requires a confirmed account email");
-  requireText(inviteDispatchMigration, "new.status not in ('payment_reserved','matching_station','matching_driver')", "automatic dispatch waits for payment reservation");
+  requireText(inviteDispatchMigration, "new.status not in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route')", "automatic dispatch waits for eligible paid-order states");
   requireText(inviteDispatchMigration, "status<>'matching_driver'", "waiting orders do not recursively update their status trigger");
   requireText(inviteDispatchMigration, "read_lpg_station_managed_driver_invitation_access", "pending invite workspace access");
   requireText(station, "record_lpg_station_managed_driver_agreement", "agreement records");
