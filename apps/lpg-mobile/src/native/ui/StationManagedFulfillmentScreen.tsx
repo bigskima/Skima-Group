@@ -96,7 +96,7 @@ export function StationManagedFulfillmentScreen() {
       if (!Number.isFinite(fee) || fee < 0) throw new Error("Enter a valid delivery fee.");
       const compensation = Number(compensationAmount);
       if (!Number.isFinite(compensation) || compensation < 0) throw new Error("Enter a valid driver payment amount.");
-      const plan: Record<string, unknown> = { calculation: "per_delivery", amount: compensation, currencyCode };
+      const plan: Record<string, unknown> = compensationMode === "offline" ? {} : { calculation: "per_delivery", amount: compensation, currencyCode };
       return runRpc("configure_lpg_station_managed_fulfillment", {
         target_station_branch_id: branchId,
         target_enabled: enabled,
@@ -114,7 +114,7 @@ export function StationManagedFulfillmentScreen() {
   const registerMutation = useMutation({
     mutationFn: async () => {
       if (!branchId) throw new Error("Your station branch is not available.");
-      if (!driverUserId.trim() || !driverName.trim()) throw new Error("Select the driver’s existing SKIMA account and enter their name. If you do not have the account ID, ask the driver to open their SKIMA profile or contact station support.");
+      if (!driverUserId.trim() || !driverName.trim()) throw new Error("Choose the driver’s existing SKIMA account and enter their full name.");
       return runRpc("register_lpg_station_managed_driver", {
         target_station_branch_id: branchId,
         target_user_id: driverUserId.trim(),
@@ -216,7 +216,7 @@ export function StationManagedFulfillmentScreen() {
             <Text style={{ color: palette.muted, fontSize: 13 }}>Driver compensation is a station responsibility. These settings do not create SKIMA driver earnings or payouts.</Text>
           </Section>
 
-          <Section title="3. What your station pays its drivers" palette={palette} expanded={expandedSection === "3. Driver payment plan"} onPress={() => setExpandedSection(expandedSection === "3. Driver payment plan" ? "" : "3. Driver payment plan")}>
+          <Section title="3. What your station pays its drivers" palette={palette} expanded={expandedSection === "3. What your station pays its drivers"} onPress={() => setExpandedSection(expandedSection === "3. What your station pays its drivers" ? "" : "3. What your station pays its drivers")}>
             <View style={styles.row}>
               <Choice label="In-app plan" active={compensationMode === "in_app_plan"} onPress={() => { setCompensationMode("in_app_plan"); setAgreementMode("in_app_plan"); }} palette={palette} />
               <Choice label="Offline agreement" active={compensationMode === "offline"} onPress={() => { setCompensationMode("offline"); setAgreementMode("offline"); }} palette={palette} />
@@ -227,7 +227,8 @@ export function StationManagedFulfillmentScreen() {
           <AppButton label="Save delivery settings" fullWidth loading={settingsMutation.isPending} onPress={() => void settingsMutation.mutateAsync()} />
 
           <Section title="4. Add a driver to this station" palette={palette} expanded={expandedSection === "4. Add a station driver"} onPress={() => setExpandedSection(expandedSection === "4. Add a station driver" ? "" : "4. Add a station driver")}>
-            <Field label="Driver account ID (ask SKIMA support if needed)" value={driverUserId} onChangeText={setDriverUserId} palette={palette} autoCapitalize="none" />
+            <Text style={{ color: palette.muted, fontSize: 13 }}>Use the existing SKIMA profile ID for the driver. This registration does not create a new login. A profile search is not available in this version, so do not guess an ID.</Text>
+            <Field label="Existing SKIMA profile ID" value={driverUserId} onChangeText={setDriverUserId} palette={palette} autoCapitalize="none" />
             <Field label="Driver full name" value={driverName} onChangeText={setDriverName} palette={palette} />
             <Field label="Phone (optional)" value={driverPhone} onChangeText={setDriverPhone} palette={palette} keyboardType="phone-pad" />
             <AppButton label="Register station driver" fullWidth loading={registerMutation.isPending} disabled={!driverUserId.trim() || !driverName.trim()} onPress={() => void registerMutation.mutateAsync()} />
