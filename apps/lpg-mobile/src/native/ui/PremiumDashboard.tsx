@@ -25,6 +25,7 @@ import {
   Text,
   View,
   useWindowDimensions,
+  useState,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { domainQueries, useEntityMediaLinks } from "../api/domains";
@@ -120,13 +121,11 @@ export function CustomerDashboard() {
             <CustomerServiceCards primary={primary} />
           </GuideTarget>
 
-          <AiAssistantLauncher workspace="customer" />
+          <PromotionBanner audience="customer" />
 
           {order && orderId ? (
             <ActiveOrder record={order} href={`/(customer)/orders/${orderId}`} />
           ) : null}
-
-          <PromotionBanner audience="customer" />
 
           <HomeSection
             title="Your cylinders"
@@ -322,6 +321,7 @@ function MobileHome({ workspace, context, children }: {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const firstName = session.context?.profile?.display_name?.trim().split(/\s+/)[0];
+  const [showAi, setShowAi] = useState(false);
 
   return (
     <ScrollView
@@ -340,6 +340,16 @@ function MobileHome({ workspace, context, children }: {
               </Text>
             </View>
           </View>
+          {workspace === "customer" ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={showAi ? "Hide SKIMA AI assistant" : "Open SKIMA AI assistant"}
+              onPress={() => setShowAi((visible) => !visible)}
+              style={[styles.notification, { backgroundColor: palette.surface, borderColor: palette.border, marginRight: 8 }]}
+            >
+              <Sparkles color={colors.brand} size={19} />
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityLabel="Open notifications"
             onPress={() => router.push(`/${`(${workspace})`}/notifications` as never)}
@@ -349,6 +359,8 @@ function MobileHome({ workspace, context, children }: {
             <View style={styles.notificationDot} />
           </Pressable>
         </View>
+
+        {workspace === "customer" && showAi ? <AiAssistantLauncher workspace="customer" /> : null}
 
         <GuideTarget targetKey="common.workspace-switcher" style={styles.workspaceSwitcher}>
           <WorkspaceSwitcher current={workspace} />
