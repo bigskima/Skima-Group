@@ -26,8 +26,8 @@ returns uuid language plpgsql security definer set search_path=public,pg_temp as
 declare current_email text; invite_record public.lpg_station_managed_driver_invites%rowtype; result_id uuid; current_name text; email_confirmed_at timestamptz;
 begin
  if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
- select lower(email), coalesce(nullif(btrim(raw_user_meta_data->>'full_name'),''),nullif(btrim(raw_user_meta_data->>'name'),''),split_part(email,'@',1)), email_confirmed_at
- into current_email,current_name,email_confirmed_at from auth.users where id=auth.uid();
+ select lower(u.email), coalesce(nullif(btrim(u.raw_user_meta_data->>'full_name'),''),nullif(btrim(u.raw_user_meta_data->>'name'),''),split_part(u.email,'@',1)), u.email_confirmed_at
+ into current_email,current_name,email_confirmed_at from auth.users u where u.id=auth.uid();
  if current_email is null or email_confirmed_at is null then raise exception using errcode='42501',message='verify the invited email address before accepting the station driver invitation'; end if;
  select id into result_id from public.lpg_station_managed_drivers
  where user_id=auth.uid() and status='active' limit 1;
