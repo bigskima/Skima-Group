@@ -114,11 +114,18 @@ export function StationManagedFulfillmentScreen() {
   const registerMutation = useMutation({
     mutationFn: async () => {
       if (!branchId) throw new Error("Your station branch is not available.");
-      if (!driverEmail.trim() || !/^\S+@\S+\.\S+$/.test(driverEmail.trim())) throw new Error("Enter a valid driver email address.");
-      throw new Error("Email invitations need the station-driver invitation service deployed first. No driver was added; do not use a profile ID as a workaround.");
+      const email = driverEmail.trim().toLowerCase();
+      if (!email || !/^\S+@\S+\.\S+$/.test(email)) throw new Error("Enter a valid driver email address.");
+      if (driverName.trim().length < 2) throw new Error("Enter the driver's full name.");
+      const result = await session.supabase.functions.invoke("api-gateway/runtime/station-driver-invitations", {
+        body: { value: { stationBranchId: branchId, email, displayName: driverName.trim(), phone: driverPhone.trim() || null } },
+      });
+      if (result.error) throw result.error;
+      if (result.data?.ok !== true) throw new Error(result.data?.message || "Station driver invitation could not be sent.");
+      return result.data.data;
     },
     onSuccess: async () => { setDriverEmail(""); setDriverName(""); setDriverPhone(""); setErrorMessage(null); await workspace.refetch(); },
-    onError: (error) => setErrorMessage(friendlyError(error, "Station driver could not be registered.")),
+    onError: (error) => setErrorMessage(friendlyError(error, "Station driver invitation could not be sent.")),
   });
   const assignMutation = useMutation({
     mutationFn: async () => {
@@ -221,23 +228,22 @@ export function StationManagedFulfillmentScreen() {
           <AppButton label="Save delivery settings" fullWidth loading={settingsMutation.isPending} onPress={() => void settingsMutation.mutateAsync()} />
 
           <Section title="4. Add a driver to this station" palette={palette} expanded={expandedSection === "4. Add a station driver"} onPress={() => setExpandedSection(expandedSection === "4. Add a station driver" ? "" : "4. Add a station driver")}>
-            <Text style={{ color: palette.muted, fontSize: 13 }}>Use the existing SKIMA profile ID for the driver. This registration does not create a new login. A profile search is not available in this version, so do not guess an ID.</Text>
+            <Text style={{ color: palette.muted, fontSize: 13 }}>Invite a station-owned driver by email. They accept the invitation and sign in to their own account; they do not need an independent-driver profile.</Text>
             <Field label="Driver email address" value={driverEmail} onChangeText={setDriverEmail} palette={palette} autoCapitalize="none" />
             <Field label="Driver full name" value={driverName} onChangeText={setDriverName} palette={palette} />
             <Field label="Phone (optional)" value={driverPhone} onChangeText={setDriverPhone} palette={palette} keyboardType="phone-pad" />
-            <AppButton label="Invite station driver" fullWidth loading={registerMutation.isPending} disabled={!driverUserId.trim() || !driverName.trim()} onPress={() => void registerMutation.mutateAsync()} />
-            <Text style={{ color: palette.muted, fontSize: 12 }}>Station drivers must not already have a SKIMA Managed or independent driver profile.</Text>
+            <AppButton label="Invite station driver" fullWidth loading={registerMutation.isPending} disabled={!driverEmail.trim() || !driverName.trim()} onPress={() => void registerMutation.mutateAsync()} />
+            <Text style={{ color: palette.muted, fontSize: 12 }}>For safety, an account with an independent or SKIMA Managed driver profile cannot accept a Station Managed invitation.</Text>
           </Section>
 
-          <Section title="5. Choose a driver for an order" palette={palette} expanded={expandedSection === "5. Assign a delivery"} onPress={() => setExpandedSection(expandedSection === "5. Assign a delivery" ? "" : "5. Assign a delivery")}>
-            <Text style={{ color: palette.muted, fontSize: 13 }}>Only orders already quoted and paid as Station Managed appear here.</Text>
+          <Section title="5. Automatic order dispatch" palette={palette} expanded={expandedSection === "5. Automatic order dispatch"} onPress={() => setExpandedSection(expandedSection === "5. Automatic order dispatch" ? "" : "5. Automatic order dispatch")}>
+            <Text style={{ color: palette.muted, fontSize: 13 }}>When Station Managed is enabled and this branch has an active, accepted station driver, eligible new orders are routed automatically. Orders already assigned to a driver are never reassigned. Independent-driver and SKIMA Fleet orders keep their existing dispatch paths.</Text>
             {(data?.assignableOrders ?? []).length ? (data?.assignableOrders ?? []).map((order) => (
-              <Choice key={order.id} label={`${order.publicReference ?? order.id.slice(0, 8)} · ${order.requestedKg ?? "—"} kg · ${order.status}`} active={selectedOrderId === order.id} onPress={() => setSelectedOrderId(order.id)} palette={palette} />
-            )) : <Text style={{ color: palette.muted }}>No unassigned Station Managed orders for this branch.</Text>}
-            {drivers.length ? drivers.map((driver) => (
-              <Choice key={driver.id} label={driver.displayName} active={selectedDriverId === driver.id} onPress={() => setSelectedDriverId(driver.id)} palette={palette} />
-            )) : <Text style={{ color: palette.muted }}>Register an active station driver first.</Text>}
-            <AppButton label="Assign selected driver" fullWidth loading={assignMutation.isPending} disabled={!selectedOrderId || !selectedDriverId} onPress={() => void assignMutation.mutateAsync()} />
+              <View key={order.id} style={[styles.orderRow, { borderColor: palette.border }]}>
+                <Text style={{ color: palette.ink, fontWeight: "700" }}>{order.publicReference ?? order.id.slice(0, 8)}</Text>
+                <Text style={{ color: palette.muted, fontSize: 12 }}>{order.requestedKg ?? "—"} kg · {order.status}</Text>
+              </View>
+            )) : <Text style={{ color: palette.muted }}>No pending Station Managed orders for this branch.</Text>}
           </Section>
 
           <Section title="6. Record the driver agreement" palette={palette} expanded={expandedSection === "6. Record driver agreement"} onPress={() => setExpandedSection(expandedSection === "6. Record driver agreement" ? "" : "6. Record driver agreement")}>
