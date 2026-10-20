@@ -100,7 +100,7 @@ drop trigger if exists trg_auto_dispatch_lpg_station_managed_order on public.lpg
 create trigger trg_auto_dispatch_lpg_station_managed_order after insert or update of fulfillment_mode,status on public.lpg_refill_orders for each row execute function public.auto_dispatch_lpg_station_managed_order();
 
 create or replace function public.read_lpg_station_managed_driver_invitation_access()
-returns jsonb language plpgsql stable security definer set search_path=public,pg_temp as $
+returns jsonb language plpgsql stable security definer set search_path=public,pg_temp as $$
 declare current_email text; invite_record public.lpg_station_managed_driver_invites%rowtype;
 begin
  if auth.uid() is null then return jsonb_build_object('enabled',false); end if;
