@@ -239,7 +239,7 @@ export function StationManagedFulfillmentScreen() {
           <Section title="5. Automatic order dispatch" palette={palette} expanded={expandedSection === "5. Automatic order dispatch"} onPress={() => setExpandedSection(expandedSection === "5. Automatic order dispatch" ? "" : "5. Automatic order dispatch")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>When Station Managed is enabled and this branch has an active, accepted station driver, eligible new orders are routed automatically. Orders already assigned to a driver are never reassigned. Independent-driver and SKIMA Fleet orders keep their existing dispatch paths.</Text>
             {(data?.assignableOrders ?? []).length ? (data?.assignableOrders ?? []).map((order) => (
-              <View key={order.id} style={[styles.orderRow, { borderColor: palette.border }]}>
+              <View key={order.id} style={[styles.row, { borderColor: palette.border }]}>
                 <Text style={{ color: palette.ink, fontWeight: "700" }}>{order.publicReference ?? order.id.slice(0, 8)}</Text>
                 <Text style={{ color: palette.muted, fontSize: 12 }}>{order.requestedKg ?? "—"} kg · {order.status}</Text>
               </View>
