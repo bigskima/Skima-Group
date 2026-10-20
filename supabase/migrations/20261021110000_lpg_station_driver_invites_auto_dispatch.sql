@@ -47,7 +47,7 @@ begin
    and status in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route')
    and not exists(select 1 from public.lpg_station_managed_driver_assignments a where a.lpg_order_id=public.lpg_refill_orders.id and a.status<>'cancelled');
  return result_id;
-end $;
+end $$;
 
 create or replace function public.assign_lpg_station_managed_driver(
  target_lpg_order_id uuid, target_station_driver_id uuid, target_idempotency_key text,
@@ -111,7 +111,7 @@ begin
  order by i.created_at desc limit 1;
  if not found then return jsonb_build_object('enabled',false); end if;
  return jsonb_build_object('enabled',true,'stationBranchId',invite_record.station_branch_id,'invitationId',invite_record.id);
-end $;
+end $$;
 revoke all on function public.read_lpg_station_managed_driver_invitation_access() from public,anon;
 grant execute on function public.read_lpg_station_managed_driver_invitation_access() to authenticated,service_role;
 
