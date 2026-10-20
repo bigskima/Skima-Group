@@ -1,5 +1,6 @@
 const migration = await Deno.readTextFile("supabase/migrations/20261019090000_lpg_station_managed_fulfillment.sql");
 const aclMigration = await Deno.readTextFile("supabase/migrations/20261020142000_lpg_station_managed_acl_hardening.sql");
+const inviteDispatchMigration = await Deno.readTextFile("supabase/migrations/20261021110000_lpg_station_driver_invites_auto_dispatch.sql");
 const customer = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx");
 const station = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedFulfillmentScreen.tsx");
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
@@ -55,7 +56,11 @@ Deno.test("Station workspace and API surfaces are wired", () => {
   requireText(migration, "read_lpg_station_managed_workspace", "station workspace read API");
   requireText(station, "configure_lpg_station_managed_fulfillment", "station pricing settings");
   requireText(station, "register_lpg_station_managed_driver", "station driver registration");
-  requireText(station, "assign_lpg_station_managed_driver", "station assignment");
+  requireText(station, "Automatic order dispatch", "automatic station order dispatch UI");
+  requireText(station, "api-gateway/runtime/station-driver-invitations", "email invitation endpoint");
+  requireText(inviteDispatchMigration, "accept_lpg_station_managed_driver_invite", "driver invitation acceptance RPC");
+  requireText(inviteDispatchMigration, "trg_auto_dispatch_lpg_station_managed_order", "automatic dispatch trigger");
+  requireText(inviteDispatchMigration, "read_lpg_station_managed_driver_invitation_access", "pending invite workspace access");
   requireText(station, "record_lpg_station_managed_driver_agreement", "agreement records");
   requireText(station, "record_lpg_station_managed_driver_payment", "payment confirmation records");
   requireText(gateway, "fulfillment_mode,delivery_pricing_mode,station_delivery_fee_amount", "quote and order API projections");
