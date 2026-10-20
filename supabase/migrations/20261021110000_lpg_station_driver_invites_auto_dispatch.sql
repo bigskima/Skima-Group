@@ -23,12 +23,12 @@ grant all on public.lpg_station_managed_driver_invites to service_role;
 
 create or replace function public.accept_lpg_station_managed_driver_invite()
 returns uuid language plpgsql security definer set search_path=public,pg_temp as $$
-declare current_email text; invite_record public.lpg_station_managed_driver_invites%rowtype; result_id uuid; current_name text;
+declare current_email text; invite_record public.lpg_station_managed_driver_invites%rowtype; result_id uuid; current_name text; email_confirmed_at timestamptz;
 begin
  if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
- select lower(email), coalesce(nullif(btrim(raw_user_meta_data->>'full_name'),''),nullif(btrim(raw_user_meta_data->>'name'),''),split_part(email,'@',1))
- into current_email,current_name from auth.users where id=auth.uid();
- if current_email is null then raise exception using errcode='42501',message='verified account email is required'; end if;
+ select lower(email), coalesce(nullif(btrim(raw_user_meta_data->>'full_name'),''),nullif(btrim(raw_user_meta_data->>'name'),''),split_part(email,'@',1)), email_confirmed_at
+ into current_email,current_name,email_confirmed_at from auth.users where id=auth.uid();
+ if current_email is null or email_confirmed_at is null then raise exception using errcode='42501',message='verify the invited email address before accepting the station driver invitation'; end if;
  select * into invite_record from public.lpg_station_managed_driver_invites
  where lower(email)=current_email and status='pending' and expires_at>now()
  order by created_at desc limit 1 for update;
