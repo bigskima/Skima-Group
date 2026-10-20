@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
   heroDivider: { width: StyleSheet.hairlineWidth, height: 36, marginHorizontal: spacing.lg, backgroundColor: "rgba(255,255,255,.22)" },
   headingRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   eyebrow: { ...typography.eyebrow, fontSize: 8 },
-  heading: { maxWidth: 320, fontSize: 19, lineHeight: 24, fontWeight: "850", letterSpacing: -0.35, marginTop: 4 },
+  heading: { maxWidth: 320, fontSize: 19, lineHeight: 24, fontWeight: "800", letterSpacing: -0.35, marginTop: 4 },
   actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
   action: { flex: 1, minWidth: 150, minHeight: 138, justifyContent: "space-between", borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.sm + 2 },
   actionIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
