@@ -853,18 +853,26 @@ begin
 end
 $$;
 
-do $$
-declare function_sql text; old_block text; new_block text;
+do $station_managed_lifecycle_guard$
+declare
+  function_sql text;
+  patched_function_sql text;
 begin
   function_sql:=pg_get_functiondef('public.process_lpg_order_lifecycle(integer)'::regprocedure);
-  -- Match only the stable status predicate; formatting of the legacy worker query
-  -- differs between migration history and pg_get_functiondef output.
-  old_block:='where target_order.status=''payment_reserved''';
-  new_block:='where target_order.status=''payment_reserved'' and target_order.fulfillment_mode<>''station_managed''';
-  if position(old_block in function_sql)=0 then raise exception 'Station Managed lifecycle guard could not locate automatic dispatch query'; end if;
-  execute replace(function_sql,old_block,new_block);
+  -- Source formatting differs across the legacy migration history. Match the
+  -- predicate semantically, then add the exclusion without rewriting the worker.
+  patched_function_sql:=regexp_replace(
+    function_sql,
+    'where[[:space:]]+target_order\.status[[:space:]]*=[[:space:]]*''payment_reserved''',
+    'where target_order.status=''payment_reserved'' and target_order.fulfillment_mode<>''station_managed''',
+    'i'
+  );
+  if patched_function_sql=function_sql then
+    raise exception 'Station Managed lifecycle guard could not locate automatic dispatch predicate';
+  end if;
+  execute patched_function_sql;
 end
-$$;
+$station_managed_lifecycle_guard$;
 
 do $$
 declare function_sql text; old_block text; new_block text;
