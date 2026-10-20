@@ -54,6 +54,7 @@ export function StationManagedFulfillmentScreen() {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "bank_transfer" | "wallet_external" | "other">("bank_transfer");
   const [paymentReference, setPaymentReference] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [expandedSection, setExpandedSection] = useState("1. Customer delivery option");
 
   const workspace = useQuery<WorkspaceData>({
     queryKey: ["station-managed-workspace", branchId],
@@ -197,14 +198,14 @@ export function StationManagedFulfillmentScreen() {
         <EmptyState title="Station branch unavailable" description="Complete station setup before configuring managed delivery." />
       ) : (
         <>
-          <Section title="1. Customer delivery option" palette={palette}>
+          <Section title="1. Customer delivery option" palette={palette} expanded={expandedSection === "1. Customer delivery option"} onPress={() => setExpandedSection(expandedSection === "1. Customer delivery option" ? "" : "1. Customer delivery option")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Enable this option to let customers choose delivery by your own station driver. Existing independent-driver and SKIMA Fleet orders are unchanged.</Text>
             <View style={styles.row}>
               <Choice label={enabled ? "Enabled for customers" : "Disabled for customers"} active={enabled} onPress={() => setEnabled(!enabled)} palette={palette} />
             </View>
           </Section>
 
-          <Section title="2. Delivery price" palette={palette}>
+          <Section title="2. Delivery price" palette={palette} expanded={expandedSection === "2. Delivery price"} onPress={() => setExpandedSection(expandedSection === "2. Delivery price" ? "" : "2. Delivery price")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Choose how delivery appears on the customer's SKIMA checkout. Refill and delivery remain separately tracked where a separate fee is selected.</Text>
             <View style={styles.row}>
               <Choice label="Separate fee" active={pricingMode === "separate"} onPress={() => setPricingMode("separate")} palette={palette} />
@@ -215,7 +216,7 @@ export function StationManagedFulfillmentScreen() {
             <Text style={{ color: palette.muted, fontSize: 13 }}>Driver compensation is a station responsibility. These settings do not create SKIMA driver earnings or payouts.</Text>
           </Section>
 
-          <Section title="3. Driver payment plan" palette={palette}>
+          <Section title="3. Driver payment plan" palette={palette} expanded={expandedSection === "3. Driver payment plan"} onPress={() => setExpandedSection(expandedSection === "3. Driver payment plan" ? "" : "3. Driver payment plan")}>
             <View style={styles.row}>
               <Choice label="In-app plan" active={compensationMode === "in_app_plan"} onPress={() => { setCompensationMode("in_app_plan"); setAgreementMode("in_app_plan"); }} palette={palette} />
               <Choice label="Offline agreement" active={compensationMode === "offline"} onPress={() => { setCompensationMode("offline"); setAgreementMode("offline"); }} palette={palette} />
@@ -225,7 +226,7 @@ export function StationManagedFulfillmentScreen() {
 
           <AppButton label="Save delivery settings" fullWidth loading={settingsMutation.isPending} onPress={() => void settingsMutation.mutateAsync()} />
 
-          <Section title="4. Add a station driver" palette={palette}>
+          <Section title="4. Add a station driver" palette={palette} expanded={expandedSection === "4. Add a station driver"} onPress={() => setExpandedSection(expandedSection === "4. Add a station driver" ? "" : "4. Add a station driver")}>
             <Field label="Driver account ID (ask SKIMA support if needed)" value={driverUserId} onChangeText={setDriverUserId} palette={palette} autoCapitalize="none" />
             <Field label="Driver full name" value={driverName} onChangeText={setDriverName} palette={palette} />
             <Field label="Phone (optional)" value={driverPhone} onChangeText={setDriverPhone} palette={palette} keyboardType="phone-pad" />
@@ -233,7 +234,7 @@ export function StationManagedFulfillmentScreen() {
             <Text style={{ color: palette.muted, fontSize: 12 }}>Station drivers must not already have a SKIMA Managed or independent driver profile.</Text>
           </Section>
 
-          <Section title="5. Assign a delivery" palette={palette}>
+          <Section title="5. Assign a delivery" palette={palette} expanded={expandedSection === "5. Assign a delivery"} onPress={() => setExpandedSection(expandedSection === "5. Assign a delivery" ? "" : "5. Assign a delivery")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Only orders already quoted and paid as Station Managed appear here.</Text>
             {(data?.assignableOrders ?? []).length ? (data?.assignableOrders ?? []).map((order) => (
               <Choice key={order.id} label={`${order.publicReference ?? order.id.slice(0, 8)} · ${order.requestedKg ?? "—"} kg · ${order.status}`} active={selectedOrderId === order.id} onPress={() => setSelectedOrderId(order.id)} palette={palette} />
@@ -244,7 +245,7 @@ export function StationManagedFulfillmentScreen() {
             <AppButton label="Assign selected driver" fullWidth loading={assignMutation.isPending} disabled={!selectedOrderId || !selectedDriverId} onPress={() => void assignMutation.mutateAsync()} />
           </Section>
 
-          <Section title="6. Record driver agreement" palette={palette}>
+          <Section title="6. Record driver agreement" palette={palette} expanded={expandedSection === "6. Record driver agreement"} onPress={() => setExpandedSection(expandedSection === "6. Record driver agreement" ? "" : "6. Record driver agreement")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>{selectedDriver ? `Selected driver: ${selectedDriver.displayName}` : "Select a station driver in the assignment section above."}</Text>
             <View style={styles.row}>
               <Choice label="In-app plan" active={agreementMode === "in_app_plan"} onPress={() => setAgreementMode("in_app_plan")} palette={palette} />
@@ -255,7 +256,7 @@ export function StationManagedFulfillmentScreen() {
             <AppButton label="Record agreement" fullWidth loading={agreementMutation.isPending} disabled={!selectedDriverId} onPress={() => void agreementMutation.mutateAsync()} />
           </Section>
 
-          <Section title="7. Record a payment you made" palette={palette}>
+          <Section title="7. Record a payment you made" palette={palette} expanded={expandedSection === "7. Record a payment you made"} onPress={() => setExpandedSection(expandedSection === "7. Record a payment you made" ? "" : "7. Record a payment you made")}>
             <Field label={`Amount (${currencyCode})`} value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" palette={palette} />
             <View style={styles.row}>
               <Choice label="Bank transfer" active={paymentMethod === "bank_transfer"} onPress={() => setPaymentMethod("bank_transfer")} palette={palette} />
@@ -267,7 +268,7 @@ export function StationManagedFulfillmentScreen() {
             <Text style={{ color: palette.muted, fontSize: 12 }}>This creates a station record only. It does not move money through SKIMA or create a SKIMA payout.</Text>
           </Section>
 
-          <Section title="Recent agreements and payments" palette={palette}>
+          <Section title="Recent agreements and payments" palette={palette} expanded={expandedSection === "Recent agreements and payments"} onPress={() => setExpandedSection(expandedSection === "Recent agreements and payments" ? "" : "Recent agreements and payments")}>
             <Text style={{ color: palette.ink, fontWeight: "700" }}>Agreements</Text>
             {(data?.agreements ?? []).slice(0, 5).map((record, index) => <Text key={String(record.id ?? index)} style={{ color: palette.muted, paddingVertical: 4 }}>{String(record.agreementMode ?? "agreement")} · {String(record.agreementStatus ?? "recorded")} · {String(record.stationDriverId ?? "")}</Text>)}
             <Text style={{ color: palette.ink, fontWeight: "700", marginTop: 8 }}>Payment confirmations</Text>
@@ -280,8 +281,8 @@ export function StationManagedFulfillmentScreen() {
   );
 }
 
-function Section({ title, children, palette }: { title: string; children: React.ReactNode; palette: ReturnType<typeof useAppTheme>["palette"] }) {
-  return <View style={[styles.section, { backgroundColor: palette.surface, borderColor: palette.border }]}><Text style={[styles.sectionTitle, { color: palette.ink }]}>{title}</Text>{children}</View>;
+function Section({ title, children, palette, expanded, onPress }: { title: string; children: React.ReactNode; palette: ReturnType<typeof useAppTheme>["palette"]; expanded: boolean; onPress(): void }) {
+  return <View style={[styles.section, { backgroundColor: palette.surface, borderColor: palette.border }]}><Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={onPress} style={styles.sectionHeader}><Text style={[styles.sectionTitle, { color: palette.ink }]}>{title}</Text><Text style={{ color: palette.brand, fontSize: 18, fontWeight: "800" }}>{expanded ? "−" : "+"}</Text></Pressable>{expanded ? children : null}</View>;
 }
 
 function Choice({ label, active, onPress, palette }: { label: string; active: boolean; onPress(): void; palette: ReturnType<typeof useAppTheme>["palette"] }) {
@@ -294,7 +295,8 @@ function Field({ label, value, onChangeText, palette, keyboardType, multiline = 
 
 const styles = StyleSheet.create({
   section: { borderWidth: 1, borderRadius: radii.lg, padding: spacing.sm + 2, gap: spacing.sm, marginBottom: spacing.sm },
-  sectionTitle: { ...typography.heading, fontSize: 15, lineHeight: 20 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, minHeight: 30 },
+  sectionTitle: { ...typography.heading, fontSize: 15, lineHeight: 20, flex: 1 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
   choice: { borderWidth: 1, borderRadius: radii.md, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 4 },
   field: { gap: 6, marginBottom: 8 },
