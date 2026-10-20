@@ -170,6 +170,11 @@ security definer
 set search_path=public,pg_temp
 as $trigger$
 begin
+  if tg_op='UPDATE' and old.fulfillment_mode is not distinct from new.fulfillment_mode
+    and old.station_branch_id is not distinct from new.station_branch_id
+    and old.status is not distinct from new.status then
+    return new;
+  end if;
   if new.fulfillment_channel='marketplace' and new.fulfillment_mode='station_managed'
     and new.station_branch_id is not null
     and new.status in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route') then
