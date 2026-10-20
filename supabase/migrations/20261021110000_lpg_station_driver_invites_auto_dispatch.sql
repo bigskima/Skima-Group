@@ -29,6 +29,9 @@ begin
  select lower(email), coalesce(nullif(btrim(raw_user_meta_data->>'full_name'),''),nullif(btrim(raw_user_meta_data->>'name'),''),split_part(email,'@',1)), email_confirmed_at
  into current_email,current_name,email_confirmed_at from auth.users where id=auth.uid();
  if current_email is null or email_confirmed_at is null then raise exception using errcode='42501',message='verify the invited email address before accepting the station driver invitation'; end if;
+ select id into result_id from public.lpg_station_managed_drivers
+ where user_id=auth.uid() and status='active' limit 1;
+ if result_id is not null then return result_id; end if;
  select * into invite_record from public.lpg_station_managed_driver_invites
  where lower(email)=current_email and status='pending' and expires_at>now()
  order by created_at desc limit 1 for update;
