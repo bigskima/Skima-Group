@@ -74,6 +74,18 @@ begin
           updated_at=timezone('utc',now()),
           metadata=metadata||jsonb_build_object('acceptedDriverId',driver_record.id)
       where id=invite_record.id and status='pending';
+
+      -- Drain eligible orders that were waiting for this station to onboard a driver.
+      perform public.auto_assign_lpg_station_managed_order_for_id(pending_order.id)
+      from public.lpg_refill_orders pending_order
+      where pending_order.station_branch_id=driver_record.station_branch_id
+        and pending_order.fulfillment_channel='marketplace'
+        and pending_order.fulfillment_mode='station_managed'
+        and pending_order.status in ('payment_reserved','matching_station','matching_driver')
+        and not exists (
+          select 1 from public.lpg_station_managed_driver_assignments assignment
+          where assignment.lpg_order_id=pending_order.id and assignment.status<>'cancelled'
+        );
     end if;
   end if;
 
