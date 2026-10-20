@@ -16,6 +16,7 @@ import { AdminPartnerLocationReviewWorkspace } from "../../admin-partner-locatio
 import { AdminSkimaFleetComplianceWorkspace } from "../../admin-skima-fleet-compliance-workspace";
 import { AdminSkimaFleetWorkspace } from "../../admin-skima-fleet-workspace";
 import { AdminStationPricingWorkspace } from "../../admin-station-pricing-workspace";
+import { AdminStationManagedFulfillmentWorkspace } from "../../admin-station-managed-fulfillment-workspace";
 import { AdminVerificationWorkspace } from "../../admin-verification-workspace";
 import { toLegacyAdminWorkspacePath } from "../../app/admin-v2-navigation";
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
@@ -90,6 +91,10 @@ export function PartnersWorkspaceRouter(props: {
     return <AdminSkimaFleetComplianceWorkspace onNavigate={props.onNavigate} />;
   }
   if (props.route === "/partners/fleet/legacy") return <AdminFleetWorkspace />;
+
+  if (props.route === "/partners/stations/managed-fulfillment") {
+    return <AdminStationManagedFulfillmentWorkspace />;
+  }
 
   if (props.route === "/partners/stations" || props.route.startsWith("/partners/stations/")) {
     return (

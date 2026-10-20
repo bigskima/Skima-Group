@@ -1954,7 +1954,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase
           .from("lpg_refill_quotes")
           .select(
-            "id,public_reference,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,pricing_id,requested_kg,quoted_kg,currency_code,lpg_amount,delivery_fee_amount,platform_fee_amount,tax_amount,driver_commission_amount,total_amount,status,expires_at,breakdown,financial_policy_snapshot,metadata,created_at,updated_at",
+            "id,public_reference,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,pricing_id,requested_kg,quoted_kg,currency_code,lpg_amount,delivery_fee_amount,platform_fee_amount,tax_amount,driver_commission_amount,total_amount,status,expires_at,breakdown,financial_policy_snapshot,fulfillment_mode,delivery_pricing_mode,station_delivery_fee_amount,metadata,created_at,updated_at",
           )
           .eq("created_by", authResult.user.id)
           .order("created_at", { ascending: false }),
@@ -2014,7 +2014,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       let orderQuery = supabase
         .from("lpg_refill_orders")
         .select(
-          "id,public_reference,lpg_refill_quote_id,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,driver_profile_id,vehicle_id,tracking_session_id,escrow_hold_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,station_amount,delivery_fee_amount,platform_fee_amount,driver_commission_amount,status,payment_status,assignment_status,financial_policy_snapshot,metadata,created_at,updated_at",
+          "id,public_reference,lpg_refill_quote_id,service_request_id,price_quote_id,cylinder_id,pickup_location_id,delivery_location_id,station_branch_id,driver_profile_id,vehicle_id,tracking_session_id,escrow_hold_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,station_amount,delivery_fee_amount,platform_fee_amount,driver_commission_amount,status,payment_status,assignment_status,financial_policy_snapshot,fulfillment_mode,delivery_pricing_mode,station_delivery_fee_amount,metadata,created_at,updated_at",
         );
 
       if (url.searchParams.get("scope") === "customer") {
@@ -7196,6 +7196,11 @@ async function resolveLpgMobileWorkspaceAccess(
     return databaseError(driverResult.error, id);
   }
 
+  const stationManagedDriverAccess = await supabase.rpc("read_lpg_station_managed_driver_access");
+  if (stationManagedDriverAccess.error) {
+    return databaseError(stationManagedDriverAccess.error, id);
+  }
+
   const userRolesResult = await supabase
     .from("user_roles")
     .select("id,organization_id,branch_id,role_id,status")
@@ -7353,6 +7358,22 @@ async function resolveLpgMobileWorkspaceAccess(
       organizationIds: stationOrganizationIds,
       branchIds: approvedBranchIds,
       stationIds: approvedStationIds,
+    });
+  }
+
+  const stationDriverEnabled = getRecordValue(stationManagedDriverAccess.data, "enabled") === true;
+  const stationDriverId = stringOrNull(getRecordValue(stationManagedDriverAccess.data, "stationDriverId"));
+  const stationDriverBranchId = stringOrNull(getRecordValue(stationManagedDriverAccess.data, "stationBranchId"));
+  if (stationDriverEnabled && stationDriverId && stationDriverBranchId) {
+    workspaces.push({
+      key: "station_driver",
+      status: "active",
+      subjectType: "lpg_station_managed_driver",
+      subjectId: stationDriverId,
+      capabilityKeys: ["station_managed.delivery.accept", "station_managed.delivery.update"],
+      organizationIds: [],
+      branchIds: [],
+      stationIds: [stationDriverBranchId],
     });
   }
 
@@ -11708,7 +11729,7 @@ async function buildAiAssistantContext(
     const [orders, cylinders, locations, refillOutlook, complaints, priceExplanations, locationServiceability] = await Promise.all([
       supabase
         .from("lpg_refill_orders")
-        .select("id,public_reference,cylinder_id,station_branch_id,driver_profile_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,delivery_fee_amount,platform_fee_amount,status,payment_status,assignment_status,created_at,updated_at")
+        .select("id,public_reference,cylinder_id,station_branch_id,driver_profile_id,currency_code,requested_kg,quoted_kg,actual_kg,total_amount,delivery_fee_amount,platform_fee_amount,fulfillment_mode,delivery_pricing_mode,station_delivery_fee_amount,status,payment_status,assignment_status,created_at,updated_at")
         .order("created_at", { ascending: false })
         .limit(8),
       supabase

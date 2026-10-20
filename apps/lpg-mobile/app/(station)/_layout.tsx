@@ -26,6 +26,7 @@ export default function Layout() {
           "roles",
           "account-tools",
           "account-settings",
+          "managed-fulfillment",
         ]}
       />
     </WorkspaceGate>

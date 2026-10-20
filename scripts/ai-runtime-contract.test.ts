@@ -585,7 +585,7 @@ Deno.test("contextual AI actions prefill questions but never auto-send them", ()
   );
   assertIncludes(
     jobDetailScreen,
-    'label={workspace === "driver" ? "What should I do next?" : "Explain this station job"}',
+    'label={driverWorkspace ? "What should I do next?" : "Explain this station job"}',
     "driver and station job details should offer contextual workflow guidance",
   );
   assertIncludes(

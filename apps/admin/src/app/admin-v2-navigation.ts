@@ -176,6 +176,7 @@ const partnerScreenLabels: Readonly<Record<string, string>> = {
   "/partners/companies": "Companies",
   "/partners/drivers": "Drivers",
   "/partners/stations": "Stations",
+  "/partners/stations/managed-fulfillment": "Station Managed Fulfillment",
   "/partners/verification": "Verification",
   "/partners/location-review": "Location review",
   "/partners/fleet": "Fleet & vehicles",

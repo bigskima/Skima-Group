@@ -69,6 +69,8 @@ jobs:
         run: npm run ai-runtime:contract
       - name: Verify LPG refill production contracts
         run: npm run lpg-refill:contract
+      - name: Verify Station Managed fulfillment, driver and admin contracts
+        run: npm run station-managed:verify
       - name: Verify LPG auth production contracts
         run: npm run lpg-auth:contract
       - name: Verify payout runtime production contracts
@@ -111,3 +113,45 @@ jobs:
         run: npm --prefix apps/lpg-mobile ci --no-audit --no-fund
       - name: Typecheck and build LPG web
         run: npm run deploy:check:lpg
+
+  station-managed-db-validation:
+    name: Station Managed local database migration validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start ephemeral local Supabase and apply schema migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          # These two legacy data-only migrations require live owner/admin identities.
+          # A blank local database intentionally has no such identity. Skip only these
+          # one-time data updates; retain all schema, function, policy and feature migrations.
+          backup_dir="$(mktemp -d)"
+          legacy_migrations=(
+            "supabase/migrations/20260813044000_retire_legacy_lpg_commercial_rates.sql"
+            "supabase/migrations/20260906035426_awka_legacy_area_mapping.sql"
+          )
+          restore_legacy_migrations() {
+            for backup_file in "$backup_dir"/*.sql; do
+              [ -f "$backup_file" ] || continue
+              mv "$backup_file" "supabase/migrations/$(basename "$backup_file")"
+            done
+            rmdir "$backup_dir" 2>/dev/null || true
+          }
+          for migration in "${legacy_migrations[@]}"; do
+            mv "$migration" "$backup_dir/"
+          done
+          trap restore_legacy_migrations EXIT
+          supabase start
+          # Startup only launches the local stack; reset explicitly applies every
+          # remaining migration to a clean ephemeral database. Never targets remote.
+          supabase db reset --local --no-seed
+      - name: Stop ephemeral local Supabase
+        if: always()
+        run: supabase stop --no-backup

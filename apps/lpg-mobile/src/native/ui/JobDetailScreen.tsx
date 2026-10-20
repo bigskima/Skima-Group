@@ -42,7 +42,7 @@ import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 import { StatusPill } from "./StatusPill";
 
-export function JobDetailScreen({ workspace }: { workspace: "driver" | "station" }) {
+export function JobDetailScreen({ workspace }: { workspace: "driver" | "station" | "station_driver" }) {
   const params = useLocalSearchParams<{ id?: string; scannedToken?: string }>();
   const id = params.id ?? null;
   const session = useSession();
@@ -127,6 +127,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const routeDistance = firstNumber(root, ["routeDistanceMeters", "route_distance_meters", "distanceMeters"]);
   const routeDuration = firstNumber(root, ["routeDurationSeconds", "route_duration_seconds", "durationSeconds"]);
   const status = displayStatus(order ?? {}) ?? "unknown";
+  const driverWorkspace = workspace === "driver" || workspace === "station_driver";
   const contactLocation = usesDeliveryContact(status) ? delivery : pickup;
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
   const filledKg = firstNumber(order, ["actualKg", "actual_kg"]);
@@ -145,12 +146,12 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   );
   const stationCanPump = Boolean(session.context?.platformAdmin || permissions.has("lpg.stations.pump"));
 
-  const driverScanType = driverScanTypeForStatus(status);
+  const driverScanType = workspace === "station_driver" ? stationManagedDriverScanTypeForStatus(status) : driverScanTypeForStatus(status);
   const stationScanType = stationScanTypeForStatus(status);
-  const canDriverScan = workspace === "driver" && Boolean(driverScanType);
+  const canDriverScan = driverWorkspace && Boolean(driverScanType);
   const canStationScan = workspace === "station" && stationCanInspect && Boolean(stationScanType);
-  const driverAction = workspace === "driver" ? driverActionForStatus(status) : null;
-  const navigationTarget = workspace === "driver" ? navigationPointForStatus(status, routePoints) : null;
+  const driverAction = workspace === "station_driver" ? stationManagedDriverActionForStatus(status) : driverWorkspace ? driverActionForStatus(status) : null;
+  const navigationTarget = driverWorkspace && (workspace !== "station_driver" || ["return_en_route", "delivery_verification_pending"].includes(status)) ? navigationPointForStatus(status, routePoints) : null;
   const stationWaitingForDriverScan = workspace === "station" && ["pickup_verified", "station_en_route"].includes(status);
   const refillActive = ["station_verified", "refill_in_progress", "refill_started"].includes(status);
   const releaseReady = ["refill_confirmed", "station_settled"].includes(status);
@@ -168,7 +169,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
       const location = await readOperationalLocation().catch(() => null);
       await scan.mutateAsync({
         ...(location ?? {}),
-        idempotencyKey: operationIdempotencyKey(`driver-${driverScanType}`, id),
+        idempotencyKey: operationIdempotencyKey(`${workspace === "station_driver" ? "station-managed-driver" : "driver"}-${driverScanType}`, id),
         lpgOrderId: id,
         scanType: driverScanType,
         source: "skima.lpg.mobile",
@@ -179,7 +180,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
       });
       setToken("");
       setNoticeSuccess(true);
-      setNotice(driverScanSuccess(driverScanType));
+      setNotice(workspace === "station_driver" && driverScanType === "customer_delivery" ? "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments." : driverScanSuccess(driverScanType));
     } catch (cause) {
       setNoticeSuccess(false);
       setNotice(friendlyError(cause, "SKIMA could not verify this cylinder. Scan the code again."));
@@ -304,9 +305,9 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
 
   return (
     <Screen
-      eyebrow={workspace === "station" ? "Station order" : "Delivery job"}
+      eyebrow={workspace === "station" ? "Station order" : workspace === "station_driver" ? "Station Managed delivery" : "Delivery job"}
       title={order ? displayTitle(order) : "Job details"}
-      subtitle={workspace === "station" ? "Verify the matched arrival, complete safety checks and record the actual refill." : "Follow the assigned route, scan the SKIMA cylinder at required hand-offs and complete delivery."}
+      subtitle={workspace === "station" ? "Verify the matched arrival, complete safety checks and record the actual refill." : workspace === "station_driver" ? "Follow your station-assigned delivery, confirm customer hand-over and record only the operational steps. Your station handles your compensation." : "Follow the assigned route, scan the SKIMA cylinder at required hand-offs and complete delivery."}
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {detail.isPending || (workspace === "station" && inspections.isPending) ? (
@@ -324,22 +325,24 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             <View style={styles.heroCopy}>
               <Text style={styles.heroEyebrow}>CURRENT STAGE</Text>
               <Text style={styles.heroTitle}>{friendlyJobStatus(status)}</Text>
-              <Text style={styles.heroBody}>{workspace === "driver" ? driverStageDescription(status) : stationStageDescription(status)}</Text>
+              <Text style={styles.heroBody}>{workspace === "station_driver" ? stationManagedDriverStageDescription(status) : driverWorkspace ? driverStageDescription(status) : stationStageDescription(status)}</Text>
             </View>
             <StatusPill label={friendlyJobStatus(status)} tone={statusTone(status)} />
           </View>
 
           <AiContextAction
-            workspace={workspace}
-            label={workspace === "driver" ? "What should I do next?" : "Explain this station job"}
+            workspace={workspace === "station_driver" ? "driver" : workspace}
+            label={driverWorkspace ? "What should I do next?" : "Explain this station job"}
             prompt={
-              workspace === "driver"
-                ? `Explain my assigned SKIMA driver job ${aiJobReference}. The current workflow stage is ${friendlyJobStatus(status)}. Tell me the next normal action I should take and any required scan or hand-off. Do not accept, cancel, scan, complete or change the job.`
-                : `Explain this SKIMA station refill job ${aiJobReference}. The current workflow stage is ${friendlyJobStatus(status)}. Tell me what the station should check or do next. Do not record an inspection, refill, scan, settlement or other action.`
+              workspace === "station_driver"
+                ? `Explain my Station Managed delivery ${aiJobReference}. The current stage is ${friendlyJobStatus(status)}. Explain the next safe hand-over step. The station pays me directly; SKIMA does not execute station-driver payments. Do not accept, scan, complete or change the job.`
+                : driverWorkspace
+                  ? `Explain my assigned SKIMA driver job ${aiJobReference}. The current workflow stage is ${friendlyJobStatus(status)}. Tell me the next normal action I should take and any required scan or hand-off. Do not accept, cancel, scan, complete or change the job.`
+                  : `Explain this SKIMA station refill job ${aiJobReference}. The current workflow stage is ${friendlyJobStatus(status)}. Tell me what the station should check or do next. Do not record an inspection, refill, scan, settlement or other action.`
             }
           />
 
-          {workspace === "driver" && routePoints.length ? (
+          {driverWorkspace && routePoints.length ? (
             <View style={[styles.mapShell, shadows.soft]}>
               <OperationalMap points={routePoints} height={390} />
             </View>
@@ -354,20 +357,20 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             {requestedKg !== null ? <><Divider /><SummaryField label="Requested refill" value={`${requestedKg} kg`} /></> : null}
             {filledKg !== null ? <><Divider /><SummaryField label="Actual refill" value={`${filledKg} kg`} /></> : null}
             {workspace === "station" && driver ? <><Divider /><SummaryField label="Assigned driver" value={firstString(driver, ["displayName", "display_name", "name"]) ?? displayTitle(driver)} /></> : null}
-            {workspace === "driver" && customer ? <><Divider /><SummaryField label="Customer" value={firstString(customer, ["displayName", "display_name"]) ?? "Customer"} /></> : null}
-            {workspace === "driver" && firstString(contactLocation, ["contactName", "contact_name"]) ? <><Divider /><SummaryField label={usesDeliveryContact(status) ? "Delivery contact" : "Pickup contact"} value={firstString(contactLocation, ["contactName", "contact_name"]) ?? "Customer"} /></> : null}
-            {workspace === "driver" && firstString(contactLocation, ["contactPhone", "contact_phone"]) ? <><Divider /><SummaryField label="Contact phone" value={firstString(contactLocation, ["contactPhone", "contact_phone"]) ?? "Not available"} /></> : null}
-            {workspace === "driver" && (firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"])) ? <><Divider /><SummaryField label="Contact email" value={firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"]) ?? "Not available"} /></> : null}
+            {driverWorkspace && customer ? <><Divider /><SummaryField label="Customer" value={firstString(customer, ["displayName", "display_name"]) ?? "Customer"} /></> : null}
+            {driverWorkspace && firstString(contactLocation, ["contactName", "contact_name"]) ? <><Divider /><SummaryField label={usesDeliveryContact(status) ? "Delivery contact" : "Pickup contact"} value={firstString(contactLocation, ["contactName", "contact_name"]) ?? "Customer"} /></> : null}
+            {driverWorkspace && firstString(contactLocation, ["contactPhone", "contact_phone"]) ? <><Divider /><SummaryField label="Contact phone" value={firstString(contactLocation, ["contactPhone", "contact_phone"]) ?? "Not available"} /></> : null}
+            {driverWorkspace && (firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"])) ? <><Divider /><SummaryField label="Contact email" value={firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"]) ?? "Not available"} /></> : null}
           </View>
 
-          {workspace === "driver" && (routeDistance !== null || routeDuration !== null) ? (
+          {driverWorkspace && (routeDistance !== null || routeDuration !== null) ? (
             <View style={styles.metricGrid}>
               <Metric icon={<MapPin color={palette.brand} size={19} />} label="Route distance" value={routeDistance !== null ? `${(routeDistance / 1000).toFixed(1)} km` : "Unavailable"} />
               <Metric icon={<Clock3 color={palette.brand} size={19} />} label="Estimated time" value={routeDuration !== null ? `${Math.ceil(routeDuration / 60)} min` : "Unavailable"} />
             </View>
           ) : null}
 
-          {workspace === "driver" && navigationTarget ? (
+          {driverWorkspace && navigationTarget ? (
             <AppButton
               label={`Navigate to ${navigationTarget.label.toLowerCase()}`}
               fullWidth
@@ -380,7 +383,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             />
           ) : null}
 
-          {workspace === "driver" && driverAction ? (
+          {driverWorkspace && driverAction ? (
             <AppButton
               label={driverActionLabel(driverAction)}
               fullWidth
@@ -550,10 +553,10 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             />
           ) : null}
 
-          {workspace === "driver" && ["delivered", "completed"].includes(status) ? (
+          {driverWorkspace && ["delivered", "completed"].includes(status) ? (
             <InfoNotice
               icon={<CheckCircle2 color={palette.success} size={19} />}
-              text="Delivery is confirmed. Your earnings will be added automatically; no further action is needed."
+              text={workspace === "station_driver" ? "Customer hand-over is confirmed. Any driver compensation is handled by your station, not paid by SKIMA." : "Delivery is confirmed. Your earnings will be added automatically; no further action is needed."}
             />
           ) : null}
 
@@ -566,6 +569,24 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
       )}
     </Screen>
   );
+}
+
+
+function stationManagedDriverScanTypeForStatus(status: string): "customer_delivery" | null {
+  return ["return_en_route", "delivery_verification_pending"].includes(status) ? "customer_delivery" : null;
+}
+
+function stationManagedDriverActionForStatus(status: string) {
+  return status === "return_en_route" ? "lpg.delivery.pending" : null;
+}
+
+function stationManagedDriverStageDescription(status: string) {
+  if (["driver_offered", "driver_accepted"].includes(status)) return "Your station has assigned this delivery. Wait for the station to finish the refill and settlement before starting the customer route.";
+  if (["refill_confirmed", "station_settled"].includes(status)) return "The station has confirmed the refill. Start delivery from My Deliveries when the station settlement is complete.";
+  if (status === "return_en_route") return "You are travelling to the customer. Record arrival at hand-over, then follow the customer's delivery verification and scan the cylinder.";
+  if (status === "delivery_verification_pending") return "The customer must complete delivery verification before the final cylinder scan can close the order.";
+  if (["delivered", "completed"].includes(status)) return "The hand-over is verified. Any driver compensation is recorded and paid by the station, not by SKIMA.";
+  return "Follow the station's delivery instructions and complete the required hand-over checks.";
 }
 
 function StationProgress({ status }: { status: string }) {

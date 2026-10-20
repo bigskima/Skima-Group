@@ -22,7 +22,7 @@ import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { AppButton } from "./AppButton";
 import { Screen } from "./Screen";
 
-type Workspace = "customer" | "driver" | "station";
+type Workspace = "customer" | "driver" | "station" | "station-driver";
 type ToolItem = {
   label: string;
   detail: string;
@@ -76,6 +76,14 @@ const toolGroups: Record<Workspace, readonly ToolGroup[]> = {
         { label: "Service areas", detail: "Places where you can receive jobs", href: "/(driver)/service-zone", icon: MapPin },
         { label: "Vehicles", detail: "Vehicle details and approval", href: "/(driver)/vehicles", icon: Truck },
         { label: "Documents", detail: "Submitted driver documents", href: "/(driver)/documents", icon: FileCheck2 },
+      ],
+    },
+  ],
+  "station-driver": [
+    {
+      title: "Station delivery work",
+      items: [
+        { label: "My deliveries", detail: "Accept assigned work and update delivery progress", href: "/(station-driver)", icon: Truck },
       ],
     },
   ],
