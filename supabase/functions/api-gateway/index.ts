@@ -484,7 +484,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
   }
 
   if (routePath === "/runtime/station-driver-invitations/accept" && request.method === "POST") {
-    const result = await supabase.rpc("accept_lpg_station_managed_driver_invitation");
+    const result = await supabase.rpc("accept_lpg_station_managed_driver_invite");
     if (result.error) return databaseError(result.error, id);
     return jsonResponse({ ok: true, data: { stationDriverId: result.data }, requestId: id });
   }
