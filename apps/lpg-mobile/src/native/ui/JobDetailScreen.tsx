@@ -151,7 +151,9 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const canDriverScan = driverWorkspace && Boolean(driverScanType);
   const canStationScan = workspace === "station" && stationCanInspect && Boolean(stationScanType);
   const driverAction = workspace === "station_driver" ? stationManagedDriverActionForStatus(status) : driverWorkspace ? driverActionForStatus(status) : null;
-  const navigationTarget = driverWorkspace && (workspace !== "station_driver" || ["return_en_route", "delivery_verification_pending"].includes(status)) ? navigationPointForStatus(status, routePoints) : null;
+  // Station drivers follow the same customer → station → customer route as the
+  // existing LPG lifecycle; they are authorized by their station assignment.
+  const navigationTarget = driverWorkspace ? navigationPointForStatus(status, routePoints) : null;
   const stationWaitingForDriverScan = workspace === "station" && ["pickup_verified", "station_en_route"].includes(status);
   const refillActive = ["station_verified", "refill_in_progress", "refill_started"].includes(status);
   const releaseReady = ["refill_confirmed", "station_settled"].includes(status);
@@ -572,21 +574,32 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
 }
 
 
-function stationManagedDriverScanTypeForStatus(status: string): "customer_delivery" | null {
+function stationManagedDriverScanTypeForStatus(status: string): "customer_pickup" | "station_receipt" | "customer_delivery" | null {
+  if (status === "pickup_en_route") return "customer_pickup";
+  if (status === "station_en_route") return "station_receipt";
   return ["return_en_route", "delivery_verification_pending"].includes(status) ? "customer_delivery" : null;
 }
 
 function stationManagedDriverActionForStatus(status: string) {
-  return status === "return_en_route" ? "lpg.delivery.pending" : null;
+  if (status === "driver_accepted") return "lpg.pickup.start";
+  if (status === "pickup_verified") return "lpg.station.start";
+  if (status === "return_en_route") return "lpg.delivery.pending";
+  return null;
 }
 
 function stationManagedDriverStageDescription(status: string) {
-  if (["driver_offered", "driver_accepted"].includes(status)) return "Your station has assigned this delivery. Wait for the station to finish the refill and settlement before starting the customer route.";
-  if (["refill_confirmed", "station_settled"].includes(status)) return "The station has confirmed the refill. Start delivery from My Deliveries when the station settlement is complete.";
-  if (status === "return_en_route") return "You are travelling to the customer. Record arrival at hand-over, then follow the customer's delivery verification and scan the cylinder.";
-  if (status === "delivery_verification_pending") return "The customer must complete delivery verification before the final cylinder scan can close the order.";
+  if (status === "driver_offered") return "Your station assigned this order. Accept it in My Deliveries to start the pickup workflow.";
+  if (status === "driver_accepted") return "Start the pickup route to the customer, then scan the cylinder to verify collection.";
+  if (status === "pickup_en_route") return "Navigate to the customer and scan the cylinder after you collect it.";
+  if (status === "pickup_verified") return "Pickup is verified. Start transit to your station and scan the cylinder when you arrive.";
+  if (status === "station_en_route") return "Head to your station. Scan the cylinder at reception so the station can begin safety checks and refill.";
+  if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is checking and refilling the cylinder. Wait until refill and settlement are complete.";
+  if (status === "refill_confirmed") return "The refill is complete. The station must finish settlement and release the cylinder before the return leg.";
+  if (status === "station_settled") return "The station has settled the refill. Start the return leg from My Deliveries, or wait for the station to complete its release scan.";
+  if (status === "return_en_route") return "Return to the customer, request delivery verification at hand-over, then scan the cylinder to finish the order.";
+  if (status === "delivery_verification_pending") return "Complete the customer's delivery verification before scanning the cylinder for the final hand-over.";
   if (["delivered", "completed"].includes(status)) return "The hand-over is verified. Any driver compensation is recorded and paid by the station, not by SKIMA.";
-  return "Follow the station's delivery instructions and complete the required hand-over checks.";
+  return "Follow the station's delivery instructions and complete each required cylinder and customer verification step.";
 }
 
 function StationProgress({ status }: { status: string }) {
