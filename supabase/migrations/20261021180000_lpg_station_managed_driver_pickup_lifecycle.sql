@@ -30,29 +30,29 @@ begin
   end if;
   function_sql := replace(function_sql,old_block,new_block);
 
-  old_block :=
-    '  elsif target_scan_type = ''station_receipt'' then'||E'\n'||
-    '    if order_record.status not in (''pickup_verified'', ''station_en_route'') then'||E'\n'||
-    '      raise exception ''station receipt scan is not valid for the current order status'';'||E'\n'||
-    '    end if;'||E'\n'||
-    '    if not public.can_operate_lpg_station_branch(order_record.station_branch_id, ''lpg.stations.scan'') then'||E'\n'||
-    '      raise exception ''branch-scoped LPG scanner permission is required'';'||E'\n'||
-    '    end if;'||E'\n'||
-    '    new_status := ''station_verified'';';
-  new_block :=
-    '  elsif target_scan_type = ''station_receipt'' then'||E'\n'||
-    '    if order_record.status not in (''pickup_verified'', ''station_en_route'') then'||E'\n'||
-    '      raise exception ''station receipt scan is not valid for the current order status'';'||E'\n'||
-    '    end if;'||E'\n'||
-    '    if not public.can_operate_lpg_station_branch(order_record.station_branch_id, ''lpg.stations.scan'')'||E'\n'||
-    '      and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid()) then'||E'\n'||
-    '      raise exception ''branch-scoped LPG scanner permission or assigned station driver is required'';'||E'\n'||
-    '    end if;'||E'\n'||
-    '    new_status := ''station_verified'';';
-  if position(old_block in function_sql)=0 then
-    raise exception 'Could not locate station receipt scanner access guard';
-  end if;
-  function_sql := replace(function_sql,old_block,new_block);
+  -- Scope this guard patch to the station_receipt branch only. Match the
+  -- predicate itself rather than the entire formatted branch, so later lifecycle
+  -- migrations that reflow whitespace do not break local migration replay.
+  declare
+    receipt_branch_start integer;
+    receipt_guard_start integer;
+    receipt_guard text;
+    receipt_insert_at integer;
+  begin
+    receipt_branch_start := position('elsif target_scan_type = ''station_receipt'' then' in function_sql);
+    if receipt_branch_start=0 then
+      raise exception 'Could not locate station receipt scan branch';
+    end if;
+    receipt_guard := 'if not public.can_operate_lpg_station_branch(order_record.station_branch_id, ''lpg.stations.scan'')';
+    receipt_guard_start := position(receipt_guard in substring(function_sql from receipt_branch_start));
+    if receipt_guard_start=0 then
+      raise exception 'Could not locate station receipt scanner permission predicate';
+    end if;
+    receipt_insert_at := receipt_branch_start + receipt_guard_start - 1 + length(receipt_guard);
+    function_sql := substring(function_sql from 1 for receipt_insert_at - 1)
+      || ' and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())'
+      || substring(function_sql from receipt_insert_at);
+  end;
 
   -- Keep the assignment state aligned with the completed order after the
   -- canonical cylinder scan has verified the final customer hand-over.
