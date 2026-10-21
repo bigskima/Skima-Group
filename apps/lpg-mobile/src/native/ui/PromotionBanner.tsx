@@ -192,7 +192,7 @@ function PromotionCard({ publication, width }: {
 }
 
 const styles = StyleSheet.create({
-  carousel: { gap: 10, marginHorizontal: -8 },
+  carousel: { gap: 10, marginHorizontal: -12 },
   carouselContent: { gap: 12, paddingRight: spacing.sm },
   banner: { minHeight: 190, overflow: "hidden", flexDirection: "row", alignItems: "center", gap: 14, padding: 20, borderRadius: 26 },
   copy: { flex: 1, gap: 3 },
