@@ -148,7 +148,7 @@ Deno.test("Station Managed drivers have a separate authenticated job workspace",
   requireText(workspaceGate, '"station_driver"', "station driver workspace gate");
   requireText(workspaceSwitcher, 'workspaces.includes("station_driver")', "station driver workspace switcher");
   requireText(driverScreen, "Accept delivery", "driver accepts station assignment");
-  requireText(driverScreen, "Start delivery", "driver starts assigned route");
+  requireText(driverScreen, "Start return delivery", "driver starts the return leg after station release");
   requireText(driverScreen, "Open delivery details & hand-over", "driver opens customer hand-over");
   requireText(driverDetailRoute, 'workspace="station_driver"', "dedicated station driver hand-over route");
   requireText(jobDetailScreen, "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments.", "station driver hand-over has no SKIMA payout messaging");
@@ -167,12 +167,12 @@ Deno.test("Home promotion carousel uses the available width and an expanded bann
 
 
 Deno.test("Station Managed driver can progress the full pickup → station → return lifecycle", () => {
-  requireText(driverPickupLifecycleMigration, "public.process_lpg_order_action(uuid,text,text,jsonb,text)", "station driver assigned-action authorization patch");
+  requireText(migration, "and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())", "canonical assigned-driver action guard supports Station Managed");
   requireText(driverPickupLifecycleMigration, "not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())", "only the assigned station driver can progress the order");
   requireText(driverPickupLifecycleMigration, "public.record_lpg_cylinder_scan(uuid,text,text,numeric,numeric,numeric,jsonb,text)", "station driver cylinder scan authorization patch");
   requireText(driverPickupLifecycleMigration, "public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())", "station driver receipt scan follows station assignment");
   requireText(driverPickupLifecycleMigration, "order_status_before not in (''station_settled'',''return_en_route'')", "return route starts only after station release or settlement");
-  requireText(driverPickupLifecycleMigration, "assignment.status = ''delivered''", "verified customer hand-over closes station assignment");
+  requireText(driverPickupLifecycleMigration, "set status = ''delivered''", "verified customer hand-over closes station assignment");
   requireText(driverPickupLifecycleMigration, "Station Managed pickup and receipt scans require the order''s active station-driver assignment.", "legacy pickup scan block is retired");
   requireText(jobDetailScreen, 'if (status === "driver_accepted") return "lpg.pickup.start";', "station drivers can start pickup");
   requireText(jobDetailScreen, 'if (status === "pickup_verified") return "lpg.station.start";', "station drivers can proceed to refill station");
