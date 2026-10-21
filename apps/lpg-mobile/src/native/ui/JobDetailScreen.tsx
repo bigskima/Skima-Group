@@ -153,7 +153,13 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const driverAction = workspace === "station_driver" ? stationManagedDriverActionForStatus(status) : driverWorkspace ? driverActionForStatus(status) : null;
   // Station drivers follow the same customer → station → customer route as the
   // existing LPG lifecycle; they are authorized by their station assignment.
-  const navigationTarget = driverWorkspace ? navigationPointForStatus(status, routePoints) : null;
+  const stationDriverCanNavigate = workspace !== "station_driver" || [
+    "driver_accepted", "pickup_en_route", "pickup_verified", "station_en_route",
+    "station_settled", "return_en_route", "delivery_verification_pending",
+  ].includes(status);
+  const navigationTarget = driverWorkspace && stationDriverCanNavigate
+    ? navigationPointForStatus(status, routePoints)
+    : null;
   const stationWaitingForDriverScan = workspace === "station" && ["pickup_verified", "station_en_route"].includes(status);
   const refillActive = ["station_verified", "refill_in_progress", "refill_started"].includes(status);
   const releaseReady = ["refill_confirmed", "station_settled"].includes(status);
