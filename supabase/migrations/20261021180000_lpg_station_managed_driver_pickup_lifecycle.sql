@@ -61,7 +61,7 @@ begin
     handover_patch text;
   begin
     return_idx := length(function_sql)
-      - position('return scan_id' in reverse(lower(function_sql)))
+      - position(reverse('return scan_id') in reverse(lower(function_sql)))
       - length('return scan_id') + 2;
     if return_idx < 1 then
       raise exception 'Could not locate final scan return in cylinder verification function';
