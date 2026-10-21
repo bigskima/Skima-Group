@@ -13,6 +13,12 @@ declare
   function_sql text;
   old_block text;
   new_block text;
+  receipt_branch_start integer;
+  receipt_guard_start integer;
+  receipt_guard text;
+  receipt_insert_at integer;
+  return_idx integer;
+  handover_patch text;
 begin
   function_sql := pg_get_functiondef('public.record_lpg_cylinder_scan(uuid,text,text,numeric,numeric,numeric,jsonb,text)'::regprocedure);
 
@@ -33,55 +39,43 @@ begin
   -- Scope this guard patch to the station_receipt branch only. Match the
   -- predicate itself rather than the entire formatted branch, so later lifecycle
   -- migrations that reflow whitespace do not break local migration replay.
-  declare
-    receipt_branch_start integer;
-    receipt_guard_start integer;
-    receipt_guard text;
-    receipt_insert_at integer;
-  begin
-    receipt_branch_start := position('elsif target_scan_type = ''station_receipt'' then' in function_sql);
-    if receipt_branch_start=0 then
-      raise exception 'Could not locate station receipt scan branch';
-    end if;
-    receipt_guard := 'if not public.can_operate_lpg_station_branch(order_record.station_branch_id, ''lpg.stations.scan'')';
-    receipt_guard_start := position(receipt_guard in substring(function_sql from receipt_branch_start));
-    if receipt_guard_start=0 then
-      raise exception 'Could not locate station receipt scanner permission predicate';
-    end if;
-    receipt_insert_at := receipt_branch_start + receipt_guard_start - 1 + length(receipt_guard);
-    function_sql := substring(function_sql from 1 for receipt_insert_at - 1)
-      || ' and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())'
-      || substring(function_sql from receipt_insert_at);
-  end;
+  receipt_branch_start := position('elsif target_scan_type = ''station_receipt'' then' in function_sql);
+  if receipt_branch_start=0 then
+    raise exception 'Could not locate station receipt scan branch';
+  end if;
+  receipt_guard := 'if not public.can_operate_lpg_station_branch(order_record.station_branch_id, ''lpg.stations.scan'')';
+  receipt_guard_start := position(receipt_guard in substring(function_sql from receipt_branch_start));
+  if receipt_guard_start=0 then
+    raise exception 'Could not locate station receipt scanner permission predicate';
+  end if;
+  receipt_insert_at := receipt_branch_start + receipt_guard_start - 1 + length(receipt_guard);
+  function_sql := substring(function_sql from 1 for receipt_insert_at - 1)
+    || ' and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())'
+    || substring(function_sql from receipt_insert_at);
 
   -- Keep the assignment state aligned with the completed order after the
   -- canonical cylinder scan has verified the final customer hand-over.
-  declare
-    return_idx integer;
-    handover_patch text;
-  begin
-    return_idx := length(function_sql)
-      - position(reverse('return scan_id') in reverse(lower(function_sql)))
-      - length('return scan_id') + 2;
-    if return_idx < 1 then
-      raise exception 'Could not locate final scan return in cylinder verification function';
-    end if;
-    handover_patch :=
-      '  if target_scan_type = ''customer_delivery'' and new_status = ''delivered'''||E'\n'||
-      '    and order_record.fulfillment_mode = ''station_managed'' then'||E'\n'||
-      '    update public.lpg_station_managed_driver_assignments assignment'||E'\n'||
-      '    set status = ''delivered'', completed_at = timezone(''utc'', now())'||E'\n'||
-      '    from public.lpg_station_managed_drivers station_driver'||E'\n'||
-      '    where assignment.lpg_order_id = order_record.id'||E'\n'||
-      '      and assignment.station_driver_id = station_driver.id'||E'\n'||
-      '      and station_driver.user_id = auth.uid()'||E'\n'||
-      '      and station_driver.status = ''active'''||E'\n'||
-      '      and assignment.status in (''accepted'', ''en_route'');'||E'\n'||
-      '  end if;'||E'\n'||E'\n';
-    function_sql := substring(function_sql from 1 for return_idx - 1)
-      || handover_patch
-      || substring(function_sql from return_idx);
-  end;
+  return_idx := length(function_sql)
+    - position(reverse('return scan_id') in reverse(lower(function_sql)))
+    - length('return scan_id') + 2;
+  if return_idx < 1 then
+    raise exception 'Could not locate final scan return in cylinder verification function';
+  end if;
+  handover_patch :=
+    '  if target_scan_type = ''customer_delivery'' and new_status = ''delivered'''||E'\n'||
+    '    and order_record.fulfillment_mode = ''station_managed'' then'||E'\n'||
+    '    update public.lpg_station_managed_driver_assignments assignment'||E'\n'||
+    '    set status = ''delivered'', completed_at = timezone(''utc'', now())'||E'\n'||
+    '    from public.lpg_station_managed_drivers station_driver'||E'\n'||
+    '    where assignment.lpg_order_id = order_record.id'||E'\n'||
+    '      and assignment.station_driver_id = station_driver.id'||E'\n'||
+    '      and station_driver.user_id = auth.uid()'||E'\n'||
+    '      and station_driver.status = ''active'''||E'\n'||
+    '      and assignment.status in (''accepted'', ''en_route'');'||E'\n'||
+    '  end if;'||E'\n'||E'\n';
+  function_sql := substring(function_sql from 1 for return_idx - 1)
+    || handover_patch
+    || substring(function_sql from return_idx);
 end
 $station_managed_scans$;
 
