@@ -1,7 +1,7 @@
 begin;
 
--- Independent drivers keep normal workspace access when they do not have a matching Station Managed invite.
--- The conversion guard is intentionally inside the branch for a pending, confirmed-email invitation.
+-- A pending invite cannot convert an independent driver account. Revoke only that invite
+-- and return a normal disabled Station Managed result instead of aborting workspace resolution.
 create or replace function public.read_lpg_station_managed_driver_access()
 returns jsonb
 language plpgsql
@@ -36,7 +36,13 @@ begin
     order by created_at desc limit 1 for update;
     if found then
       if exists(select 1 from public.driver_profiles where user_id=auth.uid()) then
-        raise exception using errcode='55000',message='an independent or SKIMA Managed driver profile cannot accept a Station Managed invitation';
+        -- Consume an ineligible invite without breaking the user's existing independent-driver workspace.
+        update public.lpg_station_managed_driver_invites
+        set status='revoked',
+            updated_at=timezone('utc',now()),
+            metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object('revocationReason','account_already_has_independent_driver_profile')
+        where id=invite_record.id and status='pending';
+        return jsonb_build_object('enabled',false);
       end if;
       if exists(select 1 from public.lpg_station_managed_drivers where user_id=auth.uid() and status='active') then
         raise exception using errcode='23505',message='this account already belongs to an active Station Managed driver';
