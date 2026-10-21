@@ -465,12 +465,34 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     if (existing.data?.status === "accepted") {
       return jsonResponse({ ok: false, error: "already_registered", message: "This email has already accepted a Station Managed driver invitation for this branch.", requestId: id }, 409);
     }
+    // Persist the pending invite before sending email so a fast accept/click can
+    // never arrive before the branch-scoped invitation record exists.
+    const saved = await serviceClient.from("lpg_station_managed_driver_invites").upsert({
+      station_branch_id: stationBranchId, email, display_name: displayName, phone,
+      invited_by: authResult.user.id, status: "pending", accepted_user_id: null,
+      accepted_at: null, expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+      metadata: { source: "api-gateway", deliveryStatus: "pending" },
+    }, { onConflict: "station_branch_id,email" }).select("id,status,expires_at").single();
+    if (saved.error) return databaseError(saved.error, id);
+
+    const revokeUndeliveredInvitation = async (failureCode: string): Promise<Response | null> => {
+      const revoked = await serviceClient.from("lpg_station_managed_driver_invites")
+        .update({
+          status: "revoked",
+          updated_at: new Date().toISOString(),
+          metadata: { source: "api-gateway", deliveryStatus: "failed", deliveryFailure: failureCode },
+        })
+        .eq("id", saved.data.id)
+        .eq("status", "pending");
+      return revoked.error ? databaseError(revoked.error, id) : null;
+    };
+
     const inviteRedirectTo = Deno.env.get("AUTH_INVITE_REDIRECT_URL") ?? Deno.env.get("SITE_URL");
     const invitation = await serviceClient.auth.admin.inviteUserByEmail(email, {
       data: { full_name: displayName, station_managed_driver_invite: true },
       ...(inviteRedirectTo ? { redirectTo: inviteRedirectTo } : {}),
     });
-    let invitationUserId: string | null = invitation.data?.user?.id ?? null;
     if (invitation.error) {
       // Existing SKIMA accounts cannot be invited as new auth users. Send an OTP
       // sign-in email instead; the pending branch invite is accepted after login.
@@ -483,21 +505,16 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           },
         });
         if (signIn.error) {
+          const cleanupError = await revokeUndeliveredInvitation("existing_account_otp_failed");
+          if (cleanupError) return cleanupError;
           return jsonResponse({ ok: false, error: "invitation_delivery_failed", message: signIn.error.message, requestId: id }, 400);
         }
-        invitationUserId = null;
       } else {
+        const cleanupError = await revokeUndeliveredInvitation("invite_email_failed");
+        if (cleanupError) return cleanupError;
         return jsonResponse({ ok: false, error: "invitation_delivery_failed", message: invitation.error.message, requestId: id }, 400);
       }
     }
-    const saved = await serviceClient.from("lpg_station_managed_driver_invites").upsert({
-      station_branch_id: stationBranchId, email, display_name: displayName, phone,
-      invited_by: authResult.user.id, status: "pending", accepted_user_id: null,
-      accepted_at: null, expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-      metadata: { source: "api-gateway", invitationUserId },
-    }, { onConflict: "station_branch_id,email" }).select("id,status,expires_at").single();
-    if (saved.error) return databaseError(saved.error, id);
     return jsonResponse({ ok: true, data: { id: saved.data.id, email, status: saved.data.status, expiresAt: saved.data.expires_at }, requestId: id });
   }
 
