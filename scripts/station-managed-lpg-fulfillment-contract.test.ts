@@ -77,7 +77,7 @@ Deno.test("Station workspace and API surfaces are wired", () => {
   requireText(station, "api-gateway/runtime/station-driver-invitations", "email invitation endpoint");
   requireText(inviteDispatchMigration, "accept_lpg_station_managed_driver_invite", "driver invitation acceptance RPC");
   requireText(inviteDispatchMigration, "trg_auto_dispatch_lpg_station_managed_order", "automatic dispatch trigger");
-  requireText(stationDispatchAclMigration, "auto_dispatch_pending_lpg_station_managed_orders_for_branch(uuid)", "internal branch dispatch helper is not publicly callable");
+  requireText(stationDispatchAclMigration, "auto_dispatch_pending_station_orders_for_branch(uuid)", "internal branch dispatch helper is not publicly callable");
   requireText(stationDispatchAclMigration, "on_station_managed_dispatch_readiness_changed()", "internal dispatch trigger helper is not publicly callable");
   requireText(inviteDispatchMigration, "driver_commission_amount=0", "station-managed orders stay out of independent-driver commission accounting");
   requireText(inviteDispatchMigration, "where public.lpg_station_managed_driver_assignments.status='cancelled'", "cancelled station assignments can be automatically reassigned");
