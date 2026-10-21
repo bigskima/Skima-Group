@@ -470,14 +470,32 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       data: { full_name: displayName, station_managed_driver_invite: true },
       ...(inviteRedirectTo ? { redirectTo: inviteRedirectTo } : {}),
     });
+    let invitationUserId: string | null = invitation.data?.user?.id ?? null;
     if (invitation.error) {
-      return jsonResponse({ ok: false, error: "invitation_delivery_failed", message: invitation.error.message, requestId: id }, 400);
+      // Existing SKIMA accounts cannot be invited as new auth users. Send an OTP
+      // sign-in email instead; the pending branch invite is accepted after login.
+      if (/already registered|already exists|user exists/i.test(invitation.error.message)) {
+        const signIn = await serviceClient.auth.signInWithOtp({
+          email,
+          options: {
+            shouldCreateUser: false,
+            ...(inviteRedirectTo ? { emailRedirectTo: inviteRedirectTo } : {}),
+          },
+        });
+        if (signIn.error) {
+          return jsonResponse({ ok: false, error: "invitation_delivery_failed", message: signIn.error.message, requestId: id }, 400);
+        }
+        invitationUserId = null;
+      } else {
+        return jsonResponse({ ok: false, error: "invitation_delivery_failed", message: invitation.error.message, requestId: id }, 400);
+      }
     }
     const saved = await serviceClient.from("lpg_station_managed_driver_invites").upsert({
       station_branch_id: stationBranchId, email, display_name: displayName, phone,
       invited_by: authResult.user.id, status: "pending", accepted_user_id: null,
       accepted_at: null, expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      metadata: { source: "api-gateway", invitationUserId: invitation.data.user?.id ?? null },
+      updated_at: new Date().toISOString(),
+      metadata: { source: "api-gateway", invitationUserId },
     }, { onConflict: "station_branch_id,email" }).select("id,status,expires_at").single();
     if (saved.error) return databaseError(saved.error, id);
     return jsonResponse({ ok: true, data: { id: saved.data.id, email, status: saved.data.status, expiresAt: saved.data.expires_at }, requestId: id });
@@ -486,7 +504,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
   if (routePath === "/runtime/station-driver-invitations/accept" && request.method === "POST") {
     const result = await supabase.rpc("accept_lpg_station_managed_driver_invite");
     if (result.error) return databaseError(result.error, id);
-    return jsonResponse({ ok: true, data: result.data, requestId: id });
+    return jsonResponse({ ok: true, data: { stationDriverId: result.data }, requestId: id });
   }
 
   if (routePath === "/health") {
