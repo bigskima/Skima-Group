@@ -27,7 +27,11 @@ export function PromotionBanner({ audience = "customer" }: { audience?: "custome
     .filter((item) => item.placementKey === "mobile.home.promotion")
     .sort((left, right) => right.priority - left.priority);
 
-  const cardWidth = Math.min(Math.max(width - 40, 312), 640);
+  const [carouselWidth, setCarouselWidth] = useState(0);
+  // Measure the actual carousel slot, rather than the whole device width. This
+  // lets the banner bleed slightly wider than the other home sections on mobile
+  // while staying within the dashboard frame on tablets and web.
+  const cardWidth = Math.min(Math.max(carouselWidth || width - 20, 280), 700);
   const pageWidth = cardWidth + 12;
   const scrollViewRef = useRef<ScrollView>(null);
   const rawPageRef = useRef(0);
@@ -109,7 +113,13 @@ export function PromotionBanner({ audience = "customer" }: { audience?: "custome
   if (!publications.length) return null;
 
   return (
-    <View style={styles.carousel}>
+    <View
+      style={styles.carousel}
+      onLayout={(event) => {
+        const measuredWidth = event.nativeEvent.layout.width;
+        setCarouselWidth((current) => Math.abs(current - measuredWidth) > 1 ? measuredWidth : current);
+      }}
+    >
       <ScrollView
         ref={scrollViewRef}
         horizontal
@@ -183,12 +193,12 @@ function PromotionCard({ publication, width }: {
 }
 
 const styles = StyleSheet.create({
-  carousel: { gap: 9 },
+  carousel: { gap: 10, marginHorizontal: -8 },
   carouselContent: { gap: 12, paddingRight: spacing.sm },
-  banner: { minHeight: 150, overflow: "hidden", flexDirection: "row", alignItems: "center", gap: 12, padding: 16, borderRadius: 22 },
+  banner: { minHeight: 190, overflow: "hidden", flexDirection: "row", alignItems: "center", gap: 14, padding: 20, borderRadius: 26 },
   copy: { flex: 1, gap: 3 },
-  title: { color: "white", fontSize: 17, lineHeight: 21, fontWeight: "900" },
-  body: { color: "rgba(255,255,255,.70)", fontSize: 11, lineHeight: 15 },
+  title: { color: "white", fontSize: 19, lineHeight: 23, fontWeight: "900" },
+  body: { color: "rgba(255,255,255,.76)", fontSize: 12, lineHeight: 17 },
   arrow: { position: "absolute", right: 12, bottom: 12, width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: "white" },
   dots: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5 },
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "rgba(18,29,23,.18)" },
