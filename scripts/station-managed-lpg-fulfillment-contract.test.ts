@@ -11,6 +11,7 @@ const admin = await Deno.readTextFile("apps/admin/src/admin-station-managed-fulf
 const adminRouter = await Deno.readTextFile("apps/admin/src/features/partners/PartnersWorkspaceRouter.tsx");
 const driverScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedDriverJobsScreen.tsx");
 const driverDetailRoute = await Deno.readTextFile("apps/lpg-mobile/app/(station-driver)/job/[id].tsx");
+const promotionBanner = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/PromotionBanner.tsx");
 const jobDetailScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx");
 const workspaceGate = await Deno.readTextFile("apps/lpg-mobile/src/native/navigation/WorkspaceGate.tsx");
 const workspaceSwitcher = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/WorkspaceSwitcher.tsx");
@@ -150,4 +151,13 @@ Deno.test("Station Managed drivers have a separate authenticated job workspace",
   requireText(jobDetailScreen, "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments.", "station driver hand-over has no SKIMA payout messaging");
   requireText(jobDetailScreen, "stationManagedDriverScanTypeForStatus", "station driver uses customer hand-over scan");
   requireText(driverScreen, "station's normal safety and cylinder-verification process", "verified completion guard");
+});
+
+
+Deno.test("Home promotion carousel uses the available width and an expanded banner", () => {
+  requireText(promotionBanner, "onLayout={(event) =>", "carousel measures the real content slot");
+  requireText(promotionBanner, "carouselWidth || width - 20", "carousel width has a responsive fallback");
+  requireText(promotionBanner, "Math.min(Math.max(carouselWidth || width - 20, 280), 700)", "carousel width respects compact and wide layouts");
+  requireText(promotionBanner, "carousel: { gap: 10, marginHorizontal: -8 }", "promotion banner uses the wider home-section bleed");
+  requireText(promotionBanner, "banner: { minHeight: 190", "promotion banner has increased height");
 });
