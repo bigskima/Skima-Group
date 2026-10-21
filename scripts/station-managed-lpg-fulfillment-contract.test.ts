@@ -1,7 +1,7 @@
 const migration = await Deno.readTextFile("supabase/migrations/20261019090000_lpg_station_managed_fulfillment.sql");
 const aclMigration = await Deno.readTextFile("supabase/migrations/20261020142000_lpg_station_managed_acl_hardening.sql");
 const inviteDispatchMigration = await Deno.readTextFile("supabase/migrations/20261021110000_lpg_station_driver_invites_auto_dispatch.sql");
-const driverAccessGuardFixMigration = await Deno.readTextFile("supabase/migrations/20261021130000_lpg_station_managed_driver_access_independent_profile_guard_fix.sql");
+const driverAccessGuardFixMigration = await Deno.readTextFile("supabase/migrations/20261021160000_lpg_station_managed_driver_access_independent_profile_guard_fix.sql");
 const ineligibleInviteFixMigration = driverAccessGuardFixMigration;
 const customer = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx");
 const station = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedFulfillmentScreen.tsx");
