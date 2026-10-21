@@ -1,6 +1,7 @@
 const migration = await Deno.readTextFile("supabase/migrations/20261019090000_lpg_station_managed_fulfillment.sql");
 const aclMigration = await Deno.readTextFile("supabase/migrations/20261020142000_lpg_station_managed_acl_hardening.sql");
 const inviteDispatchMigration = await Deno.readTextFile("supabase/migrations/20261021110000_lpg_station_driver_invites_auto_dispatch.sql");
+const driverAccessGuardFixMigration = await Deno.readTextFile("supabase/migrations/20261021120000_lpg_station_managed_driver_access_independent_profile_guard_fix.sql");
 const customer = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx");
 const station = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedFulfillmentScreen.tsx");
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
@@ -16,6 +17,20 @@ const workspaceResolver = gateway.slice(gateway.indexOf("async function resolveL
 function requireText(source: string, fragment: string, label: string) {
   if (!source.includes(fragment)) throw new Error(`${label}: missing required contract fragment: ${fragment}`);
 }
+
+Deno.test("Independent drivers keep workspace access without a station invite", () => {
+  const start = driverAccessGuardFixMigration.indexOf("create or replace function public.read_lpg_station_managed_driver_access()");
+  const end = driverAccessGuardFixMigration.indexOf("$station_driver_access$;", start);
+  if (start < 0 || end < 0) throw new Error("The station-driver access function must be present in the guard-fix migration.");
+  const access = driverAccessGuardFixMigration.slice(start, end);
+  const inviteLookup = access.indexOf("select * into invite_record");
+  const independentProfileGuard = access.indexOf("public.driver_profiles where user_id=auth.uid()");
+  if (inviteLookup < 0 || independentProfileGuard < inviteLookup) {
+    throw new Error("Independent-profile rejection must run only after a matching invite has been looked up.");
+  }
+  requireText(access, "email_confirmed_at is not null", "confirmed-email acceptance guard");
+  requireText(access, "if found then", "invite-scoped acceptance guard");
+});
 
 Deno.test("Station Managed remains a fulfillment mode distinct from the channel", () => {
   requireText(migration, "fulfillment_mode text not null default 'independent_driver'", "additive mode");
