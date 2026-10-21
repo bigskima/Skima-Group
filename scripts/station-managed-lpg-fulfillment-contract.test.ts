@@ -1,6 +1,9 @@
 const migration = await Deno.readTextFile("supabase/migrations/20261019090000_lpg_station_managed_fulfillment.sql");
 const aclMigration = await Deno.readTextFile("supabase/migrations/20261020142000_lpg_station_managed_acl_hardening.sql");
 const inviteDispatchMigration = await Deno.readTextFile("supabase/migrations/20261021110000_lpg_station_driver_invites_auto_dispatch.sql");
+const stationDispatchAclMigration = await Deno.readTextFile("supabase/migrations/20261021170000_harden_internal_station_dispatch_functions.sql");
+const driverAccessGuardFixMigration = await Deno.readTextFile("supabase/migrations/20261021160000_lpg_station_managed_driver_access_independent_profile_guard_fix.sql");
+const ineligibleInviteFixMigration = driverAccessGuardFixMigration;
 const customer = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx");
 const station = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedFulfillmentScreen.tsx");
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
@@ -16,6 +19,20 @@ const workspaceResolver = gateway.slice(gateway.indexOf("async function resolveL
 function requireText(source: string, fragment: string, label: string) {
   if (!source.includes(fragment)) throw new Error(`${label}: missing required contract fragment: ${fragment}`);
 }
+
+Deno.test("Independent drivers keep workspace access without a station invite", () => {
+  const start = driverAccessGuardFixMigration.indexOf("create or replace function public.read_lpg_station_managed_driver_access()");
+  const end = driverAccessGuardFixMigration.indexOf("$station_driver_access$;", start);
+  if (start < 0 || end < 0) throw new Error("The station-driver access function must be present in the guard-fix migration.");
+  const access = driverAccessGuardFixMigration.slice(start, end);
+  const inviteLookup = access.indexOf("select * into invite_record");
+  const independentProfileGuard = access.indexOf("public.driver_profiles where user_id=auth.uid()");
+  if (inviteLookup < 0 || independentProfileGuard < inviteLookup) {
+    throw new Error("Independent-profile rejection must run only after a matching invite has been looked up.");
+  }
+  requireText(access, "email_confirmed_at is not null", "confirmed-email acceptance guard");
+  requireText(access, "if found then", "invite-scoped acceptance guard");
+});
 
 Deno.test("Station Managed remains a fulfillment mode distinct from the channel", () => {
   requireText(migration, "fulfillment_mode text not null default 'independent_driver'", "additive mode");
@@ -60,6 +77,8 @@ Deno.test("Station workspace and API surfaces are wired", () => {
   requireText(station, "api-gateway/runtime/station-driver-invitations", "email invitation endpoint");
   requireText(inviteDispatchMigration, "accept_lpg_station_managed_driver_invite", "driver invitation acceptance RPC");
   requireText(inviteDispatchMigration, "trg_auto_dispatch_lpg_station_managed_order", "automatic dispatch trigger");
+  requireText(stationDispatchAclMigration, "auto_dispatch_pending_station_orders_for_branch(uuid)", "internal branch dispatch helper is not publicly callable");
+  requireText(stationDispatchAclMigration, "on_station_managed_dispatch_readiness_changed()", "internal dispatch trigger helper is not publicly callable");
   requireText(inviteDispatchMigration, "driver_commission_amount=0", "station-managed orders stay out of independent-driver commission accounting");
   requireText(inviteDispatchMigration, "where public.lpg_station_managed_driver_assignments.status='cancelled'", "cancelled station assignments can be automatically reassigned");
   requireText(inviteDispatchMigration, "email_confirmed_at is not null", "invitation acceptance requires a confirmed account email");
@@ -86,6 +105,20 @@ Deno.test("Station Managed RPCs do not inherit anonymous execution", () => {
   requireText(aclMigration, "revoke all on function public.apply_lpg_station_managed_quote_policy() from public, anon, authenticated", "quote policy trigger helper is not an API");
   requireText(aclMigration, "revoke all on function public.copy_lpg_station_fulfillment_snapshot_to_order() from public, anon, authenticated", "snapshot trigger helper is not an API");
   requireText(aclMigration, "grant execute on function public.configure_lpg_station_managed_fulfillment", "authenticated station settings RPC remains available");
+});
+
+
+Deno.test("An ineligible invite does not lock an independent driver out of their workspace", () => {
+  const start = ineligibleInviteFixMigration.indexOf("create or replace function public.read_lpg_station_managed_driver_access()");
+  const end = ineligibleInviteFixMigration.indexOf("$station_driver_access$;", start);
+  if (start < 0 || end < 0) throw new Error("The invite-conflict reconciliation function must be present.");
+  const access = ineligibleInviteFixMigration.slice(start, end);
+  requireText(access, "status='revoked'", "ineligible invitation is consumed safely");
+  requireText(access, "account_already_has_independent_driver_profile", "ineligible invitation reason is auditable");
+  requireText(access, "return jsonb_build_object('enabled',false)", "workspace resolution returns normally for independent drivers");
+  if (access.includes("raise exception using errcode='55000',message='an independent or SKIMA Managed driver profile cannot accept a Station Managed invitation'")) {
+    throw new Error("An ineligible invitation must not abort the authenticated workspace resolver.");
+  }
 });
 
 Deno.test("Station Managed drivers have a separate authenticated job workspace", () => {
