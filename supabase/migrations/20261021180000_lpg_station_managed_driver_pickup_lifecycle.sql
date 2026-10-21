@@ -74,6 +74,77 @@ begin
   if position(old_block in function_sql)=0 then
     raise exception 'Could not locate station receipt scanner access guard';
   end if;
+  function_sql := replace(function_sql,old_block,new_block);
+
+  -- Once customer hand-over is verified, close the station assignment as well as
+  -- the LPG order so the driver's queue and active-delivery count stay accurate.
+  old_block :=
+    '  if target_scan_type = ''customer_delivery'''||E'\n'||
+    '    and order_record.tracking_session_id is not null then'||E'\n'||
+    '    update public.tracking_sessions'||E'\n'||
+    '    set status = ''completed'','||E'\n'||
+    '        ended_at = coalesce(ended_at, timezone(''utc'', now())),'||E'\n'||
+    '        updated_at = timezone(''utc'', now())'||E'\n'||
+    '    where id = order_record.tracking_session_id'||E'\n'||
+    '      and status <> ''completed'';'||E'\n'||
+    E'\n'||
+    '    insert into public.tracking_session_events ('||E'\n'||
+    '      tracking_session_id,'||E'\n'||
+    '      status,'||E'\n'||
+    '      idempotency_key,'||E'\n'||
+    '      metadata'||E'\n'||
+    '    )'||E'\n'||
+    '    values ('||E'\n'||
+    '      order_record.tracking_session_id,'||E'\n'||
+    '      ''completed'','||E'\n'||
+    '      target_idempotency_key || '':tracking-completed'','||E'\n'||
+    '      jsonb_build_object(''lpg_order_id'', order_record.id)'||E'\n'||
+    '    )'||E'\n'||
+    '    on conflict do nothing;'||E'\n'||
+    '  end if;'||E'\n'||
+    E'\n'||
+    '  return scan_id;';
+  new_block :=
+    '  if target_scan_type = ''customer_delivery'''||E'\n'||
+    '    and order_record.tracking_session_id is not null then'||E'\n'||
+    '    update public.tracking_sessions'||E'\n'||
+    '    set status = ''completed'','||E'\n'||
+    '        ended_at = coalesce(ended_at, timezone(''utc'', now())),'||E'\n'||
+    '        updated_at = timezone(''utc'', now())'||E'\n'||
+    '    where id = order_record.tracking_session_id'||E'\n'||
+    '      and status <> ''completed'';'||E'\n'||
+    E'\n'||
+    '    insert into public.tracking_session_events ('||E'\n'||
+    '      tracking_session_id,'||E'\n'||
+    '      status,'||E'\n'||
+    '      idempotency_key,'||E'\n'||
+    '      metadata'||E'\n'||
+    '    )'||E'\n'||
+    '    values ('||E'\n'||
+    '      order_record.tracking_session_id,'||E'\n'||
+    '      ''completed'','||E'\n'||
+    '      target_idempotency_key || '':tracking-completed'','||E'\n'||
+    '      jsonb_build_object(''lpg_order_id'', order_record.id)'||E'\n'||
+    '    )'||E'\n'||
+    '    on conflict do nothing;'||E'\n'||
+    '  end if;'||E'\n'||
+    E'\n'||
+    '  if target_scan_type = ''customer_delivery'' and new_status = ''delivered'''||E'\n'||
+    '    and order_record.fulfillment_mode = ''station_managed'' then'||E'\n'||
+    '    update public.lpg_station_managed_driver_assignments assignment'||E'\n'||
+    '    set status = ''delivered'', completed_at = timezone(''utc'', now())'||E'\n'||
+    '    from public.lpg_station_managed_drivers station_driver'||E'\n'||
+    '    where assignment.lpg_order_id = order_record.id'||E'\n'||
+    '      and assignment.station_driver_id = station_driver.id'||E'\n'||
+    '      and station_driver.user_id = auth.uid()'||E'\n'||
+    '      and station_driver.status = ''active'''||E'\n'||
+    '      and assignment.status in (''accepted'', ''en_route'');'||E'\n'||
+    '  end if;'||E'\n'||
+    E'\n'||
+    '  return scan_id;';
+  if position(old_block in function_sql)=0 then
+    raise exception 'Could not locate customer hand-over tracking block';
+  end if;
   execute replace(function_sql,old_block,new_block);
 end
 $station_managed_scans$;
