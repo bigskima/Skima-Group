@@ -161,7 +161,7 @@ Deno.test("Home promotion carousel uses the available width and an expanded bann
   requireText(promotionBanner, "onLayout={(event) =>", "carousel measures the real content slot");
   requireText(promotionBanner, "carouselWidth || width - 20", "carousel width has a responsive fallback");
   requireText(promotionBanner, "Math.min(Math.max(carouselWidth || width - 20, 280), 700)", "carousel width respects compact and wide layouts");
-  requireText(promotionBanner, "carousel: { gap: 10, marginHorizontal: -8 }", "promotion banner uses the wider home-section bleed");
+  requireText(promotionBanner, "carousel: { gap: 10, marginHorizontal: -12 }", "promotion banner uses the wider home-section bleed");
   requireText(promotionBanner, "banner: { minHeight: 190", "promotion banner has increased height");
 });
 
