@@ -5,30 +5,8 @@ begin;
 -- Allow only the currently assigned station driver to advance their own pickup,
 -- station receipt and return stages.
 
-do $station_managed_action_acl$
-declare
-  function_sql text;
-  old_block text;
-  new_block text;
-begin
-  function_sql := pg_get_functiondef('public.process_lpg_order_action(uuid,text,text,jsonb,text)'::regprocedure);
-  old_block :=
-    '  elsif action_record.actor_scope = ''assigned_driver'' then'||E'\n'||
-    '    if auth.role() <> ''service_role'''||E'\n'||
-    '      and driver_record.user_id is distinct from auth.uid()'||E'\n'||
-    '      and not public.can_manage_lpg_operations() then';
-  new_block :=
-    '  elsif action_record.actor_scope = ''assigned_driver'' then'||E'\n'||
-    '    if auth.role() <> ''service_role'''||E'\n'||
-    '      and driver_record.user_id is distinct from auth.uid()'||E'\n'||
-    '      and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())'||E'\n'||
-    '      and not public.can_manage_lpg_operations() then';
-  if position(old_block in function_sql)=0 then
-    raise exception 'Could not locate assigned-driver action guard for Station Managed extension';
-  end if;
-  execute replace(function_sql,old_block,new_block);
-end
-$station_managed_action_acl$;
+-- process_lpg_order_action already permits assigned Station Managed drivers via
+-- the branch-scoped identity guard installed in the foundational migration.
 
 do $station_managed_scans$
 declare
