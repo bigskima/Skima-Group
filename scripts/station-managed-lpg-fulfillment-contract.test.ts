@@ -165,5 +165,5 @@ Deno.test("Station driver invites persist before delivery and revoke failed send
   requireText(route, 'const revokeUndeliveredInvitation', "failed invitation cleanup");
   requireText(route, 'status: "revoked"', "failed email sends cannot leave a misleading pending invite");
   requireText(route, 'shouldCreateUser: false', "existing SKIMA accounts use sign-in rather than duplicate account creation");
-  requireText(route, 'email_confirmed_at', "acceptance is bound to the authenticated confirmed email in the RPC migration");
+  requireText(inviteDispatchMigration, "email_confirmed_at is not null", "acceptance is bound to the authenticated confirmed email");
 });
