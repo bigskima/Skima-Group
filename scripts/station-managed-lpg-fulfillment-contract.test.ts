@@ -151,3 +151,19 @@ Deno.test("Station Managed drivers have a separate authenticated job workspace",
   requireText(jobDetailScreen, "stationManagedDriverScanTypeForStatus", "station driver uses customer hand-over scan");
   requireText(driverScreen, "station's normal safety and cylinder-verification process", "verified completion guard");
 });
+
+Deno.test("Station driver invites persist before delivery and revoke failed sends", () => {
+  const start = gateway.indexOf('if (routePath === "/runtime/station-driver-invitations" && request.method === "POST")');
+  const end = gateway.indexOf('if (routePath === "/runtime/station-driver-invitations/accept" && request.method === "POST")', start);
+  if (start < 0 || end < 0) throw new Error("Both station-driver invitation routes must be present.");
+  const route = gateway.slice(start, end);
+  const persistence = route.indexOf('.from("lpg_station_managed_driver_invites").upsert({');
+  const emailDelivery = route.indexOf('.auth.admin.inviteUserByEmail(');
+  if (persistence < 0 || emailDelivery < 0 || persistence >= emailDelivery) {
+    throw new Error("The pending invitation must be committed before an invitation email can be delivered.");
+  }
+  requireText(route, 'const revokeUndeliveredInvitation', "failed invitation cleanup");
+  requireText(route, 'status: "revoked"', "failed email sends cannot leave a misleading pending invite");
+  requireText(route, 'shouldCreateUser: false', "existing SKIMA accounts use sign-in rather than duplicate account creation");
+  requireText(inviteDispatchMigration, "email_confirmed_at is not null", "acceptance is bound to the authenticated confirmed email");
+});
