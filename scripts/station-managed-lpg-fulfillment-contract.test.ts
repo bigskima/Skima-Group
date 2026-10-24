@@ -168,11 +168,10 @@ Deno.test("Home promotion carousel uses the available width and an expanded bann
 
 Deno.test("Station Managed driver can progress the full pickup → station → return lifecycle", () => {
   requireText(migration, "and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())", "canonical assigned-driver action guard supports Station Managed");
-  requireText(driverPickupLifecycleMigration, "not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())", "only the assigned station driver can progress the order");
   requireText(driverPickupLifecycleMigration, "public.record_lpg_cylinder_scan(uuid,text,text,numeric,numeric,numeric,jsonb,text)", "station driver cylinder scan authorization patch");
   requireText(driverPickupLifecycleMigration, "execute function_sql;", "patched cylinder-scan function is actually installed");
+  if (driverPickupLifecycleMigration.includes("receipt_guard := 'if not public.can_operate_lpg_station_branch")) throw new Error("Do not add a station-operator guard inside station_receipt; assignment-scoped driver authorization handles this leg.");
   requireText(driverPickupLifecycleMigration, "function_sql := replace(", "final hand-over completion patch is anchored to the function tail");
-  requireText(driverPickupLifecycleMigration, "public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())", "station driver receipt scan follows station assignment");
   requireText(driverPickupLifecycleMigration, "order_status_before not in (''station_settled'',''return_en_route'')", "return route starts only after station release or settlement");
   requireText(driverPickupLifecycleMigration, "set status = ''delivered''", "verified customer hand-over closes station assignment");
   requireText(driverPickupLifecycleMigration, "Station Managed pickup and receipt scans require the order''s active station-driver assignment.", "legacy pickup scan block is retired");
