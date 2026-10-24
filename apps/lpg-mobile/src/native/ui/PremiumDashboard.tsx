@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Sparkles,
   Truck,
+  X,
   WalletCards,
   Zap,
 } from "lucide-react-native";
@@ -25,6 +26,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Modal,
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -360,7 +362,42 @@ function MobileHome({ workspace, context, children }: {
           </Pressable>
         </View>
 
-        {workspace === "customer" && showAi ? <AiAssistantLauncher workspace="customer" /> : null}
+        <Modal
+          visible={workspace === "customer" && showAi}
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={() => setShowAi(false)}
+        >
+          <View style={styles.aiModalRoot}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close AI assistant"
+              onPress={() => setShowAi(false)}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={[styles.aiModalCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.aiModalHeader}>
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text style={[styles.aiModalEyebrow, { color: palette.brand }]}>SKIMA INTELLIGENCE</Text>
+                  <Text style={[styles.aiModalTitle, { color: palette.ink }]}>Ask Matty</Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Close AI assistant"
+                  onPress={() => setShowAi(false)}
+                  style={[styles.aiModalClose, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}
+                >
+                  <X color={palette.ink} size={20} />
+                </Pressable>
+              </View>
+              <Text style={[styles.aiModalBody, { color: palette.muted }]}>
+                Get help with your LPG refill, cylinder, delivery status or your latest SKIMA order.
+              </Text>
+              <AiAssistantLauncher workspace="customer" onOpen={() => setShowAi(false)} />
+            </View>
+          </View>
+        </Modal>
 
         <GuideTarget targetKey="common.workspace-switcher" style={styles.workspaceSwitcher}>
           <WorkspaceSwitcher current={workspace} />
@@ -1019,6 +1056,13 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 18, lineHeight: 22, fontWeight: "900", letterSpacing: -0.35 },
   notification: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, borderWidth: StyleSheet.hairlineWidth },
   notificationDot: { position: "absolute", top: 9, right: 9, width: 6, height: 6, borderRadius: 3, backgroundColor: colors.brand },
+  aiModalRoot: { flex: 1, justifyContent: "center", paddingHorizontal: 18, paddingVertical: 28, backgroundColor: "rgba(5,8,12,.68)" },
+  aiModalCard: { width: "100%", maxWidth: 520, alignSelf: "center", gap: 14, padding: 18, borderRadius: 26, borderWidth: StyleSheet.hairlineWidth, shadowColor: "#000000", shadowOpacity: 0.28, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 12 },
+  aiModalHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  aiModalEyebrow: { fontSize: 9, fontWeight: "900", letterSpacing: 1.1 },
+  aiModalTitle: { fontSize: 23, lineHeight: 28, fontWeight: "900", letterSpacing: -0.45 },
+  aiModalBody: { fontSize: 13, lineHeight: 19 },
+  aiModalClose: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 14, borderWidth: StyleSheet.hairlineWidth },
   workspaceSwitcher: { minHeight: 8, marginTop: 9 },
   homeContent: { gap: 22, paddingTop: 18 },
 
