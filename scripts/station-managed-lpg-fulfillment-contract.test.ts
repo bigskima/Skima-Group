@@ -4,6 +4,9 @@ const inviteDispatchMigration = await Deno.readTextFile("supabase/migrations/202
 const stationDispatchAclMigration = await Deno.readTextFile("supabase/migrations/20261021170000_harden_internal_station_dispatch_functions.sql");
 const driverAccessGuardFixMigration = await Deno.readTextFile("supabase/migrations/20261021160000_lpg_station_managed_driver_access_independent_profile_guard_fix.sql");
 const ineligibleInviteFixMigration = driverAccessGuardFixMigration;
+const driverPickupLifecycleMigration = await Deno.readTextFile("supabase/migrations/20261021180000_lpg_station_managed_driver_pickup_lifecycle.sql");
+const premiumDashboard = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/PremiumDashboard.tsx");
+const assistantLauncher = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/AiAssistantLauncher.tsx");
 const customer = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx");
 const station = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedFulfillmentScreen.tsx");
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
@@ -11,6 +14,7 @@ const admin = await Deno.readTextFile("apps/admin/src/admin-station-managed-fulf
 const adminRouter = await Deno.readTextFile("apps/admin/src/features/partners/PartnersWorkspaceRouter.tsx");
 const driverScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedDriverJobsScreen.tsx");
 const driverDetailRoute = await Deno.readTextFile("apps/lpg-mobile/app/(station-driver)/job/[id].tsx");
+const promotionBanner = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/PromotionBanner.tsx");
 const jobDetailScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx");
 const workspaceGate = await Deno.readTextFile("apps/lpg-mobile/src/native/navigation/WorkspaceGate.tsx");
 const workspaceSwitcher = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/WorkspaceSwitcher.tsx");
@@ -144,12 +148,48 @@ Deno.test("Station Managed drivers have a separate authenticated job workspace",
   requireText(workspaceGate, '"station_driver"', "station driver workspace gate");
   requireText(workspaceSwitcher, 'workspaces.includes("station_driver")', "station driver workspace switcher");
   requireText(driverScreen, "Accept delivery", "driver accepts station assignment");
-  requireText(driverScreen, "Start delivery", "driver starts assigned route");
+  requireText(driverScreen, "Start return delivery", "driver starts the return leg after station release");
   requireText(driverScreen, "Open delivery details & hand-over", "driver opens customer hand-over");
   requireText(driverDetailRoute, 'workspace="station_driver"', "dedicated station driver hand-over route");
   requireText(jobDetailScreen, "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments.", "station driver hand-over has no SKIMA payout messaging");
   requireText(jobDetailScreen, "stationManagedDriverScanTypeForStatus", "station driver uses customer hand-over scan");
   requireText(driverScreen, "station's normal safety and cylinder-verification process", "verified completion guard");
+});
+
+
+Deno.test("Home promotion carousel uses the available width and an expanded banner", () => {
+  requireText(promotionBanner, "onLayout={(event) =>", "carousel measures the real content slot");
+  requireText(promotionBanner, "carouselWidth || width - 20", "carousel width has a responsive fallback");
+  requireText(promotionBanner, "Math.min(Math.max(carouselWidth || width - 20, 280), 700)", "carousel width respects compact and wide layouts");
+  requireText(promotionBanner, "carousel: { gap: 10, marginHorizontal: -12 }", "promotion banner uses the wider home-section bleed");
+  requireText(promotionBanner, "banner: { minHeight: 190", "promotion banner has increased height");
+});
+
+
+Deno.test("Station Managed driver can progress the full pickup → station → return lifecycle", () => {
+  requireText(migration, "and not public.is_lpg_station_managed_order_driver(order_record.id,auth.uid())", "canonical assigned-driver action guard supports Station Managed");
+  requireText(driverPickupLifecycleMigration, "public.record_lpg_cylinder_scan(uuid,text,text,numeric,numeric,numeric,jsonb,text)", "station driver cylinder scan authorization patch");
+  requireText(driverPickupLifecycleMigration, "execute function_sql;", "patched cylinder-scan function is actually installed");
+  if (driverPickupLifecycleMigration.includes("receipt_guard := 'if not public.can_operate_lpg_station_branch")) throw new Error("Do not add a station-operator guard inside station_receipt; assignment-scoped driver authorization handles this leg.");
+  requireText(driverPickupLifecycleMigration, "function_sql := replace(", "final hand-over completion patch is anchored to the function tail");
+  requireText(driverPickupLifecycleMigration, "order_status_before not in (''station_settled'',''return_en_route'')", "return route starts only after station release or settlement");
+  requireText(driverPickupLifecycleMigration, "set status = ''delivered''", "verified customer hand-over closes station assignment");
+  requireText(driverPickupLifecycleMigration, "Station Managed pickup and receipt scans require the order''s active station-driver assignment.", "legacy pickup scan block is retired");
+  requireText(jobDetailScreen, 'if (status === "driver_accepted") return "lpg.pickup.start";', "station drivers can start pickup");
+  requireText(jobDetailScreen, 'if (status === "pickup_verified") return "lpg.station.start";', "station drivers can proceed to refill station");
+  requireText(jobDetailScreen, 'if (status === "pickup_en_route") return "customer_pickup";', "station drivers can scan customer pickup");
+  requireText(jobDetailScreen, 'if (status === "station_en_route") return "station_receipt";', "station drivers can scan station arrival");
+  requireText(driverScreen, "Open pickup & station workflow", "driver queue opens the pickup workflow before return delivery");
+  requireText(driverScreen, "Continue return delivery", "driver can continue after the station has already released the cylinder");
+});
+
+Deno.test("Customer AI launcher opens as an overlay modal, not in the home layout", () => {
+  requireText(premiumDashboard, "<Modal", "home AI modal");
+  requireText(premiumDashboard, "transparent", "AI overlay uses a transparent modal surface");
+  requireText(premiumDashboard, "styles.aiModalRoot", "AI overlay is positioned over the home screen");
+  requireText(premiumDashboard, "onRequestClose={() => setShowAi(false)}", "AI modal supports native back/close");
+  requireText(premiumDashboard, "<AiAssistantLauncher workspace=\"customer\" onOpen={() => setShowAi(false)} />", "AI modal closes before navigating to the full assistant");
+  requireText(assistantLauncher, "onOpen?.();", "launcher dismisses its parent overlay before navigation");
 });
 
 Deno.test("Station driver invites persist before delivery and revoke failed sends", () => {

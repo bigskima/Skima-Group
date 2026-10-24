@@ -19,7 +19,7 @@ const AiHomeInsightSchema = z.object({
   estimateOnly: z.boolean().default(false),
 }).nullable();
 
-export function AiAssistantLauncher({ workspace }: { readonly workspace: AiAssistantWorkspace }) {
+export function AiAssistantLauncher({ workspace, onOpen }: { readonly workspace: AiAssistantWorkspace; readonly onOpen?: () => void }) {
   const insight = useGatewayQuery({
     key: ["ai-home-insight", workspace],
     path: `/runtime/ai/home-insight?workspace=${encodeURIComponent(workspace)}`,
@@ -61,6 +61,7 @@ export function AiAssistantLauncher({ workspace }: { readonly workspace: AiAssis
       accessibilityLabel={brandedAction}
       onPress={() => {
         const prompt = "prompt" in copy && typeof copy.prompt === "string" ? copy.prompt : null;
+        onOpen?.();
         router.push(
           (
             "/(" + workspace + ")/assistant" +

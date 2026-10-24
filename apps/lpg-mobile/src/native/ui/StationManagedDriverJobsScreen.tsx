@@ -142,23 +142,35 @@ export function StationManagedDriverJobsScreen() {
               {job.status === "assigned" ? (
                 <AppButton label="Accept delivery" loading={busy} disabled={updateStatus.isPending} onPress={() => updateStatus.mutate({ job, nextStatus: "accepted" })} />
               ) : null}
-              {job.status === "accepted" && job.orderStatus === "station_settled" ? (
-                <AppButton label="Start delivery" loading={busy} disabled={updateStatus.isPending} onPress={() => updateStatus.mutate({ job, nextStatus: "en_route" })} />
+              {job.status === "accepted" && ["station_settled", "return_en_route"].includes(job.orderStatus) ? (
+                <AppButton
+                  label={job.orderStatus === "station_settled" ? "Start return delivery" : "Continue return delivery"}
+                  loading={busy}
+                  disabled={updateStatus.isPending}
+                  onPress={() => updateStatus.mutate({ job, nextStatus: "en_route" })}
+                />
               ) : null}
-              {job.status === "accepted" && job.orderStatus !== "station_settled" ? (
+              {job.status === "accepted" && !["station_settled", "return_en_route"].includes(job.orderStatus) ? (
                 <View style={[styles.notice, { backgroundColor: palette.brandSofter }]}>
-                  <Text style={[styles.noticeText, { color: palette.ink }]}>Waiting for the station to complete the refill and settlement. Delivery cannot start before the station confirms it is ready.</Text>
+                  <Text style={[styles.noticeText, { color: palette.ink }]}>
+                    Open the job workflow below to collect the customer's cylinder and check it in at your station. The return trip unlocks after the station completes refill, settlement and release.
+                  </Text>
                 </View>
               ) : null}
               {job.status === "en_route" ? (
-                <>
-                  <View style={[styles.notice, { backgroundColor: palette.brandSofter }]}>
-                    <Text style={[styles.noticeText, { color: palette.ink }]}>You are en route. Open the delivery details to record arrival, follow customer verification and scan the cylinder at hand-over.</Text>
-                  </View>
-                  <AppButton label="Open delivery details & hand-over" variant="secondary" onPress={() => router.push(`/(station-driver)/job/${encodeURIComponent(job.lpgOrderId)}` as never)} />
-                </>
+                <View style={[styles.notice, { backgroundColor: palette.brandSofter }]}>
+                  <Text style={[styles.noticeText, { color: palette.ink }]}>The station has released the filled cylinder. Navigate to the customer, request delivery verification and complete the final cylinder scan.</Text>
+                </View>
               ) : null}
-              {job.status === "delivered" ? <Text style={[styles.muted, { color: palette.muted }]}>Delivery completion verified. Any driver compensation remains the station's responsibility.</Text> : null}
+              {job.status !== "delivered" ? (
+                <AppButton
+                  label={job.status === "en_route" || ["return_en_route", "delivery_verification_pending"].includes(job.orderStatus) ? "Open delivery details & hand-over" : "Open pickup & station workflow"}
+                  variant="secondary"
+                  onPress={() => router.push(`/(station-driver)/job/${encodeURIComponent(job.lpgOrderId)}` as never)}
+                />
+              ) : (
+                <Text style={[styles.muted, { color: palette.muted }]}>Delivery completion verified. Any driver compensation remains the station's responsibility.</Text>
+              )}
             </View>
           );
         })}
