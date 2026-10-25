@@ -89,6 +89,52 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
     });
   }, [actualKg, draftOwner, id, inspectionNotes, inspectionResult, workspace]);
 
+  const scan = useGatewayMutation({
+    path: "/lpg/scans",
+    schema: ActionResponseSchema,
+    invalidate: [["jobs"], ["orders"], ["scans"], ["station-runtime"]],
+  });
+  const inspection = useGatewayMutation({
+    path: "/lpg/inspections",
+    schema: ActionResponseSchema,
+    invalidate: [["jobs"], ["inspections"], ["station-runtime"]],
+  });
+  const action = useGatewayMutation({
+    path: "/lpg/orders/actions",
+    schema: ActionResponseSchema,
+    invalidate: [["jobs"], ["orders"], ["station-runtime"]],
+  });
+  const confirmRefill = useGatewayMutation({
+    path: "/lpg/refills/confirm",
+    schema: ActionResponseSchema,
+    invalidate: [["jobs"], ["orders"], ["station-runtime"], ["settlements"], ["wallets"]],
+  });
+
+  const root = detail.data;
+  const order = nestedRecord(root, "order") ?? root;
+  const cylinder = nestedRecord(root, "cylinder") ?? nestedRecord(order, "cylinder");
+  const driver = nestedRecord(root, "driver") ?? nestedRecord(order, "driver") ?? nestedRecord(root, "stationManagedDriver") ?? nestedRecord(order, "stationManagedDriver");
+  const stationManagedVehicle = nestedRecord(root, "stationManagedVehicle") ?? nestedRecord(order, "stationManagedVehicle");
+  const station = nestedRecord(root, "station") ?? nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
+  const pickup = nestedRecord(root, "pickupLocation") ?? nestedRecord(root, "pickup_location") ?? nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location");
+  const delivery = nestedRecord(root, "deliveryLocation") ?? nestedRecord(root, "delivery_location") ?? nestedRecord(order, "deliveryLocation") ?? nestedRecord(order, "delivery_location");
+  const customer = nestedRecord(root, "customer") ?? nestedRecord(order, "customer");
+  const latestDriver = nestedRecord(root, "latestDriverLocation") ?? nestedRecord(root, "driverLocation");
+
+  const routePoints = [
+    locationPoint(pickup, "Customer"),
+    locationPoint(station, "Station"),
+    locationPoint(delivery, "Delivery"),
+    locationPoint(latestDriver, "Driver"),
+  ].filter((point): point is MapPoint => Boolean(point));
+
+  const routeDistance = firstNumber(root, ["routeDistanceMeters", "route_distance_meters", "distanceMeters"]);
+  const routeDuration = firstNumber(root, ["routeDurationSeconds", "route_duration_seconds", "durationSeconds"]);
+  const status = displayStatus(order ?? {}) ?? "unknown";
+  const terminalOrderStatus = ["delivered", "completed", "cancelled", "failed", "refunded", "expired"].includes(status);
+  const canShareStationDriverLocation = workspace === "station_driver" && Boolean(id)
+    && ["driver_accepted", "pickup_en_route", "pickup_verified", "station_en_route", "station_verified", "refill_started", "refill_in_progress", "refill_confirmed", "station_settled", "return_en_route", "delivery_verification_pending"].includes(status);
+
   useEffect(() => {
     if (workspace !== "station_driver" || !id) {
       setStationTrackingOrderId(null);
@@ -155,51 +201,6 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
     }
   };
 
-  const scan = useGatewayMutation({
-    path: "/lpg/scans",
-    schema: ActionResponseSchema,
-    invalidate: [["jobs"], ["orders"], ["scans"], ["station-runtime"]],
-  });
-  const inspection = useGatewayMutation({
-    path: "/lpg/inspections",
-    schema: ActionResponseSchema,
-    invalidate: [["jobs"], ["inspections"], ["station-runtime"]],
-  });
-  const action = useGatewayMutation({
-    path: "/lpg/orders/actions",
-    schema: ActionResponseSchema,
-    invalidate: [["jobs"], ["orders"], ["station-runtime"]],
-  });
-  const confirmRefill = useGatewayMutation({
-    path: "/lpg/refills/confirm",
-    schema: ActionResponseSchema,
-    invalidate: [["jobs"], ["orders"], ["station-runtime"], ["settlements"], ["wallets"]],
-  });
-
-  const root = detail.data;
-  const order = nestedRecord(root, "order") ?? root;
-  const cylinder = nestedRecord(root, "cylinder") ?? nestedRecord(order, "cylinder");
-  const driver = nestedRecord(root, "driver") ?? nestedRecord(order, "driver") ?? nestedRecord(root, "stationManagedDriver") ?? nestedRecord(order, "stationManagedDriver");
-  const stationManagedVehicle = nestedRecord(root, "stationManagedVehicle") ?? nestedRecord(order, "stationManagedVehicle");
-  const station = nestedRecord(root, "station") ?? nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
-  const pickup = nestedRecord(root, "pickupLocation") ?? nestedRecord(root, "pickup_location") ?? nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location");
-  const delivery = nestedRecord(root, "deliveryLocation") ?? nestedRecord(root, "delivery_location") ?? nestedRecord(order, "deliveryLocation") ?? nestedRecord(order, "delivery_location");
-  const customer = nestedRecord(root, "customer") ?? nestedRecord(order, "customer");
-  const latestDriver = nestedRecord(root, "latestDriverLocation") ?? nestedRecord(root, "driverLocation");
-
-  const routePoints = [
-    locationPoint(pickup, "Customer"),
-    locationPoint(station, "Station"),
-    locationPoint(delivery, "Delivery"),
-    locationPoint(latestDriver, "Driver"),
-  ].filter((point): point is MapPoint => Boolean(point));
-
-  const routeDistance = firstNumber(root, ["routeDistanceMeters", "route_distance_meters", "distanceMeters"]);
-  const routeDuration = firstNumber(root, ["routeDurationSeconds", "route_duration_seconds", "durationSeconds"]);
-  const status = displayStatus(order ?? {}) ?? "unknown";
-  const terminalOrderStatus = ["delivered", "completed", "cancelled", "failed", "refunded", "expired"].includes(status);
-  const canShareStationDriverLocation = workspace === "station_driver" && Boolean(id)
-    && ["driver_accepted", "pickup_en_route", "pickup_verified", "station_en_route", "station_verified", "refill_started", "refill_in_progress", "refill_confirmed", "station_settled", "return_en_route", "delivery_verification_pending"].includes(status);
   const driverWorkspace = workspace === "driver" || workspace === "station_driver";
   const contactLocation = usesDeliveryContact(status) ? delivery : pickup;
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
