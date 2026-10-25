@@ -242,6 +242,7 @@ Deno.test("Station Managed app surfaces are dedicated views over the existing ba
   requireText(station, 'section === "payments"', "dedicated station driver agreement and payment view");
   requireText(station, 'read_lpg_station_managed_workspace', "manager views keep using the existing workspace RPC");
   requireText(station, 'read_lpg_station_managed_available_vehicles', "vehicle view uses the existing readiness RPC");
+  requireText(station, 'domainQueries.stationJobs(section === "orders")', "assigned-order tracking uses the canonical station jobs queue");
   for (const route of [
     "managed-fulfillment-settings",
     "managed-fulfillment-vehicles",
