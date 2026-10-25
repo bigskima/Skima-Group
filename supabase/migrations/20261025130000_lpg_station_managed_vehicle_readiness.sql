@@ -201,6 +201,16 @@ begin
   if target_enabled and not public.is_lpg_station_managed_vehicle_eligible(target_station_branch_id,target_vehicle_id,current_date) then
     raise exception using errcode='55000',message='vehicle must be active, owned by this station organisation, LPG-approved, compliant and have a verified positive load capacity';
   end if;
+  if not target_enabled and exists(
+    select 1
+    from public.lpg_station_managed_driver_assignments assignment
+    join public.lpg_refill_orders order_record on order_record.id=assignment.lpg_order_id
+    where assignment.vehicle_id=target_vehicle_id
+      and assignment.status in ('assigned','accepted','en_route')
+      and order_record.status in ('pickup_verified','station_en_route')
+  ) then
+    raise exception using errcode='55000',message='vehicle cannot be removed while a station-managed order is carrying a cylinder; complete delivery or resolve the physical handover first';
+  end if;
 
   if target_enabled then
     insert into public.lpg_station_managed_vehicles(
