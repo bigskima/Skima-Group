@@ -24,7 +24,9 @@ const stationQuotePricingHardening = await Deno.readTextFile("supabase/migration
 const stationVehicleReadiness = await Deno.readTextFile("supabase/migrations/20261025130000_lpg_station_managed_vehicle_readiness.sql");
 const stationResourceReservation = await Deno.readTextFile("supabase/migrations/20261025131000_lpg_station_managed_resource_reservation_gate.sql");
 const stationAffiliateProgram = await Deno.readTextFile("supabase/migrations/20261025140000_lpg_station_affiliate_program.sql");
+const stationAffiliateReversal = await Deno.readTextFile("supabase/migrations/20261025150000_lpg_station_affiliate_reversal_recovery.sql");
 const affiliateAdmin = await Deno.readTextFile("apps/admin/src/features/money/FulfillmentWorkspaceV2.tsx");
+const stationAdminWorkspace = await Deno.readTextFile("apps/admin/src/admin-station-managed-fulfillment-workspace.tsx");
 const accountSettings = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/WorkspaceAccountSettingsScreen.tsx");
 const applicationOverview = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx");
 const stationVehicleScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedFulfillmentScreen.tsx");
@@ -291,4 +293,39 @@ Deno.test("Admins can configure the commission policy and operate the referral p
   requireText(affiliateAdmin, "activate_financial_policy_version", "policy activation action");
   requireText(affiliateAdmin, "review_lpg_station_affiliate", "affiliate approval and suspension controls");
   requireText(affiliateAdmin, "retry_lpg_station_affiliate_commission", "failed commission retry control");
+});
+
+
+Deno.test("Station Managed expansion cannot override paused or explicitly excluded areas", () => {
+  requireText(stationExternalCoverage, "Station Managed cannot override an excluded, paused, or policy-blocked LPG area", "server-side denial of explicit exclusions");
+  requireText(stationExternalCoverage, "pickup_resolution->>'reason' is distinct from 'SERVICE_NOT_LAUNCHED'", "pickup must fail only for an unlaunched customer-ordering area");
+  requireText(stationExternalCoverage, "delivery_resolution->>'reason' is distinct from 'SERVICE_NOT_LAUNCHED'", "return location must fail only for an unlaunched customer-ordering area");
+  requireText(stationVehicleReadiness, "external_launch_coverage and not coalesce(coverage_enabled,false)", "admin approval is required only for the out-of-launch exception");
+  requireText(customer, 'pickupServiceability.data?.reason === "SERVICE_NOT_LAUNCHED"', "customer UI does not expose external coverage for paused/excluded locations");
+  requireText(customer, '(eligibleStations.data?.length ?? 0) === 0', "Station Managed fallback appears when standard station options cannot serve the trip");
+});
+
+Deno.test("Station Managed provisional quote rows are not prematurely price-locked", () => {
+  requireText(stationQuotePricingHardening, "if tg_op='INSERT' and (", "provisional quote insert detection");
+  requireText(stationQuotePricingHardening, "Do not lock prices on that provisional INSERT", "wait for the commercial snapshot before applying configured delivery pricing");
+  requireText(stationQuotePricingHardening, "new.financial_policy_snapshot->'settlement' is null", "commercial policy snapshot readiness guard");
+});
+
+Deno.test("Platform admins can inspect and assign approved Station Managed vehicles", () => {
+  requireText(stationVehicleReadiness, "public.has_permission('platform.vehicles.manage',null)", "platform vehicle-management permission");
+  requireText(stationAdminWorkspace, "StationVehicleAdminPanel", "admin Station Managed vehicle panel");
+  requireText(stationAdminWorkspace, "read_lpg_station_managed_available_vehicles", "admin reads assigned and eligible station vehicles");
+  requireText(stationAdminWorkspace, "configure_lpg_station_managed_vehicle", "admin can assign or remove a station vehicle");
+  requireText(stationAdminWorkspace, "Register and approve the vehicle through the existing fleet and compliance workspace first", "admin cannot create or self-approve vehicle compliance");
+});
+
+Deno.test("Full LPG refunds reverse affiliate commission or queue a recovery exception", () => {
+  requireText(stationAffiliateReversal, "reversal_transaction_id", "separate immutable reversal transaction reference");
+  requireText(stationAffiliateReversal, "after update of status on public.lpg_refill_orders", "refund lifecycle is connected to reversal handling");
+  requireText(stationAffiliateReversal, "new.status='refunded'", "only full refunded order status triggers automatic reversal");
+  requireText(stationAffiliateReversal, "Affiliate wallet balance is below the commission reversal amount", "insufficient affiliate balance is recorded instead of silently dropped");
+  requireText(stationAffiliateReversal, "lpg_station_affiliate_reversal_failures", "reversal recovery queue");
+  requireText(affiliateAdmin, "reverse_lpg_station_affiliate_commission", "admin reversal action");
+  requireText(affiliateAdmin, "retry_lpg_station_affiliate_reversal", "admin reversal recovery retry");
+  requireText(stationAffiliateReversal, "read_lpg_station_affiliate_admin_workspace_base", "reversal queue extends the existing admin workspace without recursion");
 });
