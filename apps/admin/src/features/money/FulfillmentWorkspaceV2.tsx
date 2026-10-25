@@ -625,6 +625,7 @@ const AffiliateAdminWorkspaceSchema = z.object({
   referrals: z.array(z.record(z.unknown())).default([]),
   earnings: z.array(z.record(z.unknown())).default([]),
   commissionFailures: z.array(z.record(z.unknown())).default([]),
+  reversalFailures: z.array(z.record(z.unknown())).default([]),
 });
 type AffiliateAdminWorkspace = z.infer<typeof AffiliateAdminWorkspaceSchema>;
 type AffiliateDecision = "active" | "rejected" | "suspended";
@@ -646,6 +647,7 @@ function AffiliateAdminSection(props: {
   const [policyReason, setPolicyReason] = useState("");
   const [affiliateReason, setAffiliateReason] = useState("");
   const [retryReason, setRetryReason] = useState("");
+  const [reversalReason, setReversalReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
 
   const workspace = useQuery<AffiliateAdminWorkspace>({
@@ -872,6 +874,46 @@ function AffiliateAdminSection(props: {
     },
   });
 
+  const reverseCommission = useMutation({
+    mutationFn: async (earningId: string) => {
+      if (!props.canRetryCommission) throw new Error("Financial and wallet management permissions are required.");
+      if (reversalReason.trim().length < 5) throw new Error("Enter a reason of at least 5 characters.");
+      const { data, error } = await supabase.rpc("reverse_lpg_station_affiliate_commission", {
+        target_earning_id: earningId,
+        target_reason: reversalReason.trim(),
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async (result) => {
+      setReversalReason("");
+      setNotice(recordText(result, "status") === "pending_recovery"
+        ? "Reversal could not be funded from the affiliate wallet yet. It has been queued for recovery."
+        : "Affiliate commission reversal processed.");
+      await refresh();
+    },
+  });
+
+  const retryReversal = useMutation({
+    mutationFn: async (earningId: string) => {
+      if (!props.canRetryCommission) throw new Error("Financial and wallet management permissions are required.");
+      if (reversalReason.trim().length < 5) throw new Error("Enter a reason of at least 5 characters.");
+      const { data, error } = await supabase.rpc("retry_lpg_station_affiliate_reversal", {
+        target_earning_id: earningId,
+        target_reason: reversalReason.trim(),
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async (result) => {
+      setReversalReason("");
+      setNotice(recordText(result, "status") === "pending_recovery"
+        ? "The affiliate wallet still cannot cover this reversal. The exception remains open."
+        : "Affiliate commission reversal recovery processed.");
+      await refresh();
+    },
+  });
+
   if (!props.canRead) {
     return <div className="admin-inline-warning"><strong>Access required.</strong> You need an approved platform operations, wallet, revenue, or financial-policy read permission to view Station Affiliate operations.</div>;
   }
@@ -884,6 +926,7 @@ function AffiliateAdminSection(props: {
   const referrals = workspace.data.referrals;
   const earnings = workspace.data.earnings;
   const failures = workspace.data.commissionFailures;
+  const reversalFailures = workspace.data.reversalFailures;
   const policyVersionDisplay = latestVersionId
     ? "v" + (recordText(latestPolicy, "version") ?? "?") + " · " + normalizeStatusLabel(latestLifecycle ?? "draft")
     : "Not configured";
@@ -1017,18 +1060,55 @@ function AffiliateAdminSection(props: {
 
       <section className="sk-panel stack-md">
         <div className="sk-panel__header"><div><span className="section-kicker">Ledger-backed earnings</span><h2>Affiliate commissions</h2>
-          <p className="skima-muted">These entries are posted only against eligible SKIMA revenue credits and a locked policy version.</p>
+          <p className="skima-muted">Commission entries and reversals each use their own financial transaction. A full LPG order refund requests an automatic reversal.</p>
         </div></div>
-        {earnings.length ? earnings.map((row, index) => (
-          <div className="skima-list-row" key={recordText(row, "id") ?? recordText(row, "orderId") ?? ("earning-" + index)}>
-            <div className="stack-xs">
-              <strong>{recordText(row, "affiliateName") ?? "Affiliate"} · {recordText(row, "stationName") ?? "Station"}</strong>
-              <span className="skima-muted">{recordText(row, "publicReference") ?? recordText(row, "orderId") ?? "LPG order"} · {recordText(row, "policyVersion") ? "Policy v" + recordText(row, "policyVersion") : "policy version recorded"}</span>
+        <TextInput label="Reason for manual reversal (required)" value={reversalReason} onChange={(event) => setReversalReason(event.currentTarget.value)}
+          placeholder="e.g. Full refund or approved dispute adjustment" disabled={!props.canRetryCommission || reverseCommission.isPending || retryReversal.isPending} />
+        {reverseCommission.error ? <ErrorState title="Could not reverse affiliate commission" error={reverseCommission.error} /> : null}
+        {earnings.length ? earnings.map((row, index) => {
+          const earningId = recordText(row, "id") ?? "";
+          const earningStatus = recordText(row, "status") ?? "pending";
+          return (
+            <div className="skima-list-row" key={earningId || recordText(row, "orderId") || ("earning-" + index)}>
+              <div className="stack-xs">
+                <strong>{recordText(row, "affiliateName") ?? "Affiliate"} · {recordText(row, "stationName") ?? "Station"}</strong>
+                <span className="skima-muted">{recordText(row, "publicReference") ?? recordText(row, "orderId") ?? "LPG order"} · {recordText(row, "policyVersion") ? "Policy v" + recordText(row, "policyVersion") : "policy version recorded"}</span>
+                {recordText(row, "reversal_transaction_id") ? <small className="skima-muted">Reversal transaction: {recordText(row, "reversal_transaction_id")}</small> : null}
+              </div>
+              <span>{money(Number(row.amount ?? 0), recordText(row, "currencyCode") ?? "NGN")}</span>
+              <StatusBadge tone={earningStatus === "posted" ? "success" : earningStatus === "reversed" ? "warning" : "neutral"}>{normalizeStatusLabel(earningStatus)}</StatusBadge>
+              {earningStatus === "posted" && props.canRetryCommission ? (
+                <Button size="sm" variant="outline" disabled={!earningId || reversalReason.trim().length < 5 || reverseCommission.isPending || retryReversal.isPending}
+                  isLoading={reverseCommission.isPending && reverseCommission.variables === earningId}
+                  onClick={() => reverseCommission.mutate(earningId)}>Reverse commission</Button>
+              ) : null}
             </div>
-            <span>{money(Number(row.amount ?? 0), recordText(row, "currencyCode") ?? "NGN")}</span>
-            <StatusBadge tone={recordText(row, "status") === "posted" ? "success" : "neutral"}>{normalizeStatusLabel(recordText(row, "status") ?? "pending")}</StatusBadge>
-          </div>
-        )) : <p className="skima-muted">No affiliate commissions have posted yet.</p>}
+          );
+        }) : <p className="skima-muted">No affiliate commissions have posted yet.</p>}
+      </section>
+
+      <section className="sk-panel stack-md">
+        <div className="sk-panel__header"><div><span className="section-kicker">Reversal recovery</span><h2>Refund-related commission reversals</h2>
+          <p className="skima-muted">A full order refund can request a reversal automatically. If the affiliate wallet does not have sufficient funds, the original earning stays unchanged and the recovery remains visible here for retry.</p>
+        </div></div>
+        <TextInput label="Reason for reversal retry (required)" value={reversalReason} onChange={(event) => setReversalReason(event.currentTarget.value)}
+          placeholder="e.g. Rechecked affiliate wallet balance" disabled={!props.canRetryCommission || retryReversal.isPending || reverseCommission.isPending} />
+        {retryReversal.error ? <ErrorState title="Could not retry affiliate reversal" error={retryReversal.error} /> : null}
+        {reversalFailures.length ? reversalFailures.map((row, index) => {
+          const earningId = recordText(row, "earningId") ?? "";
+          return (
+            <div className="skima-list-row" key={recordText(row, "id") ?? earningId ?? ("reversal-" + index)}>
+              <div className="stack-xs">
+                <strong>{recordText(row, "publicReference") ?? recordText(row, "orderId") ?? "LPG order"}</strong>
+                <span className="skima-muted">{recordText(row, "affiliateName") ?? "Affiliate"} · {recordText(row, "lastError") ?? "Reversal needs recovery"}</span>
+                <small className="skima-muted">Required {money(Number(row.requiredAmount ?? 0), "NGN")} · Available {money(Number(row.availableAmount ?? 0), "NGN")} · {Number(row.attemptCount ?? 1)} attempts</small>
+              </div>
+              <Button size="sm" variant="outline" disabled={!props.canRetryCommission || !earningId || reversalReason.trim().length < 5 || retryReversal.isPending || reverseCommission.isPending}
+                isLoading={retryReversal.isPending && retryReversal.variables === earningId}
+                onClick={() => retryReversal.mutate(earningId)}>Retry reversal</Button>
+            </div>
+          );
+        }) : <p className="skima-muted">No unresolved affiliate reversal recoveries.</p>}
       </section>
 
       <section className="sk-panel stack-md">
