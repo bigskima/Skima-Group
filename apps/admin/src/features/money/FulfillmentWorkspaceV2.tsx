@@ -465,6 +465,114 @@ function AvailabilitySection(props: {
       {save.error ? <ErrorState title="Could not save availability" error={save.error} /> : null}
       <Button disabled={!props.canManage || save.isPending} isLoading={save.isPending} onClick={() => save.mutate()}>Save availability</Button>
     </section>
+    <StationManagedCoveragePolicySection canManage={props.canManage} />
+  );
+}
+
+const StationManagedCoveragePolicySchema = z.object({
+  outsideCustomerCoverageEnabled: z.boolean(),
+  updatedAt: z.string().nullable().optional(),
+  changeReason: z.string(),
+  version: z.coerce.number().int().positive(),
+});
+
+function StationManagedCoveragePolicySection(props: { readonly canManage: boolean }) {
+  const { supabase, status } = useSessionState();
+  const queryClient = useQueryClient();
+  const [enabled, setEnabled] = useState(false);
+  const [reason, setReason] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const policy = useQuery({
+    queryKey: ["lpg-station-managed-coverage-policy"],
+    enabled: status === "authenticated",
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("read_lpg_station_managed_coverage_policy");
+      if (error) throw error;
+      return StationManagedCoveragePolicySchema.parse(data);
+    },
+  });
+
+  useEffect(() => {
+    if (policy.data) setEnabled(policy.data.outsideCustomerCoverageEnabled);
+  }, [policy.data]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!reason.trim() || reason.trim().length < 5) {
+        throw new Error("Enter a reason of at least 5 characters for the policy change.");
+      }
+      const { data, error } = await supabase.rpc("configure_lpg_station_managed_coverage_policy", {
+        target_enabled: enabled,
+        target_reason: reason.trim(),
+      });
+      if (error) throw error;
+      return StationManagedCoveragePolicySchema.parse(data);
+    },
+    onSuccess: async (next) => {
+      setEnabled(next.outsideCustomerCoverageEnabled);
+      setReason("");
+      setNotice("Station Managed coverage policy saved.");
+      await queryClient.invalidateQueries({ queryKey: ["lpg-station-managed-coverage-policy"] });
+    },
+  });
+
+  if (policy.isPending) return <LoadingState label="Loading Station Managed coverage policy" />;
+  if (policy.error || !policy.data) {
+    return <ErrorState title="Station Managed coverage policy unavailable" error={policy.error} onRetry={() => void policy.refetch()} />;
+  }
+
+  return (
+    <section className="sk-panel stack-md fulfillment-v2__single-task">
+      <div className="sk-panel__header">
+        <div>
+          <span className="section-kicker">Station Managed · Coverage expansion</span>
+          <h2>Allow qualified stations to serve beyond SKIMA launch areas</h2>
+          <p className="skima-muted">
+            This switch affects only explicitly Station Managed orders. The branch must be approved and available,
+            Station Managed must be enabled, an active branch driver must exist, stock and current price must qualify,
+            and the station's configured delivery radius must cover both pickup and return locations. It does not open
+            SKIMA Managed or Independent delivery outside their own service areas.
+          </p>
+        </div>
+        <StatusBadge tone={policy.data.outsideCustomerCoverageEnabled ? "success" : "neutral"}>
+          {policy.data.outsideCustomerCoverageEnabled ? "Enabled" : "Disabled"}
+        </StatusBadge>
+      </div>
+
+      <SelectInput
+        label="Station Managed delivery outside SKIMA customer coverage"
+        value={enabled ? "enabled" : "disabled"}
+        onChange={(event) => setEnabled(event.currentTarget.value === "enabled")}
+        options={[
+          { label: "Disabled — require SKIMA customer-ordering coverage", value: "disabled" },
+          { label: "Enabled — allow eligible Station Managed branches within their own radius", value: "enabled" },
+        ]}
+        disabled={!props.canManage || save.isPending}
+      />
+      <TextInput
+        label="Reason for change (required)"
+        value={reason}
+        onChange={(event) => setReason(event.currentTarget.value)}
+        placeholder="e.g. Approve limited Station Managed expansion for launch"
+        disabled={!props.canManage || save.isPending}
+      />
+      <div className="skima-muted">
+        Policy version {policy.data.version}
+        {policy.data.updatedAt ? ` · Last changed ${new Date(policy.data.updatedAt).toLocaleString()}` : ""}
+        {policy.data.changeReason ? ` · ${policy.data.changeReason}` : ""}
+      </div>
+      {notice ? <StatusBadge tone="success">{notice}</StatusBadge> : null}
+      {save.error ? <ErrorState title="Could not save Station Managed coverage" error={save.error} /> : null}
+      <Button
+        disabled={!props.canManage || save.isPending || reason.trim().length < 5 || enabled === policy.data.outsideCustomerCoverageEnabled}
+        isLoading={save.isPending}
+        onClick={() => save.mutate()}
+      >
+        Save Station Managed coverage
+      </Button>
+    </section>
   );
 }
 
