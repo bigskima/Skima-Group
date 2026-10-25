@@ -10,6 +10,7 @@ const assistantLauncher = await Deno.readTextFile("apps/lpg-mobile/src/native/ui
 const customer = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx");
 const station = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedFulfillmentScreen.tsx");
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
+const sharedHttp = await Deno.readTextFile("supabase/functions/_shared/http.ts");
 const admin = await Deno.readTextFile("apps/admin/src/admin-station-managed-fulfillment-workspace.tsx");
 const adminRouter = await Deno.readTextFile("apps/admin/src/features/partners/PartnersWorkspaceRouter.tsx");
 const driverScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedDriverJobsScreen.tsx");
@@ -209,6 +210,12 @@ Deno.test("Customer AI launcher opens as an overlay modal, not in the home layou
 });
 
 Deno.test("Station driver invites persist before delivery and revoke failed sends", () => {
+  const allowedHeaders = sharedHttp.match(/"Access-Control-Allow-Headers":\\s*"([^"]+)"/)?.[1]
+    ?.split(",").map((header) => header.trim().toLowerCase()) ?? [];
+  if (!allowedHeaders.includes("x-skima-client")) {
+    throw new Error("Gateway CORS must allow x-skima-client because the app Supabase client sends it on browser requests.");
+  }
+
   const start = gateway.indexOf('if (routePath === "/runtime/station-driver-invitations" && request.method === "POST")');
   const end = gateway.indexOf('if (routePath === "/runtime/station-driver-invitations/accept" && request.method === "POST")', start);
   if (start < 0 || end < 0) throw new Error("Both station-driver invitation routes must be present.");
