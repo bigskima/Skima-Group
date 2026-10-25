@@ -208,6 +208,15 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
                     Available in affiliate wallet: ₦{Number(affiliate.availableBalance ?? 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Text>
                 </View>
+                <AppButton
+                  label="Withdraw affiliate earnings"
+                  fullWidth
+                  disabled={!affiliate.commissionWalletId || Number(affiliate.availableBalance ?? 0) <= 0}
+                  onPress={() => {
+                    if (!affiliate.commissionWalletId) return;
+                    router.push(("/customer/wallet/affiliate-withdraw?walletId=" + encodeURIComponent(affiliate.commissionWalletId)) as never);
+                  }}
+                />
                 {(affiliate.referrals ?? []).length ? (
                   <View style={styles.affiliateReferralList}>
                     <Text style={[styles.affiliateStatusTitle, { color: theme.palette.ink }]}>Your referrals</Text>
