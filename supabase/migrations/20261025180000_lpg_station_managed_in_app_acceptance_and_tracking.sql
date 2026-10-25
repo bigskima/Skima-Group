@@ -140,8 +140,6 @@ begin
 
   select i.* into invite_record
   from public.lpg_station_managed_driver_invites i
-  join public.lpg_station_fulfillment_settings settings
-    on settings.station_branch_id=i.station_branch_id and settings.station_managed_enabled
   join public.lpg_station_branches station
     on station.id=i.station_branch_id
     and station.approval_status='approved'
