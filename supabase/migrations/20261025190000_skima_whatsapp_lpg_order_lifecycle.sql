@@ -42,8 +42,7 @@ begin
       'id', c.id,
       'displayName', coalesce(nullif(c.display_name, ''), nullif(c.brand, ''), c.cylinder_identifier, 'LPG cylinder'),
       'sizeKg', c.size_kg,
-      'maxCapacityKg', c.max_capacity_kg,
-      'status', c.status
+      'maxCapacityKg', c.max_capacity_kg
     ) as choice
     from public.lpg_cylinders c
     where c.owner_user_id = contact_record.profile_id
@@ -59,12 +58,7 @@ begin
     select jsonb_build_object(
       'id', l.id,
       'label', l.label,
-      'address', l.formatted_address,
-      'landmark', l.landmark,
-      'contactName', l.contact_name,
-      'contactPhone', l.contact_phone,
-      'latitude', l.latitude,
-      'longitude', l.longitude
+      'address', l.formatted_address
     ) as choice
     from public.lpg_customer_locations l
     where l.owner_user_id = contact_record.profile_id
