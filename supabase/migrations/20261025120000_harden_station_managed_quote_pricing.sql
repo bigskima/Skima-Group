@@ -60,6 +60,24 @@ begin
   end if;
 
   new.fulfillment_mode:=requested_mode;
+
+  -- Quote creation is a two-step runtime: create_lpg_refill_quote writes a
+  -- provisional row, then create_lpg_refill_quote_from_commercial_snapshot
+  -- updates it with the server-resolved policy snapshot and calculated amounts.
+  -- Do not lock prices on that provisional INSERT; the final policy-bearing
+  -- UPDATE below is the point at which the station fee can safely be applied.
+  if tg_op='INSERT' and (
+    new.financial_policy_snapshot is null
+    or new.financial_policy_snapshot->'settlement' is null
+    or coalesce(new.financial_policy_snapshot,'{}'::jsonb)='{}'::jsonb
+  ) then
+    new.metadata:=coalesce(new.metadata,'{}'::jsonb)
+      - 'station_fulfillment_pricing_locked'
+      - 'station_delivery_fee_amount'
+      - 'delivery_pricing_mode';
+    return new;
+  end if;
+
   if requested_mode<>'station_managed' then
     new.delivery_pricing_mode:=coalesce(new.delivery_pricing_mode,'separate');
     new.station_delivery_fee_amount:=0;
