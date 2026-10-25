@@ -300,7 +300,7 @@ begin
     or jsonb_typeof(config->'commission_percent') is distinct from 'number'
     or jsonb_typeof(config->'earning_period_months') is distinct from 'number'
     or jsonb_typeof(config->'eligible_revenue_streams') is distinct from 'array' then
-    raise exception using errcode='22023',message='Station Affiliate policy requires program_enabled, commission_percent, earning_period_months, eligible_revenue_streams and payout_threshold';
+    raise exception using errcode='22023',message='Station Affiliate policy requires program_enabled, commission_percent, earning_period_months, eligible_revenue_streams';
   end if;
   if (config->>'commission_percent')::numeric<0 or (config->>'commission_percent')::numeric>100
     or ((config->>'program_enabled')::boolean and (config->>'commission_percent')::numeric<=0) then
