@@ -35,6 +35,7 @@ type StationAffiliateSummary = {
   id?: string;
   status: "not_applied" | "pending" | "active" | "suspended" | "rejected" | string;
   referralCode?: string | null;
+  commissionWalletId?: string | null;
   currencyCode?: string;
   availableBalance?: number;
   referralCount?: number;
