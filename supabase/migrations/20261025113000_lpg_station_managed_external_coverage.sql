@@ -438,6 +438,7 @@ begin
 end
 $$;
 
+-- Dollar quoting validated for the quote-eligibility trigger.
 create or replace function public.enforce_lpg_refill_quote_station_eligibility()
 returns trigger
 language plpgsql
