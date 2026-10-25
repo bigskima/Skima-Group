@@ -344,5 +344,13 @@ comment on function public.apply_lpg_station_affiliate_reversal(uuid,text,text) 
 comment on function public.reverse_lpg_station_affiliate_commission_on_order_refund() is
   'Automatically requests reversal of posted station affiliate commission after a full LPG order refund without blocking the customer refund if recovery fails.';
 
+drop policy if exists lpg_station_affiliate_reversal_failures_service_role_only on public.lpg_station_affiliate_reversal_failures;
+create policy lpg_station_affiliate_reversal_failures_service_role_only
+on public.lpg_station_affiliate_reversal_failures
+for all
+to service_role
+using (true)
+with check (true);
+
 notify pgrst,'reload schema';
 commit;
