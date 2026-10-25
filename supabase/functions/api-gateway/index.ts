@@ -331,6 +331,12 @@ async function handleRequest(request: Request): Promise<Response> {
     if (routePath === "/runtime/driver-id-cards/verify" && request.method === "GET") {
       return publicDriverIdVerificationResponse(request, id);
     }
+    if (routePath === "/internal/whatsapp/lpg/quote") {
+      if (request.method !== "POST") {
+        return jsonResponse({ ok: false, error: "method_not_allowed", requestId: id }, 405);
+      }
+      return await handleInternalWhatsAppLpgQuote(request, id);
+    }
 
     return await handleAuthenticatedRequest(request, id);
   } catch (error) {
@@ -388,6 +394,109 @@ async function handleRequest(request: Request): Promise<Response> {
       500,
     );
   }
+}
+
+async function handleInternalWhatsAppLpgQuote(request: Request, id: string): Promise<Response> {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const authorization = request.headers.get("authorization") ?? "";
+  const suppliedKey = /^Bearer\s+(.+)$/i.exec(authorization)?.[1] ?? "";
+  if (!serviceRoleKey || !supabaseUrl) {
+    return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+  }
+  if (suppliedKey.length !== serviceRoleKey.length || suppliedKey !== serviceRoleKey) {
+    return jsonResponse({ ok: false, error: "unauthorized", requestId: id }, 401);
+  }
+
+  const body = await readJsonBody(request, id);
+  if ("response" in body) return body.response;
+  const payload = requireRecord(body.value, "quote");
+  const whatsappWaId = requireString(payload.whatsappWaId, "whatsappWaId").trim();
+  const cylinderId = requireUuid(payload.cylinderId, "cylinderId");
+  const pickupLocationId = requireUuid(payload.pickupLocationId, "pickupLocationId");
+  const deliveryLocationId = requireUuid(payload.deliveryLocationId, "deliveryLocationId");
+  const stationBranchId = requireUuid(payload.stationBranchId, "stationBranchId");
+  const requestedKg = requireNumber(payload.requestedKg, "requestedKg");
+  const fulfillmentMode = requireString(payload.fulfillmentMode, "fulfillmentMode");
+  const idempotencyKey = requireString(payload.idempotencyKey, "idempotencyKey");
+  const providerMessageId = requireString(payload.providerMessageId, "providerMessageId");
+  if (!/^[0-9]{6,20}$/.test(whatsappWaId)) throw new RequestValidationError("whatsappWaId is invalid.");
+  if (requestedKg <= 0) throw new RequestValidationError("requestedKg must be greater than zero.");
+  if (fulfillmentMode !== "independent_driver" && fulfillmentMode !== "station_managed") {
+    throw new RequestValidationError("Unsupported LPG fulfillment option.");
+  }
+
+  const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+  const contactResult = await serviceClient.from("skima_whatsapp_contacts")
+    .select("profile_id")
+    .eq("whatsapp_wa_id", whatsappWaId)
+    .eq("link_status", "linked")
+    .maybeSingle();
+  if (contactResult.error) return databaseError(contactResult.error, id);
+  const profileId = contactResult.data?.profile_id;
+  if (!profileId) {
+    return jsonResponse({ ok: false, error: "linked_customer_required", requestId: id }, 403);
+  }
+
+  const profileResult = await serviceClient.from("profiles")
+    .select("id")
+    .eq("id", profileId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (profileResult.error) return databaseError(profileResult.error, id);
+  if (!profileResult.data) {
+    return jsonResponse({ ok: false, error: "active_customer_required", requestId: id }, 403);
+  }
+
+  // Re-run the canonical eligibility rules before any commercial route-provider call.
+  const eligibleResult = await serviceClient.rpc("read_skima_whatsapp_eligible_stations", {
+    target_whatsapp_wa_id: whatsappWaId,
+    target_cylinder_id: cylinderId,
+    target_requested_kg: requestedKg,
+    target_pickup_location_id: pickupLocationId,
+    target_delivery_location_id: deliveryLocationId,
+  });
+  if (eligibleResult.error) return databaseError(eligibleResult.error, id);
+  const eligibleOptions = Array.isArray(eligibleResult.data)
+    ? eligibleResult.data.filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === "object")
+    : [];
+  const selectedStillEligible = eligibleOptions.some((option) =>
+    String(option.station_branch_id) === stationBranchId && String(option.fulfillmentMode) === fulfillmentMode
+  );
+  if (!selectedStillEligible) {
+    return jsonResponse({
+      ok: false,
+      error: "station_not_eligible",
+      message: "The selected station is no longer eligible for these locations and cylinder. Request the station list again.",
+      requestId: id,
+    }, 409);
+  }
+
+  const routeSnapshot = await buildLpgCommercialRouteSnapshot(
+    serviceClient,
+    supabaseUrl,
+    profileId,
+    pickupLocationId,
+    deliveryLocationId,
+    stationBranchId,
+    id,
+  );
+  if ("response" in routeSnapshot) return routeSnapshot.response;
+
+  const quoteResult = await serviceClient.rpc("create_skima_whatsapp_lpg_quote", {
+    target_whatsapp_wa_id: whatsappWaId,
+    target_cylinder_id: cylinderId,
+    target_requested_kg: requestedKg,
+    target_pickup_location_id: pickupLocationId,
+    target_delivery_location_id: deliveryLocationId,
+    target_station_branch_id: stationBranchId,
+    target_fulfillment_mode: fulfillmentMode,
+    target_route_snapshot: routeSnapshot.data,
+    target_idempotency_key: idempotencyKey,
+    target_provider_message_id: providerMessageId,
+  });
+  if (quoteResult.error) return databaseError(quoteResult.error, id);
+  return jsonResponse({ ok: true, data: quoteResult.data, requestId: id });
 }
 
 async function handleAuthenticatedRequest(request: Request, id: string): Promise<Response> {
