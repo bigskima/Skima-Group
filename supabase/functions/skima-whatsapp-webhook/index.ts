@@ -90,7 +90,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
       if (eventResult.error || !eventResult.data) {
         return json({ ok: false, error: "event_persistence_failed" }, 500);
       }
-      eventId = eventId;
+      eventId = eventResult.data.id;
     }
 
     const conversationResult = await db.from("skima_whatsapp_conversations")
