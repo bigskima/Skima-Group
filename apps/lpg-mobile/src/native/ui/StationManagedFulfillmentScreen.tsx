@@ -16,6 +16,35 @@ import { GuideTarget } from "../onboarding/InAppGuideProvider";
 
 type DeliveryPricingMode = "separate" | "included" | "free";
 type CompensationMode = "in_app_plan" | "offline";
+type StationManagedDelivery = {
+  assignmentId: string;
+  lpgOrderId: string;
+  publicReference?: string | null;
+  assignmentStatus: string;
+  orderStatus: string;
+  requestedKg?: number | string | null;
+  actualKg?: number | string | null;
+  totalAmount?: number | string | null;
+  currencyCode?: string | null;
+  paymentStatus?: string | null;
+  assignedAt?: string | null;
+  completedAt?: string | null;
+  updatedAt?: string | null;
+  stationDriverId?: string | null;
+  driverName?: string | null;
+  driverPhone?: string | null;
+  vehicleId?: string | null;
+  vehicleRegistrationNumber?: string | null;
+  vehicleManufacturer?: string | null;
+  vehicleModel?: string | null;
+  vehicleType?: string | null;
+  deliveryAddress?: string | null;
+  deliveryInstructions?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  isActive?: boolean;
+};
+
 type WorkspaceData = {
   settings?: {
     stationManagedEnabled?: boolean;
@@ -28,7 +57,16 @@ type WorkspaceData = {
   drivers?: Array<{ id: string; userId: string; displayName: string; phone?: string; status: string }>;
   agreements?: Array<Record<string, unknown>>;
   payments?: Array<Record<string, unknown>>;
-  assignableOrders?: Array<{ id: string; publicReference?: string; status: string; requestedKg?: number; totalAmount?: number; currencyCode?: string }>;
+  deliveries?: StationManagedDelivery[];
+  assignableOrders?: Array<{
+    id: string;
+    publicReference?: string;
+    status: string;
+    requestedKg?: number;
+    totalAmount?: number;
+    currencyCode?: string;
+    dispatchStatus?: string | null;
+  }>;
 };
 
 type StationManagedVehicle = {
@@ -77,12 +115,13 @@ export function StationManagedFulfillmentScreen() {
   const [vehicleChangeReason, setVehicleChangeReason] = useState("Assigned for Station Managed LPG delivery");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [expandedSection, setExpandedSection] = useState("1. Customer delivery option");
+  const [expandedSection, setExpandedSection] = useState("Live delivery operations");
 
   const workspace = useQuery<WorkspaceData>({
     queryKey: ["station-managed-workspace", branchId],
     enabled: session.status === "authenticated" && Boolean(branchId),
     retry: false,
+    refetchInterval: 15_000,
     queryFn: async () => {
       const result = await session.supabase.rpc("read_lpg_station_managed_workspace", {
         target_station_branch_id: branchId,
@@ -234,6 +273,14 @@ export function StationManagedFulfillmentScreen() {
 
   const data = workspace.data;
   const drivers = (data?.drivers ?? []).filter((driver) => driver.status === "active");
+  const deliveries = data?.deliveries ?? [];
+  const activeDeliveries = deliveries.filter((delivery) =>
+    delivery.isActive === true || ["assigned", "accepted", "en_route"].includes(delivery.assignmentStatus),
+  );
+  const completedDeliveries = deliveries.filter((delivery) =>
+    !(delivery.isActive === true || ["assigned", "accepted", "en_route"].includes(delivery.assignmentStatus)),
+  );
+  const pendingDispatchOrders = data?.assignableOrders ?? [];
   const selectedDriver = drivers.find((driver) => driver.id === selectedDriverId);
   const loading = runtime.isPending || workspace.isPending;
   const failed = runtime.error || workspace.error;
@@ -251,6 +298,128 @@ export function StationManagedFulfillmentScreen() {
         <EmptyState title="Station branch unavailable" description="Complete station setup before configuring managed delivery." />
       ) : (
         <>
+          <Section
+            title="Live delivery operations"
+            palette={palette}
+            expanded={expandedSection === "Live delivery operations"}
+            onPress={() => setExpandedSection(expandedSection === "Live delivery operations" ? "" : "Live delivery operations")}
+          >
+            <View style={styles.operationsHeader}>
+              <View style={{ flex: 1, gap: 3 }}>
+                <Text style={{ color: palette.ink, fontWeight: "800", fontSize: 17 }}>
+                  {activeDeliveries.length} active {activeDeliveries.length === 1 ? "delivery" : "deliveries"}
+                </Text>
+                <Text style={{ color: palette.muted, fontSize: 12 }}>
+                  Status refreshes every 15 seconds from SKIMA's existing order assignments.
+                </Text>
+              </View>
+              <AppButton label="Refresh" size="sm" variant="secondary" onPress={() => void workspace.refetch()} />
+            </View>
+
+            {activeDeliveries.length === 0 ? (
+              <Text style={{ color: palette.muted, fontSize: 13 }}>
+                No active Station Managed deliveries right now. New orders will appear here after the existing dispatch service assigns a driver and eligible vehicle.
+              </Text>
+            ) : activeDeliveries.map((delivery) => (
+              <View key={delivery.assignmentId} style={[styles.deliveryCard, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
+                <View style={styles.deliveryCardHeader}>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={{ color: palette.ink, fontWeight: "800", fontSize: 15 }}>
+                      {delivery.publicReference || delivery.lpgOrderId.slice(0, 8)}
+                    </Text>
+                    <Text style={{ color: palette.muted, fontSize: 12 }}>
+                      {delivery.requestedKg ?? "—"} kg · {delivery.currencyCode || currencyCode} {delivery.totalAmount ?? "—"}
+                    </Text>
+                  </View>
+                  <View style={[styles.statusTag, { backgroundColor: palette.brandSoft, borderColor: palette.brand }]}>
+                    <Text style={{ color: palette.brand, fontSize: 11, fontWeight: "800" }}>
+                      {formatOperationStatus(delivery.assignmentStatus)}
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ gap: 5 }}>
+                  <Text style={{ color: palette.ink, fontSize: 13 }}>
+                    **Driver:** {delivery.driverName || "Station driver"}
+                    {delivery.driverPhone ? ` · ${delivery.driverPhone}` : ""}
+                  </Text>
+                  <Text style={{ color: palette.ink, fontSize: 13 }}>
+                    **Vehicle:** {delivery.vehicleRegistrationNumber || "No vehicle registration"}
+                    {delivery.vehicleType ? ` · ${delivery.vehicleType}` : ""}
+                  </Text>
+                  <Text style={{ color: palette.muted, fontSize: 12 }}>
+                    **Order status:** {formatOperationStatus(delivery.orderStatus)}
+                  </Text>
+                  {delivery.customerName ? <Text style={{ color: palette.ink, fontSize: 13 }}>Customer: {delivery.customerName}{delivery.customerPhone ? ` · ${delivery.customerPhone}` : ""}</Text> : null}
+                  {delivery.deliveryAddress ? <Text style={{ color: palette.muted, fontSize: 12 }}>Delivery: {delivery.deliveryAddress}</Text> : null}
+                  {delivery.deliveryInstructions ? <Text style={{ color: palette.muted, fontSize: 12 }}>Instructions: {delivery.deliveryInstructions}</Text> : null}
+                  <Text style={{ color: palette.muted, fontSize: 11 }}>
+                    Assigned {formatOperationDate(delivery.assignedAt)}
+                    {delivery.updatedAt ? ` · Last order update ${formatOperationDate(delivery.updatedAt)}` : ""}
+                  </Text>
+                </View>
+                <AppButton
+                  label="Open order details"
+                  fullWidth
+                  variant="secondary"
+                  onPress={() => router.push(`/(station)/job/${encodeURIComponent(delivery.lpgOrderId)}` as never)}
+                />
+              </View>
+            ))}
+
+            {pendingDispatchOrders.length ? (
+              <View style={[styles.pendingDispatch, { borderColor: palette.warning, backgroundColor: palette.surface }]}>
+                <Text style={{ color: palette.ink, fontWeight: "800" }}>
+                  {pendingDispatchOrders.length} {pendingDispatchOrders.length === 1 ? "order is" : "orders are"} waiting for dispatch
+                </Text>
+                <Text style={{ color: palette.muted, fontSize: 12 }}>
+                  These orders do not yet have a live assignment. Check the dispatch reason, active station driver and eligible vehicle below.
+                </Text>
+                {pendingDispatchOrders.slice(0, 5).map((order) => (
+                  <View key={order.id} style={[styles.pendingOrderRow, { borderColor: palette.border }]}>
+                    <View style={{ flex: 1, gap: 3 }}>
+                      <Text style={{ color: palette.ink, fontSize: 13, fontWeight: "700" }}>
+                        {order.publicReference || order.id.slice(0, 8)} · {order.requestedKg ?? "—"} kg
+                      </Text>
+                      <Text style={{ color: palette.muted, fontSize: 12 }}>
+                        {formatOperationStatus(order.dispatchStatus || order.status)}
+                      </Text>
+                    </View>
+                    <AppButton
+                      label="Open"
+                      size="sm"
+                      variant="ghost"
+                      onPress={() => router.push(`/(station)/job/${encodeURIComponent(order.id)}` as never)}
+                    />
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {completedDeliveries.length ? (
+              <View style={{ gap: spacing.xs }}>
+                <Text style={{ color: palette.ink, fontWeight: "800" }}>Recently completed</Text>
+                {completedDeliveries.slice(0, 5).map((delivery) => (
+                  <View key={delivery.assignmentId} style={[styles.pendingOrderRow, { borderColor: palette.border }]}>
+                    <View style={{ flex: 1, gap: 3 }}>
+                      <Text style={{ color: palette.ink, fontSize: 13, fontWeight: "700" }}>
+                        {delivery.publicReference || delivery.lpgOrderId.slice(0, 8)}
+                      </Text>
+                      <Text style={{ color: palette.muted, fontSize: 12 }}>
+                        Customer hand-over verified · {formatOperationDate(delivery.completedAt)}
+                      </Text>
+                    </View>
+                    <AppButton
+                      label="Details"
+                      size="sm"
+                      variant="ghost"
+                      onPress={() => router.push(`/(station)/job/${encodeURIComponent(delivery.lpgOrderId)}` as never)}
+                    />
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </Section>
+
           <GuideTarget targetKey="station.managed-fulfillment">
           <Section title="1. Customer delivery option" palette={palette} expanded={expandedSection === "1. Customer delivery option"} onPress={() => setExpandedSection(expandedSection === "1. Customer delivery option" ? "" : "1. Customer delivery option")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Allow customers to choose delivery by a driver employed or engaged by your station. This does not change independent-driver or SKIMA Fleet orders. If you cannot edit this setting, ask your station manager.</Text>
@@ -426,8 +595,25 @@ function Field({ label, value, onChangeText, palette, keyboardType, multiline = 
   return <View style={styles.field}><Text style={[styles.fieldLabel, { color: palette.ink }]}>{label}</Text><TextInput value={value} onChangeText={onChangeText} keyboardType={keyboardType} multiline={multiline} autoCapitalize={autoCapitalize} autoCorrect={false} placeholder={label} placeholderTextColor={palette.muted} style={[styles.input, { color: palette.ink, backgroundColor: palette.input, borderColor: palette.borderStrong }, multiline && { minHeight: 84, textAlignVertical: "top" }]} /></View>;
 }
 
+function formatOperationStatus(value?: string | null) {
+  if (!value) return "Status unavailable";
+  return value.replaceAll("_", " ").replace(/\\b\\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatOperationDate(value?: string | null) {
+  if (!value) return "time unavailable";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "time unavailable" : date.toLocaleString();
+}
+
 const styles = StyleSheet.create({
   section: { borderWidth: 1, borderRadius: radii.lg, padding: spacing.sm + 2, gap: spacing.sm, marginBottom: spacing.sm },
+  operationsHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  deliveryCard: { borderWidth: 1, borderRadius: radii.lg, padding: spacing.md, gap: spacing.sm, marginBottom: spacing.xs },
+  deliveryCardHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
+  statusTag: { borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  pendingDispatch: { borderWidth: 1, borderRadius: radii.md, padding: spacing.sm, gap: spacing.xs },
+  pendingOrderRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: spacing.xs },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, minHeight: 30 },
   sectionTitle: { ...typography.heading, fontSize: 15, lineHeight: 20, flex: 1 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
