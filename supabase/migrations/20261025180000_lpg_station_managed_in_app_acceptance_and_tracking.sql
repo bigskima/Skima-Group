@@ -73,8 +73,6 @@ begin
 
   select i.* into invite_record
   from public.lpg_station_managed_driver_invites i
-  join public.lpg_station_fulfillment_settings settings
-    on settings.station_branch_id=i.station_branch_id and settings.station_managed_enabled
   join public.lpg_station_branches station
     on station.id=i.station_branch_id
     and station.approval_status='approved'
@@ -252,21 +250,23 @@ begin
     raise exception using errcode='42501',message='a verified email address is required';
   end if;
 
+  select candidate.id into invitation_id
+  from public.lpg_station_managed_driver_invites candidate
+  where lower(btrim(candidate.email))=current_email
+    and candidate.status='pending'
+    and candidate.expires_at>timezone('utc',now())
+  order by candidate.created_at desc
+  limit 1
+  for update;
+  if invitation_id is null then
+    raise exception using errcode='55000',message='there is no pending Station Managed invitation to decline';
+  end if;
+
   update public.lpg_station_managed_driver_invites i
   set status='revoked',
       updated_at=timezone('utc',now()),
       metadata=i.metadata||jsonb_build_object('declinedInApp',true,'declinedAt',timezone('utc',now()))
-  where i.id=(
-    select candidate.id from public.lpg_station_managed_driver_invites candidate
-    join public.lpg_station_fulfillment_settings settings
-      on settings.station_branch_id=candidate.station_branch_id and settings.station_managed_enabled
-    where lower(btrim(candidate.email))=current_email
-      and candidate.status='pending'
-      and candidate.expires_at>timezone('utc',now())
-    order by candidate.created_at desc
-    limit 1
-    for update of candidate
-  )
+  where i.id=invitation_id
   returning i.id into invitation_id;
 
   if invitation_id is null then
@@ -405,7 +405,7 @@ begin
       left join public.vehicles v on v.id=a.vehicle_id
       left join public.vehicle_types vt on vt.id=v.vehicle_type_id
       where a.station_branch_id=target_station_branch_id
-        and a.status in ('assigned','accepted','en_route','delivered')
+        and a.status in ('assigned','accepted','en_route')
         and o.fulfillment_mode='station_managed'
         and o.status not in ('cancelled','failed','refunded','expired')
       limit 50
