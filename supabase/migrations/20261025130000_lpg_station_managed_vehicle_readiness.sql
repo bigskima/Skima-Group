@@ -634,5 +634,13 @@ create trigger trg_station_managed_vehicle_dispatch_pending
 after insert or update of status on public.lpg_station_managed_vehicles
 for each row execute function public.on_station_managed_dispatch_readiness_changed();
 
+drop policy if exists lpg_station_managed_vehicles_service_role_only on public.lpg_station_managed_vehicles;
+create policy lpg_station_managed_vehicles_service_role_only
+on public.lpg_station_managed_vehicles
+for all
+to service_role
+using (true)
+with check (true);
+
 notify pgrst,'reload schema';
 commit;
