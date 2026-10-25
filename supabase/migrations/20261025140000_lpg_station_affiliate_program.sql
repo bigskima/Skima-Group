@@ -595,6 +595,36 @@ begin
 end
 $$;
 
+create or replace function public.resolve_lpg_station_affiliate_referral_application_outcome()
+returns trigger
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $
+begin
+  if old.status is not distinct from new.status then return new; end if;
+
+  if new.status='rejected' then
+    update public.lpg_station_referrals
+    set status='rejected',
+        metadata=metadata||jsonb_build_object('applicationOutcome','rejected','applicationOutcomeAt',timezone('utc',now()))
+    where application_id=new.id and status='submitted';
+  elsif new.status in ('expired','withdrawn') then
+    update public.lpg_station_referrals
+    set status='expired',
+        metadata=metadata||jsonb_build_object('applicationOutcome',new.status,'applicationOutcomeAt',timezone('utc',now()))
+    where application_id=new.id and status='submitted';
+  end if;
+
+  return new;
+end
+$;
+
+drop trigger if exists trg_resolve_lpg_station_affiliate_referral_application_outcome on public.application_records;
+create trigger trg_resolve_lpg_station_affiliate_referral_application_outcome
+after update of status on public.application_records
+for each row execute function public.resolve_lpg_station_affiliate_referral_application_outcome();
+
 create or replace function public.activate_lpg_station_affiliate_referral_for_branch()
 returns trigger
 language plpgsql
@@ -977,6 +1007,7 @@ revoke all on function public.review_lpg_station_affiliate(uuid,text,text) from 
 revoke all on function public.validate_lpg_station_affiliate_referral_on_submission() from public,anon,authenticated;
 revoke all on function public.record_lpg_station_affiliate_referral_on_submission() from public,anon,authenticated;
 revoke all on function public.activate_lpg_station_affiliate_referral_for_branch() from public,anon,authenticated;
+revoke all on function public.resolve_lpg_station_affiliate_referral_application_outcome() from public,anon,authenticated;
 revoke all on function public.award_lpg_station_affiliate_commission(uuid,uuid) from public,anon,authenticated;
 revoke all on function public.capture_lpg_station_affiliate_commission_failure() from public,anon,authenticated;
 revoke all on function public.retry_lpg_station_affiliate_commission(uuid,text) from public,anon;
