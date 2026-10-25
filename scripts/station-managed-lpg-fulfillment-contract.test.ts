@@ -23,6 +23,7 @@ const stationExternalCoverage = await Deno.readTextFile("supabase/migrations/202
 const stationQuotePricingHardening = await Deno.readTextFile("supabase/migrations/20261025120000_lpg_station_managed_quote_pricing_hardening.sql");
 const stationVehicleReadiness = await Deno.readTextFile("supabase/migrations/20261025130000_lpg_station_managed_vehicle_readiness.sql");
 const stationResourceReservation = await Deno.readTextFile("supabase/migrations/20261025131000_lpg_station_managed_resource_reservation_gate.sql");
+const stationOperationsReadModel = await Deno.readTextFile("supabase/migrations/20261025210000_lpg_station_managed_delivery_operations_read_model.sql");
 const stationAffiliateProgram = await Deno.readTextFile("supabase/migrations/20261025140000_lpg_station_affiliate_program.sql");
 const stationAffiliateReversal = await Deno.readTextFile("supabase/migrations/20261025150000_lpg_station_affiliate_reversal_recovery.sql");
 const stationAffiliateWithdrawalGuard = await Deno.readTextFile("supabase/migrations/20261025160000_lpg_station_affiliate_withdrawal_recovery_guard.sql");
@@ -376,4 +377,24 @@ Deno.test("Affiliate wallet withdrawals use existing payout checks and wait thro
   requireText(affiliateWithdrawalRoute, "FinanceWithdrawalExperience", "affiliate withdrawal route reuses the verified payout UI");
   requireText(stationAffiliateWithdrawalGuard, "before insert or update of status on public.withdrawal_requests", "pending commission clawbacks gate withdrawal requests and approval");
   requireText(stationAffiliateWithdrawalGuard, "Affiliate withdrawal approval is held until the pending commission reversal is resolved", "withdrawal approval fails closed during unresolved reversal");
+});
+
+
+Deno.test("Station Managed managers track canonical active and completed delivery assignments", () => {
+  requireText(stationOperationsReadModel, "public.can_operate_lpg_station_branch(target_station_branch_id,'lpg.stations.manage')", "branch-scoped authorization remains mandatory");
+  requireText(stationOperationsReadModel, "'deliveries',coalesce((", "manager workspace includes a deliveries read model");
+  requireText(stationOperationsReadModel, "public.lpg_station_managed_driver_assignments assignment", "delivery data comes from the canonical assignment table");
+  requireText(stationOperationsReadModel, "order_record.fulfillment_mode='station_managed'", "only Station Managed orders are projected");
+  requireText(stationOperationsReadModel, "'assignmentStatus',delivery.assignment_status", "assignment lifecycle remains the canonical lifecycle");
+  requireText(stationOperationsReadModel, "'vehicleRegistrationNumber',delivery.vehicle_registration_number", "manager can see the already-reserved vehicle");
+  requireText(stationOperationsReadModel, "'deliveryAddress',delivery.delivery_address", "manager can follow the assigned delivery destination");
+  if (/create\\s+table/i.test(stationOperationsReadModel)) {
+    throw new Error("The Station Managed manager view must not create a parallel tracking table.");
+  }
+  requireText(station, "Live delivery operations", "Station Managed has a dedicated operations view");
+  requireText(station, "refetchInterval: 15_000", "manager delivery statuses refresh from the backend");
+  requireText(station, "pendingDispatchOrders", "unassigned orders waiting on dispatch readiness remain visible");
+  requireText(station, "router.push(`/(station)/job/${encodeURIComponent(delivery.lpgOrderId)}` as never)", "manager opens the existing station order detail route");
+  requireText(driverScreen, 'supabase.rpc("read_lpg_station_managed_driver_jobs"', "driver sees their assignments through the existing backend RPC");
+  requireText(driverScreen, 'supabase.rpc("update_lpg_station_managed_driver_assignment_status"', "driver status changes use the existing authorised lifecycle RPC");
 });
