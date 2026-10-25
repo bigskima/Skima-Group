@@ -1022,6 +1022,38 @@ grant execute on function public.read_lpg_station_affiliate_admin_workspace() to
 comment on function public.award_lpg_station_affiliate_commission(uuid,uuid) is
   'Posts idempotent, time-limited station affiliate commissions only against eligible revenue credits actually posted to the SKIMA revenue wallet; no active governed policy means no commission.';
 
+drop policy if exists lpg_station_affiliates_service_role_only on public.lpg_station_affiliates;
+create policy lpg_station_affiliates_service_role_only
+on public.lpg_station_affiliates
+for all
+to service_role
+using (true)
+with check (true);
+
+drop policy if exists lpg_station_referrals_service_role_only on public.lpg_station_referrals;
+create policy lpg_station_referrals_service_role_only
+on public.lpg_station_referrals
+for all
+to service_role
+using (true)
+with check (true);
+
+drop policy if exists lpg_station_affiliate_earnings_service_role_only on public.lpg_station_affiliate_earnings;
+create policy lpg_station_affiliate_earnings_service_role_only
+on public.lpg_station_affiliate_earnings
+for all
+to service_role
+using (true)
+with check (true);
+
+drop policy if exists lpg_station_affiliate_commission_failures_service_role_only on public.lpg_station_affiliate_commission_failures;
+create policy lpg_station_affiliate_commission_failures_service_role_only
+on public.lpg_station_affiliate_commission_failures
+for all
+to service_role
+using (true)
+with check (true);
+
 notify pgrst,'reload schema';
 
 commit;
