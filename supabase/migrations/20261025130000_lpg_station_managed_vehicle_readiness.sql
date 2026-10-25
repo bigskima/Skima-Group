@@ -280,8 +280,7 @@ returns table(
   station_branch_id uuid,display_name text,formatted_address text,latitude numeric,longitude numeric,
   service_radius_meters integer,pickup_distance_meters numeric,return_distance_meters numeric,
   route_proxy_distance_meters numeric,currency_code text,price_per_kg numeric,current_available_kg numeric,
-  refill_capacity_kg numeric,supported_cylinder_sizes_kg numeric[],cylinder_size_kg numeric,
-  station_managed_vehicle_id uuid,station_managed_vehicle_registration_number text,station_managed_vehicle_max_load_kg numeric
+  refill_capacity_kg numeric,supported_cylinder_sizes_kg numeric[],cylinder_size_kg numeric
 )
 language plpgsql security definer
 set search_path=public,extensions,pg_temp
@@ -367,8 +366,7 @@ begin
   select priced.station_id,priced.display_name,priced.formatted_address,priced.latitude,priced.longitude,
     priced.service_radius_meters,round(priced.pickup_distance,2),round(priced.return_distance,2),
     round(priced.pickup_distance+priced.return_distance,2),priced.currency_code,priced.price_per_kg,
-    priced.current_available_kg,priced.refill_capacity_kg,priced.supported_cylinder_sizes_kg,cylinder_record.size_kg,
-    priced.vehicle_id,priced.registration_number,priced.max_load_kg
+    priced.current_available_kg,priced.refill_capacity_kg,priced.supported_cylinder_sizes_kg,cylinder_record.size_kg
   from prices priced
   order by greatest(priced.pickup_distance,priced.return_distance),priced.display_name
   limit target_limit;
@@ -387,8 +385,7 @@ returns table(
   station_branch_id uuid,display_name text,formatted_address text,latitude numeric,longitude numeric,
   service_radius_meters integer,pickup_distance_meters numeric,return_distance_meters numeric,
   route_proxy_distance_meters numeric,currency_code text,price_per_kg numeric,current_available_kg numeric,
-  refill_capacity_kg numeric,supported_cylinder_sizes_kg numeric[],cylinder_size_kg numeric,
-  station_managed_vehicle_id uuid,station_managed_vehicle_registration_number text,station_managed_vehicle_max_load_kg numeric
+  refill_capacity_kg numeric,supported_cylinder_sizes_kg numeric[],cylinder_size_kg numeric
 )
 language plpgsql security definer
 set search_path=public,extensions,pg_temp
@@ -418,16 +415,26 @@ begin
       and resolved_kg<=cylinder_record.max_capacity_kg
       and resolved_kg<=candidate.current_available_kg
       and resolved_kg<=candidate.refill_capacity_kg
-      and resolved_kg<=candidate.station_managed_vehicle_max_load_kg then
+      and exists (
+        select 1
+        from public.lpg_station_managed_vehicles assignment
+        join public.vehicles vehicle on vehicle.id=assignment.vehicle_id
+        where assignment.station_branch_id=candidate.station_branch_id
+          and assignment.status='active'
+          and vehicle.max_load_kg>=resolved_kg
+          and public.is_lpg_station_managed_vehicle_eligible(candidate.station_branch_id,vehicle.id,target_at::date)
+          and not exists (
+            select 1 from public.lpg_station_managed_driver_assignments busy
+            where busy.vehicle_id=vehicle.id and busy.status in ('assigned','accepted','en_route')
+          )
+      ) then
       station_branch_id:=candidate.station_branch_id;display_name:=candidate.display_name;formatted_address:=candidate.formatted_address;
       latitude:=candidate.latitude;longitude:=candidate.longitude;service_radius_meters:=candidate.service_radius_meters;
       pickup_distance_meters:=candidate.pickup_distance_meters;return_distance_meters:=candidate.return_distance_meters;
       route_proxy_distance_meters:=candidate.route_proxy_distance_meters;currency_code:=candidate.currency_code;
       price_per_kg:=candidate.price_per_kg;current_available_kg:=candidate.current_available_kg;
       refill_capacity_kg:=candidate.refill_capacity_kg;supported_cylinder_sizes_kg:=candidate.supported_cylinder_sizes_kg;
-      cylinder_size_kg:=candidate.cylinder_size_kg;station_managed_vehicle_id:=candidate.station_managed_vehicle_id;
-      station_managed_vehicle_registration_number:=candidate.station_managed_vehicle_registration_number;
-      station_managed_vehicle_max_load_kg:=candidate.station_managed_vehicle_max_load_kg;
+      cylinder_size_kg:=candidate.cylinder_size_kg;
       return next;
       matched_count:=matched_count+1;
       if matched_count>=target_limit then return; end if;
