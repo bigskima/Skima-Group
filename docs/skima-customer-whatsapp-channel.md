@@ -11,6 +11,10 @@ SKIMA uses Meta's official WhatsApp Business Cloud API directly. The webhook is 
 5. Payment is attempted through the same wallet reservation + escrow + dispatch transaction used by the app. The bot reports success only after it re-reads the order and verifies the payment status. If wallet funds or eligible dispatch are unavailable, it says payment remains pending and directs the customer to SKIMA app Wallet → Top up.
 6. Customers can list their recent orders and see the latest recorded driver location for active orders, when that location is available.
 
+## App handoff configuration
+
+- `EXPO_PUBLIC_SKIMA_WHATSAPP_NUMBER`: the official WhatsApp business number in international digits-only format, without a plus sign (for example, a configured Nigerian number begins with `234`). This value is public and lets Account → WhatsApp ordering open the correct `wa.me` chat with the generated one-time linking code prefilled. Configure it in the mobile app's build environment (Expo/EAS and any deployed web build that serves this app). Do not ship a guessed or temporary test number in production.
+
 ## Required Supabase Edge Function secrets
 - `SKIMA_WHATSAPP_VERIFY_TOKEN`: random webhook verification token.
 - `SKIMA_WHATSAPP_APP_SECRET`: Meta app secret used for `X-Hub-Signature-256`.
