@@ -597,7 +597,7 @@ function Field({ label, value, onChangeText, palette, keyboardType, multiline = 
 
 function formatOperationStatus(value?: string | null) {
   if (!value) return "Status unavailable";
-  return value.replaceAll("_", " ").replace(/\\b\\w/g, (letter) => letter.toUpperCase());
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function formatOperationDate(value?: string | null) {
