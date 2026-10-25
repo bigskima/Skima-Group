@@ -1,9 +1,28 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Building2, ClipboardList, RefreshCcw, Truck, WalletCards } from "lucide-react";
 import { z } from "zod";
 
-import { Button, ErrorState, LoadingState, PageHeader, StatusBadge } from "@skima/ui";
+import { Button, ErrorState, LoadingState, PageHeader, StatusBadge, TextInput } from "@skima/ui";
 import { useSessionState } from "./session";
+
+const StationVehicleSchema = z.object({
+  assignmentId: z.string().uuid().optional(),
+  vehicleId: z.string().uuid(),
+  registrationNumber: z.string().nullable().optional(),
+  manufacturer: z.string().nullable().optional(),
+  model: z.string().nullable().optional(),
+  vehicleType: z.string().nullable().optional(),
+  maxLoadKg: z.coerce.number().nullable().optional(),
+  status: z.string().optional(),
+  eligible: z.boolean().optional(),
+  updatedAt: z.string().optional(),
+  changeReason: z.string().optional(),
+});
+const StationVehicleWorkspaceSchema = z.object({
+  assignedVehicles: z.array(StationVehicleSchema).default([]),
+  availableVehicles: z.array(StationVehicleSchema).default([]),
+});
 
 const DriverSchema = z.object({
   id: z.string(),
@@ -72,7 +91,11 @@ const StationSchema = z.object({
 type StationManagedRecord = z.infer<typeof StationSchema>;
 
 export function AdminStationManagedFulfillmentWorkspace() {
-  const { status, supabase } = useSessionState();
+  const { status, supabase, context } = useSessionState();
+  const canManageStationVehicles = Boolean(
+    context?.platformAdmin?.admin_kind === "super_admin" ||
+      context?.permissions.includes("platform.vehicles.manage"),
+  );
   const query = useQuery({
     queryKey: ["admin-station-managed-fulfillment"],
     enabled: status === "authenticated",
@@ -113,7 +136,7 @@ export function AdminStationManagedFulfillmentWorkspace() {
 
           {stations.length ? (
             <div style={{ display: "grid", gap: "0.9rem" }}>
-              {stations.map((station) => <StationCard key={station.stationBranchId} station={station} />)}
+              {stations.map((station) => <StationCard key={station.stationBranchId} station={station} canManageVehicles={canManageStationVehicles} />)}
             </div>
           ) : (
             <section className="sk-panel"><p className="skima-muted">No station branches were returned for your admin access.</p></section>
@@ -124,7 +147,7 @@ export function AdminStationManagedFulfillmentWorkspace() {
   );
 }
 
-function StationCard({ station }: { readonly station: StationManagedRecord }) {
+function StationCard({ station, canManageVehicles }: { readonly station: StationManagedRecord; readonly canManageVehicles: boolean }) {
   const fee = station.deliveryPricingMode === "separate"
     ? formatMoney(station.deliveryFeeAmount, station.currencyCode)
     : station.deliveryPricingMode === "included" ? "Included in refill price" : "Free to customer";
@@ -198,9 +221,123 @@ function StationCard({ station }: { readonly station: StationManagedRecord }) {
             ))}
             <p className="skima-muted" style={{ margin: 0, fontSize: "0.85rem" }}>These are station-entered confirmations only. SKIMA did not execute these driver payments.</p>
           </RecordSection>
+
+          {canManageVehicles ? <StationVehicleAdminPanel station={station} /> : null}
         </div>
       </details>
     </article>
+  );
+}
+
+function StationVehicleAdminPanel(props: { readonly station: StationManagedRecord }) {
+  const { supabase, status } = useSessionState();
+  const queryClient = useQueryClient();
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
+  const [reason, setReason] = useState("Assigned by platform vehicle administrator");
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const query = useQuery({
+    queryKey: ["admin-station-managed-vehicles", props.station.stationBranchId],
+    enabled: status === "authenticated",
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("read_lpg_station_managed_available_vehicles", {
+        target_station_branch_id: props.station.stationBranchId,
+      });
+      if (error) throw error;
+      return StationVehicleWorkspaceSchema.parse(data ?? { assignedVehicles: [], availableVehicles: [] });
+    },
+  });
+
+  const configure = useMutation({
+    mutationFn: async (input: { vehicleId: string; enabled: boolean }) => {
+      if (reason.trim().length < 5) throw new Error("Enter a reason of at least 5 characters.");
+      const { data, error } = await supabase.rpc("configure_lpg_station_managed_vehicle", {
+        target_station_branch_id: props.station.stationBranchId,
+        target_vehicle_id: input.vehicleId,
+        target_enabled: input.enabled,
+        target_reason: reason.trim(),
+      });
+      if (error) throw error;
+      return { data, enabled: input.enabled };
+    },
+    onSuccess: async ({ enabled }) => {
+      setNotice(enabled
+        ? "Vehicle assigned. It will only dispatch orders it is compliant and has capacity to carry."
+        : "Vehicle removed from this station's available assignment pool.");
+      if (enabled) setSelectedVehicleId("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin-station-managed-vehicles", props.station.stationBranchId] }),
+        queryClient.invalidateQueries({ queryKey: ["admin-station-managed-fulfillment"] }),
+      ]);
+    },
+  });
+
+  return (
+    <section className="stack-md" style={{ borderTop: "1px solid var(--sk-border, #d0d5dd)", paddingTop: "1rem" }}>
+      <h3 style={{ margin: 0 }}>Station-owned delivery vehicles</h3>
+      <p className="skima-muted" style={{ margin: 0 }}>
+        Assign only active vehicles registered under this station organisation. SKIMA checks LPG transport capability,
+        required evidence and vehicle load capacity again before quote/payment reservation and dispatch. This control
+        does not create a vehicle or mark compliance documents approved.
+      </p>
+
+      {query.isLoading ? <LoadingState label="Checking station vehicle readiness" /> : null}
+      {query.error ? <ErrorState title="Station vehicle list unavailable" message={readError(query.error)} onRetry={() => void query.refetch()} /> : null}
+      {configure.error ? <ErrorState title="Could not update station vehicle assignment" message={readError(configure.error)} /> : null}
+      {notice ? <StatusBadge tone="success">{notice}</StatusBadge> : null}
+
+      {query.data?.assignedVehicles.length ? (
+        <div style={{ display: "grid", gap: "0.55rem" }}>
+          {query.data.assignedVehicles.map((vehicle) => (
+            <div key={vehicle.assignmentId ?? vehicle.vehicleId} style={{ border: "1px solid var(--sk-border, #d0d5dd)", borderRadius: 10, padding: "0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+              <div>
+                <strong>{vehicle.registrationNumber || "Unregistered vehicle"}</strong>
+                <p className="skima-muted" style={{ margin: "0.2rem 0", fontSize: "0.88rem" }}>
+                  {[vehicle.manufacturer, vehicle.model, vehicle.vehicleType].filter(Boolean).join(" · ") || "Station vehicle"}
+                  {vehicle.maxLoadKg !== null && vehicle.maxLoadKg !== undefined ? " · " + vehicle.maxLoadKg + " kg load" : ""}
+                </p>
+                <StatusBadge tone={vehicle.eligible ? "success" : "warning"}>
+                  {vehicle.eligible ? "Eligible for dispatch" : "Not currently eligible"} · {vehicle.status ?? "assigned"}
+                </StatusBadge>
+              </div>
+              {vehicle.status !== "removed" ? (
+                <Button size="sm" variant="outline"
+                  disabled={configure.isPending}
+                  isLoading={configure.isPending && configure.variables?.vehicleId === vehicle.vehicleId && configure.variables?.enabled === false}
+                  onClick={() => configure.mutate({ vehicleId: vehicle.vehicleId, enabled: false })}>
+                  Remove assignment
+                </Button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : !query.isLoading && !query.error ? <p className="skima-muted">No vehicles are assigned to Station Managed delivery.</p> : null}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.7rem", alignItems: "end" }}>
+        <label style={{ display: "grid", gap: "0.3rem", fontWeight: 600, fontSize: "0.9rem" }}>
+          Eligible organisation vehicle
+          <select value={selectedVehicleId} onChange={(event) => setSelectedVehicleId(event.currentTarget.value)} disabled={configure.isPending || !query.data?.availableVehicles.length}
+            style={{ minHeight: 42, borderRadius: 8, border: "1px solid var(--sk-border, #d0d5dd)", background: "var(--sk-surface, #fff)", color: "inherit", padding: "0.5rem" }}>
+            <option value="">Choose vehicle…</option>
+            {(query.data?.availableVehicles ?? []).map((vehicle) => (
+              <option key={vehicle.vehicleId} value={vehicle.vehicleId}>
+                {(vehicle.registrationNumber || "Unregistered") + " · " + [vehicle.manufacturer, vehicle.model, vehicle.vehicleType].filter(Boolean).join(" ") + " · " + (vehicle.maxLoadKg ?? "?") + " kg"}
+              </option>
+            ))}
+          </select>
+        </label>
+        <TextInput label="Reason for change" value={reason} onChange={(event) => setReason(event.currentTarget.value)} placeholder="Reason required for audit" />
+        <Button disabled={!selectedVehicleId || reason.trim().length < 5 || configure.isPending}
+          isLoading={configure.isPending && configure.variables?.enabled === true}
+          onClick={() => configure.mutate({ vehicleId: selectedVehicleId, enabled: true })}>
+          Assign vehicle
+        </Button>
+      </div>
+      {!query.isLoading && !query.error && !(query.data?.availableVehicles.length) ? (
+        <p className="skima-muted" style={{ margin: 0 }}>No unassigned, compliant vehicles are available under this station organisation. Register and approve the vehicle through the existing fleet and compliance workspace first.</p>
+      ) : null}
+    </section>
   );
 }
 
