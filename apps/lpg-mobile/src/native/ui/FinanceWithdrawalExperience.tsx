@@ -30,15 +30,23 @@ import { WithdrawalModal } from "./WithdrawalModal";
 type Workspace = "customer" | "driver" | "station";
 type BankOption = { name: string; code: string };
 
-export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspace }) {
+export function FinanceWithdrawalExperience({
+  workspace,
+  walletIdOverride = null,
+}: {
+  workspace: Workspace;
+  walletIdOverride?: string | null;
+}) {
   const { palette } = useAppTheme();
   const wallets = domainQueries.wallets();
   const bankQuery = useFinanceQuery({ key: ["banks"], path: "/banks", schema: RecordObjectSchema });
   const beneficiaryQuery = useFinanceQuery({ key: ["beneficiaries"], path: "/beneficiaries", schema: RecordArraySchema });
 
   const wallet = useMemo(
-    () => selectWorkspaceWallet(wallets.data ?? [], workspace),
-    [wallets.data, workspace],
+    () => walletIdOverride
+      ? (wallets.data ?? []).find((item) => firstString(item, ["wallet_id", "walletId", "id"]) === walletIdOverride) ?? null
+      : selectWorkspaceWallet(wallets.data ?? [], workspace),
+    [wallets.data, walletIdOverride, workspace],
   );
   const walletId = firstString(wallet, ["wallet_id", "walletId", "id"]);
   const available = firstNumber(wallet, ["available_balance", "availableBalance", "balance"]) ?? 0;
@@ -300,9 +308,11 @@ export function FinanceWithdrawalExperience({ workspace }: { workspace: Workspac
 
   return (
     <Screen
-      eyebrow="Payouts"
-      title="Withdraw funds"
-      subtitle="Choose a verified payout account. SKIMA shows the exact fee and wallet debit before you confirm."
+      eyebrow={walletIdOverride ? "Affiliate payouts" : "Payouts"}
+      title={walletIdOverride ? "Withdraw affiliate earnings" : "Withdraw funds"}
+      subtitle={walletIdOverride
+        ? "Withdraw posted Station Affiliate commissions from your dedicated earnings wallet. SKIMA verifies the payout account and shows any configured fee before confirmation."
+        : "Choose a verified payout account. SKIMA shows the exact fee and wallet debit before you confirm."}
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
