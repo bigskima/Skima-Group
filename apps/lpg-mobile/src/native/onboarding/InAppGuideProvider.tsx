@@ -84,7 +84,7 @@ type GuideContextValue = {
   active: boolean;
   setWorkspace(workspace: GuideWorkspace): void;
   startNow(workspace: GuideWorkspace): Promise<void>;
-  registerTarget(key: string, node: View | null): void;
+  registerTarget(key: string, node: View | null, pathname: string): void;
 };
 
 const GuideContext = createContext<GuideContextValue | null>(null);
@@ -102,11 +102,11 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
   const [snoozeDays, setSnoozeDays] = useState("7");
   const [busy, setBusy] = useState(false);
   const [policyError, setPolicyError] = useState<string | null>(null);
-  const targetsRef = useRef(new Map<string, View>());
+  const targetsRef = useRef(new Map<string, { node: View; pathname: string }>());
   const automaticLoadRef = useRef<string | null>(null);
 
-  const registerTarget = useCallback((key: string, node: View | null) => {
-    if (node) targetsRef.current.set(key, node);
+  const registerTarget = useCallback((key: string, node: View | null, targetPathname: string) => {
+    if (node) targetsRef.current.set(key, { node, pathname: normalizeGuideRoute(targetPathname) });
     else targetsRef.current.delete(key);
   }, []);
 
@@ -239,16 +239,17 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
       timer = setTimeout(() => {
         if (cancelled) return;
         const target = targetsRef.current.get(step.targetKey);
-        if (!target) {
-          if (attempt < 10) measure(attempt + 1);
+        const expectedRoute = normalizeGuideRoute(step.route);
+        if (!target || target.pathname !== expectedRoute) {
+          if (attempt < 16) measure(attempt + 1);
           return;
         }
-        target.measureInWindow((x, y, width, height) => {
+        target.node.measureInWindow((x, y, width, height) => {
           if (cancelled) return;
           if (width > 0 && height > 0) setTargetRect({ x, y, width, height });
           else if (attempt < 10) measure(attempt + 1);
         });
-      }, attempt === 0 ? 220 : 120);
+      }, attempt === 0 ? 280 : 160);
     };
     measure(0);
     return () => {
@@ -393,10 +394,11 @@ export function GuideTarget({
   children: ReactNode;
 }) {
   const guide = useInAppGuide();
+  const pathname = usePathname();
   return (
     <View
       collapsable={false}
-      ref={(node) => guide.registerTarget(targetKey, node)}
+      ref={(node) => guide.registerTarget(targetKey, node, pathname)}
       style={style}
     >
       {children}
@@ -699,6 +701,12 @@ function parseGuidePayload(value: unknown): GuidePayload {
     .filter((item) => item.order > 0 && item.route && item.targetKey)
     .sort((left, right) => left.order - right.order);
   return { eligible: value.eligible === true, guide, steps };
+}
+
+function normalizeGuideRoute(route: string): string {
+  const withoutGroups = route.replace(/\/\([^/]+\)/g, "");
+  const segments = withoutGroups.split("/").filter(Boolean);
+  return segments.length ? `/${segments.join("/")}` : "/";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
