@@ -416,6 +416,7 @@ function AvailabilitySection(props: {
   ];
 
   return (
+    <>
     <section className="sk-panel stack-md">
       <div className="sk-panel__header">
         <div>
@@ -466,6 +467,7 @@ function AvailabilitySection(props: {
       <Button disabled={!props.canManage || save.isPending} isLoading={save.isPending} onClick={() => save.mutate()}>Save availability</Button>
     </section>
     <StationManagedCoveragePolicySection canManage={props.canManage} />
+    </>
   );
 }
 
