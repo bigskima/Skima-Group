@@ -227,23 +227,24 @@ begin
   end if;
 
   if not target_enabled then
-    update public.lpg_station_managed_driver_assignments
-    set status='cancelled',completed_at=timezone('utc',now()),
-        metadata=metadata||jsonb_build_object('vehicleRemovedAt',timezone('utc',now()),'vehicleRemovedReason',btrim(target_reason))
-    where vehicle_id=target_vehicle_id and status in ('assigned','accepted','en_route');
+    with released_assignments as (
+      update public.lpg_station_managed_driver_assignments
+      set status='cancelled',completed_at=timezone('utc',now()),
+          metadata=metadata||jsonb_build_object('vehicleRemovedAt',timezone('utc',now()),'vehicleRemovedReason',btrim(target_reason))
+      where vehicle_id=target_vehicle_id and status in ('assigned','accepted','en_route')
+      returning lpg_order_id
+    )
     update public.lpg_refill_orders order_record
     set vehicle_id=null,
+        status='matching_driver',
+        assignment_status='unassigned',
         metadata=coalesce(order_record.metadata,'{}'::jsonb)||jsonb_build_object('stationManagedDispatch','waiting_for_station_vehicle','stationManagedVehicleRemovedAt',timezone('utc',now())),
         updated_at=timezone('utc',now())
-    where order_record.id in (
-      select assignment_order.lpg_order_id from public.lpg_station_managed_driver_assignments assignment_order
-      where assignment_order.vehicle_id=target_vehicle_id and assignment_order.status='cancelled'
-    )
+    where order_record.id in (select lpg_order_id from released_assignments)
       and order_record.fulfillment_mode='station_managed'
       and order_record.status in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route');
-  else
-    perform public.auto_dispatch_pending_station_orders_for_branch(target_station_branch_id);
   end if;
+  perform public.auto_dispatch_pending_station_orders_for_branch(target_station_branch_id);
   return public.read_lpg_station_managed_available_vehicles(target_station_branch_id);
 end
 $$;
