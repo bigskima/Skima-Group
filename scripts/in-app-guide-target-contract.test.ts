@@ -71,7 +71,7 @@ Deno.test("tour waits for the requested route and resolved anchor before enablin
 Deno.test("tour content version 2 aligns copy and resets completed guide progress", () => {
   requireText(migration, "version = 2", "tour version increment");
   requireText(migration, "tourContentVersion', 2", "guide content version metadata");
-  requireText(migration, "Station Managed driver controls", "station fulfilment tour copy");
+  requireText(migration, "Station Managed delivery settings", "station fulfilment tour copy");
   requireText(migration, "wallet", "customer wallet context");
   requireText(migration, "Replay this tour", "replay entry guidance");
 
