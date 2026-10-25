@@ -542,5 +542,21 @@ comment on function public.read_lpg_station_managed_eligible_stations(uuid,uuid,
 
 comment on function public.enforce_lpg_refill_quote_serviceability() is
   'Enforces standard customer LPG coverage for managed/independent fulfilment; permits an exception only for an explicitly selected, backend-eligible Station Managed branch covering both locations by its own bounded radius.';
+drop policy if exists lpg_station_managed_coverage_policy_service_role_only on public.lpg_station_managed_coverage_policy;
+create policy lpg_station_managed_coverage_policy_service_role_only
+on public.lpg_station_managed_coverage_policy
+for all
+to service_role
+using (true)
+with check (true);
+
+drop policy if exists lpg_station_managed_coverage_policy_events_service_role_only on public.lpg_station_managed_coverage_policy_events;
+create policy lpg_station_managed_coverage_policy_events_service_role_only
+on public.lpg_station_managed_coverage_policy_events
+for all
+to service_role
+using (true)
+with check (true);
+
 
 commit;
