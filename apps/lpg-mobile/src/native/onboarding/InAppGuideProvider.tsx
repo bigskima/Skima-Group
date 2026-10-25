@@ -540,10 +540,19 @@ function GuideOverlay({
   const pad = 7;
   const topSpace = rect ? Math.max(rect.y - pad, 0) : 0;
   const bottomStart = rect ? Math.min(rect.y + rect.height + pad, screen.height) : 0;
-  const boxTop = rect
-    ? (rect.y < screen.height * 0.52 ? Math.min(bottomStart + 14, screen.height - 250) : undefined)
+  const hasRoomBelow = rect ? screen.height - bottomStart >= 280 : false;
+  const preferredAbove = Boolean(rect) && (
+    step.placement === "top"
+    || ((step.placement === "auto" || step.placement === "left" || step.placement === "right")
+      && rect.y >= screen.height * 0.52)
+  );
+  // Honor the configured placement when there is room; otherwise put the coachmark
+  // on the opposite side so it does not cover the highlighted control or leave screen.
+  const placeAbove = Boolean(rect) && (preferredAbove || !hasRoomBelow);
+  const boxTop = rect && !placeAbove
+    ? Math.min(bottomStart + 14, screen.height - 250)
     : undefined;
-  const boxBottom = rect && rect.y >= screen.height * 0.52
+  const boxBottom = rect && placeAbove
     ? Math.min(screen.height - topSpace + 14, screen.height - 230)
     : undefined;
 
