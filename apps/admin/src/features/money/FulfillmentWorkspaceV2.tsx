@@ -45,7 +45,8 @@ type FulfillmentSection =
   | "lpg-price"
   | "team"
   | "activity"
-  | "advanced";
+  | "advanced"
+  | "station-affiliates";
 
 type FulfillmentMode = "marketplace_only" | "internal_only" | "hybrid";
 
@@ -118,6 +119,7 @@ const sections: readonly {
   { key: "lpg-price", label: "LPG buying price", short: "Area reference", icon: Fuel },
   { key: "team", label: "Managed team", short: "Drivers & fleet", icon: UsersRound },
   { key: "activity", label: "Activity", short: "Purchases & pay", icon: Activity },
+  { key: "station-affiliates", label: "Station affiliates", short: "Referrals & commission", icon: UsersRound },
   { key: "advanced", label: "Advanced", short: "All settings", icon: Settings2 },
 ];
 
@@ -137,10 +139,23 @@ export function FulfillmentWorkspaceV2(props: {
       context?.permissions.includes("platform.financial_policy.activate") ||
       context?.permissions.includes("platform.financial_policy.manage"),
   );
+  const canReadAffiliateAdmin = Boolean(
+    isSuperAdmin ||
+      context?.permissions.includes("platform.dispatch.read") ||
+      context?.permissions.includes("platform.wallets.read") ||
+      context?.permissions.includes("platform.revenue.read") ||
+      context?.permissions.includes("platform.financial_policy.draft") ||
+      context?.permissions.includes("platform.financial_policy.approve") ||
+      context?.permissions.includes("platform.financial_policy.activate"),
+  );
+  const canManageAffiliate = Boolean(isSuperAdmin || context?.permissions.includes("platform.wallets.manage"));
+  const canDraftFinancialPolicy = Boolean(isSuperAdmin || context?.permissions.includes("platform.financial_policy.draft"));
+  const canApproveFinancialPolicy = Boolean(isSuperAdmin || context?.permissions.includes("platform.financial_policy.approve"));
+  const canActivateFinancialPolicy = Boolean(isSuperAdmin || context?.permissions.includes("platform.financial_policy.activate"));
 
   const configuration = useQuery({
     queryKey: ["lpg-launch-assurance-configuration"],
-    enabled: status === "authenticated" && section !== "advanced",
+    enabled: status === "authenticated" && section !== "advanced" && section !== "station-affiliates",
     retry: false,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("read_lpg_launch_assurance_configuration");
@@ -151,7 +166,7 @@ export function FulfillmentWorkspaceV2(props: {
 
   const readiness = useQuery({
     queryKey: ["lpg-launch-assurance-readiness"],
-    enabled: status === "authenticated" && section !== "advanced",
+    enabled: status === "authenticated" && section !== "advanced" && section !== "station-affiliates",
     retry: false,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("read_lpg_internal_launch_readiness");
@@ -169,6 +184,22 @@ export function FulfillmentWorkspaceV2(props: {
       queryClient.invalidateQueries({ queryKey: ["lpg-managed-driver-payouts"] }),
     ]);
   };
+
+  if (section === "station-affiliates") {
+    return (
+      <div className="fulfillment-v2 stack-lg">
+        <FulfillmentHeader onRefresh={null} />
+        <FulfillmentSectionNav active={section} onNavigate={props.onNavigate} />
+        <StationAffiliateAdminSection
+          canRead={canReadAffiliateAdmin}
+          canManageAffiliate={canManageAffiliate}
+          canDraftPolicy={canDraftFinancialPolicy}
+          canApprovePolicy={canApproveFinancialPolicy}
+          canActivatePolicy={canActivateFinancialPolicy}
+        />
+      </div>
+    );
+  }
 
   if (section === "advanced") {
     return (
