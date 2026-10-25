@@ -339,15 +339,15 @@ export function StationManagedFulfillmentScreen() {
                 </View>
                 <View style={{ gap: 5 }}>
                   <Text style={{ color: palette.ink, fontSize: 13 }}>
-                    **Driver:** {delivery.driverName || "Station driver"}
+                    Driver: {delivery.driverName || "Station driver"}
                     {delivery.driverPhone ? ` · ${delivery.driverPhone}` : ""}
                   </Text>
                   <Text style={{ color: palette.ink, fontSize: 13 }}>
-                    **Vehicle:** {delivery.vehicleRegistrationNumber || "No vehicle registration"}
+                    Vehicle: {delivery.vehicleRegistrationNumber || "No vehicle registration"}
                     {delivery.vehicleType ? ` · ${delivery.vehicleType}` : ""}
                   </Text>
                   <Text style={{ color: palette.muted, fontSize: 12 }}>
-                    **Order status:** {formatOperationStatus(delivery.orderStatus)}
+                    Order status: {formatOperationStatus(delivery.orderStatus)}
                   </Text>
                   {delivery.customerName ? <Text style={{ color: palette.ink, fontSize: 13 }}>Customer: {delivery.customerName}{delivery.customerPhone ? ` · ${delivery.customerPhone}` : ""}</Text> : null}
                   {delivery.deliveryAddress ? <Text style={{ color: palette.muted, fontSize: 12 }}>Delivery: {delivery.deliveryAddress}</Text> : null}
@@ -367,7 +367,7 @@ export function StationManagedFulfillmentScreen() {
             ))}
 
             {pendingDispatchOrders.length ? (
-              <View style={[styles.pendingDispatch, { borderColor: palette.warning, backgroundColor: palette.surface }]}>
+              <View style={[styles.pendingDispatch, { borderColor: palette.warning, backgroundColor: palette.warningSoft }]}>
                 <Text style={{ color: palette.ink, fontWeight: "800" }}>
                   {pendingDispatchOrders.length} {pendingDispatchOrders.length === 1 ? "order is" : "orders are"} waiting for dispatch
                 </Text>
