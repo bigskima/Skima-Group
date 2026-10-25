@@ -1,4 +1,5 @@
 const migration = await Deno.readTextFile("supabase/migrations/20261019090000_lpg_station_managed_fulfillment.sql");
+const gatewayHttp = await Deno.readTextFile("supabase/functions/_shared/http.ts");
 const aclMigration = await Deno.readTextFile("supabase/migrations/20261020142000_lpg_station_managed_acl_hardening.sql");
 const inviteDispatchMigration = await Deno.readTextFile("supabase/migrations/20261021110000_lpg_station_driver_invites_auto_dispatch.sql");
 const stationDispatchAclMigration = await Deno.readTextFile("supabase/migrations/20261021170000_harden_internal_station_dispatch_functions.sql");
@@ -391,6 +392,7 @@ Deno.test("Station Managed managers track canonical active and completed deliver
   if (/create\s+table/i.test(stationOperationsReadModel)) {
     throw new Error("The Station Managed manager view must not create a parallel tracking table.");
   }
+  requireText(gatewayHttp, "x-skima-client", "gateway preflight permits the authenticated mobile client's configured header");
   requireText(station, "Live delivery operations", "Station Managed has a dedicated operations view");
   requireText(station, "refetchInterval: 15_000", "manager delivery statuses refresh from the backend");
   requireText(station, "pendingDispatchOrders", "unassigned orders waiting on dispatch readiness remain visible");
