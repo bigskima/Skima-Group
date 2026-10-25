@@ -298,7 +298,12 @@ declare
   pickup_record public.lpg_customer_locations%rowtype;
   delivery_record public.lpg_customer_locations%rowtype;
   cylinder_record public.lpg_cylinders%rowtype;
+  matched_count integer := 0;
 begin
+  if actor_user_id is null then raise exception using errcode='42501', message='authentication required'; end if;
+  if target_limit is null or target_limit < 1 or target_limit > 50 then
+    raise exception using errcode='22023', message='target_limit must be between 1 and 50';
+  end if;
   if target_requested_amount is null or target_requested_amount <= 0 then
     raise exception using errcode='22023', message='target_requested_amount must be greater than zero';
   end if;
@@ -315,7 +320,7 @@ begin
   for candidate in
     select * from public.read_lpg_station_managed_eligible_stations(
       target_pickup_location_id, target_delivery_location_id, target_cylinder_id,
-      0.001, target_limit, target_at
+      0.001, 50, target_at
     )
   loop
     resolved_kg := floor((target_requested_amount / candidate.price_per_kg) * 1000) / 1000;
@@ -339,6 +344,8 @@ begin
       supported_cylinder_sizes_kg := candidate.supported_cylinder_sizes_kg;
       cylinder_size_kg := candidate.cylinder_size_kg;
       return next;
+      matched_count := matched_count + 1;
+      if matched_count >= target_limit then return; end if;
     end if;
   end loop;
 end
@@ -384,7 +391,7 @@ begin
 
   if not coalesce((pickup_resolution ->> 'serviceable')::boolean, false)
     or not coalesce((delivery_resolution ->> 'serviceable')::boolean, false) then
-    if coalesce(new.fulfillment_mode, 'independent_driver') <> 'station_managed'
+    if coalesce(nullif(new.metadata->>'fulfillment_mode',''), new.fulfillment_mode, 'independent_driver') <> 'station_managed'
       or new.station_branch_id is null then
       raise exception using errcode='P0001',
         message='LPG service is not available for this trip through the selected fulfilment model';
@@ -445,7 +452,7 @@ begin
     raise exception using errcode='P0001',message='an eligible LPG station is required for this refill';
   end if;
 
-  if coalesce(new.fulfillment_mode,'independent_driver')='station_managed' then
+  if coalesce(nullif(new.metadata->>'fulfillment_mode',''),new.fulfillment_mode,'independent_driver')='station_managed' then
     if not exists(
       select 1
       from public.lpg_station_branches station
