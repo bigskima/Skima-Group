@@ -70,12 +70,27 @@ Deno.serve(async (request: Request): Promise<Response> => {
       },
     }).select("id").maybeSingle();
 
+    let eventId: string;
     if (eventResult.error?.code === "23505") {
-      // Meta retries deliveries. Do not send the same reply twice for a processed message.
-      continue;
-    }
-    if (eventResult.error || !eventResult.data) {
-      return json({ ok: false, error: "event_persistence_failed" }, 500);
+      // Meta can retry after an outbound failure. Retry failed events, but never duplicate a successful reply.
+      const existingEvent = await db.from("skima_whatsapp_events")
+        .select("id, processing_status")
+        .eq("provider_message_id", messageId)
+        .maybeSingle();
+      if (existingEvent.error || !existingEvent.data) {
+        return json({ ok: false, error: "event_persistence_failed" }, 500);
+      }
+      if (existingEvent.data.processing_status === "processed") continue;
+      const resetEvent = await db.from("skima_whatsapp_events")
+        .update({ processing_status: "received", error_message: null, processed_at: null })
+        .eq("id", existingEvent.data.id);
+      if (resetEvent.error) return json({ ok: false, error: "event_retry_reset_failed" }, 500);
+      eventId = existingEvent.data.id;
+    } else {
+      if (eventResult.error || !eventResult.data) {
+        return json({ ok: false, error: "event_persistence_failed" }, 500);
+      }
+      eventId = eventId;
     }
 
     const conversationResult = await db.from("skima_whatsapp_conversations")
@@ -88,7 +103,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
       .single();
 
     if (conversationResult.error || !conversationResult.data) {
-      await markEventFailed(db, eventResult.data.id, "conversation_persistence_failed");
+      await markEventFailed(db, eventId, "conversation_persistence_failed");
       return json({ ok: false, error: "conversation_persistence_failed" }, 500);
     }
 
@@ -102,7 +117,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         target_whatsapp_wa_id: sender,
       });
       if (linkResult.error) {
-        await markEventFailed(db, eventResult.data.id, "account_link_verification_failed");
+        await markEventFailed(db, eventId, "account_link_verification_failed");
         return json({ ok: false, error: "account_link_verification_failed" }, 500);
       }
       linkCodeAccepted = linkResult.data === true;
@@ -120,7 +135,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     });
 
     if (!sendResult.ok) {
-      await markEventFailed(db, eventResult.data.id, sendResult.error);
+      await markEventFailed(db, eventId, sendResult.error);
       return json({ ok: false, error: "outbound_message_failed" }, 502);
     }
 
@@ -129,7 +144,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
       .eq("id", conversationResult.data.id);
     await db.from("skima_whatsapp_events")
       .update({ processing_status: "processed", processed_at: new Date().toISOString() })
-      .eq("id", eventResult.data.id);
+      .eq("id", eventId);
 
     accepted += 1;
   }
