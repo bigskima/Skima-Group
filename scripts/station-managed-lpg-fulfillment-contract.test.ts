@@ -95,7 +95,8 @@ Deno.test("Station workspace and API surfaces are wired", () => {
   requireText(migration, "read_lpg_station_managed_workspace", "station workspace read API");
   requireText(station, "configure_lpg_station_managed_fulfillment", "station pricing settings");
   requireText(station, "api-gateway/runtime/station-driver-invitations", "station driver email invitation");
-  requireText(station, "Automatic order dispatch", "automatic station order dispatch UI");
+  requireText(station, "Live delivery operations", "Station Managed operations board");
+  requireText(station, "orders are waiting for dispatch", "automatic dispatch backlog remains visible on the live board");
   requireText(station, "api-gateway/runtime/station-driver-invitations", "email invitation endpoint");
   requireText(inviteDispatchMigration, "accept_lpg_station_managed_driver_invite", "driver invitation acceptance RPC");
   requireText(inviteDispatchMigration, "trg_auto_dispatch_lpg_station_managed_order", "automatic dispatch trigger");
