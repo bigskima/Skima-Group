@@ -149,6 +149,8 @@ export function NewRefillScreen() {
     : eligibleStations.data ?? [];
   const activeStationQuery = showStationManagedOnly ? stationManagedEligibleStations : eligibleStations;
   const selectedStation = displayedStations.find((station) => station.station_branch_id === stationId) ?? null;
+  const selectedStationManagedCandidate =
+    (stationManagedEligibleStations.data ?? []).find((station) => station.station_branch_id === stationId) ?? null;
   const stationManagedOption = useQuery({
     queryKey: ["station-managed-fulfillment-option", stationId],
     enabled: session.status === "authenticated" && Boolean(stationId) && !isSkimaInternalFulfillmentId(stationId) && !selectedStation?.isStationManagedOnly,
@@ -845,7 +847,7 @@ export function NewRefillScreen() {
             </View>
           ) : null}
 
-          {refillStep === 4 && !selectedStation?.isStationManagedOnly && Boolean(stationManagedOption.data?.enabled) ? (
+          {refillStep === 4 && !selectedStation?.isStationManagedOnly && Boolean(stationManagedOption.data?.enabled) && Boolean(selectedStationManagedCandidate) ? (
             <View style={[styles.selectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <SectionLead
                 eyebrow="DELIVERY METHOD"
@@ -894,6 +896,7 @@ export function NewRefillScreen() {
             size="lg"
             disabled={
               (!tripServiceable && !(selectedStation?.isStationManagedOnly && fulfillmentMode === "station_managed")) ||
+              (fulfillmentMode === "station_managed" && !selectedStation?.isStationManagedOnly && !selectedStationManagedCandidate) ||
               serviceabilityError ||
               locationNeedsMapPosition ||
               !validPurchase ||
