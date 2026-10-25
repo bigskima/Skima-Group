@@ -397,6 +397,20 @@ begin
         message='LPG service is not available for this trip through the selected fulfilment model';
     end if;
 
+    -- This fallback is specifically for areas where customer-ordering has not
+    -- launched. It must never override an explicit exclusion, a paused service,
+    -- a location-quality failure, or a policy-configuration conflict.
+    if (
+      not coalesce((pickup_resolution->>'serviceable')::boolean,false)
+      and pickup_resolution->>'reason' is distinct from 'SERVICE_NOT_LAUNCHED'
+    ) or (
+      not coalesce((delivery_resolution->>'serviceable')::boolean,false)
+      and delivery_resolution->>'reason' is distinct from 'SERVICE_NOT_LAUNCHED'
+    ) then
+      raise exception using errcode='P0001',
+        message='Station Managed cannot override an excluded, paused, or policy-blocked LPG area';
+    end if;
+
     select count(*) into eligible_station_count
     from public.read_lpg_station_managed_eligible_stations(
       new.pickup_location_id, new.delivery_location_id, new.cylinder_id,
