@@ -9,6 +9,7 @@ const premiumDashboard = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/
 const assistantLauncher = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/AiAssistantLauncher.tsx");
 const customer = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx");
 const station = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedFulfillmentScreen.tsx");
+const stationLayout = await Deno.readTextFile("apps/lpg-mobile/app/(station)/_layout.tsx");
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const sharedHttp = await Deno.readTextFile("supabase/functions/_shared/http.ts");
 const admin = await Deno.readTextFile("apps/admin/src/admin-station-managed-fulfillment-workspace.tsx");
@@ -231,6 +232,29 @@ Deno.test("Station driver invites persist before delivery and revoke failed send
   requireText(inviteDispatchMigration, "email_confirmed_at is not null", "acceptance is bound to the authenticated confirmed email");
 });
 
+
+Deno.test("Station Managed app surfaces are dedicated views over the existing backend", () => {
+  requireText(station, 'section === "overview"', "Station Managed overview route");
+  requireText(station, 'section === "settings"', "dedicated delivery settings view");
+  requireText(station, 'section === "vehicles"', "dedicated vehicle readiness view");
+  requireText(station, 'section === "drivers"', "dedicated driver management view");
+  requireText(station, 'section === "orders"', "dedicated automatic dispatch queue view");
+  requireText(station, 'section === "payments"', "dedicated station driver agreement and payment view");
+  requireText(station, 'read_lpg_station_managed_workspace', "manager views keep using the existing workspace RPC");
+  requireText(station, 'read_lpg_station_managed_available_vehicles', "vehicle view uses the existing readiness RPC");
+  for (const route of [
+    "managed-fulfillment-settings",
+    "managed-fulfillment-vehicles",
+    "managed-fulfillment-drivers",
+    "managed-fulfillment-orders",
+    "managed-fulfillment-payments",
+  ]) {
+    requireText(stationLayout, `"${route}"`, `${route} must not leak into station tab navigation`);
+  }
+  requireText(driverScreen, 'const activeJobs = (jobs.data ?? []).filter((job) => job.status !== "delivered")', "active deliveries use backend assignment state");
+  requireText(driverScreen, 'const completedJobs = (jobs.data ?? []).filter((job) => job.status === "delivered")', "history uses backend-verified completion");
+  requireText(driverScreen, "function orderStageLabel(status: string)", "driver cards explain canonical LPG order state");
+});
 
 Deno.test("Station Managed external coverage is an explicit admin-gated exception", () => {
   requireText(stationExternalCoverage, "outside_customer_coverage_enabled boolean not null default false", "safe default coverage policy");
