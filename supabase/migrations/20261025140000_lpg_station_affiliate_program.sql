@@ -875,6 +875,7 @@ begin
     and not public.has_permission('platform.dispatch.read',null)
     and not public.has_permission('platform.wallets.read',null)
     and not public.has_permission('platform.revenue.read',null)
+    and not public.has_permission('platform.financial_policy.read',null)
     and not public.has_permission('platform.financial_policy.draft',null)
     and not public.has_permission('platform.financial_policy.approve',null)
     and not public.has_permission('platform.financial_policy.activate',null) then
