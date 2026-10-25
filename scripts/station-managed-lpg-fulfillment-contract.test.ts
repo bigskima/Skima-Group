@@ -28,6 +28,8 @@ const stationAffiliateReversal = await Deno.readTextFile("supabase/migrations/20
 const affiliateAdmin = await Deno.readTextFile("apps/admin/src/features/money/FulfillmentWorkspaceV2.tsx");
 const stationAdminWorkspace = await Deno.readTextFile("apps/admin/src/admin-station-managed-fulfillment-workspace.tsx");
 const accountSettings = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/WorkspaceAccountSettingsScreen.tsx");
+const affiliateWithdrawal = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FinanceWithdrawalExperience.tsx");
+const affiliateWithdrawalRoute = await Deno.readTextFile("apps/lpg-mobile/app/(customer)/wallet/affiliate-withdraw.tsx");
 const applicationOverview = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx");
 const stationVehicleScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedFulfillmentScreen.tsx");
 const stationEligibilityApi = await Deno.readTextFile("apps/lpg-mobile/src/native/api/stationEligibility.ts");
@@ -328,4 +330,14 @@ Deno.test("Full LPG refunds reverse affiliate commission or queue a recovery exc
   requireText(affiliateAdmin, "reverse_lpg_station_affiliate_commission", "admin reversal action");
   requireText(affiliateAdmin, "retry_lpg_station_affiliate_reversal", "admin reversal recovery retry");
   requireText(stationAffiliateReversal, "read_lpg_station_affiliate_admin_workspace_base", "reversal queue extends the existing admin workspace without recursion");
+});
+
+
+Deno.test("Station Affiliate commission wallet uses the existing governed withdrawal flow", () => {
+  requireText(accountSettings, "Withdraw affiliate earnings", "account has a withdrawal action for positive affiliate balance");
+  requireText(accountSettings, "/customer/wallet/affiliate-withdraw?walletId=", "withdrawal action passes the owned commission wallet id");
+  requireText(affiliateWithdrawal, "walletIdOverride", "withdrawal experience can target the explicitly supplied wallet");
+  requireText(affiliateWithdrawal, "/withdrawals/preview", "withdrawal fee preview still uses existing finance API");
+  requireText(affiliateWithdrawal, "/withdrawals", "withdrawal still goes through the existing policy-controlled finance API");
+  requireText(affiliateWithdrawalRoute, "walletIdOverride={walletId ?? null}", "dedicated affiliate withdrawal route passes the wallet id");
 });
