@@ -639,8 +639,8 @@ function AffiliateAdminSection(props: {
   const { supabase, status } = useSessionState();
   const queryClient = useQueryClient();
   const [policyEnabled, setPolicyEnabled] = useState(false);
-  const [commissionPercent, setCommissionPercent] = useState("5");
-  const [earningMonths, setEarningMonths] = useState("12");
+  const [commissionPercent, setCommissionPercent] = useState("");
+  const [earningMonths, setEarningMonths] = useState("");
   const [eligibleStreams, setEligibleStreams] = useState<"both" | "refill" | "delivery">("both");
   const [policyReason, setPolicyReason] = useState("");
   const [affiliateReason, setAffiliateReason] = useState("");
