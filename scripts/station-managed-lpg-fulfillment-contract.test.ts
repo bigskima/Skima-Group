@@ -214,22 +214,26 @@ Deno.test("Customer AI launcher opens as an overlay modal, not in the home layou
   requireText(assistantLauncher, "onOpen?.();", "launcher dismisses its parent overlay before navigation");
 });
 
-Deno.test("Station driver invites persist before delivery and revoke failed sends", () => {
+Deno.test("Station driver invitation email is sign-in only; station acceptance occurs in SKIMA", () => {
   const start = gateway.indexOf('if (routePath === "/runtime/station-driver-invitations" && request.method === "POST")');
   const end = gateway.indexOf('if (routePath === "/runtime/station-driver-invitations/accept" && request.method === "POST")', start);
   if (start < 0 || end < 0) throw new Error("Both station-driver invitation routes must be present.");
   const route = gateway.slice(start, end);
   const persistence = route.indexOf('.from("lpg_station_managed_driver_invites").upsert({');
-  const emailDelivery = route.indexOf('.auth.admin.inviteUserByEmail(');
-  if (persistence < 0 || emailDelivery < 0 || persistence >= emailDelivery) {
-    throw new Error("The pending invitation must be committed before an invitation email can be delivered.");
+  const signInEmail = route.indexOf('.auth.signInWithOtp({');
+  if (persistence < 0 || signInEmail < 0 || persistence >= signInEmail) {
+    throw new Error("The pending station invitation must be persisted before sending the sign-in email.");
   }
-  requireText(route, 'const revokeUndeliveredInvitation', "failed invitation cleanup");
+  if (route.includes(".auth.admin.inviteUserByEmail(")) {
+    throw new Error("Station Managed invites must not require a separate station-acceptance action in the email inbox.");
+  }
+  requireText(route, 'const revokeUndeliveredInvitation', "failed email delivery cleanup");
   requireText(route, 'status: "revoked"', "failed email sends cannot leave a misleading pending invite");
-  requireText(route, 'shouldCreateUser: false', "existing SKIMA accounts use sign-in rather than duplicate account creation");
-  requireText(inviteDispatchMigration, "email_confirmed_at is not null", "acceptance is bound to the authenticated confirmed email");
+  requireText(route, "shouldCreateUser: true", "new drivers can sign in through the emailed magic link");
+  requireText(route, 'acceptanceMode: "in_app"', "email metadata names the true acceptance channel");
+  requireText(stationManagedInAppMigration, "'acceptedInApp',true", "station relationship is accepted only in the app");
+  requireText(stationManagedInAppMigration, "email_confirmed_at is not null", "acceptance is bound to the authenticated confirmed email");
 });
-
 
 Deno.test("Station Managed external coverage is an explicit admin-gated exception", () => {
   requireText(stationExternalCoverage, "outside_customer_coverage_enabled boolean not null default false", "safe default coverage policy");
