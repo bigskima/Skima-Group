@@ -291,6 +291,9 @@ declare
   delivery_record public.lpg_customer_locations%rowtype;
   cylinder_record public.lpg_cylinders%rowtype;
   coverage_enabled boolean:=false;
+  pickup_serviceability jsonb;
+  delivery_serviceability jsonb;
+  external_launch_coverage boolean:=false;
 begin
   if actor_user_id is null then raise exception using errcode='42501',message='authentication required'; end if;
   if target_requested_kg is null or target_requested_kg<=0 then raise exception using errcode='22023',message='target_requested_kg must be greater than zero'; end if;
@@ -304,9 +307,29 @@ begin
   if not found then raise exception using errcode='42501',message='cylinder is not available to this customer'; end if;
   if target_requested_kg>cylinder_record.max_capacity_kg then raise exception using errcode='22023',message='requested refill exceeds verified cylinder capacity'; end if;
 
+  pickup_serviceability:=public.resolve_lpg_serviceability(
+    pickup_record.latitude,pickup_record.longitude,coalesce(pickup_record.metadata,'{}'::jsonb)
+  );
+  delivery_serviceability:=public.resolve_lpg_serviceability(
+    delivery_record.latitude,delivery_record.longitude,coalesce(delivery_record.metadata,'{}'::jsonb)
+  );
+
+  if not coalesce((pickup_serviceability->>'serviceable')::boolean,false)
+    and pickup_serviceability->>'reason' is distinct from 'SERVICE_NOT_LAUNCHED' then
+    return;
+  end if;
+  if not coalesce((delivery_serviceability->>'serviceable')::boolean,false)
+    and delivery_serviceability->>'reason' is distinct from 'SERVICE_NOT_LAUNCHED' then
+    return;
+  end if;
+
+  external_launch_coverage:=
+    not coalesce((pickup_serviceability->>'serviceable')::boolean,false)
+    or not coalesce((delivery_serviceability->>'serviceable')::boolean,false);
+
   select coalesce(policy.outside_customer_coverage_enabled,false) into coverage_enabled
   from public.lpg_station_managed_coverage_policy policy where policy.singleton=true;
-  if not coalesce(coverage_enabled,false) then return; end if;
+  if external_launch_coverage and not coalesce(coverage_enabled,false) then return; end if;
 
   return query
   with candidate_stations as (
