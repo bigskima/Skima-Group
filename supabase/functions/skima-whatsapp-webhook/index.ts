@@ -65,7 +65,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
       processing_status: "received",
       inbound_payload: {
         type: item.type,
-        text: item.text ?? null,
+        hasText: Boolean(item.text),
+        // Do not persist raw customer messages or one-time account-link codes in webhook logs.
         timestamp: item.timestamp ?? null,
       },
     }).select("id").maybeSingle();
