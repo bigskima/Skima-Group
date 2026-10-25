@@ -89,6 +89,72 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
     });
   }, [actualKg, draftOwner, id, inspectionNotes, inspectionResult, workspace]);
 
+  useEffect(() => {
+    if (workspace !== "station_driver" || !id) {
+      setStationTrackingOrderId(null);
+      return;
+    }
+    let active = true;
+    void getTrackedStationManagedOrderId().then((trackedOrderId) => {
+      if (active) setStationTrackingOrderId(trackedOrderId);
+    }).catch(() => {
+      if (active) setStationTrackingOrderId(null);
+    });
+    return () => { active = false; };
+  }, [workspace, id]);
+
+  useEffect(() => {
+    if (workspace !== "station_driver" || !id || !terminalOrderStatus) return;
+    void getTrackedStationManagedOrderId().then(async (trackedOrderId) => {
+      if (trackedOrderId !== id) return;
+      await stopDriverTracking();
+      setStationTrackingOrderId(null);
+      setNotice("Delivery closed. Live location sharing has stopped.");
+      setNoticeSuccess(true);
+    }).catch(() => undefined);
+  }, [workspace, id, terminalOrderStatus]);
+
+  const toggleStationDriverTracking = async () => {
+    if (!id || !canShareStationDriverLocation) return;
+    setStationTrackingBusy(true);
+    setNotice(null);
+    try {
+      if (stationTrackingOrderId === id) {
+        await stopDriverTracking();
+        setStationTrackingOrderId(null);
+        setNoticeSuccess(true);
+        setNotice("Live location sharing stopped for this delivery.");
+        return;
+      }
+      if (!session.session?.access_token || !session.session.refresh_token) {
+        throw new Error("Your SKIMA session needs to be refreshed before location sharing can start.");
+      }
+      const access = await session.supabase.rpc("read_lpg_station_managed_driver_access");
+      if (access.error) throw access.error;
+      const identity = access.data && typeof access.data === "object"
+        ? access.data as { enabled?: boolean; stationDriverId?: string }
+        : null;
+      if (identity?.enabled !== true || !identity.stationDriverId) {
+        throw new Error("An active Station Managed driver identity is required for live tracking.");
+      }
+      await startStationManagedDriverTracking({
+        stationDriverId: identity.stationDriverId,
+        lpgOrderId: id,
+        accessToken: session.session.access_token,
+        refreshToken: session.session.refresh_token,
+        onlineStatus: "busy",
+      });
+      setStationTrackingOrderId(id);
+      setNoticeSuccess(true);
+      setNotice("Live location sharing is active for this delivery. Updates use the existing LPG order tracking stream.");
+    } catch (cause) {
+      setNoticeSuccess(false);
+      setNotice(friendlyError(cause, "Live location sharing could not be started."));
+    } finally {
+      setStationTrackingBusy(false);
+    }
+  };
+
   const scan = useGatewayMutation({
     path: "/lpg/scans",
     schema: ActionResponseSchema,
@@ -131,6 +197,9 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const routeDistance = firstNumber(root, ["routeDistanceMeters", "route_distance_meters", "distanceMeters"]);
   const routeDuration = firstNumber(root, ["routeDurationSeconds", "route_duration_seconds", "durationSeconds"]);
   const status = displayStatus(order ?? {}) ?? "unknown";
+  const terminalOrderStatus = ["delivered", "completed", "cancelled", "failed", "refunded", "expired"].includes(status);
+  const canShareStationDriverLocation = workspace === "station_driver" && Boolean(id)
+    && ["driver_accepted", "pickup_en_route", "pickup_verified", "station_en_route", "station_verified", "refill_started", "refill_in_progress", "refill_confirmed", "station_settled", "return_en_route", "delivery_verification_pending"].includes(status);
   const driverWorkspace = workspace === "driver" || workspace === "station_driver";
   const contactLocation = usesDeliveryContact(status) ? delivery : pickup;
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
