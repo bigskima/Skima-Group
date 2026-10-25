@@ -102,12 +102,13 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
   const [snoozeDays, setSnoozeDays] = useState("7");
   const [busy, setBusy] = useState(false);
   const [policyError, setPolicyError] = useState<string | null>(null);
-  const targetsRef = useRef(new Map<string, { node: View; pathname: string }>());
+  const targetsRef = useRef(new Map<string, View>());
   const automaticLoadRef = useRef<string | null>(null);
 
   const registerTarget = useCallback((key: string, node: View | null, targetPathname: string) => {
-    if (node) targetsRef.current.set(key, { node, pathname: normalizeGuideRoute(targetPathname) });
-    else targetsRef.current.delete(key);
+    const routeKey = `${normalizeGuideRoute(targetPathname)}::${key}`;
+    if (node) targetsRef.current.set(routeKey, node);
+    else targetsRef.current.delete(routeKey);
   }, []);
 
   const recordEvent = useCallback(async (
@@ -238,13 +239,12 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
     const measure = (attempt: number) => {
       timer = setTimeout(() => {
         if (cancelled) return;
-        const target = targetsRef.current.get(step.targetKey);
-        const expectedRoute = normalizeGuideRoute(step.route);
-        if (!target || target.pathname !== expectedRoute) {
+        const target = targetsRef.current.get(`${normalizeGuideRoute(step.route)}::${step.targetKey}`);
+        if (!target) {
           if (attempt < 16) measure(attempt + 1);
           return;
         }
-        target.node.measureInWindow((x, y, width, height) => {
+        target.measureInWindow((x, y, width, height) => {
           if (cancelled) return;
           if (width > 0 && height > 0) setTargetRect({ x, y, width, height });
           else if (attempt < 10) measure(attempt + 1);
