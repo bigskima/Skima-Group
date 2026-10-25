@@ -25,6 +25,7 @@ const stationVehicleReadiness = await Deno.readTextFile("supabase/migrations/202
 const stationResourceReservation = await Deno.readTextFile("supabase/migrations/20261025131000_lpg_station_managed_resource_reservation_gate.sql");
 const stationAffiliateProgram = await Deno.readTextFile("supabase/migrations/20261025140000_lpg_station_affiliate_program.sql");
 const stationAffiliateReversal = await Deno.readTextFile("supabase/migrations/20261025150000_lpg_station_affiliate_reversal_recovery.sql");
+const stationAffiliateWithdrawalGuard = await Deno.readTextFile("supabase/migrations/20261025160000_lpg_station_affiliate_withdrawal_recovery_guard.sql");
 const affiliateAdmin = await Deno.readTextFile("apps/admin/src/features/money/FulfillmentWorkspaceV2.tsx");
 const stationAdminWorkspace = await Deno.readTextFile("apps/admin/src/admin-station-managed-fulfillment-workspace.tsx");
 const accountSettings = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/WorkspaceAccountSettingsScreen.tsx");
@@ -340,4 +341,16 @@ Deno.test("Station Affiliate commission wallet uses the existing governed withdr
   requireText(affiliateWithdrawal, "/withdrawals/preview", "withdrawal fee preview still uses existing finance API");
   requireText(affiliateWithdrawal, "/withdrawals", "withdrawal still goes through the existing policy-controlled finance API");
   requireText(affiliateWithdrawalRoute, "walletIdOverride={walletId ?? null}", "dedicated affiliate withdrawal route passes the wallet id");
+});
+
+
+Deno.test("Station Affiliate earnings are withdrawable through the governed finance engine", () => {
+  requireText(affiliateWithdrawal, "walletIdOverride", "affiliate withdrawal targets the commission wallet selected by the backend");
+  requireText(affiliateWithdrawal, "/withdrawals/preview", "withdrawal fee uses the existing fee-policy preview");
+  requireText(affiliateWithdrawal, "/withdrawals", "withdrawal request uses the existing finance runtime");
+  requireText(affiliateWithdrawalRoute, "FinanceWithdrawalExperience workspace=\"customer\" walletIdOverride={walletId ?? null}", "affiliate withdrawal route uses the shared withdrawal workflow");
+  requireText(accountSettings, "Withdraw affiliate earnings", "affiliate account exposes cash-out for a positive commission balance");
+  requireText(stationAffiliateWithdrawalGuard, "lpg_station_affiliate_reversal_failures", "pending clawbacks are checked before a withdrawal");
+  requireText(stationAffiliateWithdrawalGuard, "Affiliate withdrawals are temporarily held while a refund-related commission reversal is being recovered", "withdrawal requests fail closed during unresolved clawback");
+  requireText(stationAffiliateWithdrawalGuard, "new.status in ('approved','processing','succeeded')", "existing requested withdrawals cannot be newly approved during recovery");
 });
