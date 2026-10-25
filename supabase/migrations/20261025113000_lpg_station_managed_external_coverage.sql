@@ -480,7 +480,7 @@ begin
     where eligible.station_branch_id=new.station_branch_id
   ) into regular_station_eligible;
 
-  if not regular_station_eligible and coalesce(new.fulfillment_mode,'independent_driver')='station_managed' then
+  if not regular_station_eligible and coalesce(nullif(new.metadata->>'fulfillment_mode',''),new.fulfillment_mode,'independent_driver')='station_managed' then
     select exists(
       select 1
       from public.read_lpg_station_managed_eligible_stations(
@@ -500,13 +500,13 @@ begin
     'stationEligibilityStationId',new.station_branch_id,
     'stationEligibilityMode',case
       when external_station_eligible then 'station_managed_external_coverage'
-      when coalesce(new.fulfillment_mode,'independent_driver')='station_managed' then 'station_managed'
+      when coalesce(nullif(new.metadata->>'fulfillment_mode',''),new.fulfillment_mode,'independent_driver')='station_managed' then 'station_managed'
       else 'independent_driver'
     end
   );
   return new;
 end
-$;
+$$;
 
 revoke all on function public.read_lpg_station_managed_eligible_stations(uuid,uuid,uuid,numeric,integer,timestamptz)
   from public, anon;
