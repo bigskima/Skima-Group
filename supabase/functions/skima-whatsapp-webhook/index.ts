@@ -363,19 +363,17 @@ async function handleLinkedMessage(
     const stations = arrayOfRecords(state.stations);
     const station = selectNumber(input, stations);
     if (!station) return plan("Reply with the number of one of the listed refill options, or MENU to cancel.", stage, state);
-    const quoteResult = await db.rpc("create_skima_whatsapp_lpg_quote", {
-      target_whatsapp_wa_id: whatsappWaId,
-      target_cylinder_id: asText(asRecord(state.cylinder).id, ""),
-      target_requested_kg: numberValue(state.requestedKg),
-      target_pickup_location_id: asText(state.pickupLocationId, ""),
-      target_delivery_location_id: asText(state.deliveryLocationId, ""),
-      target_station_branch_id: asText(station.station_branch_id, ""),
-      target_fulfillment_mode: asText(station.fulfillmentMode, ""),
-      target_idempotency_key: await idempotencyKey("quote", item.id),
-      target_provider_message_id: item.id,
+    const quote = await requestCanonicalQuote({
+      whatsappWaId,
+      cylinderId: asText(asRecord(state.cylinder).id, ""),
+      requestedKg: numberValue(state.requestedKg),
+      pickupLocationId: asText(state.pickupLocationId, ""),
+      deliveryLocationId: asText(state.deliveryLocationId, ""),
+      stationBranchId: asText(station.station_branch_id, ""),
+      fulfillmentMode: asText(station.fulfillmentMode, ""),
+      idempotencyKey: await idempotencyKey("quote", item.id),
+      providerMessageId: item.id,
     });
-    if (quoteResult.error) throw quoteResult.error;
-    const quote = asRecord(quoteResult.data);
     if (!quote.id || !numberValue(quote.totalAmount)) throw new Error("Quote details were not returned by the canonical pricing service.");
     const expires = formatDate(quote.expiresAt);
     return plan(
@@ -533,6 +531,50 @@ async function handleLinkedMessage(
 
   if (stage === "menu" || stage === "payment.pending") return plan("I didn't recognise that choice. Reply with 1, 2, 3, 4 or 5, or MENU to see all options.", "menu");
   return plan("I couldn't match that response to the current step. Reply MENU to restart the ordering flow; no payment is confirmed by this message.", "menu");
+}
+
+async function requestCanonicalQuote(args: {
+  whatsappWaId: string;
+  cylinderId: string;
+  requestedKg: number | null;
+  pickupLocationId: string;
+  deliveryLocationId: string;
+  stationBranchId: string;
+  fulfillmentMode: string;
+  idempotencyKey: string;
+  providerMessageId: string;
+}): Promise<Record<string, unknown>> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) throw new Error("WhatsApp quote route is not configured.");
+  const response = await fetch(
+    `${supabaseUrl.replace(/\\/$/, "")}/functions/v1/api-gateway/internal/whatsapp/lpg/quote`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${serviceRoleKey}`,
+        apikey: serviceRoleKey,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        whatsappWaId: args.whatsappWaId,
+        cylinderId: args.cylinderId,
+        requestedKg: args.requestedKg,
+        pickupLocationId: args.pickupLocationId,
+        deliveryLocationId: args.deliveryLocationId,
+        stationBranchId: args.stationBranchId,
+        fulfillmentMode: args.fulfillmentMode,
+        idempotencyKey: args.idempotencyKey,
+        providerMessageId: args.providerMessageId,
+      }),
+    },
+  );
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok || !isRecord(body) || body.ok !== true || !isRecord(body.data)) {
+    const message = isRecord(body) && typeof body.message === "string" ? body.message : "Canonical SKIMA quoting is temporarily unavailable.";
+    throw new Error(message);
+  }
+  return body.data;
 }
 
 async function attemptReservation(
