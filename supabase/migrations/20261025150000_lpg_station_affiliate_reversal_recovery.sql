@@ -274,6 +274,11 @@ for each row
 when (new.status='refunded' and old.status is distinct from new.status)
 execute function public.reverse_lpg_station_affiliate_commission_on_order_refund();
 
+-- Preserve the already-implemented affiliate/earnings workspace and extend its
+-- result with recovery exceptions without recursively calling the replacement.
+alter function public.read_lpg_station_affiliate_admin_workspace()
+  rename to read_lpg_station_affiliate_admin_workspace_base;
+
 -- The admin workspace exposes unresolved reversal recoveries alongside posting failures.
 create or replace function public.read_lpg_station_affiliate_admin_workspace()
 returns jsonb
@@ -284,7 +289,7 @@ set search_path=public,pg_temp
 as $$
 declare workspace_result jsonb; reversal_result jsonb;
 begin
-  workspace_result:=public.read_lpg_station_affiliate_admin_workspace();
+  workspace_result:=public.read_lpg_station_affiliate_admin_workspace_base();
   select coalesce(jsonb_agg(jsonb_build_object(
     'id',failure.id,'earningId',failure.earning_id,'orderId',failure.lpg_order_id,
     'publicReference',order_record.public_reference,'affiliateId',earning.affiliate_id,
@@ -313,6 +318,7 @@ revoke all on function public.apply_lpg_station_affiliate_reversal(uuid,text,tex
 revoke all on function public.reverse_lpg_station_affiliate_commission(uuid,text) from public,anon;
 revoke all on function public.retry_lpg_station_affiliate_reversal(uuid,text) from public,anon;
 revoke all on function public.reverse_lpg_station_affiliate_commission_on_order_refund() from public,anon,authenticated;
+revoke all on function public.read_lpg_station_affiliate_admin_workspace_base() from public,anon,authenticated;
 revoke all on function public.read_lpg_station_affiliate_admin_workspace() from public,anon;
 grant execute on function public.apply_lpg_station_affiliate_reversal(uuid,text,text) to service_role;
 grant execute on function public.reverse_lpg_station_affiliate_commission(uuid,text) to authenticated,service_role;
