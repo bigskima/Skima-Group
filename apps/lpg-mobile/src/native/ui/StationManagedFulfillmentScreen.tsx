@@ -28,7 +28,9 @@ type WorkspaceData = {
   drivers?: Array<{ id: string; userId: string; displayName: string; phone?: string; status: string }>;
   agreements?: Array<Record<string, unknown>>;
   payments?: Array<Record<string, unknown>>;
+  invitations?: Array<{ id: string; email: string; displayName: string; phone?: string | null; status: string; expiresAt?: string | null; acceptedAt?: string | null; createdAt?: string | null; deliveryStatus?: string | null; deliveryFailure?: string | null }>;
   assignableOrders?: Array<{ id: string; publicReference?: string; status: string; requestedKg?: number; totalAmount?: number; currencyCode?: string }>;
+  assignedOrders?: Array<{ id: string; lpgOrderId: string; publicReference?: string | null; orderStatus: string; assignmentStatus: string; requestedKg?: number; actualKg?: number | null; totalAmount?: number; currencyCode?: string; assignedAt?: string | null; completedAt?: string | null; driverId?: string; driverName?: string; driverPhone?: string | null; vehicleId?: string | null; vehicleRegistration?: string | null; vehicleType?: string | null }>;
 };
 
 type StationManagedVehicle = {
@@ -160,8 +162,25 @@ export function StationManagedFulfillmentScreen() {
       if (result.data?.ok !== true) throw new Error(result.data?.message || "Station driver invitation could not be sent.");
       return result.data.data;
     },
-    onSuccess: async (invitation) => { setDriverEmail(""); setDriverName(""); setDriverPhone(""); setErrorMessage(null); setSuccessMessage(`Invitation email sent to ${String(invitation?.email ?? "the driver")}. They must accept using that email address.`); await workspace.refetch(); },
+    onSuccess: async (invitation) => { setDriverEmail(""); setDriverName(""); setDriverPhone(""); setErrorMessage(null); setSuccessMessage("Invitation notice sent to " + String(invitation?.email ?? "the driver") + ". They must sign in with that verified email and accept inside SKIMA under Account > Station driver invitation."); await workspace.refetch(); },
     onError: (error) => setErrorMessage(friendlyError(error, "Station driver invitation could not be sent.")),
+  });
+  const resendInvitationMutation = useMutation({
+    mutationFn: async (invitation: { email: string; displayName: string; phone?: string | null }) => {
+      if (!branchId) throw new Error("Your station branch is not available.");
+      const result = await session.supabase.functions.invoke("api-gateway/runtime/station-driver-invitations", {
+        body: { value: { stationBranchId: branchId, email: invitation.email, displayName: invitation.displayName, phone: invitation.phone ?? null } },
+      });
+      if (result.error) throw result.error;
+      if (result.data?.ok !== true) throw new Error(result.data?.message || "Station invitation email could not be resent.");
+      return result.data.data;
+    },
+    onSuccess: async () => {
+      setErrorMessage(null);
+      setSuccessMessage("A new sign-in notice was sent. Station acceptance still happens inside SKIMA.");
+      await workspace.refetch();
+    },
+    onError: (error) => setErrorMessage(friendlyError(error, "Station invitation email could not be resent.")),
   });
   const agreementMutation = useMutation({
     mutationFn: async () => {
@@ -354,16 +373,41 @@ export function StationManagedFulfillmentScreen() {
             />
           </Section>
 
-          <Section title="4. Add a driver to this station" palette={palette} expanded={expandedSection === "4. Add a station driver"} onPress={() => setExpandedSection(expandedSection === "4. Add a station driver" ? "" : "4. Add a station driver")}>
-            <Text style={{ color: palette.muted, fontSize: 13 }}>Invite a station-owned driver by email. They accept the invitation and sign in to their own account; they do not need an independent-driver profile.</Text>
+          <Section title="5. Add a driver to this station" palette={palette} expanded={expandedSection === "5. Add a station driver"} onPress={() => setExpandedSection(expandedSection === "5. Add a station driver" ? "" : "5. Add a station driver")}>
+            <Text style={{ color: palette.muted, fontSize: 13 }}>Enter the driver's name and email. The email is a sign-in notice; it does not accept the station relationship. The driver must sign in to SKIMA and explicitly accept the invitation inside the app.</Text>
             <Field label="Driver email address" value={driverEmail} onChangeText={setDriverEmail} palette={palette} autoCapitalize="none" />
             <Field label="Driver full name" value={driverName} onChangeText={setDriverName} palette={palette} />
             <Field label="Phone (optional)" value={driverPhone} onChangeText={setDriverPhone} palette={palette} keyboardType="phone-pad" />
-            <AppButton label="Invite station driver" fullWidth loading={registerMutation.isPending} disabled={!driverEmail.trim() || !driverName.trim()} onPress={() => void registerMutation.mutateAsync()} />
-            <Text style={{ color: palette.muted, fontSize: 12 }}>For safety, an account with an independent or SKIMA Managed driver profile cannot accept a Station Managed invitation.</Text>
+            <AppButton label="Send invitation email" fullWidth loading={registerMutation.isPending} disabled={!driverEmail.trim() || !driverName.trim()} onPress={() => void registerMutation.mutateAsync()} />
+            <Text style={{ color: palette.muted, fontSize: 12 }}>For safety, an account with an independent or SKIMA Managed driver profile cannot accept a Station Managed invitation. The email must be verified before acceptance.</Text>
           </Section>
 
-          <Section title="6. Automatic order dispatch" palette={palette} expanded={expandedSection === "6. Automatic order dispatch"} onPress={() => setExpandedSection(expandedSection === "6. Automatic order dispatch" ? "" : "6. Automatic order dispatch")}>
+          <Section title="6. Driver invitations" palette={palette} expanded={expandedSection === "6. Driver invitations"} onPress={() => setExpandedSection(expandedSection === "6. Driver invitations" ? "" : "6. Driver invitations")}>
+            {(data?.invitations ?? []).length ? (data?.invitations ?? []).map((invitation) => (
+              <View key={invitation.id} style={[styles.section, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
+                <Text style={{ color: palette.ink, fontWeight: "800" }}>{invitation.displayName}</Text>
+                <Text style={{ color: palette.muted, fontSize: 12 }}>{invitation.email}{invitation.phone ? " · " + invitation.phone : ""}</Text>
+                <Text style={{ color: invitation.status === "accepted" ? palette.success : invitation.status === "pending" ? palette.warning : palette.muted, fontSize: 12, fontWeight: "800" }}>
+                  {invitation.status === "accepted" ? "Accepted in SKIMA" : invitation.status === "pending" ? "Waiting for in-app acceptance" : invitation.status === "revoked" ? "Revoked or declined" : invitation.status}
+                </Text>
+                {invitation.status === "pending" && invitation.expiresAt ? <Text style={{ color: palette.muted, fontSize: 11 }}>Expires {new Date(invitation.expiresAt).toLocaleString()}</Text> : null}
+                {invitation.deliveryFailure ? <Text style={{ color: palette.danger, fontSize: 12 }}>Last email delivery failed. Resend the sign-in notice.</Text> : null}
+                {invitation.status === "pending" ? (
+                  <AppButton
+                    label="Resend sign-in email"
+                    size="sm"
+                    variant="secondary"
+                    loading={resendInvitationMutation.isPending && resendInvitationMutation.variables?.email === invitation.email}
+                    disabled={resendInvitationMutation.isPending}
+                    onPress={() => void resendInvitationMutation.mutateAsync(invitation)}
+                  />
+                ) : null}
+              </View>
+            )) : <Text style={{ color: palette.muted, fontSize: 13 }}>No station invitations yet. Invite a driver above; their decision will be recorded here after they accept inside SKIMA.</Text>}
+          </Section>
+
+
+          <Section title="7. Automatic order dispatch" palette={palette} expanded={expandedSection === "7. Automatic order dispatch"} onPress={() => setExpandedSection(expandedSection === "7. Automatic order dispatch" ? "" : "7. Automatic order dispatch")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>When Station Managed is enabled, eligible new orders are assigned automatically to the least-loaded active driver at this station. Orders waiting here are not sent to independent drivers or SKIMA Fleet; invite a station driver and let them accept the invitation to make this queue dispatch-ready. Existing independent-driver and SKIMA Fleet orders are unchanged.</Text>
             {(data?.assignableOrders ?? []).length ? (data?.assignableOrders ?? []).map((order) => (
               <View key={order.id} style={[styles.row, { borderColor: palette.border }]}>
@@ -373,7 +417,22 @@ export function StationManagedFulfillmentScreen() {
             )) : <Text style={{ color: palette.muted }}>No waiting Station Managed orders. New eligible orders will be routed automatically.</Text>}
           </Section>
 
-          <Section title="7. Record the driver agreement" palette={palette} expanded={expandedSection === "7. Record driver agreement"} onPress={() => setExpandedSection(expandedSection === "7. Record driver agreement" ? "" : "7. Record driver agreement")}>
+          <Section title="Assigned deliveries" palette={palette} expanded={expandedSection === "Assigned deliveries"} onPress={() => setExpandedSection(expandedSection === "Assigned deliveries" ? "" : "Assigned deliveries")}>
+            <Text style={{ color: palette.muted, fontSize: 13 }}>These assignments come from the same LPG order, station-driver and reserved-vehicle records used by the driver app.</Text>
+            {(data?.assignedOrders ?? []).length ? (data?.assignedOrders ?? []).map((order) => (
+              <View key={order.id} style={[styles.section, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
+                <Text style={{ color: palette.ink, fontWeight: "800" }}>{order.publicReference ?? order.id.slice(0, 8)}</Text>
+                <Text style={{ color: palette.muted, fontSize: 12 }}>{order.requestedKg ?? "—"} kg · {order.orderStatus.replaceAll("_", " ")}</Text>
+                <Text style={{ color: palette.ink, fontSize: 13 }}>Driver: {order.driverName || "Assigned station driver"}</Text>
+                <Text style={{ color: palette.muted, fontSize: 12 }}>Vehicle: {order.vehicleRegistration || "Reserved vehicle"}{order.vehicleType ? " · " + order.vehicleType : ""}</Text>
+                <Text style={{ color: palette.muted, fontSize: 12 }}>Assignment: {order.assignmentStatus.replaceAll("_", " ")}</Text>
+                <AppButton label="Open delivery details" size="sm" variant="secondary" onPress={() => router.push(("/(station)/job/" + encodeURIComponent(order.lpgOrderId)) as never)} />
+              </View>
+            )) : <Text style={{ color: palette.muted }}>No active station-driver assignments right now.</Text>}
+          </Section>
+
+
+          <Section title="8. Record the driver agreement" palette={palette} expanded={expandedSection === "8. Record driver agreement"} onPress={() => setExpandedSection(expandedSection === "8. Record driver agreement" ? "" : "8. Record driver agreement")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Select which station driver's agreement or payment record you want to manage. This selection does not assign individual orders.</Text>
             {drivers.map((driver) => (
               <Choice key={driver.id} label={driver.displayName} active={selectedDriverId === driver.id} onPress={() => setSelectedDriverId(driver.id)} palette={palette} />
@@ -388,7 +447,7 @@ export function StationManagedFulfillmentScreen() {
             <AppButton label="Record agreement" fullWidth loading={agreementMutation.isPending} disabled={!selectedDriverId} onPress={() => void agreementMutation.mutateAsync()} />
           </Section>
 
-          <Section title="8. Confirm a payment made by your station" palette={palette} expanded={expandedSection === "8. Record a payment you made"} onPress={() => setExpandedSection(expandedSection === "8. Record a payment you made" ? "" : "8. Record a payment you made")}>
+          <Section title="9. Confirm a payment made by your station" palette={palette} expanded={expandedSection === "9. Record a payment you made"} onPress={() => setExpandedSection(expandedSection === "9. Record a payment you made" ? "" : "9. Record a payment you made")}>
             <Field label={`Amount (${currencyCode})`} value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" palette={palette} />
             <View style={styles.row}>
               <Choice label="Bank transfer" active={paymentMethod === "bank_transfer"} onPress={() => setPaymentMethod("bank_transfer")} palette={palette} />
