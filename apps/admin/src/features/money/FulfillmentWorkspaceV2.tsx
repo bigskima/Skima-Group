@@ -719,7 +719,7 @@ function AffiliateAdminSection(props: {
         target_change_reason: policyReason.trim(),
         target_idempotency_key: createClientIdempotencyKey(
           "admin.lpg.station-affiliate.policy-draft",
-          JSON.stringify(configuration) + ":" + policyReason.trim() + ":" + Date.now(),
+          JSON.stringify(configuration) + ":" + policyReason.trim(),
         ),
         target_module_key: "lpg",
         target_organization_id: null,
@@ -754,7 +754,7 @@ function AffiliateAdminSection(props: {
         target_reason: policyReason.trim(),
         target_idempotency_key: createClientIdempotencyKey(
           "admin.lpg.station-affiliate.policy-submit",
-          latestVersionId + ":" + policyReason.trim() + ":" + Date.now(),
+          latestVersionId + ":" + policyReason.trim(),
         ),
       });
       if (error) throw error;
@@ -777,7 +777,7 @@ function AffiliateAdminSection(props: {
         target_reason: policyReason.trim(),
         target_idempotency_key: createClientIdempotencyKey(
           "admin.lpg.station-affiliate.policy-review",
-          latestVersionId + ":" + decision + ":" + policyReason.trim() + ":" + Date.now(),
+          latestVersionId + ":" + decision + ":" + policyReason.trim(),
         ),
       });
       if (error) throw error;
@@ -802,7 +802,7 @@ function AffiliateAdminSection(props: {
         target_reason: policyReason.trim(),
         target_idempotency_key: createClientIdempotencyKey(
           "admin.lpg.station-affiliate.policy-activate",
-          latestVersionId + ":" + policyReason.trim() + ":" + Date.now(),
+          latestVersionId + ":" + policyReason.trim(),
         ),
       });
       if (error) throw error;
@@ -824,7 +824,7 @@ function AffiliateAdminSection(props: {
         target_reason: policyReason.trim(),
         target_idempotency_key: createClientIdempotencyKey(
           "admin.lpg.station-affiliate.policy-deactivate",
-          activeVersionId + ":" + policyReason.trim() + ":" + Date.now(),
+          activeVersionId + ":" + policyReason.trim(),
         ),
       });
       if (error) throw error;
