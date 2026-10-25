@@ -296,10 +296,10 @@ begin
     or new.module_id is distinct from (select id from public.business_modules where key='lpg') then
     raise exception using errcode='22023',message='Station Affiliate policy must be scoped to LPG / lpg.station.affiliate / Nigeria / NGN';
   end if;
-  if jsonb_typeof(config->'program_enabled')<>'boolean'
-    or jsonb_typeof(config->'commission_percent')<>'number'
-    or jsonb_typeof(config->'earning_period_months')<>'number'
-    or jsonb_typeof(config->'eligible_revenue_streams')<>'array' then
+  if jsonb_typeof(config->'program_enabled') is distinct from 'boolean'
+    or jsonb_typeof(config->'commission_percent') is distinct from 'number'
+    or jsonb_typeof(config->'earning_period_months') is distinct from 'number'
+    or jsonb_typeof(config->'eligible_revenue_streams') is distinct from 'array' then
     raise exception using errcode='22023',message='Station Affiliate policy requires program_enabled, commission_percent, earning_period_months, eligible_revenue_streams and payout_threshold';
   end if;
   if (config->>'commission_percent')::numeric<0 or (config->>'commission_percent')::numeric>100
@@ -850,6 +850,9 @@ begin
   into transaction_id from public.lpg_refill_orders order_record where order_record.id=target_lpg_order_id;
   if transaction_id is null then raise exception using errcode='55000',message='LPG order has no platform revenue classification transaction'; end if;
   earning_id:=public.award_lpg_station_affiliate_commission(target_lpg_order_id,transaction_id);
+  if earning_id is null then
+    raise exception using errcode='55000',message='affiliate commission was not posted; confirm the referral, order eligibility and active approved policy before retrying';
+  end if;
   update public.lpg_station_affiliate_commission_failures
   set status='resolved',resolved_at=timezone('utc',now()),resolved_by=auth.uid(),
       last_attempt_at=timezone('utc',now()),metadata=metadata||jsonb_build_object('resolvedReason',btrim(target_reason))
