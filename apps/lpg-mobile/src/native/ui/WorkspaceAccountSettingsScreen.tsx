@@ -144,6 +144,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
         <View style={styles.group}>
           <Text style={[styles.groupTitle, { color: theme.palette.ink }]}>Earning opportunities</Text>
           <View style={[styles.affiliateCard, shadows.soft, { backgroundColor: theme.palette.surface, borderColor: theme.palette.border }]}>
+            <GuideTarget targetKey="account.station-affiliate">
             <View style={styles.affiliateHeading}>
               <View style={[styles.iconWrap, { backgroundColor: theme.palette.brandSoft }]}>
                 <UsersRound color={theme.palette.brand} size={20} />
@@ -155,6 +156,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
                 </Text>
               </View>
             </View>
+          </GuideTarget>
 
             {affiliateLoading && !affiliate ? (
               <Text style={[styles.affiliateBody, { color: theme.palette.muted }]}>Loading affiliate status…</Text>
