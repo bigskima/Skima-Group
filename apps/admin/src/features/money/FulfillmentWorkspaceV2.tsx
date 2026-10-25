@@ -141,6 +141,7 @@ export function FulfillmentWorkspaceV2(props: {
   );
   const canReadAffiliateAdmin = Boolean(
     isSuperAdmin ||
+      context?.permissions.includes("platform.financial_policy.read") ||
       context?.permissions.includes("platform.dispatch.read") ||
       context?.permissions.includes("platform.wallets.read") ||
       context?.permissions.includes("platform.revenue.read") ||
