@@ -48,6 +48,10 @@ export function FinanceWithdrawalExperience({
       : selectWorkspaceWallet(wallets.data ?? [], workspace),
     [wallets.data, walletIdOverride, workspace],
   );
+  useEffect(() => {
+    if (walletIdOverride) void wallets.refetch();
+  }, [walletIdOverride]);
+
   const walletId = firstString(wallet, ["wallet_id", "walletId", "id"]);
   const available = firstNumber(wallet, ["available_balance", "availableBalance", "balance"]) ?? 0;
   const currency = firstString(wallet, ["currency_code", "currencyCode"]) ?? "NGN";
