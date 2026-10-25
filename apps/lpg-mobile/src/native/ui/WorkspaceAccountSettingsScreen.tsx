@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   Sun,
 } from "lucide-react-native";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSession } from "../session/SessionProvider";
 import { GuideTarget, useInAppGuide } from "../onboarding/InAppGuideProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -111,14 +111,29 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
         throw new Error("SKIMA returned an invalid linking code. Please try again.");
       }
       const code = result.data;
-      Alert.alert(
-        "WhatsApp linking code",
-        "Send this code to the official SKIMA LPG WhatsApp number within 10 minutes:\n\n" + code + "\n\nDo not share this code with another person.",
-        [
+      const publicNumber = (process.env.EXPO_PUBLIC_SKIMA_WHATSAPP_NUMBER ?? "").replace(/\\D/g, "");
+      const message = "Send this code to the official SKIMA LPG WhatsApp number within 10 minutes:\\n\\n" + code + "\\n\\nDo not share this code with another person."; 
+      const copyAction = { text: "Copy code", onPress: () => { void Clipboard.setStringAsync(code); } };
+      if (publicNumber.length >= 6 && publicNumber.length <= 20) {
+        Alert.alert("WhatsApp linking code", message, [
           { text: "Close", style: "cancel" },
-          { text: "Copy code", onPress: () => { void Clipboard.setStringAsync(code); } },
-        ],
-      );
+          copyAction,
+          {
+            text: "Open WhatsApp",
+            onPress: () => {
+              const url = "https://wa.me/" + publicNumber + "?text=" + encodeURIComponent(code);
+              void Linking.openURL(url).catch(() => {
+                Alert.alert("Could not open WhatsApp", "Copy the one-time code and send it to the official SKIMA LPG WhatsApp number.");
+              });
+            },
+          },
+        ]);
+      } else {
+        Alert.alert("WhatsApp linking code", message, [
+          { text: "Close", style: "cancel" },
+          copyAction,
+        ]);
+      }
     } catch (error) {
       Alert.alert(
         "Could not generate code",
