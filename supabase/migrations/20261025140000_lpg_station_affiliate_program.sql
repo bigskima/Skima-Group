@@ -600,7 +600,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path=public,pg_temp
-as $
+as $$
 begin
   if old.status is not distinct from new.status then return new; end if;
 
