@@ -173,8 +173,8 @@ export function StationDashboardScreen() {
               />
               <OperationAction
                 icon={<PackageCheck color={palette.brand} size={24} />}
-                title="Your drivers"
-                description="Manage delivery prices, station drivers and payment records."
+                title="Station Managed"
+                description="Manage delivery settings, station drivers, vehicles, the order queue and station-recorded driver payments."
                 onPress={() => router.push("/(station)/managed-fulfillment" as never)}
               />
             </GuideTarget>

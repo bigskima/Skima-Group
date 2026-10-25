@@ -27,6 +27,11 @@ export default function Layout() {
           "account-tools",
           "account-settings",
           "managed-fulfillment",
+          "managed-fulfillment-settings",
+          "managed-fulfillment-vehicles",
+          "managed-fulfillment-drivers",
+          "managed-fulfillment-orders",
+          "managed-fulfillment-payments",
         ]}
       />
     </WorkspaceGate>

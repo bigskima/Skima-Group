@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { RefreshControl, StyleSheet, Text, View } from "react-native";
-import type { ReactNode } from "react";
+import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { useState, type ReactNode } from "react";
 import { BriefcaseBusiness, CheckCircle2, Clock3, MapPin, UserRound } from "lucide-react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -35,6 +35,7 @@ export function StationManagedDriverJobsScreen() {
   const { supabase } = useSession();
   const { palette } = useAppTheme();
   const queryClient = useQueryClient();
+  const [showCompleted, setShowCompleted] = useState(false);
   const jobs = useQuery({
     queryKey: ["station-managed-driver-jobs"],
     queryFn: async (): Promise<ManagedJob[]> => {
@@ -68,6 +69,8 @@ export function StationManagedDriverJobsScreen() {
 
   const refreshing = jobs.isRefetching;
   const activeJobs = (jobs.data ?? []).filter((job) => job.status !== "delivered");
+  const completedJobs = (jobs.data ?? []).filter((job) => job.status === "delivered");
+  const visibleJobs = showCompleted ? completedJobs : activeJobs;
   const refresh = () => void jobs.refetch();
 
   return (
@@ -86,6 +89,27 @@ export function StationManagedDriverJobsScreen() {
           </View>
         </View>
 
+        <View style={[styles.tabBar, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected: !showCompleted }}
+            onPress={() => setShowCompleted(false)}
+            style={[styles.tab, !showCompleted && { backgroundColor: palette.surface, borderColor: palette.brand }]}
+          >
+            <Text style={[styles.tabText, { color: !showCompleted ? palette.ink : palette.muted }]}>Active</Text>
+            <Text style={[styles.tabCount, { color: !showCompleted ? palette.brand : palette.muted }]}>{activeJobs.length}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="tab"
+            accessibilityState={{ selected: showCompleted }}
+            onPress={() => setShowCompleted(true)}
+            style={[styles.tab, showCompleted && { backgroundColor: palette.surface, borderColor: palette.brand }]}
+          >
+            <Text style={[styles.tabText, { color: showCompleted ? palette.ink : palette.muted }]}>Completed</Text>
+            <Text style={[styles.tabCount, { color: showCompleted ? palette.brand : palette.muted }]}>{completedJobs.length}</Text>
+          </Pressable>
+        </View>
+
         {jobs.isPending ? <Text style={[styles.muted, { color: palette.muted }]}>Loading your station deliveries…</Text> : null}
         {jobs.error ? (
           <EmptyState
@@ -101,15 +125,17 @@ export function StationManagedDriverJobsScreen() {
             <Text accessibilityRole="alert" style={[styles.noticeText, { color: palette.danger }]}>{friendlyError(updateStatus.error, "This delivery status could not be updated. Refresh and try again.")}</Text>
           </View>
         ) : null}
-        {jobs.data && jobs.data.length === 0 ? (
+        {jobs.data && visibleJobs.length === 0 ? (
           <EmptyState
             icon={<CheckCircle2 color={palette.brand} size={26} />}
-            title="No station deliveries assigned"
-            description="When your station enables Station Managed and an eligible order is created, the system routes it to an active station driver automatically. You do not need an independent-driver profile."
+            title={showCompleted ? "No completed deliveries yet" : "No active deliveries"}
+            description={showCompleted
+              ? "Completed station deliveries will appear here after the backend verifies the final customer hand-over scan."
+              : "When your station enables Station Managed and an eligible order has an active driver and approved vehicle, SKIMA assigns it automatically. You do not need an independent-driver profile."}
           />
         ) : null}
 
-        {(jobs.data ?? []).map((job) => {
+        {visibleJobs.map((job) => {
           const busy = updateStatus.isPending && updateStatus.variables?.job.id === job.id;
           return (
             <View key={job.id} style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -119,6 +145,11 @@ export function StationManagedDriverJobsScreen() {
                   <Text style={[styles.muted, { color: palette.muted }]}>{job.stationName}</Text>
                 </View>
                 <StatusPill label={statusLabel(job.status)} tone={job.status === "delivered" ? "success" : job.status === "en_route" ? "brand" : "neutral"} />
+              </View>
+              <View style={[styles.currentStage, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+                <Text style={[styles.stageEyebrow, { color: palette.muted }]}>{job.status === "delivered" ? "COMPLETED AT" : "CURRENT STEP"}</Text>
+                <Text style={[styles.stageText, { color: palette.ink }]}>{orderStageLabel(job.orderStatus)}</Text>
+                {job.completedAt ? <Text style={[styles.muted, { color: palette.muted }]}>{formatDate(job.completedAt)}</Text> : null}
               </View>
               <View style={styles.detailRow}>
                 <Clock3 color={palette.muted} size={16} />
@@ -178,6 +209,26 @@ export function StationManagedDriverJobsScreen() {
   );
 }
 
+function orderStageLabel(status: string) {
+  const labels: Record<string, string> = {
+    driver_offered: "Awaiting driver acceptance",
+    driver_accepted: "Begin customer pickup",
+    pickup_en_route: "Travelling to collect the cylinder",
+    pickup_verified: "Cylinder collected",
+    station_en_route: "Travelling to the refill station",
+    station_verified: "Station check-in confirmed",
+    refill_started: "Refill started",
+    refill_in_progress: "Station is refilling",
+    refill_confirmed: "Refill confirmed",
+    station_settled: "Station settled · awaiting cylinder release",
+    return_en_route: "Returning the filled cylinder",
+    delivery_verification_pending: "Waiting for customer verification",
+    delivered: "Customer hand-over verified",
+    completed: "Delivery complete",
+  };
+  return labels[status] ?? status.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function statusLabel(status: ManagedJob["status"]) {
   return status.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -191,6 +242,13 @@ function formatMoney(amount: number, currency: string) {
 }
 
 const styles = StyleSheet.create({
+  tabBar: { flexDirection: "row", borderWidth: 1, borderRadius: radii.lg, padding: 4, gap: 4 },
+  tab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 42, borderWidth: 1, borderColor: "transparent", borderRadius: radii.md, paddingHorizontal: 10 },
+  tabText: { ...typography.body, fontSize: 13, fontWeight: "800" },
+  tabCount: { fontSize: 12, fontWeight: "900" },
+  currentStage: { borderWidth: 1, borderRadius: radii.md, padding: spacing.sm + 2, gap: 4 },
+  stageEyebrow: { ...typography.eyebrow, fontSize: 10, letterSpacing: 0.7 },
+  stageText: { ...typography.body, fontWeight: "900" },
   summary: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 1, borderRadius: radii.xl, padding: spacing.md },
   summaryTitle: { ...typography.body, fontWeight: "900" },
   muted: { ...typography.caption, marginTop: 3 },
