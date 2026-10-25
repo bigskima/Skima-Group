@@ -258,15 +258,15 @@ Deno.test("Customer refill only exposes the separate Station Managed fallback ou
   requireText(customer, "outsideCoverageLikely", "outside-coverage state detection");
   requireText(customer, "SKIMA Managed and Independent delivery are not available for this trip", "non-Station Managed models are not enabled outside coverage");
   requireText(customer, "Station Managed delivery available", "customer sees explicitly identified Station Managed fallback");
-  requireText(customer, "selectedStation?.isStationManagedOnly && fulfillmentMode === 'station_managed'", "quote is allowed only with the selected Station Managed fallback");
+  requireText(customer, 'selectedStation?.isStationManagedOnly && fulfillmentMode === "station_managed"', "quote is allowed only with the selected Station Managed fallback");
 });
 
 Deno.test("Station Affiliate referral and commission are governed and ledger-backed", () => {
   requireText(stationAffiliateProgram, "financial_policy_definitions", "reusable financial policy definitions");
   requireText(stationAffiliateProgram, "'commission.lpg.station_affiliate'", "stable affiliate policy key");
-  requireText(stationAffiliateProgram, "target_geography_key", "geographic policy scope");
-  requireText(stationAffiliateProgram, "create_financial_policy_version", "versioned policy lifecycle");
-  requireText(stationAffiliateProgram, "review_financial_policy_version", "independent approval lifecycle");
+  requireText(stationAffiliateProgram, "new.geography_key is distinct from 'NG'", "geographic policy scope is fixed to Nigeria");
+  requireText(affiliateAdmin, "create_financial_policy_version", "versioned policy lifecycle");
+  requireText(affiliateAdmin, "review_financial_policy_version", "independent approval lifecycle");
   requireText(stationAffiliateProgram, "public.post_financial_transaction(", "commission posts through the financial ledger");
   requireText(stationAffiliateProgram, "on conflict(lpg_order_id) do nothing", "one affiliate earning per LPG order");
   requireText(stationAffiliateProgram, "old.submitted_at is not null or new.submitted_at is null", "referral is recorded only once at first application submission");
