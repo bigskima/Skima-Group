@@ -156,7 +156,7 @@ begin
   into standard_options
   from public.read_lpg_eligible_stations(
     target_pickup_location_id, target_delivery_location_id, target_cylinder_id,
-    target_requested_kg, 5, timezone('utc', now())
+    target_requested_kg, 5, now()
   ) s;
 
   select coalesce(jsonb_agg(
@@ -165,7 +165,7 @@ begin
   into station_managed_options
   from public.read_lpg_station_managed_eligible_stations(
     target_pickup_location_id, target_delivery_location_id, target_cylinder_id,
-    target_requested_kg, 5, timezone('utc', now())
+    target_requested_kg, 5, now()
   ) s;
 
   return standard_options || station_managed_options;
@@ -180,6 +180,7 @@ create or replace function public.create_skima_whatsapp_lpg_quote(
   target_delivery_location_id uuid,
   target_station_branch_id uuid,
   target_fulfillment_mode text,
+  target_route_snapshot jsonb,
   target_idempotency_key text,
   target_provider_message_id text
 )
@@ -199,6 +200,14 @@ begin
   end if;
   if target_fulfillment_mode is null or target_fulfillment_mode not in ('independent_driver', 'station_managed') then
     raise exception using errcode='22023', message='unsupported LPG fulfillment option';
+  end if;
+  if target_station_branch_id is null then
+    raise exception using errcode='22023', message='eligible station is required';
+  end if;
+  if target_route_snapshot is null or jsonb_typeof(target_route_snapshot) <> 'object'
+     or jsonb_typeof(target_route_snapshot->'legs') <> 'array'
+     or jsonb_array_length(target_route_snapshot->'legs') <> 2 then
+    raise exception using errcode='22023', message='commercial route snapshot with two legs is required';
   end if;
   if target_idempotency_key is null or btrim(target_idempotency_key) = '' then
     raise exception using errcode='22023', message='idempotency key required';
@@ -234,13 +243,15 @@ begin
   perform set_config('request.jwt.claims',
     jsonb_build_object('sub', contact_record.profile_id::text, 'role', 'service_role')::text, true);
 
-  quote_id := public.create_lpg_refill_quote(
+  quote_id := public.create_lpg_refill_quote_from_purchase_input(
     target_cylinder_id,
     target_requested_kg,
+    null,
     target_pickup_location_id,
     target_delivery_location_id,
-    target_idempotency_key,
     target_station_branch_id,
+    target_route_snapshot,
+    target_idempotency_key,
     null,
     null,
     jsonb_build_object(
@@ -330,8 +341,11 @@ begin
   if not found then
     raise exception using errcode='42501', message='quote does not belong to this linked customer';
   end if;
-  if quote_record.status <> 'quoted' or quote_record.expires_at <= timezone('utc', now()) then
+  if quote_record.expires_at <= now() then
     raise exception using errcode='55000', message='quote expired or is no longer available; request a fresh quote';
+  end if;
+  if quote_record.status not in ('quoted', 'accepted') then
+    raise exception using errcode='55000', message='quote is no longer available; request a fresh quote';
   end if;
 
   perform set_config('request.jwt.claim.sub', contact_record.profile_id::text, true);
@@ -372,12 +386,12 @@ $$;
 
 revoke all on function public.read_skima_whatsapp_customer_choices(text) from public, anon, authenticated;
 revoke all on function public.read_skima_whatsapp_eligible_stations(text, uuid, numeric, uuid, uuid) from public, anon, authenticated;
-revoke all on function public.create_skima_whatsapp_lpg_quote(text, uuid, numeric, uuid, uuid, uuid, text, text, text) from public, anon, authenticated;
+revoke all on function public.create_skima_whatsapp_lpg_quote(text, uuid, numeric, uuid, uuid, uuid, text, jsonb, text, text) from public, anon, authenticated;
 revoke all on function public.create_skima_whatsapp_lpg_order(text, uuid, text, text) from public, anon, authenticated;
 
 grant execute on function public.read_skima_whatsapp_customer_choices(text) to service_role;
 grant execute on function public.read_skima_whatsapp_eligible_stations(text, uuid, numeric, uuid, uuid) to service_role;
-grant execute on function public.create_skima_whatsapp_lpg_quote(text, uuid, numeric, uuid, uuid, uuid, text, text, text) to service_role;
+grant execute on function public.create_skima_whatsapp_lpg_quote(text, uuid, numeric, uuid, uuid, uuid, text, jsonb, text, text) to service_role;
 grant execute on function public.create_skima_whatsapp_lpg_order(text, uuid, text, text) to service_role;
 
 commit;
