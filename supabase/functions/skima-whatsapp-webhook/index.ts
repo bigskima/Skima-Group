@@ -548,7 +548,7 @@ async function requestCanonicalQuote(args: {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) throw new Error("WhatsApp quote route is not configured.");
   const response = await fetch(
-    `${supabaseUrl.replace(/\\/$/, "")}/functions/v1/api-gateway/internal/whatsapp/lpg/quote`,
+    `${supabaseUrl.replace(/\/$/, "")}/functions/v1/api-gateway/internal/whatsapp/lpg/quote`,
     {
       method: "POST",
       headers: {
