@@ -507,7 +507,7 @@ revoke all on function public.configure_lpg_station_managed_vehicle(uuid,uuid,bo
 revoke all on function public.read_lpg_station_managed_eligible_stations(uuid,uuid,uuid,numeric,integer,timestamptz) from public,anon;
 revoke all on function public.read_lpg_station_managed_eligible_stations_for_amount(uuid,uuid,uuid,numeric,integer,timestamptz) from public,anon;
 
-grant execute on function public.is_lpg_station_managed_vehicle_eligible(uuid,uuid,date) to authenticated,service_role;
+grant execute on function public.is_lpg_station_managed_vehicle_eligible(uuid,uuid,date) to service_role;
 grant execute on function public.read_lpg_station_managed_available_vehicles(uuid) to authenticated,service_role;
 grant execute on function public.configure_lpg_station_managed_vehicle(uuid,uuid,boolean,text) to authenticated,service_role;
 grant execute on function public.read_lpg_station_managed_eligible_stations(uuid,uuid,uuid,numeric,integer,timestamptz) to authenticated,service_role;
