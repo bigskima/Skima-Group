@@ -603,7 +603,11 @@ set search_path=public,pg_temp
 as $$
 declare application_text text; application_id_value uuid;
 begin
-  if new.approval_status<>'approved' then return new; end if;
+  if new.approval_status<>'approved'
+    or new.compliance_status<>'approved'
+    or new.availability_status<>'available' then
+    return new;
+  end if;
   application_text:=coalesce(new.metadata->>'source_application_id',new.metadata->>'activated_from_application_id');
   if application_text is null then return new; end if;
   begin application_id_value:=application_text::uuid;
@@ -630,7 +634,7 @@ for each row execute function public.record_lpg_station_affiliate_referral_on_su
 
 drop trigger if exists trg_activate_lpg_station_affiliate_referral_for_branch on public.lpg_station_branches;
 create trigger trg_activate_lpg_station_affiliate_referral_for_branch
-after insert or update of approval_status,metadata on public.lpg_station_branches
+after insert or update of approval_status,compliance_status,availability_status,metadata on public.lpg_station_branches
 for each row execute function public.activate_lpg_station_affiliate_referral_for_branch();
 
 create or replace function public.award_lpg_station_affiliate_commission(
