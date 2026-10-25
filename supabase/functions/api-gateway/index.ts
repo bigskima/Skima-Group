@@ -489,32 +489,32 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     };
 
     const inviteRedirectTo = Deno.env.get("AUTH_INVITE_REDIRECT_URL") ?? Deno.env.get("SITE_URL");
-    const invitation = await serviceClient.auth.admin.inviteUserByEmail(email, {
-      data: { full_name: displayName, station_managed_driver_invite: true },
-      ...(inviteRedirectTo ? { redirectTo: inviteRedirectTo } : {}),
+    // The email only signs the invited user into SKIMA. It does not create
+    // the Station Managed relationship; that requires the explicit in-app
+    // Accept invitation action guarded by accept_lpg_station_managed_driver_invite().
+    const signIn = await serviceClient.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: true,
+        data: { full_name: displayName },
+        ...(inviteRedirectTo ? { emailRedirectTo: inviteRedirectTo } : {}),
+      },
     });
-    if (invitation.error) {
-      // Existing SKIMA accounts cannot be invited as new auth users. Send an OTP
-      // sign-in email instead; the pending branch invite is accepted after login.
-      if (/already registered|already exists|user exists/i.test(invitation.error.message)) {
-        const signIn = await serviceClient.auth.signInWithOtp({
-          email,
-          options: {
-            shouldCreateUser: false,
-            ...(inviteRedirectTo ? { emailRedirectTo: inviteRedirectTo } : {}),
-          },
-        });
-        if (signIn.error) {
-          const cleanupError = await revokeUndeliveredInvitation("existing_account_otp_failed");
-          if (cleanupError) return cleanupError;
-          return jsonResponse({ ok: false, error: "invitation_delivery_failed", message: signIn.error.message, requestId: id }, 400);
-        }
-      } else {
-        const cleanupError = await revokeUndeliveredInvitation("invite_email_failed");
-        if (cleanupError) return cleanupError;
-        return jsonResponse({ ok: false, error: "invitation_delivery_failed", message: invitation.error.message, requestId: id }, 400);
-      }
+    if (signIn.error) {
+      const cleanupError = await revokeUndeliveredInvitation("sign_in_email_failed");
+      if (cleanupError) return cleanupError;
+      return jsonResponse({ ok: false, error: "invitation_delivery_failed", message: signIn.error.message, requestId: id }, 400);
     }
+
+    const deliveryRecorded = await serviceClient.from("lpg_station_managed_driver_invites")
+      .update({
+        updated_at: new Date().toISOString(),
+        metadata: { source: "api-gateway", deliveryStatus: "sign_in_link_requested", acceptanceMode: "in_app" },
+      })
+      .eq("id", saved.data.id)
+      .eq("status", "pending");
+    if (deliveryRecorded.error) return databaseError(deliveryRecorded.error, id);
+
     return jsonResponse({ ok: true, data: { id: saved.data.id, email, status: saved.data.status, expiresAt: saved.data.expires_at }, requestId: id });
   }
 
