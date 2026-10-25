@@ -128,7 +128,9 @@ begin
   requested_mode:=coalesce(nullif(new.metadata->>'fulfillment_mode',''),new.fulfillment_mode,'independent_driver');
   if new.fulfillment_channel<>'marketplace' or requested_mode<>'station_managed' then return new; end if;
   if new.status<>'payment_reserved' then return new; end if;
-  if tg_op='UPDATE' and old.status is not distinct from new.status then return new; end if;
+  if tg_op='UPDATE' then
+    if old.status is not distinct from new.status then return new; end if;
+  end if;
 
   if new.station_branch_id is null then
     raise exception using errcode='P0001',message='Station Managed order requires a selected branch';
