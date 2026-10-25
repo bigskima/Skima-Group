@@ -190,12 +190,13 @@ export function FulfillmentWorkspaceV2(props: {
       <div className="fulfillment-v2 stack-lg">
         <FulfillmentHeader onRefresh={null} />
         <FulfillmentSectionNav active={section} onNavigate={props.onNavigate} />
-        <StationAffiliateAdminSection
+        <AffiliateAdminSection
           canRead={canReadAffiliateAdmin}
           canManageAffiliate={canManageAffiliate}
           canDraftPolicy={canDraftFinancialPolicy}
           canApprovePolicy={canApproveFinancialPolicy}
           canActivatePolicy={canActivateFinancialPolicy}
+          canRetryCommission={Boolean(isSuperAdmin || (context?.permissions.includes("platform.financial.manage") && context?.permissions.includes("platform.wallets.manage")))}
         />
       </div>
     );
@@ -607,6 +608,464 @@ function StationManagedCoveragePolicySection(props: { readonly canManage: boolea
       </Button>
     </section>
   );
+}
+
+
+const AffiliateAdminWorkspaceSchema = z.object({
+  policy: z.object({
+    policyKey: z.string().optional(),
+    displayName: z.string().optional(),
+    policyFamily: z.string().optional(),
+    definitionId: z.string().uuid().optional(),
+    latestVersion: z.record(z.unknown()).nullable().optional(),
+    activeVersion: z.record(z.unknown()).nullable().optional(),
+  }).nullable().optional(),
+  affiliates: z.array(z.record(z.unknown())).default([]),
+  referrals: z.array(z.record(z.unknown())).default([]),
+  earnings: z.array(z.record(z.unknown())).default([]),
+  commissionFailures: z.array(z.record(z.unknown())).default([]),
+});
+type AffiliateAdminWorkspace = z.infer<typeof AffiliateAdminWorkspaceSchema>;
+type AffiliateDecision = "active" | "rejected" | "suspended";
+
+function AffiliateAdminSection(props: {
+  readonly canRead: boolean;
+  readonly canManageAffiliate: boolean;
+  readonly canDraftPolicy: boolean;
+  readonly canApprovePolicy: boolean;
+  readonly canActivatePolicy: boolean;
+  readonly canRetryCommission: boolean;
+}) {
+  const { supabase, status } = useSessionState();
+  const queryClient = useQueryClient();
+  const [policyEnabled, setPolicyEnabled] = useState(false);
+  const [commissionPercent, setCommissionPercent] = useState("5");
+  const [earningMonths, setEarningMonths] = useState("12");
+  const [eligibleStreams, setEligibleStreams] = useState<"both" | "refill" | "delivery">("both");
+  const [policyReason, setPolicyReason] = useState("");
+  const [affiliateReason, setAffiliateReason] = useState("");
+  const [retryReason, setRetryReason] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const workspace = useQuery<AffiliateAdminWorkspace>({
+    queryKey: ["lpg-station-affiliate-admin-workspace"],
+    enabled: props.canRead && status === "authenticated",
+    retry: false,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("read_lpg_station_affiliate_admin_workspace");
+      if (error) throw error;
+      return AffiliateAdminWorkspaceSchema.parse(data);
+    },
+  });
+
+  const latestPolicy = workspace.data?.policy?.latestVersion ?? null;
+  const activePolicy = workspace.data?.policy?.activeVersion ?? null;
+  const latestVersionId = recordText(latestPolicy, "id");
+  const latestLifecycle = recordText(latestPolicy, "lifecycle_status");
+  const activeVersionId = recordText(activePolicy, "id");
+  const activeConfiguration = recordObject(activePolicy, "configuration");
+  const hasActivePolicy = Boolean(activeVersionId);
+  const programAlreadyConfigured = Boolean(latestVersionId);
+
+  useEffect(() => {
+    const policyRecord = latestPolicy ?? activePolicy;
+    const config = recordObject(policyRecord, "configuration");
+    if (!policyRecord) return;
+    const enabled = config.program_enabled;
+    const rate = Number(config.commission_percent);
+    const months = Number(config.earning_period_months);
+    const streams = Array.isArray(config.eligible_revenue_streams)
+      ? config.eligible_revenue_streams.filter((item): item is string => typeof item === "string")
+      : ["refill", "delivery"];
+    if (typeof enabled === "boolean") setPolicyEnabled(enabled);
+    if (Number.isFinite(rate) && rate >= 0) setCommissionPercent(String(rate));
+    if (Number.isInteger(months) && months >= 1) setEarningMonths(String(months));
+    setEligibleStreams(streams.includes("refill") && streams.includes("delivery")
+      ? "both" : streams.includes("refill") ? "refill" : "delivery");
+  }, [latestPolicy, activePolicy]);
+
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["lpg-station-affiliate-admin-workspace"] });
+  };
+
+  const createPolicyDraft = useMutation({
+    mutationFn: async () => {
+      if (policyReason.trim().length < 5) throw new Error("Enter a change reason of at least 5 characters.");
+      const rate = Number(commissionPercent);
+      const months = Number(earningMonths);
+      if (!Number.isFinite(rate) || rate < 0 || rate > 100 || (policyEnabled && rate <= 0)) {
+        throw new Error("Commission must be 0–100%; use a positive percentage while the programme is enabled.");
+      }
+      if (!Number.isInteger(months) || months < 1 || months > 36) {
+        throw new Error("The earning period must be a whole number from 1 to 36 months.");
+      }
+      const streams = eligibleStreams === "both" ? ["refill", "delivery"] : [eligibleStreams];
+      const configuration = {
+        program_enabled: policyEnabled,
+        commission_percent: rate,
+        earning_period_months: months,
+        eligible_revenue_streams: streams,
+      };
+      const { data, error } = await supabase.rpc("create_financial_policy_version", {
+        target_policy_key: "commission.lpg.station_affiliate",
+        target_display_name: "LPG Station Affiliate Commission",
+        target_policy_family: "affiliate",
+        target_currency_code: "NGN",
+        target_configuration: configuration,
+        target_effective_from: new Date().toISOString(),
+        target_change_reason: policyReason.trim(),
+        target_idempotency_key: createClientIdempotencyKey(
+          "admin.lpg.station-affiliate.policy-draft",
+          JSON.stringify(configuration) + ":" + policyReason.trim() + ":" + Date.now(),
+        ),
+        target_module_key: "lpg",
+        target_organization_id: null,
+        target_service_key: "lpg.station.affiliate",
+        target_geography_type: "country",
+        target_geography_key: "NG",
+        target_effective_until: null,
+        target_priority: 100,
+        target_approval_required: true,
+        target_allow_partner_delegation: false,
+        target_based_on_version_id: activeVersionId,
+        target_supersedes_version_id: activeVersionId,
+        target_rollback_of_version_id: null,
+        target_metadata: { module: "lpg", programme: "station_affiliate", createdFrom: "admin-fulfillment-workspace" },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async () => {
+      setPolicyReason("");
+      setNotice("Commission policy draft created. Submit it for independent approval.");
+      await refresh();
+    },
+  });
+
+  const submitPolicy = useMutation({
+    mutationFn: async () => {
+      if (!latestVersionId) throw new Error("Create a policy draft first.");
+      if (policyReason.trim().length < 5) throw new Error("Enter a reason of at least 5 characters.");
+      const { data, error } = await supabase.rpc("submit_financial_policy_version", {
+        target_policy_version_id: latestVersionId,
+        target_reason: policyReason.trim(),
+        target_idempotency_key: createClientIdempotencyKey(
+          "admin.lpg.station-affiliate.policy-submit",
+          latestVersionId + ":" + policyReason.trim() + ":" + Date.now(),
+        ),
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async () => {
+      setPolicyReason("");
+      setNotice("Commission policy submitted for independent approval.");
+      await refresh();
+    },
+  });
+
+  const reviewPolicy = useMutation({
+    mutationFn: async (decision: "approved" | "rejected") => {
+      if (!latestVersionId) throw new Error("No policy version is available to review.");
+      if (policyReason.trim().length < 5) throw new Error("Enter a reason of at least 5 characters.");
+      const { data, error } = await supabase.rpc("review_financial_policy_version", {
+        target_policy_version_id: latestVersionId,
+        target_decision: decision,
+        target_reason: policyReason.trim(),
+        target_idempotency_key: createClientIdempotencyKey(
+          "admin.lpg.station-affiliate.policy-review",
+          latestVersionId + ":" + decision + ":" + policyReason.trim() + ":" + Date.now(),
+        ),
+      });
+      if (error) throw error;
+      return { decision, data };
+    },
+    onSuccess: async ({ decision }) => {
+      setPolicyReason("");
+      setNotice(decision === "approved" ? "Commission policy approved." : "Commission policy rejected.");
+      await refresh();
+    },
+  });
+
+  const activatePolicy = useMutation({
+    mutationFn: async () => {
+      if (!latestVersionId) throw new Error("No policy version is available to activate.");
+      if (policyReason.trim().length < 5) throw new Error("Enter a reason of at least 5 characters.");
+      if (activeVersionId && activeVersionId !== latestVersionId) {
+        throw new Error("Deactivate the current active version first. Policy versions are immutable and conflicting active windows are not allowed.");
+      }
+      const { data, error } = await supabase.rpc("activate_financial_policy_version", {
+        target_policy_version_id: latestVersionId,
+        target_reason: policyReason.trim(),
+        target_idempotency_key: createClientIdempotencyKey(
+          "admin.lpg.station-affiliate.policy-activate",
+          latestVersionId + ":" + policyReason.trim() + ":" + Date.now(),
+        ),
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async () => {
+      setPolicyReason("");
+      setNotice("Station Affiliate commission policy activated.");
+      await refresh();
+    },
+  });
+
+  const deactivatePolicy = useMutation({
+    mutationFn: async () => {
+      if (!activeVersionId) throw new Error("There is no active policy version.");
+      if (policyReason.trim().length < 5) throw new Error("Enter a reason of at least 5 characters.");
+      const { data, error } = await supabase.rpc("deactivate_financial_policy_version", {
+        target_policy_version_id: activeVersionId,
+        target_reason: policyReason.trim(),
+        target_idempotency_key: createClientIdempotencyKey(
+          "admin.lpg.station-affiliate.policy-deactivate",
+          activeVersionId + ":" + policyReason.trim() + ":" + Date.now(),
+        ),
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async () => {
+      setPolicyReason("");
+      setNotice("Active commission policy deactivated. A replacement policy can be activated after approval.");
+      await refresh();
+    },
+  });
+
+  const reviewAffiliate = useMutation({
+    mutationFn: async (input: { id: string; decision: AffiliateDecision }) => {
+      if (!props.canManageAffiliate) throw new Error("Affiliate management permission is required.");
+      if (affiliateReason.trim().length < 5) throw new Error("Enter a review reason of at least 5 characters.");
+      const { data, error } = await supabase.rpc("review_lpg_station_affiliate", {
+        target_affiliate_id: input.id,
+        target_decision: input.decision,
+        target_reason: affiliateReason.trim(),
+      });
+      if (error) throw error;
+      return { ...input, data };
+    },
+    onSuccess: async ({ decision }) => {
+      setAffiliateReason("");
+      setNotice("Affiliate request " + (decision === "active" ? "activated." : decision + "."));
+      await refresh();
+    },
+  });
+
+  const retryCommission = useMutation({
+    mutationFn: async (orderId: string) => {
+      if (!props.canRetryCommission) throw new Error("Financial and wallet management permissions are required.");
+      if (retryReason.trim().length < 5) throw new Error("Enter a reason of at least 5 characters.");
+      const { data, error } = await supabase.rpc("retry_lpg_station_affiliate_commission", {
+        target_lpg_order_id: orderId,
+        target_reason: retryReason.trim(),
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: async () => {
+      setRetryReason("");
+      setNotice("Affiliate commission retry completed.");
+      await refresh();
+    },
+  });
+
+  if (!props.canRead) {
+    return <div className="admin-inline-warning"><strong>Access required.</strong> You need an approved platform operations, wallet, revenue, or financial-policy read permission to view Station Affiliate operations.</div>;
+  }
+  if (workspace.isPending) return <LoadingState label="Loading Station Affiliate programme…" />;
+  if (workspace.error || !workspace.data) {
+    return <ErrorState title="Station Affiliate administration unavailable" error={workspace.error} onRetry={() => void workspace.refetch()} />;
+  }
+
+  const affiliates = workspace.data.affiliates;
+  const referrals = workspace.data.referrals;
+  const earnings = workspace.data.earnings;
+  const failures = workspace.data.commissionFailures;
+  const policyVersionDisplay = latestVersionId
+    ? "v" + (recordText(latestPolicy, "version") ?? "?") + " · " + normalizeStatusLabel(latestLifecycle ?? "draft")
+    : "Not configured";
+  const submitReady = Boolean(latestVersionId && latestLifecycle === "draft" && props.canDraftPolicy);
+  const reviewReady = Boolean(latestVersionId && latestLifecycle === "submitted" && props.canApprovePolicy);
+  const activateReady = Boolean(latestVersionId && latestLifecycle === "approved" && props.canActivatePolicy);
+  const createDraftReady = !latestVersionId || ["active", "inactive", "rejected", "superseded"].includes(latestLifecycle ?? "");
+
+  return (
+    <div className="stack-lg">
+      <section className="fulfillment-v2__metrics">
+        <MetricTile label="Affiliate applicants" value={affiliates.length} icon={UsersRound} />
+        <MetricTile label="Active affiliates" value={affiliates.filter((row) => recordText(row, "status") === "active").length} icon={CircleCheck} tone="success" />
+        <MetricTile label="Station referrals" value={referrals.length} icon={Building2} />
+        <MetricTile label="Posted commissions" value={earnings.filter((row) => recordText(row, "status") === "posted").length} icon={WalletCards} />
+      </section>
+
+      <section className="sk-panel stack-md">
+        <div className="sk-panel__header">
+          <div>
+            <span className="section-kicker">Governed financial policy · Nigeria / NGN</span>
+            <h2>Station Affiliate commission</h2>
+            <p className="skima-muted">
+              Configure the percentage paid from eligible SKIMA LPG platform revenue, the earning window and eligible revenue streams. Changes go through the existing draft → submit → independent approval → activation lifecycle; no unaudited direct edits are made to active policy versions.
+            </p>
+          </div>
+          <StatusBadge tone={latestLifecycle === "active" ? "success" : latestLifecycle === "submitted" ? "warning" : "neutral"}>{policyVersionDisplay}</StatusBadge>
+        </div>
+
+        {hasActivePolicy ? (
+          <div className="admin-inline-warning">
+            <strong>Currently active:</strong> {Number(activeConfiguration.commission_percent ?? 0)}% for {Number(activeConfiguration.earning_period_months ?? 0)} months; eligible streams: {Array.isArray(activeConfiguration.eligible_revenue_streams) ? activeConfiguration.eligible_revenue_streams.join(", ") : "not configured"}.
+            {activeConfiguration.program_enabled === false ? " The programme is currently disabled by policy." : ""}
+          </div>
+        ) : (
+          <div className="admin-inline-warning"><strong>No active commission policy.</strong> Affiliates can be reviewed and referred stations tracked, but no commission will post until an approved policy version is activated.</div>
+        )}
+
+        <SelectInput label="Affiliate commission programme" value={policyEnabled ? "enabled" : "disabled"}
+          onChange={(event) => setPolicyEnabled(event.currentTarget.value === "enabled")}
+          options={[{ label: "Enabled after policy activation", value: "enabled" }, { label: "Disabled (no new commission accrual)", value: "disabled" }]}
+          disabled={!props.canDraftPolicy || createPolicyDraft.isPending || !createDraftReady} />
+        <TextInput label="Commission percentage of eligible net SKIMA revenue" value={commissionPercent}
+          onChange={(event) => setCommissionPercent(event.currentTarget.value)} placeholder="5"
+          disabled={!props.canDraftPolicy || createPolicyDraft.isPending || !createDraftReady} />
+        <TextInput label="Earning window after station activation (months)" value={earningMonths}
+          onChange={(event) => setEarningMonths(event.currentTarget.value)} placeholder="12"
+          disabled={!props.canDraftPolicy || createPolicyDraft.isPending || !createDraftReady} />
+        <SelectInput label="Eligible revenue streams" value={eligibleStreams}
+          onChange={(event) => setEligibleStreams(event.currentTarget.value as "both" | "refill" | "delivery")}
+          options={[
+            { label: "Refill markup and delivery margin", value: "both" },
+            { label: "Refill markup only", value: "refill" },
+            { label: "Delivery margin only", value: "delivery" },
+          ]}
+          disabled={!props.canDraftPolicy || createPolicyDraft.isPending || !createDraftReady} />
+        <TextInput label="Change reason / approval notes (required)" value={policyReason}
+          onChange={(event) => setPolicyReason(event.currentTarget.value)}
+          placeholder="e.g. Approve the launch commission rate for Nigeria"
+          disabled={createPolicyDraft.isPending || submitPolicy.isPending || reviewPolicy.isPending || activatePolicy.isPending || deactivatePolicy.isPending} />
+        {createDraftReady && props.canDraftPolicy ? (
+          <Button disabled={createPolicyDraft.isPending || policyReason.trim().length < 5} isLoading={createPolicyDraft.isPending} onClick={() => createPolicyDraft.mutate()}>
+            {programAlreadyConfigured ? "Create new policy draft" : "Create commission policy draft"}
+          </Button>
+        ) : null}
+        {submitReady ? <Button disabled={submitPolicy.isPending || policyReason.trim().length < 5} isLoading={submitPolicy.isPending} onClick={() => submitPolicy.mutate()}>Submit policy for approval</Button> : null}
+        {reviewReady ? (
+          <div className="fulfillment-v2__action-row">
+            <Button disabled={reviewPolicy.isPending || policyReason.trim().length < 5} isLoading={reviewPolicy.isPending} onClick={() => reviewPolicy.mutate("approved")}>Approve policy</Button>
+            <Button variant="outline" disabled={reviewPolicy.isPending || policyReason.trim().length < 5} onClick={() => reviewPolicy.mutate("rejected")}>Reject policy</Button>
+          </div>
+        ) : null}
+        {activateReady ? (
+          <Button disabled={activatePolicy.isPending || policyReason.trim().length < 5 || Boolean(activeVersionId && activeVersionId !== latestVersionId)} isLoading={activatePolicy.isPending} onClick={() => activatePolicy.mutate()}>Activate approved policy</Button>
+        ) : null}
+        {activeVersionId && activeVersionId !== latestVersionId && props.canActivatePolicy ? (
+          <Button variant="outline" disabled={deactivatePolicy.isPending || policyReason.trim().length < 5} isLoading={deactivatePolicy.isPending} onClick={() => deactivatePolicy.mutate()}>Deactivate current policy before replacing it</Button>
+        ) : null}
+
+        {notice ? <StatusBadge tone="success">{notice}</StatusBadge> : null}
+        {createPolicyDraft.error ? <ErrorState title="Could not create commission draft" error={createPolicyDraft.error} /> : null}
+        {submitPolicy.error ? <ErrorState title="Could not submit commission policy" error={submitPolicy.error} /> : null}
+        {reviewPolicy.error ? <ErrorState title="Could not review commission policy" error={reviewPolicy.error} /> : null}
+        {activatePolicy.error ? <ErrorState title="Could not activate commission policy" error={activatePolicy.error} /> : null}
+        {deactivatePolicy.error ? <ErrorState title="Could not deactivate commission policy" error={deactivatePolicy.error} /> : null}
+      </section>
+
+      <section className="sk-panel stack-md">
+        <div className="sk-panel__header"><div><span className="section-kicker">Affiliate governance</span><h2>Review affiliate applications</h2>
+          <p className="skima-muted">Referral codes become usable only after activation. Self-referrals are rejected, and commission is calculated only after the referred station activates and eligible platform revenue is posted.</p>
+        </div></div>
+        <TextInput label="Review reason (required)" value={affiliateReason} onChange={(event) => setAffiliateReason(event.currentTarget.value)}
+          placeholder="e.g. Identity and referral terms reviewed" disabled={!props.canManageAffiliate || reviewAffiliate.isPending} />
+        {reviewAffiliate.error ? <ErrorState title="Could not update affiliate status" error={reviewAffiliate.error} /> : null}
+        {affiliates.length ? affiliates.map((row) => {
+          const id = recordText(row, "id") ?? "";
+          const affiliateStatus = recordText(row, "status") ?? "pending";
+          return (
+            <div className="skima-list-row" key={id}>
+              <div className="stack-xs">
+                <strong>{recordText(row, "displayName") ?? "SKIMA affiliate"}</strong>
+                <span className="skima-muted">Code {recordText(row, "referralCode") ?? "—"} · {Number(row.referralCount ?? 0)} station referrals · {Number(row.activeReferrals ?? 0)} activated · earned {money(Number(row.earned ?? 0), "NGN")}</span>
+                {recordText(row, "reviewReason") ? <small className="skima-muted">Last review: {recordText(row, "reviewReason")}</small> : null}
+              </div>
+              <StatusBadge tone={affiliateStatus === "active" ? "success" : affiliateStatus === "pending" ? "warning" : "neutral"}>{normalizeStatusLabel(affiliateStatus)}</StatusBadge>
+              {props.canManageAffiliate && affiliateStatus !== "rejected" ? (
+                <div className="fulfillment-v2__action-row">
+                  {affiliateStatus !== "active" ? <Button size="sm" disabled={!id || affiliateReason.trim().length < 5 || reviewAffiliate.isPending} onClick={() => reviewAffiliate.mutate({ id, decision: "active" })}>{affiliateStatus === "suspended" ? "Reactivate" : "Approve"}</Button> : null}
+                  {affiliateStatus === "pending" ? <Button size="sm" variant="outline" disabled={!id || affiliateReason.trim().length < 5 || reviewAffiliate.isPending} onClick={() => reviewAffiliate.mutate({ id, decision: "rejected" })}>Reject</Button> : null}
+                  {affiliateStatus === "active" ? <Button size="sm" variant="outline" disabled={!id || affiliateReason.trim().length < 5 || reviewAffiliate.isPending} onClick={() => reviewAffiliate.mutate({ id, decision: "suspended" })}>Suspend</Button> : null}
+                </div>
+              ) : null}
+            </div>
+          );
+        }) : <p className="skima-muted">No affiliate applications have been received.</p>}
+      </section>
+
+      <section className="sk-panel stack-md">
+        <div className="sk-panel__header"><div><span className="section-kicker">Referral pipeline</span><h2>Referred stations</h2></div></div>
+        {referrals.length ? referrals.map((row, index) => (
+          <div className="skima-list-row" key={recordText(row, "id") ?? ("referral-" + index)}>
+            <div className="stack-xs">
+              <strong>{recordText(row, "stationName") ?? "Station application"}</strong>
+              <span className="skima-muted">{recordText(row, "affiliateName") ?? "Affiliate"} · {recordText(row, "referralCode") ?? "—"}</span>
+            </div>
+            <StatusBadge tone={recordText(row, "status") === "activated" ? "success" : "neutral"}>{normalizeStatusLabel(recordText(row, "status") ?? "submitted")}</StatusBadge>
+            <span>{money(Number(row.earnings ?? 0), "NGN")} earned</span>
+          </div>
+        )) : <p className="skima-muted">No referred station applications yet.</p>}
+      </section>
+
+      <section className="sk-panel stack-md">
+        <div className="sk-panel__header"><div><span className="section-kicker">Ledger-backed earnings</span><h2>Affiliate commissions</h2>
+          <p className="skima-muted">These entries are posted only against eligible SKIMA revenue credits and a locked policy version.</p>
+        </div></div>
+        {earnings.length ? earnings.map((row, index) => (
+          <div className="skima-list-row" key={recordText(row, "id") ?? recordText(row, "orderId") ?? ("earning-" + index)}>
+            <div className="stack-xs">
+              <strong>{recordText(row, "affiliateName") ?? "Affiliate"} · {recordText(row, "stationName") ?? "Station"}</strong>
+              <span className="skima-muted">{recordText(row, "publicReference") ?? recordText(row, "orderId") ?? "LPG order"} · {recordText(row, "policyVersion") ? "Policy v" + recordText(row, "policyVersion") : "policy version recorded"}</span>
+            </div>
+            <span>{money(Number(row.amount ?? 0), recordText(row, "currencyCode") ?? "NGN")}</span>
+            <StatusBadge tone={recordText(row, "status") === "posted" ? "success" : "neutral"}>{normalizeStatusLabel(recordText(row, "status") ?? "pending")}</StatusBadge>
+          </div>
+        )) : <p className="skima-muted">No affiliate commissions have posted yet.</p>}
+      </section>
+
+      <section className="sk-panel stack-md">
+        <div className="sk-panel__header"><div><span className="section-kicker">Exception queue</span><h2>Commission posting failures</h2>
+          <p className="skima-muted">A failed posting is held for review rather than silently being marked paid.</p>
+        </div></div>
+        <TextInput label="Reason for retry (required)" value={retryReason} onChange={(event) => setRetryReason(event.currentTarget.value)}
+          placeholder="e.g. Rechecked revenue wallet and policy validity" disabled={!props.canRetryCommission || retryCommission.isPending} />
+        {retryCommission.error ? <ErrorState title="Could not retry affiliate commission" error={retryCommission.error} /> : null}
+        {failures.length ? failures.map((row, index) => {
+          const orderId = recordText(row, "orderId") ?? "";
+          return (
+            <div className="skima-list-row" key={recordText(row, "id") ?? (orderId || "failure-" + index)}>
+              <div className="stack-xs">
+                <strong>{recordText(row, "publicReference") ?? orderId}</strong>
+                <span className="skima-muted">{recordText(row, "lastError") ?? "Commission posting failed"} · {Number(row.attemptCount ?? 1)} attempts</span>
+              </div>
+              <Button size="sm" variant="outline" disabled={!props.canRetryCommission || !orderId || retryReason.trim().length < 5 || retryCommission.isPending}
+                isLoading={retryCommission.isPending && retryCommission.variables === orderId}
+                onClick={() => retryCommission.mutate(orderId)}>Retry posting</Button>
+            </div>
+          );
+        }) : <p className="skima-muted">No unresolved affiliate commission failures.</p>}
+      </section>
+    </div>
+  );
+}
+
+function recordObject(value: unknown, key: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const child = (value as Record<string, unknown>)[key];
+  return child && typeof child === "object" && !Array.isArray(child) ? child as Record<string, unknown> : {};
+}
+
+function recordText(value: unknown, key: string): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const child = (value as Record<string, unknown>)[key];
+  return typeof child === "string" || typeof child === "number" ? String(child) : null;
 }
 
 function DriverPaySection(props: {
