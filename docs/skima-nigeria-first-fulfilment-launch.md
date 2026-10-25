@@ -57,7 +57,7 @@ Desired policy capabilities:
 - uniquely attribute an approved affiliate referral to a station organisation/branch;
 - prevent self-referrals, duplicate attribution, and retroactive referral-code changes;
 - define activation criteria for the referred station;
-- configure eligible SKIMA fees, commission percentage, start/end time, payout threshold, reversals and fraud review through authorized backend policy;
+- configure eligible SKIMA revenue streams, commission percentage, earning window, reversals and fraud review through the authorized backend policy;
 - calculate earnings only from eligible SKIMA fees actually collected, net of applicable reversals/adjustments;
 - preserve attribution and policy snapshots for audit;
 - route payout and reconciliation through the existing financial engine and ledger.
@@ -102,3 +102,24 @@ Rates and durations are product/business policy decisions and must not be invent
 - Affiliate commissions are based on configurable eligible SKIMA fees and actual collection, not total station sales, and are auditable and time-limited.
 - Service coverage and financial policy remain database-driven.
 - No production deployment or live service activation occurs without separate verification and authorization.
+
+
+## Branch implementation record — 25 October 2026
+
+The current feature branch now contains the first implementation slices below. These are code changes only; they have not been merged to `main`, and migrations or production services have not been activated.
+
+- **Coverage and serviceability:** a new admin-controlled Station Managed external-coverage policy defaults off. The customer app checks Station Managed candidates separately, including a fallback when standard eligible stations cannot serve. The exception is restricted to `SERVICE_NOT_LAUNCHED`; an explicit exclusion, paused service, poor location accuracy, or policy conflict remains blocked.
+- **Vehicle readiness:** Station Managed needs a branch driver and an approved, compliant, organisation-owned vehicle with current configured evidence and enough carrying capacity. Active vehicle assignment is reserved with the station delivery; quote eligibility and payment reservation fail closed if resources are absent. The station app and admin oversight workspace can assign/remove an existing registered vehicle without self-approving compliance.
+- **Quote integrity:** Station delivery pricing is taken from the station’s backend settings. The quote trigger waits until the commercial policy snapshot is present, strips client-supplied pricing-lock metadata, and then preserves the derived price snapshot on subsequent updates.
+- **Affiliate flow:** users can apply from Account settings and get an active referral code only after review. Station applications capture the code; backend submission validation prevents inactive codes, self-referrals and duplicate attribution. After the referred branch activates, commissions are calculated only from eligible revenue posted to the SKIMA platform revenue ledger and only during the configured earning window.
+- **Financial governance and admin controls:** the existing SKIMA Fulfillment admin workspace includes a Station Affiliates section for immutable policy draft/submit/independent approval/activation, affiliate approval/suspension, referrals, earned commissions and posting exceptions. Commission percent and earning duration must be entered by an authorized admin; no default rate is activated by this migration.
+- **Reversals:** full LPG order refunds request a separate double-entry commission reversal. If the affiliate wallet cannot fund it, the original earning is not falsely marked reversed; an exception is retained for authorized recovery/retry.
+
+### Outstanding release gates
+
+1. Run the Deno contract suite, TypeScript checks for the admin and LPG mobile apps, the repository migration-history verifier, and a disposable-database migration application/test. The contract suite has been extended, but these commands have **not** yet been run in a repository execution environment.
+2. Inspect the generated database objects and trigger order after applying the migrations to a disposable database; this branch contains cross-migration trigger/function changes and should not be applied directly to production without that verification.
+3. Review the draft pull request checks. Prior Vercel checks for this repository reported a build-rate-limit failure; a green application build has not been confirmed.
+4. After approval and verification, deploy migrations under the normal release process. External Station Managed coverage remains disabled by default; affiliate accrual remains off until an authorized financial-policy version is created, independently approved and activated.
+
+The branch does not claim national LPG delivery is available everywhere. It permits an order only when a backend-verified fulfilment path, station coverage, stock/pricing, required driver and compliant vehicle are available.
