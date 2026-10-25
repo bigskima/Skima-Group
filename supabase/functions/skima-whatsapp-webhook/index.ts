@@ -92,7 +92,29 @@ Deno.serve(async (request: Request): Promise<Response> => {
       return json({ ok: false, error: "conversation_persistence_failed" }, 500);
     }
 
-    const reply = buildCustomerReply(item, contactResult.data.link_status);
+    let currentLinkStatus = contactResult.data.link_status;
+    let linkCodeAccepted = false;
+    let linkCodeRejected = false;
+    const candidateCode = (item.text ?? "").trim();
+    if (currentLinkStatus !== "linked" && /^[A-Fa-f0-9]{16}$/.test(candidateCode)) {
+      const linkResult = await db.rpc("consume_skima_whatsapp_link_code", {
+        target_code: candidateCode,
+        target_whatsapp_wa_id: sender,
+      });
+      if (linkResult.error) {
+        await markEventFailed(db, eventResult.data.id, "account_link_verification_failed");
+        return json({ ok: false, error: "account_link_verification_failed" }, 500);
+      }
+      linkCodeAccepted = linkResult.data === true;
+      linkCodeRejected = !linkCodeAccepted;
+      if (linkCodeAccepted) currentLinkStatus = "linked";
+    }
+
+    const reply = linkCodeAccepted
+      ? buildCustomerReply({ type: "text", text: "menu" }, "linked")
+      : linkCodeRejected
+        ? "That account-linking code is invalid, expired, or already used. In the SKIMA app, generate a new code and send it here. Codes expire after 10 minutes."
+        : buildCustomerReply(item, currentLinkStatus);
     const sendResult = await sendWhatsAppText({
       accessToken, graphVersion, phoneNumberId, recipient: sender, text: reply,
     });
@@ -171,7 +193,7 @@ function buildCustomerReply(
       "",
       "Reply MENU to see this menu again, or HELP for account-linking support.",
       "",
-      "Account linking and live wallet/order actions are being prepared. I won't ask you to send a password, PIN or payment details in chat.",
+      "To link your account: open the SKIMA app, go to Account > WhatsApp linking, generate a one-time code, then send that code here. It expires after 10 minutes.",
     ].join("\n");
   }
 
