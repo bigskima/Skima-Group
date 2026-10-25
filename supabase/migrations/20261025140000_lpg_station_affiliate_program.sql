@@ -313,11 +313,8 @@ begin
     or (config->>'earning_period_months')::integer>36 then
     raise exception using errcode='22023',message='earning_period_months must be an integer from 1 through 36';
   end if;
-  if (config->>'payout_threshold')::numeric<0 then
-    raise exception using errcode='22023',message='payout_threshold cannot be negative';
-  end if;
-  select array_agg(value) into allowed_streams
-  from jsonb_array_elements_text(config->'eligible_revenue_streams') values(value);
+    select array_agg(value) into allowed_streams
+  from jsonb_array_elements_text(config->'eligible_revenue_streams') as stream_item(value);
   if coalesce(cardinality(allowed_streams),0)=0
     or exists(select 1 from unnest(allowed_streams) stream where stream not in ('refill','delivery')) then
     raise exception using errcode='22023',message='eligible_revenue_streams must contain refill and/or delivery only';
@@ -550,7 +547,7 @@ begin
   select definition.key into application_type_key
   from public.application_type_definitions definition
   where definition.id=new.application_type_id;
-  if application_type_key<>'application.lpg.station.phase-one' then return new; end if;
+  if application_type_key is distinct from 'application.lpg.station.phase-one' then return new; end if;
 
   select version.payload into active_payload from public.application_versions version
   where version.application_id=new.id and version.version=new.active_version;
@@ -584,7 +581,7 @@ begin
   select definition.key into application_type_key
   from public.application_type_definitions definition
   where definition.id=new.application_type_id;
-  if application_type_key<>'application.lpg.station.phase-one' then return new; end if;
+  if application_type_key is distinct from 'application.lpg.station.phase-one' then return new; end if;
   select version.payload into active_payload from public.application_versions version
   where version.application_id=new.id and version.version=new.active_version;
   code:=upper(btrim(coalesce(active_payload->'station'->>'affiliateReferralCode','')));
