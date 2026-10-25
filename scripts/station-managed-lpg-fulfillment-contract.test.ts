@@ -210,7 +210,7 @@ Deno.test("Customer AI launcher opens as an overlay modal, not in the home layou
 });
 
 Deno.test("Station driver invites persist before delivery and revoke failed sends", () => {
-  const allowedHeaders = sharedHttp.match(/"Access-Control-Allow-Headers":\\s*"([^"]+)"/)?.[1]
+  const allowedHeaders = sharedHttp.match(/"Access-Control-Allow-Headers":\s*"([^"]+)"/)?.[1]
     ?.split(",").map((header) => header.trim().toLowerCase()) ?? [];
   if (!allowedHeaders.includes("x-skima-client")) {
     throw new Error("Gateway CORS must allow x-skima-client because the app Supabase client sends it on browser requests.");
