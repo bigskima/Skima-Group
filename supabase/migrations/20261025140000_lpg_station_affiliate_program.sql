@@ -923,9 +923,14 @@ begin
         'submittedAt',referral.submitted_at,'activatedAt',referral.activated_at,'affiliateId',affiliate.id,
         'affiliateName',profile.display_name,'earnings',coalesce((select sum(earning.amount) from public.lpg_station_affiliate_earnings earning where earning.referral_id=referral.id and earning.status='posted'),0))
       order by referral.submitted_at desc)
-      from public.lpg_station_referrals referral join public.lpg_station_affiliates affiliate on affiliate.id=referral.affiliate_id
-      join public.profiles profile on profile.id=affiliate.affiliate_user_id left join public.lpg_station_branches station on station.id=referral.station_branch_id
-      limit 100
+      from (
+        select * from public.lpg_station_referrals
+        order by submitted_at desc
+        limit 100
+      ) referral
+      join public.lpg_station_affiliates affiliate on affiliate.id=referral.affiliate_id
+      join public.profiles profile on profile.id=affiliate.affiliate_user_id
+      left join public.lpg_station_branches station on station.id=referral.station_branch_id
     ),'[]'::jsonb),
     'earnings',coalesce((
       select jsonb_agg(jsonb_build_object('id',earning.id,'affiliateId',earning.affiliate_id,'affiliateName',profile.display_name,
@@ -934,22 +939,28 @@ begin
         'revenueBaseAmount',earning.revenue_base_amount,'commissionPercent',earning.commission_percent,
         'amount',earning.amount,'status',earning.status,'createdAt',earning.created_at,'policyVersion',earning.metadata->>'policyVersion')
       order by earning.created_at desc)
-      from public.lpg_station_affiliate_earnings earning
+      from (
+        select * from public.lpg_station_affiliate_earnings
+        order by created_at desc
+        limit 100
+      ) earning
       join public.lpg_station_affiliates affiliate on affiliate.id=earning.affiliate_id
       join public.profiles profile on profile.id=affiliate.affiliate_user_id
       join public.lpg_station_branches station on station.id=earning.station_branch_id
       join public.lpg_refill_orders order_record on order_record.id=earning.lpg_order_id
-      limit 100
     ),'[]'::jsonb),
     'commissionFailures',coalesce((
       select jsonb_agg(jsonb_build_object('id',failure.id,'orderId',failure.lpg_order_id,'publicReference',order_record.public_reference,
         'classificationTransactionId',failure.classification_transaction_id,'attemptCount',failure.attempt_count,
         'lastError',failure.last_error,'status',failure.status,'lastAttemptAt',failure.last_attempt_at)
       order by failure.last_attempt_at desc)
-      from public.lpg_station_affiliate_commission_failures failure
+      from (
+        select * from public.lpg_station_affiliate_commission_failures
+        where status='pending'
+        order by last_attempt_at desc
+        limit 100
+      ) failure
       join public.lpg_refill_orders order_record on order_record.id=failure.lpg_order_id
-      where failure.status='pending'
-      limit 100
     ),'[]'::jsonb)
   );
 end
