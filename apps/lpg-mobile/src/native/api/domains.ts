@@ -122,11 +122,12 @@ export const domainQueries = {
       schema: RecordArraySchema,
       refetchInterval: 15000,
     }),
-  stationJobs: () =>
+  stationJobs: (enabled = true) =>
     useGatewayQuery({
       key: ["jobs", "station"],
       path: "/lpg/jobs?queue=station&limit=50",
       schema: RecordArraySchema,
+      enabled,
       refetchInterval: 15000,
     }),
   vehicles: () =>
