@@ -242,7 +242,7 @@ begin
       and order_record.fulfillment_mode='station_managed'
       and order_record.status in ('payment_reserved','matching_station','matching_driver','driver_offered','driver_accepted','pickup_verified','station_en_route');
   else
-    perform public.auto_dispatch_pending_lpg_station_managed_orders_for_branch(target_station_branch_id);
+    perform public.auto_dispatch_pending_station_orders_for_branch(target_station_branch_id);
   end if;
   return public.read_lpg_station_managed_available_vehicles(target_station_branch_id);
 end
@@ -574,11 +574,11 @@ set search_path=public,pg_temp
 as $dispatch_readiness$
 begin
   if tg_table_name='lpg_station_fulfillment_settings' then
-    if new.station_managed_enabled then perform public.auto_dispatch_pending_lpg_station_managed_orders_for_branch(new.station_branch_id); end if;
+    if new.station_managed_enabled then perform public.auto_dispatch_pending_station_orders_for_branch(new.station_branch_id); end if;
   elsif tg_table_name='lpg_station_managed_drivers' then
-    if new.status='active' then perform public.auto_dispatch_pending_lpg_station_managed_orders_for_branch(new.station_branch_id); end if;
+    if new.status='active' then perform public.auto_dispatch_pending_station_orders_for_branch(new.station_branch_id); end if;
   elsif tg_table_name='lpg_station_managed_vehicles' then
-    if new.status='active' then perform public.auto_dispatch_pending_lpg_station_managed_orders_for_branch(new.station_branch_id); end if;
+    if new.status='active' then perform public.auto_dispatch_pending_station_orders_for_branch(new.station_branch_id); end if;
   end if;
   return new;
 end;
