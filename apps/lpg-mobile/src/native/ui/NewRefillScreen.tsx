@@ -642,13 +642,13 @@ export function NewRefillScreen() {
                 <View style={styles.availabilityLead}>
                   <MapPin color={palette.brand} size={22} />
                   <View style={styles.requirementCopy}>
-                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>Sorry, SKIMA service is not yet available in your area</Text>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>SKIMA's general delivery coverage is not active here yet</Text>
                     <Text style={[styles.requirementBody, { color: palette.muted }]}>
                       {pickupUnavailable && deliveryUnavailable
-                        ? "We haven't opened LPG pickup or return service for the selected locations yet."
+                        ? "The selected pickup and return locations are outside SKIMA Managed and Independent delivery coverage."
                         : pickupUnavailable
-                          ? "We haven't opened LPG pickup service for the selected pickup location yet."
-                          : "We haven't opened LPG return service for the selected return location yet."} Choose another location, or help bring SKIMA LPG to this area as an early partner.
+                          ? "The selected pickup location is outside SKIMA Managed and Independent delivery coverage."
+                          : "The selected return location is outside SKIMA Managed and Independent delivery coverage."} You can still continue: SKIMA will separately check whether an approved Station Managed station can serve both locations within its own delivery radius. No refill is confirmed unless a valid station option and quote are available.
                     </Text>
                   </View>
                 </View>
