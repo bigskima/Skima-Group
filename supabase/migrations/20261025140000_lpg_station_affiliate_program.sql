@@ -658,6 +658,7 @@ declare
   commission_wallet_id uuid;
   earning_id uuid;
   posting_id uuid;
+  existing_earning public.lpg_station_affiliate_earnings%rowtype;
   earning_start timestamptz;
   earning_end timestamptz;
 begin
@@ -757,14 +758,15 @@ begin
   ) on conflict(lpg_order_id) do nothing returning id into earning_id;
 
   if earning_id is null then
-    select * into strict referral from public.lpg_station_referrals where id=referral.id;
-    select earning.id,earning.status,earning.financial_transaction_id into earning_id,order_record.status,posting_id
-    from public.lpg_station_affiliate_earnings earning where earning.lpg_order_id=target_lpg_order_id;
-    if posting_id is not null then return earning_id; end if;
+    select * into strict existing_earning
+    from public.lpg_station_affiliate_earnings earning
+    where earning.lpg_order_id=target_lpg_order_id;
+    if existing_earning.financial_transaction_id is not null then return existing_earning.id; end if;
+    earning_id:=existing_earning.id;
   end if;
 
   perform pg_advisory_xact_lock(hashtextextended(revenue_wallet_id::text,0));
-  if (select coalesce(balance.balance,0) from public.wallet_balances balance where balance.wallet_id=revenue_wallet_id)<commission_amount then
+  if coalesce((select balance.balance from public.wallet_balances balance where balance.wallet_id=revenue_wallet_id),0)<commission_amount then
     raise exception using errcode='55000',message='SKIMA revenue wallet does not have sufficient available balance to post affiliate commission';
   end if;
 
@@ -876,14 +878,27 @@ begin
     raise exception using errcode='42501',message='Station Affiliate administration read permission is required';
   end if;
 
-  select to_jsonb(version)||jsonb_build_object('policyKey',definition.key,'displayName',definition.display_name,'policyFamily',definition.policy_family)
+  select jsonb_build_object(
+    'policyKey',definition.key,
+    'displayName',definition.display_name,
+    'policyFamily',definition.policy_family,
+    'definitionId',definition.id,
+    'latestVersion',(
+      select to_jsonb(latest.*) from public.financial_policy_versions latest
+      where latest.policy_definition_id=definition.id
+      order by latest.version desc limit 1
+    ),
+    'activeVersion',(
+      select to_jsonb(active.*) from public.financial_policy_versions active
+      where active.policy_definition_id=definition.id
+        and active.lifecycle_status in ('active','scheduled')
+        and active.effective_from<=timezone('utc',now())
+        and (active.effective_until is null or active.effective_until>timezone('utc',now()))
+      order by active.version desc limit 1
+    )
+  )
   into policy_result
   from public.financial_policy_definitions definition
-  left join lateral (
-    select v.* from public.financial_policy_versions v
-    where v.policy_definition_id=definition.id
-    order by v.version desc limit 1
-  ) version on true
   where definition.key='commission.lpg.station_affiliate';
 
   return jsonb_build_object(
