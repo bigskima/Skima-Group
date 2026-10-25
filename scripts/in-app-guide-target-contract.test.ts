@@ -63,6 +63,8 @@ Deno.test("tour waits for the requested route and resolved anchor before enablin
   requireText(provider, "const requiredRoute = normalizeGuideRoute(step.route);", "requested route normalization");
   requireText(provider, "if (activeGuideRoute !== requiredRoute)", "route-confirmed measurement");
   requireText(provider, "target.measureInWindow", "anchor measurement");
+  requireText(provider, "const visibleLeft = Math.max(x, 0);", "viewport-clipped anchor measurement");
+  requireText(provider, "if (visibleRight > visibleLeft && visibleBottom > visibleTop)", "off-screen target guard");
   requireText(provider, "disabled={!rect && !targetUnavailable}", "no progression before an anchor or explicit fallback");
   requireText(provider, "targetsRef.current.get(key) === previousNode", "stale ref protection");
   requireText(provider, "This control could not be found on this screen, so we will not point to another place.", "honest no-anchor fallback");
