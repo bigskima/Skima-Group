@@ -354,3 +354,26 @@ Deno.test("Station Affiliate earnings are withdrawable through the governed fina
   requireText(stationAffiliateWithdrawalGuard, "Affiliate withdrawals are temporarily held while a refund-related commission reversal is being recovered", "withdrawal requests fail closed during unresolved clawback");
   requireText(stationAffiliateWithdrawalGuard, "new.status in ('approved','processing','succeeded')", "existing requested withdrawals cannot be newly approved during recovery");
 });
+
+
+Deno.test("Station Managed options require a vehicle eligible for the selected refill size", () => {
+  requireText(customer, "const selectedStationManagedCandidate", "per-station vehicle candidate for the requested quantity");
+  requireText(customer, "Boolean(selectedStationManagedCandidate) ?", "Station Managed UI is not offered solely because a driver exists");
+  requireText(customer, '(fulfillmentMode === "station_managed" && !selectedStation?.isStationManagedOnly && !selectedStationManagedCandidate)', "quote review is blocked if the selected vehicle cannot carry this refill");
+});
+
+Deno.test("Affiliate referrals begin only after station operational readiness", () => {
+  requireText(stationAffiliateProgram, "new.compliance_status<>'approved'", "compliance approval is required before activation");
+  requireText(stationAffiliateProgram, "new.availability_status<>'available'", "operational availability is required before activation");
+  requireText(stationAffiliateProgram, "after insert or update of approval_status,compliance_status,availability_status,metadata", "later operational activation re-evaluates referral status");
+  requireText(stationAffiliateProgram, "resolve_lpg_station_affiliate_referral_application_outcome", "rejected/withdrawn applications do not stay stuck in submitted referral state");
+});
+
+Deno.test("Affiliate wallet withdrawals use existing payout checks and wait through clawback recovery", () => {
+  requireText(affiliateWithdrawal, "walletIdOverride", "payout targets the affiliate's dedicated wallet");
+  requireText(affiliateWithdrawal, "/withdrawals/preview", "existing governed withdrawal fee preview");
+  requireText(affiliateWithdrawal, "/withdrawals", "existing withdrawal request API");
+  requireText(affiliateWithdrawalRoute, "FinanceWithdrawalExperience", "affiliate withdrawal route reuses the verified payout UI");
+  requireText(stationAffiliateWithdrawalGuard, "before insert or update of status on public.withdrawal_requests", "pending commission clawbacks gate withdrawal requests and approval");
+  requireText(stationAffiliateWithdrawalGuard, "Affiliate withdrawal approval is held until the pending commission reversal is resolved", "withdrawal approval fails closed during unresolved reversal");
+});
