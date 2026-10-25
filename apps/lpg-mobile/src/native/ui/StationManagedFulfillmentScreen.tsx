@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { ClipboardList, Settings2, Truck, UsersRound, WalletCards } from "lucide-react-native";
 import { router } from "expo-router";
-import { useStationRuntime } from "../api/domains";
+import { domainQueries, useStationRuntime } from "../api/domains";
 import { firstString, nestedRecord } from "../api/records";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -56,6 +56,7 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
   const session = useSession();
   const { palette } = useAppTheme();
   const runtime = useStationRuntime();
+  const stationJobsQuery = domainQueries.stationJobs(section === "orders");
   const branch = nestedRecord(runtime.data, "branch");
   const branchId = firstString(branch, ["id", "stationBranchId", "station_branch_id"]);
   const client = useQueryClient();
@@ -84,7 +85,7 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
     settings: "1. Customer delivery option",
     vehicles: "4. Station delivery vehicles",
     drivers: "4. Add a station driver",
-    orders: "6. Automatic order dispatch",
+    orders: "Orders in progress",
     payments: "7. Record driver agreement",
   } satisfies Record<ManagedWorkspaceSection, string>)[section]);
 
@@ -243,6 +244,10 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
 
   const data = workspace.data;
   const drivers = (data?.drivers ?? []).filter((driver) => driver.status === "active");
+  const stationManagedAssignedJobs = (stationJobsQuery.data ?? []).filter((job) => {
+    const metadata = nestedRecord(job, "metadata");
+    return Boolean(firstString(metadata, ["stationManagedDriverId", "station_managed_driver_id"]));
+  });
   const selectedDriver = drivers.find((driver) => driver.id === selectedDriverId);
   const loading = runtime.isPending || workspace.isPending;
   const failed = runtime.error || workspace.error;
@@ -423,15 +428,64 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
 
           {section === "orders" ? (
             <>
-              <Section title="6. Automatic order dispatch" palette={palette} expanded={expandedSection === "6. Automatic order dispatch"} onPress={() => setExpandedSection(expandedSection === "6. Automatic order dispatch" ? "" : "6. Automatic order dispatch")}>
-            <Text style={{ color: palette.muted, fontSize: 13 }}>When Station Managed is enabled, eligible new orders are assigned automatically to the least-loaded active driver at this station. Orders waiting here are not sent to independent drivers or SKIMA Fleet; invite a station driver and let them accept the invitation to make this queue dispatch-ready. Existing independent-driver and SKIMA Fleet orders are unchanged.</Text>
-            {(data?.assignableOrders ?? []).length ? (data?.assignableOrders ?? []).map((order) => (
-              <View key={order.id} style={[styles.row, { borderColor: palette.border }]}>
-                <Text style={{ color: palette.ink, fontWeight: "700" }}>{order.publicReference ?? order.id.slice(0, 8)}</Text>
-                <Text style={{ color: palette.muted, fontSize: 12 }}>{order.requestedKg ?? "—"} kg · {order.status}</Text>
-              </View>
-            )) : <Text style={{ color: palette.muted }}>No waiting Station Managed orders. New eligible orders will be routed automatically.</Text>}
-          </Section>
+              <Section title="Orders in progress" palette={palette} expanded={expandedSection === "Orders in progress"} onPress={() => setExpandedSection(expandedSection === "Orders in progress" ? "" : "Orders in progress")}>
+                <Text style={{ color: palette.muted, fontSize: 13 }}>
+                  These are active Station Managed orders from SKIMA's existing station queue. Updates are refreshed by the same backend job feed used on the station dashboard.
+                </Text>
+                {stationJobsQuery.isPending ? <Text style={{ color: palette.muted }}>Loading assigned Station Managed orders…</Text> : null}
+                {stationJobsQuery.error ? (
+                  <EmptyState
+                    title="Assigned orders could not be loaded"
+                    description="The station job queue is unavailable right now. Retry to check the latest order status."
+                    action={<AppButton label="Retry orders" size="sm" variant="secondary" onPress={() => void stationJobsQuery.refetch()} />}
+                  />
+                ) : null}
+                {stationManagedAssignedJobs.length ? stationManagedAssignedJobs.map((job) => {
+                  const metadata = nestedRecord(job, "metadata");
+                  const driverId = firstString(metadata, ["stationManagedDriverId", "station_managed_driver_id"]);
+                  const assignedDriver = drivers.find((driver) => driver.id === driverId);
+                  const orderId = firstString(job, ["lpgOrderId", "lpg_order_id"]);
+                  const reference = firstString(job, ["publicReference", "public_reference"]) ?? (orderId ? orderId.slice(0, 8) : "Station Managed order");
+                  const orderStatus = firstString(job, ["status"]) ?? "unknown";
+                  const requestedKg = firstString(job, ["requestedKg", "requested_kg"]) ?? "—";
+                  return (
+                    <View key={orderId ?? reference} style={[styles.section, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
+                      <View style={styles.orderHeader}>
+                        <View style={{ flex: 1, gap: 4 }}>
+                          <Text style={{ color: palette.ink, fontWeight: "900" }}>{reference}</Text>
+                          <Text style={{ color: palette.muted, fontSize: 12 }}>{requestedKg} kg · Updated {firstString(job, ["updatedAt", "updated_at"]) ?? "recently"}</Text>
+                        </View>
+                        <Text style={{ color: palette.brand, fontSize: 12, fontWeight: "800" }}>{orderStatus.replaceAll("_", " ")}</Text>
+                      </View>
+                      <Text style={{ color: palette.muted, fontSize: 13 }}>
+                        {assignedDriver ? `Assigned to ${assignedDriver.displayName}` : "Assigned to a station driver"}
+                      </Text>
+                      {orderId ? (
+                        <AppButton
+                          label="Track order"
+                          size="sm"
+                          variant="secondary"
+                          onPress={() => router.push(`/(station)/job/${encodeURIComponent(orderId)}` as never)}
+                        />
+                      ) : null}
+                    </View>
+                  );
+                }) : !stationJobsQuery.isPending && !stationJobsQuery.error ? (
+                  <Text style={{ color: palette.muted, fontSize: 13 }}>No assigned Station Managed deliveries are currently in progress.</Text>
+                ) : null}
+              </Section>
+
+              <Section title="Waiting for resources" palette={palette} expanded={expandedSection === "Waiting for resources"} onPress={() => setExpandedSection(expandedSection === "Waiting for resources" ? "" : "Waiting for resources")}>
+                <Text style={{ color: palette.muted, fontSize: 13 }}>
+                  SKIMA keeps eligible Station Managed orders here when a station driver or approved vehicle is not available. The backend retries assignment when the branch becomes dispatch-ready; this is not a manual assignment queue.
+                </Text>
+                {(data?.assignableOrders ?? []).length ? (data?.assignableOrders ?? []).map((order) => (
+                  <View key={order.id} style={[styles.row, { borderColor: palette.border }]}>
+                    <Text style={{ color: palette.ink, fontWeight: "700" }}>{order.publicReference ?? order.id.slice(0, 8)}</Text>
+                    <Text style={{ color: palette.muted, fontSize: 12 }}>{order.requestedKg ?? "—"} kg · {order.status}</Text>
+                  </View>
+                )) : <Text style={{ color: palette.muted }}>No orders are waiting for a driver or vehicle.</Text>}
+              </Section>
             </>
           ) : null}
 
@@ -634,6 +688,7 @@ const styles = StyleSheet.create({
   overviewTileMetric: { fontSize: 11, fontWeight: "800", textAlign: "right" },
   overviewFootnote: { fontSize: 12, lineHeight: 18, paddingHorizontal: 3, marginTop: 2 },
   driverRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: spacing.sm },
+  orderHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
 
   section: { borderWidth: 1, borderRadius: radii.lg, padding: spacing.sm + 2, gap: spacing.sm, marginBottom: spacing.sm },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm, minHeight: 30 },
