@@ -257,8 +257,7 @@ insert into public.financial_policy_definitions(
     'commission_percent',jsonb_build_object('type','number','minimum',0,'maximum',100),
     'earning_period_months',jsonb_build_object('type','integer','minimum',1,'maximum',36),
     'program_enabled',jsonb_build_object('type','boolean'),
-    'eligible_revenue_streams',jsonb_build_object('type','array','items',jsonb_build_object('enum',jsonb_build_array('refill','delivery'))),
-    'payout_threshold',jsonb_build_object('type','number','minimum',0)
+    'eligible_revenue_streams',jsonb_build_object('type','array','items',jsonb_build_object('enum',jsonb_build_array('refill','delivery')))
   ),
   true,false,'active',
   jsonb_build_object('module','lpg','programme','station_affiliate','source','skima_nigeria_first_launch')
@@ -300,8 +299,7 @@ begin
   if jsonb_typeof(config->'program_enabled')<>'boolean'
     or jsonb_typeof(config->'commission_percent')<>'number'
     or jsonb_typeof(config->'earning_period_months')<>'number'
-    or jsonb_typeof(config->'eligible_revenue_streams')<>'array'
-    or jsonb_typeof(config->'payout_threshold')<>'number' then
+    or jsonb_typeof(config->'eligible_revenue_streams')<>'array' then
     raise exception using errcode='22023',message='Station Affiliate policy requires program_enabled, commission_percent, earning_period_months, eligible_revenue_streams and payout_threshold';
   end if;
   if (config->>'commission_percent')::numeric<0 or (config->>'commission_percent')::numeric>100
