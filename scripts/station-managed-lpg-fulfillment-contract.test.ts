@@ -388,7 +388,7 @@ Deno.test("Station Managed managers track canonical active and completed deliver
   requireText(stationOperationsReadModel, "'assignmentStatus',delivery.assignment_status", "assignment lifecycle remains the canonical lifecycle");
   requireText(stationOperationsReadModel, "'vehicleRegistrationNumber',delivery.vehicle_registration_number", "manager can see the already-reserved vehicle");
   requireText(stationOperationsReadModel, "'deliveryAddress',delivery.delivery_address", "manager can follow the assigned delivery destination");
-  if (/create\\s+table/i.test(stationOperationsReadModel)) {
+  if (/create\s+table/i.test(stationOperationsReadModel)) {
     throw new Error("The Station Managed manager view must not create a parallel tracking table.");
   }
   requireText(station, "Live delivery operations", "Station Managed has a dedicated operations view");
