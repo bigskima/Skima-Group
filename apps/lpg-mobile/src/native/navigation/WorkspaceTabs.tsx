@@ -13,7 +13,7 @@ import { StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows } from "../theme/tokens";
-import { GuideTarget } from "../onboarding/InAppGuideProvider";
+import { GuideTarget, type GuideWorkspace } from "../onboarding/InAppGuideProvider";
 
 type Tab = {
   name: string;
@@ -21,7 +21,7 @@ type Tab = {
   icon: ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
 };
 
-export function WorkspaceTabs({ tabs, hidden = [] }: { tabs: readonly Tab[]; hidden?: readonly string[] }) {
+export function WorkspaceTabs({ tabs, hidden = [], guideScope }: { tabs: readonly Tab[]; hidden?: readonly string[]; guideScope: GuideWorkspace }) {
   const { scheme, palette } = useAppTheme();
   const desktop = useWindowDimensions().width >= 900;
   const insets = useSafeAreaInsets();
@@ -81,7 +81,7 @@ export function WorkspaceTabs({ tabs, hidden = [] }: { tabs: readonly Tab[]; hid
             title,
             tabBarIcon: ({ color, size, focused }) => (
               <GuideTarget
-                targetKey={`nav.${name}`}
+                targetKey={`nav.${guideScope}.${name}`}
                 style={[
                   styles.icon,
                   desktop && focused && { backgroundColor: palette.brandSofter },
