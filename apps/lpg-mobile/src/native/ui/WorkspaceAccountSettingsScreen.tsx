@@ -1,14 +1,17 @@
 import { router } from "expo-router";
+import * as Clipboard from "expo-clipboard";
+import { useState } from "react";
 import {
   ChevronRight,
   CircleHelp,
   FileText,
   LogOut,
+  MessageCircle,
   Moon,
   ShieldCheck,
   Sun,
 } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSession } from "../session/SessionProvider";
 import { GuideTarget, useInAppGuide } from "../onboarding/InAppGuideProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -22,6 +25,35 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
   const session = useSession();
   const guide = useInAppGuide();
   const theme = useAppTheme();
+  const [linkCodeLoading, setLinkCodeLoading] = useState(false);
+
+  const generateWhatsAppLinkCode = async () => {
+    if (linkCodeLoading) return;
+    setLinkCodeLoading(true);
+    try {
+      const result = await session.supabase.rpc("issue_skima_whatsapp_link_code");
+      if (result.error) throw result.error;
+      if (typeof result.data !== "string" || !/^[A-F0-9]{16}$/.test(result.data)) {
+        throw new Error("SKIMA returned an invalid linking code. Please try again.");
+      }
+      const code = result.data;
+      Alert.alert(
+        "WhatsApp linking code",
+        "Send this code to the official SKIMA LPG WhatsApp number within 10 minutes:\n\n" + code + "\n\nDo not share this code with another person.",
+        [
+          { text: "Close", style: "cancel" },
+          { text: "Copy code", onPress: () => { void Clipboard.setStringAsync(code); } },
+        ],
+      );
+    } catch (error) {
+      Alert.alert(
+        "Could not generate code",
+        error instanceof Error ? error.message : "Please try again when your connection is available.",
+      );
+    } finally {
+      setLinkCodeLoading(false);
+    }
+  };
   const policyHref = workspace === "customer"
     ? "/policies/customer-terms"
     : workspace === "driver"
@@ -62,6 +94,22 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
           </GuideTarget>
         </View>
       </View>
+
+      {workspace === "customer" ? (
+        <View style={styles.group}>
+          <Text style={[styles.groupTitle, { color: theme.palette.ink }]}>Customer channels</Text>
+          <View style={[styles.list, shadows.soft, { backgroundColor: theme.palette.surface, borderColor: theme.palette.border }]}>
+            <SettingsRow
+              icon={MessageCircle}
+              label="WhatsApp ordering"
+              detail="Link this chat securely to your existing SKIMA account for LPG orders and wallet services."
+              value={linkCodeLoading ? "Generating one-time code…" : "Generate linking code"}
+              onPress={() => void generateWhatsAppLinkCode()}
+              last
+            />
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.group}>
         <Text style={[styles.groupTitle, { color: theme.palette.ink }]}>Privacy & terms</Text>
