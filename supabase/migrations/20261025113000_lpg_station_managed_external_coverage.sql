@@ -315,7 +315,7 @@ begin
   for candidate in
     select * from public.read_lpg_station_managed_eligible_stations(
       target_pickup_location_id, target_delivery_location_id, target_cylinder_id,
-      cylinder_record.max_capacity_kg, target_limit, target_at
+      0.001, target_limit, target_at
     )
   loop
     resolved_kg := floor((target_requested_amount / candidate.price_per_kg) * 1000) / 1000;
@@ -416,6 +416,90 @@ begin
   return new;
 end
 $$;
+
+create or replace function public.enforce_lpg_refill_quote_station_eligibility()
+returns trigger
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $
+declare
+  regular_station_eligible boolean := false;
+  external_station_eligible boolean := false;
+begin
+  if new.fulfillment_channel='skima_internal' then
+    if new.station_branch_id is not null then
+      raise exception using errcode='P0001',message='SKIMA internal fulfillment cannot be bound to a marketplace station';
+    end if;
+    if new.financial_policy_snapshot->'internalReference' is null then
+      raise exception using errcode='55000',message='SKIMA internal fulfillment requires a locked geographic reference price';
+    end if;
+    new.metadata:=coalesce(new.metadata,'{}'::jsonb) || jsonb_build_object(
+      'stationEligibilityMode','skima_internal',
+      'stationEligibilityVerifiedAt',timezone('utc',now())
+    );
+    return new;
+  end if;
+
+  if new.station_branch_id is null then
+    raise exception using errcode='P0001',message='an eligible LPG station is required for this refill';
+  end if;
+
+  if coalesce(new.fulfillment_mode,'independent_driver')='station_managed' then
+    if not exists(
+      select 1
+      from public.lpg_station_branches station
+      join public.lpg_station_fulfillment_settings settings
+        on settings.station_branch_id=station.id and settings.station_managed_enabled
+      where station.id=new.station_branch_id
+        and station.approval_status='approved'
+        and station.compliance_status='approved'
+        and station.availability_status='available'
+        and exists(
+          select 1 from public.lpg_station_managed_drivers driver
+          where driver.station_branch_id=station.id and driver.status='active'
+        )
+    ) then
+      raise exception using errcode='P0001',
+        message='Station Managed requires an approved, available branch with Station Managed enabled and an active branch driver';
+    end if;
+  end if;
+
+  select exists(
+    select 1
+    from public.read_lpg_eligible_stations(
+      new.pickup_location_id,new.delivery_location_id,new.cylinder_id,new.requested_kg,50,timezone('utc',now())
+    ) eligible
+    where eligible.station_branch_id=new.station_branch_id
+  ) into regular_station_eligible;
+
+  if not regular_station_eligible and coalesce(new.fulfillment_mode,'independent_driver')='station_managed' then
+    select exists(
+      select 1
+      from public.read_lpg_station_managed_eligible_stations(
+        new.pickup_location_id,new.delivery_location_id,new.cylinder_id,new.requested_kg,50,timezone('utc',now())
+      ) eligible
+      where eligible.station_branch_id=new.station_branch_id
+    ) into external_station_eligible;
+  end if;
+
+  if not regular_station_eligible and not external_station_eligible then
+    raise exception using errcode='P0001',
+      message='selected LPG station cannot fulfil this refill for the chosen trip';
+  end if;
+
+  new.metadata:=coalesce(new.metadata,'{}'::jsonb) || jsonb_build_object(
+    'stationEligibilityVerifiedAt',timezone('utc',now()),
+    'stationEligibilityStationId',new.station_branch_id,
+    'stationEligibilityMode',case
+      when external_station_eligible then 'station_managed_external_coverage'
+      when coalesce(new.fulfillment_mode,'independent_driver')='station_managed' then 'station_managed'
+      else 'independent_driver'
+    end
+  );
+  return new;
+end
+$;
 
 revoke all on function public.read_lpg_station_managed_eligible_stations(uuid,uuid,uuid,numeric,integer,timestamptz)
   from public, anon;
