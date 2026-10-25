@@ -290,6 +290,20 @@ as $$
 declare workspace_result jsonb; reversal_result jsonb;
 begin
   workspace_result:=public.read_lpg_station_affiliate_admin_workspace_base();
+  select jsonb_set(
+    workspace_result,
+    '{earnings}',
+    coalesce((
+      select jsonb_agg(item.value||jsonb_build_object(
+        'reversalTransactionId',earning.reversal_transaction_id,
+        'reversedAt',earning.reversed_at,
+        'reversalReason',earning.reversal_reason
+      ) order by earning.created_at desc)
+      from jsonb_array_elements(coalesce(workspace_result->'earnings','[]'::jsonb)) as item(value)
+      left join public.lpg_station_affiliate_earnings earning on earning.id=(item.value->>'id')::uuid
+    ),'[]'::jsonb)
+  ) into workspace_result;
+
   select coalesce(jsonb_agg(jsonb_build_object(
     'id',failure.id,'earningId',failure.earning_id,'orderId',failure.lpg_order_id,
     'publicReference',order_record.public_reference,'affiliateId',earning.affiliate_id,
