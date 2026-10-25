@@ -331,7 +331,7 @@ begin
         'email',i.email,
         'displayName',i.display_name,
         'phone',i.phone,
-        'status',i.status,
+        'status',case when i.status='pending' and i.expires_at<=timezone('utc',now()) then 'expired' else i.status end,
         'expiresAt',i.expires_at,
         'acceptedAt',i.accepted_at,
         'createdAt',i.created_at,
@@ -644,6 +644,8 @@ begin
     from public.tracking_sessions session
     where session.id=order_record.tracking_session_id
       and session.status='active'
+      and session.subject_type='lpg_order'
+      and session.subject_id=order_record.id
     on conflict (tracking_session_id,idempotency_key)
     where idempotency_key is not null
     do nothing;
