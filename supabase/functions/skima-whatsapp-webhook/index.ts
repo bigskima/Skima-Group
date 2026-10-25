@@ -90,6 +90,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     }).select("id").maybeSingle();
 
     let eventId: string;
+    let shouldReplaySavedReply = false;
     if (eventResult.error?.code === "23505") {
       // Meta retries are idempotent. Do not answer a previously successful delivery twice.
       const existingEvent = await db.from("skima_whatsapp_events")
@@ -100,6 +101,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         return json({ ok: false, error: "event_persistence_failed" }, 500);
       }
       if (existingEvent.data.processing_status === "processed") continue;
+      shouldReplaySavedReply = true;
       const resetEvent = await db.from("skima_whatsapp_events")
         .update({ processing_status: "received", error_message: null, processed_at: null })
         .eq("id", existingEvent.data.id);
@@ -123,6 +125,24 @@ Deno.serve(async (request: Request): Promise<Response> => {
     if (conversationResult.error || !conversationResult.data) {
       await markEventFailed(db, eventId, "conversation_persistence_failed");
       return json({ ok: false, error: "conversation_persistence_failed" }, 500);
+    }
+
+    if (shouldReplaySavedReply) {
+      const saved = asRecord(conversationResult.data.state);
+      if (saved._lastInboundMessageId === item.id && typeof saved._lastReplyText === "string" && saved._lastReplyText) {
+        const replaySend = await sendWhatsAppText({
+          accessToken, graphVersion, phoneNumberId, recipient: sender, text: saved._lastReplyText,
+        });
+        if (!replaySend.ok) {
+          await markEventFailed(db, eventId, replaySend.error);
+          return json({ ok: false, error: "outbound_message_failed" }, 502);
+        }
+        await db.from("skima_whatsapp_events")
+          .update({ processing_status: "processed", processed_at: new Date().toISOString() })
+          .eq("id", eventId);
+        accepted += 1;
+        continue;
+      }
     }
 
     let contact = contactResult.data;
@@ -193,7 +213,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const stateResult = await db.from("skima_whatsapp_conversations")
       .update({
         state_key: plan.stateKey,
-        state: plan.state,
+        state: { ...plan.state, _lastInboundMessageId: item.id, _lastReplyText: plan.text },
         last_message_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       })
