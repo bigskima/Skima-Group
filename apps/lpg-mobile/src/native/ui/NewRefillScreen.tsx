@@ -99,6 +99,8 @@ export function NewRefillScreen() {
   );
   const pickupUnavailable = pickupServiceability.data?.serviceable === false;
   const deliveryUnavailable = deliveryServiceability.data?.serviceable === false;
+  const pickupNeedsStationManaged = pickupUnavailable && pickupServiceability.data?.reason === "SERVICE_NOT_LAUNCHED";
+  const deliveryNeedsStationManaged = deliveryUnavailable && deliveryServiceability.data?.reason === "SERVICE_NOT_LAUNCHED";
   const driverOnboardingAvailable = Boolean(
     pickupServiceability.data?.partnerOpportunities?.driver || deliveryServiceability.data?.partnerOpportunities?.driver,
   );
@@ -118,7 +120,7 @@ export function NewRefillScreen() {
       !locationNeedsMapPosition &&
       !serviceabilityPending &&
       !serviceabilityError &&
-      (pickupUnavailable || deliveryUnavailable),
+      (pickupNeedsStationManaged || deliveryNeedsStationManaged),
   );
   const eligibleStations = useEligibleLpgStations({
     pickupLocationId: pickupLocationId || null,
@@ -135,13 +137,17 @@ export function NewRefillScreen() {
     cylinderId: cylinderId || null,
     requestedKg: stationEligibilityReady && purchaseMode === "kg" ? requestedKgNumber : null,
     requestedAmount: stationEligibilityReady && purchaseMode === "amount" ? requestedAmountNumber : null,
-    enabled: stationEligibilityReady && outsideCoverageLikely,
+    enabled: stationEligibilityReady && (tripServiceable || outsideCoverageLikely),
     limit: 10,
   });
-  const displayedStations = tripServiceable
-    ? eligibleStations.data ?? []
-    : stationManagedEligibleStations.data ?? [];
-  const activeStationQuery = tripServiceable ? eligibleStations : stationManagedEligibleStations;
+  const showStationManagedOnly = Boolean(
+    !tripServiceable ||
+      (!eligibleStations.isPending && !eligibleStations.isError && (eligibleStations.data?.length ?? 0) === 0),
+  );
+  const displayedStations = showStationManagedOnly
+    ? stationManagedEligibleStations.data ?? []
+    : eligibleStations.data ?? [];
+  const activeStationQuery = showStationManagedOnly ? stationManagedEligibleStations : eligibleStations;
   const selectedStation = displayedStations.find((station) => station.station_branch_id === stationId) ?? null;
   const stationManagedOption = useQuery({
     queryKey: ["station-managed-fulfillment-option", stationId],
@@ -830,7 +836,9 @@ export function NewRefillScreen() {
                 <View style={styles.requirementCopy}>
                   <Text style={[styles.requirementTitle, { color: palette.ink }]}>Station Managed delivery available</Text>
                   <Text style={[styles.requirementBody, { color: palette.muted }]}>
-                    SKIMA Managed and Independent coverage is not available for this trip. This approved station can serve both locations within its configured delivery radius using its own Station Managed workflow.
+                    {tripServiceable
+                      ? "No standard eligible station option was found for this refill. This approved station can serve both locations within its configured delivery radius using its own Station Managed workflow."
+                      : "The selected location is outside SKIMA's general customer-ordering launch coverage. This approved station can serve both locations within its configured delivery radius using its own Station Managed workflow."}
                   </Text>
                 </View>
               </View>
