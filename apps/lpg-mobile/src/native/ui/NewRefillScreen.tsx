@@ -15,7 +15,7 @@ import {
   type PlatformRecord,
 } from "../api/records";
 import { useLpgServiceability } from "../api/serviceability";
-import { useEligibleLpgStations, type EligibleLpgStation } from "../api/stationEligibility";
+import { useEligibleLpgStations, useEligibleStationManagedStations, type EligibleLpgStation } from "../api/stationEligibility";
 import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -112,21 +112,40 @@ export function NewRefillScreen() {
       deliveryServiceability.data?.serviceable === true,
   );
   const validPurchase = purchaseMode === "kg" ? validRequestedKg : validRequestedAmount;
-  const stationEligibilityReady = Boolean(tripServiceable && validPurchase && !exceedsCylinderCapacity && cylinderId);
+  const stationEligibilityReady = Boolean(hasSelectedTrip && validPurchase && !exceedsCylinderCapacity && cylinderId);
+  const outsideCoverageLikely = Boolean(
+    hasSelectedTrip &&
+      !locationNeedsMapPosition &&
+      !serviceabilityPending &&
+      !serviceabilityError &&
+      (pickupUnavailable || deliveryUnavailable),
+  );
   const eligibleStations = useEligibleLpgStations({
+    pickupLocationId: pickupLocationId || null,
+    deliveryLocationId: deliveryLocationId || null,
+    cylinderId: cylinderId || null,
+    requestedKg: stationEligibilityReady && tripServiceable && purchaseMode === "kg" ? requestedKgNumber : null,
+    requestedAmount: stationEligibilityReady && tripServiceable && purchaseMode === "amount" ? requestedAmountNumber : null,
+    enabled: stationEligibilityReady && tripServiceable,
+    limit: 10,
+  });
+  const stationManagedEligibleStations = useEligibleStationManagedStations({
     pickupLocationId: pickupLocationId || null,
     deliveryLocationId: deliveryLocationId || null,
     cylinderId: cylinderId || null,
     requestedKg: stationEligibilityReady && purchaseMode === "kg" ? requestedKgNumber : null,
     requestedAmount: stationEligibilityReady && purchaseMode === "amount" ? requestedAmountNumber : null,
-    enabled: stationEligibilityReady,
+    enabled: stationEligibilityReady && outsideCoverageLikely,
     limit: 10,
   });
-  const displayedStations = eligibleStations.data ?? [];
+  const displayedStations = tripServiceable
+    ? eligibleStations.data ?? []
+    : stationManagedEligibleStations.data ?? [];
+  const activeStationQuery = tripServiceable ? eligibleStations : stationManagedEligibleStations;
   const selectedStation = displayedStations.find((station) => station.station_branch_id === stationId) ?? null;
   const stationManagedOption = useQuery({
     queryKey: ["station-managed-fulfillment-option", stationId],
-    enabled: session.status === "authenticated" && Boolean(stationId) && !isSkimaInternalFulfillmentId(stationId),
+    enabled: session.status === "authenticated" && Boolean(stationId) && !isSkimaInternalFulfillmentId(stationId) && !selectedStation?.isStationManagedOnly,
     retry: false,
     queryFn: async () => {
       const result = await session.supabase.rpc("read_lpg_station_managed_fulfillment_option", {
@@ -207,11 +226,17 @@ export function NewRefillScreen() {
 
   useEffect(() => {
     const options = displayedStations;
-    if (!options) return;
-    if (stationId && options.some((station) => station.station_branch_id === stationId)) return;
-    setFulfillmentMode("independent_driver");
-    setStationId(options[0]?.station_branch_id ?? "");
-  }, [displayedStations, stationId]);
+    const selected = options.find((station) => station.station_branch_id === stationId);
+    if (selected) {
+      if (selected.isStationManagedOnly && fulfillmentMode !== "station_managed") {
+        setFulfillmentMode("station_managed");
+      }
+      return;
+    }
+    const first = options[0];
+    setFulfillmentMode(first?.isStationManagedOnly ? "station_managed" : "independent_driver");
+    setStationId(first?.station_branch_id ?? "");
+  }, [displayedStations, stationId, fulfillmentMode]);
 
   useEffect(() => {
     if (!owner || !hydrated) return;
@@ -276,8 +301,11 @@ export function NewRefillScreen() {
       setError("SKIMA couldn't confirm service availability for this trip yet. Check again and continue when the locations are verified.");
       return;
     }
-    if (!tripServiceable) {
-      setError("Sorry, SKIMA service is not yet available for the selected pickup and return trip. Choose another location or apply to become a SKIMA partner in this area.");
+    const stationManagedCoverageOverride = Boolean(
+      selectedStation?.isStationManagedOnly && fulfillmentMode === "station_managed",
+    );
+    if (!tripServiceable && !stationManagedCoverageOverride) {
+      setError("SKIMA Managed and Independent delivery are not available for this trip. Select an eligible Station Managed option if one is offered, or choose another location.");
       return;
     }
     if (!Number.isFinite(kilograms) || kilograms <= 0) {
@@ -290,12 +318,12 @@ export function NewRefillScreen() {
       );
       return;
     }
-    if (eligibleStations.isPending) {
-      setError("SKIMA is still checking which refill options can serve this trip. Please wait a moment.");
+    if (activeStationQuery.isPending) {
+      setError("SKIMA is still checking which fulfilment options can serve this trip. Please wait a moment.");
       return;
     }
-    if (eligibleStations.isError) {
-      setError("SKIMA couldn't check refill availability right now. Try the availability check again.");
+    if (activeStationQuery.isError) {
+      setError("SKIMA couldn't verify fulfilment availability right now. Try the availability check again.");
       return;
     }
     if (!stationId || !displayedStations.some((station) => station.station_branch_id === stationId)) {
@@ -421,7 +449,11 @@ export function NewRefillScreen() {
 
   const currency = firstString(quoteRecord, ["currencyCode", "currency_code"]) ?? "NGN";
   const total = firstNumber(quoteRecord, ["totalAmount", "total_amount", "quotedTotal"]);
-  const stationUnavailable = stationEligibilityReady && !eligibleStations.isPending && !eligibleStations.isError && displayedStations.length === 0;
+  const stationUnavailable = stationEligibilityReady &&
+    (tripServiceable || outsideCoverageLikely) &&
+    !activeStationQuery.isPending &&
+    !activeStationQuery.isError &&
+    displayedStations.length === 0;
   const quoteButtonLabel = !hasSelectedTrip
     ? "Choose locations to continue"
     : locationNeedsMapPosition
@@ -436,9 +468,9 @@ export function NewRefillScreen() {
               ? "Enter refill amount to continue"
               : exceedsCylinderCapacity
                 ? "Correct refill amount to continue"
-                : eligibleStations.isPending
+                : activeStationQuery.isPending
                   ? "Finding refill options…"
-                  : eligibleStations.isError
+                  : activeStationQuery.isError
                     ? "Check stations to continue"
                     : stationUnavailable
                       ? "No refill option is available right now"
@@ -570,7 +602,7 @@ export function NewRefillScreen() {
             selected={deliveryLocationId}
             onSelect={selectDeliveryLocation}
             emptyText="Add a saved location to continue."
-          /><View style={styles.stepActions}><AppButton label="Back" variant="secondary" onPress={() => setRefillStep(1)} /><AppButton label="Continue" disabled={!pickupLocationId || !deliveryLocationId || !tripServiceable || serviceabilityPending || serviceabilityError || locationNeedsMapPosition} onPress={() => setRefillStep(3)} /></View></> : null}
+          /><View style={styles.stepActions}><AppButton label="Back" variant="secondary" onPress={() => setRefillStep(1)} /><AppButton label="Continue" disabled={!pickupLocationId || !deliveryLocationId || serviceabilityPending || serviceabilityError || locationNeedsMapPosition} onPress={() => setRefillStep(3)} /></View></> : null}
 
           {refillStep === 2 && hasSelectedTrip ? (
             locationNeedsMapPosition ? (
@@ -772,25 +804,40 @@ export function NewRefillScreen() {
             <View style={styles.stepActions}><AppButton label="Back" variant="secondary" onPress={() => setRefillStep(2)} /><AppButton label="Find refill options" disabled={!validPurchase || exceedsCylinderCapacity} onPress={() => setRefillStep(4)} /></View>
           </View> : null}
 
-          {refillStep === 4 && tripServiceable ? (
+          {refillStep === 4 && (tripServiceable || outsideCoverageLikely) ? (
             <StationSelectionSection
               stations={displayedStations}
               selected={stationId}
               onSelect={(id) => {
+                const candidate = displayedStations.find((station) => station.station_branch_id === id);
                 setStationId(id);
-                setFulfillmentMode("independent_driver");
+                setFulfillmentMode(candidate?.isStationManagedOnly ? "station_managed" : "independent_driver");
                 setQuoteId(null);
                 setQuoteRecord(null);
                 setError(null);
               }}
               ready={stationEligibilityReady}
-              loading={eligibleStations.isPending}
-              failed={eligibleStations.isError}
-              onRetry={() => void eligibleStations.refetch()}
+              loading={activeStationQuery.isPending}
+              failed={activeStationQuery.isError}
+              onRetry={() => void activeStationQuery.refetch()}
             />
           ) : null}
 
-          {refillStep === 4 && Boolean(stationManagedOption.data?.enabled) ? (
+          {refillStep === 4 && selectedStation?.isStationManagedOnly ? (
+            <View style={[styles.availabilityCard, { backgroundColor: palette.successSoft, borderColor: palette.success }]}>
+              <View style={styles.availabilityLead}>
+                <ShieldCheck color={palette.success} size={22} />
+                <View style={styles.requirementCopy}>
+                  <Text style={[styles.requirementTitle, { color: palette.ink }]}>Station Managed delivery available</Text>
+                  <Text style={[styles.requirementBody, { color: palette.muted }]}>
+                    SKIMA Managed and Independent coverage is not available for this trip. This approved station can serve both locations within its configured delivery radius using its own Station Managed workflow.
+                  </Text>
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          {refillStep === 4 && !selectedStation?.isStationManagedOnly && Boolean(stationManagedOption.data?.enabled) ? (
             <View style={[styles.selectionCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <SectionLead
                 eyebrow="DELIVERY METHOD"
@@ -838,16 +885,16 @@ export function NewRefillScreen() {
             fullWidth
             size="lg"
             disabled={
-              !tripServiceable ||
+              (!tripServiceable && !(selectedStation?.isStationManagedOnly && fulfillmentMode === "station_managed")) ||
               serviceabilityError ||
               locationNeedsMapPosition ||
               !validPurchase ||
               exceedsCylinderCapacity ||
-              eligibleStations.isError ||
+              activeStationQuery.isError ||
               stationUnavailable ||
               !stationId
             }
-            loading={quote.isPending || serviceabilityPending || eligibleStations.isPending}
+            loading={quote.isPending || serviceabilityPending || activeStationQuery.isPending}
             onPress={() => setReviewOpen(true)}
           /><AppButton label="Back" variant="ghost" onPress={() => setRefillStep(3)} /></> : null}
 
