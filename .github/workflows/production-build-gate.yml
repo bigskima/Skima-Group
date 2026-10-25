@@ -25,6 +25,7 @@ on:
       - "scripts/verify-financial-policy-governance.ts"
       - "scripts/payout-runtime-production-contract.test.ts"
       - "scripts/verification-runtime-contract.test.ts"
+      - "scripts/skima-whatsapp-lifecycle-contract.test.ts"
       - "scripts/ai-*.test.ts"
       - "package.json"
       - "vercel.json"
@@ -71,6 +72,8 @@ jobs:
         run: npm run lpg-refill:contract
       - name: Verify Station Managed fulfillment, driver and admin contracts
         run: npm run station-managed:verify
+      - name: Verify SKIMA WhatsApp ordering contracts
+        run: npm run whatsapp:contract
       - name: Verify LPG auth production contracts
         run: npm run lpg-auth:contract
       - name: Verify payout runtime production contracts
