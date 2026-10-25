@@ -388,11 +388,11 @@ export function StationManagedFulfillmentScreen() {
                 <Text style={{ color: palette.ink, fontWeight: "800" }}>{invitation.displayName}</Text>
                 <Text style={{ color: palette.muted, fontSize: 12 }}>{invitation.email}{invitation.phone ? " · " + invitation.phone : ""}</Text>
                 <Text style={{ color: invitation.status === "accepted" ? palette.success : invitation.status === "pending" ? palette.warning : palette.muted, fontSize: 12, fontWeight: "800" }}>
-                  {invitation.status === "accepted" ? "Accepted in SKIMA" : invitation.status === "pending" ? "Waiting for in-app acceptance" : invitation.status === "revoked" ? "Revoked or declined" : invitation.status}
+                  {invitation.status === "accepted" ? "Accepted in SKIMA" : invitation.status === "pending" ? "Waiting for in-app acceptance" : invitation.status === "expired" ? "Invitation expired" : invitation.status === "revoked" ? "Revoked or declined" : invitation.status}
                 </Text>
-                {invitation.status === "pending" && invitation.expiresAt ? <Text style={{ color: palette.muted, fontSize: 11 }}>Expires {new Date(invitation.expiresAt).toLocaleString()}</Text> : null}
+                {["pending", "expired"].includes(invitation.status) && invitation.expiresAt ? <Text style={{ color: palette.muted, fontSize: 11 }}>Expires {new Date(invitation.expiresAt).toLocaleString()}</Text> : null}
                 {invitation.deliveryFailure ? <Text style={{ color: palette.danger, fontSize: 12 }}>Last email delivery failed. Resend the sign-in notice.</Text> : null}
-                {invitation.status === "pending" ? (
+                {["pending", "expired"].includes(invitation.status) ? (
                   <AppButton
                     label="Resend sign-in email"
                     size="sm"
