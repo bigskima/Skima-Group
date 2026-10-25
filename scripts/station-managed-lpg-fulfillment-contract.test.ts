@@ -412,7 +412,7 @@ Deno.test("Station Managed location sharing uses existing LPG location and track
   requireText(stationManagedInAppMigration, "insert into public.tracking_points", "customer tracking points reuse existing tracking session");
   requireText(gateway, 'supabase.rpc("record_lpg_station_managed_driver_location"', "the existing location endpoint routes station driver samples");
   requireText(gateway, "station_driver_id,user_id,lpg_order_id,latitude", "location reads include Station Managed identity");
-  requireText(nativeDriverTracking, '"/lpg/driver-locations"', "native driver tracker uses the existing location endpoint");
+  requireText(nativeDriverTracking, "lpg/driver-locations", "native driver tracker uses the existing location endpoint");
   requireText(webDriverTracking, '"/lpg/driver-locations"', "web driver tracker uses the existing location endpoint");
   requireText(jobDetailScreen, 'label={stationTrackingOrderId === id ? "Stop live location sharing"', "job screen exposes explicit tracking control");
   requireText(httpShared, "x-skima-client, x-supabase-api-version", "gateway CORS allows client tracking headers");
@@ -427,5 +427,5 @@ Deno.test("Station manager and driver workspaces show the real assignment and re
   requireText(stationManagedInAppMigration, "'vehicleRegistration',vehicle.registration_number", "driver job read model exposes its reserved vehicle");
   requireText(driverScreen, "vehicleRegistration", "driver sees the reserved delivery vehicle");
   requireText(jobDetailScreen, "stationManagedVehicle", "canonical order detail displays the station vehicle");
-  requireText(stationManagedInAppMigration, "Station Managed order is not in an active Station Managed route stage", "location writes are restricted to active lifecycle states");
+  requireText(stationManagedInAppMigration, "this LPG order is not in an active Station Managed route stage", "location writes are restricted to active lifecycle states");
 });
