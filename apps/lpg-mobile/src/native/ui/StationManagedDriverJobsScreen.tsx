@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { BriefcaseBusiness, CheckCircle2, Clock3, MapPin, UserRound } from "lucide-react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
