@@ -94,7 +94,7 @@ export function StationDashboardScreen() {
           </Pressable>
         </View>
 
-        <GuideTarget targetKey="common.workspace-switcher" style={styles.switcher}><WorkspaceSwitcher current="station" /></GuideTarget>
+        <GuideTarget targetKey="station.workspace-switcher" style={styles.switcher}><WorkspaceSwitcher current="station" /></GuideTarget>
 
         {loading ? (
           <View style={styles.content}><ScreenSkeleton cards={4} /></View>
