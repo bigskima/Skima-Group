@@ -618,7 +618,7 @@ begin
 
   return new;
 end
-$;
+$$;
 
 drop trigger if exists trg_resolve_lpg_station_affiliate_referral_application_outcome on public.application_records;
 create trigger trg_resolve_lpg_station_affiliate_referral_application_outcome
