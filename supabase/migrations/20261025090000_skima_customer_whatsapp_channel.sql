@@ -212,6 +212,23 @@ alter table public.skima_whatsapp_link_challenges enable row level security;
 alter table public.skima_whatsapp_conversations enable row level security;
 alter table public.skima_whatsapp_events enable row level security;
 
+create policy skima_whatsapp_contacts_service_role_all
+  on public.skima_whatsapp_contacts for all to service_role
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+create policy skima_whatsapp_link_challenges_service_role_all
+  on public.skima_whatsapp_link_challenges for all to service_role
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+create policy skima_whatsapp_conversations_service_role_all
+  on public.skima_whatsapp_conversations for all to service_role
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+create policy skima_whatsapp_events_service_role_all
+  on public.skima_whatsapp_events for all to service_role
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
 revoke all on public.skima_whatsapp_contacts from public, anon, authenticated;
 revoke all on public.skima_whatsapp_link_challenges from public, anon, authenticated;
 revoke all on public.skima_whatsapp_conversations from public, anon, authenticated;
