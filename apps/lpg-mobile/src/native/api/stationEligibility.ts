@@ -22,7 +22,7 @@ const EligibleStationSchema = z.object({
 
 const EligibleStationsSchema = z.array(EligibleStationSchema);
 
-export type EligibleLpgStation = z.infer<typeof EligibleStationSchema>;
+export type EligibleLpgStation = z.infer<typeof EligibleStationSchema> & { isStationManagedOnly?: boolean };
 
 interface EligibleStationParams {
   pickupLocationId: string | null;
@@ -84,7 +84,75 @@ export function useEligibleLpgStations({
           });
 
       if (error) throw error;
-      return EligibleStationsSchema.parse(data ?? []);
+      return EligibleStationsSchema.parse(data ?? []).map((station) => ({
+        ...station,
+        isStationManagedOnly: false as const,
+      }));
+    },
+  });
+}
+
+
+/**
+ * Finds approved Station Managed branches that can cover both customer locations
+ * under their own positive delivery radius. This is a separate read path from
+ * normal SKIMA customer serviceability; it is never used to enable SKIMA Managed
+ * or Independent fulfilment outside their configured coverage.
+ */
+export function useEligibleStationManagedStations({
+  pickupLocationId,
+  deliveryLocationId,
+  cylinderId,
+  requestedKg,
+  requestedAmount = null,
+  enabled = true,
+  limit = 10,
+}: EligibleStationParams) {
+  const session = useSession();
+  const canLoad = Boolean(
+    enabled &&
+      session.status === "authenticated" &&
+      pickupLocationId &&
+      deliveryLocationId &&
+      cylinderId &&
+      ((requestedKg !== null && Number.isFinite(requestedKg) && requestedKg > 0) ||
+        (requestedAmount !== null && Number.isFinite(requestedAmount) && requestedAmount > 0)),
+  );
+
+  return useQuery({
+    queryKey: [
+      "lpg-station-managed-external-eligible",
+      pickupLocationId,
+      deliveryLocationId,
+      cylinderId,
+      requestedKg,
+      requestedAmount,
+      limit,
+    ],
+    enabled: canLoad,
+    staleTime: 15_000,
+    queryFn: async () => {
+      const { data, error } = requestedAmount !== null
+        ? await session.supabase.rpc("read_lpg_station_managed_eligible_stations_for_amount", {
+            target_pickup_location_id: pickupLocationId,
+            target_delivery_location_id: deliveryLocationId,
+            target_cylinder_id: cylinderId,
+            target_requested_amount: requestedAmount,
+            target_limit: limit,
+          })
+        : await session.supabase.rpc("read_lpg_station_managed_eligible_stations", {
+            target_pickup_location_id: pickupLocationId,
+            target_delivery_location_id: deliveryLocationId,
+            target_cylinder_id: cylinderId,
+            target_requested_kg: requestedKg,
+            target_limit: limit,
+          });
+
+      if (error) throw error;
+      return EligibleStationsSchema.parse(data ?? []).map((station) => ({
+        ...station,
+        isStationManagedOnly: true as const,
+      }));
     },
   });
 }

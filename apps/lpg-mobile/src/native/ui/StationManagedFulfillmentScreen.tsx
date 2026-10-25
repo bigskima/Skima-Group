@@ -30,6 +30,25 @@ type WorkspaceData = {
   assignableOrders?: Array<{ id: string; publicReference?: string; status: string; requestedKg?: number; totalAmount?: number; currencyCode?: string }>;
 };
 
+type StationManagedVehicle = {
+  assignmentId?: string;
+  vehicleId: string;
+  registrationNumber?: string;
+  manufacturer?: string;
+  model?: string;
+  vehicleType?: string;
+  maxLoadKg?: number | string | null;
+  status?: string;
+  eligible?: boolean;
+  updatedAt?: string;
+  changeReason?: string;
+};
+
+type StationManagedVehicleReadiness = {
+  assignedVehicles?: StationManagedVehicle[];
+  availableVehicles?: StationManagedVehicle[];
+};
+
 export function StationManagedFulfillmentScreen() {
   const session = useSession();
   const { palette } = useAppTheme();
@@ -53,6 +72,8 @@ export function StationManagedFulfillmentScreen() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "bank_transfer" | "wallet_external" | "other">("bank_transfer");
   const [paymentReference, setPaymentReference] = useState("");
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
+  const [vehicleChangeReason, setVehicleChangeReason] = useState("Assigned for Station Managed LPG delivery");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [expandedSection, setExpandedSection] = useState("1. Customer delivery option");
@@ -67,6 +88,19 @@ export function StationManagedFulfillmentScreen() {
       });
       if (result.error) throw result.error;
       return (result.data ?? {}) as WorkspaceData;
+    },
+  });
+
+  const vehicleReadiness = useQuery<StationManagedVehicleReadiness>({
+    queryKey: ["station-managed-vehicle-readiness", branchId],
+    enabled: session.status === "authenticated" && Boolean(branchId),
+    retry: false,
+    queryFn: async () => {
+      const result = await session.supabase.rpc("read_lpg_station_managed_available_vehicles", {
+        target_station_branch_id: branchId,
+      });
+      if (result.error) throw result.error;
+      return (result.data ?? { assignedVehicles: [], availableVehicles: [] }) as StationManagedVehicleReadiness;
     },
   });
 
@@ -168,6 +202,35 @@ export function StationManagedFulfillmentScreen() {
     onError: (error) => setErrorMessage(friendlyError(error, "Station payment confirmation could not be recorded.")),
   });
 
+  const vehicleMutation = useMutation({
+    mutationFn: async (input: { vehicleId: string; enabled: boolean; reason: string }) => {
+      if (!branchId) throw new Error("Your station branch is not available.");
+      if (!input.vehicleId) throw new Error("Choose a vehicle.");
+      if (input.reason.trim().length < 5) throw new Error("Enter a reason of at least 5 characters.");
+      return runRpc("configure_lpg_station_managed_vehicle", {
+        target_station_branch_id: branchId,
+        target_vehicle_id: input.vehicleId,
+        target_enabled: input.enabled,
+        target_reason: input.reason.trim(),
+      });
+    },
+    onSuccess: async (_, input) => {
+      setErrorMessage(null);
+      if (input.enabled) {
+        setSuccessMessage("Vehicle assigned to Station Managed delivery. New eligible orders can use it.");
+        setSelectedVehicleId("");
+      } else {
+        setSuccessMessage("Vehicle removed. Any active delivery assignment using it has been released for safe reassignment.");
+      }
+      await vehicleReadiness.refetch();
+      await workspace.refetch();
+      await client.invalidateQueries({ queryKey: ["lpg-station-managed-external-eligible"] });
+      await client.invalidateQueries({ queryKey: ["lpg-eligible-stations"] });
+      await client.invalidateQueries({ queryKey: ["station-managed-fulfillment-option"] });
+    },
+    onError: (error) => setErrorMessage(friendlyError(error, "Station vehicle assignment could not be saved.")),
+  });
+
   const data = workspace.data;
   const drivers = (data?.drivers ?? []).filter((driver) => driver.status === "active");
   const selectedDriver = drivers.find((driver) => driver.id === selectedDriverId);
@@ -215,6 +278,79 @@ export function StationManagedFulfillmentScreen() {
 
           <AppButton label="Save delivery settings" fullWidth loading={settingsMutation.isPending} onPress={() => void settingsMutation.mutateAsync()} />
 
+          <Section title="4. Station delivery vehicles" palette={palette} expanded={expandedSection === "4. Station delivery vehicles"} onPress={() => setExpandedSection(expandedSection === "4. Station delivery vehicles" ? "" : "4. Station delivery vehicles")}>
+            <Text style={{ color: palette.muted, fontSize: 13 }}>
+              Assign vehicles that belong to this station organisation and are active in SKIMA's vehicle register. LPG transport approval, required safety evidence and the recorded load capacity are checked again by the backend before a quote or payment can proceed. A driver alone does not make a delivery orderable.
+            </Text>
+            {vehicleReadiness.isPending ? <Text style={{ color: palette.muted }}>Checking eligible station vehicles…</Text> : null}
+            {vehicleReadiness.error ? (
+              <EmptyState
+                title="Station vehicle readiness could not be loaded"
+                description="Check your branch access and vehicle approval, then retry."
+                action={<AppButton label="Retry vehicles" size="sm" variant="secondary" onPress={() => void vehicleReadiness.refetch()} />}
+              />
+            ) : null}
+            {(vehicleReadiness.data?.assignedVehicles ?? []).length ? (
+              (vehicleReadiness.data?.assignedVehicles ?? []).map((vehicle) => (
+                <View key={vehicle.assignmentId ?? vehicle.vehicleId} style={[styles.section, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
+                  <Text style={{ color: palette.ink, fontWeight: "800" }}>
+                    {vehicle.registrationNumber || "Vehicle registration pending"}
+                  </Text>
+                  <Text style={{ color: palette.muted, fontSize: 12 }}>
+                    {[vehicle.manufacturer, vehicle.model, vehicle.vehicleType].filter(Boolean).join(" · ") || "Station delivery vehicle"}
+                    {vehicle.maxLoadKg !== null && vehicle.maxLoadKg !== undefined ? ` · ${vehicle.maxLoadKg} kg load` : ""}
+                  </Text>
+                  <Text style={{ color: vehicle.eligible ? palette.success : palette.danger, fontSize: 12, fontWeight: "700" }}>
+                    {vehicle.eligible ? "Eligible for Station Managed delivery" : `Not currently eligible · ${vehicle.status ?? "assigned"}`}
+                  </Text>
+                  <AppButton
+                    label="Remove vehicle"
+                    size="sm"
+                    variant="secondary"
+                    disabled={vehicleMutation.isPending}
+                    loading={vehicleMutation.isPending && vehicleMutation.variables?.vehicleId === vehicle.vehicleId && vehicleMutation.variables?.enabled === false}
+                    onPress={() => void vehicleMutation.mutateAsync({
+                      vehicleId: vehicle.vehicleId,
+                      enabled: false,
+                      reason: vehicleChangeReason.trim().length >= 5 ? vehicleChangeReason : "Vehicle removed from station delivery",
+                    })}
+                  />
+                </View>
+              ))
+            ) : !vehicleReadiness.isPending && !vehicleReadiness.error ? (
+              <Text style={{ color: palette.muted, fontSize: 13 }}>No Station Managed vehicles are assigned yet.</Text>
+            ) : null}
+            <Text style={{ color: palette.ink, fontWeight: "700" }}>Assign an eligible organisation vehicle</Text>
+            {(vehicleReadiness.data?.availableVehicles ?? []).length ? (
+              (vehicleReadiness.data?.availableVehicles ?? []).map((vehicle) => (
+                <Choice
+                  key={vehicle.vehicleId}
+                  label={`${vehicle.registrationNumber || "Unregistered"} · ${[vehicle.manufacturer, vehicle.model, vehicle.vehicleType].filter(Boolean).join(" ") || "Vehicle"} · ${vehicle.maxLoadKg ?? "?"} kg`}
+                  active={selectedVehicleId === vehicle.vehicleId}
+                  onPress={() => setSelectedVehicleId(vehicle.vehicleId)}
+                  palette={palette}
+                />
+              ))
+            ) : !vehicleReadiness.isPending && !vehicleReadiness.error ? (
+              <Text style={{ color: palette.muted, fontSize: 13 }}>
+                No eligible vehicles were found under this station organisation. Register the vehicle through SKIMA's existing vehicle onboarding flow, complete the configured safety/LPG transport requirements, and ensure the vehicle is approved and active before assigning it here.
+              </Text>
+            ) : null}
+            <Field
+              label="Reason for vehicle assignment or removal"
+              value={vehicleChangeReason}
+              onChangeText={setVehicleChangeReason}
+              palette={palette}
+            />
+            <AppButton
+              label="Assign vehicle"
+              fullWidth
+              loading={vehicleMutation.isPending && vehicleMutation.variables?.enabled === true}
+              disabled={!selectedVehicleId || vehicleChangeReason.trim().length < 5 || vehicleMutation.isPending}
+              onPress={() => void vehicleMutation.mutateAsync({ vehicleId: selectedVehicleId, enabled: true, reason: vehicleChangeReason })}
+            />
+          </Section>
+
           <Section title="4. Add a driver to this station" palette={palette} expanded={expandedSection === "4. Add a station driver"} onPress={() => setExpandedSection(expandedSection === "4. Add a station driver" ? "" : "4. Add a station driver")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Invite a station-owned driver by email. They accept the invitation and sign in to their own account; they do not need an independent-driver profile.</Text>
             <Field label="Driver email address" value={driverEmail} onChangeText={setDriverEmail} palette={palette} autoCapitalize="none" />
@@ -224,7 +360,7 @@ export function StationManagedFulfillmentScreen() {
             <Text style={{ color: palette.muted, fontSize: 12 }}>For safety, an account with an independent or SKIMA Managed driver profile cannot accept a Station Managed invitation.</Text>
           </Section>
 
-          <Section title="5. Automatic order dispatch" palette={palette} expanded={expandedSection === "5. Automatic order dispatch"} onPress={() => setExpandedSection(expandedSection === "5. Automatic order dispatch" ? "" : "5. Automatic order dispatch")}>
+          <Section title="6. Automatic order dispatch" palette={palette} expanded={expandedSection === "6. Automatic order dispatch"} onPress={() => setExpandedSection(expandedSection === "6. Automatic order dispatch" ? "" : "6. Automatic order dispatch")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>When Station Managed is enabled, eligible new orders are assigned automatically to the least-loaded active driver at this station. Orders waiting here are not sent to independent drivers or SKIMA Fleet; invite a station driver and let them accept the invitation to make this queue dispatch-ready. Existing independent-driver and SKIMA Fleet orders are unchanged.</Text>
             {(data?.assignableOrders ?? []).length ? (data?.assignableOrders ?? []).map((order) => (
               <View key={order.id} style={[styles.row, { borderColor: palette.border }]}>
@@ -234,7 +370,7 @@ export function StationManagedFulfillmentScreen() {
             )) : <Text style={{ color: palette.muted }}>No waiting Station Managed orders. New eligible orders will be routed automatically.</Text>}
           </Section>
 
-          <Section title="6. Record the driver agreement" palette={palette} expanded={expandedSection === "6. Record driver agreement"} onPress={() => setExpandedSection(expandedSection === "6. Record driver agreement" ? "" : "6. Record driver agreement")}>
+          <Section title="7. Record the driver agreement" palette={palette} expanded={expandedSection === "7. Record driver agreement"} onPress={() => setExpandedSection(expandedSection === "7. Record driver agreement" ? "" : "7. Record driver agreement")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Select which station driver's agreement or payment record you want to manage. This selection does not assign individual orders.</Text>
             {drivers.map((driver) => (
               <Choice key={driver.id} label={driver.displayName} active={selectedDriverId === driver.id} onPress={() => setSelectedDriverId(driver.id)} palette={palette} />
@@ -249,7 +385,7 @@ export function StationManagedFulfillmentScreen() {
             <AppButton label="Record agreement" fullWidth loading={agreementMutation.isPending} disabled={!selectedDriverId} onPress={() => void agreementMutation.mutateAsync()} />
           </Section>
 
-          <Section title="7. Confirm a payment made by your station" palette={palette} expanded={expandedSection === "7. Record a payment you made"} onPress={() => setExpandedSection(expandedSection === "7. Record a payment you made" ? "" : "7. Record a payment you made")}>
+          <Section title="8. Confirm a payment made by your station" palette={palette} expanded={expandedSection === "8. Record a payment you made"} onPress={() => setExpandedSection(expandedSection === "8. Record a payment you made" ? "" : "8. Record a payment you made")}>
             <Field label={`Amount (${currencyCode})`} value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" palette={palette} />
             <View style={styles.row}>
               <Choice label="Bank transfer" active={paymentMethod === "bank_transfer"} onPress={() => setPaymentMethod("bank_transfer")} palette={palette} />

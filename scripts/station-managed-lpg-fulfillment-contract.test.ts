@@ -19,6 +19,22 @@ const jobDetailScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/J
 const workspaceGate = await Deno.readTextFile("apps/lpg-mobile/src/native/navigation/WorkspaceGate.tsx");
 const workspaceSwitcher = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/WorkspaceSwitcher.tsx");
 const workspaceResolver = gateway.slice(gateway.indexOf("async function resolveLpgMobileWorkspaceAccess"));
+const stationExternalCoverage = await Deno.readTextFile("supabase/migrations/20261025113000_lpg_station_managed_external_coverage.sql");
+const stationQuotePricingHardening = await Deno.readTextFile("supabase/migrations/20261025120000_lpg_station_managed_quote_pricing_hardening.sql");
+const stationVehicleReadiness = await Deno.readTextFile("supabase/migrations/20261025130000_lpg_station_managed_vehicle_readiness.sql");
+const stationResourceReservation = await Deno.readTextFile("supabase/migrations/20261025131000_lpg_station_managed_resource_reservation_gate.sql");
+const stationAffiliateProgram = await Deno.readTextFile("supabase/migrations/20261025140000_lpg_station_affiliate_program.sql");
+const stationAffiliateReversal = await Deno.readTextFile("supabase/migrations/20261025150000_lpg_station_affiliate_reversal_recovery.sql");
+const stationAffiliateWithdrawalGuard = await Deno.readTextFile("supabase/migrations/20261025160000_lpg_station_affiliate_withdrawal_recovery_guard.sql");
+const affiliateAdmin = await Deno.readTextFile("apps/admin/src/features/money/FulfillmentWorkspaceV2.tsx");
+const stationAdminWorkspace = await Deno.readTextFile("apps/admin/src/admin-station-managed-fulfillment-workspace.tsx");
+const accountSettings = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/WorkspaceAccountSettingsScreen.tsx");
+const affiliateWithdrawal = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FinanceWithdrawalExperience.tsx");
+const affiliateWithdrawalRoute = await Deno.readTextFile("apps/lpg-mobile/app/(customer)/wallet/affiliate-withdraw.tsx");
+const applicationOverview = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx");
+const stationVehicleScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedFulfillmentScreen.tsx");
+const stationEligibilityApi = await Deno.readTextFile("apps/lpg-mobile/src/native/api/stationEligibility.ts");
+
 
 function requireText(source: string, fragment: string, label: string) {
   if (!source.includes(fragment)) throw new Error(`${label}: missing required contract fragment: ${fragment}`);
@@ -206,4 +222,158 @@ Deno.test("Station driver invites persist before delivery and revoke failed send
   requireText(route, 'status: "revoked"', "failed email sends cannot leave a misleading pending invite");
   requireText(route, 'shouldCreateUser: false', "existing SKIMA accounts use sign-in rather than duplicate account creation");
   requireText(inviteDispatchMigration, "email_confirmed_at is not null", "acceptance is bound to the authenticated confirmed email");
+});
+
+
+Deno.test("Station Managed external coverage is an explicit admin-gated exception", () => {
+  requireText(stationExternalCoverage, "outside_customer_coverage_enabled boolean not null default false", "safe default coverage policy");
+  requireText(stationExternalCoverage, "configure_lpg_station_managed_coverage_policy", "admin configuration RPC");
+  requireText(stationExternalCoverage, "public.has_permission('platform.dispatch.manage', null)", "coverage configuration permission gate");
+  requireText(stationExternalCoverage, "station.service_radius_meters is not null and station.service_radius_meters > 0", "positive station delivery radius");
+  requireText(stationExternalCoverage, "greatest(station.pickup_distance, station.return_distance) <= station.service_radius_meters", "both customer locations are within branch radius");
+  requireText(stationExternalCoverage, "public.read_lpg_station_managed_eligible_stations(", "backend station eligibility");
+  requireText(stationExternalCoverage, "coalesce(nullif(new.metadata->>'fulfillment_mode',''), new.fulfillment_mode, 'independent_driver') <> 'station_managed'", "exception cannot apply to other fulfilment modes");
+  requireText(affiliateAdmin, "StationManagedCoveragePolicySection", "admin coverage workspace control");
+  requireText(stationExternalCoverage, "change_reason", "auditable admin reason");
+});
+
+Deno.test("Station Managed quote pricing cannot be locked by client metadata", () => {
+  requireText(stationQuotePricingHardening, "before insert or update on public.lpg_refill_quotes", "pricing trigger on quote creation and update");
+  requireText(stationQuotePricingHardening, "- 'station_fulfillment_pricing_locked'", "client-supplied lock flag is removed");
+  requireText(stationQuotePricingHardening, "settings.delivery_pricing_mode", "pricing comes from configured station settings");
+  requireText(stationQuotePricingHardening, "new.metadata:=coalesce(new.metadata,'{}'::jsonb)||jsonb_build_object(", "server-derived snapshot is written");
+  requireText(stationQuotePricingHardening, "'station_fulfillment_pricing_locked',true", "server locks the derived pricing");
+});
+
+Deno.test("Station Managed dispatch requires a compliant station-owned LPG vehicle", () => {
+  requireText(stationVehicleReadiness, "create table if not exists public.lpg_station_managed_vehicles", "branch vehicle assignment table");
+  requireText(stationVehicleReadiness, "vehicle.organization_id=station.organization_id", "vehicle belongs to the station organization");
+  requireText(stationVehicleReadiness, "vehicle.lpg-transport", "LPG transport capability is required");
+  requireText(stationVehicleReadiness, "vehicle.max_load_kg>=order_record.requested_kg", "vehicle load capacity covers the refill");
+  requireText(stationVehicleReadiness, "lpg_station_managed_assignments_active_vehicle_unique", "a vehicle cannot be assigned to multiple active deliveries");
+  requireText(stationVehicleReadiness, "waiting_for_station_vehicle", "no-vehicle dispatch is held for later reassignment");
+  requireText(stationResourceReservation, "require_lpg_station_managed_resources_before_reservation", "payment reservation readiness guard");
+  requireText(stationResourceReservation, "Station Managed payment cannot be reserved: no available approved LPG vehicle can carry this refill", "payment fails closed without a compliant vehicle");
+  requireText(stationVehicleScreen, "read_lpg_station_managed_available_vehicles", "station vehicle readiness API");
+  requireText(stationVehicleScreen, "configure_lpg_station_managed_vehicle", "station can assign or remove its vehicle");
+});
+
+Deno.test("Customer refill only exposes the separate Station Managed fallback outside coverage", () => {
+  requireText(stationEligibilityApi, "useEligibleStationManagedStations", "separate station-managed eligibility hook");
+  requireText(customer, "outsideCoverageLikely", "outside-coverage state detection");
+  requireText(customer, "SKIMA Managed and Independent delivery are not available for this trip", "non-Station Managed models are not enabled outside coverage");
+  requireText(customer, "Station Managed delivery available", "customer sees explicitly identified Station Managed fallback");
+  requireText(customer, 'selectedStation?.isStationManagedOnly && fulfillmentMode === "station_managed"', "quote is allowed only with the selected Station Managed fallback");
+});
+
+Deno.test("Station Affiliate referral and commission are governed and ledger-backed", () => {
+  requireText(stationAffiliateProgram, "financial_policy_definitions", "reusable financial policy definitions");
+  requireText(stationAffiliateProgram, "'commission.lpg.station_affiliate'", "stable affiliate policy key");
+  requireText(stationAffiliateProgram, "new.geography_key is distinct from 'NG'", "geographic policy scope is fixed to Nigeria");
+  requireText(affiliateAdmin, "create_financial_policy_version", "versioned policy lifecycle");
+  requireText(affiliateAdmin, "review_financial_policy_version", "independent approval lifecycle");
+  requireText(stationAffiliateProgram, "public.post_financial_transaction(", "commission posts through the financial ledger");
+  requireText(stationAffiliateProgram, "on conflict(lpg_order_id) do nothing", "one affiliate earning per LPG order");
+  requireText(stationAffiliateProgram, "old.submitted_at is not null or new.submitted_at is null", "referral is recorded only once at first application submission");
+  requireText(stationAffiliateProgram, "You cannot use your own Station Affiliate referral code", "self-referral prevention");
+  requireText(stationAffiliateProgram, "lpg_station_affiliate_commission_failures", "failed commission posting is queued for retry");
+  requireText(stationAffiliateProgram, "read_lpg_station_affiliate_admin_workspace", "admin referral and earning oversight");
+});
+
+Deno.test("Customers can apply for Station Affiliate and refer a station from the application", () => {
+  requireText(accountSettings, "request_lpg_station_affiliate", "customer affiliate application");
+  requireText(accountSettings, "read_my_lpg_station_affiliate", "customer status and wallet view");
+  requireText(accountSettings, "Copy", "referral code copy action");
+  requireText(applicationOverview, "affiliateReferralCode", "station application referral capture");
+  requireText(applicationOverview, "Station referral code (optional)", "referral input is visible in station onboarding");
+});
+
+Deno.test("Admins can configure the commission policy and operate the referral pipeline", () => {
+  requireText(affiliateAdmin, 'key: "station-affiliates"', "admin dashboard navigation");
+  requireText(affiliateAdmin, "create_financial_policy_version", "policy draft action");
+  requireText(affiliateAdmin, "submit_financial_policy_version", "policy submit action");
+  requireText(affiliateAdmin, "review_financial_policy_version", "policy approval action");
+  requireText(affiliateAdmin, "activate_financial_policy_version", "policy activation action");
+  requireText(affiliateAdmin, "review_lpg_station_affiliate", "affiliate approval and suspension controls");
+  requireText(affiliateAdmin, "retry_lpg_station_affiliate_commission", "failed commission retry control");
+});
+
+
+Deno.test("Station Managed expansion cannot override paused or explicitly excluded areas", () => {
+  requireText(stationExternalCoverage, "Station Managed cannot override an excluded, paused, or policy-blocked LPG area", "server-side denial of explicit exclusions");
+  requireText(stationExternalCoverage, "pickup_resolution->>'reason' is distinct from 'SERVICE_NOT_LAUNCHED'", "pickup must fail only for an unlaunched customer-ordering area");
+  requireText(stationExternalCoverage, "delivery_resolution->>'reason' is distinct from 'SERVICE_NOT_LAUNCHED'", "return location must fail only for an unlaunched customer-ordering area");
+  requireText(stationVehicleReadiness, "external_launch_coverage and not coalesce(coverage_enabled,false)", "admin approval is required only for the out-of-launch exception");
+  requireText(customer, 'pickupServiceability.data?.reason === "SERVICE_NOT_LAUNCHED"', "customer UI does not expose external coverage for paused/excluded locations");
+  requireText(customer, '(eligibleStations.data?.length ?? 0) === 0', "Station Managed fallback appears when standard station options cannot serve the trip");
+});
+
+Deno.test("Station Managed provisional quote rows are not prematurely price-locked", () => {
+  requireText(stationQuotePricingHardening, "if tg_op='INSERT' and (", "provisional quote insert detection");
+  requireText(stationQuotePricingHardening, "Do not lock prices on that provisional INSERT", "wait for the commercial snapshot before applying configured delivery pricing");
+  requireText(stationQuotePricingHardening, "new.financial_policy_snapshot->'settlement' is null", "commercial policy snapshot readiness guard");
+});
+
+Deno.test("Platform admins can inspect and assign approved Station Managed vehicles", () => {
+  requireText(stationVehicleReadiness, "public.has_permission('platform.vehicles.manage',null)", "platform vehicle-management permission");
+  requireText(stationAdminWorkspace, "StationVehicleAdminPanel", "admin Station Managed vehicle panel");
+  requireText(stationAdminWorkspace, "read_lpg_station_managed_available_vehicles", "admin reads assigned and eligible station vehicles");
+  requireText(stationAdminWorkspace, "configure_lpg_station_managed_vehicle", "admin can assign or remove a station vehicle");
+  requireText(stationAdminWorkspace, "Register and approve the vehicle through the existing fleet and compliance workspace first", "admin cannot create or self-approve vehicle compliance");
+});
+
+Deno.test("Full LPG refunds reverse affiliate commission or queue a recovery exception", () => {
+  requireText(stationAffiliateReversal, "reversal_transaction_id", "separate immutable reversal transaction reference");
+  requireText(stationAffiliateReversal, "after update of status on public.lpg_refill_orders", "refund lifecycle is connected to reversal handling");
+  requireText(stationAffiliateReversal, "new.status='refunded'", "only full refunded order status triggers automatic reversal");
+  requireText(stationAffiliateReversal, "Affiliate wallet balance is below the commission reversal amount", "insufficient affiliate balance is recorded instead of silently dropped");
+  requireText(stationAffiliateReversal, "lpg_station_affiliate_reversal_failures", "reversal recovery queue");
+  requireText(affiliateAdmin, "reverse_lpg_station_affiliate_commission", "admin reversal action");
+  requireText(affiliateAdmin, "retry_lpg_station_affiliate_reversal", "admin reversal recovery retry");
+  requireText(stationAffiliateReversal, "read_lpg_station_affiliate_admin_workspace_base", "reversal queue extends the existing admin workspace without recursion");
+});
+
+
+Deno.test("Station Affiliate commission wallet uses the existing governed withdrawal flow", () => {
+  requireText(accountSettings, "Withdraw affiliate earnings", "account has a withdrawal action for positive affiliate balance");
+  requireText(accountSettings, "/customer/wallet/affiliate-withdraw?walletId=", "withdrawal action passes the owned commission wallet id");
+  requireText(affiliateWithdrawal, "walletIdOverride", "withdrawal experience can target the explicitly supplied wallet");
+  requireText(affiliateWithdrawal, "/withdrawals/preview", "withdrawal fee preview still uses existing finance API");
+  requireText(affiliateWithdrawal, "/withdrawals", "withdrawal still goes through the existing policy-controlled finance API");
+  requireText(affiliateWithdrawalRoute, "walletIdOverride={walletId ?? null}", "dedicated affiliate withdrawal route passes the wallet id");
+});
+
+
+Deno.test("Station Affiliate earnings are withdrawable through the governed finance engine", () => {
+  requireText(affiliateWithdrawal, "walletIdOverride", "affiliate withdrawal targets the commission wallet selected by the backend");
+  requireText(affiliateWithdrawal, "/withdrawals/preview", "withdrawal fee uses the existing fee-policy preview");
+  requireText(affiliateWithdrawal, "/withdrawals", "withdrawal request uses the existing finance runtime");
+  requireText(affiliateWithdrawalRoute, "FinanceWithdrawalExperience workspace=\"customer\" walletIdOverride={walletId ?? null}", "affiliate withdrawal route uses the shared withdrawal workflow");
+  requireText(accountSettings, "Withdraw affiliate earnings", "affiliate account exposes cash-out for a positive commission balance");
+  requireText(stationAffiliateWithdrawalGuard, "lpg_station_affiliate_reversal_failures", "pending clawbacks are checked before a withdrawal");
+  requireText(stationAffiliateWithdrawalGuard, "Affiliate withdrawals are temporarily held while a refund-related commission reversal is being recovered", "withdrawal requests fail closed during unresolved clawback");
+  requireText(stationAffiliateWithdrawalGuard, "new.status in ('approved','processing','succeeded')", "existing requested withdrawals cannot be newly approved during recovery");
+});
+
+
+Deno.test("Station Managed options require a vehicle eligible for the selected refill size", () => {
+  requireText(customer, "const selectedStationManagedCandidate", "per-station vehicle candidate for the requested quantity");
+  requireText(customer, "Boolean(selectedStationManagedCandidate) ?", "Station Managed UI is not offered solely because a driver exists");
+  requireText(customer, '(fulfillmentMode === "station_managed" && !selectedStation?.isStationManagedOnly && !selectedStationManagedCandidate)', "quote review is blocked if the selected vehicle cannot carry this refill");
+});
+
+Deno.test("Affiliate referrals begin only after station operational readiness", () => {
+  requireText(stationAffiliateProgram, "new.compliance_status<>'approved'", "compliance approval is required before activation");
+  requireText(stationAffiliateProgram, "new.availability_status<>'available'", "operational availability is required before activation");
+  requireText(stationAffiliateProgram, "after insert or update of approval_status,compliance_status,availability_status,metadata", "later operational activation re-evaluates referral status");
+  requireText(stationAffiliateProgram, "resolve_lpg_station_affiliate_referral_application_outcome", "rejected/withdrawn applications do not stay stuck in submitted referral state");
+});
+
+Deno.test("Affiliate wallet withdrawals use existing payout checks and wait through clawback recovery", () => {
+  requireText(affiliateWithdrawal, "walletIdOverride", "payout targets the affiliate's dedicated wallet");
+  requireText(affiliateWithdrawal, "/withdrawals/preview", "existing governed withdrawal fee preview");
+  requireText(affiliateWithdrawal, "/withdrawals", "existing withdrawal request API");
+  requireText(affiliateWithdrawalRoute, "FinanceWithdrawalExperience", "affiliate withdrawal route reuses the verified payout UI");
+  requireText(stationAffiliateWithdrawalGuard, "before insert or update of status on public.withdrawal_requests", "pending commission clawbacks gate withdrawal requests and approval");
+  requireText(stationAffiliateWithdrawalGuard, "Affiliate withdrawal approval is held until the pending commission reversal is resolved", "withdrawal approval fails closed during unresolved reversal");
 });

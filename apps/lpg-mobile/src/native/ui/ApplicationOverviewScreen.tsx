@@ -157,6 +157,7 @@ export function ApplicationOverviewScreen({
   const [address, setAddress] = useState("");
   const [legalOrLicence, setLegalOrLicence] = useState("");
   const [businessRegistrationNumber, setBusinessRegistrationNumber] = useState("");
+  const [affiliateReferralCode, setAffiliateReferralCode] = useState("");
   const [stationRole, setStationRole] = useState("owner");
   const [stationName, setStationName] = useState("");
   const [slug, setSlug] = useState("");
@@ -315,6 +316,9 @@ export function ApplicationOverviewScreen({
         firstString(organization, ["displayName", "display_name"]) ??
         stationName,
     );
+    setAffiliateReferralCode(
+      firstString(station, ["affiliateReferralCode", "affiliate_referral_code"]) ?? affiliateReferralCode,
+    );
     setSlug(firstString(organization, ["slug"]) ?? slug);
 
     const storedLat =
@@ -387,6 +391,7 @@ export function ApplicationOverviewScreen({
         longitude,
         refillCapacityKg: Number(capacity) || 5000,
         operatingHours: { opensAt: opens, closesAt: closes },
+        affiliateReferralCode: affiliateReferralCode.trim().toUpperCase(),
       },
       location: lastLocation ?? existingLocation ?? null,
     };
@@ -1026,6 +1031,21 @@ export function ApplicationOverviewScreen({
                   placeholderTextColor={palette.muted}
                   style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
                 />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.fieldLabel, { color: palette.ink }]}>Station referral code (optional)</Text>
+                <TextInput
+                  value={affiliateReferralCode}
+                  onChangeText={(value) => setAffiliateReferralCode(value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12))}
+                  autoCapitalize="characters"
+                  placeholder="e.g. SKA1B2C3D4E5"
+                  placeholderTextColor={palette.muted}
+                  style={[styles.input, { backgroundColor: palette.input, borderColor: palette.border, color: palette.ink }]}
+                />
+                <Text style={[styles.helperText, { color: palette.muted }]}>
+                  Enter an active SKIMA Station Affiliate code if someone referred your station. SKIMA validates the code when you submit the application; an invalid or inactive code will not be accepted.
+                </Text>
               </View>
 
               <View style={styles.fieldGroup}>
