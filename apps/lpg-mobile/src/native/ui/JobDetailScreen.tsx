@@ -438,6 +438,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             {requestedKg !== null ? <><Divider /><SummaryField label="Requested refill" value={`${requestedKg} kg`} /></> : null}
             {filledKg !== null ? <><Divider /><SummaryField label="Actual refill" value={`${filledKg} kg`} /></> : null}
             {workspace === "station" && driver ? <><Divider /><SummaryField label="Assigned driver" value={firstString(driver, ["displayName", "display_name", "name"]) ?? displayTitle(driver)} /></> : null}
+            {(workspace === "station" || workspace === "station_driver") && stationManagedVehicle ? <><Divider /><SummaryField label="Station vehicle" value={[firstString(stationManagedVehicle, ["registrationNumber", "registration_number"]), firstString(stationManagedVehicle, ["typeName", "type_name"])].filter(Boolean).join(" · ") || "Assigned station vehicle"} /></> : null}
             {driverWorkspace && customer ? <><Divider /><SummaryField label="Customer" value={firstString(customer, ["displayName", "display_name"]) ?? "Customer"} /></> : null}
             {driverWorkspace && firstString(contactLocation, ["contactName", "contact_name"]) ? <><Divider /><SummaryField label={usesDeliveryContact(status) ? "Delivery contact" : "Pickup contact"} value={firstString(contactLocation, ["contactName", "contact_name"]) ?? "Customer"} /></> : null}
             {driverWorkspace && firstString(contactLocation, ["contactPhone", "contact_phone"]) ? <><Divider /><SummaryField label="Contact phone" value={firstString(contactLocation, ["contactPhone", "contact_phone"]) ?? "Not available"} /></> : null}
@@ -472,6 +473,28 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
               loading={action.isPending}
               onPress={() => void runDriverAction(driverAction)}
             />
+          ) : null}
+
+          {canShareStationDriverLocation ? (
+            <View style={[styles.trackingCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.sectionLead}>
+                <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><MapPin color={palette.brand} size={21} /></View>
+                <View style={styles.sectionCopy}>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>Live delivery location</Text>
+                  <Text style={[styles.sectionBody, { color: palette.muted }]}>
+                    Share device location for this accepted order so the customer can follow the existing order tracking stream. Location sharing stops when the delivery reaches a terminal state.
+                  </Text>
+                </View>
+              </View>
+              <AppButton
+                label={stationTrackingOrderId === id ? "Stop live location sharing" : stationTrackingOrderId ? "Share location for this delivery" : "Share live location with customer"}
+                fullWidth
+                variant={stationTrackingOrderId === id ? "secondary" : "primary"}
+                loading={stationTrackingBusy}
+                disabled={stationTrackingBusy}
+                onPress={() => void toggleStationDriverTracking()}
+              />
+            </View>
           ) : null}
 
           {canDriverScan && driverScanType ? (
@@ -914,6 +937,7 @@ const styles = StyleSheet.create({
   metricIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   metricValue: { ...typography.heading, fontSize: 19 },
   metricLabel: { ...typography.caption },
+  trackingCard: { borderWidth: 1, borderRadius: radii.xl, padding: spacing.md, gap: spacing.md },
   scanCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
   operationCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
   sectionLead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
