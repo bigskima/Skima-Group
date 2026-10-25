@@ -84,7 +84,10 @@ export function useEligibleLpgStations({
           });
 
       if (error) throw error;
-      return EligibleStationsSchema.parse(data ?? []);
+      return EligibleStationsSchema.parse(data ?? []).map((station) => ({
+        ...station,
+        isStationManagedOnly: false as const,
+      }));
     },
   });
 }
