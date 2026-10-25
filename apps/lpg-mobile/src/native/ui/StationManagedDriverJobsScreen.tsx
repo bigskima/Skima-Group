@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { RefreshControl, StyleSheet, Text, View } from "react-native";
 import type { ReactNode } from "react";
-import { BriefcaseBusiness, CheckCircle2, Clock3, MapPin, UserRound } from "lucide-react-native";
+import { BriefcaseBusiness, CheckCircle2, Clock3, MapPin, Truck, UserRound } from "lucide-react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -29,6 +29,8 @@ type ManagedJob = {
   deliveryAddress: string | null;
   deliveryInstructions: string | null;
   customerName: string | null;
+  vehicleRegistration?: string | null;
+  vehicleType?: string | null;
 };
 
 export function StationManagedDriverJobsScreen() {
@@ -38,10 +40,6 @@ export function StationManagedDriverJobsScreen() {
   const jobs = useQuery({
     queryKey: ["station-managed-driver-jobs"],
     queryFn: async (): Promise<ManagedJob[]> => {
-      // Accept a pending email invitation on first authenticated entry. The RPC is
-      // idempotent for drivers who have already completed acceptance.
-      const acceptance = await supabase.rpc("accept_lpg_station_managed_driver_invite");
-      if (acceptance.error) throw acceptance.error;
       const result = await supabase.rpc("read_lpg_station_managed_driver_jobs", { target_limit: 50 });
       if (result.error) throw result.error;
       if (!Array.isArray(result.data)) throw new Error("Station delivery jobs were returned in an unexpected format.");
@@ -128,6 +126,14 @@ export function StationManagedDriverJobsScreen() {
                 <MapPin color={palette.muted} size={16} />
                 <Text style={[styles.detailText, { color: palette.ink }]}>{job.deliveryAddress || "Delivery address will be confirmed with the station"}</Text>
               </View>
+              {job.vehicleRegistration ? (
+                <View style={styles.detailRow}>
+                  <Truck color={palette.muted} size={16} />
+                  <Text style={[styles.detailText, { color: palette.ink }]}>
+                    {job.vehicleRegistration}{job.vehicleType ? " · " + job.vehicleType : ""}
+                  </Text>
+                </View>
+              ) : null}
               {job.customerName ? (
                 <View style={styles.detailRow}>
                   <UserRound color={palette.muted} size={16} />
