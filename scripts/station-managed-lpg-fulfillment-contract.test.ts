@@ -34,6 +34,12 @@ const affiliateWithdrawalRoute = await Deno.readTextFile("apps/lpg-mobile/app/(c
 const applicationOverview = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx");
 const stationVehicleScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedFulfillmentScreen.tsx");
 const stationEligibilityApi = await Deno.readTextFile("apps/lpg-mobile/src/native/api/stationEligibility.ts");
+const stationManagedInAppMigration = await Deno.readTextFile("supabase/migrations/20261025180000_lpg_station_managed_in_app_acceptance_and_tracking.sql");
+const stationInvitationScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationDriverInvitationScreen.tsx");
+const workspaceAccount = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/WorkspaceAccount.tsx");
+const nativeDriverTracking = await Deno.readTextFile("apps/lpg-mobile/src/native/device/driverTracking.ts");
+const webDriverTracking = await Deno.readTextFile("apps/lpg-mobile/src/native/device/driverTracking.web.ts");
+const httpShared = await Deno.readTextFile("supabase/functions/_shared/http.ts");
 
 
 function requireText(source: string, fragment: string, label: string) {
@@ -376,4 +382,50 @@ Deno.test("Affiliate wallet withdrawals use existing payout checks and wait thro
   requireText(affiliateWithdrawalRoute, "FinanceWithdrawalExperience", "affiliate withdrawal route reuses the verified payout UI");
   requireText(stationAffiliateWithdrawalGuard, "before insert or update of status on public.withdrawal_requests", "pending commission clawbacks gate withdrawal requests and approval");
   requireText(stationAffiliateWithdrawalGuard, "Affiliate withdrawal approval is held until the pending commission reversal is resolved", "withdrawal approval fails closed during unresolved reversal");
+});
+
+
+Deno.test("Station invitation email is not acceptance; only the in-app decision enrolls the driver", () => {
+  const accessStart = stationManagedInAppMigration.indexOf("create or replace function public.read_lpg_station_managed_driver_access()");
+  const accessEnd = stationManagedInAppMigration.indexOf("$station_driver_access$;", accessStart);
+  if (accessStart < 0 || accessEnd < 0) throw new Error("Read-only Station Managed driver access RPC is required.");
+  const accessBody = stationManagedInAppMigration.slice(accessStart, accessEnd);
+  if (accessBody.includes("insert into public.lpg_station_managed_drivers") || accessBody.includes("update public.lpg_station_managed_driver_invites")) {
+    throw new Error("Workspace access checks must never accept or consume station invitations.");
+  }
+  if (workspaceGate.includes("accept_lpg_station_managed_driver_invite") || driverScreen.includes("accept_lpg_station_managed_driver_invite")) {
+    throw new Error("Opening a workspace or loading jobs must never accept an invitation automatically.");
+  }
+  requireText(stationInvitationScreen, 'label="Accept invitation"', "explicit in-app acceptance action");
+  requireText(stationInvitationScreen, 'supabase.rpc("accept_lpg_station_managed_driver_invite")', "in-app acceptance calls the governed RPC");
+  requireText(stationInvitationScreen, 'supabase.rpc("decline_lpg_station_managed_driver_invite")', "in-app decline action");
+  requireText(stationManagedInAppMigration, "'acceptedInApp',true", "accepted invitation is audited as an in-app decision");
+  requireText(workspaceAccount, 'router.push("/(customer)/station-invitation" as never)', "pending invitation is discoverable in customer Account");
+  requireText(station, "Waiting for in-app acceptance", "manager sees that the email does not complete acceptance");
+});
+
+Deno.test("Station Managed location sharing uses existing LPG location and tracking records", () => {
+  requireText(stationManagedInAppMigration, "alter column driver_profile_id drop not null", "existing LPG location stream permits station-owned identity");
+  requireText(stationManagedInAppMigration, "add column if not exists station_driver_id uuid", "location ownership is tied to a station driver");
+  requireText(stationManagedInAppMigration, "public.lpg_station_managed_driver_assignments", "only the active assignment owner can record location");
+  requireText(stationManagedInAppMigration, "insert into public.lpg_driver_locations", "station location uses canonical LPG location table");
+  requireText(stationManagedInAppMigration, "insert into public.tracking_points", "customer tracking points reuse existing tracking session");
+  requireText(gateway, 'supabase.rpc("record_lpg_station_managed_driver_location"', "the existing location endpoint routes station driver samples");
+  requireText(gateway, "station_driver_id,user_id,lpg_order_id,latitude", "location reads include Station Managed identity");
+  requireText(nativeDriverTracking, '"/lpg/driver-locations"', "native driver tracker uses the existing location endpoint");
+  requireText(webDriverTracking, '"/lpg/driver-locations"', "web driver tracker uses the existing location endpoint");
+  requireText(jobDetailScreen, 'label={stationTrackingOrderId === id ? "Stop live location sharing"', "job screen exposes explicit tracking control");
+  requireText(httpShared, "x-skima-client, x-supabase-api-version", "gateway CORS allows client tracking headers");
+});
+
+Deno.test("Station manager and driver workspaces show the real assignment and reserved vehicle", () => {
+  requireText(stationManagedInAppMigration, "'assignedOrders',coalesce(", "manager receives existing branch assignments");
+  requireText(stationManagedInAppMigration, "'driverName',d.display_name", "manager sees station-owned driver identity");
+  requireText(stationManagedInAppMigration, "'vehicleRegistration',v.registration_number", "manager sees the actual reserved vehicle");
+  requireText(station, "Assigned deliveries", "station UI has a dedicated assigned-delivery section");
+  requireText(station, "Open delivery details", "station can open the canonical order details");
+  requireText(stationManagedInAppMigration, "'vehicleRegistration',vehicle.registration_number", "driver job read model exposes its reserved vehicle");
+  requireText(driverScreen, "vehicleRegistration", "driver sees the reserved delivery vehicle");
+  requireText(jobDetailScreen, "stationManagedVehicle", "canonical order detail displays the station vehicle");
+  requireText(stationManagedInAppMigration, "Station Managed order is not in an active Station Managed route stage", "location writes are restricted to active lifecycle states");
 });
