@@ -92,6 +92,7 @@ const GuideContext = createContext<GuideContextValue | null>(null);
 export function InAppGuideProvider({ children }: PropsWithChildren) {
   const session = useSession();
   const pathname = usePathname();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const segments = useSegments();
   const activeGuideRoute = useMemo(() => normalizeGuideRoute(segments), [segments]);
   const [workspace, setWorkspaceState] = useState<GuideWorkspace | null>(null);
@@ -265,8 +266,25 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
         target.measureInWindow((x, y, width, height) => {
           if (cancelled) return;
           if (width > 0 && height > 0) {
-            setTargetRect({ x, y, width, height });
-            setTargetUnavailable(false);
+            const visibleLeft = Math.max(x, 0);
+            const visibleTop = Math.max(y, 0);
+            const visibleRight = Math.min(x + width, viewportWidth);
+            const visibleBottom = Math.min(y + height, viewportHeight);
+            if (visibleRight > visibleLeft && visibleBottom > visibleTop) {
+              // Spotlight only the portion that is actually inside the viewport.
+              // Never shade the screen around an off-screen or stale measurement.
+              setTargetRect({
+                x: visibleLeft,
+                y: visibleTop,
+                width: visibleRight - visibleLeft,
+                height: visibleBottom - visibleTop,
+              });
+              setTargetUnavailable(false);
+            } else if (attempt < maxAttempts) {
+              measure(attempt + 1);
+            } else {
+              setTargetUnavailable(true);
+            }
           } else if (attempt < maxAttempts) {
             measure(attempt + 1);
           } else {
@@ -280,7 +298,7 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [activeGuideRoute, phase, step, targetsRevision]);
+  }, [activeGuideRoute, phase, step, targetsRevision, viewportHeight, viewportWidth]);
 
   const agreePolicy = useCallback(async () => {
     if (!policy || !payload?.guide || !confirmedPolicy || busy) return;
