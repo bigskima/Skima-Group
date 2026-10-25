@@ -444,7 +444,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path=public,pg_temp
-as $
+as $$
 declare
   regular_station_eligible boolean := false;
   external_station_eligible boolean := false;
