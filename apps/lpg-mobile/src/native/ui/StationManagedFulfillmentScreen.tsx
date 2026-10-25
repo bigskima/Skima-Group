@@ -16,6 +16,7 @@ import { GuideTarget } from "../onboarding/InAppGuideProvider";
 
 type DeliveryPricingMode = "separate" | "included" | "free";
 type CompensationMode = "in_app_plan" | "offline";
+type StationManagedTab = "overview" | "drivers" | "vehicles" | "settings";
 type StationManagedDelivery = {
   assignmentId: string;
   lpgOrderId: string;
@@ -116,6 +117,7 @@ export function StationManagedFulfillmentScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [expandedSection, setExpandedSection] = useState("Live delivery operations");
+  const [activeTab, setActiveTab] = useState<StationManagedTab>("overview");
 
   const workspace = useQuery<WorkspaceData>({
     queryKey: ["station-managed-workspace", branchId],
@@ -288,8 +290,8 @@ export function StationManagedFulfillmentScreen() {
   return (
     <Screen
       eyebrow="Station operations"
-      title="Your delivery service"
-      subtitle="Follow the steps below to set delivery prices, add station drivers and record driver payments. Only authorised station managers can change delivery settings."
+      title="Station Managed"
+      subtitle="Track assigned deliveries, manage station drivers and vehicles, and configure service settings in one workspace."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {loading ? <Text style={{ color: palette.muted }}>Loading branch settings…</Text> : failed ? (
@@ -298,6 +300,43 @@ export function StationManagedFulfillmentScreen() {
         <EmptyState title="Station branch unavailable" description="Complete station setup before configuring managed delivery." />
       ) : (
         <>
+          <View style={styles.workspaceTabs}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeTab === "overview" }}
+              onPress={() => { setActiveTab("overview"); setExpandedSection("Live delivery operations"); }}
+              style={[styles.workspaceTab, { backgroundColor: activeTab === "overview" ? palette.brandSoft : palette.surface, borderColor: activeTab === "overview" ? palette.brand : palette.border }]}
+            >
+              <Text style={{ color: activeTab === "overview" ? palette.brand : palette.ink, fontSize: 13, fontWeight: "800" }}>Overview</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeTab === "drivers" }}
+              onPress={() => { setActiveTab("drivers"); setExpandedSection("Invite a station driver"); }}
+              style={[styles.workspaceTab, { backgroundColor: activeTab === "drivers" ? palette.brandSoft : palette.surface, borderColor: activeTab === "drivers" ? palette.brand : palette.border }]}
+            >
+              <Text style={{ color: activeTab === "drivers" ? palette.brand : palette.ink, fontSize: 13, fontWeight: "800" }}>Drivers</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeTab === "vehicles" }}
+              onPress={() => { setActiveTab("vehicles"); setExpandedSection("Station delivery vehicles"); }}
+              style={[styles.workspaceTab, { backgroundColor: activeTab === "vehicles" ? palette.brandSoft : palette.surface, borderColor: activeTab === "vehicles" ? palette.brand : palette.border }]}
+            >
+              <Text style={{ color: activeTab === "vehicles" ? palette.brand : palette.ink, fontSize: 13, fontWeight: "800" }}>Vehicles</Text>
+            </Pressable>
+            <GuideTarget targetKey="station.managed-fulfillment">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: activeTab === "settings" }}
+                onPress={() => { setActiveTab("settings"); setExpandedSection("Customer delivery option"); }}
+                style={[styles.workspaceTab, { backgroundColor: activeTab === "settings" ? palette.brandSoft : palette.surface, borderColor: activeTab === "settings" ? palette.brand : palette.border }]}
+              >
+                <Text style={{ color: activeTab === "settings" ? palette.brand : palette.ink, fontSize: 13, fontWeight: "800" }}>Settings & pay</Text>
+              </Pressable>
+            </GuideTarget>
+          </View>
+          {activeTab === "overview" ? (
           <Section
             title="Live delivery operations"
             palette={palette}
@@ -419,17 +458,19 @@ export function StationManagedFulfillmentScreen() {
               </View>
             ) : null}
           </Section>
+          ) : null}
 
-          <GuideTarget targetKey="station.managed-fulfillment">
-          <Section title="1. Customer delivery option" palette={palette} expanded={expandedSection === "1. Customer delivery option"} onPress={() => setExpandedSection(expandedSection === "1. Customer delivery option" ? "" : "1. Customer delivery option")}>
+          {activeTab === "settings" ? (
+            <>
+
+          <Section title="Customer delivery option" palette={palette} expanded={expandedSection === "Customer delivery option"} onPress={() => setExpandedSection(expandedSection === "Customer delivery option" ? "" : "Customer delivery option")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Allow customers to choose delivery by a driver employed or engaged by your station. This does not change independent-driver or SKIMA Fleet orders. If you cannot edit this setting, ask your station manager.</Text>
             <View style={styles.row}>
               <Choice label={enabled ? "Enabled for customers" : "Disabled for customers"} active={enabled} onPress={() => setEnabled(!enabled)} palette={palette} />
             </View>
           </Section>
-          </GuideTarget>
 
-          <Section title="2. Delivery price" palette={palette} expanded={expandedSection === "2. Delivery price"} onPress={() => setExpandedSection(expandedSection === "2. Delivery price" ? "" : "2. Delivery price")}>
+          <Section title="Delivery price" palette={palette} expanded={expandedSection === "2. Delivery price"} onPress={() => setExpandedSection(expandedSection === "2. Delivery price" ? "" : "2. Delivery price")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Choose how delivery appears on the customer's SKIMA checkout. Refill and delivery remain separately tracked where a separate fee is selected.</Text>
             <View style={styles.row}>
               <Choice label="Separate fee" active={pricingMode === "separate"} onPress={() => setPricingMode("separate")} palette={palette} />
@@ -440,7 +481,7 @@ export function StationManagedFulfillmentScreen() {
             <Text style={{ color: palette.muted, fontSize: 13 }}>Driver compensation is a station responsibility. These settings do not create SKIMA driver earnings or payouts.</Text>
           </Section>
 
-          <Section title="3. What your station pays its drivers" palette={palette} expanded={expandedSection === "3. What your station pays its drivers"} onPress={() => setExpandedSection(expandedSection === "3. What your station pays its drivers" ? "" : "3. What your station pays its drivers")}>
+          <Section title="Driver compensation plan" palette={palette} expanded={expandedSection === "Driver compensation plan"} onPress={() => setExpandedSection(expandedSection === "Driver compensation plan" ? "" : "Driver compensation plan")}>
             <View style={styles.row}>
               <Choice label="In-app plan" active={compensationMode === "in_app_plan"} onPress={() => { setCompensationMode("in_app_plan"); setAgreementMode("in_app_plan"); }} palette={palette} />
               <Choice label="Offline agreement" active={compensationMode === "offline"} onPress={() => { setCompensationMode("offline"); setAgreementMode("offline"); }} palette={palette} />
@@ -449,8 +490,11 @@ export function StationManagedFulfillmentScreen() {
           </Section>
 
           <AppButton label="Save delivery settings" fullWidth loading={settingsMutation.isPending} onPress={() => void settingsMutation.mutateAsync()} />
+            </>
+          ) : null}
 
-          <Section title="4. Station delivery vehicles" palette={palette} expanded={expandedSection === "4. Station delivery vehicles"} onPress={() => setExpandedSection(expandedSection === "4. Station delivery vehicles" ? "" : "4. Station delivery vehicles")}>
+          {activeTab === "vehicles" ? (
+          <Section title="Station delivery vehicles" palette={palette} expanded={expandedSection === "4. Station delivery vehicles"} onPress={() => setExpandedSection(expandedSection === "4. Station delivery vehicles" ? "" : "4. Station delivery vehicles")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>
               Assign vehicles that belong to this station organisation and are active in SKIMA's vehicle register. LPG transport approval, required safety evidence and the recorded load capacity are checked again by the backend before a quote or payment can proceed. A driver alone does not make a delivery orderable.
             </Text>
@@ -522,8 +566,38 @@ export function StationManagedFulfillmentScreen() {
               onPress={() => void vehicleMutation.mutateAsync({ vehicleId: selectedVehicleId, enabled: true, reason: vehicleChangeReason })}
             />
           </Section>
+          ) : null}
 
-          <Section title="4. Add a driver to this station" palette={palette} expanded={expandedSection === "4. Add a station driver"} onPress={() => setExpandedSection(expandedSection === "4. Add a station driver" ? "" : "4. Add a station driver")}>
+          {activeTab === "drivers" ? (
+            <>
+              <View style={[styles.section, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Station driver roster</Text>
+                <Text style={{ color: palette.muted, fontSize: 12 }}>
+                  Assignments and progress come from SKIMA's existing dispatch and order lifecycle.
+                </Text>
+                {drivers.length ? drivers.map((driver) => {
+                  const activeCount = activeDeliveries.filter((delivery) => delivery.stationDriverId === driver.id).length;
+                  return (
+                    <View key={driver.id} style={[styles.driverRosterRow, { borderColor: palette.border }]}>
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <Text style={{ color: palette.ink, fontWeight: "800", fontSize: 14 }}>{driver.displayName}</Text>
+                        <Text style={{ color: palette.muted, fontSize: 12 }}>
+                          {driver.phone || "No phone recorded"} · {activeCount} active {activeCount === 1 ? "delivery" : "deliveries"}
+                        </Text>
+                      </View>
+                      <AppButton
+                        label="Compensation"
+                        size="sm"
+                        variant="ghost"
+                        onPress={() => { setSelectedDriverId(driver.id); setActiveTab("settings"); setExpandedSection("Record driver agreement"); }}
+                      />
+                    </View>
+                  );
+                }) : (
+                  <Text style={{ color: palette.muted, fontSize: 13 }}>No active Station Managed drivers yet. Invite a driver below to make the station dispatch-ready.</Text>
+                )}
+              </View>
+          <Section title="Invite a station driver" palette={palette} expanded={expandedSection === "Invite a station driver"} onPress={() => setExpandedSection(expandedSection === "Invite a station driver" ? "" : "Invite a station driver")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Invite a station-owned driver by email. They accept the invitation and sign in to their own account; they do not need an independent-driver profile.</Text>
             <Field label="Driver email address" value={driverEmail} onChangeText={setDriverEmail} palette={palette} autoCapitalize="none" />
             <Field label="Driver full name" value={driverName} onChangeText={setDriverName} palette={palette} />
@@ -531,18 +605,12 @@ export function StationManagedFulfillmentScreen() {
             <AppButton label="Invite station driver" fullWidth loading={registerMutation.isPending} disabled={!driverEmail.trim() || !driverName.trim()} onPress={() => void registerMutation.mutateAsync()} />
             <Text style={{ color: palette.muted, fontSize: 12 }}>For safety, an account with an independent or SKIMA Managed driver profile cannot accept a Station Managed invitation.</Text>
           </Section>
+            </>
+          ) : null}
 
-          <Section title="6. Automatic order dispatch" palette={palette} expanded={expandedSection === "6. Automatic order dispatch"} onPress={() => setExpandedSection(expandedSection === "6. Automatic order dispatch" ? "" : "6. Automatic order dispatch")}>
-            <Text style={{ color: palette.muted, fontSize: 13 }}>When Station Managed is enabled, eligible new orders are assigned automatically to the least-loaded active driver at this station. Orders waiting here are not sent to independent drivers or SKIMA Fleet; invite a station driver and let them accept the invitation to make this queue dispatch-ready. Existing independent-driver and SKIMA Fleet orders are unchanged.</Text>
-            {(data?.assignableOrders ?? []).length ? (data?.assignableOrders ?? []).map((order) => (
-              <View key={order.id} style={[styles.row, { borderColor: palette.border }]}>
-                <Text style={{ color: palette.ink, fontWeight: "700" }}>{order.publicReference ?? order.id.slice(0, 8)}</Text>
-                <Text style={{ color: palette.muted, fontSize: 12 }}>{order.requestedKg ?? "—"} kg · {order.status}</Text>
-              </View>
-            )) : <Text style={{ color: palette.muted }}>No waiting Station Managed orders. New eligible orders will be routed automatically.</Text>}
-          </Section>
-
-          <Section title="7. Record the driver agreement" palette={palette} expanded={expandedSection === "7. Record driver agreement"} onPress={() => setExpandedSection(expandedSection === "7. Record driver agreement" ? "" : "7. Record driver agreement")}>
+          {activeTab === "settings" ? (
+            <>
+          <Section title="Record driver agreement" palette={palette} expanded={expandedSection === "Record driver agreement"} onPress={() => setExpandedSection(expandedSection === "Record driver agreement" ? "" : "Record driver agreement")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Select which station driver's agreement or payment record you want to manage. This selection does not assign individual orders.</Text>
             {drivers.map((driver) => (
               <Choice key={driver.id} label={driver.displayName} active={selectedDriverId === driver.id} onPress={() => setSelectedDriverId(driver.id)} palette={palette} />
@@ -557,7 +625,7 @@ export function StationManagedFulfillmentScreen() {
             <AppButton label="Record agreement" fullWidth loading={agreementMutation.isPending} disabled={!selectedDriverId} onPress={() => void agreementMutation.mutateAsync()} />
           </Section>
 
-          <Section title="8. Confirm a payment made by your station" palette={palette} expanded={expandedSection === "8. Record a payment you made"} onPress={() => setExpandedSection(expandedSection === "8. Record a payment you made" ? "" : "8. Record a payment you made")}>
+          <Section title="Record a station payment" palette={palette} expanded={expandedSection === "Record a station payment"} onPress={() => setExpandedSection(expandedSection === "Record a station payment" ? "" : "Record a station payment")}>
             <Field label={`Amount (${currencyCode})`} value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" palette={palette} />
             <View style={styles.row}>
               <Choice label="Bank transfer" active={paymentMethod === "bank_transfer"} onPress={() => setPaymentMethod("bank_transfer")} palette={palette} />
@@ -575,6 +643,8 @@ export function StationManagedFulfillmentScreen() {
             <Text style={{ color: palette.ink, fontWeight: "700", marginTop: 8 }}>Payment confirmations</Text>
             {(data?.payments ?? []).slice(0, 5).map((record, index) => <Text key={String(record.id ?? index)} style={{ color: palette.muted, paddingVertical: 4 }}>{String(record.currencyCode ?? currencyCode)} {String(record.amount ?? "0")} · {String(record.paymentMethod ?? "other")} · {String(record.paymentStatus ?? "recorded")}</Text>)}
           </Section>
+            </>
+          ) : null}
         </>
       )}
       {successMessage ? <Text style={{ color: palette.brand, marginTop: 12 }}>{successMessage}</Text> : null}
@@ -608,7 +678,10 @@ function formatOperationDate(value?: string | null) {
 
 const styles = StyleSheet.create({
   section: { borderWidth: 1, borderRadius: radii.lg, padding: spacing.sm + 2, gap: spacing.sm, marginBottom: spacing.sm },
+  workspaceTabs: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: spacing.xs, marginBottom: spacing.sm },
+  workspaceTab: { width: "48%", minHeight: 44, alignItems: "center", justifyContent: "center", borderWidth: 1, borderRadius: radii.md, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   operationsHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  driverRosterRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: spacing.sm },
   deliveryCard: { borderWidth: 1, borderRadius: radii.lg, padding: spacing.md, gap: spacing.sm, marginBottom: spacing.xs },
   deliveryCardHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   statusTag: { borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
