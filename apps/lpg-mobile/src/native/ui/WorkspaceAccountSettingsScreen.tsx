@@ -98,7 +98,6 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
     }
   };
 
-  const theme = useAppTheme();
   const policyHref = workspace === "customer"
     ? "/policies/customer-terms"
     : workspace === "driver"
