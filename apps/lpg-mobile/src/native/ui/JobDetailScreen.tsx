@@ -25,6 +25,7 @@ import {
   recordId,
 } from "../api/records";
 import { readOperationalLocation } from "../device/location";
+import { getTrackedStationManagedOrderId, startStationManagedDriverTracking, stopDriverTracking } from "../device/driverTracking";
 import { openDeviceNavigation } from "../device/navigation";
 import { Scanner } from "../device/Scanner";
 import { OperationalMap, type MapPoint } from "../maps/OperationalMap";
@@ -57,6 +58,8 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const [actualKg, setActualKg] = useState("");
   const [inspectionResult, setInspectionResult] = useState("");
   const [inspectionNotes, setInspectionNotes] = useState("");
+  const [stationTrackingOrderId, setStationTrackingOrderId] = useState<string | null>(null);
+  const [stationTrackingBusy, setStationTrackingBusy] = useState(false);
 
   useEffect(() => {
     if (params.scannedToken) setToken(params.scannedToken);
@@ -110,7 +113,8 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const root = detail.data;
   const order = nestedRecord(root, "order") ?? root;
   const cylinder = nestedRecord(root, "cylinder") ?? nestedRecord(order, "cylinder");
-  const driver = nestedRecord(root, "driver") ?? nestedRecord(order, "driver");
+  const driver = nestedRecord(root, "driver") ?? nestedRecord(order, "driver") ?? nestedRecord(root, "stationManagedDriver") ?? nestedRecord(order, "stationManagedDriver");
+  const stationManagedVehicle = nestedRecord(root, "stationManagedVehicle") ?? nestedRecord(order, "stationManagedVehicle");
   const station = nestedRecord(root, "station") ?? nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
   const pickup = nestedRecord(root, "pickupLocation") ?? nestedRecord(root, "pickup_location") ?? nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location");
   const delivery = nestedRecord(root, "deliveryLocation") ?? nestedRecord(root, "delivery_location") ?? nestedRecord(order, "deliveryLocation") ?? nestedRecord(order, "delivery_location");
