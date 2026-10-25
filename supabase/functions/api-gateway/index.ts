@@ -2575,7 +2575,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase
           .from("lpg_driver_locations")
           .select(
-            "id,driver_profile_id,user_id,lpg_order_id,latitude,longitude,accuracy_meters,heading_degrees,speed_meters_per_second,online_status,recorded_at,metadata,created_at",
+            "id,driver_profile_id,station_driver_id,user_id,lpg_order_id,latitude,longitude,accuracy_meters,heading_degrees,speed_meters_per_second,online_status,recorded_at,metadata,created_at",
           )
           .order("recorded_at", { ascending: false }),
         id,
@@ -2590,6 +2590,25 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }
 
       const payload = body.value;
+      if (payload.stationDriverId !== undefined) {
+        return rpcResponse(
+          supabase.rpc("record_lpg_station_managed_driver_location", {
+            target_accuracy_meters: optionalNumber(payload.accuracyMeters, "accuracyMeters"),
+            target_heading_degrees: optionalNumber(payload.headingDegrees, "headingDegrees"),
+            target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+            target_latitude: requireNumber(payload.latitude, "latitude"),
+            target_longitude: requireNumber(payload.longitude, "longitude"),
+            target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+            target_metadata: optionalRecord(payload.metadata) ?? {},
+            target_recorded_at: optionalString(payload.recordedAt),
+            target_source: optionalString(payload.source) ?? "skima.lpg.station_managed_driver_api",
+            target_speed_meters_per_second: optionalNumber(payload.speedMetersPerSecond, "speedMetersPerSecond"),
+            target_station_driver_id: requireUuid(payload.stationDriverId, "stationDriverId"),
+          }),
+          id,
+        );
+      }
+
       return rpcResponse(
         supabase.rpc("record_operational_driver_location", {
           target_accuracy_meters: optionalNumber(payload.accuracyMeters, "accuracyMeters"),
