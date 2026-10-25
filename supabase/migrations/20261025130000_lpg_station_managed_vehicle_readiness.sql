@@ -116,8 +116,10 @@ as $$
 declare station_record public.lpg_station_branches%rowtype; result jsonb;
 begin
   if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
-  if not public.can_operate_lpg_station_branch(target_station_branch_id,'lpg.stations.manage') then
-    raise exception using errcode='42501',message='branch-scoped station management permission is required';
+  if not public.can_operate_lpg_station_branch(target_station_branch_id,'lpg.stations.manage')
+    and not public.is_platform_super_admin()
+    and not public.has_permission('platform.vehicles.manage',null) then
+    raise exception using errcode='42501',message='branch-scoped station or platform vehicle-management permission is required';
   end if;
   select * into station_record from public.lpg_station_branches where id=target_station_branch_id;
   if not found then raise exception using errcode='22023',message='station branch was not found'; end if;
@@ -188,8 +190,10 @@ as $$
 declare assignment public.lpg_station_managed_vehicles%rowtype;
 begin
   if auth.uid() is null then raise exception using errcode='42501',message='authentication required'; end if;
-  if not public.can_operate_lpg_station_branch(target_station_branch_id,'lpg.stations.manage') then
-    raise exception using errcode='42501',message='branch-scoped station management permission is required';
+  if not public.can_operate_lpg_station_branch(target_station_branch_id,'lpg.stations.manage')
+    and not public.is_platform_super_admin()
+    and not public.has_permission('platform.vehicles.manage',null) then
+    raise exception using errcode='42501',message='branch-scoped station or platform vehicle-management permission is required';
   end if;
   if target_station_branch_id is null or target_vehicle_id is null
     or target_enabled is null
