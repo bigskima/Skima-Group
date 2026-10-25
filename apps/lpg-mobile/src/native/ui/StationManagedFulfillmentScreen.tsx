@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { ClipboardList, Settings2, Truck, UsersRound, WalletCards } from "lucide-react-native";
 import { router } from "expo-router";
 import { domainQueries, useStationRuntime } from "../api/domains";
-import { firstString, nestedRecord } from "../api/records";
+import { firstNumber, firstString, nestedRecord } from "../api/records";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { spacing, typography, radii } from "../theme/tokens";
@@ -447,7 +447,7 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
                   const orderId = firstString(job, ["lpgOrderId", "lpg_order_id"]);
                   const reference = firstString(job, ["publicReference", "public_reference"]) ?? (orderId ? orderId.slice(0, 8) : "Station Managed order");
                   const orderStatus = firstString(job, ["status"]) ?? "unknown";
-                  const requestedKg = firstString(job, ["requestedKg", "requested_kg"]) ?? "—";
+                  const requestedKg = firstNumber(job, ["requestedKg", "requested_kg"]) ?? "—";
                   return (
                     <View key={orderId ?? reference} style={[styles.section, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
                       <View style={styles.orderHeader}>
