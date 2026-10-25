@@ -111,8 +111,8 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
         throw new Error("SKIMA returned an invalid linking code. Please try again.");
       }
       const code = result.data;
-      const publicNumber = (process.env.EXPO_PUBLIC_SKIMA_WHATSAPP_NUMBER ?? "").replace(/\\D/g, "");
-      const message = "Send this code to the official SKIMA LPG WhatsApp number within 10 minutes:\\n\\n" + code + "\\n\\nDo not share this code with another person."; 
+      const publicNumber = (process.env.EXPO_PUBLIC_SKIMA_WHATSAPP_NUMBER ?? "").replace(/\D/g, "");
+      const message = "Send this code to the official SKIMA LPG WhatsApp number within 10 minutes:\n\n" + code + "\n\nDo not share this code with another person.";
       const copyAction = { text: "Copy code", onPress: () => { void Clipboard.setStringAsync(code); } };
       if (publicNumber.length >= 6 && publicNumber.length <= 20) {
         Alert.alert("WhatsApp linking code", message, [
