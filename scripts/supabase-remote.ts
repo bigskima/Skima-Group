@@ -81,6 +81,7 @@ async function deployFunctions(): Promise<void> {
   await deployFunction(projectRef, "runtime-worker", true);
   await deployFunction(projectRef, "inventory-provider-webhook", true);
   await deployFunction(projectRef, "payment-webhook", true);
+  await deployFunction(projectRef, "skima-whatsapp-webhook", false);
   await deployFunction(projectRef, "webhook-sandbox-receiver", true);
 }
 

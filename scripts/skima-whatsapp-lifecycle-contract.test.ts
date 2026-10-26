@@ -1,0 +1,62 @@
+const root = new URL("../", import.meta.url);
+const read = (path: string) => Deno.readTextFile(new URL(path, root));
+
+Deno.test("WhatsApp channel connects to the canonical LPG lifecycle", async () => {
+  const [webhook, gateway, foundation, lifecycle, notifications, config] = await Promise.all([
+    read("supabase/functions/skima-whatsapp-webhook/index.ts"),
+    read("supabase/functions/api-gateway/index.ts"),
+    read("supabase/migrations/20261026001000_skima_customer_whatsapp_channel.sql"),
+    read("supabase/migrations/20261026002000_skima_whatsapp_lpg_order_lifecycle.sql"),
+    read("supabase/migrations/20261026003000_skima_whatsapp_order_status_notifications.sql"),
+    read("supabase/config.toml"),
+  ]);
+
+  // WhatsApp collects choices only from the linked customer's own records.
+  assertIncludes(webhook, 'db.rpc("read_skima_whatsapp_customer_choices"');
+  assertIncludes(webhook, 'db.rpc("read_skima_whatsapp_eligible_stations"');
+  assertIncludes(webhook, 'db.rpc("create_skima_whatsapp_lpg_order"');
+  assertIncludes(webhook, 'db.rpc("reserve_and_dispatch_lpg_refill_order"');
+  assertIncludes(webhook, 'eq("customer_user_id", profileId)');
+  assertIncludes(webhook, 'eq("payment_status", "pending")');
+  assertIncludes(webhook, "No payment is taken by generating this quote.");
+  assertIncludes(webhook, "verifySignature(appSecret, rawBody, signature)");
+  assertIncludes(webhook, "requestCanonicalQuote(");
+  assertIncludes(webhook, "_lastReplyText");
+  assertIncludes(webhook, 'db.rpc("set_skima_whatsapp_order_notifications"');
+  assertIncludes(webhook, "SKIMA_WHATSAPP_DISPATCH_SECRET");
+  assertIncludes(webhook, "sendWhatsAppTemplate");
+  assertIncludes(webhook, "extractStatuses");
+  assertIncludes(webhook, "Reply STOP at any time");
+  assertNotIncludes(webhook, "next step is to connect this chat to SKIMA's live");
+
+  // Quotes must use the same commercial route/pricing path as the app, not a local price calculation.
+  assertIncludes(gateway, 'routePath === "/internal/whatsapp/lpg/quote"');
+  assertIncludes(gateway, 'buildLpgCommercialRouteSnapshot(');
+  assertIncludes(gateway, 'serviceClient.rpc("create_skima_whatsapp_lpg_quote"');
+
+  assertIncludes(foundation, "consume_skima_whatsapp_link_code");
+  assertIncludes(foundation, "code_hash");
+  assertIncludes(foundation, "link_attempt_count");
+
+  assertIncludes(lifecycle, "read_lpg_eligible_stations");
+  assertIncludes(lifecycle, "public.create_lpg_refill_quote_from_purchase_input(");
+  assertIncludes(lifecycle, "public.create_lpg_refill_order(");
+  assertIncludes(lifecycle, "from public, anon, authenticated");
+  assertIncludes(lifecycle, "to service_role");
+
+  // Proactive notifications must be consent-based and delivered from the same canonical order rows.
+  assertIncludes(notifications, "order_status_notifications_opt_in boolean not null default false");
+  assertIncludes(notifications, "queue_skima_whatsapp_order_status_notification");
+  assertIncludes(notifications, "claim_skima_whatsapp_order_notifications");
+  assertIncludes(notifications, "cron.schedule(");
+  assertIncludes(notifications, "skima_whatsapp_dispatch_secret");
+  assertIncludes(config, "[functions.skima-whatsapp-webhook]");
+  assertIncludes(config, "verify_jwt = false");
+});
+
+function assertIncludes(source: string, fragment: string): void {
+  if (!source.includes(fragment)) throw new Error(`Expected source to include: ${fragment}`);
+}
+function assertNotIncludes(source: string, fragment: string): void {
+  if (source.includes(fragment)) throw new Error(`Expected source not to include: ${fragment}`);
+}
