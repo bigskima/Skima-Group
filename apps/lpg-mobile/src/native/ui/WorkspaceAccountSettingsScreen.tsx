@@ -127,7 +127,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
             value={theme.scheme === "dark" ? "Switch to light" : "Switch to dark"}
             onPress={() => void theme.toggle()}
           />
-          <GuideTarget targetKey="account.app-guide">
+          <GuideTarget targetKey={`account.${workspace}.app-guide`}>
             <SettingsRow
               icon={CircleHelp}
               label="App guide"
