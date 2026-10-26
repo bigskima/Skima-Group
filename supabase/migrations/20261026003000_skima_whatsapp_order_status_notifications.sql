@@ -239,14 +239,12 @@ revoke all on function public.claim_skima_whatsapp_order_notifications(integer) 
 grant execute on function public.set_skima_whatsapp_order_notifications(text, boolean) to service_role;
 grant execute on function public.claim_skima_whatsapp_order_notifications(integer) to service_role;
 
--- When the two Vault secrets are present, poll the outbox once per minute.
--- Store the dispatch URL and the same random token supplied as the Edge Function
--- secret SKIMA_WHATSAPP_DISPATCH_SECRET in Vault before applying this migration.
-do $$
+-- Create the poller even before Meta credentials are configured. The cron command
+-- remains inert until both Vault values exist, then starts delivering opt-in updates.
+do $
 begin
   if to_regclass('vault.decrypted_secrets') is not null
-     and exists (select 1 from vault.decrypted_secrets where name = 'skima_whatsapp_dispatch_url')
-     and exists (select 1 from vault.decrypted_secrets where name = 'skima_whatsapp_dispatch_secret') then
+     and to_regclass('cron.job') is not null then
     perform cron.schedule(
       'skima-whatsapp-order-notifications',
       '* * * * *',
@@ -258,11 +256,13 @@ begin
             'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'skima_whatsapp_dispatch_secret' limit 1)
           ),
           body := '{"mode":"dispatch"}'::jsonb
-        );
+        )
+        where exists (select 1 from vault.decrypted_secrets where name = 'skima_whatsapp_dispatch_url')
+          and exists (select 1 from vault.decrypted_secrets where name = 'skima_whatsapp_dispatch_secret');
       $cron$
     );
   end if;
 end;
-$$;
+$;
 
 commit;
