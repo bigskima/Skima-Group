@@ -272,8 +272,4 @@ comment on function public.read_lpg_station_managed_workspace(uuid) is
 notify pgrst,'reload schema';
 commit;
 
-comment on function public.read_lpg_station_managed_workspace(uuid) is
-  'Branch-authorized Station Managed operations read model. Drivers, assignments, orders, vehicles and delivery addresses are projected from canonical SKIMA LPG records; no parallel dispatch or tracking system is created.';
 
-notify pgrst,'reload schema';
-commit;
