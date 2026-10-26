@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
 import {
   Bell,
   ChevronRight,
@@ -6,6 +7,7 @@ import {
   LayoutGrid,
   Settings2,
   ShieldCheck,
+  Truck,
 } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSession } from "../session/SessionProvider";
@@ -26,6 +28,16 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
   const displayName = session.context?.profile?.display_name ?? "SKIMA member";
   const email = session.context?.user.email ?? "";
   const userId = session.context?.user.id ?? null;
+  const stationInvitation = useQuery({
+    queryKey: ["station-driver-invitation", userId],
+    enabled: group === "customer" && session.status === "authenticated",
+    retry: false,
+    queryFn: async () => {
+      const result = await session.supabase.rpc("read_lpg_station_managed_driver_invitation_access");
+      if (result.error) throw result.error;
+      return (result.data ?? { enabled: false }) as { enabled?: boolean; stationName?: string | null };
+    },
+  });
 
   return (
     <Screen
@@ -78,6 +90,14 @@ export function WorkspaceAccount({ workspace }: { workspace: string }) {
           detail="Orders, approvals and money"
           onPress={() => router.push(`/(${group})/notifications` as never)}
         />
+        {group === "customer" && stationInvitation.data?.enabled === true ? (
+          <QuickTile
+            icon={Truck}
+            label="Station driver invitation"
+            detail={"Review and accept " + (stationInvitation.data.stationName || "your station") + "'s invitation inside SKIMA"}
+            onPress={() => router.push("/(customer)/station-invitation" as never)}
+          />
+        ) : null}
         <QuickTile
           icon={LayoutGrid}
           label={group === "customer" ? "SKIMA services" : `${workspace} tools`}
