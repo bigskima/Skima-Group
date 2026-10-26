@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { ClipboardList, Settings2, Truck, UsersRound, WalletCards } from "lucide-react-native";
 import { router } from "expo-router";
-import { domainQueries, useStationRuntime } from "../api/domains";
-import { firstNumber, firstString, nestedRecord } from "../api/records";
+import { useStationRuntime } from "../api/domains";
+import { firstString, nestedRecord } from "../api/records";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { spacing, typography, radii } from "../theme/tokens";
@@ -18,6 +18,47 @@ import { GuideTarget } from "../onboarding/InAppGuideProvider";
 type ManagedWorkspaceSection = "overview" | "settings" | "vehicles" | "drivers" | "orders" | "payments";
 type DeliveryPricingMode = "separate" | "included" | "free";
 type CompensationMode = "in_app_plan" | "offline";
+type StationManagedInvitation = {
+  id: string;
+  email: string;
+  displayName: string;
+  phone?: string | null;
+  status: string;
+  expiresAt?: string | null;
+  createdAt?: string | null;
+  deliveryStatus?: string | null;
+  deliveryFailure?: string | null;
+};
+
+type StationManagedDelivery = {
+  assignmentId: string;
+  lpgOrderId: string;
+  publicReference?: string | null;
+  assignmentStatus: string;
+  orderStatus: string;
+  requestedKg: number | string;
+  actualKg?: number | string | null;
+  totalAmount?: number | string | null;
+  currencyCode?: string | null;
+  paymentStatus?: string | null;
+  assignedAt?: string | null;
+  completedAt?: string | null;
+  updatedAt?: string | null;
+  stationDriverId?: string | null;
+  driverName?: string | null;
+  driverPhone?: string | null;
+  vehicleId?: string | null;
+  vehicleRegistrationNumber?: string | null;
+  vehicleManufacturer?: string | null;
+  vehicleModel?: string | null;
+  vehicleType?: string | null;
+  deliveryAddress?: string | null;
+  deliveryInstructions?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  isActive?: boolean;
+};
+
 type WorkspaceData = {
   settings?: {
     stationManagedEnabled?: boolean;
@@ -28,9 +69,12 @@ type WorkspaceData = {
     currencyCode?: string;
   };
   drivers?: Array<{ id: string; userId: string; displayName: string; phone?: string; status: string }>;
+  invitations?: StationManagedInvitation[];
   agreements?: Array<Record<string, unknown>>;
   payments?: Array<Record<string, unknown>>;
-  assignableOrders?: Array<{ id: string; publicReference?: string; status: string; requestedKg?: number; totalAmount?: number; currencyCode?: string }>;
+  deliveries?: StationManagedDelivery[];
+  assignedOrders?: Array<Record<string, unknown>>;
+  assignableOrders?: Array<{ id: string; publicReference?: string; status: string; requestedKg?: number; totalAmount?: number; currencyCode?: string; dispatchStatus?: string }>;
 };
 
 type StationManagedVehicle = {
@@ -56,7 +100,6 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
   const session = useSession();
   const { palette } = useAppTheme();
   const runtime = useStationRuntime();
-  const stationJobsQuery = domainQueries.stationJobs(section === "orders");
   const branch = nestedRecord(runtime.data, "branch");
   const branchId = firstString(branch, ["id", "stationBranchId", "station_branch_id"]);
   const client = useQueryClient();
@@ -93,6 +136,7 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
     queryKey: ["station-managed-workspace", branchId],
     enabled: session.status === "authenticated" && Boolean(branchId),
     retry: false,
+    refetchInterval: section === "orders" ? 15000 : 30000,
     queryFn: async () => {
       const result = await session.supabase.rpc("read_lpg_station_managed_workspace", {
         target_station_branch_id: branchId,
@@ -170,9 +214,32 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
       if (result.data?.ok !== true) throw new Error(result.data?.message || "Station driver invitation could not be sent.");
       return result.data.data;
     },
-    onSuccess: async (invitation) => { setDriverEmail(""); setDriverName(""); setDriverPhone(""); setErrorMessage(null); setSuccessMessage(`Invitation email sent to ${String(invitation?.email ?? "the driver")}. They must accept using that email address.`); await workspace.refetch(); },
+    onSuccess: async (invitation) => { setDriverEmail(""); setDriverName(""); setDriverPhone(""); setErrorMessage(null); setSuccessMessage(`Sign-in notice sent to ${String(invitation?.email ?? "the driver")}. They must sign in with that verified email and explicitly accept the station invitation inside SKIMA.`); await workspace.refetch(); },
     onError: (error) => setErrorMessage(friendlyError(error, "Station driver invitation could not be sent.")),
   });
+  const resendInvitationMutation = useMutation({
+    mutationFn: async (invitation: StationManagedInvitation) => {
+      if (!branchId) throw new Error("Your station branch is not available.");
+      const result = await session.supabase.functions.invoke("api-gateway/runtime/station-driver-invitations", {
+        body: { value: {
+          stationBranchId: branchId,
+          email: invitation.email,
+          displayName: invitation.displayName,
+          phone: invitation.phone ?? null,
+        } },
+      });
+      if (result.error) throw result.error;
+      if (result.data?.ok !== true) throw new Error(result.data?.message || "Station invitation notice could not be resent.");
+      return result.data.data;
+    },
+    onSuccess: async () => {
+      setErrorMessage(null);
+      setSuccessMessage("A new sign-in notice was sent. The driver must still accept the station relationship inside SKIMA.");
+      await workspace.refetch();
+    },
+    onError: (error) => setErrorMessage(friendlyError(error, "Station invitation notice could not be resent.")),
+  });
+
   const agreementMutation = useMutation({
     mutationFn: async () => {
       if (!selectedDriverId) throw new Error("Choose a station driver first.");
@@ -244,10 +311,6 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
 
   const data = workspace.data;
   const drivers = (data?.drivers ?? []).filter((driver) => driver.status === "active");
-  const stationManagedAssignedJobs = (stationJobsQuery.data ?? []).filter((job) => {
-    const metadata = nestedRecord(job, "metadata");
-    return Boolean(firstString(metadata, ["stationManagedDriverId", "station_managed_driver_id"]));
-  });
   const selectedDriver = drivers.find((driver) => driver.id === selectedDriverId);
   const loading = runtime.isPending || workspace.isPending;
   const failed = runtime.error || workspace.error;
@@ -292,14 +355,12 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
 
           {section === "settings" ? (
             <>
-              <GuideTarget targetKey="station.managed-fulfillment">
-          <Section title="1. Customer delivery option" palette={palette} expanded={expandedSection === "1. Customer delivery option"} onPress={() => setExpandedSection(expandedSection === "1. Customer delivery option" ? "" : "1. Customer delivery option")}>
+              <Section title="1. Customer delivery option" palette={palette} expanded={expandedSection === "1. Customer delivery option"} onPress={() => setExpandedSection(expandedSection === "1. Customer delivery option" ? "" : "1. Customer delivery option")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Allow customers to choose delivery by a driver employed or engaged by your station. This does not change independent-driver or SKIMA Fleet orders. If you cannot edit this setting, ask your station manager.</Text>
             <View style={styles.row}>
               <Choice label={enabled ? "Enabled for customers" : "Disabled for customers"} active={enabled} onPress={() => setEnabled(!enabled)} palette={palette} />
             </View>
           </Section>
-          </GuideTarget>
 
           <Section title="2. Delivery price" palette={palette} expanded={expandedSection === "2. Delivery price"} onPress={() => setExpandedSection(expandedSection === "2. Delivery price" ? "" : "2. Delivery price")}>
             <Text style={{ color: palette.muted, fontSize: 13 }}>Choose how delivery appears on the customer's SKIMA checkout. Refill and delivery remain separately tracked where a separate fee is selected.</Text>
@@ -403,14 +464,19 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
 
           {section === "drivers" ? (
             <>
-              <Section title="4. Add a driver to this station" palette={palette} expanded={expandedSection === "4. Add a station driver"} onPress={() => setExpandedSection(expandedSection === "4. Add a station driver" ? "" : "4. Add a station driver")}>
-            <Text style={{ color: palette.muted, fontSize: 13 }}>Invite a station-owned driver by email. They accept the invitation and sign in to their own account; they do not need an independent-driver profile.</Text>
-            <Field label="Driver email address" value={driverEmail} onChangeText={setDriverEmail} palette={palette} autoCapitalize="none" />
-            <Field label="Driver full name" value={driverName} onChangeText={setDriverName} palette={palette} />
-            <Field label="Phone (optional)" value={driverPhone} onChangeText={setDriverPhone} palette={palette} keyboardType="phone-pad" />
-            <AppButton label="Invite station driver" fullWidth loading={registerMutation.isPending} disabled={!driverEmail.trim() || !driverName.trim()} onPress={() => void registerMutation.mutateAsync()} />
-            <Text style={{ color: palette.muted, fontSize: 12 }}>For safety, an account with an independent or SKIMA Managed driver profile cannot accept a Station Managed invitation.</Text>
-          </Section>
+              <Section title="Invite a station driver" palette={palette} expanded={expandedSection === "Invite a station driver"} onPress={() => setExpandedSection(expandedSection === "Invite a station driver" ? "" : "Invite a station driver")}>
+                <Text style={{ color: palette.muted, fontSize: 13 }}>
+                  Invite the driver's verified email. The email only signs them into SKIMA; a station relationship is created only after they explicitly accept inside Account, under Station driver invitation.
+                </Text>
+                <Field label="Driver email address" value={driverEmail} onChangeText={setDriverEmail} palette={palette} autoCapitalize="none" />
+                <Field label="Driver full name" value={driverName} onChangeText={setDriverName} palette={palette} />
+                <Field label="Phone (optional)" value={driverPhone} onChangeText={setDriverPhone} palette={palette} keyboardType="phone-pad" />
+                <AppButton label="Send sign-in notice" fullWidth loading={registerMutation.isPending} disabled={!driverEmail.trim() || !driverName.trim()} onPress={() => void registerMutation.mutateAsync()} />
+                <Text style={{ color: palette.muted, fontSize: 12 }}>
+                  Station Managed drivers keep a station-owned identity. This does not create an independent-driver profile or SKIMA driver payout.
+                </Text>
+              </Section>
+
               <View style={[styles.section, { borderColor: palette.border, backgroundColor: palette.surface }]}>
                 <Text style={[styles.sectionTitle, { color: palette.ink }]}>Active station drivers ({drivers.length})</Text>
                 {drivers.length ? drivers.map((driver) => (
@@ -421,70 +487,110 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
                     </View>
                     <Text style={{ color: palette.success, fontSize: 12, fontWeight: "800" }}>Active</Text>
                   </View>
-                )) : <Text style={{ color: palette.muted, fontSize: 13 }}>Drivers appear here after they accept their invitation with the invited email address.</Text>}
+                )) : <Text style={{ color: palette.muted, fontSize: 13 }}>Drivers appear here after they explicitly accept their invitation.</Text>}
+              </View>
+
+              <View style={[styles.section, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Driver invitations ({(data?.invitations ?? []).length})</Text>
+                {(data?.invitations ?? []).length ? (data?.invitations ?? []).map((invitation) => {
+                  const canResend = invitation.status !== "accepted";
+                  const resendBusy = resendInvitationMutation.isPending && resendInvitationMutation.variables?.id === invitation.id;
+                  return (
+                    <View key={invitation.id} style={[styles.invitationRow, { borderColor: palette.border }]}>
+                      <View style={{ flex: 1, gap: 4 }}>
+                        <Text style={{ color: palette.ink, fontWeight: "800" }}>{invitation.displayName || invitation.email}</Text>
+                        <Text style={{ color: palette.muted, fontSize: 12 }}>{invitation.email}</Text>
+                        <Text style={{ color: invitation.status === "accepted" ? palette.success : palette.muted, fontSize: 12, fontWeight: "800" }}>
+                          {invitation.status.replaceAll("_", " ")}
+                        </Text>
+                        {invitation.expiresAt && invitation.status !== "accepted" ? (
+                          <Text style={{ color: palette.muted, fontSize: 11 }}>Expires {formatStationDate(invitation.expiresAt)}</Text>
+                        ) : null}
+                        {invitation.deliveryStatus === "failed" && invitation.deliveryFailure ? (
+                          <Text style={{ color: palette.danger, fontSize: 11 }}>Last notice failed: {invitation.deliveryFailure.replaceAll("_", " ")}</Text>
+                        ) : null}
+                      </View>
+                      {canResend ? (
+                        <AppButton
+                          label="Resend notice"
+                          size="sm"
+                          variant="secondary"
+                          loading={resendBusy}
+                          disabled={resendInvitationMutation.isPending}
+                          onPress={() => resendInvitationMutation.mutate(invitation)}
+                        />
+                      ) : null}
+                    </View>
+                  );
+                }) : <Text style={{ color: palette.muted, fontSize: 13 }}>New and previous invitations will appear here, including accepted, declined, expired or revoked invitations.</Text>}
               </View>
             </>
           ) : null}
 
           {section === "orders" ? (
             <>
-              <Section title="Orders in progress" palette={palette} expanded={expandedSection === "Orders in progress"} onPress={() => setExpandedSection(expandedSection === "Orders in progress" ? "" : "Orders in progress")}>
+              <Section title="Active deliveries" palette={palette} expanded={expandedSection === "Active deliveries"} onPress={() => setExpandedSection(expandedSection === "Active deliveries" ? "" : "Active deliveries")}>
                 <Text style={{ color: palette.muted, fontSize: 13 }}>
-                  These are active Station Managed orders from SKIMA's existing station queue. Updates are refreshed by the same backend job feed used on the station dashboard.
+                  These deliveries are projected from SKIMA's canonical Station Managed assignments and LPG orders. Driver, reserved vehicle, delivery details and status changes stay within the same backend lifecycle.
                 </Text>
-                {stationJobsQuery.isPending ? <Text style={{ color: palette.muted }}>Loading assigned Station Managed orders…</Text> : null}
-                {stationJobsQuery.error ? (
-                  <EmptyState
-                    title="Assigned orders could not be loaded"
-                    description="The station job queue is unavailable right now. Retry to check the latest order status."
-                    action={<AppButton label="Retry orders" size="sm" variant="secondary" onPress={() => void stationJobsQuery.refetch()} />}
-                  />
-                ) : null}
-                {stationManagedAssignedJobs.length ? stationManagedAssignedJobs.map((job) => {
-                  const metadata = nestedRecord(job, "metadata");
-                  const driverId = firstString(metadata, ["stationManagedDriverId", "station_managed_driver_id"]);
-                  const assignedDriver = drivers.find((driver) => driver.id === driverId);
-                  const orderId = firstString(job, ["lpgOrderId", "lpg_order_id"]);
-                  const reference = firstString(job, ["publicReference", "public_reference"]) ?? (orderId ? orderId.slice(0, 8) : "Station Managed order");
-                  const orderStatus = firstString(job, ["status"]) ?? "unknown";
-                  const requestedKg = firstNumber(job, ["requestedKg", "requested_kg"]) ?? "—";
-                  return (
-                    <View key={orderId ?? reference} style={[styles.section, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
+                {workspace.isRefetching ? <Text style={{ color: palette.muted, fontSize: 12 }}>Refreshing delivery status…</Text> : null}
+                {(data?.deliveries ?? []).filter((delivery) => delivery.isActive === true).length ? (
+                  (data?.deliveries ?? []).filter((delivery) => delivery.isActive === true).map((delivery) => (
+                    <View key={delivery.assignmentId} style={[styles.deliveryCard, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
                       <View style={styles.orderHeader}>
                         <View style={{ flex: 1, gap: 4 }}>
-                          <Text style={{ color: palette.ink, fontWeight: "900" }}>{reference}</Text>
-                          <Text style={{ color: palette.muted, fontSize: 12 }}>{requestedKg} kg · Updated {firstString(job, ["updatedAt", "updated_at"]) ?? "recently"}</Text>
+                          <Text style={{ color: palette.ink, fontWeight: "900" }}>{delivery.publicReference || delivery.lpgOrderId.slice(0, 8)}</Text>
+                          <Text style={{ color: palette.muted, fontSize: 12 }}>{delivery.requestedKg} kg · Updated {formatStationDate(delivery.updatedAt || delivery.assignedAt || "")}</Text>
                         </View>
-                        <Text style={{ color: palette.brand, fontSize: 12, fontWeight: "800" }}>{orderStatus.replaceAll("_", " ")}</Text>
+                        <Text style={{ color: palette.brand, fontSize: 12, fontWeight: "800" }}>{(delivery.orderStatus || delivery.assignmentStatus).replaceAll("_", " ")}</Text>
                       </View>
-                      <Text style={{ color: palette.muted, fontSize: 13 }}>
-                        {assignedDriver ? `Assigned to ${assignedDriver.displayName}` : "Assigned to a station driver"}
+                      <Text style={{ color: palette.ink, fontSize: 13, fontWeight: "700" }}>
+                        {delivery.driverName || "Assigned station driver"}{delivery.vehicleRegistrationNumber ? " · " + delivery.vehicleRegistrationNumber : ""}
                       </Text>
-                      {orderId ? (
-                        <AppButton
-                          label="Track order"
-                          size="sm"
-                          variant="secondary"
-                          onPress={() => router.push(`/(station)/job/${encodeURIComponent(orderId)}` as never)}
-                        />
+                      {(delivery.vehicleManufacturer || delivery.vehicleModel || delivery.vehicleType) ? (
+                        <Text style={{ color: palette.muted, fontSize: 12 }}>{[delivery.vehicleManufacturer, delivery.vehicleModel, delivery.vehicleType].filter(Boolean).join(" · ")}</Text>
                       ) : null}
+                      {delivery.deliveryAddress ? <Text style={{ color: palette.muted, fontSize: 13 }}>{delivery.deliveryAddress}</Text> : null}
+                      {delivery.customerName ? <Text style={{ color: palette.muted, fontSize: 12 }}>Customer: {delivery.customerName}{delivery.customerPhone ? " · " + delivery.customerPhone : ""}</Text> : null}
+                      <AppButton
+                        label="Open delivery details"
+                        size="sm"
+                        variant="secondary"
+                        onPress={() => router.push(`/(station)/job/${encodeURIComponent(delivery.lpgOrderId)}` as never)}
+                      />
                     </View>
-                  );
-                }) : !stationJobsQuery.isPending && !stationJobsQuery.error ? (
-                  <Text style={{ color: palette.muted, fontSize: 13 }}>No assigned Station Managed deliveries are currently in progress.</Text>
-                ) : null}
+                  ))
+                ) : <Text style={{ color: palette.muted, fontSize: 13 }}>No assigned Station Managed deliveries are currently active.</Text>}
               </Section>
 
               <Section title="Waiting for resources" palette={palette} expanded={expandedSection === "Waiting for resources"} onPress={() => setExpandedSection(expandedSection === "Waiting for resources" ? "" : "Waiting for resources")}>
                 <Text style={{ color: palette.muted, fontSize: 13 }}>
-                  SKIMA keeps eligible Station Managed orders here when a station driver or approved vehicle is not available. The backend retries assignment when the branch becomes dispatch-ready; this is not a manual assignment queue.
+                  Orders remain here when no eligible station driver and approved vehicle are available. The backend retries assignment when the station becomes dispatch-ready; this is not a manual assignment queue.
                 </Text>
                 {(data?.assignableOrders ?? []).length ? (data?.assignableOrders ?? []).map((order) => (
-                  <View key={order.id} style={[styles.row, { borderColor: palette.border }]}>
-                    <Text style={{ color: palette.ink, fontWeight: "700" }}>{order.publicReference ?? order.id.slice(0, 8)}</Text>
-                    <Text style={{ color: palette.muted, fontSize: 12 }}>{order.requestedKg ?? "—"} kg · {order.status}</Text>
+                  <View key={order.id} style={[styles.deliveryCard, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
+                    <Text style={{ color: palette.ink, fontWeight: "800" }}>{order.publicReference ?? order.id.slice(0, 8)}</Text>
+                    <Text style={{ color: palette.muted, fontSize: 12 }}>{order.requestedKg ?? "—"} kg · {order.dispatchStatus || order.status}</Text>
                   </View>
                 )) : <Text style={{ color: palette.muted }}>No orders are waiting for a driver or vehicle.</Text>}
+              </Section>
+
+              <Section title="Recently completed" palette={palette} expanded={expandedSection === "Recently completed"} onPress={() => setExpandedSection(expandedSection === "Recently completed" ? "" : "Recently completed")}>
+                {(data?.deliveries ?? []).filter((delivery) => delivery.isActive !== true).length ? (
+                  (data?.deliveries ?? []).filter((delivery) => delivery.isActive !== true).map((delivery) => (
+                    <View key={delivery.assignmentId} style={[styles.deliveryCard, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
+                      <Text style={{ color: palette.ink, fontWeight: "800" }}>{delivery.publicReference || delivery.lpgOrderId.slice(0, 8)}</Text>
+                      <Text style={{ color: palette.muted, fontSize: 12 }}>{delivery.driverName || "Station driver"} · {(delivery.orderStatus || delivery.assignmentStatus).replaceAll("_", " ")}</Text>
+                      {delivery.completedAt ? <Text style={{ color: palette.muted, fontSize: 12 }}>Completed {formatStationDate(delivery.completedAt)}</Text> : null}
+                      <AppButton
+                        label="View delivery record"
+                        size="sm"
+                        variant="secondary"
+                        onPress={() => router.push(`/(station)/job/${encodeURIComponent(delivery.lpgOrderId)}` as never)}
+                      />
+                    </View>
+                  ))
+                ) : <Text style={{ color: palette.muted, fontSize: 13 }}>Verified completed deliveries will appear here.</Text>}
               </Section>
             </>
           ) : null}
@@ -535,6 +641,11 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
 }
 
 
+function formatStationDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
 function WorkspaceOverview({
   enabled,
   activeDriverCount,
@@ -553,6 +664,7 @@ function WorkspaceOverview({
   const { palette } = useAppTheme();
   return (
     <>
+      <GuideTarget targetKey="station.managed-fulfillment">
       <View style={[styles.overviewHero, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={[styles.overviewStatusDot, { backgroundColor: enabled ? palette.success : palette.muted }]} />
         <View style={{ flex: 1, gap: 4 }}>
@@ -564,6 +676,7 @@ function WorkspaceOverview({
           </Text>
         </View>
       </View>
+      </GuideTarget>
       <View style={styles.overviewMetrics}>
         <View style={[styles.overviewMetric, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <Text style={[styles.overviewMetricValue, { color: palette.ink }]}>{activeDriverCount}</Text>
@@ -672,6 +785,7 @@ function Field({ label, value, onChangeText, palette, keyboardType, multiline = 
 }
 
 const styles = StyleSheet.create({
+  deliveryCard: { borderWidth: 1, borderRadius: radii.lg, padding: spacing.md, gap: spacing.sm, marginBottom: spacing.sm },
   overviewHero: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderRadius: radii.xl, padding: spacing.md, gap: spacing.md },
   overviewStatusDot: { width: 10, height: 10, borderRadius: 5 },
   overviewHeroTitle: { fontSize: 16, lineHeight: 21, fontWeight: "900" },
@@ -688,6 +802,7 @@ const styles = StyleSheet.create({
   overviewTileMetric: { fontSize: 11, fontWeight: "800", textAlign: "right" },
   overviewFootnote: { fontSize: 12, lineHeight: 18, paddingHorizontal: 3, marginTop: 2 },
   driverRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: spacing.sm },
+  invitationRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: spacing.md },
   orderHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
 
   section: { borderWidth: 1, borderRadius: radii.lg, padding: spacing.sm + 2, gap: spacing.sm, marginBottom: spacing.sm },

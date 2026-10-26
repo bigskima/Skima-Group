@@ -15,6 +15,9 @@ const sharedHttp = await Deno.readTextFile("supabase/functions/_shared/http.ts")
 const admin = await Deno.readTextFile("apps/admin/src/admin-station-managed-fulfillment-workspace.tsx");
 const adminRouter = await Deno.readTextFile("apps/admin/src/features/partners/PartnersWorkspaceRouter.tsx");
 const driverScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationManagedDriverJobsScreen.tsx");
+const stationDriverInvitationScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/StationDriverInvitationScreen.tsx");
+const stationDriverLifecycleMigration = await Deno.readTextFile("supabase/migrations/20261025180000_lpg_station_managed_in_app_acceptance_and_tracking.sql");
+const stationDeliveryReadModel = await Deno.readTextFile("supabase/migrations/20261025210000_lpg_station_managed_delivery_operations_read_model.sql");
 const driverDetailRoute = await Deno.readTextFile("apps/lpg-mobile/app/(station-driver)/job/[id].tsx");
 const promotionBanner = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/PromotionBanner.tsx");
 const jobDetailScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx");
@@ -211,11 +214,11 @@ Deno.test("Customer AI launcher opens as an overlay modal, not in the home layou
   requireText(assistantLauncher, "onOpen?.();", "launcher dismisses its parent overlay before navigation");
 });
 
-Deno.test("Station driver invites persist before delivery and revoke failed sends", () => {
+Deno.test("Station driver invitations persist, send a sign-in link, and require explicit in-app acceptance", () => {
   const allowedHeaders = sharedHttp.match(/"Access-Control-Allow-Headers":\s*"([^"]+)"/)?.[1]
     ?.split(",").map((header) => header.trim().toLowerCase()) ?? [];
-  if (!allowedHeaders.includes("x-skima-client")) {
-    throw new Error("Gateway CORS must allow x-skima-client because the app Supabase client sends it on browser requests.");
+  if (!allowedHeaders.includes("x-skima-client") || !allowedHeaders.includes("x-supabase-api-version")) {
+    throw new Error("Gateway CORS must allow the SKIMA app client and Supabase API-version headers.");
   }
 
   const start = gateway.indexOf('if (routePath === "/runtime/station-driver-invitations" && request.method === "POST")');
@@ -223,16 +226,23 @@ Deno.test("Station driver invites persist before delivery and revoke failed send
   if (start < 0 || end < 0) throw new Error("Both station-driver invitation routes must be present.");
   const route = gateway.slice(start, end);
   const persistence = route.indexOf('.from("lpg_station_managed_driver_invites").upsert({');
-  const emailDelivery = route.indexOf('.auth.admin.inviteUserByEmail(');
+  const emailDelivery = route.indexOf('.auth.signInWithOtp({');
   if (persistence < 0 || emailDelivery < 0 || persistence >= emailDelivery) {
-    throw new Error("The pending invitation must be committed before an invitation email can be delivered.");
+    throw new Error("The pending invitation must be persisted before the sign-in notice is sent.");
   }
   requireText(route, 'const revokeUndeliveredInvitation', "failed invitation cleanup");
   requireText(route, 'status: "revoked"', "failed email sends cannot leave a misleading pending invite");
-  requireText(route, 'shouldCreateUser: false', "existing SKIMA accounts use sign-in rather than duplicate account creation");
-  requireText(inviteDispatchMigration, "email_confirmed_at is not null", "acceptance is bound to the authenticated confirmed email");
+  requireText(route, 'acceptanceMode: "in_app"', "sign-in email is not station relationship acceptance");
+  requireText(stationDriverLifecycleMigration, "email_confirmed_at is not null", "acceptance is bound to the authenticated confirmed email");
+  requireText(stationDriverInvitationScreen, 'label="Accept invitation"', "the driver explicitly accepts inside SKIMA");
+  requireText(stationDriverInvitationScreen, 'decline_lpg_station_managed_driver_invite', "the driver can decline inside SKIMA");
+  if (driverScreen.includes('rpc("accept_lpg_station_managed_driver_invite")')) {
+    throw new Error("Opening the job screen must not silently accept a station relationship.");
+  }
+  if (workspaceGate.includes('rpc("accept_lpg_station_managed_driver_invite")')) {
+    throw new Error("Opening the station-driver workspace must not silently accept an invitation.");
+  }
 });
-
 
 Deno.test("Station Managed app surfaces are dedicated views over the existing backend", () => {
   requireText(station, 'section === "overview"', "Station Managed overview route");
@@ -243,7 +253,8 @@ Deno.test("Station Managed app surfaces are dedicated views over the existing ba
   requireText(station, 'section === "payments"', "dedicated station driver agreement and payment view");
   requireText(station, 'read_lpg_station_managed_workspace', "manager views keep using the existing workspace RPC");
   requireText(station, 'read_lpg_station_managed_available_vehicles', "vehicle view uses the existing readiness RPC");
-  requireText(station, 'domainQueries.stationJobs(section === "orders")', "assigned-order tracking uses the canonical station jobs queue");
+  requireText(station, "data?.deliveries", "manager delivery tracking uses the canonical Station Managed assignment read model");
+  requireText(station, "resendInvitationMutation", "station managers can resend a sign-in notice for a pending or expired invitation");
   for (const route of [
     "managed-fulfillment-settings",
     "managed-fulfillment-vehicles",
@@ -256,6 +267,21 @@ Deno.test("Station Managed app surfaces are dedicated views over the existing ba
   requireText(driverScreen, 'const activeJobs = (jobs.data ?? []).filter((job) => job.status !== "delivered")', "active deliveries use backend assignment state");
   requireText(driverScreen, 'const completedJobs = (jobs.data ?? []).filter((job) => job.status === "delivered")', "history uses backend-verified completion");
   requireText(driverScreen, "function orderStageLabel(status: string)", "driver cards explain canonical LPG order state");
+});
+
+Deno.test("Station Managed workspace composes invitations, active assignments and live delivery details", () => {
+  requireText(stationDeliveryReadModel, "'invitations',coalesce", "branch-owned invitation status projection");
+  requireText(stationDeliveryReadModel, "'deliveries',coalesce", "active/completed canonical delivery projection");
+  requireText(stationDeliveryReadModel, "'assignedOrders',coalesce", "existing assigned-order projection remains available");
+  requireText(stationDeliveryReadModel, "'assignableOrders',coalesce", "orders waiting for backend resource readiness remain visible");
+  requireText(stationDeliveryReadModel, "assignment.station_branch_id=target_station_branch_id", "delivery rows remain branch scoped");
+  requireText(stationDeliveryReadModel, "order_record.fulfillment_mode='station_managed'", "read model excludes other fulfillment modes");
+  if (/create\s+table/i.test(stationDeliveryReadModel)) {
+    throw new Error("Station Managed delivery reporting must not create parallel order, assignment or tracking tables.");
+  }
+  requireText(station, "refetchInterval: section === \"orders\" ? 15000 : 30000", "manager views refresh the existing backend read model");
+  requireText(station, "record_lpg_station_managed_driver_agreement", "driver agreement still uses the existing station RPC");
+  requireText(station, "record_lpg_station_managed_driver_payment", "station-paid driver compensation remains a station record, not a platform payout");
 });
 
 Deno.test("Station Managed external coverage is an explicit admin-gated exception", () => {
