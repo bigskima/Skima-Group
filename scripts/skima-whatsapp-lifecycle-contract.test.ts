@@ -2,11 +2,13 @@ const root = new URL("../", import.meta.url);
 const read = (path: string) => Deno.readTextFile(new URL(path, root));
 
 Deno.test("WhatsApp channel connects to the canonical LPG lifecycle", async () => {
-  const [webhook, gateway, foundation, lifecycle] = await Promise.all([
+  const [webhook, gateway, foundation, lifecycle, notifications, config] = await Promise.all([
     read("supabase/functions/skima-whatsapp-webhook/index.ts"),
     read("supabase/functions/api-gateway/index.ts"),
     read("supabase/migrations/20261026001000_skima_customer_whatsapp_channel.sql"),
     read("supabase/migrations/20261026002000_skima_whatsapp_lpg_order_lifecycle.sql"),
+    read("supabase/migrations/20261026003000_skima_whatsapp_order_status_notifications.sql"),
+    read("supabase/config.toml"),
   ]);
 
   // WhatsApp collects choices only from the linked customer's own records.
@@ -20,6 +22,11 @@ Deno.test("WhatsApp channel connects to the canonical LPG lifecycle", async () =
   assertIncludes(webhook, "verifySignature(appSecret, rawBody, signature)");
   assertIncludes(webhook, "requestCanonicalQuote(");
   assertIncludes(webhook, "_lastReplyText");
+  assertIncludes(webhook, 'db.rpc("set_skima_whatsapp_order_notifications"');
+  assertIncludes(webhook, "SKIMA_WHATSAPP_DISPATCH_SECRET");
+  assertIncludes(webhook, "sendWhatsAppTemplate");
+  assertIncludes(webhook, "extractStatuses");
+  assertIncludes(webhook, "Reply STOP at any time");
   assertNotIncludes(webhook, "next step is to connect this chat to SKIMA's live");
 
   // Quotes must use the same commercial route/pricing path as the app, not a local price calculation.
@@ -36,6 +43,15 @@ Deno.test("WhatsApp channel connects to the canonical LPG lifecycle", async () =
   assertIncludes(lifecycle, "public.create_lpg_refill_order(");
   assertIncludes(lifecycle, "from public, anon, authenticated");
   assertIncludes(lifecycle, "to service_role");
+
+  // Proactive notifications must be consent-based and delivered from the same canonical order rows.
+  assertIncludes(notifications, "order_status_notifications_opt_in boolean not null default false");
+  assertIncludes(notifications, "queue_skima_whatsapp_order_status_notification");
+  assertIncludes(notifications, "claim_skima_whatsapp_order_notifications");
+  assertIncludes(notifications, "cron.schedule(");
+  assertIncludes(notifications, "skima_whatsapp_dispatch_secret");
+  assertIncludes(config, "[functions.skima-whatsapp-webhook]");
+  assertIncludes(config, "verify_jwt = false");
 });
 
 function assertIncludes(source: string, fragment: string): void {
