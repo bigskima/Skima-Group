@@ -10,6 +10,7 @@ const MENU = [
   "3 — Pay / retry a pending order",
   "4 — Check and track my orders",
   "5 — Get help",
+  "6 — Enable order status notifications",
 ].join("\n");
 
 type InboundMessage = {
@@ -21,10 +22,19 @@ type InboundMessage = {
 };
 type Conversation = { id: string; state_key: string; state: Record<string, unknown> };
 type ReplyPlan = { text: string; stateKey: string; state: Record<string, unknown> };
+type ProviderDeliveryStatus = {
+  id: string;
+  status: "sent" | "delivered" | "read" | "failed";
+  timestamp?: string;
+  errorCode?: string;
+};
 
 Deno.serve(async (request: Request): Promise<Response> => {
   if (request.method === "GET") return verifyWebhook(request);
   if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, 405);
+  if (new URL(request.url).searchParams.get("mode") === "dispatch") {
+    return await dispatchOrderStatusNotifications(request);
+  }
 
   const appSecret = Deno.env.get("SKIMA_WHATSAPP_APP_SECRET");
   const accessToken = Deno.env.get("SKIMA_WHATSAPP_ACCESS_TOKEN");
@@ -54,11 +64,33 @@ Deno.serve(async (request: Request): Promise<Response> => {
   }
 
   const messages = extractMessages(payload);
-  if (messages.length === 0) return json({ ok: true, accepted: 0 });
+  const statuses = extractStatuses(payload);
+  if (messages.length === 0 && statuses.length === 0) return json({ ok: true, accepted: 0, statusesRecorded: 0 });
 
   const db = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
   });
+  let statusesRecorded = 0;
+  for (const status of statuses) {
+    const providerTime = status.timestamp && /^\d+$/.test(status.timestamp)
+      ? new Date(Number(status.timestamp) * 1000).toISOString()
+      : new Date().toISOString();
+    const statusResult = await db.from("skima_whatsapp_order_notifications")
+      .update({
+        provider_delivery_status: status.status,
+        provider_status_at: providerTime,
+        provider_error_code: status.errorCode ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("provider_message_id", status.id)
+      .select("id")
+      .maybeSingle();
+    if (statusResult.error) {
+      return json({ ok: false, error: "delivery_status_persistence_failed" }, 500);
+    }
+    if (statusResult.data) statusesRecorded += 1;
+  }
+  if (messages.length === 0) return json({ ok: true, accepted: 0, statusesRecorded });
   let accepted = 0;
 
   for (const item of messages) {
@@ -257,8 +289,30 @@ async function handleLinkedMessage(
   const stage = conversation.state_key;
 
   if (!input) return plan("Please send a text response or reply MENU to see the options.", "menu");
-  if (["cancel", "stop", "restart"].includes(normalized)) {
-    return plan("Cancelled. No new order was created by that command.\n\n" + MENU, "menu");
+  if (["stop", "unsubscribe", "stop notifications", "turn off notifications"].includes(normalized)) {
+    const preference = await db.rpc("set_skima_whatsapp_order_notifications", {
+      target_whatsapp_wa_id: whatsappWaId,
+      target_opt_in: false,
+    });
+    if (preference.error) throw preference.error;
+    return plan("WhatsApp order-status notifications are now off. You can still message SKIMA to check your orders. Reply 6 to opt in again.", "menu");
+  }
+  if (["cancel", "restart"].includes(normalized)) {
+    return plan("Cancelled the current step. No new order was created by that command.\n\n" + MENU, "menu");
+  }
+  if (["6", "notifications", "order notifications", "enable notifications", "enable order updates"].includes(normalized)) {
+    const preference = await db.rpc("set_skima_whatsapp_order_notifications", {
+      target_whatsapp_wa_id: whatsappWaId,
+      target_opt_in: true,
+    });
+    if (preference.error) throw preference.error;
+    return plan([
+      "You are opted in to SKIMA LPG order-status notifications.",
+      "",
+      "We'll send service updates for your LPG orders, such as payment reservation, dispatch and delivery progress. These are order updates, not marketing messages.",
+      "",
+      "Reply STOP at any time to turn them off. You can still use MENU to order or check an order.",
+    ].join("\n"), "menu");
   }
   if (["menu", "hi", "hello", "hey", "start"].includes(normalized)) return plan(MENU, "menu");
 
@@ -737,6 +791,32 @@ function extractMessages(payload: Record<string, unknown>): InboundMessage[] {
   return result;
 }
 
+function extractStatuses(payload: Record<string, unknown>): ProviderDeliveryStatus[] {
+  const result: ProviderDeliveryStatus[] = [];
+  const entries = Array.isArray(payload.entry) ? payload.entry : [];
+  for (const entry of entries) {
+    if (!isRecord(entry) || !Array.isArray(entry.changes)) continue;
+    for (const change of entry.changes) {
+      if (!isRecord(change) || !isRecord(change.value)) continue;
+      const statuses = Array.isArray(change.value.statuses) ? change.value.statuses : [];
+      for (const value of statuses) {
+        if (!isRecord(value) || typeof value.id !== "string" || typeof value.status !== "string") continue;
+        if (!["sent", "delivered", "read", "failed"].includes(value.status)) continue;
+        const firstError = Array.isArray(value.errors) && isRecord(value.errors[0]) ? value.errors[0] : null;
+        result.push({
+          id: value.id,
+          status: value.status as ProviderDeliveryStatus["status"],
+          timestamp: typeof value.timestamp === "string" ? value.timestamp : undefined,
+          errorCode: firstError && (typeof firstError.code === "string" || typeof firstError.code === "number")
+            ? String(firstError.code)
+            : undefined,
+        });
+      }
+    }
+  }
+  return result;
+}
+
 async function sendWhatsAppText(args: {
   accessToken: string; graphVersion: string; phoneNumberId: string; recipient: string; text: string;
 }): Promise<{ ok: boolean; error: string }> {
@@ -757,6 +837,179 @@ async function sendWhatsAppText(args: {
   if (response.ok) return { ok: true, error: "" };
   const body = (await response.text()).slice(0, 500);
   return { ok: false, error: `Meta Graph API returned ${response.status}: ${body}` };
+}
+
+async function dispatchOrderStatusNotifications(request: Request): Promise<Response> {
+  const expectedSecret = Deno.env.get("SKIMA_WHATSAPP_DISPATCH_SECRET") ?? "";
+  const suppliedSecret = /^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") ?? "")?.[1] ?? "";
+  if (!expectedSecret || !timingSafeEqual(expectedSecret, suppliedSecret)) {
+    return json({ ok: false, error: "unauthorized" }, 401);
+  }
+
+  const accessToken = Deno.env.get("SKIMA_WHATSAPP_ACCESS_TOKEN");
+  const phoneNumberId = Deno.env.get("SKIMA_WHATSAPP_PHONE_NUMBER_ID");
+  const graphVersion = Deno.env.get("SKIMA_WHATSAPP_GRAPH_API_VERSION");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!accessToken || !phoneNumberId || !graphVersion || !supabaseUrl || !serviceRoleKey) {
+    return json({ ok: false, error: "whatsapp_provider_not_configured" }, 503);
+  }
+  if (!/^v\d+\.\d+$/.test(graphVersion)) {
+    return json({ ok: false, error: "invalid_graph_api_version_configuration" }, 500);
+  }
+
+  const db = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
+  });
+  const claimedResult = await db.rpc("claim_skima_whatsapp_order_notifications", { target_limit: 25 });
+  if (claimedResult.error) {
+    console.error(JSON.stringify({ event: "whatsapp_outbox_claim_failed", code: "claim_failed" }));
+    return json({ ok: false, error: "notification_queue_unavailable" }, 500);
+  }
+
+  const claimed = arrayOfRecords(claimedResult.data);
+  let sent = 0;
+  let queuedForRetry = 0;
+  let deadLettered = 0;
+  for (const item of claimed) {
+    const notificationId = asText(item.notification_id, "");
+    const recipient = asText(item.whatsapp_wa_id, "");
+    const attempt = numberValue(item.attempt_count) ?? 1;
+    const payload = asRecord(item.payload);
+    if (!notificationId || !/^[0-9]{6,20}$/.test(recipient)) {
+      if (notificationId) {
+        await db.from("skima_whatsapp_order_notifications")
+          .update({
+            status: "failed",
+            locked_at: null,
+            last_error_code: "invalid_notification_recipient",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", notificationId)
+          .eq("status", "processing");
+      }
+      deadLettered += 1;
+      continue;
+    }
+
+    const templateName = Deno.env.get("SKIMA_WHATSAPP_ORDER_UPDATE_TEMPLATE") ?? "skima_lpg_order_update";
+    const templateLanguage = Deno.env.get("SKIMA_WHATSAPP_ORDER_UPDATE_LANGUAGE") ?? "en";
+    const result = await sendWhatsAppTemplate({
+      accessToken,
+      graphVersion,
+      phoneNumberId,
+      recipient,
+      templateName,
+      languageCode: templateLanguage,
+      payload,
+    });
+
+    if (result.ok) {
+      const saved = await db.from("skima_whatsapp_order_notifications")
+        .update({
+          status: "sent",
+          provider_message_id: result.providerMessageId,
+          provider_delivery_status: result.providerMessageId ? "sent" : null,
+          provider_status_at: result.providerMessageId ? new Date().toISOString() : null,
+          sent_at: new Date().toISOString(),
+          locked_at: null,
+          last_error_code: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", notificationId)
+        .eq("status", "processing");
+      if (saved.error) {
+        console.error(JSON.stringify({ event: "whatsapp_outbox_sent_but_not_recorded", notificationId }));
+      } else {
+        sent += 1;
+      }
+      continue;
+    }
+
+    const retry = result.retryable && attempt < 8;
+    const delayMinutes = Math.min(360, Math.max(1, 2 ** Math.min(attempt, 8)));
+    const nextAttemptAt = new Date(Date.now() + delayMinutes * 60_000).toISOString();
+    const saved = await db.from("skima_whatsapp_order_notifications")
+      .update({
+        status: retry ? "queued" : "failed",
+        next_attempt_at: nextAttemptAt,
+        locked_at: null,
+        last_error_code: result.errorCode,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", notificationId)
+      .eq("status", "processing");
+    if (saved.error) {
+      console.error(JSON.stringify({ event: "whatsapp_outbox_failure_not_recorded", notificationId }));
+    }
+    if (retry) queuedForRetry += 1;
+    else deadLettered += 1;
+  }
+
+  return json({ ok: true, claimed: claimed.length, sent, queuedForRetry, deadLettered });
+}
+
+async function sendWhatsAppTemplate(args: {
+  accessToken: string;
+  graphVersion: string;
+  phoneNumberId: string;
+  recipient: string;
+  templateName: string;
+  languageCode: string;
+  payload: Record<string, unknown>;
+}): Promise<{ ok: true; providerMessageId: string | null } | { ok: false; errorCode: string; retryable: boolean }> {
+  const amount = numberValue(args.payload.totalAmount) ?? 0;
+  const currency = asText(args.payload.currencyCode, "NGN");
+  const orderReference = asText(args.payload.publicReference, "LPG order");
+  const orderStatus = humanizeStatus(asText(args.payload.orderStatus, "updated"));
+  const paymentStatus = humanizeStatus(asText(args.payload.paymentStatus, "unknown"));
+  const response = await fetch(
+    \`https://graph.facebook.com/\${args.graphVersion}/\${args.phoneNumberId}/messages\`,
+    {
+      method: "POST",
+      headers: { authorization: \`Bearer \${args.accessToken}\`, "content-type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: args.recipient,
+        type: "template",
+        template: {
+          name: args.templateName,
+          language: { code: args.languageCode },
+          components: [{
+            type: "body",
+            parameters: [
+              { type: "text", text: orderReference },
+              { type: "text", text: orderStatus },
+              { type: "text", text: paymentStatus },
+              { type: "text", text: money(amount, currency) },
+            ],
+          }],
+        },
+      }),
+    },
+  ).catch(() => null);
+
+  if (!response) return { ok: false, errorCode: "meta_network_error", retryable: true };
+  let body: unknown = null;
+  try { body = await response.json(); } catch { body = null; }
+  if (!response.ok) {
+    const errorObject = isRecord(body) && isRecord(body.error) ? body.error : {};
+    const code = typeof errorObject.code === "string" || typeof errorObject.code === "number"
+      ? String(errorObject.code)
+      : \`http_\${response.status}\`;
+    return {
+      ok: false,
+      errorCode: \`meta_\${code}\`.slice(0, 180),
+      retryable: response.status === 429 || response.status >= 500,
+    };
+  }
+  const messages = isRecord(body) && Array.isArray(body.messages) ? body.messages : [];
+  const firstMessage = isRecord(messages[0]) ? messages[0] : null;
+  return {
+    ok: true,
+    providerMessageId: firstMessage && typeof firstMessage.id === "string" ? firstMessage.id : null,
+  };
 }
 
 async function markEventFailed(db: SupabaseClient, id: string, error: string): Promise<void> {
