@@ -7,6 +7,7 @@ export default function Layout() {
   return (
     <WorkspaceGate workspace="driver">
       <WorkspaceTabs
+        guideScope="driver"
         tabs={driverTabs}
         hidden={[
           "assistant",
