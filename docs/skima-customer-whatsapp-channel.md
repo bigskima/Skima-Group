@@ -51,7 +51,7 @@ Use a newly generated random token; the placeholders above are not credentials. 
 ## Meta launch checklist
 1. Create or select the SKIMA Meta Business Portfolio and Meta developer app; add WhatsApp and register/verify the business phone number.
 2. Use the Meta test number and test recipient first. Configure the webhook callback URL for the deployed `skima-whatsapp-webhook` Edge Function and the same verify token; subscribe to the `messages` webhook field.
-3. Store the five WhatsApp secrets in Supabase Edge Function secrets. Configure the version actually supported by the Meta app, not a guessed placeholder.
+3. Store the Meta verify token, app secret, access token, phone-number ID, supported Graph API version, and dispatch secret in Supabase Edge Function secrets. Configure the version actually supported by the Meta app, not a guessed placeholder.
 4. Run signed webhook tests, secure account-link tests, quote/confirmation/payment/dispatch tests and retry/idempotency checks before enabling the production phone number.
 5. Configure the dispatcher Vault values and verify the one-minute cron poller. It stays idle until the dispatcher URL and secret are present.
 6. Create the approved Utility status template, verify account linking and explicit opt-in/opt-out, and test payment/dispatch/order-status notifications plus sent/delivered/read/failed callbacks with the Meta test number first.
