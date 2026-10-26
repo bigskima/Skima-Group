@@ -10,6 +10,8 @@ SKIMA uses Meta's official WhatsApp Business Cloud API directly. The webhook is 
 4. The customer must reply CONFIRM before an LPG order is created. SKIMA's current customer-terms check still applies.
 5. Payment is attempted through the same wallet reservation + escrow + dispatch transaction used by the app. The bot reports success only after it re-reads the order and verifies the payment status. If wallet funds or eligible dispatch are unavailable, it says payment remains pending and directs the customer to SKIMA app Wallet → Top up.
 6. Customers can list their recent orders and see the latest recorded driver location for active orders, when that location is available.
+7. Linked customers can explicitly opt in to order-status notifications by replying `6`. Reply `STOP` or `UNSUBSCRIBE` to opt out. Consent is stored against the linked WhatsApp contact; queued messages are cancelled on opt-out.
+8. After an opted-in customer's LPG order status or payment status changes, the canonical database trigger queues a notification. A scheduled Edge Function poller sends it through Meta's approved utility template, records the provider message ID, and reconciles sent/delivered/read/failed receipts from Meta's status webhooks. Retries use a locked outbox and bounded backoff; exhausted/permanent failures are left failed for inspection.
 
 ## App handoff configuration
 
@@ -21,7 +23,30 @@ SKIMA uses Meta's official WhatsApp Business Cloud API directly. The webhook is 
 - `SKIMA_WHATSAPP_ACCESS_TOKEN`: server-side Meta Cloud API access token.
 - `SKIMA_WHATSAPP_PHONE_NUMBER_ID`: Meta phone number ID, not the public phone number.
 - `SKIMA_WHATSAPP_GRAPH_API_VERSION`: supported Graph API version configured for the Meta app.
+- `SKIMA_WHATSAPP_DISPATCH_SECRET`: a long random secret used only to authenticate the scheduled outbox dispatcher; use the same value in the Vault entry below.
+- `SKIMA_WHATSAPP_ORDER_UPDATE_TEMPLATE`: optional; defaults to `skima_lpg_order_update`.
+- `SKIMA_WHATSAPP_ORDER_UPDATE_LANGUAGE`: optional; defaults to `en` and must match the approved Meta template language.
 - Supabase provides `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to Edge Functions; never copy the service-role key into the app or GitHub.
+
+### Proactive order-status template and scheduler
+
+Create and obtain Meta approval for a **Utility** template named `skima_lpg_order_update` (or set `SKIMA_WHATSAPP_ORDER_UPDATE_TEMPLATE` to the approved name). Use four body variables in this order:
+
+`SKIMA LPG order {{1}} update. Order status: {{2}}. Payment: {{3}}. Total: {{4}}. Reply MENU for details. Reply STOP to turn off order updates.`
+
+The dispatcher sends only to contacts that explicitly opted in. This is a transactional update, not marketing. Meta must approve the template before the provider will deliver it outside the 24-hour customer-service window.
+
+The status-notification migration creates a one-minute poller that remains inert until both Vault values exist. Store the complete dispatcher URL and the same token configured as `SKIMA_WHATSAPP_DISPATCH_SECRET`:
+
+```sql
+select vault.create_secret(
+  'https://<project-ref>.supabase.co/functions/v1/skima-whatsapp-webhook?mode=dispatch',
+  'skima_whatsapp_dispatch_url'
+);
+select vault.create_secret('<same-random-token-as-SKIMA_WHATSAPP_DISPATCH_SECRET>', 'skima_whatsapp_dispatch_secret');
+```
+
+Use a newly generated random token; the placeholders above are not credentials. The webhook is configured with JWT verification disabled because Meta cannot send a Supabase JWT; the handler verifies Meta's HMAC signature for webhook events and a separate bearer secret for scheduled dispatch calls.
 
 ## Meta launch checklist
 1. Create or select the SKIMA Meta Business Portfolio and Meta developer app; add WhatsApp and register/verify the business phone number.
