@@ -489,32 +489,32 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     };
 
     const inviteRedirectTo = Deno.env.get("AUTH_INVITE_REDIRECT_URL") ?? Deno.env.get("SITE_URL");
-    const invitation = await serviceClient.auth.admin.inviteUserByEmail(email, {
-      data: { full_name: displayName, station_managed_driver_invite: true },
-      ...(inviteRedirectTo ? { redirectTo: inviteRedirectTo } : {}),
+    // The email only signs the invited user into SKIMA. It does not create
+    // the Station Managed relationship; that requires the explicit in-app
+    // Accept invitation action guarded by accept_lpg_station_managed_driver_invite().
+    const signIn = await serviceClient.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: true,
+        data: { full_name: displayName },
+        ...(inviteRedirectTo ? { emailRedirectTo: inviteRedirectTo } : {}),
+      },
     });
-    if (invitation.error) {
-      // Existing SKIMA accounts cannot be invited as new auth users. Send an OTP
-      // sign-in email instead; the pending branch invite is accepted after login.
-      if (/already registered|already exists|user exists/i.test(invitation.error.message)) {
-        const signIn = await serviceClient.auth.signInWithOtp({
-          email,
-          options: {
-            shouldCreateUser: false,
-            ...(inviteRedirectTo ? { emailRedirectTo: inviteRedirectTo } : {}),
-          },
-        });
-        if (signIn.error) {
-          const cleanupError = await revokeUndeliveredInvitation("existing_account_otp_failed");
-          if (cleanupError) return cleanupError;
-          return jsonResponse({ ok: false, error: "invitation_delivery_failed", message: signIn.error.message, requestId: id }, 400);
-        }
-      } else {
-        const cleanupError = await revokeUndeliveredInvitation("invite_email_failed");
-        if (cleanupError) return cleanupError;
-        return jsonResponse({ ok: false, error: "invitation_delivery_failed", message: invitation.error.message, requestId: id }, 400);
-      }
+    if (signIn.error) {
+      const cleanupError = await revokeUndeliveredInvitation("sign_in_email_failed");
+      if (cleanupError) return cleanupError;
+      return jsonResponse({ ok: false, error: "invitation_delivery_failed", message: signIn.error.message, requestId: id }, 400);
     }
+
+    const deliveryRecorded = await serviceClient.from("lpg_station_managed_driver_invites")
+      .update({
+        updated_at: new Date().toISOString(),
+        metadata: { source: "api-gateway", deliveryStatus: "sign_in_link_requested", acceptanceMode: "in_app" },
+      })
+      .eq("id", saved.data.id)
+      .eq("status", "pending");
+    if (deliveryRecorded.error) return databaseError(deliveryRecorded.error, id);
+
     return jsonResponse({ ok: true, data: { id: saved.data.id, email, status: saved.data.status, expiresAt: saved.data.expires_at }, requestId: id });
   }
 
@@ -2575,7 +2575,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         supabase
           .from("lpg_driver_locations")
           .select(
-            "id,driver_profile_id,user_id,lpg_order_id,latitude,longitude,accuracy_meters,heading_degrees,speed_meters_per_second,online_status,recorded_at,metadata,created_at",
+            "id,driver_profile_id,station_driver_id,user_id,lpg_order_id,latitude,longitude,accuracy_meters,heading_degrees,speed_meters_per_second,online_status,recorded_at,metadata,created_at",
           )
           .order("recorded_at", { ascending: false }),
         id,
@@ -2590,6 +2590,25 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       }
 
       const payload = body.value;
+      if (payload.stationDriverId !== undefined) {
+        return rpcResponse(
+          supabase.rpc("record_lpg_station_managed_driver_location", {
+            target_accuracy_meters: optionalNumber(payload.accuracyMeters, "accuracyMeters"),
+            target_heading_degrees: optionalNumber(payload.headingDegrees, "headingDegrees"),
+            target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+            target_latitude: requireNumber(payload.latitude, "latitude"),
+            target_longitude: requireNumber(payload.longitude, "longitude"),
+            target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+            target_metadata: optionalRecord(payload.metadata) ?? {},
+            target_recorded_at: optionalString(payload.recordedAt),
+            target_source: optionalString(payload.source) ?? "skima.lpg.station_managed_driver_api",
+            target_speed_meters_per_second: optionalNumber(payload.speedMetersPerSecond, "speedMetersPerSecond"),
+            target_station_driver_id: requireUuid(payload.stationDriverId, "stationDriverId"),
+          }),
+          id,
+        );
+      }
+
       return rpcResponse(
         supabase.rpc("record_operational_driver_location", {
           target_accuracy_meters: optionalNumber(payload.accuracyMeters, "accuracyMeters"),
