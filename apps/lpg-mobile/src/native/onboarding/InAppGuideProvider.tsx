@@ -1,4 +1,4 @@
-import { router, usePathname } from "expo-router";
+import { router, usePathname, useSegments } from "expo-router";
 import {
   ArrowLeft,
   Check,
@@ -84,7 +84,7 @@ type GuideContextValue = {
   active: boolean;
   setWorkspace(workspace: GuideWorkspace): void;
   startNow(workspace: GuideWorkspace): Promise<void>;
-  registerTarget(key: string, node: View | null, pathname: string): void;
+  registerTarget(key: string, node: View | null, pathname: string, previousNode?: View | null): void;
 };
 
 const GuideContext = createContext<GuideContextValue | null>(null);
@@ -92,6 +92,9 @@ const GuideContext = createContext<GuideContextValue | null>(null);
 export function InAppGuideProvider({ children }: PropsWithChildren) {
   const session = useSession();
   const pathname = usePathname();
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const segments = useSegments();
+  const activeGuideRoute = useMemo(() => normalizeGuideRoute(segments), [segments]);
   const [workspace, setWorkspaceState] = useState<GuideWorkspace | null>(null);
   const [payload, setPayload] = useState<GuidePayload | null>(null);
   const [policy, setPolicy] = useState<PolicyPrompt | null>(null);
@@ -99,16 +102,23 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
   const [phase, setPhase] = useState<"idle" | "policy" | "tour" | "snooze">("idle");
   const [stepIndex, setStepIndex] = useState(0);
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
+  const [targetUnavailable, setTargetUnavailable] = useState(false);
+  const [targetsRevision, setTargetsRevision] = useState(0);
   const [snoozeDays, setSnoozeDays] = useState("7");
   const [busy, setBusy] = useState(false);
   const [policyError, setPolicyError] = useState<string | null>(null);
   const targetsRef = useRef(new Map<string, View>());
   const automaticLoadRef = useRef<string | null>(null);
 
-  const registerTarget = useCallback((key: string, node: View | null, targetPathname: string) => {
-    const routeKey = `${normalizeGuideRoute(targetPathname)}::${key}`;
-    if (node) targetsRef.current.set(routeKey, node);
-    else targetsRef.current.delete(routeKey);
+  const registerTarget = useCallback((key: string, node: View | null, pathname: string, previousNode?: View | null) => {
+    const routeKey = `${normalizeGuideRoute(pathname)}::${key}`;
+    if (node) {
+      targetsRef.current.set(routeKey, node);
+    } else if (previousNode && targetsRef.current.get(routeKey) === previousNode) {
+      // A stale ref callback must never remove a newer target that reused the key.
+      targetsRef.current.delete(routeKey);
+    }
+    setTargetsRevision((revision) => revision + 1);
   }, []);
 
   const recordEvent = useCallback(async (
@@ -232,31 +242,64 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!step || phase !== "tour") return;
     setTargetRect(null);
-    router.replace(step.route as never);
+    setTargetUnavailable(false);
+
+    const requiredRoute = normalizeGuideRoute(step.route);
+    if (activeGuideRoute !== requiredRoute) {
+      // Wait for Expo Router to confirm the destination before measuring any target.
+      // A still-mounted screen from the previous workspace must not be spotlighted.
+      router.replace(step.route as never);
+      return;
+    }
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    const maxAttempts = 24;
     const measure = (attempt: number) => {
       timer = setTimeout(() => {
         if (cancelled) return;
-        const target = targetsRef.current.get(`${normalizeGuideRoute(step.route)}::${step.targetKey}`);
+        const target = targetsRef.current.get(`${requiredRoute}::${step.targetKey}`);
         if (!target) {
-          if (attempt < 16) measure(attempt + 1);
+          if (attempt < maxAttempts) measure(attempt + 1);
+          else setTargetUnavailable(true);
           return;
         }
         target.measureInWindow((x, y, width, height) => {
           if (cancelled) return;
-          if (width > 0 && height > 0) setTargetRect({ x, y, width, height });
-          else if (attempt < 10) measure(attempt + 1);
+          if (width > 0 && height > 0) {
+            const visibleLeft = Math.max(x, 0);
+            const visibleTop = Math.max(y, 0);
+            const visibleRight = Math.min(x + width, viewportWidth);
+            const visibleBottom = Math.min(y + height, viewportHeight);
+            if (visibleRight > visibleLeft && visibleBottom > visibleTop) {
+              // Spotlight only the portion that is actually inside the viewport.
+              // Never shade the screen around an off-screen or stale measurement.
+              setTargetRect({
+                x: visibleLeft,
+                y: visibleTop,
+                width: visibleRight - visibleLeft,
+                height: visibleBottom - visibleTop,
+              });
+              setTargetUnavailable(false);
+            } else if (attempt < maxAttempts) {
+              measure(attempt + 1);
+            } else {
+              setTargetUnavailable(true);
+            }
+          } else if (attempt < maxAttempts) {
+            measure(attempt + 1);
+          } else {
+            setTargetUnavailable(true);
+          }
         });
-      }, attempt === 0 ? 280 : 160);
+      }, attempt === 0 ? 100 : 120);
     };
     measure(0);
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [phase, step]);
+  }, [activeGuideRoute, phase, step, targetsRevision, viewportHeight, viewportWidth]);
 
   const agreePolicy = useCallback(async () => {
     if (!policy || !payload?.guide || !confirmedPolicy || busy) return;
@@ -358,6 +401,7 @@ export function InAppGuideProvider({ children }: PropsWithChildren) {
           stepIndex={stepIndex}
           stepCount={payload?.steps.length ?? 0}
           rect={targetRect}
+          targetUnavailable={targetUnavailable}
           allowSnooze={payload?.guide?.allowSnooze === true}
           onBack={back}
           onNext={() => void next()}
@@ -395,10 +439,17 @@ export function GuideTarget({
 }) {
   const guide = useInAppGuide();
   const pathname = usePathname();
+  const registeredNode = useRef<View | null>(null);
+  const attachNode = useCallback((node: View | null) => {
+    const previousNode = registeredNode.current;
+    registeredNode.current = node;
+    guide.registerTarget(targetKey, node, pathname, previousNode);
+  }, [guide.registerTarget, pathname, targetKey]);
+
   return (
     <View
       collapsable={false}
-      ref={(node) => guide.registerTarget(targetKey, node, pathname)}
+      ref={attachNode}
       style={style}
     >
       {children}
@@ -488,6 +539,7 @@ function GuideOverlay({
   stepIndex,
   stepCount,
   rect,
+  targetUnavailable,
   allowSnooze,
   onBack,
   onNext,
@@ -497,6 +549,7 @@ function GuideOverlay({
   stepIndex: number;
   stepCount: number;
   rect: TargetRect | null;
+  targetUnavailable: boolean;
   allowSnooze: boolean;
   onBack(): void;
   onNext(): void;
@@ -507,10 +560,19 @@ function GuideOverlay({
   const pad = 7;
   const topSpace = rect ? Math.max(rect.y - pad, 0) : 0;
   const bottomStart = rect ? Math.min(rect.y + rect.height + pad, screen.height) : 0;
-  const boxTop = rect
-    ? (rect.y < screen.height * 0.52 ? Math.min(bottomStart + 14, screen.height - 250) : undefined)
+  const hasRoomBelow = rect ? screen.height - bottomStart >= 280 : false;
+  const preferredAbove = rect
+    ? step.placement === "top"
+      || ((step.placement === "auto" || step.placement === "left" || step.placement === "right")
+        && rect.y >= screen.height * 0.52)
+    : false;
+  // Honor the configured placement when there is room; otherwise put the coachmark
+  // on the opposite side so it does not cover the highlighted control or leave screen.
+  const placeAbove = Boolean(rect) && (preferredAbove || !hasRoomBelow);
+  const boxTop = rect && !placeAbove
+    ? Math.min(bottomStart + 14, screen.height - 250)
     : undefined;
-  const boxBottom = rect && rect.y >= screen.height * 0.52
+  const boxBottom = rect && placeAbove
     ? Math.min(screen.height - topSpace + 14, screen.height - 230)
     : undefined;
 
@@ -567,7 +629,11 @@ function GuideOverlay({
           </View>
           <Text style={[styles.coachTitle, { color: palette.ink }]}>{step.title}</Text>
           <Text style={[styles.coachBody, { color: palette.muted }]}>
-            {rect ? step.body : "Opening the right screen…"}
+            {rect
+              ? step.body
+              : targetUnavailable
+                ? "This control could not be found on this screen, so we will not point to another place. You can continue without a highlight or go back and try again."
+                : "Opening the right screen…"}
           </Text>
           <View style={styles.coachActions}>
             <Pressable
@@ -579,7 +645,12 @@ function GuideOverlay({
               <ArrowLeft color={palette.ink} size={17} />
               <Text style={[styles.backActionText, { color: palette.ink }]}>Back</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" onPress={onNext} style={styles.nextAction}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={!rect && !targetUnavailable}
+              onPress={onNext}
+              style={[styles.nextAction, !rect && !targetUnavailable && styles.disabled]}
+            >
               <Text style={styles.nextActionText}>{step.actionLabel || (stepIndex === stepCount - 1 ? "Finish" : "Next")}</Text>
               {stepIndex < stepCount - 1 ? <ChevronRight color="#FFFFFF" size={17} /> : <Check color="#FFFFFF" size={17} />}
             </Pressable>
@@ -703,10 +774,12 @@ function parseGuidePayload(value: unknown): GuidePayload {
   return { eligible: value.eligible === true, guide, steps };
 }
 
-function normalizeGuideRoute(route: string): string {
-  const withoutGroups = route.replace(/\/\([^/]+\)/g, "");
-  const segments = withoutGroups.split("/").filter(Boolean);
-  return segments.length ? `/${segments.join("/")}` : "/";
+function normalizeGuideRoute(route: string | readonly string[]) {
+  const rawSegments = typeof route === "string" ? route.split("/") : [...route];
+  const normalized = rawSegments
+    .map((segment) => segment.trim().replace(/^\\([^/]+\\)$/, ""))
+    .filter((segment) => segment.length > 0 && segment !== "index");
+  return `/${normalized.join("/")}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
