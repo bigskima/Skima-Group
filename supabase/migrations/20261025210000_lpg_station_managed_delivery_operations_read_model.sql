@@ -236,7 +236,7 @@ begin
         and o.fulfillment_mode='station_managed'
         and o.status not in ('cancelled','failed','refunded','expired')
       limit 50
-    ),'[]'::jsonb)
+    ),'[]'::jsonb),
 
     'assignableOrders',coalesce((
       select jsonb_agg(jsonb_build_object(
