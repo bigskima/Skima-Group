@@ -964,10 +964,10 @@ async function sendWhatsAppTemplate(args: {
   const orderStatus = humanizeStatus(asText(args.payload.orderStatus, "updated"));
   const paymentStatus = humanizeStatus(asText(args.payload.paymentStatus, "unknown"));
   const response = await fetch(
-    \`https://graph.facebook.com/\${args.graphVersion}/\${args.phoneNumberId}/messages\`,
+    `https://graph.facebook.com/${args.graphVersion}/${args.phoneNumberId}/messages`,
     {
       method: "POST",
-      headers: { authorization: \`Bearer \${args.accessToken}\`, "content-type": "application/json" },
+      headers: { authorization: `Bearer ${args.accessToken}`, "content-type": "application/json" },
       body: JSON.stringify({
         messaging_product: "whatsapp",
         recipient_type: "individual",
@@ -997,10 +997,10 @@ async function sendWhatsAppTemplate(args: {
     const errorObject = isRecord(body) && isRecord(body.error) ? body.error : {};
     const code = typeof errorObject.code === "string" || typeof errorObject.code === "number"
       ? String(errorObject.code)
-      : \`http_\${response.status}\`;
+      : `http_${response.status}`;
     return {
       ok: false,
-      errorCode: \`meta_\${code}\`.slice(0, 180),
+      errorCode: `meta_${code}`.slice(0, 180),
       retryable: response.status === 429 || response.status >= 500,
     };
   }
