@@ -18,6 +18,47 @@ import { GuideTarget } from "../onboarding/InAppGuideProvider";
 type ManagedWorkspaceSection = "overview" | "settings" | "vehicles" | "drivers" | "orders" | "payments";
 type DeliveryPricingMode = "separate" | "included" | "free";
 type CompensationMode = "in_app_plan" | "offline";
+type StationManagedInvitation = {
+  id: string;
+  email: string;
+  displayName: string;
+  phone?: string | null;
+  status: string;
+  expiresAt?: string | null;
+  createdAt?: string | null;
+  deliveryStatus?: string | null;
+  deliveryFailure?: string | null;
+};
+
+type StationManagedDelivery = {
+  assignmentId: string;
+  lpgOrderId: string;
+  publicReference?: string | null;
+  assignmentStatus: string;
+  orderStatus: string;
+  requestedKg: number | string;
+  actualKg?: number | string | null;
+  totalAmount?: number | string | null;
+  currencyCode?: string | null;
+  paymentStatus?: string | null;
+  assignedAt?: string | null;
+  completedAt?: string | null;
+  updatedAt?: string | null;
+  stationDriverId?: string | null;
+  driverName?: string | null;
+  driverPhone?: string | null;
+  vehicleId?: string | null;
+  vehicleRegistrationNumber?: string | null;
+  vehicleManufacturer?: string | null;
+  vehicleModel?: string | null;
+  vehicleType?: string | null;
+  deliveryAddress?: string | null;
+  deliveryInstructions?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  isActive?: boolean;
+};
+
 type WorkspaceData = {
   settings?: {
     stationManagedEnabled?: boolean;
@@ -28,9 +69,12 @@ type WorkspaceData = {
     currencyCode?: string;
   };
   drivers?: Array<{ id: string; userId: string; displayName: string; phone?: string; status: string }>;
+  invitations?: StationManagedInvitation[];
   agreements?: Array<Record<string, unknown>>;
   payments?: Array<Record<string, unknown>>;
-  assignableOrders?: Array<{ id: string; publicReference?: string; status: string; requestedKg?: number; totalAmount?: number; currencyCode?: string }>;
+  deliveries?: StationManagedDelivery[];
+  assignedOrders?: Array<Record<string, unknown>>;
+  assignableOrders?: Array<{ id: string; publicReference?: string; status: string; requestedKg?: number; totalAmount?: number; currencyCode?: string; dispatchStatus?: string }>;
 };
 
 type StationManagedVehicle = {
@@ -93,6 +137,7 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
     queryKey: ["station-managed-workspace", branchId],
     enabled: session.status === "authenticated" && Boolean(branchId),
     retry: false,
+    refetchInterval: section === "orders" ? 15000 : 30000,
     queryFn: async () => {
       const result = await session.supabase.rpc("read_lpg_station_managed_workspace", {
         target_station_branch_id: branchId,
@@ -170,9 +215,32 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
       if (result.data?.ok !== true) throw new Error(result.data?.message || "Station driver invitation could not be sent.");
       return result.data.data;
     },
-    onSuccess: async (invitation) => { setDriverEmail(""); setDriverName(""); setDriverPhone(""); setErrorMessage(null); setSuccessMessage(`Invitation email sent to ${String(invitation?.email ?? "the driver")}. They must accept using that email address.`); await workspace.refetch(); },
+    onSuccess: async (invitation) => { setDriverEmail(""); setDriverName(""); setDriverPhone(""); setErrorMessage(null); setSuccessMessage(`Sign-in notice sent to ${String(invitation?.email ?? "the driver")}. They must sign in with that verified email and explicitly accept the station invitation inside SKIMA.`); await workspace.refetch(); },
     onError: (error) => setErrorMessage(friendlyError(error, "Station driver invitation could not be sent.")),
   });
+  const resendInvitationMutation = useMutation({
+    mutationFn: async (invitation: StationManagedInvitation) => {
+      if (!branchId) throw new Error("Your station branch is not available.");
+      const result = await session.supabase.functions.invoke("api-gateway/runtime/station-driver-invitations", {
+        body: { value: {
+          stationBranchId: branchId,
+          email: invitation.email,
+          displayName: invitation.displayName,
+          phone: invitation.phone ?? null,
+        } },
+      });
+      if (result.error) throw result.error;
+      if (result.data?.ok !== true) throw new Error(result.data?.message || "Station invitation notice could not be resent.");
+      return result.data.data;
+    },
+    onSuccess: async () => {
+      setErrorMessage(null);
+      setSuccessMessage("A new sign-in notice was sent. The driver must still accept the station relationship inside SKIMA.");
+      await workspace.refetch();
+    },
+    onError: (error) => setErrorMessage(friendlyError(error, "Station invitation notice could not be resent.")),
+  });
+
   const agreementMutation = useMutation({
     mutationFn: async () => {
       if (!selectedDriverId) throw new Error("Choose a station driver first.");
