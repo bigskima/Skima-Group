@@ -25,6 +25,7 @@ import {
   recordId,
 } from "../api/records";
 import { readOperationalLocation } from "../device/location";
+import { getTrackedStationManagedOrderId, startStationManagedDriverTracking, stopDriverTracking } from "../device/driverTracking";
 import { openDeviceNavigation } from "../device/navigation";
 import { Scanner } from "../device/Scanner";
 import { OperationalMap, type MapPoint } from "../maps/OperationalMap";
@@ -57,6 +58,8 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const [actualKg, setActualKg] = useState("");
   const [inspectionResult, setInspectionResult] = useState("");
   const [inspectionNotes, setInspectionNotes] = useState("");
+  const [stationTrackingOrderId, setStationTrackingOrderId] = useState<string | null>(null);
+  const [stationTrackingBusy, setStationTrackingBusy] = useState(false);
 
   useEffect(() => {
     if (params.scannedToken) setToken(params.scannedToken);
@@ -110,7 +113,8 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const root = detail.data;
   const order = nestedRecord(root, "order") ?? root;
   const cylinder = nestedRecord(root, "cylinder") ?? nestedRecord(order, "cylinder");
-  const driver = nestedRecord(root, "driver") ?? nestedRecord(order, "driver");
+  const driver = nestedRecord(root, "driver") ?? nestedRecord(order, "driver") ?? nestedRecord(root, "stationManagedDriver") ?? nestedRecord(order, "stationManagedDriver");
+  const stationManagedVehicle = nestedRecord(root, "stationManagedVehicle") ?? nestedRecord(order, "stationManagedVehicle");
   const station = nestedRecord(root, "station") ?? nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
   const pickup = nestedRecord(root, "pickupLocation") ?? nestedRecord(root, "pickup_location") ?? nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location");
   const delivery = nestedRecord(root, "deliveryLocation") ?? nestedRecord(root, "delivery_location") ?? nestedRecord(order, "deliveryLocation") ?? nestedRecord(order, "delivery_location");
@@ -127,6 +131,76 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const routeDistance = firstNumber(root, ["routeDistanceMeters", "route_distance_meters", "distanceMeters"]);
   const routeDuration = firstNumber(root, ["routeDurationSeconds", "route_duration_seconds", "durationSeconds"]);
   const status = displayStatus(order ?? {}) ?? "unknown";
+  const terminalOrderStatus = ["delivered", "completed", "cancelled", "failed", "refunded", "expired"].includes(status);
+  const canShareStationDriverLocation = workspace === "station_driver" && Boolean(id)
+    && ["driver_accepted", "pickup_en_route", "pickup_verified", "station_en_route", "station_verified", "refill_started", "refill_in_progress", "refill_confirmed", "station_settled", "return_en_route", "delivery_verification_pending"].includes(status);
+
+  useEffect(() => {
+    if (workspace !== "station_driver" || !id) {
+      setStationTrackingOrderId(null);
+      return;
+    }
+    let active = true;
+    void getTrackedStationManagedOrderId().then((trackedOrderId) => {
+      if (active) setStationTrackingOrderId(trackedOrderId);
+    }).catch(() => {
+      if (active) setStationTrackingOrderId(null);
+    });
+    return () => { active = false; };
+  }, [workspace, id]);
+
+  useEffect(() => {
+    if (workspace !== "station_driver" || !id || !terminalOrderStatus) return;
+    void getTrackedStationManagedOrderId().then(async (trackedOrderId) => {
+      if (trackedOrderId !== id) return;
+      await stopDriverTracking();
+      setStationTrackingOrderId(null);
+      setNotice("Delivery closed. Live location sharing has stopped.");
+      setNoticeSuccess(true);
+    }).catch(() => undefined);
+  }, [workspace, id, terminalOrderStatus]);
+
+  const toggleStationDriverTracking = async () => {
+    if (!id || !canShareStationDriverLocation) return;
+    setStationTrackingBusy(true);
+    setNotice(null);
+    try {
+      if (stationTrackingOrderId === id) {
+        await stopDriverTracking();
+        setStationTrackingOrderId(null);
+        setNoticeSuccess(true);
+        setNotice("Live location sharing stopped for this delivery.");
+        return;
+      }
+      if (!session.session?.access_token || !session.session.refresh_token) {
+        throw new Error("Your SKIMA session needs to be refreshed before location sharing can start.");
+      }
+      const access = await session.supabase.rpc("read_lpg_station_managed_driver_access");
+      if (access.error) throw access.error;
+      const identity = access.data && typeof access.data === "object"
+        ? access.data as { enabled?: boolean; stationDriverId?: string }
+        : null;
+      if (identity?.enabled !== true || !identity.stationDriverId) {
+        throw new Error("An active Station Managed driver identity is required for live tracking.");
+      }
+      await startStationManagedDriverTracking({
+        stationDriverId: identity.stationDriverId,
+        lpgOrderId: id,
+        accessToken: session.session.access_token,
+        refreshToken: session.session.refresh_token,
+        onlineStatus: "busy",
+      });
+      setStationTrackingOrderId(id);
+      setNoticeSuccess(true);
+      setNotice("Live location sharing is active for this delivery. Updates use the existing LPG order tracking stream.");
+    } catch (cause) {
+      setNoticeSuccess(false);
+      setNotice(friendlyError(cause, "Live location sharing could not be started."));
+    } finally {
+      setStationTrackingBusy(false);
+    }
+  };
+
   const driverWorkspace = workspace === "driver" || workspace === "station_driver";
   const contactLocation = usesDeliveryContact(status) ? delivery : pickup;
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
@@ -365,6 +439,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             {requestedKg !== null ? <><Divider /><SummaryField label="Requested refill" value={`${requestedKg} kg`} /></> : null}
             {filledKg !== null ? <><Divider /><SummaryField label="Actual refill" value={`${filledKg} kg`} /></> : null}
             {workspace === "station" && driver ? <><Divider /><SummaryField label="Assigned driver" value={firstString(driver, ["displayName", "display_name", "name"]) ?? displayTitle(driver)} /></> : null}
+            {(workspace === "station" || workspace === "station_driver") && stationManagedVehicle ? <><Divider /><SummaryField label="Station vehicle" value={[firstString(stationManagedVehicle, ["registrationNumber", "registration_number"]), firstString(stationManagedVehicle, ["typeName", "type_name"])].filter(Boolean).join(" · ") || "Assigned station vehicle"} /></> : null}
             {driverWorkspace && customer ? <><Divider /><SummaryField label="Customer" value={firstString(customer, ["displayName", "display_name"]) ?? "Customer"} /></> : null}
             {driverWorkspace && firstString(contactLocation, ["contactName", "contact_name"]) ? <><Divider /><SummaryField label={usesDeliveryContact(status) ? "Delivery contact" : "Pickup contact"} value={firstString(contactLocation, ["contactName", "contact_name"]) ?? "Customer"} /></> : null}
             {driverWorkspace && firstString(contactLocation, ["contactPhone", "contact_phone"]) ? <><Divider /><SummaryField label="Contact phone" value={firstString(contactLocation, ["contactPhone", "contact_phone"]) ?? "Not available"} /></> : null}
@@ -399,6 +474,28 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
               loading={action.isPending}
               onPress={() => void runDriverAction(driverAction)}
             />
+          ) : null}
+
+          {canShareStationDriverLocation ? (
+            <View style={[styles.trackingCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.sectionLead}>
+                <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><MapPin color={palette.brand} size={21} /></View>
+                <View style={styles.sectionCopy}>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>Live delivery location</Text>
+                  <Text style={[styles.sectionBody, { color: palette.muted }]}>
+                    Share device location for this accepted order so the customer can follow the existing order tracking stream. Location sharing stops when the delivery reaches a terminal state.
+                  </Text>
+                </View>
+              </View>
+              <AppButton
+                label={stationTrackingOrderId === id ? "Stop live location sharing" : stationTrackingOrderId ? "Share location for this delivery" : "Share live location with customer"}
+                fullWidth
+                variant={stationTrackingOrderId === id ? "secondary" : "primary"}
+                loading={stationTrackingBusy}
+                disabled={stationTrackingBusy}
+                onPress={() => void toggleStationDriverTracking()}
+              />
+            </View>
           ) : null}
 
           {canDriverScan && driverScanType ? (
@@ -841,6 +938,7 @@ const styles = StyleSheet.create({
   metricIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   metricValue: { ...typography.heading, fontSize: 19 },
   metricLabel: { ...typography.caption },
+  trackingCard: { borderWidth: 1, borderRadius: radii.xl, padding: spacing.md, gap: spacing.md },
   scanCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
   operationCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
   sectionLead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
