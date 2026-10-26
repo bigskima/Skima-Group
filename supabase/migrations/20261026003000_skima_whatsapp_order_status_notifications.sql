@@ -241,7 +241,7 @@ grant execute on function public.claim_skima_whatsapp_order_notifications(intege
 
 -- Create the poller even before Meta credentials are configured. The cron command
 -- remains inert until both Vault values exist, then starts delivering opt-in updates.
-do $
+do $whatsapp_cron$
 begin
   if to_regclass('vault.decrypted_secrets') is not null
      and to_regclass('cron.job') is not null then
@@ -263,6 +263,6 @@ begin
     );
   end if;
 end;
-$;
+$whatsapp_cron$;
 
 commit;
