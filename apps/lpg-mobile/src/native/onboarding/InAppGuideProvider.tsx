@@ -777,7 +777,7 @@ function parseGuidePayload(value: unknown): GuidePayload {
 function normalizeGuideRoute(route: string | readonly string[]) {
   const rawSegments = typeof route === "string" ? route.split("/") : [...route];
   const normalized = rawSegments
-    .map((segment) => segment.trim().replace(/^\\([^/]+\\)$/, ""))
+    .map((segment) => segment.trim().replace(/^\([^/]+\)$/, ""))
     .filter((segment) => segment.length > 0 && segment !== "index");
   return `/${normalized.join("/")}`;
 }
