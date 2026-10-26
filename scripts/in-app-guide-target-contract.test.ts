@@ -6,7 +6,7 @@ const accountSettings = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/W
 const customerLayout = await Deno.readTextFile("apps/lpg-mobile/app/(customer)/_layout.tsx");
 const driverLayout = await Deno.readTextFile("apps/lpg-mobile/app/(driver)/_layout.tsx");
 const stationLayout = await Deno.readTextFile("apps/lpg-mobile/app/(station)/_layout.tsx");
-const migration = await Deno.readTextFile("supabase/migrations/20261025170000_lpg_in_app_guide_route_target_alignment.sql");
+const migration = await Deno.readTextFile("supabase/migrations/20261025170100_lpg_in_app_guide_route_target_alignment.sql");
 
 function requireText(source: string, fragment: string, label: string) {
   if (!source.includes(fragment)) {
@@ -71,8 +71,8 @@ Deno.test("tour waits for the requested route and resolved anchor before enablin
 });
 
 Deno.test("tour content version 2 aligns copy and resets completed guide progress", () => {
-  requireText(migration, "version = 2", "tour version increment");
-  requireText(migration, "tourContentVersion', 2", "guide content version metadata");
+  requireText(migration, "version = 3", "tour version increment");
+  requireText(migration, "tourContentVersion', 3", "guide content version metadata");
   requireText(migration, "Station Managed delivery settings", "station fulfilment tour copy");
   requireText(migration, "wallet", "customer wallet context");
   requireText(migration, "Replay this tour", "replay entry guidance");
