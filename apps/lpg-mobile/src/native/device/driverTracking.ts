@@ -11,8 +11,26 @@ type TrackingConfig = {
   supabaseUrl: string;
   accessToken: string;
   refreshToken: string;
-  driverProfileId: string;
+  trackingKind?: "independent" | "station_managed";
+  driverProfileId?: string;
+  stationDriverId?: string;
+  lpgOrderId?: string;
   onlineStatus: "online" | "busy";
+};
+
+type IndependentTrackingInput = {
+  driverProfileId: string;
+  accessToken: string;
+  refreshToken: string;
+  onlineStatus: "online" | "busy";
+};
+
+type StationManagedTrackingInput = {
+  stationDriverId: string;
+  lpgOrderId: string;
+  accessToken: string;
+  refreshToken: string;
+  onlineStatus?: "busy";
 };
 
 async function refreshSession(config: TrackingConfig): Promise<TrackingConfig> {
@@ -49,6 +67,30 @@ async function postLocation(
   location: Location.LocationObject,
 ): Promise<void> {
   const recordedAt = new Date(location.timestamp).toISOString();
+  const stationManaged = config.trackingKind === "station_managed";
+  if (stationManaged && (!config.stationDriverId || !config.lpgOrderId)) {
+    throw new Error("A Station Managed driver and order are required for live tracking.");
+  }
+  if (!stationManaged && !config.driverProfileId) {
+    throw new Error("An approved driver profile is required for live tracking.");
+  }
+  const identity = stationManaged ? String(config.stationDriverId) + ":" + String(config.lpgOrderId) : String(config.driverProfileId);
+  const payload = {
+    ...(stationManaged
+      ? { stationDriverId: config.stationDriverId, lpgOrderId: config.lpgOrderId }
+      : { driverProfileId: config.driverProfileId }),
+    latitude: location.coords.latitude,
+    longitude: location.coords.longitude,
+    accuracyMeters: location.coords.accuracy,
+    headingDegrees: location.coords.heading,
+    speedMetersPerSecond: location.coords.speed,
+    onlineStatus: config.onlineStatus,
+    purpose: "active-driver-tracking",
+    recordedAt,
+    source: stationManaged ? "skima.lpg.station_managed_driver.mobile" : "skima.lpg.mobile",
+    metadata: { background: true, stationManaged },
+    idempotencyKey: `skima:lpg:driver-location:${identity}:${location.timestamp}`,
+  };
   const request = (accessToken: string) =>
     fetch(`${config.gateway.replace(/\/$/, "")}/lpg/driver-locations`, {
       method: "POST",
@@ -58,20 +100,7 @@ async function postLocation(
         authorization: `Bearer ${accessToken}`,
         "x-skima-client": "lpg-expo-background",
       },
-      body: JSON.stringify({
-        driverProfileId: config.driverProfileId,
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        accuracyMeters: location.coords.accuracy,
-        headingDegrees: location.coords.heading,
-        speedMetersPerSecond: location.coords.speed,
-        onlineStatus: config.onlineStatus,
-        purpose: "active-driver-tracking",
-        recordedAt,
-        source: "skima.lpg.mobile",
-        metadata: { background: true },
-        idempotencyKey: `skima:lpg:driver-location:${config.driverProfileId}:${location.timestamp}`,
-      }),
+      body: JSON.stringify(payload),
     });
   let response = await request(config.accessToken);
   if (response.status === 401) {
@@ -99,7 +128,7 @@ TaskManager.defineTask(TASK, async ({ data, error }) => {
   for (const location of locations) await postLocation(config, location);
 });
 
-export async function startDriverTracking(
+async function startTracking(
   input: Omit<TrackingConfig, "gateway" | "anonKey" | "supabaseUrl">,
 ) {
   const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -118,9 +147,7 @@ export async function startDriverTracking(
   }
   const background = await Location.requestBackgroundPermissionsAsync();
   if (!background.granted) {
-    throw new Error(
-      "Background location permission is required while you are online.",
-    );
+    throw new Error("Background location permission is required during an active delivery.");
   }
   await SecureStore.setItemAsync(
     CONFIG,
@@ -134,12 +161,31 @@ export async function startDriverTracking(
       pausesUpdatesAutomatically: true,
       showsBackgroundLocationIndicator: true,
       foregroundService: {
-        notificationTitle: "SKIMA driver is online",
-        notificationBody:
-          "Location is shared for authorised dispatch and active fulfilment.",
+        notificationTitle: "SKIMA driver location sharing is active",
+        notificationBody: "Location is shared for the accepted LPG delivery only.",
         notificationColor: "#D7192D",
       },
     });
+  }
+}
+
+export async function startDriverTracking(input: IndependentTrackingInput) {
+  await startTracking({ ...input, trackingKind: "independent" });
+}
+
+export async function startStationManagedDriverTracking(input: StationManagedTrackingInput) {
+  await startTracking({ ...input, onlineStatus: input.onlineStatus ?? "busy", trackingKind: "station_managed" });
+}
+
+export async function getTrackedStationManagedOrderId(): Promise<string | null> {
+  const stored = await SecureStore.getItemAsync(CONFIG);
+  if (!stored) return null;
+  try {
+    const value = JSON.parse(stored) as TrackingConfig;
+    return value.trackingKind === "station_managed" ? value.lpgOrderId ?? null : null;
+  } catch {
+    await SecureStore.deleteItemAsync(CONFIG);
+    return null;
   }
 }
 
