@@ -37,6 +37,7 @@ export default function Layout() {
           "station-application",
           "driver-documents",
           "station-documents",
+          "station-invitation",
           "fleet",
           "cylinder-capacity/[id]",
           "account-tools",
