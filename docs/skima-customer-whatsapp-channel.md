@@ -53,7 +53,9 @@ Use a newly generated random token; the placeholders above are not credentials. 
 2. Use the Meta test number and test recipient first. Configure the webhook callback URL for the deployed `skima-whatsapp-webhook` Edge Function and the same verify token; subscribe to the `messages` webhook field.
 3. Store the five WhatsApp secrets in Supabase Edge Function secrets. Configure the version actually supported by the Meta app, not a guessed placeholder.
 4. Run signed webhook tests, secure account-link tests, quote/confirmation/payment/dispatch tests and retry/idempotency checks before enabling the production phone number.
-5. Keep customer replies within the user-initiated service window. For business-initiated messages outside that window, use Meta-approved templates and a recorded valid opt-in. This initial scope only responds to inbound customer messages; it does not start unsolicited marketing or automatic proactive driver notifications.
+5. Configure the dispatcher Vault values and verify the one-minute cron poller. It stays idle until the dispatcher URL and secret are present.
+6. Create the approved Utility status template, verify account linking and explicit opt-in/opt-out, and test payment/dispatch/order-status notifications plus sent/delivered/read/failed callbacks with the Meta test number first.
+7. Keep replies inside the user-initiated service window where possible. Proactive customer service messages must use an approved template and recorded opt-in. The integration does not send marketing messages or broadcast to independent drivers.
 
 ## Provider and costs
 The direct Meta Cloud API is the recommended provider; a separate paid bot builder is not required. Meta provides a test environment. Production messaging charges depend on current Meta pricing, message category and destination. See https://whatsappbusiness.com/developers/developer-hub/ and https://whatsappbusiness.com/products/platform-pricing/.
