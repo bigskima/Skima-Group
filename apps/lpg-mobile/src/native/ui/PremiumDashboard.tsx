@@ -399,7 +399,7 @@ function MobileHome({ workspace, context, children }: {
           </View>
         </Modal>
 
-        <GuideTarget targetKey="common.workspace-switcher" style={styles.workspaceSwitcher}>
+        <GuideTarget targetKey={`${workspace}.workspace-switcher`} style={styles.workspaceSwitcher}>
           <WorkspaceSwitcher current={workspace} />
         </GuideTarget>
 
