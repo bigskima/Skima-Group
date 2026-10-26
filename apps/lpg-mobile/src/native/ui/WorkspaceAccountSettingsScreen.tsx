@@ -8,11 +8,12 @@ import {
   UsersRound,
   FileText,
   LogOut,
+  MessageCircle,
   Moon,
   ShieldCheck,
   Sun,
 } from "lucide-react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSession } from "../session/SessionProvider";
 import { GuideTarget, useInAppGuide } from "../onboarding/InAppGuideProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -53,6 +54,7 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
   const [affiliateSubmitting, setAffiliateSubmitting] = useState(false);
   const [affiliateError, setAffiliateError] = useState<string | null>(null);
   const [affiliateNotice, setAffiliateNotice] = useState<string | null>(null);
+  const [linkCodeLoading, setLinkCodeLoading] = useState(false);
 
   const refreshAffiliate = useCallback(async () => {
     setAffiliateLoading(true);
@@ -96,6 +98,49 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
       setAffiliateNotice("Referral code copied.");
     } catch {
       setAffiliateError("Clipboard access was unavailable. You can select and copy the code manually.");
+    }
+  };
+
+  const generateWhatsAppLinkCode = async () => {
+    if (linkCodeLoading || session.status !== "authenticated") return;
+    setLinkCodeLoading(true);
+    try {
+      const result = await session.supabase.rpc("issue_skima_whatsapp_link_code");
+      if (result.error) throw result.error;
+      if (typeof result.data !== "string" || !/^[A-F0-9]{16}$/.test(result.data)) {
+        throw new Error("SKIMA returned an invalid linking code. Please try again.");
+      }
+      const code = result.data;
+      const publicNumber = (process.env.EXPO_PUBLIC_SKIMA_WHATSAPP_NUMBER ?? "").replace(/\D/g, "");
+      const message = "Send this code to the official SKIMA LPG WhatsApp number within 10 minutes:\n\n" + code + "\n\nDo not share this code with another person.";
+      const copyAction = { text: "Copy code", onPress: () => { void Clipboard.setStringAsync(code); } };
+      if (publicNumber.length >= 6 && publicNumber.length <= 20) {
+        Alert.alert("WhatsApp linking code", message, [
+          { text: "Close", style: "cancel" },
+          copyAction,
+          {
+            text: "Open WhatsApp",
+            onPress: () => {
+              const url = "https://wa.me/" + publicNumber + "?text=" + encodeURIComponent(code);
+              void Linking.openURL(url).catch(() => {
+                Alert.alert("Could not open WhatsApp", "Copy the one-time code and send it to the official SKIMA LPG WhatsApp number.");
+              });
+            },
+          },
+        ]);
+      } else {
+        Alert.alert("WhatsApp linking code", message, [
+          { text: "Close", style: "cancel" },
+          copyAction,
+        ]);
+      }
+    } catch (error) {
+      Alert.alert(
+        "Could not generate code",
+        error instanceof Error ? error.message : "Please try again when your connection is available.",
+      );
+    } finally {
+      setLinkCodeLoading(false);
     }
   };
 
@@ -255,6 +300,22 @@ export function WorkspaceAccountSettingsScreen({ workspace }: { workspace: Works
                 <Text style={[styles.value, { color: theme.palette.brand }]}>Refresh affiliate status</Text>
               </Pressable>
             ) : null}
+          </View>
+        </View>
+      ) : null}
+
+      {workspace === "customer" ? (
+        <View style={styles.group}>
+          <Text style={[styles.groupTitle, { color: theme.palette.ink }]}>Customer channels</Text>
+          <View style={[styles.list, shadows.soft, { backgroundColor: theme.palette.surface, borderColor: theme.palette.border }]}>
+            <SettingsRow
+              icon={MessageCircle}
+              label="WhatsApp ordering"
+              detail="Link this chat securely to your SKIMA account for LPG orders and wallet-related help."
+              value={linkCodeLoading ? "Generating one-time code…" : "Generate linking code"}
+              onPress={() => void generateWhatsAppLinkCode()}
+              last
+            />
           </View>
         </View>
       ) : null}
