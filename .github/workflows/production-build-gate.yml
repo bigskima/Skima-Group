@@ -23,6 +23,7 @@ on:
       - "scripts/verify-migration-history.ts"
       - "scripts/validate-foundation.ts"
       - "scripts/verify-financial-policy-governance.ts"
+      - "scripts/skima-whatsapp-lifecycle-contract.test.ts"
       - "scripts/in-app-guide-target-contract.test.ts"
       - "scripts/payout-runtime-production-contract.test.ts"
       - "scripts/verification-runtime-contract.test.ts"
@@ -72,6 +73,8 @@ jobs:
         run: npm run lpg-refill:contract
       - name: Verify Station Managed fulfillment, driver and admin contracts
         run: npm run station-managed:verify
+      - name: Verify SKIMA WhatsApp lifecycle contracts
+        run: npm run whatsapp:contract
       - name: Verify in-app tour route and target alignment
         run: npm run in-app-guide:contract
       - name: Verify LPG auth production contracts
