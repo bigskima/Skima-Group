@@ -471,14 +471,19 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
 
           {section === "drivers" ? (
             <>
-              <Section title="4. Add a driver to this station" palette={palette} expanded={expandedSection === "4. Add a station driver"} onPress={() => setExpandedSection(expandedSection === "4. Add a station driver" ? "" : "4. Add a station driver")}>
-            <Text style={{ color: palette.muted, fontSize: 13 }}>Invite a station-owned driver by email. They accept the invitation and sign in to their own account; they do not need an independent-driver profile.</Text>
-            <Field label="Driver email address" value={driverEmail} onChangeText={setDriverEmail} palette={palette} autoCapitalize="none" />
-            <Field label="Driver full name" value={driverName} onChangeText={setDriverName} palette={palette} />
-            <Field label="Phone (optional)" value={driverPhone} onChangeText={setDriverPhone} palette={palette} keyboardType="phone-pad" />
-            <AppButton label="Invite station driver" fullWidth loading={registerMutation.isPending} disabled={!driverEmail.trim() || !driverName.trim()} onPress={() => void registerMutation.mutateAsync()} />
-            <Text style={{ color: palette.muted, fontSize: 12 }}>For safety, an account with an independent or SKIMA Managed driver profile cannot accept a Station Managed invitation.</Text>
-          </Section>
+              <Section title="Invite a station driver" palette={palette} expanded={expandedSection === "Invite a station driver"} onPress={() => setExpandedSection(expandedSection === "Invite a station driver" ? "" : "Invite a station driver")}>
+                <Text style={{ color: palette.muted, fontSize: 13 }}>
+                  Invite the driver's verified email. The email only signs them into SKIMA; a station relationship is created only after they explicitly accept inside Account, under Station driver invitation.
+                </Text>
+                <Field label="Driver email address" value={driverEmail} onChangeText={setDriverEmail} palette={palette} autoCapitalize="none" />
+                <Field label="Driver full name" value={driverName} onChangeText={setDriverName} palette={palette} />
+                <Field label="Phone (optional)" value={driverPhone} onChangeText={setDriverPhone} palette={palette} keyboardType="phone-pad" />
+                <AppButton label="Send sign-in notice" fullWidth loading={registerMutation.isPending} disabled={!driverEmail.trim() || !driverName.trim()} onPress={() => void registerMutation.mutateAsync()} />
+                <Text style={{ color: palette.muted, fontSize: 12 }}>
+                  Station Managed drivers keep a station-owned identity. This does not create an independent-driver profile or SKIMA driver payout.
+                </Text>
+              </Section>
+
               <View style={[styles.section, { borderColor: palette.border, backgroundColor: palette.surface }]}>
                 <Text style={[styles.sectionTitle, { color: palette.ink }]}>Active station drivers ({drivers.length})</Text>
                 {drivers.length ? drivers.map((driver) => (
@@ -489,7 +494,42 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
                     </View>
                     <Text style={{ color: palette.success, fontSize: 12, fontWeight: "800" }}>Active</Text>
                   </View>
-                )) : <Text style={{ color: palette.muted, fontSize: 13 }}>Drivers appear here after they accept their invitation with the invited email address.</Text>}
+                )) : <Text style={{ color: palette.muted, fontSize: 13 }}>Drivers appear here after they explicitly accept their invitation.</Text>}
+              </View>
+
+              <View style={[styles.section, { borderColor: palette.border, backgroundColor: palette.surface }]}>
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Driver invitations ({(data?.invitations ?? []).length})</Text>
+                {(data?.invitations ?? []).length ? (data?.invitations ?? []).map((invitation) => {
+                  const canResend = invitation.status !== "accepted";
+                  const resendBusy = resendInvitationMutation.isPending && resendInvitationMutation.variables?.id === invitation.id;
+                  return (
+                    <View key={invitation.id} style={[styles.invitationRow, { borderColor: palette.border }]}>
+                      <View style={{ flex: 1, gap: 4 }}>
+                        <Text style={{ color: palette.ink, fontWeight: "800" }}>{invitation.displayName || invitation.email}</Text>
+                        <Text style={{ color: palette.muted, fontSize: 12 }}>{invitation.email}</Text>
+                        <Text style={{ color: invitation.status === "accepted" ? palette.success : palette.muted, fontSize: 12, fontWeight: "800" }}>
+                          {invitation.status.replaceAll("_", " ")}
+                        </Text>
+                        {invitation.expiresAt && invitation.status !== "accepted" ? (
+                          <Text style={{ color: palette.muted, fontSize: 11 }}>Expires {formatStationDate(invitation.expiresAt)}</Text>
+                        ) : null}
+                        {invitation.deliveryStatus === "failed" && invitation.deliveryFailure ? (
+                          <Text style={{ color: palette.danger, fontSize: 11 }}>Last notice failed: {invitation.deliveryFailure.replaceAll("_", " ")}</Text>
+                        ) : null}
+                      </View>
+                      {canResend ? (
+                        <AppButton
+                          label="Resend notice"
+                          size="sm"
+                          variant="secondary"
+                          loading={resendBusy}
+                          disabled={resendInvitationMutation.isPending}
+                          onPress={() => resendInvitationMutation.mutate(invitation)}
+                        />
+                      ) : null}
+                    </View>
+                  );
+                }) : <Text style={{ color: palette.muted, fontSize: 13 }}>New and previous invitations will appear here, including accepted, declined, expired or revoked invitations.</Text>}
               </View>
             </>
           ) : null}
@@ -602,6 +642,11 @@ export function StationManagedFulfillmentScreen({ section = "overview" }: { sect
   );
 }
 
+
+function formatStationDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
 
 function WorkspaceOverview({
   enabled,
@@ -756,6 +801,7 @@ const styles = StyleSheet.create({
   overviewTileMetric: { fontSize: 11, fontWeight: "800", textAlign: "right" },
   overviewFootnote: { fontSize: 12, lineHeight: 18, paddingHorizontal: 3, marginTop: 2 },
   driverRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: spacing.sm },
+  invitationRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: spacing.md },
   orderHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
 
   section: { borderWidth: 1, borderRadius: radii.lg, padding: spacing.sm + 2, gap: spacing.sm, marginBottom: spacing.sm },
