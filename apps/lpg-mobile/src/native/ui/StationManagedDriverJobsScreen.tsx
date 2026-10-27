@@ -76,7 +76,6 @@ export function StationManagedDriverJobsScreen() {
       eyebrow="STATION DRIVER"
       title="My deliveries"
       subtitle="Accept station-assigned LPG deliveries and update your progress. Delivery completion is confirmed through the station's normal safety and cylinder-verification process."
-      action={<AppButton label="Account" size="sm" variant="ghost" onPress={() => router.push("/(station-driver)/account" as never)} />}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={palette.brand} />}
     >
         <View style={[styles.summary, { backgroundColor: palette.surface, borderColor: palette.border }]}>

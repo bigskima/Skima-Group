@@ -22,7 +22,9 @@ export function WorkspaceGate({
   );
 
   useEffect(() => {
-    if (session.status === "authenticated") guide.setWorkspace(workspace === "station_driver" ? "driver" : workspace);
+    // Station Managed drivers have a separate route group and no independent-driver guide routes.
+    // Do not launch the independent-driver tour from this workspace.
+    if (session.status === "authenticated" && workspace !== "station_driver") guide.setWorkspace(workspace);
   }, [guide, session.status, workspace]);
 
 

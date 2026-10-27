@@ -55,7 +55,7 @@ export function JobDetailRouteScreen({ workspace }: { workspace: "driver" | "sta
 
   if (routeState.isPending) {
     return (
-      <Screen eyebrow={workspace === "station" ? "Station job" : "Driver job"} title="Job details">
+      <Screen eyebrow={workspace === "station" ? "Station job" : workspace === "station_driver" ? "Station Managed delivery" : "Driver job"} title="Job details">
         <ScreenSkeleton cards={3} />
       </Screen>
     );
@@ -64,7 +64,7 @@ export function JobDetailRouteScreen({ workspace }: { workspace: "driver" | "sta
   if (routeState.error) {
     return (
       <Screen
-        eyebrow={workspace === "station" ? "Station job" : "Driver job"}
+        eyebrow={workspace === "station" ? "Station job" : workspace === "station_driver" ? "Station Managed delivery" : "Driver job"}
         title="Job unavailable"
         action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
       >
@@ -105,7 +105,7 @@ export function JobDetailRouteScreen({ workspace }: { workspace: "driver" | "sta
 
     return (
       <Screen
-        eyebrow={workspace === "station" ? "Station job" : "Driver job"}
+        eyebrow={workspace === "station" ? "Station job" : workspace === "station_driver" ? "Station Managed delivery" : "Driver job"}
         title={routeState.data.publicReference ?? "Job unavailable"}
         subtitle="This record is retained for audit history but is no longer actionable."
         action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}

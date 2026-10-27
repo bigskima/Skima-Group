@@ -34,6 +34,7 @@ export default function Layout() {
           "support",
           "wallet/top-up",
           "wallet/withdraw",
+          "wallet/affiliate-withdraw",
           "driver-application",
           "station-application",
           "driver-documents",

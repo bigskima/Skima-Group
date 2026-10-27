@@ -136,3 +136,9 @@ export const stationTabs = [
   { name: "settlements", title: "Money", icon: WalletCards },
   { name: "account", title: "Account", icon: CircleUserRound },
 ] as const;
+
+export const stationDriverTabs = [
+  { name: "index", title: "Today", icon: Home },
+  { name: "jobs", title: "Deliveries", icon: BriefcaseBusiness },
+  { name: "account", title: "Account", icon: CircleUserRound },
+] as const;
