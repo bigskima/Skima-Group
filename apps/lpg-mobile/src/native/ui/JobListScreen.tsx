@@ -3,6 +3,7 @@ import { MapPin, PackageCheck, Route, ScanLine, Search, UserCheck } from "lucide
 import { useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries, useLpgConfig } from "../api/domains";
+import { useManagedDriverEarnings } from "../api/managedDriverEarnings";
 import {
   cylinderPermanentIdentifier,
   cylinderRegistryReference,
@@ -28,6 +29,8 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
   const { palette } = useAppTheme();
   const jobs = workspace === "driver" ? domainQueries.driverJobs() : domainQueries.stationJobs();
   const config = useLpgConfig();
+  const managedEarnings = useManagedDriverEarnings(workspace === "driver");
+  const isSkimaManaged = workspace === "driver" && managedEarnings.data?.isManaged === true;
   const [searchQuery, setSearchQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(JOB_PAGE_SIZE);
   const allJobs = jobs.data ?? [];
@@ -40,7 +43,7 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
 
   const refresh = () => {
     if (workspace === "driver") {
-      void Promise.all([jobs.refetch(), config.refetch()]);
+      void Promise.all([jobs.refetch(), config.refetch(), managedEarnings.refetch()]);
       return;
     }
     void jobs.refetch();
@@ -48,14 +51,16 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
 
   return (
     <Screen
-      eyebrow={workspace === "driver" ? "Driver jobs" : "Station orders"}
+      eyebrow={workspace === "driver" ? (isSkimaManaged ? "SKIMA Managed driver" : "Driver jobs") : "Station orders"}
       title={workspace === "driver" ? "Deliveries" : "Expected arrivals"}
       subtitle={workspace === "driver"
-        ? "See what needs your attention now and open a delivery for the full route."
+        ? isSkimaManaged
+          ? "Your SKIMA Managed orders arrive here. Open an assigned delivery to continue its internal-refill and customer hand-over workflow."
+          : "See what needs your attention now and open a delivery for the full route."
         : "See expected SKIMA arrivals and open one when the driver reaches reception."}
       refreshControl={
         <RefreshControl
-          refreshing={jobs.isRefetching || (workspace === "driver" && config.isRefetching)}
+          refreshing={jobs.isRefetching || (workspace === "driver" && (config.isRefetching || managedEarnings.isRefetching))}
           onRefresh={refresh}
           tintColor={palette.brand}
         />
@@ -86,7 +91,21 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
               <Text style={[styles.workloadLabel, { color: palette.muted }]}>SPACES LEFT</Text>
             </View>
           </View>
-          <Text style={[styles.workloadHint, { color: palette.muted }]}>New work is assigned only when your route, vehicle and availability are suitable.</Text>
+          <Text style={[styles.workloadHint, { color: palette.muted }]}>{isSkimaManaged ? "New SKIMA Managed jobs appear when your approval, eligible SKIMA fleet vehicle and configured coverage meet dispatch requirements." : "New work is assigned only when your route, vehicle and availability are suitable."}</Text>
+        </View>
+      ) : null}
+
+      {isSkimaManaged ? (
+        <View style={[styles.managedInfo, { backgroundColor: palette.brandSofter, borderColor: palette.border }]}>
+          <View style={[styles.managedInfoIcon, { backgroundColor: palette.brandSoft }]}>
+            <Route color={palette.brand} size={19} />
+          </View>
+          <View style={styles.managedInfoCopy}>
+            <Text style={[styles.managedInfoTitle, { color: palette.ink }]}>SKIMA Managed workflow</Text>
+            <Text style={[styles.managedInfoBody, { color: palette.muted }]}>
+              Use this Driver workspace to receive and execute assigned deliveries. Open an order to load its existing internal-refill workflow. Admin is for setup and oversight, not for completing your delivery.
+            </Text>
+          </View>
         </View>
       ) : null}
 
@@ -349,6 +368,11 @@ const styles = StyleSheet.create({
   workloadValue: { fontSize: 20, fontWeight: "900" },
   workloadLabel: { ...typography.eyebrow, fontSize: 7, marginTop: 3, textAlign: "center" },
   workloadHint: { ...typography.caption, fontSize: 10, lineHeight: 15 },
+  managedInfo: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, padding: spacing.md, borderRadius: radii.lg, borderWidth: 1 },
+  managedInfoIcon: { width: 36, height: 36, borderRadius: radii.md, alignItems: "center", justifyContent: "center" },
+  managedInfoCopy: { flex: 1, gap: 4 },
+  managedInfoTitle: { ...typography.body, fontWeight: "900" },
+  managedInfoBody: { ...typography.caption, lineHeight: 18 },
   searchCard: { gap: spacing.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
   searchHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   detailIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
