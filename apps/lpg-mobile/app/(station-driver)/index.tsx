@@ -1,5 +1,5 @@
-import { StationManagedDriverJobsScreen } from "../../src/native/ui/StationManagedDriverJobsScreen";
+import { StationManagedDriverHomeScreen } from "../../src/native/ui/StationManagedDriverHomeScreen";
 
 export default function StationManagedDriverHome() {
-  return <StationManagedDriverJobsScreen />;
+  return <StationManagedDriverHomeScreen />;
 }
