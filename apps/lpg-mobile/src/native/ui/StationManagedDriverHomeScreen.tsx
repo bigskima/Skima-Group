@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { BriefcaseBusiness, CheckCircle2, ChevronRight, Clock3, MapPin, Truck } from "lucide-react-native";
+import { BriefcaseBusiness, CheckCircle2, Clock3, MapPin, Truck } from "lucide-react-native";
 import { RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
