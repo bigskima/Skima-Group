@@ -339,7 +339,7 @@ Deno.test("explicit driver availability synchronizes dispatch status only on a u
 Deno.test("admin application feed returns activation state used by Live access", async () => {
   const gateway = await read("supabase/functions/api-gateway/index.ts");
   const start = gateway.indexOf("async function applicationsResponse(");
-  assert(start >= 0, "applicationsResponse must exist");
+  assertIncludes(gateway, "async function applicationsResponse(");
   const section = gateway.slice(start, start + 1800);
   assertIncludes(section, "operational_status");
   assertIncludes(section, "activated_at");
