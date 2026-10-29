@@ -797,8 +797,11 @@ begin
   -- Marketplace stations are only orderable when a verified independent driver
   -- has a fresh live location, active eligible vehicle, and approved coverage.
   if not public.lpg_independent_live_driver_available_at(
-    pickup_record.latitude,pickup_record.longitude
-  ) then
+      pickup_record.latitude,pickup_record.longitude
+    )
+    or not public.lpg_independent_live_driver_available_at(
+      delivery_record.latitude,delivery_record.longitude
+    ) then
     return;
   end if;
 
