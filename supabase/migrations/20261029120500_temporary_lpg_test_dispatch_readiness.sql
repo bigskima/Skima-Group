@@ -227,7 +227,19 @@ where (
             and test_wallet.wallet_type='customer'
             and test_wallet.currency_code=order_record.currency_code
             and test_batch.status='active'
-            and test_allocation.remaining_amount>0
+            and (
+          test_allocation.remaining_amount>0
+          or exists (
+            select 1
+            from public.escrow_holds test_hold
+            join public.wallet_test_funding_allocations test_escrow_allocation
+              on test_escrow_allocation.wallet_id=test_hold.wallet_id
+             and test_escrow_allocation.batch_id=test_batch.id
+             and test_escrow_allocation.remaining_amount>0
+            where test_hold.id=order_record.escrow_hold_id
+              and test_hold.status in ('pending','held','partially_released')
+          )
+        )
         )
       )
       and driver.verification_status='approved'
@@ -253,7 +265,19 @@ and (
                   and test_wallet.wallet_type='customer'
                   and test_wallet.currency_code=order_record.currency_code
                   and test_batch.status='active'
-                  and test_allocation.remaining_amount>0
+                  and (
+          test_allocation.remaining_amount>0
+          or exists (
+            select 1
+            from public.escrow_holds test_hold
+            join public.wallet_test_funding_allocations test_escrow_allocation
+              on test_escrow_allocation.wallet_id=test_hold.wallet_id
+             and test_escrow_allocation.batch_id=test_batch.id
+             and test_escrow_allocation.remaining_amount>0
+            where test_hold.id=order_record.escrow_hold_id
+              and test_hold.status in ('pending','held','partially_released')
+          )
+        )
               )
             )
           )
@@ -282,7 +306,19 @@ where (
             and test_wallet.wallet_type='customer'
             and test_wallet.currency_code=order_record.currency_code
             and test_batch.status='active'
-            and test_allocation.remaining_amount>0
+            and (
+          test_allocation.remaining_amount>0
+          or exists (
+            select 1
+            from public.escrow_holds test_hold
+            join public.wallet_test_funding_allocations test_escrow_allocation
+              on test_escrow_allocation.wallet_id=test_hold.wallet_id
+             and test_escrow_allocation.batch_id=test_batch.id
+             and test_escrow_allocation.remaining_amount>0
+            where test_hold.id=order_record.escrow_hold_id
+              and test_hold.status in ('pending','held','partially_released')
+          )
+        )
         )
       )
       and driver.verification_status='approved'
@@ -308,7 +344,19 @@ and (
               and test_wallet.wallet_type='customer'
               and test_wallet.currency_code=order_record.currency_code
               and test_batch.status='active'
-              and test_allocation.remaining_amount>0
+              and (
+          test_allocation.remaining_amount>0
+          or exists (
+            select 1
+            from public.escrow_holds test_hold
+            join public.wallet_test_funding_allocations test_escrow_allocation
+              on test_escrow_allocation.wallet_id=test_hold.wallet_id
+             and test_escrow_allocation.batch_id=test_batch.id
+             and test_escrow_allocation.remaining_amount>0
+            where test_hold.id=order_record.escrow_hold_id
+              and test_hold.status in ('pending','held','partially_released')
+          )
+        )
           )
         )
       )
