@@ -121,7 +121,7 @@ begin
     if resolved_id is null then raise exception using errcode='P0002',message='coverage policy was not found'; end if;
   end if;
   return resolved_id;
-end $function$
+end $function$;
 
 
 CREATE OR REPLACE FUNCTION public.preview_universal_service_policy(p_policy_id uuid, p_service_key text, p_capability_key text, p_geography_id uuid, p_priority integer, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone)
@@ -928,7 +928,7 @@ begin
    end if;
  end if;
  return public.create_lpg_refill_quote_from_commercial_snapshot(target_cylinder_id,resolved_kg,target_pickup_location_id,target_delivery_location_id,target_station_branch_id,target_route_snapshot,target_idempotency_key,target_preferred_time,target_delivery_instructions,coalesce(target_metadata,'{}')||jsonb_build_object('purchaseInput',case when target_requested_amount is null then 'weight' else 'amount' end,'requestedAmount',target_requested_amount),target_source);
-end $function$
+end $function$;
 
 
 CREATE OR REPLACE FUNCTION public.read_lpg_internal_candidate_for_kg(target_pickup_location_id uuid, target_delivery_location_id uuid, target_cylinder_id uuid, target_requested_kg numeric, target_at timestamp with time zone DEFAULT timezone('utc'::text, now()))
