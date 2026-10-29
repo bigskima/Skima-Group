@@ -315,3 +315,23 @@ function assertIncludes(value: string, expected: string) {
 function assertNotIncludes(value: string, expected: string) {
   if (value.includes(expected)) throw new Error(`Expected source not to include: ${expected}`);
 }
+
+Deno.test("SKIMA Managed LPG reference-price save avoids ambiguous module_id binding", async () => {
+  const migration = await read("supabase/migrations/20261029132000_lpg_internal_reference_price_ambiguity_fix.sql");
+  assertIncludes(migration, "resolved_module_id uuid;");
+  assertIncludes(migration, "version.module_id=resolved_module_id");
+  assertNotIncludes(migration, "version.module_id=module_id");
+});
+
+Deno.test("explicit driver availability synchronizes dispatch status only on a user action", async () => {
+  const [migration, screen] = await Promise.all([
+    read("supabase/migrations/20261029132100_sync_explicit_driver_availability.sql"),
+    read("apps/lpg-mobile/src/native/ui/DriverAvailabilityScreen.tsx"),
+  ]);
+  assertIncludes(migration, "driverAvailabilityAction");
+  assertIncludes(migration, "update public.driver_profiles");
+  assertIncludes(migration, "when 'online' then 'available'");
+  assertIncludes(migration, "when 'busy' then 'busy'");
+  assertIncludes(screen, "metadata: { driverAvailabilityAction: true }");
+  assertIncludes(screen, "await startDriverTracking");
+});
