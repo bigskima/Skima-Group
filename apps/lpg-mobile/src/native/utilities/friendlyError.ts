@@ -141,6 +141,13 @@ export function friendlyError(
     return "This job is assigned to someone else. Ask your supervisor if that looks wrong.";
   if (message.includes("branch-scoped") || message.includes("station branch"))
     return "This refill belongs to another station or your station access needs updating.";
+  if (message.includes("no nearby driver is available") || message.includes("no eligible lpg driver") || message.includes("no available skima internal driver"))
+    return "Your NGN wallet has not been charged. No eligible driver is available for this route yet; try again after the dispatch workspace is ready.";
+  if (message.includes("customer wallet has insufficient available balance") || message.includes("insufficient available wallet balance"))
+    return "Your spendable NGN wallet balance is below this refill total. Pending third-party deposits cannot be spent until the payment provider confirms them.";
+  if (message.includes("your wallet was not charged"))
+    return "Your wallet was not charged because the order could not be assigned. Your saved order is safe; refresh and retry after the dispatch issue is resolved.";
+
   if (message.includes("target_lpg_order_id must reference"))
     return "This job is no longer available. Return to the queue and refresh.";
 
