@@ -307,9 +307,9 @@ begin
     case when address_text ilike '%Nigeria%' then 'Nigeria' end
   )), '');
   v_country_code := upper(nullif(btrim(coalesce(
-    snapshot->>'countryCode', snapshot->>'v_country_code',
-    components->>'countryCode', components->>'v_country_code',
-    p_geography->>'countryCode', p_geography->>'v_country_code',
+    snapshot->>'countryCode', snapshot->>'country_code',
+    components->>'countryCode', components->>'country_code',
+    p_geography->>'countryCode', p_geography->>'country_code',
     case when public.normalize_geography_token(coalesce(country_name,''))='nigeria' then 'NG' end
   )), ''));
   state_name := nullif(btrim(coalesce(
