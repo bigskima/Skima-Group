@@ -499,8 +499,8 @@ export function NewRefillScreen() {
                       : "See my price";
   const registerExpansionInterest = async () => {
     const locationIds = [...new Set([
-      pickupUnavailable ? pickupLocationId : null,
-      deliveryUnavailable ? deliveryLocationId : null,
+      pickupUnavailable || stationUnavailable ? pickupLocationId : null,
+      deliveryUnavailable || stationUnavailable ? deliveryLocationId : null,
     ].filter((value): value is string => Boolean(value)))];
     if (locationIds.length === 0) return;
     setError(null);
@@ -700,8 +700,8 @@ export function NewRefillScreen() {
                 <View style={styles.availabilityLead}>
                   <ShieldCheck color={palette.success} size={22} />
                   <View style={styles.requirementCopy}>
-                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>SKIMA LPG is available for this trip</Text>
-                    <Text style={[styles.requirementBody, { color: palette.muted }]}>SKIMA LPG is available at both your pickup and return locations.</Text>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>Location enabled — checking live fulfilment</Text>
+                    <Text style={[styles.requirementBody, { color: palette.muted }]}>This location can be checked by SKIMA. A refill quote and order are available only when an active station and qualified driver/vehicle can serve both locations.</Text>
                   </View>
                 </View>
               </View>
@@ -840,7 +840,7 @@ export function NewRefillScreen() {
             <View style={styles.stepActions}><AppButton label="Back" variant="secondary" onPress={() => setRefillStep(2)} /><AppButton label="Find refill options" disabled={!validPurchase || exceedsCylinderCapacity} onPress={() => setRefillStep(4)} /></View>
           </View> : null}
 
-          {refillStep === 4 && (tripServiceable || outsideCoverageLikely) ? (
+          {refillStep === 4 && (tripServiceable || outsideCoverageLikely) && !stationUnavailable ? (
             <StationSelectionSection
               stations={displayedStations}
               selected={stationId}
@@ -857,6 +857,37 @@ export function NewRefillScreen() {
               failed={activeStationQuery.isError}
               onRetry={() => void activeStationQuery.refetch()}
             />
+          ) : null}
+
+          {refillStep === 4 && stationUnavailable ? (
+            <View style={[styles.availabilityCard, { backgroundColor: palette.brandSoft, borderColor: palette.brand }]}>
+              <View style={styles.availabilityLead}>
+                <MapPin color={palette.brand} size={22} />
+                <View style={styles.requirementCopy}>
+                  <Text style={[styles.requirementTitle, { color: palette.ink }]}>No active refill team in this location yet</Text>
+                  <Text style={[styles.requirementBody, { color: palette.muted }]}>
+                    SKIMA can accept location checks across Nigeria, but we can only quote and accept a refill when an approved station has stock and an eligible driver and vehicle can serve this route. No order or wallet reservation is created just because the location is enabled.
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.availabilityActions}>
+                <AppButton
+                  label={expansionInterest.isSuccess ? "Request saved" : "Notify me when service becomes available"}
+                  variant="secondary"
+                  size="sm"
+                  loading={expansionInterest.isPending}
+                  disabled={expansionInterest.isSuccess}
+                  onPress={() => void registerExpansionInterest()}
+                />
+                {stationOnboardingAvailable ? (
+                  <AppButton label="Register a station" size="sm" onPress={() => router.push("/(customer)/station-application" as never)} />
+                ) : null}
+                {driverOnboardingAvailable ? (
+                  <AppButton label="Become an independent driver" variant="secondary" size="sm" onPress={() => router.push("/(customer)/driver-application" as never)} />
+                ) : null}
+                <AppButton label="Choose another location" variant="ghost" size="sm" onPress={() => router.push("/(customer)/locations")} />
+              </View>
+            </View>
           ) : null}
 
           {refillStep === 4 && selectedStation?.isStationManagedOnly ? (
