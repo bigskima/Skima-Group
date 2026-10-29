@@ -285,7 +285,7 @@ declare
   components jsonb := coalesce(p_geography->'addressComponents',p_geography->'address_components','{}'::jsonb);
   address_text text := coalesce(p_geography->>'formattedAddress',p_geography->>'formatted_address',p_geography->>'address','');
   country_name text;
-  country_code text;
+  v_country_code text;
   state_name text;
   lga_name text;
   city_name text;
@@ -306,10 +306,10 @@ begin
     p_geography->>'country', p_geography->>'countryName',
     case when address_text ilike '%Nigeria%' then 'Nigeria' end
   )), '');
-  country_code := upper(nullif(btrim(coalesce(
-    snapshot->>'countryCode', snapshot->>'country_code',
-    components->>'countryCode', components->>'country_code',
-    p_geography->>'countryCode', p_geography->>'country_code',
+  v_country_code := upper(nullif(btrim(coalesce(
+    snapshot->>'countryCode', snapshot->>'v_country_code',
+    components->>'countryCode', components->>'v_country_code',
+    p_geography->>'countryCode', p_geography->>'v_country_code',
     case when public.normalize_geography_token(coalesce(country_name,''))='nigeria' then 'NG' end
   )), ''));
   state_name := nullif(btrim(coalesce(
@@ -355,10 +355,10 @@ begin
         or
         (
           geography.boundary_geometry is null
-          and (country_code is null or upper(geography.country_code)=country_code)
+          and (v_country_code is null or upper(geography.country_code)=v_country_code)
           and case level.key
             when 'country' then
-              (country_code is not null and upper(geography.country_code)=country_code)
+              (v_country_code is not null and upper(geography.country_code)=v_country_code)
               or (country_name is not null and public.normalize_geography_token(country_name)=geography.normalized_name)
             when 'admin_level_1' then
               state_name is not null and public.normalize_geography_token(state_name)=geography.normalized_name
@@ -380,7 +380,7 @@ begin
                 and parent.status='active'
                 and case level.key
                   when 'admin_level_1' then parent_level.key='country'
-                    and (country_code is null or upper(parent.country_code)=country_code)
+                    and (v_country_code is null or upper(parent.country_code)=v_country_code)
                   when 'admin_level_2' then parent_level.key='admin_level_1'
                     and (state_name is null or public.normalize_geography_token(parent.canonical_name)=public.normalize_geography_token(state_name))
                   when 'locality' then parent_level.key in ('admin_level_2','admin_level_1')
