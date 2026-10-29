@@ -82,7 +82,7 @@ begin
 
   return new;
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.configure_universal_service_policy(p_policy_id uuid, p_service_key text, p_capability_key text, p_geography_id uuid, p_effect text, p_priority integer, p_status text, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone, p_reason text, p_configuration jsonb DEFAULT '{}'::jsonb)
@@ -265,7 +265,7 @@ begin
     'narrowerPolicies', narrower
   );
 end;
-$function$
+$function$;
 
 
 
@@ -497,7 +497,7 @@ begin
     set parent_id=null,geography_level_id=country_level_id,canonical_name='Nigeria',
         normalized_name=public.normalize_geography_token('Nigeria'),country_code='NG',status='active',
         source=coalesce(source,'skima.admin.named_geography'),
-        metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object('addressOnlyPolicy',boundary_geometry is null,'nationalScope',true)
+        metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object('sourceSurface','nigeria_location_enablement','addressOnlyPolicy',boundary_geometry is null,'nationalScope',true)
     where id=nigeria_id;
   end if;
 
@@ -524,7 +524,7 @@ begin
     set parent_id=nigeria_id,geography_level_id=state_level_id,canonical_name='Anambra State',
         normalized_name=public.normalize_geography_token('Anambra State'),country_code='NG',status='active',
         aliases=coalesce(aliases,'[]'::jsonb)||'["Anambra"]'::jsonb,
-        metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object('addressOnlyPolicy',boundary_geometry is null,'stateCode','AN')
+        metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object('sourceSurface','nigeria_location_enablement','addressOnlyPolicy',boundary_geometry is null,'stateCode','AN')
     where id=anambra_id;
   end if;
 
@@ -542,7 +542,7 @@ begin
         metadata=coalesce(metadata,'{}'::jsonb)||jsonb_build_object(
           'country','Nigeria','state','Anambra State','lga','Awka South',
           'nationalScopeParentId',nigeria_id,'stateParentId',anambra_id,
-          'testingScope',false,'addressOnlyPolicy',boundary_geometry is null
+          'testingScope',false,'sourceSurface','nigeria_location_enablement','addressOnlyPolicy',boundary_geometry is null
         )
     where id=awka_id;
   end if;
@@ -891,7 +891,7 @@ begin
     priced.station_id asc
   limit target_limit;
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.create_lpg_marketplace_refill_quote_from_purchase_input(target_cylinder_id uuid, target_requested_kg numeric, target_requested_amount numeric, target_pickup_location_id uuid, target_delivery_location_id uuid, target_station_branch_id uuid, target_route_snapshot jsonb, target_idempotency_key text, target_preferred_time timestamp with time zone DEFAULT NULL::timestamp with time zone, target_delivery_instructions text DEFAULT NULL::text, target_metadata jsonb DEFAULT '{}'::jsonb, target_source text DEFAULT 'lpg.quote_api'::text)
@@ -1015,7 +1015,7 @@ begin
     'NGN'::text,reference_price,
     999999999::numeric,999999999::numeric,array[]::numeric[],cylinder_record.size_kg;
 end
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.create_lpg_internal_refill_quote(target_cylinder_id uuid, target_requested_kg numeric, target_pickup_location_id uuid, target_delivery_location_id uuid, target_route_snapshot jsonb, target_idempotency_key text, target_preferred_time timestamp with time zone DEFAULT NULL::timestamp with time zone, target_delivery_instructions text DEFAULT NULL::text, target_metadata jsonb DEFAULT '{}'::jsonb, target_source text DEFAULT 'lpg.quote_api'::text)
@@ -1240,7 +1240,7 @@ begin
 
   return quote_id;
 end
-$function$
+$function$;
 
 
 comment on function public.resolve_lpg_location_capability is
