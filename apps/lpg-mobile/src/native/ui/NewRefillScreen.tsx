@@ -292,6 +292,8 @@ export function NewRefillScreen() {
 
   const requestQuote = async () => {
     setError(null);
+    // A revised quote must never reuse an order created against a previous quote.
+    setOrderId(null);
     const kilograms = Number(requestedKg);
     if (purchaseMode === "amount" && !validRequestedAmount) {
       setError("Enter a valid amount greater than zero.");
@@ -368,6 +370,14 @@ export function NewRefillScreen() {
   const createOrder = async () => {
     if (!quoteId) return;
     setError(null);
+    const expiresAt = firstString(quoteRecord, ["expiresAt", "expires_at"]);
+    if (expiresAt && Number.isFinite(Date.parse(expiresAt)) && Date.parse(expiresAt) <= Date.now()) {
+      setError("This quote has expired. Your wallet was not charged. Request a fresh price to continue.");
+      setQuoteId(null);
+      setQuoteRecord(null);
+      setOrderId(null);
+      return;
+    }
     try {
       let nextOrderId = orderId;
       if (!nextOrderId) {
@@ -457,6 +467,10 @@ export function NewRefillScreen() {
 
   const currency = firstString(quoteRecord, ["currencyCode", "currency_code"]) ?? "NGN";
   const total = firstNumber(quoteRecord, ["totalAmount", "total_amount", "quotedTotal"]);
+  const quoteExpiresAt = firstString(quoteRecord, ["expiresAt", "expires_at"]);
+  const quoteIsExpired = Boolean(
+    quoteExpiresAt && Number.isFinite(Date.parse(quoteExpiresAt)) && Date.parse(quoteExpiresAt) <= Date.now(),
+  );
   const stationUnavailable = stationEligibilityReady &&
     (tripServiceable || outsideCoverageLikely) &&
     !activeStationQuery.isPending &&
@@ -506,7 +520,21 @@ export function NewRefillScreen() {
           ? "Check the full price before confirming the order."
           : "Choose the cylinder, locations, refill amount and fulfillment route for this trip."
       }
-      action={<AppButton label={quoteId ? "Edit" : "Cancel"} variant="ghost" size="sm" onPress={() => quoteId ? setQuoteId(null) : router.back()} />}
+      action={<AppButton
+        label={quoteId ? "Edit" : "Cancel"}
+        variant="ghost"
+        size="sm"
+        onPress={() => {
+          if (quoteId) {
+            setQuoteId(null);
+            setQuoteRecord(null);
+            setOrderId(null);
+            setError(null);
+          } else {
+            router.back();
+          }
+        }}
+      />}
     >
       {quoteId ? (
         <>
@@ -558,11 +586,11 @@ export function NewRefillScreen() {
           </View>
 
           <AppButton
-            label={orderId ? "Retry payment confirmation" : "Confirm and place order"}
+            label={quoteIsExpired ? "Get a fresh quote" : orderId ? "Retry payment confirmation" : "Confirm and place order"}
             fullWidth
             size="lg"
             loading={order.isPending || reserve.isPending}
-            onPress={() => void createOrder()}
+            onPress={() => quoteIsExpired ? void requestQuote() : void createOrder()}
           />
         </>
       ) : (
