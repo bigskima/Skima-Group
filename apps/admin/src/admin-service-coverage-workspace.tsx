@@ -22,6 +22,7 @@ const LevelSchema = z.object({
 const GeographySchema = z.object({
   id: z.string().uuid(), parent_id: z.string().uuid().nullable(), geography_level_id: z.string().uuid(),
   canonical_name: z.string(), country_code: z.string(), status: z.enum(["draft", "active", "inactive", "retired"]),
+  has_boundary: z.boolean().optional(),
   geography_levels: z.object({ display_name: z.string(), specificity_rank: z.coerce.number() }).nullable(),
 });
 const PolicySchema = z.object({
@@ -452,40 +453,60 @@ function GeographyDialog({ open, levels, geographies, defaultCountryCode, onClos
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!form.name.trim()) {
-      setError("Search for the place and choose the correct result before saving.");
+      setError("Enter a country, state, LGA, town, or service-area name.");
       return;
     }
     if (requiredParentLevelId && !form.parentId) {
       setError("Choose the larger area this place belongs to first.");
       return;
     }
-    if (!form.boundary.trim()) {
-      setError("Draw or import the real map boundary before saving this service area.");
+    const boundaryRequired = selectedLevel?.key === "custom_zone";
+    if (boundaryRequired && !form.boundary.trim()) {
+      setError("Draw the custom service area, or choose a Country, State, LGA, or town area type.");
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      const boundary = JSON.parse(form.boundary) as unknown;
-      const { data:savedDraft,error:draftError}=await supabase.rpc("save_coverage_geometry_draft",{p_draft_id:draftId,p_draft_type:"GEOGRAPHY_BOUNDARY",p_target_id:null,p_parent_geography_id:form.parentId||null,p_geojson:boundary});
-      if(draftError)throw draftError;
-      setDraftId(savedDraft as string);
-      const { data:geographyId,error: rpcError } = await supabase.rpc("configure_universal_geography", {
+      let boundary: unknown = null;
+      let geometryDraftId: string | null = null;
+      if (form.boundary.trim()) {
+        boundary = JSON.parse(form.boundary) as unknown;
+        const { data: savedDraft, error: draftError } = await supabase.rpc("save_coverage_geometry_draft", {
+          p_draft_id: draftId,
+          p_draft_type: "GEOGRAPHY_BOUNDARY",
+          p_target_id: null,
+          p_parent_geography_id: form.parentId || null,
+          p_geojson: boundary,
+        });
+        if (draftError) throw draftError;
+        geometryDraftId = savedDraft as string;
+        setDraftId(geometryDraftId);
+      }
+      const { data: geographyId, error: rpcError } = await supabase.rpc("configure_universal_geography", {
         p_geography_id: null,
         p_parent_id: form.parentId || null,
         p_level_id: form.levelId,
         p_canonical_name: form.name.trim(),
         p_country_code: form.countryCode.trim().toUpperCase(),
         p_boundary_geojson: boundary,
-        p_source: form.source.trim(),
+        p_source: boundary ? form.source.trim() : "admin.named_geography",
         p_external_reference: form.externalReference || null,
         p_status: "active",
         p_aliases: [],
-        p_metadata: { sourceSurface: "admin_geography", geometryDraftId:savedDraft, operatorSelectedPlace: searchTerm },
+        p_metadata: boundary
+          ? { sourceSurface: "admin_geography", geometryDraftId, operatorSelectedPlace: searchTerm }
+          : { sourceSurface: "admin_named_geography", areaType: selectedLevel?.key ?? null, operatorSelectedPlace: searchTerm },
       });
       if (rpcError) throw rpcError;
-      const{error:activationError}=await supabase.rpc("activate_coverage_geometry_draft",{p_draft_id:savedDraft,p_target_id:geographyId,p_reason:`Activated mapped service area: ${form.name.trim()}`});
-      if(activationError)throw activationError;
+      if (geometryDraftId) {
+        const { error: activationError } = await supabase.rpc("activate_coverage_geometry_draft", {
+          p_draft_id: geometryDraftId,
+          p_target_id: geographyId,
+          p_reason: `Activated mapped service area: ${form.name.trim()}`,
+        });
+        if (activationError) throw activationError;
+      }
       setForm(EMPTY_GEOGRAPHY);
       setSearchTerm("");
       setDraftId(null);
@@ -543,7 +564,13 @@ function GeographyDialog({ open, levels, geographies, defaultCountryCode, onClos
           label="Search place"
           placeholder={selectedLevel ? "Example: Awka South, Anambra" : "Choose an area type first"}
           value={searchTerm}
-          onChange={(event) => setSearchTerm(event.currentTarget.value)}
+          onChange={(event) => {
+            const value = event.currentTarget.value;
+            setSearchTerm(value);
+            if (selectedLevel?.key !== "custom_zone") {
+              setForm((current) => ({ ...current, name: value, source: "admin.named_geography", externalReference: "" }));
+            }
+          }}
           disabled={!selectedLevel}
         />
         <Button
@@ -574,11 +601,15 @@ function GeographyDialog({ open, levels, geographies, defaultCountryCode, onClos
       </div>
 
       <div className="skima-form-help">
-        <strong>3. Confirm the real boundary</strong>
-        <p>Use the map to outline the service area. This boundary—not the typed address—is what SKIMA uses to decide availability.</p>
+        <strong>3. Map boundary (only required for a custom service zone)</strong>
+        <p>Country, State, LGA, city and town rules can be saved by name without drawing a line. Their rules match the selected address hierarchy. Use a custom zone only when you specifically need a drawn boundary.</p>
       </div>
-      <AdminGeometryEditor mode="polygon" value={form.boundary} onChange={(boundary)=>setForm({...form,boundary})}/>
-      {draftId?<StatusBadge tone="info">Your boundary draft is saved while you finish.</StatusBadge>:null}
+      {selectedLevel?.key === "custom_zone" ? (
+        <AdminGeometryEditor mode="polygon" value={form.boundary} onChange={(boundary) => setForm({ ...form, boundary })} />
+      ) : (
+        <StatusBadge tone="info">No drawing required for this area type. Actual driver/station operating coverage still needs a mapped area or a radius.</StatusBadge>
+      )}
+      {draftId ? <StatusBadge tone="info">Your optional boundary draft is saved while you finish.</StatusBadge> : null}
       {error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}
     </form>
   </Dialog>;
@@ -598,6 +629,7 @@ function PolicyDialog({ open, geographies, onClose, onSaved }: { open: boolean; 
       { label: "Customers can place refill orders", value: "customer_ordering" },
       { label: "Drivers can register and operate", value: "driver_onboarding" },
       { label: "Stations can register and operate", value: "station_onboarding" },
+      { label: "SKIMA Managed can fulfil orders here", value: "skima_managed_fulfillment" },
     ]} required />
     <SelectInput label="Service area" value={form.geographyId} onChange={(e) => setForm({ ...form, geographyId: e.currentTarget.value })} options={[{ label: "Choose service area", value: "" }, ...geographies.map((g) => ({ label: g.canonical_name, value: g.id }))]} required />
     <SelectInput label="Availability" value={form.effect} onChange={(e) => setForm({ ...form, effect: e.currentTarget.value as "ALLOW" | "DENY" })} options={[{ label: "Allow this service here", value: "ALLOW" }, { label: "Block this service here", value: "DENY" }]} />
@@ -683,6 +715,7 @@ function friendlyCapabilityName(key: string) {
     customer_ordering: "Customers can place refill orders",
     driver_onboarding: "Drivers can register and operate",
     station_onboarding: "Stations can register and operate",
+    skima_managed_fulfillment: "SKIMA Managed can fulfil orders here",
   };
   return labels[key] ?? key.replaceAll("_", " ");
 }
