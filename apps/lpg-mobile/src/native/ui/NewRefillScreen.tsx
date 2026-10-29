@@ -590,9 +590,7 @@ export function NewRefillScreen() {
             fullWidth
             size="lg"
             loading={order.isPending || reserve.isPending}
-            onPress={() => quoteIsExpired
-              ? (setError("This quote has expired. Your wallet was not charged. Request a fresh price to continue."), setQuoteId(null), setQuoteRecord(null), setOrderId(null))
-              : void createOrder()}
+            onPress={() => quoteIsExpired ? void requestQuote() : void createOrder()}
           />
         </>
       ) : (
