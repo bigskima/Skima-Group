@@ -853,7 +853,7 @@ function OperationalCoverageDialog({ record, geographies, onClose, onSaved }: { 
 
       <div className="skima-form-help">
         <strong>How should the area be defined?</strong>
-        <p>Use a mapped service area when possible. Use a distance for nearby coverage, or draw a custom area only when the operating boundary crosses normal map areas.</p>
+        <p>Physical driver and station dispatch zones need a verified mapped boundary or a point-and-radius. Named country/state/LGA rules enable address checks and onboarding only; they do not prove a driver or station can reach an order.</p>
       </div>
       <SelectInput
         label="Area method"
@@ -870,7 +870,7 @@ function OperationalCoverageDialog({ record, geographies, onClose, onSaved }: { 
         label="Mapped service area"
         value={form.geographyId}
         onChange={(event) => setForm({ ...form, geographyId: event.currentTarget.value })}
-        options={[{ label: "Choose service area", value: "" }, ...geographies.filter((item) => item.status === "active").map((item) => ({ label: item.canonical_name, value: item.id }))]}
+        options={[{ label: "Choose mapped service area", value: "" }, ...geographies.filter((item) => item.status === "active" && item.has_boundary === true).map((item) => ({ label: item.canonical_name, value: item.id }))]}
         required
       /> : null}
 
