@@ -352,3 +352,31 @@ Deno.test("admin application feed returns activation state used by Live access",
   assertIncludes(section, "activated_at");
   assertIncludes(section, "activated_by");
 });
+
+Deno.test("Nigeria location enablement stays separate from physical LPG fulfilment readiness", async () => {
+  const [migration, admin, partnerCoverage, refillScreen, serviceability] = await Promise.all([
+    read("supabase/migrations/20261029193000_nigeria_location_enablement_fulfilment_gates.sql"),
+    read("apps/admin/src/admin-service-coverage-workspace.tsx"),
+    read("apps/admin/src/features/operations/CoveragePartnerScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx"),
+    read("apps/lpg-mobile/src/native/api/serviceability.ts"),
+  ]);
+
+  assertIncludes(migration, "addressHierarchyMatch");
+  assertIncludes(migration, "'notFulfilmentGuarantee',true");
+  assertIncludes(migration, "'skima_managed_fulfillment'");
+  assertIncludes(migration, "public.lpg_independent_live_driver_available_at");
+  assertIncludes(migration, "delivery_record.latitude");
+  assertIncludes(migration, "delivery_record.longitude");
+  assertIncludes(migration, "service_radius_meters");
+
+  assertIncludes(admin, 'selectedLevel?.key === "custom_zone"');
+  assertIncludes(admin, "Country, State, LGA, city and town rules can be saved by name without drawing a line.");
+  assertIncludes(admin, "Physical refill availability is checked separately");
+  assertIncludes(partnerCoverage, "area.has_boundary === true");
+
+  assertIncludes(refillScreen, "Location enabled — checking live fulfilment");
+  assertIncludes(refillScreen, "No active refill team in this location yet");
+  assertIncludes(refillScreen, "No order or wallet reservation is created just because the location is enabled.");
+  assertIncludes(serviceability, "skimaManagedEnabled: z.boolean().optional()");
+});
