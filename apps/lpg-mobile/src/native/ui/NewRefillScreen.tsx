@@ -468,7 +468,7 @@ export function NewRefillScreen() {
   const currency = firstString(quoteRecord, ["currencyCode", "currency_code"]) ?? "NGN";
   const total = firstNumber(quoteRecord, ["totalAmount", "total_amount", "quotedTotal"]);
   const quoteExpiresAt = firstString(quoteRecord, ["expiresAt", "expires_at"]);
-  const quoteExpired = Boolean(
+  const quoteIsExpired = Boolean(
     quoteExpiresAt && Number.isFinite(Date.parse(quoteExpiresAt)) && Date.parse(quoteExpiresAt) <= Date.now(),
   );
   const stationUnavailable = stationEligibilityReady &&
@@ -586,11 +586,11 @@ export function NewRefillScreen() {
           </View>
 
           <AppButton
-            label={quoteExpired ? "Get a fresh quote" : orderId ? "Retry payment confirmation" : "Confirm and place order"}
+            label={quoteIsExpired ? "Get a fresh quote" : orderId ? "Retry payment confirmation" : "Confirm and place order"}
             fullWidth
             size="lg"
             loading={order.isPending || reserve.isPending}
-            onPress={() => quoteExpired
+            onPress={() => quoteIsExpired
               ? (setError("This quote has expired. Your wallet was not charged. Request a fresh price to continue."), setQuoteId(null), setQuoteRecord(null), setOrderId(null))
               : void createOrder()}
           />
