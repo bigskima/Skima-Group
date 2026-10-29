@@ -69,27 +69,38 @@ export function DriverAvailabilityScreen() {
 
     try {
       const point = await readOperationalLocation();
-      await mutation.mutateAsync({
+      const availabilityUpdate = {
         ...point,
         driverProfileId: driverId,
         onlineStatus: status,
-        purpose: "driver-availability",
         source: "skima.lpg.mobile",
+        metadata: { driverAvailabilityAction: true },
         idempotencyKey: idempotencyKey("driver-availability", driverId),
-      });
+      };
 
       if (status === "offline") {
+        await mutation.mutateAsync(availabilityUpdate);
         await stopDriverTracking();
         setTracking(false);
         setNoticeSuccess(true);
         setNotice("You are now offline. Location sharing for jobs has stopped.");
       } else {
+        // Get foreground/background permission and start the task before marking the
+        // profile dispatchable. If permission or task startup fails, the backend stays
+        // at its prior availability instead of appearing online without a working tracker.
         await startDriverTracking({
           driverProfileId: driverId,
           onlineStatus: status,
           accessToken: session.session.access_token,
           refreshToken: session.session.refresh_token,
         });
+        try {
+          await mutation.mutateAsync(availabilityUpdate);
+        } catch (cause) {
+          await stopDriverTracking().catch(() => undefined);
+          setTracking(false);
+          throw cause;
+        }
         setTracking(true);
         setNoticeSuccess(true);
         setNotice(
