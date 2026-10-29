@@ -30,6 +30,7 @@ const GeographySchema = z.object({
   id: z.string().uuid(),
   canonical_name: z.string(),
   status: z.string(),
+  has_boundary: z.boolean().optional(),
 });
 const GeographySetupSchema = z.object({ geographies: z.array(GeographySchema) }).passthrough();
 const DriverSchema = z.object({
@@ -468,7 +469,7 @@ function PartnerCoverageDialog(props: {
           ) : null}
 
           {step === "area" ? (
-            <AdminFormSection title="Define the operating area" description="Use a mapped service area when possible. Radius and custom drawing handle exceptions.">
+            <AdminFormSection title="Define the operating area" description="Driver and station dispatch coverage must be spatially verifiable: choose a geography with a confirmed map boundary, or set a point and radius. Named country/state rules control onboarding and customer address eligibility, not physical driver dispatch.">
               <SelectInput
                 label="Area method"
                 value={form.coverageType}
@@ -484,7 +485,7 @@ function PartnerCoverageDialog(props: {
                   label="Mapped service area"
                   value={form.geographyId}
                   onChange={(event) => setForm({ ...form, geographyId: event.currentTarget.value })}
-                  options={[{ label: "Choose service area", value: "" }, ...props.geographies.map((area) => ({ label: area.canonical_name, value: area.id }))]}
+                  options={[{ label: "Choose mapped service area", value: "" }, ...props.geographies.filter((area) => area.status === "active" && area.has_boundary === true).map((area) => ({ label: area.canonical_name, value: area.id }))]}
                   required
                 />
               ) : null}
