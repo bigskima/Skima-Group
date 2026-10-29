@@ -315,3 +315,10 @@ function assertIncludes(value: string, expected: string) {
 function assertNotIncludes(value: string, expected: string) {
   if (value.includes(expected)) throw new Error(`Expected source not to include: ${expected}`);
 }
+
+Deno.test("LPG dispatch decision snapshot conflict target is unambiguous", async () => {
+  const migration = await read("supabase/migrations/20261029122600_lpg_dispatch_decision_snapshot_conflict_fix.sql");
+  assertIncludes(migration, "dispatch_location_decision_snapshots_dispatch_request_id_key");
+  assertIncludes(migration, "ON CONFLICT ON CONSTRAINT");
+  assertNotIncludes(migration, "ON CONFLICT(dispatch_request_id) DO NOTHING");
+});
