@@ -322,3 +322,33 @@ Deno.test("LPG dispatch decision snapshot conflict target is unambiguous", async
   assertIncludes(migration, "ON CONFLICT ON CONSTRAINT");
   assertNotIncludes(migration, "ON CONFLICT(dispatch_request_id) DO NOTHING");
 });
+
+Deno.test("SKIMA Managed LPG reference-price save avoids ambiguous module_id binding", async () => {
+  const migration = await read("supabase/migrations/20261029132000_lpg_internal_reference_price_ambiguity_fix.sql");
+  assertIncludes(migration, "resolved_module_id uuid;");
+  assertIncludes(migration, "version.module_id=resolved_module_id");
+  assertNotIncludes(migration, "version.module_id=module_id");
+});
+
+Deno.test("explicit driver availability synchronizes dispatch status only on a user action", async () => {
+  const [migration, screen] = await Promise.all([
+    read("supabase/migrations/20261029132100_sync_explicit_driver_availability.sql"),
+    read("apps/lpg-mobile/src/native/ui/DriverAvailabilityScreen.tsx"),
+  ]);
+  assertIncludes(migration, "driverAvailabilityAction");
+  assertIncludes(migration, "update public.driver_profiles");
+  assertIncludes(migration, "when 'online' then 'available'");
+  assertIncludes(migration, "when 'busy' then 'busy'");
+  assertIncludes(screen, "metadata: { driverAvailabilityAction: true }");
+  assertIncludes(screen, "await startDriverTracking");
+});
+
+Deno.test("admin application feed returns activation state used by Live access", async () => {
+  const gateway = await read("supabase/functions/api-gateway/index.ts");
+  const start = gateway.indexOf("async function applicationsResponse(");
+  assertIncludes(gateway, "async function applicationsResponse(");
+  const section = gateway.slice(start, start + 1800);
+  assertIncludes(section, "operational_status");
+  assertIncludes(section, "activated_at");
+  assertIncludes(section, "activated_by");
+});
