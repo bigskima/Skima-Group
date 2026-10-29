@@ -37,6 +37,7 @@ export const LpgServiceabilitySchema = z.object({
     driver: z.boolean(),
     station: z.boolean(),
   }).optional(),
+  skimaManagedEnabled: z.boolean().optional(),
 });
 
 export type LpgServiceability = z.infer<typeof LpgServiceabilitySchema>;
