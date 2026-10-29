@@ -253,6 +253,7 @@ and (
                   and test_allocation.remaining_amount>0
               )
             )
+          )
 $replacement$;
     if position(v_before in v_function_sql)=0 then
       raise exception 'Could not safely apply the test-location freshness guard to dispatch_lpg_order';
@@ -307,6 +308,7 @@ and (
               and test_allocation.remaining_amount>0
           )
         )
+      )
 $replacement$;
     if position(v_before in v_function_sql)=0 then
       raise exception 'Could not safely apply the test-location freshness guard to dispatch_lpg_internal_order';
