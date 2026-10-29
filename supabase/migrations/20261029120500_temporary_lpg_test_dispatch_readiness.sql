@@ -19,8 +19,11 @@ begin
   order by created_at desc
   limit 1;
 
+  -- This is an opt-in, temporary production test fixture migration. Clean
+  -- local/CI databases may not contain the manually issued active test batch;
+  -- do not make all subsequent application migrations fail in those environments.
   if v_batch_id is null then
-    raise exception 'Active SKIMA LPG test-funding batch is required before preparing test dispatch actors';
+    return;
   end if;
 
   -- Use the live test order's saved pickup location, not a hard-coded order ID.
