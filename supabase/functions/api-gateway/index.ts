@@ -194,6 +194,10 @@ const ROUTES = new Set([
   "/runtime/fuel/driver-qualifications",
   "/runtime/fuel/quotes",
   "/runtime/fuel/orders/stock/reserve",
+  "/runtime/fuel/orders/stock/reserve-for-order",
+  "/runtime/fuel/orders/stock/reservations",
+  "/runtime/fuel/orders/stock/batches",
+  "/runtime/fuel/orders/assign-driver",
   "/runtime/fuel/orders/stock/release",
   "/runtime/fuel/orders/stock/consume",
   "/runtime/fuel/orders/stage",
@@ -3756,6 +3760,138 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_quantity_litres: requireNumber(payload.quantityLitres, "quantityLitres"),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_expires_at: optionalString(payload.expiresAt),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/stock/reserve-for-order" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const orderId = requireUuid(payload.orderId, "orderId");
+    const access = await resolveFuelOrderBranchAccess(supabase, orderId, "business.fuel.orders.process");
+    if (access.error) return databaseError(access.error, id);
+    if (!access.order || access.moduleKey !== "fuel") return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+    if (!access.allowed) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("reserve_fuel_order_stock", {
+        target_order_id: orderId,
+        target_requested_litres: requireNumber(payload.requestedLitres, "requestedLitres"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_expires_at: optionalString(payload.expiresAt),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/stock/reservations" && request.method === "GET") {
+    const orderId = optionalUuid(url.searchParams.get("orderId"), "orderId");
+    if (!orderId) throw new RequestValidationError("orderId is required.");
+    const access = await resolveFuelOrderBranchAccess(supabase, orderId, "business.fuel.orders.read");
+    if (access.error) return databaseError(access.error, id);
+    const isCustomer = access.order?.requester_user_id === authResult.user.id;
+    if (!access.order || access.moduleKey !== "fuel" || (!access.allowed && !isCustomer)) {
+      return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+    }
+    return selectRecords(
+      supabase
+        .from("fuel_order_stock_reservations")
+        .select("id,batch_id,order_id,order_line_item_id,storage_unit_id,product_key,requested_litres,reserved_litres,consumed_litres,status,expires_at,consumed_at,released_at,release_reason,created_at,updated_at")
+        .eq("order_id", orderId)
+        .order("created_at", { ascending: true }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/stock/batches" && request.method === "GET") {
+    const orderId = optionalUuid(url.searchParams.get("orderId"), "orderId");
+    if (!orderId) throw new RequestValidationError("orderId is required.");
+    const access = await resolveFuelOrderBranchAccess(supabase, orderId, "business.fuel.orders.read");
+    if (access.error) return databaseError(access.error, id);
+    const isCustomer = access.order?.requester_user_id === authResult.user.id;
+    if (!access.order || access.moduleKey !== "fuel" || (!access.allowed && !isCustomer)) {
+      return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+    }
+    return selectRecords(
+      supabase
+        .from("fuel_order_stock_reservation_batches")
+        .select("id,order_id,service_request_id,branch_id,product_key,requested_litres,reserved_litres,status,source,idempotency_key,metadata,created_at,updated_at")
+        .eq("order_id", orderId)
+        .order("created_at", { ascending: true }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/assign-driver" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const orderId = requireUuid(payload.orderId, "orderId");
+    const driverEntityId = requireUuid(payload.driverEntityId, "driverEntityId");
+    const vehicleId = requireUuid(payload.vehicleId, "vehicleId");
+    const access = await resolveFuelOrderBranchAccess(supabase, orderId, "business.fuel.orders.process");
+    if (access.error) return databaseError(access.error, id);
+    if (!access.order || access.moduleKey !== "fuel") return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+    if (!access.allowed) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+
+    const operation = await supabase
+      .from("fuel_order_operations")
+      .select("order_id,product_key,requested_litres,station_branch_id,fulfillment_mode,stage_key")
+      .eq("order_id", orderId)
+      .maybeSingle();
+    if (operation.error) return databaseError(operation.error, id);
+    if (!operation.data || operation.data.stage_key !== "ready_for_driver") {
+      return jsonResponse({ ok: false, error: "fuel_order_not_ready_for_driver", requestId: id }, 409);
+    }
+
+    const qualificationQuery = supabase
+      .from("fuel_driver_product_qualifications")
+      .select("id,driver_user_id,driver_profile_id,station_managed_driver_id,branch_id,vehicle_id,product_key,maximum_load_litres,status,valid_until")
+      .eq("vehicle_id", vehicleId)
+      .eq("product_key", operation.data.product_key)
+      .eq("status", "approved")
+      .gte("maximum_load_litres", operation.data.requested_litres)
+      .or(`branch_id.is.null,branch_id.eq.${operation.data.station_branch_id}`)
+      .gt("valid_until", new Date().toISOString());
+    const qualificationResult = await qualificationQuery;
+    if (qualificationResult.error) return databaseError(qualificationResult.error, id);
+    const qualification = (qualificationResult.data ?? []).find((record) =>
+      operation.data.fulfillment_mode === "station_managed"
+        ? record.station_managed_driver_id === driverEntityId && record.driver_profile_id === null
+        : record.driver_profile_id === driverEntityId && record.station_managed_driver_id === null
+    ) ?? null;
+    if (!qualification) {
+      const nullValidityResult = await supabase
+        .from("fuel_driver_product_qualifications")
+        .select("id")
+        .eq("vehicle_id", vehicleId)
+        .eq("product_key", operation.data.product_key)
+        .eq("status", "approved")
+        .is("valid_until", null)
+        .gte("maximum_load_litres", operation.data.requested_litres)
+        .or(`branch_id.is.null,branch_id.eq.${operation.data.station_branch_id}`);
+      if (nullValidityResult.error) return databaseError(nullValidityResult.error, id);
+      if (!nullValidityResult.data?.length) {
+        return jsonResponse({ ok: false, error: "fuel_driver_vehicle_not_qualified", message: "This driver and vehicle are not approved for this product, branch and load.", requestId: id }, 409);
+      }
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("assign_fuel_order_driver", {
+        target_order_id: orderId,
+        target_driver_entity_type: "driver",
+        target_driver_entity_id: driverEntityId,
+        target_vehicle_id: vehicleId,
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_metadata: optionalRecord(payload.metadata) ?? {},
       }),
       id,
