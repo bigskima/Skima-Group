@@ -39,7 +39,7 @@ Deno.test("independent driver vehicle applications use backend ownership values"
 
 Deno.test("vehicle approval automatically links an applicant's approved driver", async () => {
   const activation = await read(
-    "supabase/migrations/20260822120000_fleet_production_governance.sql",
+    "supabase/migrations/20260728080000_driver_vehicle_onboarding_runtime.sql",
   );
   assertIncludes(activation, "create or replace function public.sync_driver_vehicle_link_from_approved_vehicle()");
   assertIncludes(activation, "driver.user_id = application_record.applicant_user_id");
