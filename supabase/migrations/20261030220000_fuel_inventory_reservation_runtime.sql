@@ -345,7 +345,7 @@ begin
   if not found then
     raise exception using errcode='P0002',message='Fuel stock reservation was not found';
   end if;
-  if reservation_record.status not in ('reserved','partially_consumed') then
+  if reservation_record.status <> 'reserved' then
     raise exception using errcode='55000',message='Fuel stock reservation is already closed';
   end if;
 
@@ -398,6 +398,7 @@ set search_path = public
 as $$
 declare
   reservation_record public.fuel_order_stock_reservations%rowtype;
+  order_record public.order_records%rowtype;
   storage_record public.fuel_station_storage_units%rowtype;
   operation_record public.fuel_order_operations%rowtype;
   existing_event public.fuel_stock_reservation_events%rowtype;
@@ -537,6 +538,11 @@ grant insert,update on public.fuel_station_storage_units to service_role;
 grant insert,update on public.fuel_order_stock_reservations,public.fuel_stock_reservation_events to service_role;
 
 grant insert,update,delete on public.fuel_station_stock_movements,public.fuel_order_stock_reservations,public.fuel_stock_reservation_events to service_role;
+
+drop trigger if exists fuel_station_stock_movements_audit on public.fuel_station_stock_movements;
+create trigger fuel_station_stock_movements_audit
+after insert on public.fuel_station_stock_movements
+for each row execute function public.record_table_audit();
 
 drop trigger if exists fuel_stock_reservation_events_immutable on public.fuel_stock_reservation_events;
 create trigger fuel_stock_reservation_events_immutable
