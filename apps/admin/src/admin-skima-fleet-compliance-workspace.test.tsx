@@ -101,7 +101,7 @@ describe("AdminSkimaFleetComplianceWorkspace document upload", () => {
     render(<AdminSkimaFleetComplianceWorkspace onNavigate={vi.fn()} />, { wrapper });
 
     expect(await screen.findByText("Vehicle evidence")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Upload evidence" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Upload evidence" }));
 
     const file = new File(["roadworthiness evidence"], "roadworthiness.pdf", {
       type: "application/pdf",
