@@ -29,6 +29,7 @@ Deno.test("independent driver vehicle applications use backend ownership values"
   assertIncludes(screen, 'savedOwnership === "owned" ? "driver_owned" : savedOwnership');
   assertIncludes(screen, '["driver_owned", "leased", "rented"]');
   assertIncludes(screen, "ownershipType: ownership");
+  assertIncludes(screen, "vehicleRequirementsConfigured");
   assertIncludes(screen, "driverProfileId: driverId");
   assertIncludes(screen, 'applicationTypeKey: firstString(applicationType, ["key"])');
   assertIncludes(screen, "await create.mutateAsync");
