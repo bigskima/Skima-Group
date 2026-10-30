@@ -410,3 +410,154 @@ body {
     animation: none;
   }
 }
+
+
+/* Shared admin layout guardrails: constrain every route to the space it owns. */
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+}
+
+.admin-shell {
+  width: 100%;
+  min-width: 320px;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.admin-shell__main {
+  width: calc(100% - var(--admin-sidebar-width));
+  min-width: 0;
+  max-width: 100%;
+  container: admin-main / inline-size;
+}
+
+.admin-shell__topbar > *,
+.admin-shell__content,
+.admin-v2-screen,
+.admin-v2-screen > *,
+.admin-workspace-layout,
+.admin-workspace-layout > *,
+.admin-workspace-layout__body,
+.admin-workspace-layout__body > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.admin-shell__content {
+  width: 100%;
+}
+
+.admin-v2-screen {
+  width: 100%;
+  container: admin-screen / inline-size;
+}
+
+.admin-v2-screen img,
+.admin-v2-screen video,
+.admin-v2-screen canvas {
+  max-width: 100%;
+}
+
+/* Feature workspaces must respond to their available column, not only the viewport. */
+@container admin-main (max-width: 900px) {
+  .admin-shell .admin-workspace-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-shell .admin-workspace-layout__rail {
+    display: none;
+  }
+
+  .admin-shell .admin-workspace-layout__mobile-nav {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 2px 0 14px;
+    scrollbar-width: thin;
+    overscroll-behavior-inline: contain;
+  }
+
+  .admin-shell .admin-workspace-layout__mobile-nav button {
+    flex: 0 0 auto;
+    border: 1px solid var(--sk-color-border);
+    border-radius: 999px;
+    background: var(--sk-color-surface);
+    color: var(--sk-color-muted);
+    padding: 8px 12px;
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+
+  .admin-shell .admin-workspace-layout__mobile-nav button.is-active {
+    border-color: rgba(220, 38, 38, 0.24);
+    background: var(--admin-v2-red-soft);
+    color: var(--admin-v2-red);
+    font-weight: 700;
+  }
+}
+
+@container admin-screen (max-width: 1000px) {
+  .admin-v2-screen .utility-v2__task-grid,
+  .admin-v2-screen .utility-v2__setup-grid,
+  .admin-v2-screen .utility-v2__service-chips {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-v2-screen .utility-v2__pool {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .admin-v2-screen .skima-grid--compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-v2-screen .content-v2__layout,
+  .admin-v2-screen .content-v2__preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-v2-screen .fulfillment-v2__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-v2-screen .coverage-v2__section-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container admin-screen (max-width: 720px) {
+  .admin-v2-screen .utility-v2__task-grid,
+  .admin-v2-screen .utility-v2__review-grid,
+  .admin-v2-screen .utility-v2__readiness-grid,
+  .admin-v2-screen .utility-v2__setup-grid,
+  .admin-v2-screen .utility-v2__service-chips,
+  .admin-v2-screen .catalog-v2__task-grid,
+  .admin-v2-screen .catalog-v2__review-grid,
+  .skima-grid--compact,
+  .admin-v2-screen .fulfillment-v2__setup-grid,
+  .admin-v2-screen .fulfillment-v2__choice-grid,
+  .admin-v2-screen .fulfillment-v2__action-grid,
+  .admin-v2-screen .fulfillment-v2__activity-grid,
+  .admin-v2-screen .coverage-v2__task-grid,
+  .admin-v2-screen .coverage-v2__review-grid,
+  .admin-v2-screen .content-v2__review-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-v2-screen .coverage-v2__search-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .admin-shell__main {
+    width: 100%;
+  }
+}
