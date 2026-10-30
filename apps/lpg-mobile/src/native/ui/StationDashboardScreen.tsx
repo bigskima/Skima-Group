@@ -3,6 +3,7 @@ import {
   Bell,
   ChevronRight,
   CircleCheck,
+  Fuel,
   PackageCheck,
   ShieldCheck,
 } from "lucide-react-native";
@@ -176,6 +177,12 @@ export function StationDashboardScreen() {
                 title="Station Managed"
                 description="Manage delivery settings, station drivers, vehicles, the order queue and station-recorded driver payments."
                 onPress={() => router.push("/(station)/managed-fulfillment" as never)}
+              />
+              <OperationAction
+                icon={<Fuel color={palette.brand} size={24} />}
+                title="Fuel operations"
+                description="Accept petrol, diesel and kerosene orders, manage tank stock, fill containers and dispatch approved drivers."
+                onPress={() => router.push("/(station)/fuel-operations" as never)}
               />
             </GuideTarget>
 
