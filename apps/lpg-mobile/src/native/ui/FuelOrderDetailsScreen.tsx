@@ -1,12 +1,14 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { CheckCircle2, Fuel, Package, RotateCcw, ShieldCheck, Truck } from "lucide-react-native";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import type { ReactNode } from "react";
 
 import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
-import { ActionResponseSchema } from "../api/records";
-import { RecordArraySchema, firstNumber, firstString } from "../api/records";
+import { ActionResponseSchema, RecordArraySchema, firstNumber, firstString } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { radii, spacing, typography } from "../theme/tokens";
+import { spacing, typography } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
 import { AppButton } from "./AppButton";
 import { Card } from "./Card";
 import { EmptyState } from "./EmptyState";
@@ -36,6 +38,22 @@ export function FuelOrderDetailsScreen() {
     schema: ActionResponseSchema,
     invalidate: [["fuel", "orders"], ["fuel", "order", orderId], ["orders"]],
   });
+  const [completionError, setCompletionError] = useState<string | null>(null);
+
+  const confirmCompletion = async () => {
+    setCompletionError(null);
+    try {
+      await completeOrder.mutateAsync({
+        orderId,
+        stageKey: "completed",
+        idempotencyKey: `fuel-customer-complete:${orderId}`,
+        metadata: { customer_confirmed_completion: true },
+      });
+      await Promise.all([operations.refetch(), events.refetch()]);
+    } catch (error) {
+      setCompletionError(friendlyError(error, "SKIMA could not close this Fuel order yet."));
+    }
+  };
 
   const order = operations.data?.[0] ?? null;
   const productKey = firstString(order, ["product_key"]) ?? "fuel.pms";
@@ -134,16 +152,12 @@ export function FuelOrderDetailsScreen() {
           </Card>
           {((isRental && stage === "inspection_passed") || (!isRental && stage === "delivered")) ? (
             <Card title="Confirm order completion" description={isRental ? "The returned rental container has passed station inspection. Confirm that this order can now be closed." : "Your purchased container and measured fuel have been delivered. Confirm that your order is complete."}>
+              {completionError ? <Text accessibilityRole="alert" style={[styles.returnText, { color: palette.danger }]}>{completionError}</Text> : null}
               <AppButton
                 label="Confirm fuel order completed"
                 fullWidth
                 loading={completeOrder.isPending}
-                onPress={() => void completeOrder.mutateAsync({
-                  orderId,
-                  stageKey: "completed",
-                  idempotencyKey: `fuel-customer-complete:${orderId}`,
-                  metadata: { customer_confirmed_completion: true },
-                }).then(() => Promise.all([operations.refetch(), events.refetch()]))}
+                onPress={() => void confirmCompletion()}
               />
             </Card>
           ) : null}
@@ -165,7 +179,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function DetailRow({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   const { palette } = useAppTheme();
   return (
     <View style={styles.detailRow}>
