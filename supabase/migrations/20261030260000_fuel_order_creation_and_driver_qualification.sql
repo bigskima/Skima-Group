@@ -68,6 +68,10 @@ declare
   offer_record public.fuel_branch_product_offers%rowtype;
   product_record public.fuel_products%rowtype;
   container_type_record public.fuel_container_types%rowtype;
+  delivery_location_record public.lpg_customer_locations%rowtype;
+  station_profile_id uuid;
+  customer_serviceability jsonb;
+  station_serviceability jsonb;
   order_id uuid;
   quote_id uuid;
   order_record public.order_records%rowtype;
@@ -139,6 +143,54 @@ begin
 
   if not found then
     raise exception using errcode='23514',message='Choose an active container type compatible with the selected fuel product';
+  end if;
+
+  if target_delivery_location_id is null then
+    raise exception using errcode='22023',message='Choose a saved delivery location before placing a Fuel order';
+  end if;
+
+  select * into delivery_location_record
+  from public.lpg_customer_locations
+  where id=target_delivery_location_id
+    and owner_user_id=auth.uid()
+    and status='active';
+
+  if not found then
+    raise exception using errcode='42501',message='The selected delivery location is not available to this customer';
+  end if;
+
+  customer_serviceability:=public.resolve_service_availability(
+    'fuel','customer_ordering',
+    delivery_location_record.longitude::double precision,
+    delivery_location_record.latitude::double precision,
+    timezone('utc',now())
+  );
+
+  if coalesce((customer_serviceability->>'available')::boolean,false) is not true then
+    raise exception using errcode='55000',message='Fuel delivery is not available at this address: '||coalesce(customer_serviceability->>'reason','SERVICE_NOT_LAUNCHED');
+  end if;
+
+  select station.id into station_profile_id
+  from public.lpg_station_branches station
+  where station.branch_id=target_branch_id
+    and station.approval_status='approved'
+    and station.compliance_status='approved'
+  order by station.updated_at desc
+  limit 1;
+
+  if station_profile_id is null then
+    raise exception using errcode='55000',message='The selected station has no approved operational station profile';
+  end if;
+
+  station_serviceability:=public.resolve_operational_coverage_eligibility(
+    'STATION',station_profile_id,'fuel',
+    delivery_location_record.longitude::double precision,
+    delivery_location_record.latitude::double precision,
+    timezone('utc',now())
+  );
+
+  if coalesce((station_serviceability->>'eligible')::boolean,false) is not true then
+    raise exception using errcode='55000',message='The selected station is not approved to serve this delivery address for Fuel';
   end if;
 
   -- Merge caller metadata first; server-selected order details must always win.
@@ -394,8 +446,9 @@ declare
   driver_user_id_value uuid;
   vehicle_id_value uuid;
   vehicle_record public.vehicles%rowtype;
-  driver_profile_exists boolean:=false;
-  station_driver_exists boolean:=false;
+  delivery_location_record public.lpg_customer_locations%rowtype;
+  coverage_result jsonb;
+  coverage_entity_id uuid;
 begin
   select * into order_record from public.order_records where id=target_order_id;
   select * into operation_record from public.fuel_order_operations where order_id=target_order_id;
@@ -437,6 +490,11 @@ begin
     nullif(assignment_record.metadata->'dispatch'->>'vehicle_id','')::uuid
   );
 
+  coverage_entity_id:=case
+    when assignment_record.entity_type='driver' then assignment_record.entity_id
+    else null
+  end;
+
   if driver_user_id_value is null or vehicle_id_value is null then
     raise exception using errcode='23514',message='Fuel driver assignment must include a resolvable driver and an assigned vehicle';
   end if;
@@ -467,6 +525,31 @@ begin
 
   if not found then
     raise exception using errcode='23514',message='Assigned fuel vehicle is not active or its compliance documents have expired';
+  end if;
+
+  select * into delivery_location_record
+  from public.lpg_customer_locations
+  where id=nullif(order_record.order_payload->>'delivery_location_id','')::uuid
+    and owner_user_id=operation_record.customer_user_id
+    and status='active';
+
+  if not found then
+    raise exception using errcode='23514',message='Fuel order delivery location is no longer active or available to its customer';
+  end if;
+
+  coverage_result:=public.resolve_operational_coverage_eligibility(
+    'DRIVER',
+    case when qualification_record.driver_profile_id is not null
+      then qualification_record.driver_profile_id
+      else qualification_record.station_managed_driver_id end,
+    'fuel',
+    delivery_location_record.longitude::double precision,
+    delivery_location_record.latitude::double precision,
+    timezone('utc',now())
+  );
+
+  if coalesce((coverage_result->>'eligible')::boolean,false) is not true then
+    raise exception using errcode='23514',message='Assigned driver does not have approved Fuel service coverage for this delivery address';
   end if;
 
   if operation_record.fulfillment_mode='station_managed' then
