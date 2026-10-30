@@ -26,6 +26,7 @@ describe("admin responsive layout contract", () => {
     expect(workspaceLanding).toContain("@container workspace-landing (max-width: 980px)");
     expect(workspaceLanding).toContain("grid-template-columns: minmax(0, 1fr)");
     expect(workspaceLanding).toContain(".workspace-landing__aside .skima-grid--compact");
+    expect(workspaceLanding).toContain(".workspace-landing__header > div:first-child:last-child");
     expect(workspaceLanding).not.toContain("prefers-color-scheme: dark");
   });
 
@@ -34,5 +35,7 @@ describe("admin responsive layout contract", () => {
     expect(adminTheme).toContain(".admin-v2-screen .fulfillment-v2__metrics");
     expect(adminTheme).toContain(".admin-v2-screen .coverage-v2__section-nav");
     expect(adminTheme).toContain(".admin-v2-screen .content-v2__layout");
+    expect(adminTheme).toContain(".admin-v2-screen .utility-v2__setup-grid");
+    expect(adminTheme).toContain(".admin-v2-screen .catalog-v2__task-grid");
   });
 });
