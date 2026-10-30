@@ -149,7 +149,7 @@ begin
     if existing_assignment.order_id<>target_order_id
        or existing_assignment.entity_type<>'driver'
        or existing_assignment.entity_id<>target_driver_entity_id
-       or nullif(existing_assignment.metadata->>'vehicle_id','')::uuid<>target_vehicle_id then
+       or existing_assignment.metadata->>'vehicle_id' is distinct from target_vehicle_id::text then
       raise exception using errcode='23505',message='Fuel dispatch idempotency key was reused with different assignment details';
     end if;
     assignment_id:=existing_assignment.id;
