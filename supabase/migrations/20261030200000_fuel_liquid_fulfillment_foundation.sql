@@ -439,8 +439,9 @@ language sql
 stable
 security definer
 set search_path = public
-as $$
+as $
   select auth.role() = 'service_role'
+    or public.can_read_platform_runtime()
     or exists (
       select 1
       from public.order_records order_record
@@ -448,9 +449,24 @@ as $$
         and (
           order_record.requester_user_id = auth.uid()
           or public.can_read_business_order(order_record.organization_id, order_record.branch_id)
+          or public.has_permission_for_branch(
+            'business.fuel.orders.read',
+            order_record.organization_id,
+            order_record.branch_id
+          )
+          or public.has_permission_for_branch(
+            'business.fuel.orders.process',
+            order_record.organization_id,
+            order_record.branch_id
+          )
+          or public.has_permission_for_branch(
+            'business.fuel.orders.manage',
+            order_record.organization_id,
+            order_record.branch_id
+          )
         )
     );
-$$;
+$;
 
 create or replace function public.prevent_fuel_event_mutation()
 returns trigger
