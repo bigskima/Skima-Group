@@ -178,6 +178,17 @@ const ROUTES = new Set([
   "/runtime/catalog/availability",
   "/runtime/catalog/stock-adjustments",
   "/runtime/catalog/orderability",
+  "/runtime/fuel/products",
+  "/runtime/fuel/offers",
+  "/runtime/fuel/storage",
+  "/runtime/fuel/storage/receive",
+  "/runtime/fuel/storage/adjust",
+  "/runtime/fuel/container-types",
+  "/runtime/fuel/containers",
+  "/runtime/fuel/containers/register",
+  "/runtime/fuel/container-allocations",
+  "/runtime/fuel/orders/operations",
+  "/runtime/fuel/orders/events",
   "/runtime/media/upload-sessions",
   "/runtime/media/read-sessions",
   "/runtime/media/assets",
@@ -3317,6 +3328,229 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       },
       requestId: id,
     });
+  }
+
+  if (routePath === "/runtime/fuel/products") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("fuel_products")
+          .select("id,key,short_code,display_name,unit_code,quantity_precision,status,metadata,created_at,updated_at")
+          .order("key", { ascending: true }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("set_fuel_product_status", {
+          target_product_key: requireString(payload.productKey, "productKey"),
+          target_status: requireString(payload.status, "status"),
+          target_reason: optionalString(payload.reason),
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/runtime/fuel/offers") {
+    if (request.method === "GET") {
+      let query = supabase
+        .from("fuel_branch_product_offers")
+        .select("id,organization_id,branch_id,product_key,currency_code,catalog_item_id,catalog_variant_id,price_per_litre,minimum_litres,maximum_litres,container_purchase_amount,container_rental_amount,refundable_deposit_amount,driver_delivery_fee_amount,platform_fee_amount,tax_rate_percent,fulfillment_modes,status,effective_from,effective_until,metadata,created_at,updated_at")
+        .order("updated_at", { ascending: false });
+      const branchId = optionalUuid(url.searchParams.get("branchId"), "branchId");
+      const productKey = optionalString(url.searchParams.get("productKey"));
+      if (branchId) query = query.eq("branch_id", branchId);
+      if (productKey) query = query.eq("product_key", productKey);
+      return selectRecords(query, id);
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("configure_fuel_branch_product_offer", {
+          target_branch_id: requireUuid(payload.branchId, "branchId"),
+          target_product_key: requireString(payload.productKey, "productKey"),
+          target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
+          target_price_per_litre: requireNumber(payload.pricePerLitre, "pricePerLitre"),
+          target_minimum_litres: requireNumber(payload.minimumLitres, "minimumLitres"),
+          target_maximum_litres: requireNumber(payload.maximumLitres, "maximumLitres"),
+          target_container_purchase_amount: optionalNumber(payload.containerPurchaseAmount, "containerPurchaseAmount") ?? 0,
+          target_container_rental_amount: optionalNumber(payload.containerRentalAmount, "containerRentalAmount") ?? 0,
+          target_refundable_deposit_amount: optionalNumber(payload.refundableDepositAmount, "refundableDepositAmount") ?? 0,
+          target_driver_delivery_fee_amount: optionalNumber(payload.driverDeliveryFeeAmount, "driverDeliveryFeeAmount") ?? 0,
+          target_platform_fee_amount: optionalNumber(payload.platformFeeAmount, "platformFeeAmount") ?? 0,
+          target_tax_rate_percent: optionalNumber(payload.taxRatePercent, "taxRatePercent") ?? 0,
+          target_fulfillment_modes: optionalStringArray(payload.fulfillmentModes) ?? ["station_managed", "independent_driver", "skima_managed"],
+          target_status: optionalString(payload.status) ?? "draft",
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/runtime/fuel/storage") {
+    if (request.method === "GET") {
+      let query = supabase
+        .from("fuel_station_storage_units")
+        .select("id,organization_id,branch_id,product_key,key,display_name,capacity_litres,safety_reserve_litres,physical_stock_litres,reserved_stock_litres,status,metadata,created_at,updated_at")
+        .order("created_at", { ascending: false });
+      const branchId = optionalUuid(url.searchParams.get("branchId"), "branchId");
+      if (branchId) query = query.eq("branch_id", branchId);
+      return selectRecords(query, id);
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("configure_fuel_station_storage_unit", {
+          target_organization_id: requireUuid(payload.organizationId, "organizationId"),
+          target_branch_id: requireUuid(payload.branchId, "branchId"),
+          target_product_key: requireString(payload.productKey, "productKey"),
+          target_storage_key: requireString(payload.storageKey, "storageKey"),
+          target_display_name: requireString(payload.displayName, "displayName"),
+          target_capacity_litres: requireNumber(payload.capacityLitres, "capacityLitres"),
+          target_safety_reserve_litres: optionalNumber(payload.safetyReserveLitres, "safetyReserveLitres") ?? 0,
+          target_status: optionalString(payload.status) ?? "active",
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/runtime/fuel/storage/receive" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("receive_fuel_stock", {
+        target_storage_unit_id: requireUuid(payload.storageUnitId, "storageUnitId"),
+        target_quantity_litres: requireNumber(payload.quantityLitres, "quantityLitres"),
+        target_reason: requireString(payload.reason, "reason"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/storage/adjust" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("adjust_fuel_stock", {
+        target_storage_unit_id: requireUuid(payload.storageUnitId, "storageUnitId"),
+        target_quantity_delta_litres: requireNumber(payload.quantityDeltaLitres, "quantityDeltaLitres"),
+        target_reason: requireString(payload.reason, "reason"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/container-types") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("fuel_container_types")
+          .select("id,key,display_name,nominal_capacity_litres,supported_product_keys,status,metadata,created_at,updated_at")
+          .order("nominal_capacity_litres", { ascending: true }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("configure_fuel_container_type", {
+          target_key: requireString(payload.key, "key"),
+          target_display_name: requireString(payload.displayName, "displayName"),
+          target_nominal_capacity_litres: requireNumber(payload.nominalCapacityLitres, "nominalCapacityLitres"),
+          target_supported_product_keys: requireStringArray(payload.supportedProductKeys, "supportedProductKeys"),
+          target_status: optionalString(payload.status) ?? "draft",
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/runtime/fuel/containers") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("fuel_container_profiles")
+          .select("id,asset_id,container_type_id,serial_number,ownership_mode,capacity_litres,status,last_inspected_at,last_inspection_result,metadata,created_at,updated_at")
+          .order("created_at", { ascending: false }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/runtime/fuel/containers/register" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("register_fuel_container_asset", {
+        target_serial_number: requireString(payload.serialNumber, "serialNumber"),
+        target_container_type_id: requireUuid(payload.containerTypeId, "containerTypeId"),
+        target_capacity_litres: optionalNumber(payload.capacityLitres, "capacityLitres"),
+        target_organization_id: optionalUuid(payload.organizationId, "organizationId"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/container-allocations" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("fuel_container_allocations")
+        .select("id,container_profile_id,order_id,order_line_item_id,product_key,station_branch_id,customer_user_id,allocated_litres,allocation_mode,status,purchase_amount,rental_amount,refundable_deposit_amount,currency_code,reserved_at,delivered_at,returned_at,received_at_station_at,closed_at,metadata,created_at,updated_at")
+        .order("created_at", { ascending: false }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/operations" && request.method === "GET") {
+    let query = supabase
+      .from("fuel_order_operations")
+      .select("order_id,service_request_id,product_key,station_branch_id,customer_user_id,requested_litres,filled_litres,delivered_litres,container_mode,container_count,fulfillment_mode,stage_key,exception_reason,station_accepted_at,filled_at,driver_assigned_at,station_handover_at,delivered_at,return_received_at,completed_at,metadata,created_at,updated_at")
+      .order("created_at", { ascending: false });
+    const branchId = optionalUuid(url.searchParams.get("branchId"), "branchId");
+    const orderId = optionalUuid(url.searchParams.get("orderId"), "orderId");
+    if (branchId) query = query.eq("station_branch_id", branchId);
+    if (orderId) query = query.eq("order_id", orderId);
+    return selectRecords(query, id);
+  }
+
+  if (routePath === "/runtime/fuel/orders/events" && request.method === "GET") {
+    const orderId = optionalUuid(url.searchParams.get("orderId"), "orderId");
+    let query = supabase
+      .from("fuel_order_operation_events")
+      .select("id,order_id,service_request_id,product_key,from_stage,to_stage,event_type_key,reason,actor_user_id,metadata,occurred_at,created_at")
+      .order("occurred_at", { ascending: true });
+    if (orderId) query = query.eq("order_id", orderId);
+    return selectRecords(query, id);
   }
 
   if (routePath === "/runtime/catalog/units") {
