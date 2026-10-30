@@ -7008,7 +7008,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const publicationId = requireUuid(body.value.publicationId, "publicationId");
     const publicationResult = await serviceClient
       .from("product_content_publications")
-      .select("id,organization_id,metadata,published_at")
+      .select("id,organization_id,metadata,published_at,revision,status")
       .eq("id", publicationId)
       .maybeSingle();
 
@@ -7028,8 +7028,12 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
 
     const targetStatus = requireString(body.value.status, "status");
+    if (!["draft", "published", "paused", "retired"].includes(targetStatus)) {
+      throw new RequestValidationError("status must be draft, published, paused, or retired.");
+    }
     const reason = optionalString(body.value.reason);
     const currentMetadata = requireRecordOrEmpty(getRecordValue(publicationResult.data, "metadata"));
+    const currentRevision = numberOrNull(getRecordValue(publicationResult.data, "revision")) ?? 1;
 
     return upsertResponse(
       serviceClient
@@ -7039,7 +7043,9 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
           published_at: targetStatus === "published" && !getRecordValue(publicationResult.data, "published_at")
             ? new Date().toISOString()
             : getRecordValue(publicationResult.data, "published_at"),
+          revision: currentRevision + 1,
           status: targetStatus,
+          updated_at: new Date().toISOString(),
           updated_by: authResult.user.id,
         })
         .eq("id", publicationId)
@@ -7971,6 +7977,7 @@ async function configureContentPublicationResponse(
     starts_at: optionalString(payload.startsAt),
     status,
     title: optionalString(payload.title),
+    updated_at: new Date().toISOString(),
     updated_by: user.id,
   };
 
