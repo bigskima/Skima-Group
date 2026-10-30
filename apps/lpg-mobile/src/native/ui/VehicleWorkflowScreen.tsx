@@ -130,6 +130,7 @@ export function VehicleWorkflowScreen() {
         const savedOwnership = String(draft.values.ownership ?? "driver_owned");
         setOwnership(savedOwnership === "owned" ? "driver_owned" : savedOwnership);
         setCapacity(String(draft.values.capacity ?? ""));
+        setOperatingLocation(operationalLocationFromRecord(draft.values.operatingLocation) ?? savedOperatingLocation);
         setFormStep(
           draft.step === "vehicle-review"
             ? "review"
@@ -145,11 +146,18 @@ export function VehicleWorkflowScreen() {
 
   useEffect(() => {
     if (savedOperatingLocation) setOperatingLocation(savedOperatingLocation);
-  }, [currentId, savedOperatingLocation?.latitude, savedOperatingLocation?.longitude]);
+  }, [
+    currentId,
+    savedOperatingLocation?.latitude,
+    savedOperatingLocation?.longitude,
+    savedOperatingLocation?.formattedAddress,
+    savedOperatingLocation?.accuracyMeters,
+    savedOperatingLocation?.recordedAt,
+  ]);
 
   useEffect(() => {
     if (!owner || !hydrated) return;
-    const hasValues = [typeKey, manufacturer, model, year, registration, colour, capacity].some(Boolean);
+    const hasValues = [typeKey, manufacturer, model, year, registration, colour, capacity, operatingLocation].some(Boolean);
     if (!hasValues) return;
     const now = new Date().toISOString();
     void draftStore.save({
@@ -157,12 +165,12 @@ export function VehicleWorkflowScreen() {
       type: "driver-vehicle-registration",
       ownerProfileId: owner,
       step: `vehicle-${formStep}`,
-      values: { typeKey, manufacturer, model, year, registration, colour, ownership, capacity },
+      values: { typeKey, manufacturer, model, year, registration, colour, ownership, capacity, operatingLocation },
       pendingMedia: [],
       createdAt: draftCreatedAt.current,
       updatedAt: now,
     });
-  }, [capacity, colour, formStep, hydrated, manufacturer, model, owner, ownership, registration, typeKey, year]);
+  }, [capacity, colour, formStep, hydrated, manufacturer, model, operatingLocation, owner, ownership, registration, typeKey, year]);
 
   const create = useGatewayMutation({ path: "/runtime/applications", schema: ActionResponseSchema });
   const update = useGatewayMutation({ path: "/runtime/applications/payload", schema: ActionResponseSchema });
