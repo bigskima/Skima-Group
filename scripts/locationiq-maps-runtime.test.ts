@@ -537,3 +537,19 @@ function assertNotIncludes(source: string, unexpected: string): void {
     throw new Error(`source unexpectedly contained ${JSON.stringify(unexpected)}`);
   }
 }
+
+
+Deno.test("canonical geography creation reuses an existing active hierarchy", async () => {
+  const migration = await readRepositoryFile(
+    "supabase/migrations/20261030183632_canonical_geography_hierarchy_deduplication.sql",
+  );
+  const adminCoverage = await readRepositoryFile("apps/admin/src/admin-service-coverage-workspace.tsx");
+
+  assertIncludes(migration, "geographies_active_hierarchy_unique_idx");
+  assertIncludes(migration, "nulls not distinct");
+  assertIncludes(migration, "where status = 'active'");
+  assertIncludes(migration, "geography.parent_id is not distinct from p_parent_id");
+  assertIncludes(migration, "geography.normalized_name = normalized_name");
+  assertIncludes(migration, "exception when unique_violation");
+  assertIncludes(adminCoverage, "configure_universal_geography");
+});
