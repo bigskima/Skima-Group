@@ -71,6 +71,8 @@ jobs:
         run: npm run ai-runtime:contract
       - name: Verify LPG refill production contracts
         run: npm run lpg-refill:contract
+      - name: Verify independent driver vehicle onboarding contracts
+        run: npm run lpg-driver-vehicle:contract
       - name: Verify Station Managed fulfillment, driver and admin contracts
         run: npm run station-managed:verify
       - name: Verify SKIMA WhatsApp lifecycle contracts
@@ -100,6 +102,8 @@ jobs:
           node-version: 24
       - name: Install admin dependencies
         run: npm install --no-audit --no-fund
+      - name: Test SKIMA fleet document upload
+        run: npm run frontend:test -- src/admin-skima-fleet-compliance-workspace.test.tsx
       - name: Typecheck and build admin
         run: npm run deploy:check:admin
 
