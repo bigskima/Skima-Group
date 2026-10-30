@@ -318,7 +318,6 @@ begin
 
   update public.application_records
   set active_version = next_version,
-      locked_at = null,
       updated_at = timezone('utc', now())
   where id = target_application_id;
 
