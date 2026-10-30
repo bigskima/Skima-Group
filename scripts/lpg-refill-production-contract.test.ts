@@ -355,7 +355,7 @@ Deno.test("admin application feed returns activation state used by Live access",
 
 Deno.test("Nigeria location enablement stays separate from physical LPG fulfilment readiness", async () => {
   const [migration, admin, partnerCoverage, refillScreen, serviceability] = await Promise.all([
-    read("supabase/migrations/20261029193000_nigeria_location_enablement_fulfilment_gates.sql"),
+    read("supabase/migrations/20261029182549_nigeria_location_enablement_fulfilment_gates.sql"),
     read("apps/admin/src/admin-service-coverage-workspace.tsx"),
     read("apps/admin/src/features/operations/CoveragePartnerScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx"),
@@ -380,3 +380,48 @@ Deno.test("Nigeria location enablement stays separate from physical LPG fulfilme
   assertIncludes(refillScreen, "No order or wallet reservation is created just because the location is enabled.");
   assertIncludes(serviceability, "skimaManagedEnabled: z.boolean().optional()");
 });
+
+Deno.test("admin location and coverage workflows keep physical dispatch gates intact", async () => {
+  const [locationMigration, adminMigration, coverageWorkspace, managedDriverWorkspace, geometryEditor, vercelConfig] = await Promise.all([
+    read("supabase/migrations/20261029182549_nigeria_location_enablement_fulfilment_gates.sql"),
+    read("supabase/migrations/20261030131328_admin_coverage_refresh_reject_map_tile_and_driver_fixes.sql"),
+    read("apps/admin/src/features/operations/CoverageWorkspaceV2.tsx"),
+    read("apps/admin/src/admin-managed-driver-coverage-workspace.tsx"),
+    read("apps/admin/src/admin-geometry-editor.tsx"),
+    read("apps/admin/vercel.json"),
+  ]);
+
+  assertIncludes(locationMigration, "addressHierarchyMatch");
+  assertIncludes(coverageWorkspace, 'const isCustomZone = selectedLevel?.key === "custom_zone"');
+  assertIncludes(coverageWorkspace, "No polygon required for this administrative area");
+  assertIncludes(coverageWorkspace, "Continue with this area name");
+  assertIncludes(coverageWorkspace, "p_boundary_geojson: boundary");
+
+  assertIncludes(geometryEditor, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+  assertIncludes(geometryEditor, "© OpenStreetMap contributors");
+  assertNotIncludes(geometryEditor, "basemaps.cartocdn.com");
+
+  assertIncludes(managedDriverWorkspace, 'context?.permissions.includes("platform.drivers.manage")');
+  assertIncludes(managedDriverWorkspace, "Driver service areas unavailable");
+
+  const adminRoutes = JSON.parse(vercelConfig) as { rewrites?: unknown[]; routes?: unknown[] };
+  if (!Array.isArray(adminRoutes.rewrites) || adminRoutes.rewrites.length === 0) {
+    throw new Error("Admin Vercel configuration must rewrite direct SPA routes to /index.html.");
+  }
+  if (adminRoutes.routes) {
+    throw new Error("Legacy Vercel routes fallback must not shadow the admin SPA rewrite.");
+  }
+
+  const rejectDecisionIndex = adminMigration.indexOf("if p_decision = 'APPROVED' then");
+  const activationGuardIndex = adminMigration.indexOf("driver application must be activated before coverage approval");
+  if (rejectDecisionIndex < 0 || activationGuardIndex < rejectDecisionIndex) {
+    throw new Error("Activation checks must be inside the APPROVED-only coverage branch so rejection remains possible.");
+  }
+  assertIncludes(adminMigration, "public.can_manage_lpg_operations()");
+  assertIncludes(adminMigration, "effective_reason");
+  assertIncludes(adminMigration, "platform.drivers.manage");
+  assertIncludes(adminMigration, "geography.boundary_geometry is not null");
+  assertIncludes(adminMigration, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+  assertNotIncludes(adminMigration, "basemaps.cartocdn.com");
+});
+
