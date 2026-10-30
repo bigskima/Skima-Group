@@ -69,17 +69,17 @@ export interface MapsRuntimeConfig {
   mapMatchingProviderKey: string;
 }
 
-const KEYLESS_RASTER_TILE_TEMPLATE =
-  "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
+const CARTO_RASTER_TILE_TEMPLATE =
+  "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
 const KEYLESS_OSM_TILE_TEMPLATE =
   "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const KEYLESS_MAP_STYLE_URL = "https://demotiles.maplibre.org/style.json";
-const KEYLESS_ATTRIBUTION = "© OpenStreetMap contributors, © CARTO";
+const CARTO_ATTRIBUTION = "© OpenStreetMap contributors, © CARTO";
 const KEYLESS_OSM_ATTRIBUTION = "© OpenStreetMap contributors";
 
 export function getMapsRuntimeConfig(): MapsRuntimeConfig {
   const tileMaxZoom = Number(process.env.EXPO_PUBLIC_MAP_TILE_MAX_ZOOM);
-  const configuredProvider = readEnv("EXPO_PUBLIC_MAP_TILE_PROVIDER", "carto_voyager")
+  const configuredProvider = readEnv("EXPO_PUBLIC_MAP_TILE_PROVIDER", "osm_standard")
     .toLowerCase();
   const configuredRaster = process.env.EXPO_PUBLIC_MAP_TILE_URL?.trim();
   const configuredStyle = process.env.EXPO_PUBLIC_MAP_STYLE_URL?.trim();
@@ -190,25 +190,27 @@ function selectKeylessRaster(
   configuredTemplate?: string,
 ): { key: string; template: string; attribution: string; fallback: boolean } {
   if (provider === "carto_voyager") {
-    if (!configuredTemplate) {
-      return {
-        key: "carto_voyager",
-        template: KEYLESS_RASTER_TILE_TEMPLATE,
-        attribution: KEYLESS_ATTRIBUTION,
-        fallback: false,
-      };
-    }
+    // CARTO requires a Basemaps key in public applications. Treat an old
+    // keyless CARTO env value as stale and use OSM instead of rendering the
+    // provider's "API KEY REQUIRED" watermark across every tile.
     if (
+      configuredTemplate &&
       isUsablePublicTileTemplate(configuredTemplate) &&
       keylessTileHost(configuredTemplate) === "carto"
     ) {
       return {
         key: "carto_voyager",
         template: configuredTemplate,
-        attribution: KEYLESS_ATTRIBUTION,
+        attribution: CARTO_ATTRIBUTION,
         fallback: false,
       };
     }
+    return {
+      key: "osm_standard",
+      template: KEYLESS_OSM_TILE_TEMPLATE,
+      attribution: KEYLESS_OSM_ATTRIBUTION,
+      fallback: true,
+    };
   }
 
   if (["openstreetmap", "osm", "osm_standard"].includes(provider)) {
@@ -234,9 +236,9 @@ function selectKeylessRaster(
   }
 
   return {
-    key: "carto_voyager",
-    template: KEYLESS_RASTER_TILE_TEMPLATE,
-    attribution: KEYLESS_ATTRIBUTION,
+    key: "osm_standard",
+    template: KEYLESS_OSM_TILE_TEMPLATE,
+    attribution: KEYLESS_OSM_ATTRIBUTION,
     fallback: true,
   };
 }
@@ -266,6 +268,15 @@ export function isUsablePublicStyleUrl(value?: string | null): value is string {
 
 function requiresPublicMapCredential(value: string) {
   const normalized = value.toLowerCase();
+  const cartoKeyIsConfigured = (() => {
+    try {
+      const parsed = new URL(value);
+      return parsed.hostname.toLowerCase().endsWith(".basemaps.cartocdn.com") &&
+        Boolean(parsed.searchParams.get("key")?.trim());
+    } catch {
+      return false;
+    }
+  })();
   const credentialMarkers = [
     "{access_token}",
     "{accesstoken}",
@@ -276,7 +287,7 @@ function requiresPublicMapCredential(value: string) {
     "api_key=",
     "apikey=",
     "token=",
-    "key=",
+    ...(cartoKeyIsConfigured ? [] : ["key="]),
   ];
   const credentialProviders = [
     "locationiq.com",
