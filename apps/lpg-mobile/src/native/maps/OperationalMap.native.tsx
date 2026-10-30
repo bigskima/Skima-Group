@@ -46,9 +46,9 @@ export function OperationalMap({
 }: OperationalMapProps) {
   const camera = useRef<CameraRef>(null);
   const mapRenderer = useMapsRendererConfiguration();
-  const first = points[0] ?? averageCoordinate(points) ?? (onSelectPoint ? DEFAULT_MAP_CENTER : null);
+  const first = points[0] ?? averageCoordinate(points) ?? (onSelectPoint ? mapRenderer.defaultCenter : null);
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
-  const zoom = clamp(points.length ? initialZoom : 6, minZoom, maxZoom);
+  const zoom = clamp(points.length ? initialZoom : mapRenderer.defaultZoom, minZoom, maxZoom);
   const markers = useMemo(() => pointCollection(points), [pointKey]);
   const route = useMemo(() => routeCollection(points), [pointKey]);
 
