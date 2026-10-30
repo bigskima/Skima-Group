@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { CarFront, FileCheck2, Gauge, Plus, ShieldCheck, Truck } from "lucide-react-native";
+import { CarFront, CheckCircle2, FileCheck2, Gauge, LocateFixed, MapPin, Plus, ShieldCheck, Truck } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries } from "../api/domains";
@@ -15,9 +15,12 @@ import {
   displayStatus,
   firstNumber,
   firstString,
+  nestedRecord,
   recordId,
   type PlatformRecord,
 } from "../api/records";
+import { readOperationalLocation, type OperationalLocation } from "../device/location";
+import { useMapsGatewayAdapter } from "../domains/maps/gateway";
 import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -51,6 +54,7 @@ export function VehicleWorkflowScreen() {
   const documents = domainQueries.documents();
   const drivers = domainQueries.drivers();
   const client = useQueryClient();
+  const maps = useMapsGatewayAdapter();
 
   const driver = drivers.data?.find((item) => firstString(item, ["user_id", "userId"]) === session.context?.user.id);
   const driverId = driver ? recordId(driver) : null;
@@ -69,6 +73,7 @@ export function VehicleWorkflowScreen() {
       !Array.isArray(current.application_payload)
     ? current.application_payload as Record<string, unknown>
     : {};
+  const savedOperatingLocation = operationalLocationFromRecord(currentApplicationPayload.location);
   const verification = useApplicationVerification(currentId);
   const verifiedDocumentKeys = satisfiedVerificationDocumentKeys(verification.data);
   const requirementSetId = firstString(applicationType, ["document_requirement_set_id", "documentRequirementSetId"]);
@@ -102,6 +107,11 @@ export function VehicleWorkflowScreen() {
   const [colour, setColour] = useState("");
   const [ownership, setOwnership] = useState("driver_owned");
   const [capacity, setCapacity] = useState("");
+  const [operatingLocation, setOperatingLocation] = useState<OperationalLocation | null>(savedOperatingLocation);
+  const [detectingOperatingLocation, setDetectingOperatingLocation] = useState(false);
+  const [savingOperatingLocation, setSavingOperatingLocation] = useState(false);
+  const [operatingLocationError, setOperatingLocationError] = useState<string | null>(null);
+  const [operatingLocationNotice, setOperatingLocationNotice] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageSuccess, setMessageSuccess] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -134,6 +144,10 @@ export function VehicleWorkflowScreen() {
   }, [owner]);
 
   useEffect(() => {
+    if (savedOperatingLocation) setOperatingLocation(savedOperatingLocation);
+  }, [currentId, savedOperatingLocation?.latitude, savedOperatingLocation?.longitude]);
+
+  useEffect(() => {
     if (!owner || !hydrated) return;
     const hasValues = [typeKey, manufacturer, model, year, registration, colour, capacity].some(Boolean);
     if (!hasValues) return;
@@ -153,6 +167,58 @@ export function VehicleWorkflowScreen() {
   const create = useGatewayMutation({ path: "/runtime/applications", schema: ActionResponseSchema });
   const update = useGatewayMutation({ path: "/runtime/applications/payload", schema: ActionResponseSchema });
   const submit = useGatewayMutation({ path: "/runtime/applications/submit", schema: ActionResponseSchema });
+  const updateOperatingLocation = useGatewayMutation({
+    path: "/runtime/applications/location",
+    schema: ActionResponseSchema,
+    invalidate: [["applications"]],
+  });
+
+  const detectOperatingLocation = async () => {
+    setOperatingLocationError(null);
+    setOperatingLocationNotice(null);
+    setDetectingOperatingLocation(true);
+    try {
+      const detected = await maps.resolveOperationalLocation(await readOperationalLocation());
+      setOperatingLocation(detected);
+    } catch (cause) {
+      setOperatingLocationError(friendlyError(cause, "We could not detect your operating location. Enable device location and try again."));
+    } finally {
+      setDetectingOperatingLocation(false);
+    }
+  };
+
+  const saveOperatingLocation = async () => {
+    setOperatingLocationError(null);
+    setOperatingLocationNotice(null);
+    if (!currentId || !operatingLocation) {
+      setOperatingLocationError("Detect your operating location before submitting it for review.");
+      return;
+    }
+    setSavingOperatingLocation(true);
+    try {
+      await updateOperatingLocation.mutateAsync({
+        applicationId: currentId,
+        location: operatingLocation,
+        idempotencyKey: idempotencyKey(
+          "vehicle-operating-location",
+          `${currentId}:${operatingLocation.latitude}:${operatingLocation.longitude}:${operatingLocation.recordedAt}`,
+        ),
+        metadata: { source: "independent_driver_vehicle_workspace" },
+      });
+      if (firstString(current, ["status"]) === "additional_info_required") {
+        await submit.mutateAsync({
+          applicationId: currentId,
+          idempotencyKey: idempotencyKey("vehicle-location-resubmission", currentId),
+        });
+      }
+      await applications.refetch();
+      setOperatingLocationNotice("Location submitted. SKIMA must verify it in Admin Location Review before this vehicle can be approved.");
+    } catch (cause) {
+      setOperatingLocationError(friendlyError(cause, "Your operating location could not be submitted for review."));
+    } finally {
+      setSavingOperatingLocation(false);
+    }
+  };
 
   const retryWorkspace = async () => {
     await Promise.allSettled([
@@ -195,6 +261,10 @@ export function VehicleWorkflowScreen() {
     }
     if (!driverId || !applicationType) {
       setMessage("An approved driver profile and an active LPG vehicle application type are required before you can add a vehicle.");
+      return;
+    }
+    if (current && !["draft", "incomplete", "additional_info_required"].includes(firstString(current, ["status"]) ?? "")) {
+      setMessage("You already have a vehicle application in review. Add or update its operating location in the section below instead of creating a duplicate application.");
       return;
     }
     if (!(vehicleTypes.data ?? []).length) {
@@ -258,6 +328,7 @@ export function VehicleWorkflowScreen() {
       !driverId ||
       !applicationType ||
       !vehicleRequirementsConfigured ||
+      !operatingLocation ||
       !typeKey ||
       !manufacturer.trim() ||
       !model.trim() ||
@@ -271,7 +342,7 @@ export function VehicleWorkflowScreen() {
       load <= 0
     ) {
       setMessageSuccess(false);
-      setMessage("Complete every required vehicle field. Choose a valid ownership type and enter a four-digit model year and maximum load.");
+      setMessage("Complete every required vehicle field, detect your operating location, and enter a valid model year and maximum load.");
       return;
     }
 
@@ -308,6 +379,15 @@ export function VehicleWorkflowScreen() {
       }
 
       if (!applicationId) throw new Error("The vehicle application could not be created. Please try again.");
+      await updateOperatingLocation.mutateAsync({
+        applicationId,
+        location: operatingLocation,
+        idempotencyKey: idempotencyKey(
+          "vehicle-operating-location",
+          `${applicationId}:${operatingLocation.latitude}:${operatingLocation.longitude}:${operatingLocation.recordedAt}`,
+        ),
+        metadata: { source: "independent_driver_vehicle_workspace" },
+      });
       await draftStore.clear(owner, "driver-vehicle-registration");
       await client.invalidateQueries({ queryKey: ["lpg-expo", "applications"] });
 
@@ -458,6 +538,61 @@ export function VehicleWorkflowScreen() {
             />
           ) : null}
 
+          {current ? (
+            <View style={[styles.locationCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.formHead}>
+                <View style={[styles.formIcon, { backgroundColor: palette.brandSoft }]}><MapPin color={palette.brand} size={22} /></View>
+                <View style={styles.formCopy}>
+                  <Text style={[styles.formTitle, { color: palette.ink }]}>Operating location for vehicle approval</Text>
+                  <Text style={[styles.formBody, { color: palette.muted }]}>Your vehicle application needs a location linked to its current version. Detect where you operate and submit it so SKIMA can verify it in Admin → Location Review.</Text>
+                </View>
+              </View>
+
+              {operatingLocation ? (
+                <View style={[styles.locationBox, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+                  <CheckCircle2 color={palette.success} size={19} />
+                  <View style={styles.locationCopy}>
+                    <Text style={[styles.locationTitle, { color: palette.ink }]}>{operatingLocation.formattedAddress}</Text>
+                    <Text style={[styles.vehicleMeta, { color: palette.muted }]}>
+                      {operatingLocation.accuracyMeters === null
+                        ? "GPS location captured"
+                        : `GPS accuracy about ${Math.round(operatingLocation.accuracyMeters)} m`}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <Text style={[styles.vehicleMeta, { color: palette.warning }]}>No operating location has been submitted for this vehicle application yet.</Text>
+              )}
+
+              <AppButton
+                label={operatingLocation ? "Detect location again" : "Detect my operating location"}
+                variant="secondary"
+                fullWidth
+                loading={detectingOperatingLocation}
+                onPress={() => void detectOperatingLocation()}
+                icon={<LocateFixed size={17} color={palette.ink} />}
+              />
+              <AppButton
+                label="Submit operating location for review"
+                fullWidth
+                size="lg"
+                loading={savingOperatingLocation}
+                disabled={!operatingLocation || detectingOperatingLocation || savingOperatingLocation}
+                onPress={() => void saveOperatingLocation()}
+              />
+              {operatingLocationError ? (
+                <View style={[styles.message, { backgroundColor: palette.dangerSoft }]}>
+                  <Text accessibilityRole="alert" style={[styles.messageText, { color: palette.danger }]}>{operatingLocationError}</Text>
+                </View>
+              ) : null}
+              {operatingLocationNotice ? (
+                <View style={[styles.message, { backgroundColor: palette.successSoft }]}>
+                  <Text style={[styles.messageText, { color: palette.success }]}>{operatingLocationNotice}</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
           {showForm ? (
             <View style={[styles.formCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <View style={styles.formHead}>
@@ -511,6 +646,25 @@ export function VehicleWorkflowScreen() {
                     <TextField label="Colour" value={colour} onChangeText={setColour} placeholder="White" />
                   </View>
                   <TextField label="Registration number" value={registration} onChangeText={setRegistration} placeholder="Vehicle plate number" autoCapitalize="characters" />
+
+                  <FieldSection label="Driver operating location">
+                    <Text style={[styles.vehicleMeta, { color: palette.muted }]}>This location is reviewed separately by SKIMA and is required before your vehicle can be approved.</Text>
+                    {operatingLocation ? (
+                      <View style={[styles.locationBox, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+                        <CheckCircle2 size={18} color={palette.success} />
+                        <Text style={[styles.locationTitle, { color: palette.ink }]}>{operatingLocation.formattedAddress}</Text>
+                      </View>
+                    ) : null}
+                    <AppButton
+                      label={operatingLocation ? "Detect location again" : "Detect my operating location"}
+                      fullWidth
+                      variant="secondary"
+                      loading={detectingOperatingLocation}
+                      onPress={() => void detectOperatingLocation()}
+                      icon={<LocateFixed size={17} color={palette.ink} />}
+                    />
+                    {operatingLocationError ? <Text style={[styles.vehicleMeta, { color: palette.danger }]}>{operatingLocationError}</Text> : null}
+                  </FieldSection>
 
                   <AppButton label="Continue to ownership & capacity" fullWidth size="lg" onPress={continueFromDetails} />
                 </>
@@ -571,6 +725,7 @@ export function VehicleWorkflowScreen() {
                     <VehicleReviewRow label="Colour" value={colour.trim()} />
                     <VehicleReviewRow label="Ownership" value={friendly(ownership)} />
                     <VehicleReviewRow label="Maximum load" value={`${capacity.trim()} kg`} />
+                    <VehicleReviewRow label="Operating location" value={operatingLocation?.formattedAddress ?? "Not captured"} />
                   </View>
 
                   <View style={[styles.policyNote, { backgroundColor: palette.brandSoft }]}>
@@ -743,6 +898,40 @@ function VehicleMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function operationalLocationFromRecord(value: unknown): OperationalLocation | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as PlatformRecord;
+  const latitude = firstNumber(record, ["latitude"]);
+  const longitude = firstNumber(record, ["longitude"]);
+  if (latitude === null || longitude === null) return null;
+  const address = nestedRecord(record, "address");
+  const provider = firstString(record, ["providerSource"]);
+  const providerSource: OperationalLocation["providerSource"] =
+    provider === "device_geocoder" || provider === "device_coordinates" ||
+    provider === "maps_adapter" || provider === "manual_pin"
+      ? provider
+      : "device_coordinates";
+  return {
+    latitude,
+    longitude,
+    accuracyMeters: firstNumber(record, ["accuracyMeters"]),
+    recordedAt: firstString(record, ["recordedAt"]) ?? new Date().toISOString(),
+    formattedAddress: firstString(record, ["formattedAddress"]) ?? "Saved operating location",
+    providerPlaceId: firstString(record, ["providerPlaceId"]),
+    providerSource,
+    address: {
+      name: firstString(address, ["name"]),
+      street: firstString(address, ["street"]),
+      district: firstString(address, ["district"]),
+      city: firstString(address, ["city"]),
+      region: firstString(address, ["region"]),
+      postalCode: firstString(address, ["postalCode"]),
+      country: firstString(address, ["country"]),
+      countryCode: firstString(address, ["countryCode"]),
+    },
+  };
+}
+
 function resultId(result: string | PlatformRecord | null) {
   return typeof result === "string" ? result : result ? firstString(result, ["id", "applicationId", "application_id"]) : null;
 }
@@ -772,6 +961,10 @@ const styles = StyleSheet.create({
   reviewTitle: { ...typography.bodyStrong, fontSize: 14 },
   reviewBody: { ...typography.caption },
   formCard: { gap: spacing.lg, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  locationCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  locationBox: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.md, flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  locationCopy: { flex: 1, gap: 3 },
+  locationTitle: { ...typography.bodyStrong, fontSize: 13 },
   formHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
   formIcon: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   formCopy: { flex: 1, gap: 3 },
