@@ -1,4 +1,7 @@
 .admin-workspace-layout {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(210px, 248px) minmax(0, 1fr);
   gap: 24px;
@@ -85,6 +88,8 @@
 }
 
 .admin-workspace-layout__body {
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
 }
 
