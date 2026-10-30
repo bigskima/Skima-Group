@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fuel, Gauge, Package, Plus, RefreshCcw, Save, ShieldCheck, Truck, Warehouse } from "lucide-react";
+import { Package, Plus, RefreshCcw, Save, ShieldCheck, Truck, Warehouse } from "lucide-react";
 import { useMemo, useState } from "react";
 import { z } from "zod";
 
@@ -269,7 +269,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
                 <StatusBadge tone={enabled ? "success" : "warning"}>{enabled ? "Enabled" : "Disabled"}</StatusBadge>
                 <Button
                   variant={enabled ? "outline" : "primary"}
-                  isLoading={toggleProduct.isPending}
+                  loading={toggleProduct.isPending}
                   onClick={() => record ? void onProductToggle(record) : undefined}
                   disabled={!record}
                 >{enabled ? "Disable product" : "Enable product"}</Button>
@@ -304,7 +304,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
             ))}
           </div>
         </AdminFormSection>
-        <Button icon={Save} isLoading={saveOffer.isPending} disabled={!selectedModes.length} onClick={() => void submitOffer()}>Save branch offer</Button>
+        <Button icon={Save} loading={saveOffer.isPending} disabled={!selectedModes.length} onClick={() => void submitOffer()}>Save branch offer</Button>
         <div className="fuel-admin-list">
           {(offers.data ?? []).map((offer) => (
             <article className="fuel-admin-list-row" key={catalogText(offer, "id")}>
@@ -327,7 +327,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
             <TextInput label="Capacity (litres)" type="number" value={storageForm.capacity} onChange={(event) => setStorageForm({ ...storageForm, capacity: event.currentTarget.value })} />
             <TextInput label="Safety reserve (litres)" type="number" value={storageForm.reserve} onChange={(event) => setStorageForm({ ...storageForm, reserve: event.currentTarget.value })} />
           </div>
-          <Button icon={Plus} isLoading={saveTank.isPending} onClick={() => void submitTank()}>Save tank configuration</Button>
+          <Button icon={Plus} loading={saveTank.isPending} onClick={() => void submitTank()}>Save tank configuration</Button>
           <div className="fuel-admin-list">
             {(tanks.data ?? []).map((tank) => (
               <article className="fuel-admin-list-row" key={catalogText(tank, "id")}>
@@ -354,7 +354,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
               ))}
             </div>
           </AdminFormSection>
-          <Button icon={Save} isLoading={saveContainerType.isPending} onClick={() => void submitContainerType()}>Save container type</Button>
+          <Button icon={Save} loading={saveContainerType.isPending} onClick={() => void submitContainerType()}>Save container type</Button>
           <div className="fuel-admin-list">
             {(containerTypes.data ?? []).map((type) => (
               <article className="fuel-admin-list-row" key={catalogText(type, "id")}>
@@ -382,7 +382,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
             });
           }} options={branchOptions} />
         </div>
-        <Button icon={Plus} isLoading={registerContainer.isPending} onClick={() => void submitContainer()}>Register container asset</Button>
+        <Button icon={Plus} loading={registerContainer.isPending} onClick={() => void submitContainer()}>Register container asset</Button>
         <div className="fuel-admin-list">
           {(containers.data ?? []).slice(0, 40).map((container) => (
             <article className="fuel-admin-list-row" key={catalogText(container, "id")}>
@@ -407,7 +407,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
           <TextInput label="Maximum approved load (litres)" type="number" value={qualificationForm.maximumLoad} onChange={(event) => setQualificationForm({ ...qualificationForm, maximumLoad: event.currentTarget.value })} />
           <SelectInput label="Qualification status" value={qualificationForm.status} onChange={(event) => setQualificationForm({ ...qualificationForm, status: event.currentTarget.value })} options={[{ label: "Pending", value: "pending" }, { label: "Approved", value: "approved" }, { label: "Rejected", value: "rejected" }, { label: "Suspended", value: "suspended" }]} />
         </div>
-        <Button icon={ShieldCheck} isLoading={saveQualification.isPending} onClick={() => void submitQualification()}>Save driver qualification</Button>
+        <Button icon={ShieldCheck} loading={saveQualification.isPending} onClick={() => void submitQualification()}>Save driver qualification</Button>
         <div className="fuel-admin-list">
           {(qualifications.data ?? []).map((qualification) => (
             <article className="fuel-admin-list-row" key={catalogText(qualification, "id")}>
