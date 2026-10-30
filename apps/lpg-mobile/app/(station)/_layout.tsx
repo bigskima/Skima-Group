@@ -33,6 +33,7 @@ export default function Layout() {
           "managed-fulfillment-drivers",
           "managed-fulfillment-orders",
           "managed-fulfillment-payments",
+          "fuel-operations",
         ]}
       />
     </WorkspaceGate>
