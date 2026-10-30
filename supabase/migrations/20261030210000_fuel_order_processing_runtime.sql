@@ -427,6 +427,7 @@ declare
   custody_count integer := 0;
   verified_delivered_litres numeric(16,3);
   consumed_litres numeric(16,3) := 0;
+  currently_reserved_litres numeric(16,3) := 0;
   event_id uuid;
 begin
   if auth.role() <> 'service_role' then
@@ -512,6 +513,25 @@ begin
 
   if not allowed_transition then
     raise exception using errcode='23514',message='Fuel order stage transition is not allowed';
+  end if;
+
+  if target_stage_key in ('stock_reserved','station_filling') then
+    select coalesce(sum(reservation.reserved_litres),0)
+    into currently_reserved_litres
+    from public.fuel_order_stock_reservations reservation
+    where reservation.order_id=target_order_id
+      and reservation.status='reserved';
+
+    if currently_reserved_litres+coalesce(operation_record.filled_litres,0)<operation_record.requested_litres-0.001 then
+      raise exception using errcode='23514',message='The full requested fuel quantity must be reserved before station filling';
+    end if;
+  end if;
+
+  if target_stage_key='cancelled' and exists (
+    select 1 from public.fuel_order_stock_reservations reservation
+    where reservation.order_id=target_order_id and reservation.status='reserved'
+  ) then
+    raise exception using errcode='55000',message='Release outstanding fuel stock reservations before cancelling the order';
   end if;
 
   if target_stage_key='ready_for_driver' then
