@@ -106,6 +106,7 @@
     "20261030220000_fuel_inventory_reservation_runtime.sql",
     "20261030230000_fuel_container_custody_runtime.sql",
     "20261030240000_fuel_branch_configuration_and_permissions.sql",
-    "20261030250000_fuel_commercial_quote_runtime.sql"
+    "20261030250000_fuel_commercial_quote_runtime.sql",
+    "20261030260000_fuel_order_creation_and_driver_qualification.sql"
   ]
 }
