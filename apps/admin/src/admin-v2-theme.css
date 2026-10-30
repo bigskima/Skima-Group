@@ -463,15 +463,15 @@ body,
 
 /* Feature workspaces must respond to their available column, not only the viewport. */
 @container admin-main (max-width: 900px) {
-  .admin-workspace-layout {
+  .admin-shell .admin-workspace-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .admin-workspace-layout__rail {
+  .admin-shell .admin-workspace-layout__rail {
     display: none;
   }
 
-  .admin-workspace-layout__mobile-nav {
+  .admin-shell .admin-workspace-layout__mobile-nav {
     display: flex;
     gap: 8px;
     min-width: 0;
@@ -482,7 +482,7 @@ body,
     overscroll-behavior-inline: contain;
   }
 
-  .admin-workspace-layout__mobile-nav button {
+  .admin-shell .admin-workspace-layout__mobile-nav button {
     flex: 0 0 auto;
     border: 1px solid var(--sk-color-border);
     border-radius: 999px;
@@ -494,7 +494,7 @@ body,
     cursor: pointer;
   }
 
-  .admin-workspace-layout__mobile-nav button.is-active {
+  .admin-shell .admin-workspace-layout__mobile-nav button.is-active {
     border-color: rgba(220, 38, 38, 0.24);
     background: var(--admin-v2-red-soft);
     color: var(--admin-v2-red);
@@ -503,37 +503,37 @@ body,
 }
 
 @container admin-screen (max-width: 1000px) {
-  .skima-grid--compact {
+  .admin-v2-screen .skima-grid--compact {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .content-v2__layout,
-  .content-v2__preview {
+  .admin-v2-screen .content-v2__layout,
+  .admin-v2-screen .content-v2__preview {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .fulfillment-v2__metrics {
+  .admin-v2-screen .fulfillment-v2__metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .coverage-v2__section-nav {
+  .admin-v2-screen .coverage-v2__section-nav {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @container admin-screen (max-width: 720px) {
   .skima-grid--compact,
-  .fulfillment-v2__setup-grid,
-  .fulfillment-v2__choice-grid,
-  .fulfillment-v2__action-grid,
-  .fulfillment-v2__activity-grid,
-  .coverage-v2__task-grid,
-  .coverage-v2__review-grid,
-  .content-v2__review-grid {
+  .admin-v2-screen .fulfillment-v2__setup-grid,
+  .admin-v2-screen .fulfillment-v2__choice-grid,
+  .admin-v2-screen .fulfillment-v2__action-grid,
+  .admin-v2-screen .fulfillment-v2__activity-grid,
+  .admin-v2-screen .coverage-v2__task-grid,
+  .admin-v2-screen .coverage-v2__review-grid,
+  .admin-v2-screen .content-v2__review-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .coverage-v2__search-row {
+  .admin-v2-screen .coverage-v2__search-row {
     grid-template-columns: minmax(0, 1fr);
   }
 }
