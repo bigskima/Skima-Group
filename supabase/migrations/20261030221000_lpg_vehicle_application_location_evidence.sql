@@ -62,8 +62,12 @@ begin
       and verification.status = 'verified'
   ) then
     raise exception using errcode = '23514',
-      message = case workspace_key
-        when 'driver' then 'Verify the driver operating location before approving this application.'
+      message = case
+        when workspace_key = 'driver'
+          and application_type_record.application_category = 'vehicle'
+          then 'Verify the vehicle operating location in Admin Location Review before approving this application.'
+        when workspace_key = 'driver'
+          then 'Verify the driver operating location before approving this application.'
         else 'Verify the station facility location before approving this application.'
       end;
   end if;
