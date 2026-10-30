@@ -69,8 +69,6 @@ export interface MapsRuntimeConfig {
   mapMatchingProviderKey: string;
 }
 
-const CARTO_RASTER_TILE_TEMPLATE =
-  "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
 const KEYLESS_OSM_TILE_TEMPLATE =
   "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const KEYLESS_MAP_STYLE_URL = "https://demotiles.maplibre.org/style.json";
