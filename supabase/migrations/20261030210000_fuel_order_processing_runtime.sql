@@ -494,6 +494,7 @@ begin
       ('return_due','returned_to_driver'),
       ('returned_to_driver','received_at_station'),
       ('received_at_station','inspection_passed'),
+      ('received_at_station','exception'),
       ('inspection_passed','completed'),
       ('awaiting_station_acceptance','cancelled'),
       ('stock_reserved','cancelled'),
