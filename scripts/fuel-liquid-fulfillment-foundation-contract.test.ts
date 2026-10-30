@@ -148,7 +148,7 @@ Deno.test("fuel event ledgers are append-only and product data is permission-sco
     );
   }
 
-  requireIncludes(migration, "fuel product status changes", "product changes are described as auditable events");
+  requireIncludes(migration, "event.fuel.product.status_changed", "product status changes have a declared domain event");
   requireIncludes(migration, "fuel events and stock movements are append-only", "append-only event guard exists");
   requireIncludes(migration, "fuel_product_events_immutable", "product history cannot be mutated");
   requireIncludes(migration, "fuel_container_custody_events_immutable", "container custody history cannot be mutated");
