@@ -11,8 +11,10 @@
   "outputDirectory": "dist",
   "ignoreCommand": "node ../../scripts/vercel-ignore.mjs admin",
   "cleanUrls": true,
-  "routes": [
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
