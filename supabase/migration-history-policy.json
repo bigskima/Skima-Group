@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "remoteHeadVersion": "20261029184118",
+  "remoteHeadVersion": "20261030134717",
   "requiredRestoredMigration": "20260820013807_harden_document_correction_review_flow.sql",
   "pendingPermissionMigration": null,
   "staleAliases": {
@@ -97,6 +97,9 @@
     "20260913161409_support_complaint_notifications.sql",
     "20261026001000_skima_customer_whatsapp_channel.sql",
     "20261026002000_skima_whatsapp_lpg_order_lifecycle.sql",
-    "20261026003000_skima_whatsapp_order_status_notifications.sql"
+    "20261026003000_skima_whatsapp_order_status_notifications.sql",
+    "20261029182549_nigeria_location_enablement_fulfilment_gates.sql",
+    "20261030131328_admin_coverage_refresh_reject_map_tile_and_driver_fixes.sql",
+    "20261030134717_managed_driver_coverage_universal_assignment_cutover.sql"
   ]
 }

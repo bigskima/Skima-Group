@@ -20,8 +20,8 @@ type RendererConfiguration = {
 const WIDTH = 800;
 const HEIGHT = 420;
 const TILE = 256;
-const SAFE_TILE_TEMPLATE = "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
-const SAFE_ATTRIBUTION = "© OpenStreetMap contributors, © CARTO";
+const SAFE_TILE_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const SAFE_ATTRIBUTION = "© OpenStreetMap contributors";
 const SAFE_CENTER: Coordinate = [8.6753, 9.082];
 
 const RendererConfigurationSchema = z.object({
@@ -343,7 +343,7 @@ function readBuildRenderer(): RendererConfiguration {
   const hasConfiguredTemplate = isUsableTileTemplate(configuredTemplate);
   const configuredAttribution = (import.meta.env.VITE_MAP_ATTRIBUTION as string | undefined)?.trim();
   return {
-    key: hasConfiguredTemplate ? "renderer.maps.build-configured" : "renderer.maps.carto-voyager-keyless",
+    key: hasConfiguredTemplate ? "renderer.maps.build-configured" : "renderer.maps.openstreetmap-standard",
     tileTemplate: hasConfiguredTemplate ? configuredTemplate.trim() : SAFE_TILE_TEMPLATE,
     attribution: hasConfiguredTemplate && configuredAttribution ? configuredAttribution : SAFE_ATTRIBUTION,
     maxZoom: 19,

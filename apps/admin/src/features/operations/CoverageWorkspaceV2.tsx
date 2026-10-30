@@ -475,6 +475,7 @@ function GeographyFlowDialog(props: {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
+  const [showOptionalBoundary, setShowOptionalBoundary] = useState(false);
   const placeSearch = useMutation({
     mutationFn: (input: string) => api.post("/lpg/maps/autocomplete", { input }, PlaceSearchSchema),
   });
@@ -484,11 +485,18 @@ function GeographyFlowDialog(props: {
     setStep("area");
     setForm((current) => current.countryCode ? current : { ...current, countryCode: props.defaultCountryCode || "NG" });
     setError(null);
+    setShowOptionalBoundary(false);
   }, [props.open, props.defaultCountryCode]);
 
   if (!props.open) return null;
 
   const selectedLevel = props.levels.find((level) => level.id === form.levelId);
+  const isCustomZone = selectedLevel?.key === "custom_zone";
+  const geographyFlowSteps = isCustomZone
+    ? geographySteps
+    : geographySteps.map((item) => item.key === "boundary"
+      ? { ...item, label: "Optional map", description: "Only needed for custom zones" }
+      : item);
   const requiredParentLevelId = selectedLevel?.parent_level_id ?? null;
   const parentOptions = requiredParentLevelId
     ? props.geographies.filter((geography) => geography.status === "active" && geography.geography_level_id === requiredParentLevelId)
@@ -512,23 +520,29 @@ function GeographyFlowDialog(props: {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!form.levelId) return setError("Choose the area type first.");
-    if (!form.name.trim()) return setError("Search for the place and choose the correct result before saving.");
+    if (!form.name.trim()) return setError("Enter the country, state, LGA, locality or service-area name.");
     if (requiredParentLevelId && !form.parentId) return setError("Choose the larger area this place belongs to first.");
-    if (!form.boundary.trim()) return setError("Draw or import the real map boundary before saving this service area.");
+    if (isCustomZone && !form.boundary.trim()) return setError("Draw or import the real boundary for this custom service area.");
 
     setSaving(true);
     setError(null);
     try {
-      const boundary = JSON.parse(form.boundary) as unknown;
-      const { data: savedDraft, error: draftError } = await supabase.rpc("save_coverage_geometry_draft", {
-        p_draft_id: draftId,
-        p_draft_type: "GEOGRAPHY_BOUNDARY",
-        p_target_id: null,
-        p_parent_geography_id: form.parentId || null,
-        p_geojson: boundary,
-      });
-      if (draftError) throw draftError;
-      setDraftId(savedDraft as string);
+      let boundary: unknown = null;
+      let geometryDraftId: string | null = null;
+      if (form.boundary.trim()) {
+        boundary = JSON.parse(form.boundary) as unknown;
+        const { data: savedDraft, error: draftError } = await supabase.rpc("save_coverage_geometry_draft", {
+          p_draft_id: draftId,
+          p_draft_type: "GEOGRAPHY_BOUNDARY",
+          p_target_id: null,
+          p_parent_geography_id: form.parentId || null,
+          p_geojson: boundary,
+        });
+        if (draftError) throw draftError;
+        geometryDraftId = savedDraft as string;
+        setDraftId(geometryDraftId);
+      }
+
       const { data: geographyId, error: rpcError } = await supabase.rpc("configure_universal_geography", {
         p_geography_id: null,
         p_parent_id: form.parentId || null,
@@ -536,22 +550,27 @@ function GeographyFlowDialog(props: {
         p_canonical_name: form.name.trim(),
         p_country_code: form.countryCode.trim().toUpperCase(),
         p_boundary_geojson: boundary,
-        p_source: form.source.trim(),
+        p_source: boundary ? form.source.trim() : "admin.named_geography",
         p_external_reference: form.externalReference || null,
         p_status: "active",
         p_aliases: [],
-        p_metadata: { sourceSurface: "admin_geography_v2", geometryDraftId: savedDraft, operatorSelectedPlace: searchTerm },
+        p_metadata: boundary
+          ? { sourceSurface: "admin_geography_v2", geometryDraftId, operatorSelectedPlace: searchTerm }
+          : { sourceSurface: "admin_named_geography_v2", areaType: selectedLevel?.key ?? null, operatorSelectedPlace: searchTerm || form.name.trim() },
       });
       if (rpcError) throw rpcError;
-      const { error: activationError } = await supabase.rpc("activate_coverage_geometry_draft", {
-        p_draft_id: savedDraft,
-        p_target_id: geographyId,
-        p_reason: `Activated mapped service area: ${form.name.trim()}`,
-      });
-      if (activationError) throw activationError;
+      if (geometryDraftId) {
+        const { error: activationError } = await supabase.rpc("activate_coverage_geometry_draft", {
+          p_draft_id: geometryDraftId,
+          p_target_id: geographyId,
+          p_reason: "Activated mapped service area: " + form.name.trim(),
+        });
+        if (activationError) throw activationError;
+      }
       setForm(EMPTY_GEOGRAPHY);
       setSearchTerm("");
       setDraftId(null);
+      setShowOptionalBoundary(false);
       await props.onSaved();
     } catch (cause) {
       setError(readError(cause));
@@ -564,7 +583,7 @@ function GeographyFlowDialog(props: {
     <Dialog isOpen title="Add service area" onClose={props.onClose} footer={<Button variant="ghost" onClick={props.onClose}>Cancel</Button>}>
       <form id="coverage-geography-v2-form" onSubmit={(event) => void submit(event)}>
         <AdminTaskFlow
-          steps={geographySteps}
+          steps={geographyFlowSteps}
           activeStep={step}
           onStepChange={(next) => { setError(null); setStep(next); }}
           footer={step === "boundary" ? <Button type="submit" isLoading={saving}>Save service area</Button> : undefined}
@@ -626,17 +645,51 @@ function GeographyFlowDialog(props: {
                   ))}
                 </div>
               ) : null}
+              {selectedLevel?.key !== "custom_zone" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!selectedLevel || searchTerm.trim().length < 2}
+                  onClick={() => {
+                    const name = searchTerm.trim();
+                    if (!name) return;
+                    setForm({ ...form, name, countryCode: form.countryCode || props.defaultCountryCode || "NG", source: "admin.named_geography", externalReference: "" });
+                    setError(null);
+                    setStep("boundary");
+                  }}
+                >
+                  Continue with this area name
+                </Button>
+              ) : null}
             </AdminFormSection>
           ) : null}
 
           {step === "boundary" ? (
-            <AdminFormSection title="Confirm the boundary" description="The drawn boundary—not a typed address—is the source of truth used by availability checks.">
+            <AdminFormSection
+              title={isCustomZone ? "Draw the custom boundary" : "Confirm the named area"}
+              description={isCustomZone
+                ? "A custom service zone needs a valid, server-previewed boundary."
+                : "Country, state, LGA and locality rules can be saved by their official names. A polygon is optional here; physical dispatch coverage is configured separately with mapped boundaries or radius."}
+            >
               <div className="coverage-v2__selected-place">
                 <small>Selected place</small>
                 <strong>{form.name || "No place selected yet"}</strong>
                 {searchTerm ? <span>{searchTerm}</span> : null}
               </div>
-              <AdminGeometryEditor mode="polygon" value={form.boundary} onChange={(boundary) => setForm({ ...form, boundary })} />
+              {isCustomZone ? (
+                <AdminGeometryEditor mode="polygon" value={form.boundary} onChange={(boundary) => setForm({ ...form, boundary })} />
+              ) : (
+                <div className="coverage-v2__named-area-note">
+                  <StatusBadge tone="success">No polygon required for this administrative area</StatusBadge>
+                  <p className="skima-muted">Saving this area enables address and onboarding rules only. It does not make driver dispatch or customer orders available by itself.</p>
+                  <Button type="button" variant="outline" onClick={() => setShowOptionalBoundary((value) => !value)}>
+                    {showOptionalBoundary ? "Hide optional map boundary" : "Add optional map boundary"}
+                  </Button>
+                  {showOptionalBoundary ? (
+                    <AdminGeometryEditor mode="polygon" value={form.boundary} onChange={(boundary) => setForm({ ...form, boundary })} />
+                  ) : null}
+                </div>
+              )}
               {draftId ? <StatusBadge tone="info">Boundary draft saved while you finish.</StatusBadge> : null}
             </AdminFormSection>
           ) : null}
