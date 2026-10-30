@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { CheckCircle2, Fuel, MapPin, Package, RotateCcw, Truck } from "lucide-react-native";
+import { CheckCircle2, Fuel, Package, RotateCcw, Truck } from "lucide-react-native";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useState } from "react";
 
