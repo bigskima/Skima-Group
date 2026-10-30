@@ -381,7 +381,7 @@ begin
     branch_record.organization_id,null,module_id_value,category_id_value,target_product_key,'product',
     product_record.display_name,
     product_record.display_name||' sold by the litre.',
-    array['fuel_delivery'],target_minimum_litres,target_maximum_litres,
+    array['fuel_delivery'],0.001,null,
     'active','platform.fuel_catalog',
     'fuel:item:'||branch_record.organization_id::text||':'||target_product_key,
     jsonb_build_object('module_key','fuel','product_key',target_product_key,'unit','L')
@@ -389,8 +389,8 @@ begin
   on conflict(organization_id,key) do update
   set module_id=excluded.module_id,category_id=excluded.category_id,
       item_type='product',display_name=excluded.display_name,description=excluded.description,
-      fulfillment_methods=excluded.fulfillment_methods,min_quantity=excluded.min_quantity,
-      max_quantity=excluded.max_quantity,status='active',
+      fulfillment_methods=excluded.fulfillment_methods,min_quantity=0.001,
+      max_quantity=null,status='active',
       metadata=public.catalog_items.metadata||excluded.metadata,updated_at=timezone('utc',now())
   where public.catalog_items.module_id is null or public.catalog_items.module_id=module_id_value
   returning id into item_id_value;
