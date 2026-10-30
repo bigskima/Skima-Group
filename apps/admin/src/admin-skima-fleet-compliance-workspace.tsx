@@ -298,7 +298,12 @@ export function AdminSkimaFleetComplianceWorkspace(props: { readonly onNavigate:
                 className="sk-input"
                 type="file"
                 accept="application/pdf,image/jpeg,image/png,image/webp"
-                onChange={(event) => setUploadState((current) => current ? { ...current, file: event.currentTarget.files?.[0] ?? null } : current)}
+                onChange={(event) => {
+                  // Capture the File while currentTarget is still valid. React
+                  // may run a functional state updater after this event ends.
+                  const file = event.currentTarget.files?.item(0) ?? null;
+                  setUploadState((current) => current ? { ...current, file } : current);
+                }}
               />
             </label>
             <div className="skima-form-grid">
