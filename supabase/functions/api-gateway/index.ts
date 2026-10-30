@@ -189,6 +189,14 @@ const ROUTES = new Set([
   "/runtime/fuel/container-allocations",
   "/runtime/fuel/orders/operations",
   "/runtime/fuel/orders/events",
+  "/runtime/fuel/quotes",
+  "/runtime/fuel/orders/stock/reserve",
+  "/runtime/fuel/orders/stock/release",
+  "/runtime/fuel/orders/stock/consume",
+  "/runtime/fuel/orders/stage",
+  "/runtime/fuel/containers/allocate",
+  "/runtime/fuel/containers/handover",
+  "/runtime/fuel/containers/inspection",
   "/runtime/media/upload-sessions",
   "/runtime/media/read-sessions",
   "/runtime/media/assets",
@@ -3551,6 +3559,285 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       .order("occurred_at", { ascending: true });
     if (orderId) query = query.eq("order_id", orderId);
     return selectRecords(query, id);
+  }
+
+  if (routePath === "/runtime/fuel/quotes" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("create_fuel_commercial_quote", {
+        target_order_id: requireUuid(payload.orderId, "orderId"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/stock/reserve" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const orderId = requireUuid(payload.orderId, "orderId");
+    const access = await resolveFuelOrderBranchAccess(supabase, orderId, "business.fuel.orders.process");
+    if (access.error) return databaseError(access.error, id);
+    if (!access.order || access.moduleKey !== "fuel") {
+      return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+    }
+    if (!access.allowed) {
+      return jsonResponse({ ok: false, error: "forbidden", message: "Fuel order processing permission is required for this station branch.", requestId: id }, 403);
+    }
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("reserve_fuel_stock", {
+        target_order_id: orderId,
+        target_storage_unit_id: requireUuid(payload.storageUnitId, "storageUnitId"),
+        target_quantity_litres: requireNumber(payload.quantityLitres, "quantityLitres"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_expires_at: optionalString(payload.expiresAt),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/stock/release" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const reservationId = requireUuid(payload.reservationId, "reservationId");
+    const reservation = await supabase
+      .from("fuel_order_stock_reservations")
+      .select("id,order_id")
+      .eq("id", reservationId)
+      .maybeSingle();
+    if (reservation.error) return databaseError(reservation.error, id);
+    if (!reservation.data) return jsonResponse({ ok: false, error: "reservation_not_found", requestId: id }, 404);
+    const access = await resolveFuelOrderBranchAccess(supabase, reservation.data.order_id, "business.fuel.orders.process");
+    if (access.error) return databaseError(access.error, id);
+    if (!access.order || access.moduleKey !== "fuel") return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+    if (!access.allowed) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("release_fuel_stock_reservation", {
+        target_reservation_id: reservationId,
+        target_reason: requireString(payload.reason, "reason"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/stock/consume" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const reservationId = requireUuid(payload.reservationId, "reservationId");
+    const reservation = await supabase
+      .from("fuel_order_stock_reservations")
+      .select("id,order_id")
+      .eq("id", reservationId)
+      .maybeSingle();
+    if (reservation.error) return databaseError(reservation.error, id);
+    if (!reservation.data) return jsonResponse({ ok: false, error: "reservation_not_found", requestId: id }, 404);
+    const access = await resolveFuelOrderBranchAccess(supabase, reservation.data.order_id, "business.fuel.orders.process");
+    if (access.error) return databaseError(access.error, id);
+    if (!access.order || access.moduleKey !== "fuel") return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+    if (!access.allowed) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("consume_fuel_stock_reservation", {
+        target_reservation_id: reservationId,
+        target_consumed_litres: requireNumber(payload.consumedLitres, "consumedLitres"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/stage" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const orderId = requireUuid(payload.orderId, "orderId");
+    const stageKey = requireString(payload.stageKey, "stageKey");
+    const access = await resolveFuelOrderBranchAccess(supabase, orderId, "business.fuel.orders.process");
+    if (access.error) return databaseError(access.error, id);
+    if (!access.order || access.moduleKey !== "fuel") return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+    const driverStages = new Set(["out_for_delivery", "delivered", "return_due", "returned_to_driver", "received_at_station"]);
+    const customerStages = new Set(["completed"]);
+    let allowed = access.allowed;
+    if (driverStages.has(stageKey)) {
+      const assignment = await supabase
+        .from("order_assignments")
+        .select("entity_type,entity_id")
+        .eq("order_id", orderId)
+        .eq("participant_role", "driver")
+        .eq("status", "active")
+        .maybeSingle();
+      if (assignment.error) return databaseError(assignment.error, id);
+      allowed = Boolean(assignment.data && ["driver", "user"].includes(assignment.data.entity_type) && assignment.data.entity_id === authResult.user.id);
+    } else if (customerStages.has(stageKey)) {
+      allowed = access.order.requester_user_id === authResult.user.id;
+    }
+    if (!allowed) return jsonResponse({ ok: false, error: "forbidden", message: "The current user is not authorized to record this Fuel order stage.", requestId: id }, 403);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("record_fuel_order_stage", {
+        target_order_id: orderId,
+        target_stage_key: stageKey,
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_reason: optionalString(payload.reason),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/containers/allocate" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const orderId = requireUuid(payload.orderId, "orderId");
+    const access = await resolveFuelOrderBranchAccess(supabase, orderId, "business.fuel.orders.process");
+    if (access.error) return databaseError(access.error, id);
+    if (!access.order || access.moduleKey !== "fuel" || !access.allowed) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("reserve_fuel_order_container", {
+        target_order_id: orderId,
+        target_container_profile_id: requireUuid(payload.containerProfileId, "containerProfileId"),
+        target_allocated_litres: requireNumber(payload.allocatedLitres, "allocatedLitres"),
+        target_allocation_mode: requireString(payload.allocationMode, "allocationMode"),
+        target_purchase_amount: optionalNumber(payload.purchaseAmount, "purchaseAmount") ?? 0,
+        target_rental_amount: optionalNumber(payload.rentalAmount, "rentalAmount") ?? 0,
+        target_refundable_deposit_amount: optionalNumber(payload.refundableDepositAmount, "refundableDepositAmount") ?? 0,
+        target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/containers/handover" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const allocationId = requireUuid(payload.allocationId, "allocationId");
+    const allocation = await supabase
+      .from("fuel_container_allocations")
+      .select("id,order_id,station_branch_id,customer_user_id")
+      .eq("id", allocationId)
+      .maybeSingle();
+    if (allocation.error) return databaseError(allocation.error, id);
+    if (!allocation.data) return jsonResponse({ ok: false, error: "allocation_not_found", requestId: id }, 404);
+    const access = await resolveFuelOrderBranchAccess(supabase, allocation.data.order_id, "business.fuel.orders.process");
+    if (access.error) return databaseError(access.error, id);
+    if (!access.order || access.moduleKey !== "fuel") return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+    const eventKey = requireString(payload.eventKey, "eventKey");
+    const driverAssignment = await supabase
+      .from("order_assignments")
+      .select("entity_type,entity_id")
+      .eq("order_id", allocation.data.order_id)
+      .eq("participant_role", "driver")
+      .eq("status", "active")
+      .maybeSingle();
+    if (driverAssignment.error) return databaseError(driverAssignment.error, id);
+    if (!driverAssignment.data) return jsonResponse({ ok: false, error: "driver_not_assigned", requestId: id }, 409);
+    const isAssignedDriver = ["driver", "user"].includes(driverAssignment.data.entity_type) && driverAssignment.data.entity_id === authResult.user.id;
+    const isStationOperator = access.allowed && allocation.data.station_branch_id === access.order.branch_id;
+    let fromType = "";
+    let fromId = "";
+    let toType = "";
+    let toId = "";
+    if (eventKey === "station_filled") {
+      if (!isStationOperator) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+      fromType = "station"; fromId = allocation.data.station_branch_id;
+      toType = "station"; toId = allocation.data.station_branch_id;
+    } else if (eventKey === "handed_to_driver") {
+      if (!isStationOperator) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+      fromType = "station"; fromId = allocation.data.station_branch_id;
+      toType = "driver"; toId = driverAssignment.data.entity_id;
+    } else if (eventKey === "delivered_to_customer") {
+      if (!isAssignedDriver) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+      fromType = "driver"; fromId = authResult.user.id;
+      toType = "customer"; toId = allocation.data.customer_user_id;
+    } else if (eventKey === "returned_to_driver") {
+      if (!isAssignedDriver) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+      fromType = "customer"; fromId = allocation.data.customer_user_id;
+      toType = "driver"; toId = authResult.user.id;
+    } else if (eventKey === "received_at_station") {
+      if (!isAssignedDriver) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+      fromType = "driver"; fromId = authResult.user.id;
+      toType = "station"; toId = allocation.data.station_branch_id;
+    } else {
+      throw new RequestValidationError("Unsupported fuel container handover event.");
+    }
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("record_fuel_container_handover", {
+        target_allocation_id: allocationId,
+        target_event_key: eventKey,
+        target_from_holder_type: fromType,
+        target_from_holder_id: fromId,
+        target_to_holder_type: toType,
+        target_to_holder_id: toId,
+        target_actor_user_id: authResult.user.id,
+        target_measured_litres: optionalNumber(payload.measuredLitres, "measuredLitres"),
+        target_verification_reference: optionalString(payload.verificationReference),
+        target_note: optionalString(payload.note),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/containers/inspection" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const allocationId = requireUuid(payload.allocationId, "allocationId");
+    const allocation = await supabase
+      .from("fuel_container_allocations")
+      .select("id,order_id,station_branch_id")
+      .eq("id", allocationId)
+      .maybeSingle();
+    if (allocation.error) return databaseError(allocation.error, id);
+    if (!allocation.data) return jsonResponse({ ok: false, error: "allocation_not_found", requestId: id }, 404);
+    const access = await resolveFuelOrderBranchAccess(supabase, allocation.data.order_id, "business.fuel.orders.process");
+    if (access.error) return databaseError(access.error, id);
+    if (!access.order || access.moduleKey !== "fuel" || !access.allowed) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("record_fuel_container_inspection", {
+        target_allocation_id: allocationId,
+        target_inspection_result: requireString(payload.inspectionResult, "inspectionResult"),
+        target_actor_user_id: authResult.user.id,
+        target_note: optionalString(payload.note) ?? "",
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
   }
 
   if (routePath === "/runtime/catalog/units") {
@@ -13051,6 +13338,60 @@ async function adminAiRuntimeResponse(
     },
     requestId: id,
   });
+}
+
+async function resolveFuelOrderBranchAccess(
+  supabase: SupabaseClient,
+  orderId: string,
+  permissionKey: string,
+): Promise<{
+  order: {
+    readonly id: string;
+    readonly organization_id: string;
+    readonly branch_id: string | null;
+    readonly module_id: string;
+    readonly requester_user_id: string | null;
+  } | null;
+  moduleKey: string | null;
+  allowed: boolean;
+  error: { message: string } | null;
+}> {
+  const orderResult = await supabase
+    .from("order_records")
+    .select("id,organization_id,branch_id,module_id,requester_user_id")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (orderResult.error) {
+    return { order: null, moduleKey: null, allowed: false, error: orderResult.error };
+  }
+  if (!orderResult.data) {
+    return { order: null, moduleKey: null, allowed: false, error: null };
+  }
+  const moduleResult = await supabase
+    .from("business_modules")
+    .select("key")
+    .eq("id", orderResult.data.module_id)
+    .maybeSingle();
+  if (moduleResult.error) {
+    return { order: orderResult.data, moduleKey: null, allowed: false, error: moduleResult.error };
+  }
+  if (!orderResult.data.branch_id) {
+    return { order: orderResult.data, moduleKey: moduleResult.data?.key ?? null, allowed: false, error: null };
+  }
+  const permissionResult = await supabase.rpc("has_permission_for_branch", {
+    target_permission: permissionKey,
+    target_organization_id: orderResult.data.organization_id,
+    target_branch_id: orderResult.data.branch_id,
+  });
+  if (permissionResult.error) {
+    return { order: orderResult.data, moduleKey: moduleResult.data?.key ?? null, allowed: false, error: permissionResult.error };
+  }
+  return {
+    order: orderResult.data,
+    moduleKey: moduleResult.data?.key ?? null,
+    allowed: permissionResult.data === true,
+    error: null,
+  };
 }
 
 function createServiceClient(supabaseUrl: string, serviceRoleKey: string): SupabaseClient {
