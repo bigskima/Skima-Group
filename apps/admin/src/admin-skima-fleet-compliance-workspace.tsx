@@ -307,10 +307,19 @@ export function AdminSkimaFleetComplianceWorkspace(props: { readonly onNavigate:
               />
             </label>
             <div className="skima-form-grid">
-              <TextInput label="Valid from (optional)" type="date" value={uploadState.validFrom} onChange={(event) => setUploadState((current) => current ? { ...current, validFrom: event.currentTarget.value } : current)} />
-              <TextInput label="Expiry date (optional)" type="date" value={uploadState.validUntil} onChange={(event) => setUploadState((current) => current ? { ...current, validUntil: event.currentTarget.value } : current)} />
+              <TextInput label="Valid from (optional)" type="date" value={uploadState.validFrom} onChange={(event) => {
+                const validFrom = event.currentTarget.value;
+                setUploadState((current) => current ? { ...current, validFrom } : current);
+              }} />
+              <TextInput label="Expiry date (optional)" type="date" value={uploadState.validUntil} onChange={(event) => {
+                const validUntil = event.currentTarget.value;
+                setUploadState((current) => current ? { ...current, validUntil } : current);
+              }} />
             </div>
-            <TextAreaInput label="Admin review note" value={uploadState.reason} onChange={(event) => setUploadState((current) => current ? { ...current, reason: event.currentTarget.value } : current)} placeholder="Example: Verified current insurance certificate against company fleet records" />
+            <TextAreaInput label="Admin review note" value={uploadState.reason} onChange={(event) => {
+              const reason = event.currentTarget.value;
+              setUploadState((current) => current ? { ...current, reason } : current);
+            }} placeholder="Example: Verified current insurance certificate against company fleet records" />
             {uploadEvidence.error ? <ErrorState error={uploadEvidence.error} /> : null}
           </div>
         ) : null}
