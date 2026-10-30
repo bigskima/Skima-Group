@@ -27,7 +27,7 @@ export const foundationNavigation: readonly NavigationItem[] = [
   { key: "policies", label: "Terms & Policies", href: "/policies", icon: "policies", requiredPermissions: ["platform.policy.read"] },
   { key: "branding", label: "App Branding", href: "/branding", icon: "branding", requiredPermissions: ["platform.configuration.read"] },
   { key: "catalog", label: "Services", href: "/catalog", icon: "catalog", requiredPermissions: ["platform.configuration.read"] },
-  { key: "fuel", label: "Fuel administration", href: "/services/fuel", icon: "fuel", requiredPermissions: ["platform.fuel.read"] },
+  { key: "fuel", label: "Fuel administration", href: "/services/fuel", icon: "inventory", requiredPermissions: ["platform.fuel.read"] },
   { key: "governance", label: "Configuration", href: "/governance", icon: "governance", requiredPermissions: ["platform.configuration.read"] },
   { key: "providers", label: "Integrations", href: "/providers", icon: "providers", requiredPermissions: ["platform.providers.manage"] },
   { key: "system", label: "System Health & History", href: "/system", icon: "system", requiredPermissions: ["platform.health.read"] },
