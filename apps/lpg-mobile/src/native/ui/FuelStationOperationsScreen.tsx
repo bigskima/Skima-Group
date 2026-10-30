@@ -1,6 +1,6 @@
 import { router } from "expo-router";
-import { CheckCircle2, Fuel, Package, RefreshCw, ShieldCheck, Truck } from "lucide-react-native";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { CheckCircle2, Fuel, Package, ShieldCheck, Truck } from "lucide-react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useMemo, useState } from "react";
 
 import { domainQueries, useStationInventory } from "../api/domains";
@@ -147,16 +147,16 @@ export function FuelStationOperationsScreen() {
   const focusedMode = focusedOrder ? firstString(focusedOrder, ["container_mode"]) ?? "rental" : "rental";
   const focusedContainerTypeId = focusedOrder ? firstString(focusedOrder, ["container_type_id"]) ?? "" : "";
   const focusedStage = focusedOrder ? firstString(focusedOrder, ["stage_key"]) ?? "" : "";
-  const currentOffer = focusedOrder
-    ? (offers.data ?? []).find((offer) =>
-        firstString(offer, ["product_key"]) === focusedProduct &&
-        firstString(offer, ["currency_code"]) === (firstString(offer, ["currency_code"]) ?? "NGN") &&
-        firstString(offer, ["status"]) === "active"
-      ) ?? null
-    : null;
   const branchOffers = (offers.data ?? []).filter((offer) =>
     firstString(offer, ["status"]) === "active" && firstString(offer, ["branch_id"]) === stationBranchId
   );
+  const orderCurrency = firstString(nestedRecord(focusedOrder, "order"), ["currency_code"]) ?? "NGN";
+  const currentOffer = focusedOrder
+    ? branchOffers.find((offer) =>
+        firstString(offer, ["product_key"]) === focusedProduct &&
+        firstString(offer, ["currency_code"]) === orderCurrency
+      ) ?? null
+    : null;
 
   const availableContainers = useMemo(() => (containers.data ?? []).filter((container) => {
     if (firstString(container, ["status"]) !== "available") return false;
@@ -239,22 +239,58 @@ export function FuelStationOperationsScreen() {
     const orderId = focusedOrderId;
     const order = focusedOrder;
     await withBusy(orderId, async () => {
-      const alreadyPrepared = existingAllocations.filter((row) => firstString(row, ["status"]) === "station_prepared");
-      const alreadyPreparedLitres = alreadyPrepared.reduce((total, row) => total + (firstNumber(row, ["filled_litres"]) ?? 0), 0);
-      const neededCount = Math.max(0, (firstNumber(order, ["container_count"]) ?? 0) - alreadyPrepared.length);
-      const remainingLitres = Math.max(0, focusedLitres - alreadyPreparedLitres);
-      const candidates = availableContainers.slice(0, neededCount);
-      if (candidates.length !== neededCount) {
-        throw new Error(`Only ${candidates.length} of ${neededCount} required compatible SKIMA containers are available at this station.`);
-      }
-      if (remainingLitres > 0.001 && !currentOffer) throw new Error("The current station offer could not be found for container charges.");
+      const requiredCount = firstNumber(order, ["container_count"]) ?? 0;
+      const existing = (await allocations.refetch()).data?.filter((row) =>
+        firstString(row, ["order_id"]) === orderId &&
+        firstString(row, ["status"]) !== "cancelled"
+      ) ?? [];
+      if (existing.length > requiredCount) throw new Error("Container allocation count exceeds the accepted order quote.");
 
-      let litresLeft = remainingLitres;
+      const alreadyAllocatedProfiles = new Set(existing.map((row) => firstString(row, ["container_profile_id"])).filter(Boolean));
+      const missingCount = Math.max(0, requiredCount - existing.length);
+      const candidates = availableContainers.filter((container) =>
+        !alreadyAllocatedProfiles.has(firstString(container, ["id"]))
+      ).slice(0, missingCount);
+      if (candidates.length !== missingCount) {
+        throw new Error(`Only ${candidates.length} of ${missingCount} additional compatible SKIMA containers are available at this station.`);
+      }
+      if (requiredCount > 0 && !currentOffer) throw new Error("The station's accepted currency offer could not be found for container charges.");
+
+      const markContainerFilled = async (allocationId: string, profileId: string, litres: number) => {
+        await recordHandover.mutateAsync({
+          allocationId,
+          eventKey: "station_filled",
+          measuredLitres: litres,
+          note: "Filled and measured at station",
+          idempotencyKey: idempotencyKey("fuel-container-filled", `${orderId}:${profileId}`),
+          metadata: { station_branch_id: stationBranchId },
+        });
+      };
+
+      // Complete any allocation left reserved by a previous interrupted station session.
+      const unfilledExisting = existing.filter((row) => firstString(row, ["status"]) === "reserved");
+      for (const allocation of unfilledExisting) {
+        const allocationId = firstString(allocation, ["id"]);
+        const profileId = firstString(allocation, ["container_profile_id"]);
+        const litres = firstNumber(allocation, ["allocated_litres"]) ?? 0;
+        if (!allocationId || !profileId || litres <= 0) {
+          throw new Error("An existing container allocation is missing its identity or litre amount.");
+        }
+        await markContainerFilled(allocationId, profileId, litres);
+      }
+
+      const alreadyAllocatedLitres = existing.reduce((total, row) =>
+        total + (firstNumber(row, ["allocated_litres"]) ?? 0), 0
+      );
+      let litresLeft = Math.max(0, focusedLitres - alreadyAllocatedLitres);
+
       for (const container of candidates) {
         const profileId = firstString(container, ["id"]) ?? "";
         const capacity = firstNumber(container, ["capacity_litres"]) ?? 0;
         const allocatedLitres = Math.min(capacity, litresLeft);
-        if (!profileId || capacity <= 0 || allocatedLitres <= 0) throw new Error("A selected container has an invalid capacity.");
+        if (!profileId || capacity <= 0 || allocatedLitres <= 0) {
+          throw new Error("A selected container has an invalid capacity.");
+        }
 
         await allocateContainer.mutateAsync({
           orderId,
@@ -264,59 +300,46 @@ export function FuelStationOperationsScreen() {
           purchaseAmount: focusedMode === "purchase" ? firstNumber(currentOffer, ["container_purchase_amount"]) ?? 0 : 0,
           rentalAmount: focusedMode === "rental" ? firstNumber(currentOffer, ["container_rental_amount"]) ?? 0 : 0,
           refundableDepositAmount: focusedMode === "rental" ? firstNumber(currentOffer, ["refundable_deposit_amount"]) ?? 0 : 0,
-          currencyCode: firstString(currentOffer, ["currency_code"]) ?? "NGN",
+          currencyCode: orderCurrency,
           idempotencyKey: idempotencyKey("fuel-container-allocation", `${orderId}:${profileId}`),
           metadata: { station_branch_id: stationBranchId },
         });
 
-        await recordHandover.mutateAsync({
-          allocationId: firstString(container, ["allocation_id"]) ?? undefined,
-          eventKey: "station_filled",
-          measuredLitres: allocatedLitres,
-          note: "Filled and measured at station",
-          idempotencyKey: idempotencyKey("fuel-container-filled", `${orderId}:${profileId}`),
-          metadata: { station_branch_id: stationBranchId },
-        }).catch(async () => {
-          const refreshed = await allocations.refetch();
-          const allocation = (refreshed.data ?? []).find((row) =>
-            firstString(row, ["order_id"]) === orderId &&
-            firstString(row, ["container_profile_id"]) === profileId
-          );
-          const allocationId = allocation ? firstString(allocation, ["id"]) : null;
-          if (!allocationId) throw new Error("The container was allocated but its allocation reference could not be reloaded.");
-          await recordHandover.mutateAsync({
-            allocationId,
-            eventKey: "station_filled",
-            measuredLitres: allocatedLitres,
-            note: "Filled and measured at station",
-            idempotencyKey: idempotencyKey("fuel-container-filled", `${orderId}:${profileId}`),
-            metadata: { station_branch_id: stationBranchId },
-          });
-        });
+        const latestAllocations = (await allocations.refetch()).data ?? [];
+        const allocation = latestAllocations.find((row) =>
+          firstString(row, ["order_id"]) === orderId &&
+          firstString(row, ["container_profile_id"]) === profileId
+        );
+        const allocationId = allocation ? firstString(allocation, ["id"]) : null;
+        if (!allocationId) throw new Error("The container was allocated but its order allocation could not be reloaded.");
 
+        await markContainerFilled(allocationId, profileId, allocatedLitres);
         litresLeft -= allocatedLitres;
       }
 
       if (litresLeft > 0.001) throw new Error("Registered container capacity is not enough for the ordered litres.");
 
-      const refreshedReservations = await reservations.refetch();
-      const reservedRows = refreshedReservations.data ?? [];
-      let consumedTotal = 0;
+      const reservedRows = (await reservations.refetch()).data ?? [];
+      if (reservedRows.length === 0) throw new Error("No stock reservation exists for this Fuel order.");
       for (const reservation of reservedRows) {
         const reserved = firstNumber(reservation, ["reserved_litres"]) ?? 0;
         const consumed = firstNumber(reservation, ["consumed_litres"]) ?? 0;
         const remaining = Math.max(0, reserved - consumed);
         if (remaining <= 0.001) continue;
+        const reservationId = firstString(reservation, ["id"]);
+        if (!reservationId) throw new Error("A fuel stock reservation is missing its identity.");
         await consumeStock.mutateAsync({
-          reservationId: firstString(reservation, ["id"]),
+          reservationId,
           consumedLitres: remaining,
-          idempotencyKey: idempotencyKey("fuel-stock-consume", `${orderId}:${firstString(reservation, ["id"])}:${reserved}`),
+          idempotencyKey: idempotencyKey("fuel-stock-consume", `${orderId}:${reservationId}:${reserved}`),
           metadata: { measured_at_station: true, order_id: orderId },
         });
-        consumedTotal += remaining;
       }
-      if (consumedTotal < (focusedLitres - alreadyPreparedLitres) - 0.001) {
-        throw new Error("Reserved fuel stock does not cover the remaining measured container litres.");
+
+      const finalReservations = (await reservations.refetch()).data ?? [];
+      const fullyConsumed = finalReservations.reduce((total, row) => total + (firstNumber(row, ["consumed_litres"]) ?? 0), 0);
+      if (fullyConsumed < focusedLitres - 0.001) {
+        throw new Error("Reserved fuel stock has not yet covered the complete measured order quantity.");
       }
 
       await changeStage.mutateAsync({
