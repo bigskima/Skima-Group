@@ -165,7 +165,7 @@ declare
   platform_fee_amount numeric(20,8);
   tax_amount numeric(20,8);
   refundable_deposit_amount numeric(20,8);
-  subtotal_amount numeric(28,8);
+  resolved_subtotal_amount numeric(28,8);
   grand_total numeric(28,8);
   taxable_base numeric(28,8);
   currency_decimals integer;
@@ -317,7 +317,7 @@ begin
     else 0 end;
   taxable_base:=fuel_amount+container_amount+driver_amount+platform_fee_amount;
   tax_amount:=round(taxable_base*offer_record.tax_rate_percent/100,currency_decimals);
-  subtotal_amount:=fuel_amount+container_amount+driver_amount+refundable_deposit_amount;
+  resolved_subtotal_amount:=fuel_amount+container_amount+driver_amount+refundable_deposit_amount;
   grand_total:=subtotal_amount+platform_fee_amount+tax_amount;
 
   if grand_total<=0 then
@@ -368,7 +368,7 @@ begin
   )
   values(
     order_record.service_request_id,policy_record.id,order_record.module_id,order_record.currency_code,
-    'calculated',subtotal_amount,platform_fee_amount,0,tax_amount,grand_total,
+    'calculated',resolved_subtotal_amount,platform_fee_amount,0,tax_amount,grand_total,
     quote_context,component_snapshot,now_value+interval '15 minutes',
     'platform.fuel_pricing',target_idempotency_key||':generic-price-quote',auth.uid()
   )
@@ -390,7 +390,7 @@ begin
   returning id into snapshot_id;
 
   update public.order_records
-  set subtotal_amount=subtotal_amount,
+  set subtotal_amount=resolved_subtotal_amount,
       fee_amount=platform_fee_amount,
       discount_amount=0,
       tax_amount=tax_amount,
@@ -441,12 +441,10 @@ create trigger fuel_commercial_quote_status_sync
 after update of status on public.price_quotes
 for each row execute function public.sync_fuel_commercial_quote_status();
 
-alter table public.fuel_order_commercial_snapshots
-add constraint fuel_commercial_snapshot_quote_unique unique(generic_price_quote_id);
-
 revoke all on function public.initialize_fuel_order_operation() from public,anon;
 revoke all on function public.create_fuel_commercial_quote(uuid,text,jsonb) from public,anon;
 revoke all on function public.sync_fuel_commercial_quote_status() from public,anon,authenticated;
 grant execute on function public.create_fuel_commercial_quote(uuid,text,jsonb) to authenticated,service_role;
+grant execute on function public.register_fuel_container_asset(text,uuid,numeric,uuid,jsonb) to authenticated,service_role;
 
 commit;
