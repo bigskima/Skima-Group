@@ -537,6 +537,30 @@ declare
   already_allocated_litres numeric(16,3);
   already_allocated_count integer;
 begin
+  -- Lifecycle-only updates are allowed after the asset has left the available state.
+  if tg_op = 'UPDATE'
+     and row(
+       new.container_profile_id,
+       new.order_id,
+       new.order_line_item_id,
+       new.product_key,
+       new.station_branch_id,
+       new.customer_user_id,
+       new.allocated_litres,
+       new.allocation_mode
+     ) is not distinct from row(
+       old.container_profile_id,
+       old.order_id,
+       old.order_line_item_id,
+       old.product_key,
+       old.station_branch_id,
+       old.customer_user_id,
+       old.allocated_litres,
+       old.allocation_mode
+     ) then
+    return new;
+  end if;
+
   -- Serialise multi-container allocations for the same order.
   perform pg_advisory_xact_lock(hashtextextended(new.order_id::text, 0));
 
