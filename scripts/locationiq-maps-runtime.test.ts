@@ -543,6 +543,9 @@ Deno.test("canonical geography creation reuses an existing active hierarchy", as
   const migration = await readRepositoryFile(
     "supabase/migrations/20261030183632_canonical_geography_hierarchy_deduplication.sql",
   );
+  const rpcRepair = await readRepositoryFile(
+    "supabase/migrations/20261030184216_fix_geography_deduplication_rpc_ambiguity.sql",
+  );
   const adminCoverage = await readRepositoryFile("apps/admin/src/admin-service-coverage-workspace.tsx");
   const coverageV2 = await readRepositoryFile("apps/admin/src/features/operations/CoverageWorkspaceV2.tsx");
 
@@ -550,8 +553,11 @@ Deno.test("canonical geography creation reuses an existing active hierarchy", as
   assertIncludes(migration, "nulls not distinct");
   assertIncludes(migration, "where status = 'active'");
   assertIncludes(migration, "geography.parent_id is not distinct from p_parent_id");
-  assertIncludes(migration, "geography.normalized_name = normalized_name");
+  assertIncludes(migration, "geography.normalized_name = normalized_name_value");
   assertIncludes(migration, "exception when unique_violation");
+  assertIncludes(rpcRepair, "normalized_name_value text");
+  assertIncludes(rpcRepair, "geography.normalized_name = normalized_name_value");
+  assertNotIncludes(rpcRepair, "geography.normalized_name = normalized_name;");
   assertIncludes(adminCoverage, "configure_universal_geography");
   assertIncludes(coverageV2, "configure_universal_geography");
 });
