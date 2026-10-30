@@ -171,7 +171,8 @@ begin
 
   if quote_record.product_key<>operation_record.product_key
      or quote_record.container_mode<>operation_record.container_mode
-     or quote_record.currency_code<>target_currency_code then
+     or quote_record.currency_code<>target_currency_code
+     or profile_record.container_type_id<>operation_record.container_type_id then
     raise exception using errcode='23514',message='container allocation does not match the accepted fuel quote';
   end if;
 
