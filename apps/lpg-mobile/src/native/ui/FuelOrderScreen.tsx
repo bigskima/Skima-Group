@@ -1,6 +1,6 @@
 import { router } from "expo-router";
-import { Fuel, Gauge, MapPin, Package, ShieldCheck, WalletCards, Truck, CheckCircle2 } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { Gauge, MapPin, Package, ShieldCheck, WalletCards, CheckCircle2 } from "lucide-react-native";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { domainQueries } from "../api/domains";
@@ -88,17 +88,6 @@ export function FuelOrderScreen() {
     invalidate: [["fuel", "orders"], ["orders"], ["wallets"]],
   });
 
-  const activeProducts = (products.data ?? []).filter((item) =>
-    firstString(item, ["status"]) === "enabled" &&
-    ["fuel.pms", "fuel.ago", "fuel.dpk"].includes(firstString(item, ["key"]) ?? "")
-  );
-  const selectedProductRecord = activeProducts.find((item) => firstString(item, ["key"]) === selectedProductKey);
-  const selectedProductPrecision = firstNumber(selectedProductRecord, ["quantity_precision"]) ?? 2;
-  const customerWallet = selectWorkspaceWallet(wallets.data ?? [], "customer");
-  const walletId = firstString(customerWallet, ["wallet_id", "walletId", "id"]);
-  const currencyCode = firstString(customerWallet, ["currency_code", "currencyCode"]) ?? "NGN";
-  const walletBalance = firstNumber(customerWallet, ["available_balance", "availableBalance", "balance"]) ?? 0;
-
   const [selectedProductKey, setSelectedProductKey] = useState<ProductKey>("fuel.pms");
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [litresInput, setLitresInput] = useState("");
@@ -110,6 +99,26 @@ export function FuelOrderScreen() {
   const [createdQuote, setCreatedQuote] = useState<CreatedQuote | null>(null);
   const [paid, setPaid] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  const activeProducts = (products.data ?? []).filter((item) =>
+    firstString(item, ["status"]) === "enabled" &&
+    ["fuel.pms", "fuel.ago", "fuel.dpk"].includes(firstString(item, ["key"]) ?? "")
+  );
+  const selectedProductRecord = activeProducts.find((item) => firstString(item, ["key"]) === selectedProductKey);
+  const selectedProductPrecision = firstNumber(selectedProductRecord, ["quantity_precision"]) ?? 2;
+  const customerWallet = selectWorkspaceWallet(wallets.data ?? [], "customer");
+  const walletId = firstString(customerWallet, ["wallet_id", "walletId", "id"]);
+  const currencyCode = firstString(customerWallet, ["currency_code", "currencyCode"]) ?? "NGN";
+  const walletBalance = firstNumber(customerWallet, ["available_balance", "availableBalance", "balance"]) ?? 0;
+
+  useEffect(() => {
+    if (activeProducts.length > 0 && !activeProducts.some((item) => firstString(item, ["key"]) === selectedProductKey)) {
+      const firstEnabled = firstString(activeProducts[0], ["key"]);
+      if (firstEnabled && ["fuel.pms", "fuel.ago", "fuel.dpk"].includes(firstEnabled)) {
+        setSelectedProductKey(firstEnabled as ProductKey);
+      }
+    }
+  }, [activeProducts, selectedProductKey]);
 
   const activeOffers = (offers.data ?? []).filter((item) =>
     firstString(item, ["status"]) === "active" &&
@@ -166,6 +175,12 @@ export function FuelOrderScreen() {
       )
     : [];
   const hasProductOffer = activeOffers.length > 0;
+
+  useEffect(() => {
+    if (allowedFulfillmentModes.length > 0 && !allowedFulfillmentModes.includes(fulfillmentMode)) {
+      setFulfillmentMode(allowedFulfillmentModes[0]);
+    }
+  }, [allowedFulfillmentModes, fulfillmentMode]);
 
   const validationError = useMemo(() => {
     if (!selectedProductRecord) return "No fuel product is currently enabled for ordering.";
