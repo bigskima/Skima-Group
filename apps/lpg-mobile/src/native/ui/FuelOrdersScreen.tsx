@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { ArrowRight, Fuel, Package, RefreshCw } from "lucide-react-native";
+import { ArrowRight, Fuel } from "lucide-react-native";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useGatewayQuery } from "../api/gateway";
