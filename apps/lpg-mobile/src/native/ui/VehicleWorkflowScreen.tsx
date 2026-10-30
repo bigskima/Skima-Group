@@ -24,10 +24,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
-import {
-  applicationRequirementApplies,
-  applicationRequirementIsRequired,
-} from "../api/documentRequirements";
+import { applicationRequirementIsRequired } from "../api/documentRequirements";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { PresentationMediaPanel } from "./PresentationMediaPanel";
