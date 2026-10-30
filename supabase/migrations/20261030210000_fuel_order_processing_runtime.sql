@@ -417,6 +417,11 @@ declare
   operation_record public.fuel_order_operations%rowtype;
   existing_event public.fuel_order_operation_events%rowtype;
   allowed_transition boolean := false;
+  allocated_count integer := 0;
+  allocated_litres numeric(16,3) := 0;
+  custody_count integer := 0;
+  verified_delivered_litres numeric(16,3);
+  consumed_litres numeric(16,3) := 0;
   event_id uuid;
 begin
   if auth.role() <> 'service_role' then
@@ -504,6 +509,125 @@ begin
     raise exception using errcode='23514',message='Fuel order stage transition is not allowed';
   end if;
 
+  if target_stage_key='ready_for_driver' then
+    if coalesce(operation_record.filled_litres,0) < operation_record.requested_litres - 0.001 then
+      raise exception using errcode='23514',message='The full ordered fuel quantity must be filled and measured before driver handover';
+    end if;
+
+    select count(*),coalesce(sum(allocation.allocated_litres),0)
+    into allocated_count,allocated_litres
+    from public.fuel_container_allocations allocation
+    where allocation.order_id=target_order_id
+      and allocation.status='station_prepared';
+
+    if allocated_count<>operation_record.container_count
+       or allocated_litres<operation_record.requested_litres-0.001 then
+      raise exception using errcode='23514',message='All quoted fuel containers must be allocated and prepared before driver handover';
+    end if;
+
+    select coalesce(sum(reservation.consumed_litres),0)
+    into consumed_litres
+    from public.fuel_order_stock_reservations reservation
+    where reservation.order_id=target_order_id
+      and reservation.status in ('consumed','partially_consumed');
+
+    if consumed_litres<operation_record.requested_litres-0.001 then
+      raise exception using errcode='23514',message='The complete order quantity must be consumed from station stock reservations';
+    end if;
+  end if;
+
+  if target_stage_key='driver_assigned'
+     and not exists (
+       select 1 from public.order_assignments assignment
+       where assignment.order_id=target_order_id
+         and assignment.participant_role='driver'
+         and assignment.entity_type='driver'
+         and assignment.status='active'
+     ) then
+    raise exception using errcode='23514',message='An active eligible driver assignment is required';
+  end if;
+
+  if target_stage_key='station_handover' then
+    select count(distinct allocation.container_profile_id)
+    into custody_count
+    from public.fuel_container_allocations allocation
+    join public.fuel_container_custody_events custody
+      on custody.allocation_id=allocation.id
+     and custody.event_key='handed_to_driver'
+    where allocation.order_id=target_order_id;
+
+    if custody_count<>operation_record.container_count then
+      raise exception using errcode='23514',message='Every prepared container must be recorded as handed to the assigned driver';
+    end if;
+  end if;
+
+  if target_stage_key='delivered' then
+    verified_delivered_litres:=nullif(target_metadata->>'delivered_litres','')::numeric;
+    if verified_delivered_litres is null
+       or verified_delivered_litres<=0
+       or abs(verified_delivered_litres-coalesce(operation_record.filled_litres,0))>0.001 then
+      raise exception using errcode='23514',message='Verified customer delivery quantity must match the measured station-filled quantity';
+    end if;
+
+    select count(distinct allocation.container_profile_id)
+    into custody_count
+    from public.fuel_container_allocations allocation
+    join public.fuel_container_custody_events custody
+      on custody.allocation_id=allocation.id
+     and custody.event_key='delivered_to_customer'
+    where allocation.order_id=target_order_id;
+
+    if custody_count<>operation_record.container_count then
+      raise exception using errcode='23514',message='Every filled container must have a verified customer delivery handover';
+    end if;
+  end if;
+
+  if target_stage_key='return_due' and operation_record.container_mode<>'rental' then
+    raise exception using errcode='23514',message='Only rented SKIMA containers require a return workflow';
+  end if;
+
+  if target_stage_key='returned_to_driver' then
+    select count(distinct allocation.container_profile_id)
+    into custody_count
+    from public.fuel_container_allocations allocation
+    join public.fuel_container_custody_events custody
+      on custody.allocation_id=allocation.id
+     and custody.event_key='returned_to_driver'
+    where allocation.order_id=target_order_id;
+
+    if custody_count<>operation_record.container_count then
+      raise exception using errcode='23514',message='All rented containers must be handed back to the driver';
+    end if;
+  end if;
+
+  if target_stage_key='received_at_station' then
+    select count(distinct allocation.container_profile_id)
+    into custody_count
+    from public.fuel_container_allocations allocation
+    join public.fuel_container_custody_events custody
+      on custody.allocation_id=allocation.id
+     and custody.event_key='received_at_station'
+    where allocation.order_id=target_order_id;
+
+    if custody_count<>operation_record.container_count then
+      raise exception using errcode='23514',message='All rented containers must be physically received back at the station';
+    end if;
+  end if;
+
+  if target_stage_key='inspection_passed' then
+    select count(distinct allocation.container_profile_id)
+    into custody_count
+    from public.fuel_container_allocations allocation
+    join public.fuel_container_custody_events custody
+      on custody.allocation_id=allocation.id
+     and custody.event_key='inspection_passed'
+    where allocation.order_id=target_order_id;
+
+    if custody_count<>operation_record.container_count then
+      raise exception using errcode='23514',message='Every returned container must pass inspection before reuse';
+    end if;
+  end if;
+
   if target_stage_key='completed' and operation_record.container_mode='rental'
      and operation_record.stage_key<>'inspection_passed' then
     raise exception using errcode='23514',message='Rental fuel containers must be returned and inspected before completion';
@@ -522,6 +646,7 @@ begin
       driver_assigned_at=case when target_stage_key='driver_assigned' then coalesce(driver_assigned_at,timezone('utc',now())) else driver_assigned_at end,
       station_handover_at=case when target_stage_key='station_handover' then coalesce(station_handover_at,timezone('utc',now())) else station_handover_at end,
       delivered_at=case when target_stage_key='delivered' then coalesce(delivered_at,timezone('utc',now())) else delivered_at end,
+      delivered_litres=case when target_stage_key='delivered' then verified_delivered_litres else delivered_litres end,
       return_received_at=case when target_stage_key='received_at_station' then coalesce(return_received_at,timezone('utc',now())) else return_received_at end,
       completed_at=case when target_stage_key='completed' then coalesce(completed_at,timezone('utc',now())) else completed_at end,
       metadata=metadata||target_metadata,
