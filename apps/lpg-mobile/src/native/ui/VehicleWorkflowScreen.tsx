@@ -216,7 +216,7 @@ export function VehicleWorkflowScreen() {
       if (firstString(current, ["status"]) === "additional_info_required") {
         await submit.mutateAsync({
           applicationId: currentId,
-          idempotencyKey: idempotencyKey("vehicle-location-resubmission", currentId),
+          idempotencyKey: idempotencyKey("vehicle-location-resubmission", `${currentId}:${operatingLocation.recordedAt}`),
         });
       }
       await applications.refetch();
