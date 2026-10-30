@@ -281,7 +281,7 @@ create table if not exists public.fuel_order_operations (
   container_mode text not null check (container_mode in ('purchase','rental')),
   container_count integer not null check (container_count > 0),
   fulfillment_mode text not null
-    check (fulfillment_mode in ('station_managed','independent_driver','skima_fleet','partner_managed')),
+    check (fulfillment_mode in ('station_managed','independent_driver','skima_managed')),
   stage_key text not null default 'awaiting_station_acceptance'
     check (stage_key in (
       'awaiting_station_acceptance','stock_reserved','station_filling','ready_for_driver',
@@ -363,7 +363,7 @@ begin
      or requested_litres is null or requested_litres <= 0
      or requested_container_mode not in ('purchase','rental')
      or requested_container_count is null or requested_container_count < 1
-     or requested_fulfillment_mode not in ('station_managed','independent_driver','skima_fleet','partner_managed') then
+     or requested_fulfillment_mode not in ('station_managed','independent_driver','skima_managed') then
     raise exception using errcode='22023',message='Fuel order payload must contain a valid product, litres, container mode/count and fulfilment mode';
   end if;
 
