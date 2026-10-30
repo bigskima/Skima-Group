@@ -203,6 +203,12 @@ export function DriverDashboard() {
               hint="Update your live status"
               href="/(driver)/availability"
             />
+            <OperationalAction
+              icon={Fuel}
+              label="Fuel deliveries"
+              hint="Deliver petrol, diesel or kerosene and return SKIMA containers"
+              href="/(driver)/fuel-jobs"
+            />
           </GuideTarget>
 
           <View style={styles.driverMetrics}>
