@@ -69,6 +69,9 @@ function wrapper({ children }: { children: ReactNode }) {
 
 describe("AdminSkimaFleetComplianceWorkspace document upload", () => {
   beforeEach(() => {
+    vi.stubGlobal("crypto", {
+      randomUUID: vi.fn(() => "40000000-0000-4000-8000-000000000004"),
+    });
     session.rpc.mockReset();
     session.getUser.mockReset();
     session.from.mockReset();
