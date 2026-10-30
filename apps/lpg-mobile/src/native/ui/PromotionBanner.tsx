@@ -26,6 +26,7 @@ export function PromotionBanner({ audience = "customer" }: { audience?: "custome
   const publications = (content.data ?? [])
     .filter((item) => item.placementKey === "mobile.home.promotion")
     .sort((left, right) => right.priority - left.priority);
+  const publicationSignature = publications.map((item) => item.publicationId).join("|");
 
   const [carouselWidth, setCarouselWidth] = useState(0);
   // Measure the rendered slot so the banner can extend beyond the normal
@@ -86,7 +87,7 @@ export function PromotionBanner({ audience = "customer" }: { audience?: "custome
         loopResetTimerRef.current = null;
       }
     };
-  }, [pageWidth, publications.length, reduceMotion]);
+  }, [pageWidth, publicationSignature, publications.length, reduceMotion]);
 
   const handleMomentumScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (publications.length <= 1) return;
