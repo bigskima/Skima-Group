@@ -400,7 +400,7 @@ Deno.test("admin location and coverage workflows keep physical dispatch gates in
 
   assertIncludes(geometryEditor, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
   assertIncludes(geometryEditor, "© OpenStreetMap contributors");
-  assertNotIncludes(geometryEditor, "basemaps.cartocdn.com");
+  assertIncludes(geometryEditor, 'const SAFE_TILE_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"');
 
   assertIncludes(managedDriverWorkspace, 'context?.permissions.includes("platform.drivers.manage")');
   assertIncludes(managedDriverWorkspace, "Driver service areas unavailable");
