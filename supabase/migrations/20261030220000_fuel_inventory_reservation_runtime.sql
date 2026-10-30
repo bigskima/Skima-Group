@@ -241,6 +241,20 @@ begin
     raise exception using errcode='P0002',message='Fuel order was not found';
   end if;
 
+  -- Recheck after acquiring the order lock so concurrent retries are idempotent.
+  select * into existing_reservation
+  from public.fuel_order_stock_reservations
+  where source='platform.fuel_inventory' and idempotency_key=target_idempotency_key;
+
+  if found then
+    if existing_reservation.order_id<>target_order_id
+       or existing_reservation.storage_unit_id<>target_storage_unit_id
+       or existing_reservation.reserved_litres<>target_quantity_litres then
+      raise exception using errcode='23505',message='fuel stock reservation idempotency key was reused with different details';
+    end if;
+    return existing_reservation.id;
+  end if;
+
   if not exists(select 1 from public.business_modules module where module.id=order_record.module_id and module.key='fuel') then
     raise exception using errcode='23514',message='Stock reservation requires a Fuel order';
   end if;
@@ -250,11 +264,11 @@ begin
     raise exception using errcode='55000',message='Fuel order is not accepting stock reservations';
   end if;
 
-  select coalesce(sum(reservation.reserved_litres),0)
+  select coalesce(sum(reservation.reserved_litres-reservation.consumed_litres),0)
   into reserved_total
   from public.fuel_order_stock_reservations reservation
   where reservation.order_id=target_order_id
-    and reservation.status='reserved';
+    and reservation.status in ('reserved','partially_consumed');
 
   if reserved_total+coalesce(operation_record.filled_litres,0)+target_quantity_litres>operation_record.requested_litres then
     raise exception using errcode='23514',message='Fuel stock reservations exceed the order quantity';
@@ -319,6 +333,7 @@ declare
   reservation_record public.fuel_order_stock_reservations%rowtype;
   storage_record public.fuel_station_storage_units%rowtype;
   existing_event public.fuel_stock_reservation_events%rowtype;
+  remaining_litres numeric(16,3);
   event_id uuid;
 begin
   if auth.role()<>'service_role' then
@@ -345,8 +360,23 @@ begin
   if not found then
     raise exception using errcode='P0002',message='Fuel stock reservation was not found';
   end if;
-  if reservation_record.status <> 'reserved' then
-    raise exception using errcode='55000',message='Fuel stock reservation is already closed';
+
+  -- Recheck the event after locking the reservation to make retries safe under concurrency.
+  select * into existing_event from public.fuel_stock_reservation_events where idempotency_key=target_idempotency_key;
+  if found then
+    if existing_event.reservation_id<>target_reservation_id or existing_event.event_key<>'released' then
+      raise exception using errcode='23505',message='reservation event idempotency key was reused';
+    end if;
+    return existing_event.id;
+  end if;
+
+  if reservation_record.status not in ('reserved','partially_consumed') then
+    raise exception using errcode='55000',message='Fuel stock reservation has no remaining quantity to release';
+  end if;
+
+  remaining_litres:=reservation_record.reserved_litres-reservation_record.consumed_litres;
+  if remaining_litres<=0 then
+    raise exception using errcode='55000',message='Fuel stock reservation has no remaining quantity to release';
   end if;
 
   select * into storage_record
@@ -354,12 +384,12 @@ begin
   where id=reservation_record.storage_unit_id
   for update;
 
-  if not found or storage_record.reserved_stock_litres<reservation_record.reserved_litres then
+  if not found or storage_record.reserved_stock_litres<remaining_litres then
     raise exception using errcode='23514',message='Fuel reserved-stock balance is inconsistent';
   end if;
 
   update public.fuel_station_storage_units
-  set reserved_stock_litres=reserved_stock_litres-reservation_record.reserved_litres,
+  set reserved_stock_litres=reserved_stock_litres-remaining_litres,
       updated_at=timezone('utc',now())
   where id=storage_record.id;
 
@@ -374,8 +404,8 @@ begin
   )
   values(
     reservation_record.id,reservation_record.order_id,reservation_record.storage_unit_id,'released',
-    reservation_record.reserved_litres,reservation_record.consumed_litres,
-    storage_record.reserved_stock_litres,storage_record.reserved_stock_litres-reservation_record.reserved_litres,
+    remaining_litres,reservation_record.consumed_litres,
+    storage_record.reserved_stock_litres,storage_record.reserved_stock_litres-remaining_litres,
     storage_record.physical_stock_litres,storage_record.physical_stock_litres,btrim(target_reason),
     target_idempotency_key,coalesce(target_metadata,'{}'::jsonb)
   )
@@ -402,6 +432,8 @@ declare
   storage_record public.fuel_station_storage_units%rowtype;
   operation_record public.fuel_order_operations%rowtype;
   existing_event public.fuel_stock_reservation_events%rowtype;
+  remaining_litres numeric(16,3);
+  newly_consumed_total numeric(16,3);
   physical_after numeric(16,3);
   reserved_after numeric(16,3);
   total_filled numeric(16,3);
@@ -413,8 +445,8 @@ begin
   end if;
 
   if target_reservation_id is null or target_consumed_litres is null or target_consumed_litres<=0
-     or coalesce(btrim(target_idempotency_key),'')='' then
-    raise exception using errcode='22023',message='reservation, positive consumed litres and idempotency key are required';
+     or coalesce(btrim(target_idempotency_key),'')='' or target_metadata is null or jsonb_typeof(target_metadata)<>'object' then
+    raise exception using errcode='22023',message='reservation, positive consumed litres, idempotency key and object metadata are required';
   end if;
 
   select * into existing_event from public.fuel_stock_reservation_events where idempotency_key=target_idempotency_key;
@@ -431,12 +463,27 @@ begin
   where id=target_reservation_id
   for update;
 
-  if not found or reservation_record.status<>'reserved' then
+  if not found then
+    raise exception using errcode='P0002',message='Fuel stock reservation was not found';
+  end if;
+
+  -- Recheck after locking the reservation so duplicate submissions replay cleanly.
+  select * into existing_event from public.fuel_stock_reservation_events where idempotency_key=target_idempotency_key;
+  if found then
+    if existing_event.reservation_id<>target_reservation_id or existing_event.event_key<>'consumed'
+       or existing_event.consumed_litres<>target_consumed_litres then
+      raise exception using errcode='23505',message='reservation consumption idempotency key was reused';
+    end if;
+    return existing_event.id;
+  end if;
+
+  if reservation_record.status not in ('reserved','partially_consumed') then
     raise exception using errcode='55000',message='Fuel stock reservation is not open for consumption';
   end if;
 
-  if target_consumed_litres>reservation_record.reserved_litres then
-    raise exception using errcode='23514',message='Consumed fuel cannot exceed the reservation';
+  remaining_litres:=reservation_record.reserved_litres-reservation_record.consumed_litres;
+  if target_consumed_litres>remaining_litres then
+    raise exception using errcode='23514',message='Consumed fuel cannot exceed the remaining reservation';
   end if;
 
   select * into order_record
@@ -462,7 +509,7 @@ begin
   where id=reservation_record.storage_unit_id
   for update;
 
-  if not found or storage_record.reserved_stock_litres<reservation_record.reserved_litres
+  if not found or storage_record.reserved_stock_litres<target_consumed_litres
      or storage_record.physical_stock_litres<target_consumed_litres then
     raise exception using errcode='23514',message='Fuel stock reservation or physical stock is inconsistent';
   end if;
@@ -472,8 +519,11 @@ begin
     raise exception using errcode='23514',message='Filled fuel quantity cannot exceed the order quantity';
   end if;
 
+  -- Consuming a measured quantity decrements physical and reserved stock by the same amount.
+  -- Any unused litres remain reserved until consumed or explicitly released.
   physical_after:=storage_record.physical_stock_litres-target_consumed_litres;
-  reserved_after:=storage_record.reserved_stock_litres-reservation_record.reserved_litres;
+  reserved_after:=storage_record.reserved_stock_litres-target_consumed_litres;
+  newly_consumed_total:=reservation_record.consumed_litres+target_consumed_litres;
 
   if physical_after<reserved_after+storage_record.safety_reserve_litres then
     raise exception using errcode='23514',message='Fuel dispense would consume stock reserved for other orders or safety reserve';
@@ -486,9 +536,9 @@ begin
   where id=storage_record.id;
 
   update public.fuel_order_stock_reservations
-  set status=case when target_consumed_litres=reserved_litres then 'consumed' else 'partially_consumed' end,
-      consumed_litres=target_consumed_litres,
-      consumed_at=timezone('utc',now()),
+  set status=case when newly_consumed_total>=reserved_litres-0.001 then 'consumed' else 'partially_consumed' end,
+      consumed_litres=newly_consumed_total,
+      consumed_at=case when newly_consumed_total>=reserved_litres-0.001 then coalesce(consumed_at,timezone('utc',now())) else consumed_at end,
       updated_at=timezone('utc',now())
   where id=reservation_record.id;
 
@@ -516,10 +566,14 @@ begin
   )
   values(
     reservation_record.id,reservation_record.order_id,reservation_record.storage_unit_id,'consumed',
-    reservation_record.reserved_litres,target_consumed_litres,
+    target_consumed_litres,target_consumed_litres,
     storage_record.reserved_stock_litres,reserved_after,
     storage_record.physical_stock_litres,physical_after,
-    target_idempotency_key,coalesce(target_metadata,'{}'::jsonb)||jsonb_build_object('stock_movement_id',movement_id)
+    target_idempotency_key,coalesce(target_metadata,'{}'::jsonb)||jsonb_build_object(
+      'reservation_consumed_litres_total',newly_consumed_total,
+      'reservation_original_litres',reservation_record.reserved_litres,
+      'stock_movement_id',movement_id
+    )
   )
   returning id into event_id;
 
