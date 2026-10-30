@@ -46,7 +46,7 @@ as $function$
 declare
   resolved_id uuid;
   boundary extensions.geography(MultiPolygon,4326);
-  normalized_name text;
+  normalized_name_value text;
 begin
   if coalesce(auth.role(), '') <> 'service_role'
      and not public.has_permission('platform.geography.manage', null) then
@@ -76,8 +76,8 @@ begin
       message = 'active geography level is required';
   end if;
 
-  normalized_name := public.normalize_geography_token(p_canonical_name);
-  if normalized_name is null then
+  normalized_name_value := public.normalize_geography_token(p_canonical_name);
+  if normalized_name_value is null then
     raise exception using errcode = '22023',
       message = 'geography name must contain searchable characters';
   end if;
@@ -108,7 +108,7 @@ begin
     where geography.parent_id is not distinct from p_parent_id
       and geography.geography_level_id = p_level_id
       and geography.country_code = p_country_code
-      and geography.normalized_name = normalized_name
+      and geography.normalized_name = normalized_name_value
       and geography.status <> 'retired'
     order by
       case geography.status
@@ -159,7 +159,7 @@ begin
         p_parent_id,
         p_level_id,
         btrim(p_canonical_name),
-        normalized_name,
+        normalized_name_value,
         p_country_code,
         boundary,
         case
@@ -185,7 +185,7 @@ begin
       where geography.parent_id is not distinct from p_parent_id
         and geography.geography_level_id = p_level_id
         and geography.country_code = p_country_code
-        and geography.normalized_name = normalized_name
+        and geography.normalized_name = normalized_name_value
         and geography.status = 'active'
       order by geography.created_at, geography.id
       limit 1
@@ -200,7 +200,7 @@ begin
     set parent_id = p_parent_id,
         geography_level_id = p_level_id,
         canonical_name = btrim(p_canonical_name),
-        normalized_name = normalized_name,
+        normalized_name = normalized_name_value,
         country_code = p_country_code,
         boundary_geometry = coalesce(boundary, geography.boundary_geometry),
         centroid = case
