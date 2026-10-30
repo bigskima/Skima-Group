@@ -3372,7 +3372,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     if (request.method === "GET") {
       let query = supabase
         .from("fuel_branch_product_offers")
-        .select("id,organization_id,branch_id,product_key,currency_code,catalog_item_id,catalog_variant_id,price_per_litre,minimum_litres,maximum_litres,container_purchase_amount,container_rental_amount,refundable_deposit_amount,driver_delivery_fee_amount,platform_fee_amount,tax_rate_percent,fulfillment_modes,status,effective_from,effective_until,metadata,created_at,updated_at")
+        .select("id,organization_id,branch_id,branch:organization_branches(id,key,display_name,address,geo_location),product_key,currency_code,catalog_item_id,catalog_variant_id,price_per_litre,minimum_litres,maximum_litres,container_purchase_amount,container_rental_amount,refundable_deposit_amount,driver_delivery_fee_amount,platform_fee_amount,tax_rate_percent,fulfillment_modes,status,effective_from,effective_until,metadata,created_at,updated_at")
         .order("updated_at", { ascending: false });
       const branchId = optionalUuid(url.searchParams.get("branchId"), "branchId");
       const productKey = optionalString(url.searchParams.get("productKey"));
