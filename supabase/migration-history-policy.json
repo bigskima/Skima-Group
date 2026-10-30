@@ -101,6 +101,9 @@
     "20261029182549_nigeria_location_enablement_fulfilment_gates.sql",
     "20261030131328_admin_coverage_refresh_reject_map_tile_and_driver_fixes.sql",
     "20261030134717_managed_driver_coverage_universal_assignment_cutover.sql",
-    "20261030200000_fuel_liquid_fulfillment_foundation.sql"
+    "20261030200000_fuel_liquid_fulfillment_foundation.sql",
+    "20261030210000_fuel_order_processing_runtime.sql",
+    "20261030220000_fuel_inventory_reservation_runtime.sql",
+    "20261030230000_fuel_container_custody_runtime.sql"
   ]
 }
