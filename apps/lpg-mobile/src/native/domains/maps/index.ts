@@ -182,7 +182,9 @@ export function isUsablePublicTileTemplate(value?: string | null): value is stri
   if (!/^https:\/\//i.test(normalized)) return false;
   if (!["{z}", "{x}", "{y}"].every((token) => normalized.includes(token))) return false;
   if (requiresPublicMapCredential(normalized)) return false;
-  return keylessTileHost(normalized) !== null;
+  const host = keylessTileHost(normalized);
+  if (host === "carto" && !hasCartoBasemapKey(normalized)) return false;
+  return host !== null;
 }
 
 function selectKeylessRaster(
@@ -195,6 +197,7 @@ function selectKeylessRaster(
     // provider's "API KEY REQUIRED" watermark across every tile.
     if (
       configuredTemplate &&
+      hasCartoBasemapKey(configuredTemplate) &&
       isUsablePublicTileTemplate(configuredTemplate) &&
       keylessTileHost(configuredTemplate) === "carto"
     ) {
@@ -256,6 +259,21 @@ function keylessTileHost(template: string): "carto" | "osm" | null {
     return null;
   } catch {
     return null;
+  }
+}
+
+function hasCartoBasemapKey(template: string): boolean {
+  try {
+    const url = new URL(
+      template
+        .replace("{z}", "1")
+        .replace("{x}", "1")
+        .replace("{y}", "1"),
+    );
+    return url.hostname.toLowerCase().endsWith(".basemaps.cartocdn.com") &&
+      Boolean(url.searchParams.get("key")?.trim());
+  } catch {
+    return false;
   }
 }
 
