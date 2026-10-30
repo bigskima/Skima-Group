@@ -556,7 +556,7 @@ begin
      or target_capacity_litres is null or target_capacity_litres<=0
      or coalesce(target_safety_reserve_litres,0)<0
      or target_safety_reserve_litres>target_capacity_litres
-     or target_status not in ('active','paused','maintenance','retired')
+     or target_status is null or target_status not in ('active','paused','maintenance','retired')
      or coalesce(btrim(target_idempotency_key),'')=''
      or target_metadata is null or jsonb_typeof(target_metadata)<>'object' then
     raise exception using errcode='22023',message='valid organization, branch, fuel product, storage identity, capacity, safety reserve, status and idempotency key are required';
@@ -643,6 +643,17 @@ begin
 end;
 $$;
 
+create table if not exists public.fuel_container_type_events (
+  id uuid primary key default gen_random_uuid(),
+  container_type_id uuid not null references public.fuel_container_types(id) on delete restrict,
+  event_key text not null check (event_key in ('created','updated','activated','paused','retired')),
+  before_snapshot jsonb not null default '{}'::jsonb check (jsonb_typeof(before_snapshot)='object'),
+  after_snapshot jsonb not null default '{}'::jsonb check (jsonb_typeof(after_snapshot)='object'),
+  actor_user_id uuid references public.profiles(id) on delete set null default auth.uid(),
+  idempotency_key text not null unique,
+  created_at timestamptz not null default timezone('utc',now())
+);
+
 create or replace function public.configure_fuel_container_type(
   target_key text,
   target_display_name text,
@@ -658,7 +669,11 @@ security definer
 set search_path = public
 as $$
 declare
+  type_record public.fuel_container_types%rowtype;
+  existing_event public.fuel_container_type_events%rowtype;
+  before_value jsonb := '{}'::jsonb;
   type_id uuid;
+  event_name text;
 begin
   if auth.role()<>'service_role' and not public.can_manage_fuel_platform() then
     raise exception using errcode='42501',message='platform fuel management permission is required';
@@ -668,10 +683,37 @@ begin
      or target_nominal_capacity_litres is null or target_nominal_capacity_litres<=0
      or coalesce(array_length(target_supported_product_keys,1),0)=0
      or not (target_supported_product_keys <@ array['fuel.pms','fuel.ago','fuel.dpk']::text[])
-     or target_status not in ('draft','active','paused','retired')
+     or target_status is null or target_status not in ('draft','active','paused','retired')
      or target_metadata is null or jsonb_typeof(target_metadata)<>'object'
      or coalesce(btrim(target_idempotency_key),'')='' then
     raise exception using errcode='22023',message='container type key, name, positive litre capacity, supported products, status and idempotency key are required';
+  end if;
+
+  select * into existing_event
+  from public.fuel_container_type_events
+  where idempotency_key=target_idempotency_key;
+
+  if found then
+    if not exists(select 1 from public.fuel_container_types where id=existing_event.container_type_id and key=target_key) then
+      raise exception using errcode='23505',message='container type idempotency key was reused for another type';
+    end if;
+    return existing_event.container_type_id;
+  end if;
+
+  select * into type_record
+  from public.fuel_container_types
+  where key=target_key
+  for update;
+
+  if found then
+    before_value:=to_jsonb(type_record);
+    if exists(
+      select 1 from public.fuel_container_profiles profile
+      where profile.container_type_id=type_record.id
+        and profile.capacity_litres>target_nominal_capacity_litres
+    ) then
+      raise exception using errcode='23514',message='container type capacity cannot be reduced below an existing registered container capacity';
+    end if;
   end if;
 
   insert into public.fuel_container_types(
@@ -689,15 +731,33 @@ begin
       metadata=public.fuel_container_types.metadata||excluded.metadata,
       updated_by=auth.uid(),
       updated_at=timezone('utc',now())
-  returning id into type_id;
+  returning * into type_record;
+
+  type_id:=type_record.id;
+  event_name:=case when before_value='{}'::jsonb then 'created'
+                   when target_status='retired' then 'retired'
+                   when target_status='paused' then 'paused'
+                   when target_status='active' then 'activated'
+                   else 'updated' end;
+
+  insert into public.fuel_container_type_events(
+    container_type_id,event_key,before_snapshot,after_snapshot,idempotency_key
+  )
+  values(type_id,event_name,before_value,to_jsonb(type_record),target_idempotency_key);
 
   return type_id;
 end;
 $$;
 
+alter table public.fuel_container_type_events enable row level security;
 alter table public.fuel_branch_product_offers enable row level security;
 alter table public.fuel_branch_product_offer_events enable row level security;
 alter table public.fuel_station_storage_configuration_events enable row level security;
+
+drop policy if exists fuel_container_type_events_platform_read on public.fuel_container_type_events;
+create policy fuel_container_type_events_platform_read
+on public.fuel_container_type_events for select to authenticated
+using (public.can_read_fuel_platform());
 
 drop policy if exists fuel_branch_product_offers_read_branch on public.fuel_branch_product_offers;
 create policy fuel_branch_product_offers_read_branch
@@ -720,6 +780,8 @@ create policy fuel_station_storage_configuration_events_read_branch
 on public.fuel_station_storage_configuration_events for select to authenticated
 using (public.can_read_fuel_branch(branch_id));
 
+grant select on public.fuel_container_type_events to authenticated,service_role;
+
 grant select on
   public.fuel_branch_product_offers,
   public.fuel_branch_product_offer_events,
@@ -735,6 +797,11 @@ drop trigger if exists fuel_branch_product_offers_audit on public.fuel_branch_pr
 create trigger fuel_branch_product_offers_audit
 after insert or update or delete on public.fuel_branch_product_offers
 for each row execute function public.record_table_audit();
+
+drop trigger if exists fuel_container_type_events_immutable on public.fuel_container_type_events;
+create trigger fuel_container_type_events_immutable
+before update or delete on public.fuel_container_type_events
+for each row execute function public.prevent_fuel_event_mutation();
 
 drop trigger if exists fuel_branch_product_offer_events_immutable on public.fuel_branch_product_offer_events;
 create trigger fuel_branch_product_offer_events_immutable
