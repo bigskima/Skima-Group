@@ -309,7 +309,7 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
 
   // Admin rendering must not require an env-only basemap to be usable.
   assertIncludes(adminGeometry, 'supabase.rpc("read_maps_renderer_configuration")');
-  assertIncludes(adminGeometry, "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png");
+  assertIncludes(adminGeometry, 'const SAFE_TILE_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"');
   assertNotIncludes(
     adminGeometry,
     "Configure VITE_MAP_TILE_URL_TEMPLATE for the provider basemap",
@@ -431,17 +431,22 @@ Deno.test("platform map renderer defaults to a credential-free launch basemap", 
   assertNotIncludes(migration, "LOCATIONIQ_ACCESS_TOKEN");
 });
 
-Deno.test("mobile basemap falls back before a public API-key tile URL can blank the map", async () => {
+Deno.test("mobile basemap ignores stale keyless CARTO configuration and falls back to OSM", async () => {
   const runtime = await readRepositoryFile("apps/lpg-mobile/src/native/domains/maps/index.ts");
   const webMap = await readRepositoryFile("apps/lpg-mobile/src/native/maps/OperationalMap.web.tsx");
   const nativeMap = await readRepositoryFile("apps/lpg-mobile/src/native/maps/OperationalMap.native.tsx");
 
-  assertIncludes(runtime, "KEYLESS_RASTER_TILE_TEMPLATE");
   assertIncludes(runtime, "KEYLESS_OSM_TILE_TEMPLATE");
+  assertIncludes(runtime, 'readEnv("EXPO_PUBLIC_MAP_TILE_PROVIDER", "osm_standard")');
+  assertIncludes(runtime, "hasCartoBasemapKey");
   assertIncludes(runtime, "selectKeylessRaster");
+  assertIncludes(runtime, 'template: KEYLESS_OSM_TILE_TEMPLATE');
+  assertIncludes(runtime, 'key: "osm_standard"');
   assertIncludes(runtime, "keylessTileHost");
   assertIncludes(runtime, "basemaps.cartocdn.com");
   assertIncludes(runtime, "tile.openstreetmap.org");
+  assertIncludes(runtime, "CARTO requires a Basemaps key in public applications");
+  assertIncludes(runtime, 'parsed.searchParams.get("key")');
   assertIncludes(runtime, "requiresPublicMapCredential");
   assertIncludes(runtime, '"locationiq.com"');
   assertIncludes(runtime, '"api.mapbox.com"');
