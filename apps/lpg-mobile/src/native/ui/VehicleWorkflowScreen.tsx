@@ -93,7 +93,7 @@ export function VehicleWorkflowScreen() {
   const [year, setYear] = useState("");
   const [registration, setRegistration] = useState("");
   const [colour, setColour] = useState("");
-  const [ownership, setOwnership] = useState("owned");
+  const [ownership, setOwnership] = useState("driver_owned");
   const [capacity, setCapacity] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [messageSuccess, setMessageSuccess] = useState(false);
@@ -110,7 +110,8 @@ export function VehicleWorkflowScreen() {
         setYear(String(draft.values.year ?? ""));
         setRegistration(String(draft.values.registration ?? ""));
         setColour(String(draft.values.colour ?? ""));
-        setOwnership(String(draft.values.ownership ?? "owned"));
+        const savedOwnership = String(draft.values.ownership ?? "driver_owned");
+        setOwnership(savedOwnership === "owned" ? "driver_owned" : savedOwnership);
         setCapacity(String(draft.values.capacity ?? ""));
         setFormStep(
           draft.step === "vehicle-review"
@@ -146,8 +147,54 @@ export function VehicleWorkflowScreen() {
   const update = useGatewayMutation({ path: "/runtime/applications/payload", schema: ActionResponseSchema });
   const submit = useGatewayMutation({ path: "/runtime/applications/submit", schema: ActionResponseSchema });
 
+  const retryWorkspace = async () => {
+    await Promise.allSettled([
+      vehicles.refetch(),
+      compliance.refetch(),
+      myVehicle.refetch(),
+      vehicleTypes.refetch(),
+      applicationTypes.refetch(),
+      applications.refetch(),
+      requirements.refetch(),
+      documents.refetch(),
+      drivers.refetch(),
+    ]);
+  };
+
   const openForm = () => {
     setMessage(null);
+    setMessageSuccess(false);
+    const pendingPrerequisites = [
+      drivers.isPending,
+      vehicleTypes.isPending,
+      applicationTypes.isPending,
+      applications.isPending,
+      requirements.isPending,
+      documents.isPending,
+    ].some(Boolean);
+    const failedPrerequisites = [
+      drivers.error,
+      vehicleTypes.error,
+      applicationTypes.error,
+      applications.error,
+      requirements.error,
+      documents.error,
+    ].some(Boolean);
+
+    if (pendingPrerequisites || failedPrerequisites) {
+      setMessage("Your driver and vehicle application details are not fully loaded yet. Refresh this workspace and try again.");
+      void retryWorkspace();
+      return;
+    }
+    if (!driverId || !applicationType) {
+      setMessage("An approved driver profile and an active LPG vehicle application type are required before you can add a vehicle.");
+      return;
+    }
+    if (!(vehicleTypes.data ?? []).length) {
+      setMessage("No active vehicle types are configured yet. Please contact SKIMA support.");
+      return;
+    }
+
     setFormStep("details");
     setShowForm(true);
   };
@@ -183,19 +230,36 @@ export function VehicleWorkflowScreen() {
     setMessage(null);
     const load = Number(capacity);
     if (
+      drivers.error ||
+      vehicleTypes.error ||
+      applicationTypes.error ||
+      applications.error ||
+      requirements.error ||
+      documents.error
+    ) {
+      setMessageSuccess(false);
+      setMessage("Some required vehicle application data could not be loaded. Refresh the workspace and try again.");
+      void retryWorkspace();
+      return;
+    }
+    const yearNumber = Number(year);
+    if (
       !driverId ||
       !applicationType ||
       !typeKey ||
       !manufacturer.trim() ||
       !model.trim() ||
-      !year.trim() ||
+      !/^\\d{4}$/.test(year.trim()) ||
+      yearNumber < 1900 ||
+      yearNumber > new Date().getFullYear() + 1 ||
       !registration.trim() ||
       !colour.trim() ||
+      !["driver_owned", "leased", "rented"].includes(ownership) ||
       !Number.isFinite(load) ||
       load <= 0
     ) {
       setMessageSuccess(false);
-      setMessage("Complete every required vehicle field. An approved driver profile is also required.");
+      setMessage("Complete every required vehicle field. Choose a valid ownership type and enter a four-digit model year and maximum load.");
       return;
     }
 
@@ -254,16 +318,29 @@ export function VehicleWorkflowScreen() {
     }
   };
 
-  const loading =
-    vehicles.isPending || compliance.isPending || myVehicle.isPending ||
-    vehicleTypes.isPending ||
-    applicationTypes.isPending ||
-    applications.isPending ||
-    requirements.isPending ||
-    documents.isPending ||
-    drivers.isPending;
-  const failed =
-    vehicles.error || compliance.error || myVehicle.error || vehicleTypes.error || applicationTypes.error || applications.error || requirements.error || documents.error || drivers.error;
+  const loading = [
+    vehicles,
+    compliance,
+    myVehicle,
+    vehicleTypes,
+    applicationTypes,
+    applications,
+    requirements,
+    documents,
+    drivers,
+  ].every((query) => query.isPending);
+
+  const workspaceErrors = [
+    vehicles.error ? { label: "Registered vehicles", error: vehicles.error } : null,
+    compliance.error ? { label: "Vehicle compliance", error: compliance.error } : null,
+    myVehicle.error ? { label: "Current assignment", error: myVehicle.error } : null,
+    vehicleTypes.error ? { label: "Vehicle types", error: vehicleTypes.error } : null,
+    applicationTypes.error ? { label: "Application setup", error: applicationTypes.error } : null,
+    applications.error ? { label: "Applications", error: applications.error } : null,
+    requirements.error ? { label: "Document requirements", error: requirements.error } : null,
+    documents.error ? { label: "Uploaded documents", error: documents.error } : null,
+    drivers.error ? { label: "Driver profile", error: drivers.error } : null,
+  ].filter((item): item is { label: string; error: Error } => item !== null);
   const assignedVehicle = myVehicle.data?.current && typeof myVehicle.data.current === "object"
     ? myVehicle.data.current as PlatformRecord
     : null;
@@ -290,15 +367,20 @@ export function VehicleWorkflowScreen() {
     >
       {loading ? (
         <ScreenSkeleton cards={4} />
-      ) : failed ? (
-        <EmptyState
-          icon={<Truck color={palette.brand} size={27} />}
-          title="Vehicles could not be loaded"
-          description="Check your connection and refresh your driver vehicle workspace."
-          action={<AppButton label="Retry" onPress={() => void Promise.all([vehicles.refetch(), vehicleTypes.refetch(), applications.refetch()])} />}
-        />
       ) : (
         <>
+          {workspaceErrors.length > 0 ? (
+            <View style={[styles.dataWarning, { backgroundColor: palette.warningSoft, borderColor: palette.border }]}>
+              <Text style={[styles.dataWarningTitle, { color: palette.ink }]}>Some vehicle information is temporarily unavailable</Text>
+              {workspaceErrors.map((item) => (
+                <Text key={item.label} style={[styles.dataWarningBody, { color: palette.muted }]}>
+                  {item.label}: {friendlyError(item.error, "Could not be loaded.")}
+                </Text>
+              ))}
+              <AppButton label="Refresh workspace" size="sm" variant="secondary" onPress={() => void retryWorkspace()} />
+            </View>
+          ) : null}
+
           <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
             <View style={styles.heroIcon}><Truck color="#FFFFFF" size={28} /></View>
             <View style={styles.heroCopy}>
@@ -309,7 +391,11 @@ export function VehicleWorkflowScreen() {
           </View>
 
           <SectionHeader title="My vehicle" description="Your current approved vehicle." />
-          {assignedVehicle ? (
+          {myVehicle.isPending ? (
+            <Text style={[styles.vehicleMeta, { color: palette.muted }]}>Loading your current vehicle assignment…</Text>
+          ) : myVehicle.error ? (
+            <Text style={[styles.vehicleMeta, { color: palette.warning }]}>Your current assignment could not be loaded. The rest of this workspace remains available.</Text>
+          ) : assignedVehicle ? (
             <View style={[styles.vehicleCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <View style={styles.vehicleHead}>
                 <View style={[styles.vehicleIcon, { backgroundColor: palette.brandSoft }]}><Truck color={palette.brand} size={23} /></View>
@@ -416,7 +502,7 @@ export function VehicleWorkflowScreen() {
                 <>
                   <FieldSection label="Ownership">
                     <View style={styles.options}>
-                      {["owned", "leased", "rented"].map((value) => {
+                      {["driver_owned", "leased", "rented"].map((value) => {
                         const selected = ownership === value;
                         return (
                           <Pressable
@@ -489,7 +575,11 @@ export function VehicleWorkflowScreen() {
 
           <SectionHeader title="Your vehicles" description="Vehicles added to your driver profile." />
           <View style={styles.vehicleList}>
-            {(vehicles.data ?? []).length ? (
+            {vehicles.isPending ? (
+              <Text style={[styles.vehicleMeta, { color: palette.muted }]}>Loading registered vehicles…</Text>
+            ) : vehicles.error ? (
+              <Text style={[styles.vehicleMeta, { color: palette.warning }]}>Your vehicle list could not be loaded. You can still start an application when the required driver and vehicle setup is available.</Text>
+            ) : (vehicles.data ?? []).length ? (
               (vehicles.data ?? []).map((vehicle, index) => {
                 const id = recordId(vehicle);
                 const vehicleStatus =
@@ -697,6 +787,9 @@ const styles = StyleSheet.create({
   vehicleMetric: { flex: 1, gap: 3 },
   metricLabel: { ...typography.caption, fontSize: 10 },
   metricValue: { ...typography.bodyStrong, fontSize: 14 },
+  dataWarning: { gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md },
+  dataWarningTitle: { ...typography.bodyStrong, fontSize: 14 },
+  dataWarningBody: { ...typography.caption, lineHeight: 18 },
   message: { borderRadius: radii.md, padding: spacing.md },
   messageText: { ...typography.caption, fontWeight: "800", textAlign: "center" },
 });
