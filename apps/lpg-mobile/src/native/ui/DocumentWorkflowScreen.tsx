@@ -31,6 +31,10 @@ import { useSession } from "../session/SessionProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 import { idempotencyKey } from "../utilities/idempotency";
 import { friendlyError } from "../utilities/friendlyError";
+import {
+  applicationRequirementApplies,
+  applicationRequirementIsRequired,
+} from "../api/documentRequirements";
 import { AutomatedVerificationCard } from "./AutomatedVerificationCard";
 import { Card } from "./Card";
 import { Screen } from "./Screen";
@@ -77,6 +81,11 @@ export function DocumentWorkflowScreen({
     )
     .sort((a, b) => timestampOf(b) - timestampOf(a))[0];
   const applicationId = application ? recordId(application) : null;
+  const applicationPayload = application?.application_payload &&
+      typeof application.application_payload === "object" &&
+      !Array.isArray(application.application_payload)
+    ? application.application_payload as Record<string, unknown>
+    : {};
   const verification = useApplicationVerification(applicationId);
   const reconcileVerification = useReconcileApplicationVerification();
   const requirementSetId = firstString(type, [
@@ -150,7 +159,15 @@ export function DocumentWorkflowScreen({
     verificationForDocumentKey(verificationChecks, documentKey);
   const visibleConfigured = configured.filter((requirement) => {
     const key = requirementKeyOf(requirement);
+    const hasExistingEvidence = existingForRequirement(requirement).length > 0;
+    const applies = applicationRequirementApplies(requirement, applicationPayload);
+    const requiredForApplicant = applicationRequirementIsRequired(requirement, applicationPayload);
     if (verifiedDocumentKeys.has(key)) return false;
+    // Hide conditional and optional evidence that does not apply to this
+    // vehicle. Keep previously submitted optional evidence visible for
+    // history/replacement requests.
+    if (!applies && !hasExistingEvidence) return false;
+    if (!requiredForApplicant && !hasExistingEvidence) return false;
     return shouldShowVerificationFallback(verificationCheckForDocument(key));
   });
   const pendingAutomaticChecks = verificationChecks.filter(
@@ -163,7 +180,7 @@ export function DocumentWorkflowScreen({
 
   const requiredConfigured = configured.filter(
     (requirement) =>
-      requirement.is_required === true &&
+      applicationRequirementIsRequired(requirement, applicationPayload) &&
       !verifiedDocumentKeys.has(requirementKeyOf(requirement)),
   );
 
@@ -277,7 +294,10 @@ export function DocumentWorkflowScreen({
           ? "Updates submitted. Automatic checks will reconcile before any remaining manual review."
           : "Application submitted. SKIMA will automatically clear verified checks and send only exceptions for manual review.",
       );
-      router.replace(`/(customer)/${workspace}-application` as never);
+      const postSubmissionRoute = workspace === "vehicle"
+        ? "/(driver)/vehicles"
+        : `/(customer)/${workspace}-application`;
+      router.replace(postSubmissionRoute as never);
     } catch (cause) {
       setMessage(friendlyError(cause, "The application could not be submitted. Please try again."));
     }
@@ -399,7 +419,7 @@ export function DocumentWorkflowScreen({
                       ) : null}
                     </View>
                     <Text style={styles.body}>
-                      {requirement.is_required === true ? "Required" : "Optional"}
+                      {applicationRequirementIsRequired(requirement, applicationPayload) ? "Required" : "Optional"}
                       {existing.length ? ` · ${existing.length} file${existing.length === 1 ? "" : "s"} on record` : ""}
                       {firstNumber(requirement, ["max_count", "maxCount"])
                         ? ` · up to ${firstNumber(requirement, ["max_count", "maxCount"])} files`
