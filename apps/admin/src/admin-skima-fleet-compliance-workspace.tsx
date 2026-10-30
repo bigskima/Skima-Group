@@ -301,7 +301,7 @@ export function AdminSkimaFleetComplianceWorkspace(props: { readonly onNavigate:
                 onChange={(event) => {
                   // Capture the File while currentTarget is still valid. React
                   // may run a functional state updater after this event ends.
-                  const file = event.currentTarget.files?.item(0) ?? null;
+                  const file = event.currentTarget.files?.[0] ?? null;
                   setUploadState((current) => current ? { ...current, file } : current);
                 }}
               />
