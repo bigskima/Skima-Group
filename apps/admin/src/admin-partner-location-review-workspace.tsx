@@ -622,7 +622,11 @@ function LocationEvidencePanel(props: {
           <p className="admin-section-kicker">Location evidence</p>
           <h2>{record.applicant_display_name ?? "Applicant"}</h2>
           <p className="skima-muted">
-            {record.workspace === "driver" ? "Driver operating base" : "Station facility location"}
+            {record.application_type_key.includes(".vehicle.")
+              ? "Vehicle operating location"
+              : record.workspace === "driver"
+                ? "Driver operating base"
+                : "Station facility location"}
           </p>
         </div>
         <StatusBadge tone={verificationTone(record.verification_status)}>
