@@ -2,7 +2,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import { CheckCircle2, Fuel, Package, RotateCcw, ShieldCheck, Truck } from "lucide-react-native";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
-import { useGatewayQuery } from "../api/gateway";
+import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
+import { ActionResponseSchema } from "../api/records";
 import { RecordArraySchema, firstNumber, firstString } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -29,6 +30,11 @@ export function FuelOrderDetailsScreen() {
     schema: RecordArraySchema,
     enabled: Boolean(orderId),
     refetchInterval: 12000,
+  });
+  const completeOrder = useGatewayMutation({
+    path: "/runtime/fuel/orders/stage",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "orders"], ["fuel", "order", orderId], ["orders"]],
   });
 
   const order = operations.data?.[0] ?? null;
@@ -126,6 +132,21 @@ export function FuelOrderDetailsScreen() {
               </View>
             )}
           </Card>
+          {((isRental && stage === "inspection_passed") || (!isRental && stage === "delivered")) ? (
+            <Card title="Confirm order completion" description={isRental ? "The returned rental container has passed station inspection. Confirm that this order can now be closed." : "Your purchased container and measured fuel have been delivered. Confirm that your order is complete."}>
+              <AppButton
+                label="Confirm fuel order completed"
+                fullWidth
+                loading={completeOrder.isPending}
+                onPress={() => void completeOrder.mutateAsync({
+                  orderId,
+                  stageKey: "completed",
+                  idempotencyKey: `fuel-customer-complete:${orderId}`,
+                  metadata: { customer_confirmed_completion: true },
+                }).then(() => Promise.all([operations.refetch(), events.refetch()]))}
+              />
+            </Card>
+          ) : null}
           <AppButton label="Refresh order" variant="secondary" fullWidth onPress={() => void Promise.all([operations.refetch(), events.refetch()])} />
           <AppButton label="View all fuel orders" variant="ghost" fullWidth onPress={() => router.replace("/(customer)/fuel-orders" as never)} />
         </>
