@@ -192,6 +192,7 @@ const ROUTES = new Set([
   "/runtime/application-types",
   "/runtime/applications",
   "/runtime/applications/payload",
+  "/runtime/applications/location",
   "/runtime/applications/submit",
   "/runtime/applications/reviewer",
   "/runtime/applications/corrections",
@@ -3980,6 +3981,25 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         .select("id,application_id,version,payload,change_summary,created_by,created_at")
         .eq("application_id", applicationId)
         .order("version", { ascending: false }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/applications/location" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("update_lpg_vehicle_application_location", {
+        target_application_id: requireUuid(payload.applicationId, "applicationId"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_location: requireRecord(payload.location, "location"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
       id,
     );
   }
