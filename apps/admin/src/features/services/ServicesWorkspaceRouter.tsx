@@ -1,16 +1,18 @@
-import { Boxes, ShieldCheck, Zap } from "lucide-react";
+import { Boxes, Fuel, ShieldCheck, Zap } from "lucide-react";
 
 import { WorkspaceLanding } from "../../shared/patterns/WorkspaceLanding";
 import { ServiceAvailabilityWorkspaceV2 } from "./ServiceAvailabilityWorkspaceV2";
 import { ServiceCatalogWorkspaceV2 } from "./ServiceCatalogWorkspaceV2";
 import { UtilityBillingWorkspaceV2 } from "./UtilityBillingWorkspaceV2";
 import { UtilitySimpleDashboard } from "./UtilitySimpleDashboard";
+import { FuelAdminWorkspace } from "./FuelAdminWorkspace";
 
 export function ServicesWorkspaceRouter(props: {
   readonly route: string;
   readonly onNavigate: (href: string) => void;
 }) {
   if (props.route === "/services") return <ServicesOverviewScreen onNavigate={props.onNavigate} />;
+  if (props.route === "/services/fuel") return <FuelAdminWorkspace onNavigate={props.onNavigate} />;
   if (props.route === "/services/utility-billing") {
     return <UtilitySimpleDashboard onNavigate={props.onNavigate} />;
   }
@@ -60,6 +62,15 @@ function ServicesOverviewScreen(props: { readonly onNavigate: (href: string) => 
           icon: ShieldCheck,
           meta: "Can customers order?",
           permissionKey: "catalog",
+        },
+        {
+          key: "fuel",
+          title: "Fuel administration",
+          description: "Enable petrol, diesel and kerosene independently, configure branch offers, manage tanks and containers, and approve fuel-qualified drivers.",
+          href: "/services/fuel",
+          icon: Fuel,
+          meta: "PMS · AGO · DPK",
+          permissionKey: "fuel",
         },
       ]}
     />
