@@ -60,10 +60,10 @@ export function OperationalMap({
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
   const interactive = Boolean(onSelectPoint);
   const derivedCenter = useMemo(
-    () => averageCoordinate(points) ?? (interactive ? DEFAULT_MAP_CENTER : null),
-    [pointKey, interactive],
+    () => averageCoordinate(points) ?? (interactive ? mapRenderer.defaultCenter : null),
+    [pointKey, interactive, mapRenderer.defaultCenter.latitude, mapRenderer.defaultCenter.longitude],
   );
-  const automaticZoom = points.length ? initialZoom : 6;
+  const automaticZoom = points.length ? initialZoom : mapRenderer.defaultZoom;
   const [center, setCenter] = useState(derivedCenter);
   const [zoom, setZoom] = useState(() => clamp(automaticZoom, minZoom, effectiveMaxZoom));
 
@@ -76,8 +76,8 @@ export function OperationalMap({
     setCenter(derivedCenter);
     setZoom(points.length > 1
       ? fitZoom(points, width, height, minZoom, effectiveMaxZoom)
-      : clamp(points.length ? initialZoom : 6, minZoom, effectiveMaxZoom));
-  }, [pointKey, interactive, width, height, initialZoom, effectiveMaxZoom, minZoom]);
+      : clamp(points.length ? initialZoom : mapRenderer.defaultZoom, minZoom, effectiveMaxZoom));
+  }, [pointKey, interactive, width, height, initialZoom, mapRenderer.defaultZoom, effectiveMaxZoom, minZoom]);
 
   const layout = center
     ? createLayout(center, points, width, height, zoom, tileTemplate, providerTileMaxZoom)
@@ -89,7 +89,7 @@ export function OperationalMap({
     setCenter(derivedCenter);
     setZoom(points.length > 1
       ? fitZoom(points, width, height, minZoom, effectiveMaxZoom)
-      : clamp(points.length ? initialZoom : 6, minZoom, effectiveMaxZoom));
+      : clamp(points.length ? initialZoom : mapRenderer.defaultZoom, minZoom, effectiveMaxZoom));
   };
   const select = (event: GestureResponderEvent) => {
     if (!center || !onSelectPoint) return;
