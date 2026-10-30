@@ -11,10 +11,9 @@ import {
 } from "react-native";
 import {
   averageCoordinate,
-  DEFAULT_MAP_CENTER,
-  getMapsRuntimeConfig,
   type MapPoint,
 } from "../domains/maps";
+import { useMapsRendererConfiguration } from "../domains/maps/useMapsRendererConfiguration";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 
@@ -33,8 +32,8 @@ export interface OperationalMapProps {
 const TILE = 256;
 const DEFAULT_HEIGHT = 420;
 const EMERGENCY_RASTER_TILE_TEMPLATE =
-  "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const EMERGENCY_ATTRIBUTION = "© OpenStreetMap contributors";
+  "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
+const EMERGENCY_ATTRIBUTION = "© OpenStreetMap contributors, © CARTO";
 
 export function OperationalMap({
   points,
@@ -46,38 +45,38 @@ export function OperationalMap({
   onSelectPoint,
 }: OperationalMapProps) {
   const { palette } = useAppTheme();
-  const mapConfig = getMapsRuntimeConfig();
-  const providerTileMaxZoom = mapConfig.tile.maxZoom;
+  const mapRenderer = useMapsRendererConfiguration();
+  const providerTileMaxZoom = mapRenderer.maxZoom;
   const effectiveMaxZoom = maxZoom ?? Math.max(21, providerTileMaxZoom);
   const [width, setWidth] = useState(720);
   const [useEmergencyTiles, setUseEmergencyTiles] = useState(false);
   const tileTemplate = useEmergencyTiles
     ? EMERGENCY_RASTER_TILE_TEMPLATE
-    : mapConfig.tile.rasterTileTemplate;
+    : mapRenderer.tileTemplate;
   const attribution = useEmergencyTiles
     ? EMERGENCY_ATTRIBUTION
-    : mapConfig.tile.attribution;
+    : mapRenderer.attribution;
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
   const interactive = Boolean(onSelectPoint);
   const derivedCenter = useMemo(
-    () => averageCoordinate(points) ?? (interactive ? DEFAULT_MAP_CENTER : null),
-    [pointKey, interactive],
+    () => averageCoordinate(points) ?? (interactive ? mapRenderer.defaultCenter : null),
+    [pointKey, interactive, mapRenderer.defaultCenter.latitude, mapRenderer.defaultCenter.longitude],
   );
-  const automaticZoom = points.length ? initialZoom : 6;
+  const automaticZoom = points.length ? initialZoom : mapRenderer.defaultZoom;
   const [center, setCenter] = useState(derivedCenter);
   const [zoom, setZoom] = useState(() => clamp(automaticZoom, minZoom, effectiveMaxZoom));
 
   useEffect(() => {
     setUseEmergencyTiles(false);
-  }, [mapConfig.tile.rasterTileTemplate]);
+  }, [mapRenderer.tileTemplate]);
 
   useEffect(() => {
     if (!derivedCenter) return;
     setCenter(derivedCenter);
     setZoom(points.length > 1
       ? fitZoom(points, width, height, minZoom, effectiveMaxZoom)
-      : clamp(points.length ? initialZoom : 6, minZoom, effectiveMaxZoom));
-  }, [pointKey, interactive, width, height, initialZoom, effectiveMaxZoom, minZoom]);
+      : clamp(points.length ? initialZoom : mapRenderer.defaultZoom, minZoom, effectiveMaxZoom));
+  }, [pointKey, interactive, width, height, initialZoom, mapRenderer.defaultZoom, effectiveMaxZoom, minZoom]);
 
   const layout = center
     ? createLayout(center, points, width, height, zoom, tileTemplate, providerTileMaxZoom)
@@ -89,7 +88,7 @@ export function OperationalMap({
     setCenter(derivedCenter);
     setZoom(points.length > 1
       ? fitZoom(points, width, height, minZoom, effectiveMaxZoom)
-      : clamp(points.length ? initialZoom : 6, minZoom, effectiveMaxZoom));
+      : clamp(points.length ? initialZoom : mapRenderer.defaultZoom, minZoom, effectiveMaxZoom));
   };
   const select = (event: GestureResponderEvent) => {
     if (!center || !onSelectPoint) return;

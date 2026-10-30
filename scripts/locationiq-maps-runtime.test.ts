@@ -431,13 +431,16 @@ Deno.test("platform map renderer defaults to a credential-free launch basemap", 
   assertNotIncludes(migration, "LOCATIONIQ_ACCESS_TOKEN");
 });
 
-Deno.test("mobile basemap falls back before a public API-key tile URL can blank the map", async () => {
+Deno.test("mobile basemap follows Admin's public keyless renderer and preserves the compact map frame", async () => {
   const runtime = await readRepositoryFile("apps/lpg-mobile/src/native/domains/maps/index.ts");
+  const rendererHook = await readRepositoryFile("apps/lpg-mobile/src/native/domains/maps/useMapsRendererConfiguration.ts");
   const webMap = await readRepositoryFile("apps/lpg-mobile/src/native/maps/OperationalMap.web.tsx");
   const nativeMap = await readRepositoryFile("apps/lpg-mobile/src/native/maps/OperationalMap.native.tsx");
+  const environment = await readRepositoryFile(".env.example");
 
   assertIncludes(runtime, "KEYLESS_RASTER_TILE_TEMPLATE");
   assertIncludes(runtime, "KEYLESS_OSM_TILE_TEMPLATE");
+  assertIncludes(runtime, 'readEnv("EXPO_PUBLIC_MAP_TILE_PROVIDER", "openstreetmap")');
   assertIncludes(runtime, "selectKeylessRaster");
   assertIncludes(runtime, "keylessTileHost");
   assertIncludes(runtime, "basemaps.cartocdn.com");
@@ -447,14 +450,28 @@ Deno.test("mobile basemap falls back before a public API-key tile URL can blank 
   assertIncludes(runtime, '"api.mapbox.com"');
   assertIncludes(runtime, '"maps.googleapis.com"');
   assertIncludes(runtime, '"keyless_raster_fallback"');
-  assertIncludes(runtime, "DEFAULT_MAP_CENTER");
-  assertIncludes(webMap, "EMERGENCY_RASTER_TILE_TEMPLATE");
-  assertIncludes(webMap, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+
+  // The mobile web and native renderers use the same public renderer setting
+  // as the Admin geometry editor, and independently allowlist tile hosts.
+  assertIncludes(rendererHook, 'supabase.rpc("read_maps_renderer_configuration")');
+  assertIncludes(rendererHook, "isUsablePublicTileTemplate");
+  assertIncludes(rendererHook, "safe_fallback");
+  assertIncludes(webMap, "useMapsRendererConfiguration");
+  assertIncludes(webMap, "mapRenderer.tileTemplate");
+  assertIncludes(webMap, "mapRenderer.defaultCenter");
+  assertIncludes(webMap, "mapRenderer.defaultZoom");
+  assertIncludes(webMap, "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png");
   assertIncludes(webMap, "onError={() => setUseEmergencyTiles(true)}");
-  assertIncludes(webMap, "interactive ? DEFAULT_MAP_CENTER : null");
-  assertIncludes(nativeMap, "onSelectPoint ? DEFAULT_MAP_CENTER : null");
-  assertIncludes(webMap, "points.length ? initialZoom : 6");
-  assertIncludes(nativeMap, "points.length ? initialZoom : 6");
+  assertIncludes(nativeMap, "useMapsRendererConfiguration");
+  assertIncludes(nativeMap, "mapRenderer.tileTemplate");
+  assertIncludes(nativeMap, "mapRenderer.defaultCenter");
+
+  // Keep the small-screen map dimensions and viewport clipping unchanged.
+  assertIncludes(webMap, 'map: { width: "100%", overflow: "hidden"');
+  assertIncludes(nativeMap, 'frame: { width: "100%", overflow: "hidden"');
+  assertIncludes(environment, "EXPO_PUBLIC_MAP_TILE_PROVIDER=openstreetmap");
+  assertIncludes(environment, "EXPO_PUBLIC_MAP_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+  assertNotIncludes(environment, "EXPO_PUBLIC_MAP_TILE_PROVIDER=carto_voyager");
 });
 
 function testAdapter(fetcher: typeof fetch, retryCount = 0) {
@@ -520,3 +537,27 @@ function assertNotIncludes(source: string, unexpected: string): void {
     throw new Error(`source unexpectedly contained ${JSON.stringify(unexpected)}`);
   }
 }
+
+
+Deno.test("canonical geography creation reuses an existing active hierarchy", async () => {
+  const migration = await readRepositoryFile(
+    "supabase/migrations/20261030183632_canonical_geography_hierarchy_deduplication.sql",
+  );
+  const rpcRepair = await readRepositoryFile(
+    "supabase/migrations/20261030184216_fix_geography_deduplication_rpc_ambiguity.sql",
+  );
+  const adminCoverage = await readRepositoryFile("apps/admin/src/admin-service-coverage-workspace.tsx");
+  const coverageV2 = await readRepositoryFile("apps/admin/src/features/operations/CoverageWorkspaceV2.tsx");
+
+  assertIncludes(migration, "geographies_active_hierarchy_unique_idx");
+  assertIncludes(migration, "nulls not distinct");
+  assertIncludes(migration, "where status = 'active'");
+  assertIncludes(migration, "geography.parent_id is not distinct from p_parent_id");
+  assertIncludes(migration, "geography.normalized_name = normalized_name_value");
+  assertIncludes(migration, "exception when unique_violation");
+  assertIncludes(rpcRepair, "normalized_name_value text");
+  assertIncludes(rpcRepair, "geography.normalized_name = normalized_name_value");
+  assertNotIncludes(rpcRepair, "geography.normalized_name = normalized_name;");
+  assertIncludes(adminCoverage, "configure_universal_geography");
+  assertIncludes(coverageV2, "configure_universal_geography");
+});
