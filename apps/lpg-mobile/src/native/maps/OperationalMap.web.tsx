@@ -12,9 +12,9 @@ import {
 import {
   averageCoordinate,
   DEFAULT_MAP_CENTER,
-  getMapsRuntimeConfig,
   type MapPoint,
 } from "../domains/maps";
+import { useMapsRendererConfiguration } from "../domains/maps/useMapsRendererConfiguration";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { colors, radii, spacing } from "../theme/tokens";
 
@@ -33,8 +33,8 @@ export interface OperationalMapProps {
 const TILE = 256;
 const DEFAULT_HEIGHT = 420;
 const EMERGENCY_RASTER_TILE_TEMPLATE =
-  "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const EMERGENCY_ATTRIBUTION = "© OpenStreetMap contributors";
+  "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
+const EMERGENCY_ATTRIBUTION = "© OpenStreetMap contributors, © CARTO";
 
 export function OperationalMap({
   points,
@@ -46,17 +46,17 @@ export function OperationalMap({
   onSelectPoint,
 }: OperationalMapProps) {
   const { palette } = useAppTheme();
-  const mapConfig = getMapsRuntimeConfig();
-  const providerTileMaxZoom = mapConfig.tile.maxZoom;
+  const mapRenderer = useMapsRendererConfiguration();
+  const providerTileMaxZoom = mapRenderer.maxZoom;
   const effectiveMaxZoom = maxZoom ?? Math.max(21, providerTileMaxZoom);
   const [width, setWidth] = useState(720);
   const [useEmergencyTiles, setUseEmergencyTiles] = useState(false);
   const tileTemplate = useEmergencyTiles
     ? EMERGENCY_RASTER_TILE_TEMPLATE
-    : mapConfig.tile.rasterTileTemplate;
+    : mapRenderer.tileTemplate;
   const attribution = useEmergencyTiles
     ? EMERGENCY_ATTRIBUTION
-    : mapConfig.tile.attribution;
+    : mapRenderer.attribution;
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
   const interactive = Boolean(onSelectPoint);
   const derivedCenter = useMemo(
@@ -69,7 +69,7 @@ export function OperationalMap({
 
   useEffect(() => {
     setUseEmergencyTiles(false);
-  }, [mapConfig.tile.rasterTileTemplate]);
+  }, [mapRenderer.tileTemplate]);
 
   useEffect(() => {
     if (!derivedCenter) return;
