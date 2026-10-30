@@ -246,7 +246,7 @@ begin
   end if;
 
   select * into operation_record from public.fuel_order_operations where order_id=target_order_id for update;
-  if not found or operation_record.stage_key not in ('awaiting_station_acceptance','stock_reserved') then
+  if not found or operation_record.stage_key not in ('awaiting_station_acceptance','stock_reserved','station_filling') then
     raise exception using errcode='55000',message='Fuel order is not accepting stock reservations';
   end if;
 
@@ -254,9 +254,9 @@ begin
   into reserved_total
   from public.fuel_order_stock_reservations reservation
   where reservation.order_id=target_order_id
-    and reservation.status in ('reserved','partially_consumed');
+    and reservation.status='reserved';
 
-  if reserved_total+target_quantity_litres>operation_record.requested_litres then
+  if reserved_total+coalesce(operation_record.filled_litres,0)+target_quantity_litres>operation_record.requested_litres then
     raise exception using errcode='23514',message='Fuel stock reservations exceed the order quantity';
   end if;
 
@@ -438,14 +438,13 @@ begin
     raise exception using errcode='23514',message='Consumed fuel cannot exceed the reservation';
   end if;
 
-  select * into storage_record
-  from public.fuel_station_storage_units
-  where id=reservation_record.storage_unit_id
+  select * into order_record
+  from public.order_records
+  where id=reservation_record.order_id
   for update;
 
-  if not found or storage_record.reserved_stock_litres<reservation_record.reserved_litres
-     or storage_record.physical_stock_litres<target_consumed_litres then
-    raise exception using errcode='23514',message='Fuel stock reservation or physical stock is inconsistent';
+  if not found then
+    raise exception using errcode='P0002',message='Fuel order was not found';
   end if;
 
   select * into operation_record
@@ -455,6 +454,16 @@ begin
 
   if not found or operation_record.stage_key not in ('stock_reserved','station_filling') then
     raise exception using errcode='55000',message='Fuel order is not in a station filling stage';
+  end if;
+
+  select * into storage_record
+  from public.fuel_station_storage_units
+  where id=reservation_record.storage_unit_id
+  for update;
+
+  if not found or storage_record.reserved_stock_litres<reservation_record.reserved_litres
+     or storage_record.physical_stock_litres<target_consumed_litres then
+    raise exception using errcode='23514',message='Fuel stock reservation or physical stock is inconsistent';
   end if;
 
   total_filled:=coalesce(operation_record.filled_litres,0)+target_consumed_litres;
@@ -524,6 +533,9 @@ on public.fuel_stock_reservation_events for select to authenticated
 using (public.can_read_fuel_order(order_id));
 
 grant select on public.fuel_stock_reservation_events to authenticated,service_role;
+grant insert,update on public.fuel_station_storage_units to service_role;
+grant insert,update on public.fuel_order_stock_reservations,public.fuel_stock_reservation_events to service_role;
+
 grant insert,update,delete on public.fuel_station_stock_movements,public.fuel_order_stock_reservations,public.fuel_stock_reservation_events to service_role;
 
 drop trigger if exists fuel_stock_reservation_events_immutable on public.fuel_stock_reservation_events;
