@@ -936,6 +936,12 @@ function operationalLocationFromRecord(value: unknown): OperationalLocation | nu
       postalCode: firstString(address, ["postalCode"]),
       country: firstString(address, ["country"]),
       countryCode: firstString(address, ["countryCode"]),
+      neighbourhood: firstString(address, ["neighbourhood"]),
+      town: firstString(address, ["town"]),
+      village: firstString(address, ["village"]),
+      lga: firstString(address, ["lga"]),
+      state: firstString(address, ["state"]),
+      stateCode: firstString(address, ["stateCode"]),
     },
   };
 }
