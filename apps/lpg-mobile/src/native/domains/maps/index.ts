@@ -79,7 +79,7 @@ const KEYLESS_OSM_ATTRIBUTION = "© OpenStreetMap contributors";
 
 export function getMapsRuntimeConfig(): MapsRuntimeConfig {
   const tileMaxZoom = Number(process.env.EXPO_PUBLIC_MAP_TILE_MAX_ZOOM);
-  const configuredProvider = readEnv("EXPO_PUBLIC_MAP_TILE_PROVIDER", "carto_voyager")
+  const configuredProvider = readEnv("EXPO_PUBLIC_MAP_TILE_PROVIDER", "openstreetmap")
     .toLowerCase();
   const configuredRaster = process.env.EXPO_PUBLIC_MAP_TILE_URL?.trim();
   const configuredStyle = process.env.EXPO_PUBLIC_MAP_STYLE_URL?.trim();
@@ -234,9 +234,9 @@ function selectKeylessRaster(
   }
 
   return {
-    key: "carto_voyager",
-    template: KEYLESS_RASTER_TILE_TEMPLATE,
-    attribution: KEYLESS_ATTRIBUTION,
+    key: "osm_standard",
+    template: KEYLESS_OSM_TILE_TEMPLATE,
+    attribution: KEYLESS_OSM_ATTRIBUTION,
     fallback: true,
   };
 }
