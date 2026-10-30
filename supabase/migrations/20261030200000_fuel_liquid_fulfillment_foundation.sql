@@ -264,6 +264,7 @@ create table if not exists public.fuel_container_allocations (
   product_key text not null references public.fuel_products(key) on update cascade on delete restrict,
   station_branch_id uuid not null references public.organization_branches(id) on delete restrict,
   customer_user_id uuid references public.profiles(id) on delete set null,
+  allocated_litres numeric(12,3) not null check (allocated_litres > 0),
   allocation_mode text not null
     check (allocation_mode in ('purchase', 'rental')),
   status text not null default 'reserved'
@@ -288,7 +289,11 @@ create table if not exists public.fuel_container_allocations (
   created_by uuid references public.profiles(id) on delete set null default auth.uid(),
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
-  unique (source, idempotency_key)
+  unique (source, idempotency_key),
+  check (
+    (allocation_mode = 'purchase' and rental_amount = 0 and refundable_deposit_amount = 0)
+    or (allocation_mode = 'rental' and purchase_amount = 0)
+  )
 );
 
 create unique index if not exists fuel_container_allocations_one_open_container
@@ -334,6 +339,7 @@ create table if not exists public.fuel_order_commercial_snapshots (
   container_count integer not null
     check (container_count > 0),
   currency_code text not null references public.currency_definitions(code),
+  fuel_unit_price numeric(20,8) not null check (fuel_unit_price >= 0),
   fuel_amount numeric(20,8) not null check (fuel_amount >= 0),
   container_amount numeric(20,8) not null default 0 check (container_amount >= 0),
   driver_amount numeric(20,8) not null default 0 check (driver_amount >= 0),
@@ -345,6 +351,8 @@ create table if not exists public.fuel_order_commercial_snapshots (
     check (jsonb_typeof(component_snapshot) = 'object'),
   status text not null default 'quoted'
     check (status in ('quoted', 'accepted', 'cancelled', 'expired', 'settled', 'disputed')),
+  check (abs(fuel_amount - requested_litres * fuel_unit_price) < 0.001),
+  check (grand_total = fuel_amount + container_amount + driver_amount + platform_fee_amount + tax_amount + refundable_deposit_amount),
   valid_until timestamptz,
   idempotency_key text not null unique,
   metadata jsonb not null default '{}'::jsonb
@@ -494,6 +502,67 @@ begin
   return new;
 end;
 $$;
+
+create or replace function public.validate_fuel_station_storage_scope()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  branch_organization_id uuid;
+begin
+  select branch.organization_id into branch_organization_id
+  from public.organization_branches branch
+  where branch.id = new.branch_id;
+
+  if not found or branch_organization_id is distinct from new.organization_id then
+    raise exception using errcode = '23514', message = 'fuel storage organization must match its station branch';
+  end if;
+
+  return new;
+end;
+$;
+
+create or replace function public.validate_fuel_container_allocation()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  profile_record record;
+begin
+  select profile.id, profile.ownership_mode, profile.capacity_litres,
+         profile.status as profile_status, container_type.supported_product_keys
+  into profile_record
+  from public.fuel_container_profiles profile
+  join public.fuel_container_types container_type on container_type.id = profile.container_type_id
+  where profile.id = new.container_profile_id;
+
+  if not found then
+    raise exception using errcode = '23503', message = 'fuel container profile was not found';
+  end if;
+
+  if profile_record.ownership_mode <> 'skima' then
+    raise exception using errcode = '23514', message = 'fuel order allocation requires a SKIMA-controlled container';
+  end if;
+
+  if profile_record.status not in ('available', 'reserved') then
+    raise exception using errcode = '23514', message = 'fuel container is not available for allocation';
+  end if;
+
+  if not (new.product_key = any(profile_record.supported_product_keys)) then
+    raise exception using errcode = '23514', message = 'container type is not compatible with the ordered fuel product';
+  end if;
+
+  if new.allocated_litres > profile_record.capacity_litres then
+    raise exception using errcode = '23514', message = 'allocated fuel quantity exceeds container capacity';
+  end if;
+
+  return new;
+end;
+$;
 
 create or replace function public.set_fuel_product_status(
   target_product_key text,
@@ -729,6 +798,16 @@ create trigger fuel_container_profiles_validate_asset
 before insert or update on public.fuel_container_profiles
 for each row execute function public.validate_fuel_container_asset();
 
+drop trigger if exists fuel_station_storage_units_validate_scope on public.fuel_station_storage_units;
+create trigger fuel_station_storage_units_validate_scope
+before insert or update on public.fuel_station_storage_units
+for each row execute function public.validate_fuel_station_storage_scope();
+
+drop trigger if exists fuel_container_allocations_validate on public.fuel_container_allocations;
+create trigger fuel_container_allocations_validate
+before insert or update on public.fuel_container_allocations
+for each row execute function public.validate_fuel_container_allocation();
+
 drop trigger if exists fuel_container_profiles_audit on public.fuel_container_profiles;
 create trigger fuel_container_profiles_audit
 after insert or update or delete on public.fuel_container_profiles
@@ -795,6 +874,8 @@ revoke all on function public.can_manage_fuel_branch(uuid) from public;
 revoke all on function public.can_read_fuel_order(uuid) from public;
 revoke all on function public.prevent_fuel_event_mutation() from public;
 revoke all on function public.validate_fuel_container_asset() from public;
+revoke all on function public.validate_fuel_station_storage_scope() from public;
+revoke all on function public.validate_fuel_container_allocation() from public;
 revoke all on function public.set_fuel_product_status(text, text, text, text) from public, anon;
 grant execute on function public.can_manage_fuel_platform() to authenticated, service_role;
 grant execute on function public.can_read_fuel_branch(uuid) to authenticated, service_role;
