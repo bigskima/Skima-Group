@@ -70,7 +70,7 @@
     "vercel-ignore:test": "node scripts/vercel-ignore.test.mjs",
     "utility-billing:contract": "deno test --allow-read scripts/utility-billing-production-contract.test.ts",
     "verification-runtime:contract": "deno test --allow-read scripts/verification-runtime-contract.test.ts",
-    "fuel:contract": "deno test --allow-read scripts/fuel-liquid-fulfillment-foundation-contract.test.ts scripts/fuel-order-processing-runtime-contract.test.ts scripts/fuel-stock-and-container-runtime-contract.test.ts scripts/fuel-atomic-stock-batches-contract.test.ts"
+    "fuel:contract": "deno test --allow-read scripts/fuel-liquid-fulfillment-foundation-contract.test.ts scripts/fuel-order-processing-runtime-contract.test.ts scripts/fuel-stock-and-container-runtime-contract.test.ts scripts/fuel-atomic-stock-batches-contract.test.ts scripts/fuel-dispatch-and-admin-contract.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.110.9",
