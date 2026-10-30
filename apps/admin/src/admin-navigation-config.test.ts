@@ -23,6 +23,11 @@ describe("admin navigation access rules", () => {
     expect(canAccessAdminNavigationKey("driver-pricing", (permission) => permission === "platform.financial_policy.activate")).toBe(true);
   });
 
+  it("restricts Fuel administration to platform Fuel readers", () => {
+    expect(canAccessAdminNavigationKey("fuel", (permission) => permission === "platform.fuel.read")).toBe(true);
+    expect(canAccessAdminNavigationKey("fuel", () => false)).toBe(false);
+  });
+
   it("still enforces simple focused-screen permissions", () => {
     expect(canAccessAdminNavigationKey("support", (permission) => permission === "platform.support.read")).toBe(true);
     expect(canAccessAdminNavigationKey("support", () => false)).toBe(false);
