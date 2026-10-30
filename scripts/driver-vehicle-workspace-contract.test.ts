@@ -37,6 +37,18 @@ Deno.test("independent driver vehicle applications use backend ownership values"
   assertIncludes(screen, "await submit.mutateAsync");
 });
 
+Deno.test("independent vehicle model-year validation accepts real four-digit years", async () => {
+  const screen = await read("apps/lpg-mobile/src/native/ui/VehicleWorkflowScreen.tsx");
+  const match = screen.match(/!\/\^([^/]+)\$\/\.test\(year\.trim\(\)\)/);
+  if (!match?.[1]) throw new Error("Could not locate vehicle model-year validation pattern.");
+  const yearPattern = new RegExp("^" + match[1] + "$");
+  if (!yearPattern.test("2022") || !yearPattern.test("2026")) {
+    throw new Error("The vehicle form rejects valid four-digit model years.");
+  }
+  for (const invalidYear of ["22", "202", "20222", "20A2"]) {
+    if (yearPattern.test(invalidYear)) throw new Error("The vehicle form accepts an invalid model year.");
+  }
+});
 Deno.test("vehicle approval automatically links an applicant's approved driver", async () => {
   const activation = await read(
     "supabase/migrations/20260728080000_driver_vehicle_onboarding_runtime.sql",

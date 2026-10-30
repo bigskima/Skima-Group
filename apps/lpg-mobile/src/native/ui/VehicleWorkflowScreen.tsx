@@ -255,7 +255,7 @@ export function VehicleWorkflowScreen() {
       !typeKey ||
       !manufacturer.trim() ||
       !model.trim() ||
-      !/^\\d{4}$/.test(year.trim()) ||
+      !/^\d{4}$/.test(year.trim()) ||
       yearNumber < 1900 ||
       yearNumber > new Date().getFullYear() + 1 ||
       !registration.trim() ||
