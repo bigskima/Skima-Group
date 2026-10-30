@@ -39,6 +39,7 @@ const screenRoutes: Readonly<Record<string, string>> = {
   "driver-pricing": "/money/pricing/drivers",
   billing: "/services/utility-billing",
   catalog: "/services/catalog",
+  fuel: "/services/fuel",
   ai: "/intelligence/ask",
   content: "/experience/content",
   policies: "/experience/policies",
@@ -89,7 +90,7 @@ export const adminWorkspaceDefinitions: readonly AdminWorkspaceDefinition[] = [
     description: "Utility billing, service catalogue and service availability.",
     basePath: "/services",
     icon: "services",
-    screenKeys: ["billing", "catalog"],
+    screenKeys: ["billing", "catalog", "fuel"],
   },
   {
     key: "intelligence",
@@ -195,6 +196,7 @@ const servicesScreenLabels: Readonly<Record<string, string>> = {
   "/services": "Services overview",
   "/services/utility-billing": "Utility billing",
   "/services/catalog": "Service catalog",
+  "/services/fuel": "Fuel administration",
   "/services/availability": "Service availability",
 };
 
@@ -450,7 +452,8 @@ function buildOperationsWorkspaceNavigation(items: readonly NavigationItem[]): r
 function buildServicesWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
   const billing = items.find((item) => item.key === "billing");
   const catalog = items.find((item) => item.key === "catalog");
-  const first = billing ?? catalog;
+  const fuel = items.find((item) => item.key === "fuel");
+  const first = billing ?? catalog ?? fuel;
 
   if (!first) return [];
 
@@ -478,6 +481,10 @@ function buildServicesWorkspaceNavigation(items: readonly NavigationItem[]): rea
         href: "/services/availability",
       },
     );
+  }
+
+  if (fuel) {
+    navigation.push({ ...fuel, label: "Fuel administration", href: "/services/fuel" });
   }
 
   return navigation;
