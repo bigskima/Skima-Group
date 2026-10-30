@@ -285,6 +285,21 @@ begin
     raise exception using errcode='23514',message='Stock reservation requires a Fuel order';
   end if;
 
+  if not exists (
+    select 1
+    from public.service_requests request_record
+    join public.escrow_holds hold_record on hold_record.id=request_record.escrow_hold_id
+    where request_record.id=order_record.service_request_id
+      and request_record.status='payment_reserved'
+      and hold_record.status='held'
+      and hold_record.subject_type='service_request'
+      and hold_record.subject_id=order_record.service_request_id
+      and hold_record.currency_code=order_record.currency_code
+      and hold_record.hold_amount=order_record.total_amount
+  ) then
+    raise exception using errcode='55000',message='A confirmed, matching Fuel escrow hold is required before station stock can be reserved';
+  end if;
+
   select * into operation_record from public.fuel_order_operations where order_id=target_order_id for update;
   if not found or operation_record.stage_key not in ('awaiting_station_acceptance','stock_reserved','station_filling') then
     raise exception using errcode='55000',message='Fuel order is not accepting stock reservations';
