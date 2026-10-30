@@ -245,7 +245,7 @@ export function AdminManagedDriverCoverageWorkspace(props: { readonly onNavigate
         <section className="sk-panel stack-md">
           <div className="section-heading"><div><span className="section-kicker">Service areas</span><h2>Where can this Driver fulfil LPG orders?</h2></div></div>
           {assignedAreas.isPending ? <LoadingState label="Loading Driver service areas…" /> : null}
-          {assignedAreas.error ? <ErrorState title="Driver service areas unavailable" message={readError(assignedAreas.error)} onRetry={() => void assignedAreas.refetch()} /> : null}
+          {assignedAreas.error ? <ErrorState title="Driver service areas unavailable" message={assignedAreas.error instanceof Error ? assignedAreas.error.message : String(assignedAreas.error)} onRetry={() => void assignedAreas.refetch()} /> : null}
 
           {(assignedAreas.data ?? []).length ? (assignedAreas.data ?? []).map((area) => (
             <div className="skima-list-row" key={area.serviceAreaKey}>
