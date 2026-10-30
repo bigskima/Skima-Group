@@ -24,6 +24,10 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
+import {
+  applicationRequirementApplies,
+  applicationRequirementIsRequired,
+} from "../api/documentRequirements";
 import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { PresentationMediaPanel } from "./PresentationMediaPanel";
@@ -63,13 +67,18 @@ export function VehicleWorkflowScreen() {
       !["approved", "rejected", "withdrawn", "expired"].includes(firstString(item, ["status"]) ?? ""),
   );
   const currentId = current ? recordId(current) : null;
+  const currentApplicationPayload = current?.application_payload &&
+      typeof current.application_payload === "object" &&
+      !Array.isArray(current.application_payload)
+    ? current.application_payload as Record<string, unknown>
+    : {};
   const verification = useApplicationVerification(currentId);
   const verifiedDocumentKeys = satisfiedVerificationDocumentKeys(verification.data);
   const requirementSetId = firstString(applicationType, ["document_requirement_set_id", "documentRequirementSetId"]);
   const required = (requirements.data ?? []).filter(
     (item) =>
       firstString(item, ["requirement_set_id", "requirementSetId"]) === requirementSetId &&
-      item.is_required === true &&
+      applicationRequirementIsRequired(item, currentApplicationPayload) &&
       firstString(item, ["status"]) === "active",
   );
   const vehicleRequirementsConfigured = Boolean(requirementSetId && required.length > 0);
