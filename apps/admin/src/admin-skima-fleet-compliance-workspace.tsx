@@ -298,14 +298,28 @@ export function AdminSkimaFleetComplianceWorkspace(props: { readonly onNavigate:
                 className="sk-input"
                 type="file"
                 accept="application/pdf,image/jpeg,image/png,image/webp"
-                onChange={(event) => setUploadState((current) => current ? { ...current, file: event.currentTarget.files?.[0] ?? null } : current)}
+                onChange={(event) => {
+                  // Capture the File while currentTarget is still valid. React
+                  // may run a functional state updater after this event ends.
+                  const file = event.currentTarget.files?.[0] ?? null;
+                  setUploadState((current) => current ? { ...current, file } : current);
+                }}
               />
             </label>
             <div className="skima-form-grid">
-              <TextInput label="Valid from (optional)" type="date" value={uploadState.validFrom} onChange={(event) => setUploadState((current) => current ? { ...current, validFrom: event.currentTarget.value } : current)} />
-              <TextInput label="Expiry date (optional)" type="date" value={uploadState.validUntil} onChange={(event) => setUploadState((current) => current ? { ...current, validUntil: event.currentTarget.value } : current)} />
+              <TextInput label="Valid from (optional)" type="date" value={uploadState.validFrom} onChange={(event) => {
+                const validFrom = event.currentTarget.value;
+                setUploadState((current) => current ? { ...current, validFrom } : current);
+              }} />
+              <TextInput label="Expiry date (optional)" type="date" value={uploadState.validUntil} onChange={(event) => {
+                const validUntil = event.currentTarget.value;
+                setUploadState((current) => current ? { ...current, validUntil } : current);
+              }} />
             </div>
-            <TextAreaInput label="Admin review note" value={uploadState.reason} onChange={(event) => setUploadState((current) => current ? { ...current, reason: event.currentTarget.value } : current)} placeholder="Example: Verified current insurance certificate against company fleet records" />
+            <TextAreaInput label="Admin review note" value={uploadState.reason} onChange={(event) => {
+              const reason = event.currentTarget.value;
+              setUploadState((current) => current ? { ...current, reason } : current);
+            }} placeholder="Example: Verified current insurance certificate against company fleet records" />
             {uploadEvidence.error ? <ErrorState error={uploadEvidence.error} /> : null}
           </div>
         ) : null}
