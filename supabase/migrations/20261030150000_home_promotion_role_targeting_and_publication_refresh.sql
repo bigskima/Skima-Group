@@ -216,10 +216,7 @@ AS $function$
   where publication.status = 'published'
     and (target_placement_keys is null or publication.placement_key = any(target_placement_keys))
     and (publication.module_key is null or target_module_key is null or publication.module_key = target_module_key)
-    and (
-      'public' = any(placement.allowed_audiences)
-      or coalesce(target_audience_key, 'public') = any(placement.allowed_audiences)
-    )
+    and coalesce(target_audience_key, 'public') = any(placement.allowed_audiences)
     and ('public' = any(publication.audience_keys) or coalesce(target_audience_key, 'public') = any(publication.audience_keys))
     and (cardinality(publication.country_codes) = 0 or lower(coalesce(target_country_code, '')) = any(select lower(value) from unnest(publication.country_codes) value))
     and (cardinality(publication.regions) = 0 or lower(coalesce(target_region, '')) = any(select lower(value) from unnest(publication.regions) value))
