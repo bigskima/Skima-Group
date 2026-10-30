@@ -117,6 +117,7 @@ begin
      or target_purchase_amount is null or target_purchase_amount<0
      or target_rental_amount is null or target_rental_amount<0
      or target_refundable_deposit_amount is null or target_refundable_deposit_amount<0
+     or target_currency_code is null
      or coalesce(btrim(target_idempotency_key),'')=''
      or target_metadata is null or jsonb_typeof(target_metadata)<>'object' then
     raise exception using errcode='22023',message='valid order, container, litres, allocation mode, amounts, idempotency key and object metadata are required';
@@ -169,7 +170,8 @@ begin
   end if;
 
   if quote_record.product_key<>operation_record.product_key
-     or quote_record.container_mode<>operation_record.container_mode then
+     or quote_record.container_mode<>operation_record.container_mode
+     or quote_record.currency_code<>target_currency_code then
     raise exception using errcode='23514',message='container allocation does not match the accepted fuel quote';
   end if;
 
@@ -315,8 +317,16 @@ begin
   elsif target_event_key='handed_to_driver' then
     if allocation_record.status<>'station_prepared'
        or target_from_holder_type<>'station' or target_to_holder_type<>'driver'
-       or target_from_holder_id<>allocation_record.station_branch_id then
-      raise exception using errcode='23514',message='driver handover requires a station-prepared container';
+       or target_from_holder_id<>allocation_record.station_branch_id
+       or not exists (
+         select 1 from public.order_assignments assignment
+         where assignment.order_id=allocation_record.order_id
+           and assignment.participant_role='driver'
+           and assignment.entity_id=target_to_holder_id
+           and assignment.entity_type in ('driver','user')
+           and assignment.status='active'
+       ) then
+      raise exception using errcode='23514',message='driver handover requires a station-prepared container and the active assigned driver';
     end if;
     next_allocation_status:='with_driver';
     next_profile_status:='with_driver';
@@ -324,16 +334,33 @@ begin
     if allocation_record.status<>'with_driver'
        or target_from_holder_type<>'driver' or target_to_holder_type<>'customer'
        or target_to_holder_id<>allocation_record.customer_user_id
+       or not exists (
+         select 1 from public.order_assignments assignment
+         where assignment.order_id=allocation_record.order_id
+           and assignment.participant_role='driver'
+           and assignment.entity_id=target_from_holder_id
+           and assignment.entity_type in ('driver','user')
+           and assignment.status='active'
+       )
        or target_measured_litres is null or target_measured_litres<=0
        or abs(target_measured_litres-allocation_record.filled_litres)>0.001 then
       raise exception using errcode='23514',message='customer delivery requires driver custody and quantity confirmation matching the station fill';
     end if;
-    next_allocation_status:='delivered';
+    next_allocation_status:=case when allocation_record.allocation_mode='purchase' then 'ownership_transferred' else 'delivered' end;
     next_profile_status:='with_customer';
   elsif target_event_key='returned_to_driver' then
     if allocation_record.allocation_mode<>'rental'
        or allocation_record.status<>'delivered'
-       or target_from_holder_type<>'customer' or target_to_holder_type<>'driver' then
+       or target_from_holder_type<>'customer' or target_from_holder_id<>allocation_record.customer_user_id
+       or target_to_holder_type<>'driver'
+       or not exists (
+         select 1 from public.order_assignments assignment
+         where assignment.order_id=allocation_record.order_id
+           and assignment.participant_role='driver'
+           and assignment.entity_id=target_to_holder_id
+           and assignment.entity_type in ('driver','user')
+           and assignment.status='active'
+       ) then
       raise exception using errcode='23514',message='only a delivered rental container can be returned by the customer to the driver';
     end if;
     next_allocation_status:='returned_to_driver';
@@ -341,7 +368,16 @@ begin
   elsif target_event_key='received_at_station' then
     if allocation_record.allocation_mode<>'rental'
        or allocation_record.status<>'returned_to_driver'
-       or target_from_holder_type<>'driver' or target_to_holder_type<>'station'
+       or target_from_holder_type<>'driver'
+       or not exists (
+         select 1 from public.order_assignments assignment
+         where assignment.order_id=allocation_record.order_id
+           and assignment.participant_role='driver'
+           and assignment.entity_id=target_from_holder_id
+           and assignment.entity_type in ('driver','user')
+           and assignment.status='active'
+       )
+       or target_to_holder_type<>'station'
        or target_to_holder_id<>allocation_record.station_branch_id then
       raise exception using errcode='23514',message='only a returned rental container can be received back at its allocated station';
     end if;
