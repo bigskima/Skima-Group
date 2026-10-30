@@ -32,7 +32,7 @@ export function usePublishedProductContent(
   const key = placementKeys.join("|");
   return useQuery({
     queryKey: [
-      "product-content",
+      "product-content-v2",
       key,
       options.moduleKey ?? "platform",
       options.audience ?? "public",
@@ -55,7 +55,15 @@ export function usePublishedProductContent(
       if (error) throw error;
       return (Array.isArray(data) ? data : []).map(readProductContentRecord);
     },
-    staleTime: 5 * 60_000,
+    // Promotions can be paused, retired or re-published from Admin while the app
+    // remains open. Keep the persisted first paint, but always reconcile it with
+    // the publication state on mount and after the app returns to the foreground.
+    staleTime: 15_000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
     meta: { persist: true },
   });
 }
