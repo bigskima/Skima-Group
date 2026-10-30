@@ -311,7 +311,7 @@ export function ContentWorkspaceV2(props: { readonly onNavigate: (href: string) 
                     type="button"
                     onClick={() => { setActivePlacementKey(placement.key); setSelectedPublicationId(null); }}
                   >
-                    <span><strong>{placement.display_name}</strong><small>{friendlySurface(placement.surface_key)}</small></span>
+                    <span><strong>{placement.display_name}</strong><small>{friendlySurface(placement.surface_key)} · {formatAudience(placement.allowed_audiences)}</small></span>
                     <StatusBadge tone={placement.status === "active" ? "success" : "warning"}>{count}</StatusBadge>
                   </button>
                 );
@@ -462,13 +462,24 @@ function PublicationDialog(props: {
   if (!target) return null;
 
   const activePlacement = props.placements.find((item) => item.key === form.placementKey) ?? null;
-  const audienceOptionsForForm = audienceOptions.some((option) => option.value === form.audienceKeys)
-    ? audienceOptions
-    : [...audienceOptions, { label: `Custom: ${form.audienceKeys || "none"}`, value: form.audienceKeys }];
+  const supportedAudienceOptions = audienceOptions.filter((option) =>
+    option.value.split(",").every((audience) => activePlacement?.allowed_audiences.includes(audience.trim()) ?? false)
+  );
+  const audienceOptionsForForm = supportedAudienceOptions.some((option) => option.value === form.audienceKeys)
+    ? supportedAudienceOptions
+    : [...supportedAudienceOptions, { label: `Custom: ${form.audienceKeys || "none"}`, value: form.audienceKeys }];
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!form.placementKey) { setError("Choose where this content should appear."); setStep("surface"); return; }
+    const enabledAudiences = new Set(activePlacement?.allowed_audiences ?? []);
+    const requestedAudiences = listFromInput(form.audienceKeys, ["public"]);
+    const unsupportedAudiences = requestedAudiences.filter((audience) => !enabledAudiences.has(audience));
+    if (unsupportedAudiences.length) {
+      setError(`This surface is not enabled for: ${formatAudience(unsupportedAudiences)}. Update its allowed audiences in Advanced setup, or choose an enabled audience.`);
+      setStep("audience");
+      return;
+    }
     if (uploadMedia.isPending) { setError("Wait for the image upload to finish."); setStep("creative"); return; }
     if (!form.title.trim() && !form.body.trim() && !form.mediaPublicUrl && !form.mediaAssetId) {
       setError("Add an image, title or supporting copy before saving.");
@@ -500,10 +511,23 @@ function PublicationDialog(props: {
                 label="App surface"
                 value={form.placementKey}
                 options={[{ label: "Choose content surface", value: "" }, ...props.placements.map((item) => ({ label: item.display_name, value: item.key }))]}
-                onChange={(event) => setForm({ ...form, placementKey: event.currentTarget.value })}
+                onChange={(event) => {
+                  const nextPlacementKey = event.currentTarget.value;
+                  const nextPlacement = props.placements.find((item) => item.key === nextPlacementKey);
+                  const retainedAudiences = listFromInput(form.audienceKeys, ["public"])
+                    .filter((audience) => nextPlacement?.allowed_audiences.includes(audience) ?? false);
+                  const fallbackAudience = nextPlacement?.allowed_audiences.includes("public")
+                    ? "public"
+                    : nextPlacement?.allowed_audiences[0] ?? "public";
+                  setForm({
+                    ...form,
+                    placementKey: nextPlacementKey,
+                    audienceKeys: retainedAudiences.length ? retainedAudiences.join(", ") : fallbackAudience,
+                  });
+                }}
                 required
               />
-              {activePlacement ? <div className="content-v2__review-grid"><div><small>Surface</small><strong>{activePlacement.display_name}</strong></div><div><small>App location</small><strong>{friendlySurface(activePlacement.surface_key)}</strong></div></div> : null}
+              {activePlacement ? <div className="content-v2__review-grid"><div><small>Surface</small><strong>{activePlacement.display_name}</strong></div><div><small>App location</small><strong>{friendlySurface(activePlacement.surface_key)}</strong></div><div><small>Audience reach enabled</small><strong>{formatAudience(activePlacement.allowed_audiences)}</strong></div></div> : null}
             </AdminFormSection>
           ) : null}
 
@@ -533,8 +557,9 @@ function PublicationDialog(props: {
           ) : null}
 
           {step === "audience" ? (
-            <AdminFormSection title="Choose the audience" description="Use common audiences here. Geographic and technical targeting stays under Advanced targeting.">
+            <AdminFormSection title="Choose the audience" description="Only roles enabled on the selected surface are available. Geographic and technical targeting stays under Advanced targeting.">
               <SelectInput label="Who should see this?" value={form.audienceKeys} options={audienceOptionsForForm} onChange={(event) => setForm({ ...form, audienceKeys: event.currentTarget.value })} />
+              {activePlacement ? <p className="skima-muted">This surface is enabled for: {formatAudience(activePlacement.allowed_audiences)}. A publication can target one or more of these audiences.</p> : null}
               <details className="content-v2__advanced">
                 <summary>Advanced targeting</summary>
                 <div className="skima-form-grid">
