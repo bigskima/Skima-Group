@@ -416,9 +416,14 @@ declare
   order_record public.order_records%rowtype;
   operation_record public.fuel_order_operations%rowtype;
   existing_event public.fuel_order_operation_events%rowtype;
+  quote_record public.fuel_order_commercial_snapshots%rowtype;
   allowed_transition boolean := false;
   allocated_count integer := 0;
   allocated_litres numeric(16,3) := 0;
+  allocated_filled_litres numeric(16,3) := 0;
+  allocated_container_amount numeric(20,8) := 0;
+  allocated_deposit_amount numeric(20,8) := 0;
+  delivered_container_litres numeric(16,3) := 0;
   custody_count integer := 0;
   verified_delivered_litres numeric(16,3);
   consumed_litres numeric(16,3) := 0;
@@ -514,15 +519,30 @@ begin
       raise exception using errcode='23514',message='The full ordered fuel quantity must be filled and measured before driver handover';
     end if;
 
-    select count(*),coalesce(sum(allocation.allocated_litres),0)
-    into allocated_count,allocated_litres
+    select count(*),coalesce(sum(allocation.allocated_litres),0),
+           coalesce(sum(allocation.filled_litres),0),
+           coalesce(sum(case when allocation.allocation_mode='purchase' then allocation.purchase_amount else allocation.rental_amount end),0),
+           coalesce(sum(allocation.refundable_deposit_amount),0)
+    into allocated_count,allocated_litres,allocated_filled_litres,allocated_container_amount,allocated_deposit_amount
     from public.fuel_container_allocations allocation
     where allocation.order_id=target_order_id
       and allocation.status='station_prepared';
 
     if allocated_count<>operation_record.container_count
-       or allocated_litres<operation_record.requested_litres-0.001 then
-      raise exception using errcode='23514',message='All quoted fuel containers must be allocated and prepared before driver handover';
+       or allocated_litres<operation_record.requested_litres-0.001
+       or abs(allocated_filled_litres-operation_record.filled_litres)>0.001 then
+      raise exception using errcode='23514',message='All quoted fuel containers must be allocated and measured before driver handover';
+    end if;
+
+    select * into quote_record
+    from public.fuel_order_commercial_snapshots
+    where service_request_id=operation_record.service_request_id
+      and status='accepted';
+
+    if not found
+       or abs(allocated_container_amount-quote_record.container_amount)>0.001
+       or abs(allocated_deposit_amount-quote_record.refundable_deposit_amount)>0.001 then
+      raise exception using errcode='23514',message='Allocated container charges and deposits must match the accepted commercial quote';
     end if;
 
     select coalesce(sum(reservation.consumed_litres),0)
@@ -577,8 +597,16 @@ begin
      and custody.event_key='delivered_to_customer'
     where allocation.order_id=target_order_id;
 
-    if custody_count<>operation_record.container_count then
-      raise exception using errcode='23514',message='Every filled container must have a verified customer delivery handover';
+    select count(distinct allocation.container_profile_id),coalesce(sum(allocation.delivered_litres),0)
+    into allocated_count,delivered_container_litres
+    from public.fuel_container_allocations allocation
+    where allocation.order_id=target_order_id
+      and allocation.status in ('delivered','ownership_transferred');
+
+    if custody_count<>operation_record.container_count
+       or allocated_count<>operation_record.container_count
+       or abs(delivered_container_litres-verified_delivered_litres)>0.001 then
+      raise exception using errcode='23514',message='Every filled container must be delivered and measured against the customer-verified quantity';
     end if;
   end if;
 
