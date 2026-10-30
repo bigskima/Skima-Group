@@ -51,11 +51,29 @@ as $$
       where branch_record.id = target_branch_id
         and (
           public.has_permission('business.fuel.inventory.manage', branch_record.organization_id)
-          or public.has_permission('business.fuel.orders.manage', branch_record.organization_id)
-          or public.has_permission('business.catalog.manage', branch_record.organization_id)
         )
     );
 $$;
+
+create or replace function public.can_manage_fuel_offer_branch(target_branch_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $
+  select auth.role() = 'service_role'
+    or public.can_manage_fuel_platform()
+    or exists (
+      select 1
+      from public.organization_branches branch_record
+      where branch_record.id = target_branch_id
+        and (
+          public.has_permission('business.fuel.orders.manage', branch_record.organization_id)
+          or public.has_permission('business.catalog.manage', branch_record.organization_id)
+        )
+    );
+$;
 
 create or replace function public.can_read_fuel_order(target_order_id uuid)
 returns boolean
@@ -272,7 +290,7 @@ declare
   resolved_status text;
 begin
   if auth.role() <> 'service_role'
-     and not public.can_manage_fuel_branch(target_branch_id) then
+     and not public.can_manage_fuel_offer_branch(target_branch_id) then
     raise exception using errcode='42501',message='branch fuel management permission is required';
   end if;
 
@@ -816,6 +834,7 @@ for each row execute function public.prevent_fuel_event_mutation();
 revoke all on function public.can_read_fuel_platform() from public,anon;
 revoke all on function public.can_read_fuel_branch(uuid) from public,anon;
 revoke all on function public.can_manage_fuel_branch(uuid) from public,anon;
+revoke all on function public.can_manage_fuel_offer_branch(uuid) from public,anon;
 revoke all on function public.can_read_fuel_order(uuid) from public,anon;
 revoke all on function public.configure_fuel_branch_product_offer(uuid,text,text,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,text[],text,text,jsonb) from public,anon;
 revoke all on function public.configure_fuel_station_storage_unit(uuid,uuid,text,text,text,numeric,numeric,text,jsonb,text) from public,anon;
@@ -824,6 +843,7 @@ revoke all on function public.configure_fuel_container_type(text,text,numeric,te
 grant execute on function public.can_read_fuel_platform() to authenticated,service_role;
 grant execute on function public.can_read_fuel_branch(uuid) to authenticated,service_role;
 grant execute on function public.can_manage_fuel_branch(uuid) to authenticated,service_role;
+grant execute on function public.can_manage_fuel_offer_branch(uuid) to authenticated,service_role;
 grant execute on function public.can_read_fuel_order(uuid) to authenticated,service_role;
 grant execute on function public.configure_fuel_branch_product_offer(uuid,text,text,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,numeric,text[],text,text,jsonb) to authenticated,service_role;
 grant execute on function public.configure_fuel_station_storage_unit(uuid,uuid,text,text,text,numeric,numeric,text,jsonb,text) to authenticated,service_role;
