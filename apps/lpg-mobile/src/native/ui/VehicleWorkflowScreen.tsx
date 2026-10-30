@@ -391,7 +391,13 @@ export function VehicleWorkflowScreen() {
             <View style={styles.heroIcon}><Truck color="#FFFFFF" size={28} /></View>
             <View style={styles.heroCopy}>
               <Text style={styles.heroEyebrow}>APPROVED DRIVER CAPABILITY</Text>
-              <Text style={styles.heroTitle}>{vehicles.data?.length ?? 0} registered {vehicles.data?.length === 1 ? "vehicle" : "vehicles"}</Text>
+              <Text style={styles.heroTitle}>
+                {vehicles.error
+                  ? "Vehicle list unavailable"
+                  : vehicles.isPending
+                    ? "Loading vehicles…"
+                    : `${vehicles.data?.length ?? 0} registered ${vehicles.data?.length === 1 ? "vehicle" : "vehicles"}`}
+              </Text>
               <Text style={styles.heroBody}>Your vehicle type, approval and load capacity affect the jobs you can receive. SKIMA assigns suitable jobs automatically.</Text>
             </View>
           </View>
@@ -609,8 +615,12 @@ export function VehicleWorkflowScreen() {
                       <VehicleMetric label="Max load" value={`${firstNumber(vehicle, ["max_load_kg", "maxLoadKg"]) ?? "—"} kg`} />
                       <VehicleMetric label="Ownership" value={friendly(ownership)} />
                     </View>
-                    <Text style={[styles.vehicleMeta, { color: warnings.length ? palette.danger : palette.success }]}>
-                      {warnings.length ? `Compliance: ${warnings.map(friendly).join(", ")}` : "Assignment and compliance checks are current"}
+                    <Text style={[styles.vehicleMeta, { color: compliance.error ? palette.warning : warnings.length ? palette.danger : palette.success }]}>
+                      {compliance.error
+                        ? "Compliance status could not be loaded."
+                        : warnings.length
+                          ? `Compliance: ${warnings.map(friendly).join(", ")}`
+                          : "Assignment and compliance checks are current"}
                     </Text>
                     {id ? <PresentationMediaPanel subjectId={id} subjectType="vehicle" colour={firstString(vehicle, ["colour", "color"])} /> : null}
                   </View>
