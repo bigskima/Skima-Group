@@ -13,15 +13,14 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
   averageCoordinate,
   cameraBounds,
-  DEFAULT_MAP_CENTER,
   fromLngLat,
-  getMapsRuntimeConfig,
   pointCollection,
   routeCollection,
   toLngLat,
   type MapPoint,
 } from "../domains/maps";
 import { colors, radii, spacing } from "../theme/tokens";
+import { useMapsRendererConfiguration } from "../domains/maps/useMapsRendererConfiguration";
 
 export type { MapPoint } from "../domains/maps";
 
@@ -45,10 +44,10 @@ export function OperationalMap({
   onSelectPoint,
 }: OperationalMapProps) {
   const camera = useRef<CameraRef>(null);
-  const mapConfig = getMapsRuntimeConfig();
-  const first = points[0] ?? averageCoordinate(points) ?? (onSelectPoint ? DEFAULT_MAP_CENTER : null);
+  const mapRenderer = useMapsRendererConfiguration();
+  const first = points[0] ?? averageCoordinate(points) ?? (onSelectPoint ? mapRenderer.defaultCenter : null);
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
-  const zoom = clamp(points.length ? initialZoom : 6, minZoom, maxZoom);
+  const zoom = clamp(points.length ? initialZoom : mapRenderer.defaultZoom, minZoom, maxZoom);
   const markers = useMemo(() => pointCollection(points), [pointKey]);
   const route = useMemo(() => routeCollection(points), [pointKey]);
 
@@ -96,7 +95,7 @@ export function OperationalMap({
         doubleTapZoom
         dragPan
         logo={false}
-        mapStyle={keylessRasterStyle(mapConfig.tile.rasterTileTemplate, mapConfig.tile.attribution)}
+        mapStyle={keylessRasterStyle(mapRenderer.tileTemplate, mapRenderer.attribution)}
         onPress={(event) => {
           if (!onSelectPoint) return;
           onSelectPoint(fromLngLat(event.nativeEvent.lngLat));
