@@ -13,7 +13,6 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
   averageCoordinate,
   cameraBounds,
-  DEFAULT_MAP_CENTER,
   fromLngLat,
   pointCollection,
   routeCollection,
