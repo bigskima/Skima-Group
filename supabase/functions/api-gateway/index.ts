@@ -3513,7 +3513,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       return selectRecords(
         supabase
           .from("fuel_container_profiles")
-          .select("id,asset_id,container_type_id,serial_number,ownership_mode,capacity_litres,status,last_inspected_at,last_inspection_result,metadata,created_at,updated_at")
+          .select("id,asset_id,asset:assets(organization_id,owner_user_id),container_type_id,serial_number,ownership_mode,capacity_litres,status,last_inspected_at,last_inspection_result,metadata,created_at,updated_at")
           .order("created_at", { ascending: false }),
         id,
       );
@@ -3690,7 +3690,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
   if (routePath === "/runtime/fuel/orders/operations" && request.method === "GET") {
     let query = supabase
       .from("fuel_order_operations")
-      .select("order_id,service_request_id,product_key,station_branch_id,customer_user_id,requested_litres,filled_litres,delivered_litres,container_mode,container_count,fulfillment_mode,stage_key,exception_reason,station_accepted_at,filled_at,driver_assigned_at,station_handover_at,delivered_at,return_received_at,completed_at,metadata,created_at,updated_at")
+      .select("order_id,service_request_id,product_key,station_branch_id,customer_user_id,requested_litres,filled_litres,delivered_litres,container_mode,container_count,container_type_id,fulfillment_mode,stage_key,exception_reason,station_accepted_at,filled_at,driver_assigned_at,station_handover_at,delivered_at,return_received_at,completed_at,metadata,created_at,updated_at,order:order_records(currency_code)")
       .order("created_at", { ascending: false });
     const branchId = optionalUuid(url.searchParams.get("branchId"), "branchId");
     const orderId = optionalUuid(url.searchParams.get("orderId"), "orderId");
