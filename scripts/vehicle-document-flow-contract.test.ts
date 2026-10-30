@@ -33,6 +33,25 @@ Deno.test("vehicle evidence requirements match the applicant's ownership type", 
   const rented = { vehicle: { ownershipType: "rented" } };
   const fleetAssigned = { vehicle: { ownershipType: "fleet_assigned" } };
 
+  const checklist = [
+    { key: "vehicle.insurance", is_required: true, metadata: {} },
+    { key: "vehicle.photo", is_required: true, metadata: {} },
+    { key: "vehicle.registration", is_required: true, metadata: {} },
+    { key: "vehicle.roadworthiness", is_required: true, metadata: {} },
+    { key: "vehicle.ownership-authorization", ...ownershipAuthorization },
+    { key: "vehicle.inspection", is_required: false, metadata: {} },
+    { key: "vehicle.lpg-transport", is_required: false, metadata: {} },
+  ];
+  const driverOwnedCount = checklist.filter((item) =>
+    applicationRequirementIsRequired(item, driverOwned)
+  ).length;
+  const leasedCount = checklist.filter((item) =>
+    applicationRequirementIsRequired(item, leased)
+  ).length;
+  if (driverOwnedCount !== 4 || leasedCount !== 5) {
+    throw new Error(`Expected 4 standard uploads and 5 for a leased vehicle, got ${driverOwnedCount} and ${leasedCount}.`);
+  }
+
   if (applicationRequirementIsRequired(ownershipAuthorization, driverOwned)) {
     throw new Error("Driver-owned vehicles should not require a separate authorization upload.");
   }
