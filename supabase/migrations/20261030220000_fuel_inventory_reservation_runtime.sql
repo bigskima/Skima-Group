@@ -88,6 +88,19 @@ begin
     raise exception using errcode='55000',message='fuel storage unit is not active';
   end if;
 
+  select * into existing_movement
+  from public.fuel_station_stock_movements
+  where source='platform.fuel_inventory' and idempotency_key=target_idempotency_key;
+
+  if found then
+    if existing_movement.storage_unit_id<>target_storage_unit_id
+       or existing_movement.movement_kind<>'receipt'
+       or existing_movement.quantity_delta_litres<>target_quantity_litres then
+      raise exception using errcode='23505',message='fuel stock idempotency key was reused with different receipt details';
+    end if;
+    return existing_movement.id;
+  end if;
+
   physical_after:=storage_record.physical_stock_litres+target_quantity_litres;
   if physical_after>storage_record.capacity_litres then
     raise exception using errcode='23514',message='fuel receipt exceeds configured storage capacity';
@@ -162,6 +175,19 @@ begin
 
   if not found or storage_record.status not in ('active','paused') then
     raise exception using errcode='55000',message='fuel storage unit cannot be adjusted in its current state';
+  end if;
+
+  select * into existing_movement
+  from public.fuel_station_stock_movements
+  where source='platform.fuel_inventory' and idempotency_key=target_idempotency_key;
+
+  if found then
+    if existing_movement.storage_unit_id<>target_storage_unit_id
+       or existing_movement.movement_kind<>'adjustment'
+       or existing_movement.quantity_delta_litres<>target_quantity_delta_litres then
+      raise exception using errcode='23505',message='fuel stock idempotency key was reused with different adjustment details';
+    end if;
+    return existing_movement.id;
   end if;
 
   physical_after:=storage_record.physical_stock_litres+target_quantity_delta_litres;
