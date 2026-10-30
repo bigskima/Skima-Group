@@ -135,6 +135,11 @@ export function FuelStationOperationsScreen() {
     schema: ActionResponseSchema,
     invalidate: [["fuel", "station", "operations"], ["fuel", "station", "qualifications"]],
   });
+  const inspectContainer = useGatewayMutation({
+    path: "/runtime/fuel/containers/inspection",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "allocations"], ["fuel", "station", "containers"]],
+  });
 
   const rows = (operations.data ?? []) as FuelOperation[];
   const sortedRows = [...rows].sort((a, b) => {
@@ -372,6 +377,41 @@ export function FuelStationOperationsScreen() {
     }, "A Fuel-approved driver and vehicle have been assigned to this order.");
   };
 
+  const recordContainerInspection = async (allocation: PlatformRecord, result: "passed" | "failed") => {
+    if (!focusedOrder) return;
+    const orderId = focusedOrderId;
+    const allocationId = firstString(allocation, ["id"]);
+    if (!allocationId) return;
+    await withBusy(orderId, async () => {
+      await inspectContainer.mutateAsync({
+        allocationId,
+        inspectionResult: result,
+        note: result === "passed" ? "Station physical inspection passed." : "Station physical inspection failed; container quarantined.",
+        idempotencyKey: idempotencyKey("fuel-container-inspection", `${allocationId}:${result}`),
+        metadata: { station_branch_id: stationBranchId },
+      });
+
+      const latest = (await allocations.refetch()).data ?? [];
+      const orderRows = latest.filter((row) => firstString(row, ["order_id"]) === orderId);
+      const failed = orderRows.some((row) => firstString(row, ["status"]) === "exception");
+      const inspectionPending = orderRows.some((row) => firstString(row, ["status"]) === "inspection");
+      if (failed) {
+        await changeStage.mutateAsync({
+          orderId,
+          stageKey: "exception",
+          idempotencyKey: idempotencyKey("fuel-stage-inspection-exception", orderId),
+          reason: "At least one returned rental container failed inspection.",
+        });
+      } else if (!inspectionPending && orderRows.length === (firstNumber(focusedOrder, ["container_count"]) ?? 0)) {
+        await changeStage.mutateAsync({
+          orderId,
+          stageKey: "inspection_passed",
+          idempotencyKey: idempotencyKey("fuel-stage-inspection-passed", orderId),
+        });
+      }
+    }, result === "passed" ? "Container inspection recorded as passed." : "Container flagged and quarantined for review.");
+  };
+
   const handContainersToDriver = async () => {
     if (!focusedOrder) return;
     const orderId = focusedOrderId;
@@ -554,7 +594,26 @@ export function FuelStationOperationsScreen() {
                 <AppButton label="Hand filled containers to assigned driver" fullWidth loading={busyOrderId === focusedOrderId || recordHandover.isPending} onPress={() => void handContainersToDriver()} />
               ) : null}
 
-              {["station_handover","out_for_delivery","delivered","return_due","returned_to_driver","received_at_station","inspection_passed","completed"].includes(focusedStage) ? (
+              {focusedStage === "received_at_station" ? (
+                <View style={styles.inspectionList}>
+                  <Text style={[styles.sectionLabel, { color: palette.ink }]}>Inspect returned SKIMA containers</Text>
+                  {existingAllocations.filter((row) => firstString(row, ["status"]) === "inspection").map((allocation) => (
+                    <View key={firstString(allocation, ["id"])} style={[styles.inspectionRow, { borderColor: palette.border }]}>
+                      <View style={styles.orderCopy}>
+                        <Text style={[styles.orderTitle, { color: palette.ink }]}>Container {firstString(allocation, ["container_profile_id"])?.slice(0, 8).toUpperCase()}</Text>
+                        <Text style={[styles.muted, { color: palette.muted }]}>{firstNumber(allocation, ["allocated_litres"])} L · Rental return received</Text>
+                      </View>
+                      <AppButton label="Pass" size="sm" onPress={() => void recordContainerInspection(allocation, "passed")} loading={busyOrderId === focusedOrderId || inspectContainer.isPending} />
+                      <AppButton label="Fail" size="sm" color="danger" variant="secondary" onPress={() => void recordContainerInspection(allocation, "failed")} loading={busyOrderId === focusedOrderId || inspectContainer.isPending} />
+                    </View>
+                  ))}
+                  {existingAllocations.every((row) => firstString(row, ["status"]) !== "inspection") ? (
+                    <Text style={[styles.muted, { color: palette.muted }]}>All returned containers have inspection outcomes recorded.</Text>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {["station_handover","out_for_delivery","delivered","return_due","returned_to_driver","received_at_station","inspection_passed","completed","exception"].includes(focusedStage) ? (
                 <Text style={[styles.muted, { color: palette.muted }]}>The station portion of this order is complete or has been handed to the driver. Follow rental returns and inspection in the station queue when the driver brings the SKIMA container back.</Text>
               ) : null}
             </Card>
@@ -607,4 +666,6 @@ const styles = StyleSheet.create({
   operationInfo: { gap: 3, padding: 10, borderRadius: radii.md, backgroundColor: "rgba(127,127,127,.08)" },
   sectionLabel: { ...typography.bodyStrong, fontSize: 13 },
   driverRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: 11, borderWidth: 1, borderRadius: radii.lg },
+  inspectionList: { gap: spacing.sm },
+  inspectionRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderWidth: 1, borderRadius: radii.lg, padding: 10 },
 });
