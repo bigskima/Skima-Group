@@ -102,6 +102,7 @@ export function CustomerDashboard() {
 
   return (
     <MobileHome workspace="customer" context="Refill and delivery">
+      <PromotionBanner audience="customer" />
       <GuideTarget targetKey="customer.location">
         <CustomerLocation location={location} />
       </GuideTarget>
@@ -122,8 +123,6 @@ export function CustomerDashboard() {
           <GuideTarget targetKey="customer.primary-action">
             <CustomerServiceCards primary={primary} />
           </GuideTarget>
-
-          <PromotionBanner audience="customer" />
 
           {order && orderId ? (
             <ActiveOrder record={order} href={`/(customer)/orders/${orderId}`} />
@@ -179,6 +178,7 @@ export function DriverDashboard() {
 
   return (
     <MobileHome workspace="driver" context="Driver workspace">
+      <PromotionBanner audience="driver" />
       {pending ? (
         <ScreenSkeleton cards={3} />
       ) : failed ? (
@@ -256,6 +256,7 @@ export function StationDashboard() {
 
   return (
     <MobileHome workspace="station" context="Station reception">
+      <PromotionBanner audience="station" />
       {pending ? (
         <ScreenSkeleton cards={3} />
       ) : failed ? (
