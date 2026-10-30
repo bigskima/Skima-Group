@@ -290,7 +290,13 @@ export function AdminPartnerLocationReviewWorkspace() {
         <span>
           <strong>{record.applicant_display_name ?? "Applicant"}</strong>
           <br />
-          <small>{record.workspace === "driver" ? "Driver application" : "Station application"}</small>
+          <small>
+              {record.application_type_key.includes(".vehicle.")
+                ? "Vehicle application"
+                : record.workspace === "driver"
+                  ? "Driver application"
+                  : "Station application"}
+            </small>
         </span>
       ),
     },
@@ -345,7 +351,7 @@ export function AdminPartnerLocationReviewWorkspace() {
       <PageHeader
         eyebrow="Partner approvals"
         title="Location Review"
-        description="Verify the detected operating location submitted with a driver or station application before final approval. Each decision is tied to the exact application version reviewed."
+        description="Verify the detected operating location submitted with a driver, vehicle or station application before final approval. Each decision is tied to the exact application version reviewed."
         actions={
           <Button
             icon={RefreshCcw}
@@ -616,7 +622,11 @@ function LocationEvidencePanel(props: {
           <p className="admin-section-kicker">Location evidence</p>
           <h2>{record.applicant_display_name ?? "Applicant"}</h2>
           <p className="skima-muted">
-            {record.workspace === "driver" ? "Driver operating base" : "Station facility location"}
+            {record.application_type_key.includes(".vehicle.")
+              ? "Vehicle operating location"
+              : record.workspace === "driver"
+                ? "Driver operating base"
+                : "Station facility location"}
           </p>
         </div>
         <StatusBadge tone={verificationTone(record.verification_status)}>
