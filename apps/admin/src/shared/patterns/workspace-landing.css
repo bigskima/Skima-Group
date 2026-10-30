@@ -15,6 +15,10 @@
   gap: 20px;
 }
 
+.workspace-landing__header > div:first-child:last-child {
+  grid-column: 1 / -1;
+}
+
 .workspace-landing__header > div:first-child {
   min-width: 0;
   max-width: 760px;
