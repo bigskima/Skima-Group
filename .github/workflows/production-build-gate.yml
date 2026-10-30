@@ -73,6 +73,8 @@ jobs:
         run: npm run lpg-refill:contract
       - name: Verify independent driver vehicle onboarding contracts
         run: npm run lpg-driver-vehicle:contract
+      - name: Verify independent driver vehicle location review contracts
+        run: npm run lpg-vehicle-location:contract
       - name: Verify Station Managed fulfillment, driver and admin contracts
         run: npm run station-managed:verify
       - name: Verify SKIMA WhatsApp lifecycle contracts
