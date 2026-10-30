@@ -26,6 +26,7 @@ Deno.test("vehicle approval requires verified location but inherits driver cover
   );
   assertIncludes(migration, "verification.location_purpose = location_purpose_key");
   assertIncludes(migration, "verification.status = 'verified'");
+  assertIncludes(migration, "Verify the vehicle operating location in Admin Location Review before approving this application.");
   assertIncludes(migration, "if workspace_key = 'driver'");
   assertIncludes(migration, "and application_type_record.application_category = 'driver' then");
   assertIncludes(migration, "Choose at least one driver service geography before approving this application.");
