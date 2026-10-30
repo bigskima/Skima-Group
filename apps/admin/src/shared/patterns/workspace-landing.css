@@ -1,16 +1,22 @@
 .workspace-landing {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  container: workspace-landing / inline-size;
   display: grid;
   gap: 22px;
 }
 
 .workspace-landing__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: start;
   gap: 20px;
 }
 
 .workspace-landing__header > div:first-child {
+  min-width: 0;
   max-width: 760px;
 }
 
@@ -37,12 +43,14 @@
 }
 
 .workspace-landing__grid {
+  min-width: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
   gap: 14px;
 }
 
 .workspace-landing__card {
+  min-width: 0;
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) 20px;
   gap: 13px;
@@ -102,7 +110,18 @@
 }
 
 .workspace-landing__aside {
-  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.workspace-landing__aside > * {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.workspace-landing__aside .skima-grid--compact {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
 }
 
 @media (max-width: 760px) {
@@ -119,20 +138,24 @@
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  .workspace-landing__header h1,
-  .workspace-landing__copy strong {
-    color: #f8fafc;
+
+/* Stack these sections according to the workspace column, not the browser width. */
+@container workspace-landing (max-width: 980px) {
+  .workspace-landing__header {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .workspace-landing__header p,
-  .workspace-landing__copy > span,
-  .workspace-landing__header small,
-  .workspace-landing__copy small {
-    color: #94a3b8;
+  .workspace-landing__header > div:first-child {
+    max-width: 760px;
+  }
+}
+
+@container workspace-landing (max-width: 680px) {
+  .workspace-landing__grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .workspace-landing__card {
-    background: rgba(15, 23, 42, 0.82);
+    min-height: 116px;
   }
 }
