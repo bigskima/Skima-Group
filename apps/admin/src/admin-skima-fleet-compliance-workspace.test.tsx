@@ -138,9 +138,16 @@ describe("AdminSkimaFleetComplianceWorkspace document upload", () => {
 
     const [bucket] = session.from.mock.calls[0];
     const [storagePath, uploadedFile, options] = session.upload.mock.calls[0];
+    const documentRecordCall = session.rpc.mock.calls.find(
+      ([name]) => name === "record_platform_fleet_compliance_document",
+    );
     expect(bucket).toBe("skima-platform-documents");
     expect(storagePath).toMatch(
       new RegExp(`^${ADMIN_USER_ID}/platform-fleet/${VEHICLE_ID}/vehicle\\.roadworthiness/`),
+    );
+    expect(documentRecordCall?.[1].target_storage_path).toBe(storagePath);
+    expect(documentRecordCall?.[1].target_reason).toBe(
+      "Checked current certificate against fleet records.",
     );
     expect(uploadedFile).toBe(file);
     expect(options).toEqual({ contentType: "application/pdf", upsert: false });
