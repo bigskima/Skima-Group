@@ -72,6 +72,7 @@ export function VehicleWorkflowScreen() {
       item.is_required === true &&
       firstString(item, ["status"]) === "active",
   );
+  const vehicleRequirementsConfigured = Boolean(requirementSetId && required.length > 0);
   const missing = required.filter(
     (requirement) => {
       const requirementKey = firstString(requirement, ["key"]) ?? "";
@@ -194,6 +195,10 @@ export function VehicleWorkflowScreen() {
       setMessage("No active vehicle types are configured yet. Please contact SKIMA support.");
       return;
     }
+    if (!vehicleRequirementsConfigured) {
+      setMessage("SKIMA's required LPG vehicle evidence checklist is not available. We cannot safely start a vehicle application until it is restored.");
+      return;
+    }
 
     setFormStep("details");
     setShowForm(true);
@@ -246,6 +251,7 @@ export function VehicleWorkflowScreen() {
     if (
       !driverId ||
       !applicationType ||
+      !vehicleRequirementsConfigured ||
       !typeKey ||
       !manufacturer.trim() ||
       !model.trim() ||
