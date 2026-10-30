@@ -78,10 +78,12 @@ Deno.test("conditional vehicle evidence is enforced consistently in the app and 
   const database = await read(
     "supabase/migrations/20261030211531_simplify_independent_driver_vehicle_evidence_requirements.sql",
   );
-  const submitFunction = await read("supabase/migrations/20261030211531_simplify_independent_driver_vehicle_evidence_requirements.sql");
+  const submitFunction = await read(
+    "supabase/migrations/20260907070000_automatic_partner_verification_engine.sql",
+  );
   assertIncludes(database, "required_when");
   assertIncludes(database, "vehicle.ownershipType");
-  assertIncludes(submitFunction, "vehicle.ownershipType");
+  assertIncludes(submitFunction, "public.application_requirement_applies(requirement.metadata, application_payload)");
 });
 
 function assertIncludes(value: string, expected: string) {
