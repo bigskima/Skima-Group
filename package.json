@@ -63,7 +63,7 @@
     "supabase:reset": "supabase db reset",
     "ai-runtime:contract": "deno test --allow-read scripts/ai-runtime-contract.test.ts scripts/ai-driver-daily-brief-contract.test.ts",
     "lpg-refill:contract": "deno test --allow-read scripts/lpg-refill-production-contract.test.ts scripts/lpg-job-route-production-contract.test.ts scripts/notification-event-production-contract.test.ts scripts/lpg-ui-progressive-disclosure-contract.test.ts scripts/lpg-ui-visual-regression-contract.test.ts",
-    "lpg-driver-vehicle:contract": "deno test --allow-read scripts/driver-vehicle-workspace-contract.test.ts",
+    "lpg-driver-vehicle:contract": "deno test --allow-read scripts/driver-vehicle-workspace-contract.test.ts scripts/vehicle-document-flow-contract.test.ts",
     "lpg-auth:contract": "deno test --allow-read scripts/lpg-auth-production-contract.test.ts",
     "in-app-guide:contract": "deno test --allow-read scripts/in-app-guide-target-contract.test.ts",
     "payout-runtime:contract": "deno test --allow-read scripts/payout-runtime-production-contract.test.ts",
