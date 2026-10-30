@@ -382,9 +382,10 @@ Deno.test("Nigeria location enablement stays separate from physical LPG fulfilme
 });
 
 Deno.test("admin location and coverage workflows keep physical dispatch gates intact", async () => {
-  const [locationMigration, adminMigration, coverageWorkspace, managedDriverWorkspace, geometryEditor, vercelConfig] = await Promise.all([
+  const [locationMigration, adminMigration, driverCutoverMigration, coverageWorkspace, managedDriverWorkspace, geometryEditor, vercelConfig] = await Promise.all([
     read("supabase/migrations/20261029182549_nigeria_location_enablement_fulfilment_gates.sql"),
     read("supabase/migrations/20261030131328_admin_coverage_refresh_reject_map_tile_and_driver_fixes.sql"),
+    read("supabase/migrations/20261030144500_managed_driver_coverage_universal_assignment_cutover.sql"),
     read("apps/admin/src/features/operations/CoverageWorkspaceV2.tsx"),
     read("apps/admin/src/admin-managed-driver-coverage-workspace.tsx"),
     read("apps/admin/src/admin-geometry-editor.tsx"),
@@ -423,5 +424,12 @@ Deno.test("admin location and coverage workflows keep physical dispatch gates in
   assertIncludes(adminMigration, "geography.boundary_geometry is not null");
   assertIncludes(adminMigration, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
   assertNotIncludes(adminMigration, "basemaps.cartocdn.com");
+
+  assertIncludes(driverCutoverMigration, "public.configure_operational_coverage_assignment(");
+  assertIncludes(driverCutoverMigration, "managedDriverServiceAreaKey");
+  assertIncludes(driverCutoverMigration, "public.operational_coverage_assignments");
+  assertNotIncludes(driverCutoverMigration, "insert into public.driver_service_areas");
+  assertNotIncludes(driverCutoverMigration, "update public.driver_service_areas");
+  assertNotIncludes(driverCutoverMigration, "from public.driver_service_areas");
 });
 
