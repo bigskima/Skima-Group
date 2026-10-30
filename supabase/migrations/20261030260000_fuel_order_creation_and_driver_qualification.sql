@@ -80,12 +80,12 @@ begin
   end if;
 
   if target_branch_id is null
-     or target_product_key not in ('fuel.pms','fuel.ago','fuel.dpk')
+     or target_product_key is null or target_product_key not in ('fuel.pms','fuel.ago','fuel.dpk')
      or target_requested_litres is null or target_requested_litres<=0
-     or target_container_mode not in ('purchase','rental')
+     or target_container_mode is null or target_container_mode not in ('purchase','rental')
      or coalesce(btrim(target_container_type_key),'')=''
-     or target_fulfillment_mode not in ('station_managed','independent_driver','skima_managed')
-     or target_currency_code is null
+     or target_fulfillment_mode is null or target_fulfillment_mode not in ('station_managed','independent_driver','skima_managed')
+     or coalesce(btrim(target_currency_code),'')=''
      or coalesce(btrim(target_idempotency_key),'')=''
      or target_metadata is null or jsonb_typeof(target_metadata)<>'object' then
     raise exception using errcode='22023',message='valid branch, product, litres, container option, container type, fulfillment mode, currency and idempotency key are required';
@@ -141,7 +141,8 @@ begin
     raise exception using errcode='23514',message='Choose an active container type compatible with the selected fuel product';
   end if;
 
-  payload:=jsonb_build_object(
+  -- Merge caller metadata first; server-selected order details must always win.
+  payload:=coalesce(target_metadata,'{}'::jsonb) || jsonb_build_object(
     'fuel_product_key',target_product_key,
     'requested_litres',round(target_requested_litres,3),
     'container_mode',target_container_mode,
@@ -149,7 +150,7 @@ begin
     'fulfillment_mode',target_fulfillment_mode,
     'delivery_location_id',target_delivery_location_id,
     'delivery_instructions',nullif(btrim(target_delivery_instructions),'')
-  ) || target_metadata;
+  );
 
   order_id:=public.create_order_from_catalog(
     'fuel',
@@ -245,9 +246,9 @@ begin
   if target_driver_user_id is null
      or ((target_driver_profile_id is not null)::integer+(target_station_managed_driver_id is not null)::integer)<>1
      or target_vehicle_id is null
-     or target_product_key not in ('fuel.pms','fuel.ago','fuel.dpk')
+     or target_product_key is null or target_product_key not in ('fuel.pms','fuel.ago','fuel.dpk')
      or target_maximum_load_litres is null or target_maximum_load_litres<=0
-     or target_status not in ('pending','approved','rejected','suspended','expired')
+     or target_status is null or target_status not in ('pending','approved','rejected','suspended','expired')
      or coalesce(btrim(target_idempotency_key),'')=''
      or target_metadata is null or jsonb_typeof(target_metadata)<>'object' then
     raise exception using errcode='22023',message='valid driver identity, vehicle, product, litre capacity, qualification status and idempotency key are required';
@@ -311,7 +312,7 @@ begin
     and (roadworthiness_expires_at is null or roadworthiness_expires_at>=current_date);
 
   if not found then
-    raise exception using errcode='23514',message='Fuel qualification requires a serviceable vehicle with current compliance documents';
+    raise exception using errcode='23514',message='Fuel qualification requires an active serviceable vehicle; any configured insurance, inspection and roadworthiness dates must be current';
   end if;
 
   if target_branch_id is not null
@@ -432,7 +433,8 @@ begin
 
   vehicle_id_value:=coalesce(
     nullif(assignment_record.metadata->>'vehicle_id','')::uuid,
-    nullif(assignment_record.metadata->>'vehicleId','')::uuid
+    nullif(assignment_record.metadata->>'vehicleId','')::uuid,
+    nullif(assignment_record.metadata->'dispatch'->>'vehicle_id','')::uuid
   );
 
   if driver_user_id_value is null or vehicle_id_value is null then
