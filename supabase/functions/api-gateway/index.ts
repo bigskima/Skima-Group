@@ -3858,7 +3858,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       .eq("status", "approved")
       .gte("maximum_load_litres", operation.data.requested_litres)
       .or(`branch_id.is.null,branch_id.eq.${operation.data.station_branch_id}`)
-      .gt("valid_until", new Date().toISOString());
+      .or(`valid_until.is.null,valid_until.gt.${new Date().toISOString()}`);
     const qualificationResult = await qualificationQuery;
     if (qualificationResult.error) return databaseError(qualificationResult.error, id);
     const qualification = (qualificationResult.data ?? []).find((record) =>
@@ -3867,19 +3867,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         : record.driver_profile_id === driverEntityId && record.station_managed_driver_id === null
     ) ?? null;
     if (!qualification) {
-      const nullValidityResult = await supabase
-        .from("fuel_driver_product_qualifications")
-        .select("id")
-        .eq("vehicle_id", vehicleId)
-        .eq("product_key", operation.data.product_key)
-        .eq("status", "approved")
-        .is("valid_until", null)
-        .gte("maximum_load_litres", operation.data.requested_litres)
-        .or(`branch_id.is.null,branch_id.eq.${operation.data.station_branch_id}`);
-      if (nullValidityResult.error) return databaseError(nullValidityResult.error, id);
-      if (!nullValidityResult.data?.length) {
-        return jsonResponse({ ok: false, error: "fuel_driver_vehicle_not_qualified", message: "This driver and vehicle are not approved for this product, branch and load.", requestId: id }, 409);
-      }
+      return jsonResponse({ ok: false, error: "fuel_driver_vehicle_not_qualified", message: "This driver and vehicle are not approved for this product, branch and load.", requestId: id }, 409);
     }
 
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
