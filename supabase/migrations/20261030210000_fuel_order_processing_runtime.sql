@@ -541,7 +541,7 @@ begin
        select 1 from public.order_assignments assignment
        where assignment.order_id=target_order_id
          and assignment.participant_role='driver'
-         and assignment.entity_type='driver'
+         and assignment.entity_type in ('driver','user')
          and assignment.status='active'
      ) then
     raise exception using errcode='23514',message='An active eligible driver assignment is required';
