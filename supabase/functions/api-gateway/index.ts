@@ -189,6 +189,9 @@ const ROUTES = new Set([
   "/runtime/fuel/container-allocations",
   "/runtime/fuel/orders/operations",
   "/runtime/fuel/orders/events",
+  "/runtime/fuel/orders",
+  "/runtime/fuel/orders/pay",
+  "/runtime/fuel/driver-qualifications",
   "/runtime/fuel/quotes",
   "/runtime/fuel/orders/stock/reserve",
   "/runtime/fuel/orders/stock/release",
@@ -3539,6 +3542,147 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     );
   }
 
+  if (routePath === "/runtime/fuel/orders" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("create_fuel_order_with_quote", {
+        target_branch_id: requireUuid(payload.branchId, "branchId"),
+        target_product_key: requireString(payload.productKey, "productKey"),
+        target_requested_litres: requireNumber(payload.requestedLitres, "requestedLitres"),
+        target_container_mode: requireString(payload.containerMode, "containerMode"),
+        target_container_type_key: requireString(payload.containerTypeKey, "containerTypeKey"),
+        target_fulfillment_mode: requireString(payload.fulfillmentMode, "fulfillmentMode"),
+        target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_delivery_location_id: optionalUuid(payload.deliveryLocationId, "deliveryLocationId"),
+        target_delivery_instructions: optionalString(payload.deliveryInstructions),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/pay" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const orderId = requireUuid(payload.orderId, "orderId");
+    const walletId = requireUuid(payload.walletId, "walletId");
+    const paymentIdempotencyKey = requireString(payload.idempotencyKey, "idempotencyKey");
+
+    const orderResult = await supabase
+      .from("order_records")
+      .select("id,service_request_id,module_id,requester_user_id,currency_code")
+      .eq("id", orderId)
+      .eq("requester_user_id", authResult.user.id)
+      .maybeSingle();
+    if (orderResult.error) return databaseError(orderResult.error, id);
+    if (!orderResult.data) return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+
+    const moduleResult = await supabase
+      .from("business_modules")
+      .select("key")
+      .eq("id", orderResult.data.module_id)
+      .maybeSingle();
+    if (moduleResult.error) return databaseError(moduleResult.error, id);
+    if (moduleResult.data?.key !== "fuel") return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+
+    const quoteResult = await supabase
+      .from("fuel_order_commercial_snapshots")
+      .select("id,generic_price_quote_id,currency_code,grand_total,status,valid_until")
+      .eq("order_id", orderId)
+      .eq("status", "accepted")
+      .maybeSingle();
+    if (quoteResult.error) return databaseError(quoteResult.error, id);
+    if (!quoteResult.data || !quoteResult.data.generic_price_quote_id ||
+        (quoteResult.data.valid_until && Date.parse(quoteResult.data.valid_until) <= Date.now())) {
+      return jsonResponse({ ok: false, error: "accepted_fuel_quote_required", message: "Accept a current Fuel quote before payment.", requestId: id }, 409);
+    }
+
+    const walletResult = await supabase
+      .from("wallet_accounts")
+      .select("id,wallet_type,owner_entity_type,owner_entity_id,currency_code,status")
+      .eq("id", walletId)
+      .eq("wallet_type", "customer")
+      .eq("owner_entity_type", "user")
+      .eq("owner_entity_id", authResult.user.id)
+      .eq("currency_code", orderResult.data.currency_code)
+      .eq("status", "active")
+      .maybeSingle();
+    if (walletResult.error) return databaseError(walletResult.error, id);
+    if (!walletResult.data) return jsonResponse({ ok: false, error: "customer_wallet_required", message: "Choose your own active wallet in the Fuel order currency.", requestId: id }, 403);
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const fundingResult = await serviceClient.rpc("fund_order_from_wallet", {
+      target_order_id: orderId,
+      target_customer_wallet_id: walletId,
+      target_escrow_wallet_id: null,
+      target_source: "platform.fuel.orders",
+      target_idempotency_key: paymentIdempotencyKey,
+      target_metadata: {
+        module_key: "fuel",
+        fuel_commercial_snapshot_id: quoteResult.data.id,
+        generic_price_quote_id: quoteResult.data.generic_price_quote_id,
+        payment_channel: "customer_wallet",
+      },
+    });
+    if (fundingResult.error) return databaseError(fundingResult.error, id);
+    return jsonResponse({
+      ok: true,
+      data: {
+        orderId,
+        serviceRequestId: orderResult.data.service_request_id,
+        escrowHoldId: fundingResult.data,
+        status: "payment_reserved",
+        currencyCode: quoteResult.data.currency_code,
+        totalAmount: quoteResult.data.grand_total,
+      },
+      requestId: id,
+    });
+  }
+
+  if (routePath === "/runtime/fuel/driver-qualifications") {
+    if (request.method === "GET") {
+      let query = supabase
+        .from("fuel_driver_product_qualifications")
+        .select("id,driver_user_id,driver_profile_id,station_managed_driver_id,branch_id,vehicle_id,product_key,maximum_load_litres,status,approved_by,approved_at,valid_until,metadata,created_at,updated_at")
+        .order("updated_at", { ascending: false });
+      const branchId = optionalUuid(url.searchParams.get("branchId"), "branchId");
+      const driverUserId = optionalUuid(url.searchParams.get("driverUserId"), "driverUserId");
+      const productKey = optionalString(url.searchParams.get("productKey"));
+      if (branchId) query = query.eq("branch_id", branchId);
+      if (driverUserId) query = query.eq("driver_user_id", driverUserId);
+      if (productKey) query = query.eq("product_key", productKey);
+      return selectRecords(query, id);
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+      if ("response" in body) return body.response;
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("configure_fuel_driver_product_qualification", {
+          target_driver_user_id: requireUuid(payload.driverUserId, "driverUserId"),
+          target_driver_profile_id: optionalUuid(payload.driverProfileId, "driverProfileId"),
+          target_station_managed_driver_id: optionalUuid(payload.stationManagedDriverId, "stationManagedDriverId"),
+          target_branch_id: optionalUuid(payload.branchId, "branchId"),
+          target_vehicle_id: requireUuid(payload.vehicleId, "vehicleId"),
+          target_product_key: requireString(payload.productKey, "productKey"),
+          target_maximum_load_litres: requireNumber(payload.maximumLoadLitres, "maximumLoadLitres"),
+          target_status: requireString(payload.status, "status"),
+          target_valid_until: optionalString(payload.validUntil),
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+        }),
+        id,
+      );
+    }
+  }
+
   if (routePath === "/runtime/fuel/orders/operations" && request.method === "GET") {
     let query = supabase
       .from("fuel_order_operations")
@@ -3546,6 +3690,20 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       .order("created_at", { ascending: false });
     const branchId = optionalUuid(url.searchParams.get("branchId"), "branchId");
     const orderId = optionalUuid(url.searchParams.get("orderId"), "orderId");
+    const scope = optionalString(url.searchParams.get("scope"));
+    if (scope === "customer") query = query.eq("customer_user_id", authResult.user.id);
+    if (scope === "driver") {
+      const assigned = await supabase
+        .from("order_assignments")
+        .select("order_id,entity_type,entity_id")
+        .eq("participant_role", "driver")
+        .eq("status", "active");
+      if (assigned.error) return databaseError(assigned.error, id);
+      const resolvedOrderIds = await resolveFuelAssignedOrderIdsForUser(supabase, assigned.data ?? [], authResult.user.id);
+      if (resolvedOrderIds.error) return databaseError(resolvedOrderIds.error, id);
+      if (resolvedOrderIds.orderIds.length === 0) return jsonResponse({ ok: true, data: [], requestId: id });
+      query = query.in("order_id", resolvedOrderIds.orderIds);
+    }
     if (branchId) query = query.eq("station_branch_id", branchId);
     if (orderId) query = query.eq("order_id", orderId);
     return selectRecords(query, id);
@@ -3673,23 +3831,26 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const access = await resolveFuelOrderBranchAccess(supabase, orderId, "business.fuel.orders.process");
     if (access.error) return databaseError(access.error, id);
     if (!access.order || access.moduleKey !== "fuel") return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+
     const driverStages = new Set(["out_for_delivery", "delivered", "return_due", "returned_to_driver", "received_at_station"]);
     const customerStages = new Set(["completed"]);
     let allowed = access.allowed;
     if (driverStages.has(stageKey)) {
-      const assignment = await supabase
-        .from("order_assignments")
-        .select("entity_type,entity_id")
-        .eq("order_id", orderId)
-        .eq("participant_role", "driver")
-        .eq("status", "active")
-        .maybeSingle();
-      if (assignment.error) return databaseError(assignment.error, id);
-      allowed = Boolean(assignment.data && ["driver", "user"].includes(assignment.data.entity_type) && assignment.data.entity_id === authResult.user.id);
+      const resolvedDriver = await resolveFuelAssignedDriver(supabase, orderId);
+      if (resolvedDriver.error) return databaseError(resolvedDriver.error, id);
+      allowed = Boolean(resolvedDriver.assignment && resolvedDriver.userId === authResult.user.id);
     } else if (customerStages.has(stageKey)) {
       allowed = access.order.requester_user_id === authResult.user.id;
     }
     if (!allowed) return jsonResponse({ ok: false, error: "forbidden", message: "The current user is not authorized to record this Fuel order stage.", requestId: id }, 403);
+
+    const stageMetadata = optionalRecord(payload.metadata) ?? {};
+    if (stageKey === "delivered") {
+      const deliveredLitres = requireNumber(payload.deliveredLitres ?? stageMetadata.delivered_litres, "deliveredLitres");
+      if (deliveredLitres <= 0) throw new RequestValidationError("deliveredLitres must be greater than zero.");
+      stageMetadata.delivered_litres = deliveredLitres;
+    }
+
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
     const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
@@ -3699,7 +3860,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_stage_key: stageKey,
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_reason: optionalString(payload.reason),
-        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_metadata: stageMetadata,
       }),
       id,
     );
@@ -3745,21 +3906,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       .maybeSingle();
     if (allocation.error) return databaseError(allocation.error, id);
     if (!allocation.data) return jsonResponse({ ok: false, error: "allocation_not_found", requestId: id }, 404);
+
     const access = await resolveFuelOrderBranchAccess(supabase, allocation.data.order_id, "business.fuel.orders.process");
     if (access.error) return databaseError(access.error, id);
     if (!access.order || access.moduleKey !== "fuel") return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+
     const eventKey = requireString(payload.eventKey, "eventKey");
-    const driverAssignment = await supabase
-      .from("order_assignments")
-      .select("entity_type,entity_id")
-      .eq("order_id", allocation.data.order_id)
-      .eq("participant_role", "driver")
-      .eq("status", "active")
-      .maybeSingle();
-    if (driverAssignment.error) return databaseError(driverAssignment.error, id);
-    if (!driverAssignment.data) return jsonResponse({ ok: false, error: "driver_not_assigned", requestId: id }, 409);
-    const isAssignedDriver = ["driver", "user"].includes(driverAssignment.data.entity_type) && driverAssignment.data.entity_id === authResult.user.id;
+    const resolvedDriver = await resolveFuelAssignedDriver(supabase, allocation.data.order_id);
+    if (resolvedDriver.error) return databaseError(resolvedDriver.error, id);
+    if (!resolvedDriver.assignment) return jsonResponse({ ok: false, error: "driver_not_assigned", requestId: id }, 409);
+    const isAssignedDriver = resolvedDriver.userId === authResult.user.id;
     const isStationOperator = access.allowed && allocation.data.station_branch_id === access.order.branch_id;
+
     let fromType = "";
     let fromId = "";
     let toType = "";
@@ -3771,22 +3929,23 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     } else if (eventKey === "handed_to_driver") {
       if (!isStationOperator) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
       fromType = "station"; fromId = allocation.data.station_branch_id;
-      toType = "driver"; toId = driverAssignment.data.entity_id;
+      toType = "driver"; toId = resolvedDriver.assignment.entity_id;
     } else if (eventKey === "delivered_to_customer") {
       if (!isAssignedDriver) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
-      fromType = "driver"; fromId = authResult.user.id;
+      fromType = "driver"; fromId = resolvedDriver.assignment.entity_id;
       toType = "customer"; toId = allocation.data.customer_user_id;
     } else if (eventKey === "returned_to_driver") {
       if (!isAssignedDriver) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
       fromType = "customer"; fromId = allocation.data.customer_user_id;
-      toType = "driver"; toId = authResult.user.id;
+      toType = "driver"; toId = resolvedDriver.assignment.entity_id;
     } else if (eventKey === "received_at_station") {
       if (!isAssignedDriver) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
-      fromType = "driver"; fromId = authResult.user.id;
+      fromType = "driver"; fromId = resolvedDriver.assignment.entity_id;
       toType = "station"; toId = allocation.data.station_branch_id;
     } else {
       throw new RequestValidationError("Unsupported fuel container handover event.");
     }
+
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
     const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
@@ -13392,6 +13551,66 @@ async function resolveFuelOrderBranchAccess(
     allowed: permissionResult.data === true,
     error: null,
   };
+}
+
+async function resolveFuelAssignedDriver(
+  supabase: SupabaseClient,
+  orderId: string,
+): Promise<{
+  assignment: { readonly entity_type: string; readonly entity_id: string; readonly metadata?: Record<string, unknown> } | null;
+  userId: string | null;
+  error: { message: string } | null;
+}> {
+  const assignmentResult = await supabase
+    .from("order_assignments")
+    .select("entity_type,entity_id,metadata")
+    .eq("order_id", orderId)
+    .eq("participant_role", "driver")
+    .eq("status", "active")
+    .order("assigned_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (assignmentResult.error) return { assignment: null, userId: null, error: assignmentResult.error };
+  if (!assignmentResult.data) return { assignment: null, userId: null, error: null };
+
+  const assignment = assignmentResult.data;
+  if (assignment.entity_type === "user") return { assignment, userId: assignment.entity_id, error: null };
+  if (assignment.entity_type !== "driver") return { assignment, userId: null, error: null };
+
+  const profileResult = await supabase.from("driver_profiles").select("user_id").eq("id", assignment.entity_id).maybeSingle();
+  if (profileResult.error) return { assignment, userId: null, error: profileResult.error };
+  if (profileResult.data?.user_id) return { assignment, userId: profileResult.data.user_id, error: null };
+
+  const stationDriverResult = await supabase.from("lpg_station_managed_drivers").select("user_id").eq("id", assignment.entity_id).maybeSingle();
+  if (stationDriverResult.error) return { assignment, userId: null, error: stationDriverResult.error };
+  return { assignment, userId: stationDriverResult.data?.user_id ?? null, error: null };
+}
+
+async function resolveFuelAssignedOrderIdsForUser(
+  supabase: SupabaseClient,
+  assignments: readonly { readonly order_id: string; readonly entity_type: string; readonly entity_id: string }[],
+  userId: string,
+): Promise<{ orderIds: string[]; error: { message: string } | null }> {
+  const orderIds = new Set<string>();
+  const driverIds = new Set<string>();
+  for (const assignment of assignments) {
+    if (assignment.entity_type === "user" && assignment.entity_id === userId) orderIds.add(assignment.order_id);
+    else if (assignment.entity_type === "driver") driverIds.add(assignment.entity_id);
+  }
+  const ids = [...driverIds];
+  if (ids.length) {
+    const [profiles, stationDrivers] = await Promise.all([
+      supabase.from("driver_profiles").select("id").eq("user_id", userId).in("id", ids),
+      supabase.from("lpg_station_managed_drivers").select("id").eq("user_id", userId).in("id", ids),
+    ]);
+    if (profiles.error) return { orderIds: [], error: profiles.error };
+    if (stationDrivers.error) return { orderIds: [], error: stationDrivers.error };
+    const matching = new Set([...(profiles.data ?? []).map(row => row.id), ...(stationDrivers.data ?? []).map(row => row.id)]);
+    for (const assignment of assignments) {
+      if (assignment.entity_type === "driver" && matching.has(assignment.entity_id)) orderIds.add(assignment.order_id);
+    }
+  }
+  return { orderIds: [...orderIds], error: null };
 }
 
 function createServiceClient(supabaseUrl: string, serviceRoleKey: string): SupabaseClient {
