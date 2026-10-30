@@ -503,6 +503,17 @@ body,
 }
 
 @container admin-screen (max-width: 1000px) {
+  .admin-v2-screen .utility-v2__task-grid,
+  .admin-v2-screen .utility-v2__setup-grid,
+  .admin-v2-screen .utility-v2__service-chips {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-v2-screen .utility-v2__pool {
+    display: grid;
+    align-items: stretch;
+  }
+
   .admin-v2-screen .skima-grid--compact {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -522,6 +533,13 @@ body,
 }
 
 @container admin-screen (max-width: 720px) {
+  .admin-v2-screen .utility-v2__task-grid,
+  .admin-v2-screen .utility-v2__review-grid,
+  .admin-v2-screen .utility-v2__readiness-grid,
+  .admin-v2-screen .utility-v2__setup-grid,
+  .admin-v2-screen .utility-v2__service-chips,
+  .admin-v2-screen .catalog-v2__task-grid,
+  .admin-v2-screen .catalog-v2__review-grid,
   .skima-grid--compact,
   .admin-v2-screen .fulfillment-v2__setup-grid,
   .admin-v2-screen .fulfillment-v2__choice-grid,
