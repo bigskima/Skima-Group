@@ -7935,6 +7935,34 @@ async function configureContentPublicationResponse(
     throw new RequestValidationError("publicationKey is required when creating a publication.");
   }
 
+  const requestedAudienceKeys = optionalStringArray(payload.audienceKeys);
+  const normalizedAudienceKeys = requestedAudienceKeys?.length
+    ? Array.from(new Set(requestedAudienceKeys.map((audience) => audience.trim()).filter(Boolean)))
+    : ["public"];
+  const placementKey = requireString(payload.placementKey, "placementKey");
+  const placementResult = await serviceClient
+    .from("product_content_placements")
+    .select("key,allowed_audiences,status")
+    .eq("key", placementKey)
+    .maybeSingle();
+
+  if (placementResult.error) {
+    return databaseError(placementResult.error, id);
+  }
+  if (!placementResult.data || placementResult.data.status !== "active") {
+    throw new RequestValidationError("Choose an active app content placement.");
+  }
+
+  const allowedAudienceKeys = new Set(
+    Array.isArray(placementResult.data.allowed_audiences) ? placementResult.data.allowed_audiences : [],
+  );
+  const unsupportedAudienceKeys = normalizedAudienceKeys.filter((audience) => !allowedAudienceKeys.has(audience));
+  if (unsupportedAudienceKeys.length) {
+    throw new RequestValidationError(
+      `The selected placement is not enabled for these audiences: ${unsupportedAudienceKeys.join(", ")}.`,
+    );
+  }
+
   const existingResult = publicationId
     ? await serviceClient
       .from("product_content_publications")
@@ -7954,7 +7982,7 @@ async function configureContentPublicationResponse(
   const status = optionalString(payload.status) ?? "draft";
   const baseRecord = {
     accessibility_label: optionalString(payload.accessibilityLabel),
-    audience_keys: optionalStringArray(payload.audienceKeys) ?? ["public"],
+    audience_keys: normalizedAudienceKeys,
     body: optionalString(payload.body),
     cities: optionalStringArray(payload.cities) ?? [],
     country_codes: optionalStringArray(payload.countryCodes) ?? [],
@@ -7968,7 +7996,7 @@ async function configureContentPublicationResponse(
     },
     module_key: optionalString(payload.moduleKey),
     organization_id: optionalUuid(payload.organizationId, "organizationId"),
-    placement_key: requireString(payload.placementKey, "placementKey"),
+    placement_key: placementKey,
     priority: optionalInteger(payload.priority) ?? 0,
     published_at: status === "published" && !getRecordValue(existingResult.data, "published_at")
       ? new Date().toISOString()
