@@ -64,7 +64,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
   const [containerTypeForm, setContainerTypeForm] = useState({
     key: "", name: "", capacity: "", products: ["fuel.pms"] as string[], status: "draft",
   });
-  const [containerForm, setContainerForm] = useState({ serial: "", containerTypeId: "", organizationId: "" });
+  const [containerForm, setContainerForm] = useState({ serial: "", containerTypeId: "", branchId: "", organizationId: "" });
   const [qualificationForm, setQualificationForm] = useState({
     driverUserId: "", driverProfileId: "", stationManagedDriverId: "", branchId: "",
     vehicleId: "", productKey: "fuel.pms", maximumLoad: "", status: "pending",
@@ -105,14 +105,12 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
     await client.invalidateQueries({ queryKey: ["admin-fuel"] });
     await refresh();
   };
-  const mutate = (path: string) => useFuelMutation(api, path, invalidate, setNotice, setActionError);
-
-  const toggleProduct = mutate("/runtime/fuel/products");
-  const saveOffer = mutate("/runtime/fuel/offers");
-  const saveTank = mutate("/runtime/fuel/storage");
-  const saveContainerType = mutate("/runtime/fuel/container-types");
-  const registerContainer = mutate("/runtime/fuel/containers/register");
-  const saveQualification = mutate("/runtime/fuel/driver-qualifications");
+  const toggleProduct = useFuelMutation(api, "/runtime/fuel/products", invalidate, setNotice, setActionError);
+  const saveOffer = useFuelMutation(api, "/runtime/fuel/offers", invalidate, setNotice, setActionError);
+  const saveTank = useFuelMutation(api, "/runtime/fuel/storage", invalidate, setNotice, setActionError);
+  const saveContainerType = useFuelMutation(api, "/runtime/fuel/container-types", invalidate, setNotice, setActionError);
+  const registerContainer = useFuelMutation(api, "/runtime/fuel/containers/register", invalidate, setNotice, setActionError);
+  const saveQualification = useFuelMutation(api, "/runtime/fuel/driver-qualifications", invalidate, setNotice, setActionError);
 
   const onProductToggle = async (product: CatalogRecord) => {
     const key = catalogText(product, "key");
@@ -204,7 +202,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
       organizationId: containerForm.organizationId || undefined,
       metadata: { registered_from: "admin_fuel_workspace" },
     });
-    setContainerForm({ serial: "", containerTypeId: containerForm.containerTypeId, organizationId: containerForm.organizationId });
+    setContainerForm({ serial: "", containerTypeId: containerForm.containerTypeId, branchId: containerForm.branchId, organizationId: containerForm.organizationId });
   };
 
   const submitQualification = async () => {
@@ -375,9 +373,13 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
         <div className="skima-form-grid">
           <TextInput label="Serial / asset number" value={containerForm.serial} onChange={(event) => setContainerForm({ ...containerForm, serial: event.currentTarget.value })} />
           <SelectInput label="Container type" value={containerForm.containerTypeId} onChange={(event) => setContainerForm({ ...containerForm, containerTypeId: event.currentTarget.value })} options={typeOptions} />
-          <SelectInput label="Owning station branch" value={containerForm.organizationId} onChange={(event) => {
+          <SelectInput label="Owning station branch" value={containerForm.branchId} onChange={(event) => {
             const branch = (branches.data ?? []).find((item) => catalogText(item, "id") === event.currentTarget.value);
-            setContainerForm({ ...containerForm, organizationId: branch ? catalogText(branch, "organization_id") : "" });
+            setContainerForm({
+              ...containerForm,
+              branchId: event.currentTarget.value,
+              organizationId: branch ? catalogText(branch, "organization_id") : "",
+            });
           }} options={branchOptions} />
         </div>
         <Button icon={Plus} isLoading={registerContainer.isPending} onClick={() => void submitContainer()}>Register container asset</Button>
@@ -461,7 +463,7 @@ function numeric(value: string): number {
 }
 
 function productName(key: string): string {
-  return PRODUCTS.find((product) => product.key === key)?.name ?? key || "Fuel";
+  return PRODUCTS.find((product) => product.key === key)?.name ?? (key || "Fuel");
 }
 
 function branchName(branches: readonly CatalogRecord[], branchId: string): string {
