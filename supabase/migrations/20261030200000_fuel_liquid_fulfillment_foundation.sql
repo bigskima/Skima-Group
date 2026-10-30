@@ -532,7 +532,14 @@ set search_path = public
 as $
 declare
   profile_record record;
+  order_record record;
+  snapshot_record record;
+  already_allocated_litres numeric(16,3);
+  already_allocated_count integer;
 begin
+  -- Serialise multi-container allocations for the same order.
+  perform pg_advisory_xact_lock(hashtextextended(new.order_id::text, 0));
+
   select profile.id, profile.ownership_mode, profile.capacity_litres,
          profile.status as profile_status, container_type.supported_product_keys
   into profile_record
@@ -548,7 +555,7 @@ begin
     raise exception using errcode = '23514', message = 'fuel order allocation requires a SKIMA-controlled container';
   end if;
 
-  if profile_record.status not in ('available', 'reserved') then
+  if profile_record.profile_status not in ('available', 'reserved') then
     raise exception using errcode = '23514', message = 'fuel container is not available for allocation';
   end if;
 
@@ -558,6 +565,45 @@ begin
 
   if new.allocated_litres > profile_record.capacity_litres then
     raise exception using errcode = '23514', message = 'allocated fuel quantity exceeds container capacity';
+  end if;
+
+  select order_row.id, order_row.branch_id, order_row.requester_user_id, module_record.key as module_key,
+         order_row.service_request_id
+  into order_record
+  from public.order_records order_row
+  join public.business_modules module_record on module_record.id = order_row.module_id
+  where order_row.id = new.order_id;
+
+  if not found or order_record.module_key <> 'fuel' then
+    raise exception using errcode = '23514', message = 'container allocation must belong to a Fuel order';
+  end if;
+
+  if order_record.branch_id is distinct from new.station_branch_id
+     or order_record.requester_user_id is distinct from new.customer_user_id then
+    raise exception using errcode = '23514', message = 'container station and customer must match the Fuel order';
+  end if;
+
+  select snapshot.product_key, snapshot.container_mode, snapshot.requested_litres, snapshot.container_count
+  into snapshot_record
+  from public.fuel_order_commercial_snapshots snapshot
+  where snapshot.service_request_id = order_record.service_request_id;
+
+  if not found
+     or snapshot_record.product_key <> new.product_key
+     or snapshot_record.container_mode <> new.allocation_mode then
+    raise exception using errcode = '23514', message = 'container product and purchase/rental mode must match the locked order quote';
+  end if;
+
+  select coalesce(sum(allocation.allocated_litres), 0), count(*)
+  into already_allocated_litres, already_allocated_count
+  from public.fuel_container_allocations allocation
+  where allocation.order_id = new.order_id
+    and allocation.status <> 'cancelled'
+    and allocation.id is distinct from new.id;
+
+  if already_allocated_count >= snapshot_record.container_count
+     or already_allocated_litres + new.allocated_litres > snapshot_record.requested_litres then
+    raise exception using errcode = '23514', message = 'container allocations exceed the quoted container count or fuel quantity';
   end if;
 
   return new;
@@ -587,7 +633,7 @@ begin
     raise exception using errcode = '22023', message = 'a supported fuel product key is required';
   end if;
 
-  if target_status not in ('disabled', 'enabled', 'paused', 'retired') then
+  if target_status is null or target_status not in ('disabled', 'enabled', 'paused', 'retired') then
     raise exception using errcode = '22023', message = 'target_status is not supported';
   end if;
 
