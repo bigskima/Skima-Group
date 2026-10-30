@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CircleCheck,
   CircleHelp,
+  Fuel,
   MapPin,
   Navigation,
   PackageCheck,
@@ -485,7 +486,8 @@ function CustomerServiceCards({
   const Icon = primary.icon;
   const live = primary.eyebrow.toLowerCase().includes("live") || primary.eyebrow.toLowerCase().includes("payment");
   return (
-    <View style={styles.customerServiceGrid}>
+    <View style={styles.customerServiceStack}>
+      <View style={styles.customerServiceGrid}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={primary.label}
@@ -503,7 +505,23 @@ function CustomerServiceCards({
         </View>
         <View style={styles.customerServiceArrow}><ChevronRight color={colors.brandDark} size={17} /></View>
       </Pressable>
-      <CustomerBillsCard />
+        <CustomerBillsCard />
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Order petrol diesel or kerosene"
+        onPress={() => router.push("/(customer)/fuel" as never)}
+        style={styles.fuelServiceCard}
+      >
+        <LinearGradient colors={["#E7283A", "#A90A19"]} style={StyleSheet.absoluteFill} />
+        <View style={styles.fuelServiceIcon}><Fuel color="#FFFFFF" size={22} /></View>
+        <View style={styles.fuelServiceCopy}>
+          <Text style={styles.customerServiceEyebrow}>NEW ON SKIMA</Text>
+          <Text style={styles.fuelServiceTitle}>Order petrol, diesel or kerosene</Text>
+          <Text style={styles.fuelServiceBody}>Buy or rent a delivery container and get fuel brought to you.</Text>
+        </View>
+        <View style={styles.customerServiceArrow}><ChevronRight color={colors.brandDark} size={17} /></View>
+      </Pressable>
     </View>
   );
 }
@@ -1084,7 +1102,13 @@ const styles = StyleSheet.create({
   customerActionButtonText: { color: colors.brandDark, fontSize: 12, fontWeight: "900" },
   customerActionIcon: { width: 64, height: 64, alignItems: "center", justifyContent: "center", marginLeft: 8, borderRadius: 32, backgroundColor: "rgba(255,255,255,.14)" },
   customerPrimaryStack: { gap: 10 },
+  customerServiceStack: { gap: 10 },
   customerServiceGrid: { flexDirection: "row", gap: 10 },
+  fuelServiceCard: { minHeight: 92, overflow: "hidden", borderRadius: 20, padding: 13, flexDirection: "row", alignItems: "center", gap: 12 },
+  fuelServiceIcon: { width: 43, height: 43, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,.16)" },
+  fuelServiceCopy: { flex: 1, gap: 3 },
+  fuelServiceTitle: { color: "#FFFFFF", fontSize: 15, lineHeight: 18, fontWeight: "900", letterSpacing: -0.2 },
+  fuelServiceBody: { color: "rgba(255,255,255,.76)", fontSize: 10, lineHeight: 14 },
   customerServiceCard: { flex: 1, minHeight: 154, overflow: "hidden", padding: 14, borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, justifyContent: "space-between" },
   customerServiceIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,.16)" },
   customerServiceCopy: { gap: 4, marginTop: 10 },
