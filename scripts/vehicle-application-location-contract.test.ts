@@ -3,7 +3,7 @@ const read = (path: string) => Deno.readTextFile(new URL(path, root));
 
 Deno.test("vehicle application location supplement only appends version-bound evidence", async () => {
   const migration = await read(
-    "supabase/migrations/20261030221000_vehicle_application_location_evidence.sql",
+    "supabase/migrations/20261030221000_lpg_vehicle_application_location_evidence.sql",
   );
   assertIncludes(migration, "create or replace function public.update_lpg_vehicle_application_location(");
   assertIncludes(migration, "application_type_record.application_category <> 'vehicle'");
@@ -22,7 +22,7 @@ Deno.test("vehicle application location supplement only appends version-bound ev
 
 Deno.test("vehicle approval requires verified location but inherits driver coverage", async () => {
   const migration = await read(
-    "supabase/migrations/20261030221000_vehicle_application_location_evidence.sql",
+    "supabase/migrations/20261030221000_lpg_vehicle_application_location_evidence.sql",
   );
   assertIncludes(migration, "verification.location_purpose = location_purpose_key");
   assertIncludes(migration, "verification.status = 'verified'");
