@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import {
   averageCoordinate,
-  DEFAULT_MAP_CENTER,
   type MapPoint,
 } from "../domains/maps";
 import { useMapsRendererConfiguration } from "../domains/maps/useMapsRendererConfiguration";
