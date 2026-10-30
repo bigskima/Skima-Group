@@ -385,7 +385,7 @@ Deno.test("admin location and coverage workflows keep physical dispatch gates in
   const [locationMigration, adminMigration, driverCutoverMigration, coverageWorkspace, managedDriverWorkspace, geometryEditor, vercelConfig] = await Promise.all([
     read("supabase/migrations/20261029182549_nigeria_location_enablement_fulfilment_gates.sql"),
     read("supabase/migrations/20261030131328_admin_coverage_refresh_reject_map_tile_and_driver_fixes.sql"),
-    read("supabase/migrations/20261030144500_managed_driver_coverage_universal_assignment_cutover.sql"),
+    read("supabase/migrations/20261030134717_managed_driver_coverage_universal_assignment_cutover.sql"),
     read("apps/admin/src/features/operations/CoverageWorkspaceV2.tsx"),
     read("apps/admin/src/admin-managed-driver-coverage-workspace.tsx"),
     read("apps/admin/src/admin-geometry-editor.tsx"),
