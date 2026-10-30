@@ -15,6 +15,7 @@ Deno.test("vehicle application location supplement only appends version-bound ev
   assertIncludes(migration, "'{location}'");
   assertIncludes(migration, "public.sync_application_geography_for_version(next_version_id)");
   assertIncludes(migration, "set active_version = next_version");
+  assertNotIncludes(migration, "locked_at = null");
   assertIncludes(migration, "grant execute on function public.update_lpg_vehicle_application_location");
   assertNotIncludes(migration, "target_payload jsonb");
   assertNotIncludes(migration, "update public.vehicles");
