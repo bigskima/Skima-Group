@@ -407,10 +407,14 @@ Deno.test("admin location and coverage workflows keep physical dispatch gates in
 
   const adminRoutes = JSON.parse(vercelConfig) as { rewrites?: unknown[]; routes?: unknown[] };
   if (!Array.isArray(adminRoutes.rewrites) || adminRoutes.rewrites.length === 0) {
-    throw new Error("Admin Vercel configuration must rewrite direct SPA routes to /index.html.");
+    throw new Error("Admin Vercel configuration must rewrite direct SPA routes to the root entrypoint.");
   }
   if (adminRoutes.routes) {
     throw new Error("Legacy Vercel routes fallback must not shadow the admin SPA rewrite.");
+  }
+  const rewriteDestination = (adminRoutes.rewrites[0] as { destination?: string }).destination;
+  if (rewriteDestination !== "/") {
+    throw new Error("Admin SPA rewrite must target / when cleanUrls is enabled.");
   }
 
   const rejectDecisionIndex = adminMigration.indexOf("if p_decision = 'APPROVED' then");
