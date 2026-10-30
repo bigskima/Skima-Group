@@ -8,6 +8,8 @@ const read = (path: string) => Deno.readTextFile(new URL(path, root));
 
 Deno.test("vehicle document submission returns to the driver workspace route", async () => {
   const screen = await read("apps/lpg-mobile/src/native/ui/DocumentWorkflowScreen.tsx");
+  const compatibilityRoute = await read("apps/lpg-mobile/app/customer/vehicle-application.tsx");
+  assertIncludes(compatibilityRoute, '<Redirect href="/(driver)/vehicles" />');
   assertIncludes(screen, 'workspace === "vehicle"');
   assertIncludes(screen, '"/(driver)/vehicles"');
   assertIncludes(screen, "router.replace(postSubmissionRoute as never)");
