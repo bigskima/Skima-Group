@@ -94,6 +94,11 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
     schema: ActionResponseSchema,
     invalidate: [["jobs"], ["orders"], ["scans"], ["station-runtime"]],
   });
+  const continuousScan = useGatewayMutation({
+    path: "/lpg/scans/continuous",
+    schema: ActionResponseSchema,
+    invalidate: [["jobs"], ["orders"], ["scans"], ["station-runtime"]],
+  });
   const inspection = useGatewayMutation({
     path: "/lpg/inspections",
     schema: ActionResponseSchema,
@@ -131,6 +136,8 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const routeDistance = firstNumber(root, ["routeDistanceMeters", "route_distance_meters", "distanceMeters"]);
   const routeDuration = firstNumber(root, ["routeDurationSeconds", "route_duration_seconds", "durationSeconds"]);
   const status = displayStatus(order ?? {}) ?? "unknown";
+  const deliveryChallengeVerified = order?.deliveryChallengeVerified === true
+    || order?.delivery_challenge_verified === true;
   const terminalOrderStatus = ["delivered", "completed", "cancelled", "failed", "refunded", "expired"].includes(status);
   const canShareStationDriverLocation = workspace === "station_driver" && Boolean(id)
     && ["driver_accepted", "pickup_en_route", "pickup_verified", "station_en_route", "station_verified", "refill_started", "refill_in_progress", "refill_confirmed", "station_settled", "return_en_route", "delivery_verification_pending"].includes(status);
@@ -252,48 +259,33 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
       return;
     }
     setNotice(null);
-    let scanSaved = false;
     try {
-      // Preserve the route-start event, but let a successful pickup scan move
-      // directly into station transit so the driver does not need a second tap.
-      if (driverScanType === "customer_pickup" && status === "driver_accepted") {
-        await action.mutateAsync({
-          actionKey: "lpg.pickup.start",
-          lpgOrderId: id,
-          source: "skima.lpg.mobile",
-          idempotencyKey: operationIdempotencyKey("lpg.pickup.start", id),
-        });
-      }
       const location = await readOperationalLocation().catch(() => null);
-      await scan.mutateAsync({
+      const result = await continuousScan.mutateAsync({
         ...(location ?? {}),
-        idempotencyKey: operationIdempotencyKey(`${workspace === "station_driver" ? "station-managed-driver" : "driver"}-${driverScanType}`, id),
-        lpgOrderId: id,
-        scanType: driverScanType,
-        source: "skima.lpg.mobile",
-        payload: {
-          scannedCylinderId: recordId(cylinder ?? {}),
-          scannedToken: token,
-        },
+        workspace: "driver",
+        token: token.trim(),
+        idempotencyKey: operationIdempotencyKey(
+          `continuous-driver-${driverScanType}`,
+          `${id}:${token.trim().toUpperCase()}`,
+        ),
+        source: "skima.lpg.continuous",
       });
-      scanSaved = true;
-      if (driverScanType === "customer_pickup") {
-        await action.mutateAsync({
-          actionKey: "lpg.station.start",
-          lpgOrderId: id,
-          source: "skima.lpg.mobile",
-          idempotencyKey: operationIdempotencyKey("lpg.station.start", id),
-        });
-      }
+      const completedScanType = result && typeof result === "object"
+        ? firstString(result, ["scanType"]) ?? driverScanType
+        : driverScanType;
       setToken("");
       setNoticeSuccess(true);
-      setNotice(workspace === "station_driver" && driverScanType === "customer_delivery" ? "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments." : driverScanSuccess(driverScanType));
-      void detail.refetch().catch(() => undefined);
+      setNotice(completedScanType === "customer_delivery"
+        ? "Final cylinder scan verified. Customer hand-over is complete and the order has moved to delivered."
+        : driverScanSuccess(completedScanType));
+      await detail.refetch();
     } catch (cause) {
-      setNoticeSuccess(scanSaved);
-      setNotice(scanSaved
-        ? "Cylinder pickup was verified, but the station route did not start. Use the next route action to continue; the successful scan has been saved."
-        : friendlyError(cause, "SKIMA could not verify this cylinder. Scan the code again."));
+      setNoticeSuccess(false);
+      setNotice(friendlyError(
+        cause,
+        "SKIMA could not match this cylinder to an active job assigned to you. Check the five-character Cylinder ID and try again.",
+      ));
       void detail.refetch().catch(() => undefined);
     }
   };
@@ -439,7 +431,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             <View style={styles.heroCopy}>
               <Text style={styles.heroEyebrow}>CURRENT STAGE</Text>
               <Text style={styles.heroTitle}>{friendlyJobStatus(status)}</Text>
-              <Text style={styles.heroBody}>{workspace === "station_driver" ? stationManagedDriverStageDescription(status) : driverWorkspace ? driverStageDescription(status) : stationStageDescription(status)}</Text>
+              <Text style={styles.heroBody}>{workspace === "station_driver" ? stationManagedDriverStageDescription(status) : driverWorkspace ? driverStageDescription(status, deliveryChallengeVerified) : stationStageDescription(status)}</Text>
             </View>
             <StatusPill label={friendlyJobStatus(status)} tone={statusTone(status)} />
           </View>
@@ -564,7 +556,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
                 <AppButton
                   label={driverScanButton(driverScanType)}
                   fullWidth
-                  loading={scan.isPending}
+                  loading={continuousScan.isPending}
                   icon={<CheckCircle2 color="#FFFFFF" size={17} />}
                   onPress={() => void submitDriverScan()}
                 />
@@ -948,13 +940,14 @@ function friendlyJobStatus(value: string) {
   return labels[normalized] ?? normalized.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
-function driverStageDescription(status: string) {
+function driverStageDescription(status: string, deliveryChallengeVerified = false) {
   if (["driver_offered", "driver_accepted"].includes(status)) return "This order has been assigned to you.";
   if (["pickup_en_route"].includes(status)) return "Navigate to the customer and verify the cylinder before taking custody.";
   if (["pickup_verified", "station_en_route"].includes(status)) return "Take the verified cylinder to the assigned station. Station staff scan it at reception.";
   if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is processing the verified refill.";
   if (["refill_confirmed", "station_settled", "return_en_route"].includes(status)) return "The filled cylinder is ready to return to the customer.";
-  if (status === "delivery_verification_pending") return "The customer must complete delivery verification before the final cylinder scan.";
+  if (status === "delivery_verification_pending" && deliveryChallengeVerified) return "Customer delivery verification is complete. Scan the same cylinder now to finish the hand-over and close the order.";
+  if (status === "delivery_verification_pending") return "The customer must confirm the cylinder hand-over first. Once verified, scan the same cylinder to complete delivery.";
   if (["delivered", "completed"].includes(status)) return "The hand-over is confirmed and payment processing continues automatically.";
   return "Follow the next available action for this assigned job.";
 }
