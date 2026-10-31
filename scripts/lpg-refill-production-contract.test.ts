@@ -1,3 +1,24 @@
+Deno.test("Station Managed drivers get a continuous scan tab while SKIMA Internal keeps supplier verification", async () => {
+  const [screen, route, tabs, list, internal, detail, migration] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/StationManagedDriverScanScreen.tsx"),
+    read("apps/lpg-mobile/app/(station-driver)/scan.tsx"),
+    read("apps/lpg-mobile/src/native/navigation/WorkspaceTabs.tsx"),
+    read("apps/lpg-mobile/src/native/ui/StationManagedDriverJobsScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+    read("supabase/migrations/20261031090000_lpg_simple_batch_operations_runtime.sql"),
+  ]);
+  assertIncludes(screen, "read_lpg_station_managed_driver_jobs");
+  assertIncludes(screen, 'workspace="driver"');
+  assertIncludes(route, "StationManagedDriverScanScreen");
+  assertIncludes(tabs, '{ name: "scan", title: "Scan", icon: QrCode }');
+  assertIncludes(list, 'router.push("/(station-driver)/scan"');
+  assertIncludes(internal, 'actionKey: "lpg.station.start"');
+  assertIncludes(internal, 'source: "skima.lpg.internal_mobile"');
+  assertIncludes(detail, "station staff scan it at reception");
+  assertIncludes(migration, "fulfillment_channel = 'skima_internal'");
+});
+
 Deno.test("continuous LPG cylinder scanning matches only the signed-in actor's active assigned order", async () => {
   const [migration, gateway, scanScreen, scanner, jobDetail] = await Promise.all([
     read("supabase/migrations/20261031090000_lpg_simple_batch_operations_runtime.sql"),
@@ -23,7 +44,10 @@ Deno.test("continuous LPG cylinder scanning matches only the signed-in actor's a
   assertIncludes(scanScreen, "automatically finds the matching active order");
   assertIncludes(scanner, "continuous?: boolean");
   assertIncludes(scanner, "setTimeout(() => setLocked(false), 1100)");
+  assertIncludes(scanner, "Scan the same cylinder again");
   assertIncludes(jobDetail, 'actionKey: "lpg.station.start"');
+  assertIncludes(jobDetail, "station staff scan it at reception");
+  assertIncludes(migration, "order_row.fulfillment_channel = 'skima_internal'");
 });
 
 Deno.test("station quick operations preserve per-cylinder safety and per-order refill settlement", async () => {
@@ -33,6 +57,7 @@ Deno.test("station quick operations preserve per-cylinder safety and per-order r
     read("apps/lpg-mobile/src/native/ui/JobListScreen.tsx"),
   ]);
   assertIncludes(migration, "'latestInspectionResult'");
+  assertIncludes(migration, "'fulfillmentChannel'");
   assertIncludes(migration, "latest_inspection.result");
   assertIncludes(panel, 'path: "/lpg/inspections"');
   assertIncludes(panel, 'result,');
