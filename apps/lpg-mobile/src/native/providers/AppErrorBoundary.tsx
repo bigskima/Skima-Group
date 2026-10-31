@@ -12,7 +12,13 @@ export class AppErrorBoundary extends Component<PropsWithChildren, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    if (__DEV__) console.error("SKIMA LPG render failure", error, info);
+    // Keep screen crashes diagnosable in production browser builds.
+    console.error("SKIMA LPG render failure", {
+      name: error.name,
+      message: safeErrorMessage(error),
+      stack: error.stack,
+      componentStack: info.componentStack,
+    });
   }
 
   render() {
@@ -26,6 +32,9 @@ export class AppErrorBoundary extends Component<PropsWithChildren, State> {
             Your information is safe. Try again, or close and reopen SKIMA if
             this keeps happening.
           </Text>
+          <Text selectable style={styles.detail}>
+            {safeErrorMessage(this.state.error)}
+          </Text>
           <Pressable
             accessibilityRole="button"
             onPress={() => this.setState({ error: null })}
@@ -37,6 +46,14 @@ export class AppErrorBoundary extends Component<PropsWithChildren, State> {
       </View>
     );
   }
+}
+
+function safeErrorMessage(error: Error): string {
+  return `${error.name || "Error"}: ${error.message || "Unknown render failure"}`
+    .replace(/(bearer\s+)[a-z0-9._~+\/-]+/gi, "$1[redacted]")
+    .replace(/((?:access|refresh|anon|service[_-]?role)[_-]?key\s*[:=]\s*)[^\s,;]+/gi, "$1[redacted]")
+    .replace(/(https?:\/\/[^\s?]+)\?[^\s]+/gi, "$1?[redacted]")
+    .slice(0, 260);
 }
 
 const styles = StyleSheet.create({
