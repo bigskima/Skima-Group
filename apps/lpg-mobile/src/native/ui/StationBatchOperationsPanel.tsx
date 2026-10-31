@@ -81,7 +81,7 @@ export function StationBatchOperationsPanel({
   const incomingCount = rows.filter((row) => row.status === "station_en_route").length;
   const inspectionRows = rows.filter((row) => row.status === "station_verified" && !row.inspection);
   const reviewRows = rows.filter((row) =>
-    row.status === "station_verified" && ["manual_review", "unsafe", "rejected"].includes(row.inspection),
+    ["station_verified", "disputed"].includes(row.status) && ["manual_review", "unsafe", "rejected"].includes(row.inspection),
   );
   const refillRows = rows.filter((row) =>
     ["station_verified", "refill_in_progress"].includes(row.status)
