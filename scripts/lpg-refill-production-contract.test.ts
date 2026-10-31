@@ -85,6 +85,33 @@ Deno.test("station quick operations preserve per-cylinder safety and per-order r
   assertIncludes(jobs, "StationBatchOperationsPanel");
 });
 
+Deno.test("driver job final delivery uses the assigned-cylinder resolver and reflects customer OTP verification", async () => {
+  const [detail, internal, projection] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
+    read("supabase/migrations/20261031103000_lpg_job_details_delivery_challenge_verification_state.sql"),
+  ]);
+  const driverScan = detail.slice(
+    detail.indexOf("const submitDriverScan"),
+    detail.indexOf("const submitStationScan"),
+  );
+  const internalScan = internal.slice(
+    internal.indexOf("const submitScan"),
+    internal.indexOf("const confirmInternalRefill"),
+  );
+  assertIncludes(driverScan, "continuousScan.mutateAsync");
+  assertIncludes(driverScan, 'workspace: "driver"');
+  assertIncludes(driverScan, "token: token.trim()");
+  assertNotIncludes(driverScan, "scan.mutateAsync");
+  assertIncludes(internalScan, "continuousScan.mutateAsync");
+  assertIncludes(internalScan, 'workspace: "driver"');
+  assertIncludes(detail, "deliveryChallengeVerified");
+  assertIncludes(detail, "Customer delivery verification is complete.");
+  assertIncludes(internal, "Customer delivery verification is complete.");
+  assertIncludes(projection, "deliveryChallengeVerified");
+  assertIncludes(projection, "public.lpg_delivery_challenge_is_verified");
+});
+
 const root = new URL("../", import.meta.url);
 const read = (path: string) => Deno.readTextFile(new URL(path, root));
 
