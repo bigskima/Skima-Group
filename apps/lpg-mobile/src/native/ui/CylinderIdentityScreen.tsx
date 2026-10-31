@@ -90,7 +90,7 @@ export function CylinderIdentityScreen() {
     <Screen
       eyebrow="Cylinder identity"
       title="ID & QR"
-      subtitle="The permanent Cylinder ID is the source of truth. QR is an optional faster scan method."
+      subtitle="Your unique five-character Cylinder ID is the source of truth. QR is the faster scan option."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       <View style={[styles.identity, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -100,9 +100,6 @@ export function CylinderIdentityScreen() {
         <View style={styles.copy}>
           <Text style={[styles.label, { color: palette.muted }]}>PERMANENT CYLINDER ID</Text>
           <Text selectable style={[styles.reference, { color: palette.ink }]}>{permanentId ?? "Unavailable"}</Text>
-          {publicReference && publicReference !== permanentId ? (
-            <Text selectable style={[styles.registryReference, { color: palette.muted }]}>Registry ref · {publicReference}</Text>
-          ) : null}
         </View>
       </View>
 
@@ -123,11 +120,8 @@ export function CylinderIdentityScreen() {
             <Text selectable style={[styles.qrReference, { color: palette.ink }]}>
               {permanentId ?? "Unavailable"}
             </Text>
-            {publicReference && publicReference !== permanentId ? (
-              <Text selectable style={[styles.qrRegistryReference, { color: palette.muted }]}>Registry ref · {publicReference}</Text>
-            ) : null}
             <Text style={[styles.qrHelper, { color: palette.muted }]}>
-              Save the complete identity card so the QR, permanent Cylinder ID and registry reference stay together.
+              Save the identity card so the QR and five-character Cylinder ID stay together.
             </Text>
           </View>
           <AppButton
@@ -140,7 +134,7 @@ export function CylinderIdentityScreen() {
         <View style={[styles.pending, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
           <RefreshCw color={palette.brand} size={18} />
           <Text style={[styles.pendingText, { color: palette.muted }]}>
-            QR is still being prepared. The permanent Cylinder ID above already works.
+            QR is still being prepared. The five-character Cylinder ID above already works.
           </Text>
         </View>
       )}
@@ -192,18 +186,6 @@ export function CylinderIdentityScreen() {
             >
               {permanentId}
             </SvgText>
-            {publicReference && publicReference !== permanentId ? (
-              <SvgText
-                x={EXPORT_WIDTH / 2}
-                y="654"
-                fill="#6E717A"
-                fontSize="20"
-                fontWeight="700"
-                textAnchor="middle"
-              >
-                Registry ref · {publicReference}
-              </SvgText>
-            ) : null}
             <SvgText
               x={EXPORT_WIDTH / 2}
               y="708"
@@ -211,7 +193,7 @@ export function CylinderIdentityScreen() {
               fontSize="18"
               textAnchor="middle"
             >
-              Scan the QR or enter the permanent Cylinder ID
+              Scan the QR or enter the five-character Cylinder ID
             </SvgText>
           </Svg>
         </View>
@@ -293,7 +275,6 @@ const styles = StyleSheet.create({
   copy: { flex: 1, gap: 3 },
   label: { ...typography.caption, fontSize: 8, fontWeight: "900" },
   reference: { ...typography.subheading, fontSize: 15 },
-  registryReference: { ...typography.caption, fontSize: 10 },
   qrCard: {
     alignItems: "center",
     gap: spacing.md,
