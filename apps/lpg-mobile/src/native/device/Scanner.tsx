@@ -102,6 +102,19 @@ export function Scanner({
         </View>
       )}
 
+      {continuous && lastContinuousValue ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            setLastContinuousValue(null);
+            setLocked(false);
+          }}
+          style={[styles.rescan, styles.continuousRetry, { backgroundColor: palette.brand }]}
+        >
+          <Text style={styles.buttonText}>Scan the same cylinder again</Text>
+        </Pressable>
+      ) : null}
+
       {allowManualEntry ? (
         <View style={[styles.manualCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
           <View style={styles.manualHead}>
@@ -155,6 +168,7 @@ const styles = StyleSheet.create({
   button: { borderRadius: radii.pill, paddingHorizontal: 20, paddingVertical: 12 },
   buttonText: { color: "white", fontWeight: "800" },
   rescan: { position: "absolute", bottom: spacing.lg, left: spacing.lg, borderRadius: radii.pill, paddingHorizontal: 20, paddingVertical: 12 },
+  continuousRetry: { position: "relative", left: 0, bottom: 0, alignSelf: "center" },
   manualCard: { gap: spacing.md, padding: spacing.md, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth },
   manualHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   manualIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
