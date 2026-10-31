@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import { Clock3, MapPin, Navigation, Route, Signal, SignalZero } from "lucide-react-native";
 import { StyleSheet, Text, View } from "react-native";
 import {
@@ -7,7 +8,10 @@ import {
   useTrackingSessions,
 } from "../api/domains";
 import { firstNumber, firstString, nestedRecord, type PlatformRecord } from "../api/records";
+import { useMapsGatewayAdapter } from "../domains/maps/gateway";
+import type { Coordinate } from "../domains/maps";
 import { useResolvedLocationLabel } from "../domains/maps/readableLocation";
+import { idempotencyKey } from "../utilities/idempotency";
 import { OperationalMap, type MapPoint } from "../maps/OperationalMap";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -17,8 +21,22 @@ import { Screen } from "./Screen";
 import { ScreenSkeleton } from "./ScreenSkeleton";
 import { StatusPill } from "./StatusPill";
 
+type RoadRouteState = {
+  coordinates: Coordinate[];
+  distanceMeters: number;
+  durationSeconds: number;
+};
+
 export function LiveTrackingScreen() {
   const { palette } = useAppTheme();
+  const mapsGateway = useMapsGatewayAdapter();
+  const [roadRoute, setRoadRoute] = useState<RoadRouteState | null>(null);
+  const lastRouteRequest = useRef<{
+    origin: Coordinate;
+    destination: Coordinate;
+    requestedAt: number;
+    requestKey: string;
+  } | null>(null);
   const { id } = useLocalSearchParams<{ id?: string }>();
   const sessions = useTrackingSessions();
   const details = useJobDetails(id ?? null);
@@ -54,6 +72,77 @@ export function LiveTrackingScreen() {
   // A route is geometry, not a collection of pins. Show only the latest driver
   // marker and the destination marker; the full GPS history is drawn as one line.
   const latestDriver = driverPath.at(-1) ?? null;
+
+  // Ask the Admin-configured server-side router for the live road route.
+  // Provider credentials stay in the backend; the client receives only road geometry.
+  useEffect(() => {
+    if (!latestDriver || !destination) {
+      setRoadRoute(null);
+      lastRouteRequest.current = null;
+      return;
+    }
+
+    const origin = { latitude: latestDriver.latitude, longitude: latestDriver.longitude };
+    const target = { latitude: destination.latitude, longitude: destination.longitude };
+    const now = Date.now();
+    const previous = lastRouteRequest.current;
+    const movedEnough = !previous
+      || coordinateDistanceMeters(previous.origin, origin) >= 150
+      || coordinateDistanceMeters(previous.destination, target) >= 15;
+    const refreshDue = !previous || now - previous.requestedAt >= 60_000;
+    if (!movedEnough && !refreshDue) return;
+
+    const requestKey = [
+      id ?? "unknown",
+      origin.latitude.toFixed(5),
+      origin.longitude.toFixed(5),
+      target.latitude.toFixed(5),
+      target.longitude.toFixed(5),
+      Math.floor(now / 60_000),
+    ].join(":");
+    if (previous?.requestKey === requestKey) return;
+
+    lastRouteRequest.current = {
+      origin,
+      destination: target,
+      requestedAt: now,
+      requestKey,
+    };
+
+    let current = true;
+    void mapsGateway.routeEstimate.mutateAsync({
+      origin,
+      destination: target,
+      idempotencyKey: idempotencyKey("customer-live-road-route", requestKey),
+    }).then((estimate) => {
+      if (!current) return;
+      const coordinates = readRouteCoordinates(estimate.routeGeometry);
+      if (coordinates.length < 2) {
+        setRoadRoute(null);
+        return;
+      }
+      setRoadRoute({
+        coordinates,
+        distanceMeters: estimate.distanceMeters,
+        durationSeconds: parseDurationSeconds(estimate.duration ?? estimate.staticDuration),
+      });
+    }).catch(() => {
+      // Keep the last recorded GPS breadcrumb as a quiet fallback when routing is offline.
+      if (current) setRoadRoute(null);
+    });
+
+    return () => {
+      current = false;
+    };
+  }, [
+    id,
+    latestDriver?.latitude,
+    latestDriver?.longitude,
+    destination?.latitude,
+    destination?.longitude,
+    mapsGateway.routeEstimate.mutateAsync,
+  ]);
+
   const mapped = [...(latestDriver ? [latestDriver] : []), ...(destination ? [destination] : [])];
   const latest = points.data?.[0];
   const recorded = firstString(latest, ["recorded_at", "recordedAt", "created_at"]);
@@ -63,12 +152,12 @@ export function LiveTrackingScreen() {
   const order = nestedRecord(details.data, "order") ?? details.data;
   const orderReference = firstString(order, ["publicReference", "public_reference", "reference"]);
   const orderStatus = firstString(order, ["status"]);
-  const distance = firstNumber(details.data, [
+  const distance = roadRoute?.distanceMeters ?? firstNumber(details.data, [
     "routeDistanceMeters",
     "route_distance_meters",
     "distanceMeters",
   ]);
-  const duration = firstNumber(details.data, [
+  const duration = roadRoute?.durationSeconds ?? firstNumber(details.data, [
     "routeDurationSeconds",
     "route_duration_seconds",
     "durationSeconds",
@@ -107,7 +196,11 @@ export function LiveTrackingScreen() {
       ) : (
         <>
           <View style={[styles.mapShell, shadows.raised]}>
-            <OperationalMap points={mapped} routeCoordinates={driverPath} connectPoints height={430} />
+            <OperationalMap
+              points={mapped}
+              routeCoordinates={roadRoute?.coordinates ?? driverPath}
+              height={430}
+            />
             <View style={[styles.liveOverlay, { backgroundColor: palette.surface }]}>
               {live ? <Signal color={palette.success} size={16} /> : <Clock3 color={palette.warning} size={16} />}
               <Text style={[styles.overlayText, { color: palette.ink }]}>{live ? "Driver location is live" : "Waiting for a fresh signal"}</Text>
@@ -179,6 +272,38 @@ function MetricCard({ icon, label, value }: { icon: React.ReactNode; label: stri
       <Text style={[styles.metricValue, { color: palette.ink }]}>{value}</Text>
     </View>
   );
+}
+
+function readRouteCoordinates(value: unknown): Coordinate[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const geometry = value as { coordinates?: unknown; type?: unknown };
+  if (geometry.type !== "LineString" || !Array.isArray(geometry.coordinates)) return [];
+  return geometry.coordinates.flatMap((entry): Coordinate[] => {
+    if (!Array.isArray(entry) || entry.length < 2) return [];
+    const longitude = Number(entry[0]);
+    const latitude = Number(entry[1]);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)
+      || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return [];
+    return [{ latitude, longitude }];
+  });
+}
+
+function parseDurationSeconds(value: string | null | undefined): number {
+  if (!value) return 0;
+  const parsed = Number(value.trim().replace(/s$/i, ""));
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : 0;
+}
+
+function coordinateDistanceMeters(left: Coordinate, right: Coordinate): number {
+  const radius = 6_371_000;
+  const radians = (degrees: number) => degrees * Math.PI / 180;
+  const latDelta = radians(right.latitude - left.latitude);
+  const lonDelta = radians(right.longitude - left.longitude);
+  const leftLat = radians(left.latitude);
+  const rightLat = radians(right.latitude);
+  const value = Math.sin(latDelta / 2) ** 2
+    + Math.cos(leftLat) * Math.cos(rightLat) * Math.sin(lonDelta / 2) ** 2;
+  return radius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
 }
 
 function toPoint(record: PlatformRecord): MapPoint | null {
