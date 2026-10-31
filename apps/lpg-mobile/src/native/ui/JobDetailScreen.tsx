@@ -282,7 +282,9 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
       setToken("");
       setNoticeSuccess(true);
       setNotice(completedScanType === "customer_delivery"
-        ? "Final cylinder scan verified. Customer hand-over is complete and the order has moved to delivered."
+        ? workspace === "station_driver"
+          ? "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments."
+          : "Final cylinder scan verified. Customer hand-over is complete and the order has moved to delivered."
         : driverScanSuccess(completedScanType));
       await detail.refetch();
     } catch (cause) {
