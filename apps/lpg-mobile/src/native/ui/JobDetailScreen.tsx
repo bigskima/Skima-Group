@@ -131,6 +131,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const routeDistance = firstNumber(root, ["routeDistanceMeters", "route_distance_meters", "distanceMeters"]);
   const routeDuration = firstNumber(root, ["routeDurationSeconds", "route_duration_seconds", "durationSeconds"]);
   const status = displayStatus(order ?? {}) ?? "unknown";
+  const deliveryChallengeVerified = order?.deliveryChallengeVerified === true;
   const terminalOrderStatus = ["delivered", "completed", "cancelled", "failed", "refunded", "expired"].includes(status);
   const canShareStationDriverLocation = workspace === "station_driver" && Boolean(id)
     && ["driver_accepted", "pickup_en_route", "pickup_verified", "station_en_route", "station_verified", "refill_started", "refill_in_progress", "refill_confirmed", "station_settled", "return_en_route", "delivery_verification_pending"].includes(status);
@@ -148,6 +149,12 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
     });
     return () => { active = false; };
   }, [workspace, id]);
+
+  useEffect(() => {
+    if (!driverWorkspaceForDelivery(workspace) || status !== "delivery_verification_pending" || !deliveryChallengeVerified) return;
+    setNoticeSuccess(true);
+    setNotice("Customer confirmed delivery. Scan the same cylinder again to complete the hand-over.");
+  }, [workspace, status, deliveryChallengeVerified]);
 
   useEffect(() => {
     if (workspace !== "station_driver" || !id || !terminalOrderStatus) return;
@@ -439,7 +446,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             <View style={styles.heroCopy}>
               <Text style={styles.heroEyebrow}>CURRENT STAGE</Text>
               <Text style={styles.heroTitle}>{friendlyJobStatus(status)}</Text>
-              <Text style={styles.heroBody}>{workspace === "station_driver" ? stationManagedDriverStageDescription(status) : driverWorkspace ? driverStageDescription(status) : stationStageDescription(status)}</Text>
+              <Text style={styles.heroBody}>{workspace === "station_driver" ? stationManagedDriverStageDescription(status) : driverWorkspace ? driverStageDescription(status, deliveryChallengeVerified) : stationStageDescription(status)}</Text>
             </View>
             <StatusPill label={friendlyJobStatus(status)} tone={statusTone(status)} />
           </View>
@@ -469,6 +476,13 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
           ) : null}
 
           {workspace === "station" ? <StationProgress status={status} /> : null}
+
+          {driverWorkspace && status === "delivery_verification_pending" && deliveryChallengeVerified ? (
+            <InfoNotice
+              icon={<CheckCircle2 color={palette.success} size={19} />}
+              text="Customer delivery verification is complete. Scan the same SKIMA cylinder now to finish the hand-over."
+            />
+          ) : null}
 
           {driverWorkspace && ["pickup_verified", "station_en_route"].includes(status) ? (
             <InfoNotice
@@ -948,13 +962,15 @@ function friendlyJobStatus(value: string) {
   return labels[normalized] ?? normalized.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
-function driverStageDescription(status: string) {
+function driverWorkspaceForDelivery(workspace: "driver" | "station" | "station_driver") {\n  return workspace === "driver" || workspace === "station_driver";\n}\n\nfunction driverStageDescription(status: string, deliveryChallengeVerified = false) {
   if (["driver_offered", "driver_accepted"].includes(status)) return "This order has been assigned to you.";
   if (["pickup_en_route"].includes(status)) return "Navigate to the customer and verify the cylinder before taking custody.";
   if (["pickup_verified", "station_en_route"].includes(status)) return "Take the verified cylinder to the assigned station. Station staff scan it at reception.";
   if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is processing the verified refill.";
   if (["refill_confirmed", "station_settled", "return_en_route"].includes(status)) return "The filled cylinder is ready to return to the customer.";
-  if (status === "delivery_verification_pending") return "The customer must complete delivery verification before the final cylinder scan.";
+  if (status === "delivery_verification_pending") return deliveryChallengeVerified
+    ? "The customer has confirmed delivery. Scan the same SKIMA cylinder now to complete the hand-over."
+    : "Ask the customer to complete delivery verification. The final cylinder scan becomes available immediately after confirmation.";
   if (["delivered", "completed"].includes(status)) return "The hand-over is confirmed and payment processing continues automatically.";
   return "Follow the next available action for this assigned job.";
 }
