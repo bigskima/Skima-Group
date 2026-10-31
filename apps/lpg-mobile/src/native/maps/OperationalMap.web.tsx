@@ -1,7 +1,8 @@
 import { Image } from "expo-image";
 import { Crosshair, MapPin, Minus, Plus } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
@@ -32,8 +33,8 @@ export interface OperationalMapProps {
 const TILE = 256;
 const DEFAULT_HEIGHT = 420;
 const EMERGENCY_RASTER_TILE_TEMPLATE =
-  "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
-const EMERGENCY_ATTRIBUTION = "© OpenStreetMap contributors, © CARTO";
+  "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const EMERGENCY_ATTRIBUTION = "© OpenStreetMap contributors";
 
 export function OperationalMap({
   points,
@@ -50,6 +51,9 @@ export function OperationalMap({
   const effectiveMaxZoom = maxZoom ?? Math.max(21, providerTileMaxZoom);
   const [width, setWidth] = useState(720);
   const [useEmergencyTiles, setUseEmergencyTiles] = useState(false);
+  const [tilesUnavailable, setTilesUnavailable] = useState(false);
+  const centerRef = useRef(center);
+  const panOrigin = useRef(center);
   const tileTemplate = useEmergencyTiles
     ? EMERGENCY_RASTER_TILE_TEMPLATE
     : mapRenderer.tileTemplate;
@@ -67,7 +71,12 @@ export function OperationalMap({
   const [zoom, setZoom] = useState(() => clamp(automaticZoom, minZoom, effectiveMaxZoom));
 
   useEffect(() => {
+    centerRef.current = center;
+  }, [center]);
+
+  useEffect(() => {
     setUseEmergencyTiles(false);
+    setTilesUnavailable(false);
   }, [mapRenderer.tileTemplate]);
 
   useEffect(() => {
@@ -90,6 +99,21 @@ export function OperationalMap({
       ? fitZoom(points, width, height, minZoom, effectiveMaxZoom)
       : clamp(points.length ? initialZoom : mapRenderer.defaultZoom, minZoom, effectiveMaxZoom));
   };
+  const panResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_event, gesture) =>
+      Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3,
+    onPanResponderGrant: () => {
+      panOrigin.current = centerRef.current;
+    },
+    onPanResponderMove: (_event, gesture) => {
+      const origin = panOrigin.current;
+      if (!origin) return;
+      const pixel = project(origin.latitude, origin.longitude, zoom);
+      setCenter(unproject(pixel.x - gesture.dx, pixel.y - gesture.dy, zoom));
+    },
+    onPanResponderTerminationRequest: () => false,
+  }), [zoom]);
+
   const select = (event: GestureResponderEvent) => {
     if (!center || !onSelectPoint) return;
     const centerPixel = project(center.latitude, center.longitude, zoom);
@@ -112,6 +136,7 @@ export function OperationalMap({
       accessibilityLabel={onSelectPoint ? "Interactive map. Tap to move the location pin." : "Map showing relevant locations"}
       onLayout={onLayout}
       onPress={select}
+      {...panResponder.panHandlers}
       style={[styles.map, { height, borderColor: palette.border }]}
     >
       {layout.tiles.map((tile) => (
@@ -119,11 +144,19 @@ export function OperationalMap({
           key={`${tile.zoom}:${tile.x}:${tile.y}:${tile.left}`}
           source={tile.url}
           contentFit="cover"
-          onError={() => setUseEmergencyTiles(true)}
+          onError={() => {
+            if (!useEmergencyTiles) setUseEmergencyTiles(true);
+            else setTilesUnavailable(true);
+          }}
           style={[styles.tile, { left: tile.left, top: tile.top, width: tile.size, height: tile.size }]}
           transition={60}
         />
       ))}
+      {tilesUnavailable ? (
+        <View pointerEvents="none" style={styles.tileFallbackNotice}>
+          <Text style={styles.tileFallbackText}>Map tiles are temporarily unavailable. Your saved locations and map controls are still available.</Text>
+        </View>
+      ) : null}
       {connectPoints
         ? layout.segments.map((segment, index) => (
             <View
@@ -275,6 +308,8 @@ const styles = StyleSheet.create({
   controls: { position: "absolute", right: spacing.sm, top: spacing.sm, gap: 5 },
   control: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 13, backgroundColor: "white", boxShadow: "0 4px 14px rgba(0,0,0,.16)" },
   selectionHint: { position: "absolute", top: spacing.sm, left: spacing.sm, maxWidth: "68%", paddingHorizontal: 11, paddingVertical: 7, borderRadius: radii.pill, backgroundColor: "rgba(23,33,27,.84)" },
+  tileFallbackNotice: { position: "absolute", left: spacing.md, right: 70, top: "44%", padding: spacing.sm, borderRadius: radii.md, backgroundColor: "rgba(255,255,255,.94)" },
+  tileFallbackText: { color: colors.ink, fontSize: 12, fontWeight: "700", textAlign: "center" },
   selectionHintText: { color: "white", fontSize: 11, fontWeight: "800" },
   zoomBadge: { position: "absolute", left: spacing.sm, bottom: spacing.sm, paddingHorizontal: 9, paddingVertical: 5, borderRadius: radii.pill, backgroundColor: "rgba(255,255,255,.92)" },
   zoomText: { color: colors.ink, fontSize: 10, fontWeight: "800" },
