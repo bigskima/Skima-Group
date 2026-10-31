@@ -11,12 +11,13 @@ function assertIncludes(value: string, expected: string): void {
 }
 
 Deno.test("final LPG handover requires the driver cylinder scan after customer verification", async () => {
-  const [jobDetail, gateway, scanMigration, payoutMigration, walletMigration] = await Promise.all([
+  const [jobDetail, gateway, scanMigration, payoutMigration, walletMigration, deliveryReadModelMigration] = await Promise.all([
     readRepositoryFile("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
     readRepositoryFile("supabase/functions/api-gateway/index.ts"),
     readRepositoryFile("supabase/migrations/20260801040000_lpg_integrated_lifecycle_runtime.sql"),
     readRepositoryFile("supabase/migrations/20260916165126_lpg_internal_dispatch_and_settlement_runtime.sql"),
     readRepositoryFile("supabase/migrations/20261031095000_lpg_driver_self_wallet_provisioning.sql"),
+    readRepositoryFile("supabase/migrations/20261031110000_lpg_job_delivery_verification_read_model.sql"),
   ]);
 
   const driverScanRules = jobDetail.slice(
@@ -28,6 +29,10 @@ Deno.test("final LPG handover requires the driver cylinder scan after customer v
   assertIncludes(jobDetail, "canDriverScan && driverScanType ?");
   assertIncludes(jobDetail, "await scan.mutateAsync({");
   assertIncludes(jobDetail, 'scanType: driverScanType');
+  assertIncludes(jobDetail, "order?.deliveryChallengeVerified === true");
+  assertIncludes(jobDetail, "Customer verification is complete. Scan the cylinder now");
+  assertIncludes(deliveryReadModelMigration, "'deliveryChallengeVerified'");
+  assertIncludes(deliveryReadModelMigration, "public.lpg_delivery_challenge_is_verified(");
 
   // The mobile gateway must route the physical scan through the verified,
   // order-scoped database RPC rather than setting order status from the UI.
