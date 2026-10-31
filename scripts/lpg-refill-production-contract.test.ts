@@ -648,6 +648,10 @@ Deno.test("verified LPG customer hand-over advances the order and invokes the ex
   assertIncludes(migration, "'lpg.delivery.completed'");
   assertIncludes(migration, "target_idempotency_key || ':delivery-completed'");
   assertIncludes(migration, "public.lpg_delivery_challenge_is_verified");
+  assertIncludes(migration, "previously_verified_customer_otp");
+  assertIncludes(migration, "station_settlement_execution_id is not null");
+  assertIncludes(migration, "for update");
+  assertIncludes(migration, "lpg-delivery-otp-completion-backfill:");
   assertIncludes(migration, "verified_order.fulfillment_mode = 'independent_driver'");
   assertIncludes(migration, "verified_order.fulfillment_channel = 'marketplace'");
   assertNotIncludes(migration, "set driver_commission_amount");
