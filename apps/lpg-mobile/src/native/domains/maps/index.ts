@@ -69,12 +69,9 @@ export interface MapsRuntimeConfig {
   mapMatchingProviderKey: string;
 }
 
-const KEYLESS_RASTER_TILE_TEMPLATE =
-  "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
 const KEYLESS_OSM_TILE_TEMPLATE =
   "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const KEYLESS_MAP_STYLE_URL = "https://demotiles.maplibre.org/style.json";
-const KEYLESS_ATTRIBUTION = "© OpenStreetMap contributors, © CARTO";
 const KEYLESS_OSM_ATTRIBUTION = "© OpenStreetMap contributors";
 
 export function getMapsRuntimeConfig(): MapsRuntimeConfig {
@@ -182,36 +179,17 @@ export function isUsablePublicTileTemplate(value?: string | null): value is stri
   if (!/^https:\/\//i.test(normalized)) return false;
   if (!["{z}", "{x}", "{y}"].every((token) => normalized.includes(token))) return false;
   if (requiresPublicMapCredential(normalized)) return false;
-  return keylessTileHost(normalized) !== null;
+  // OSM Standard is the only approved no-key provider for this launch.
+  return keylessTileHost(normalized) === "osm";
 }
 
 function selectKeylessRaster(
   provider: string,
   configuredTemplate?: string,
 ): { key: string; template: string; attribution: string; fallback: boolean } {
-  if (provider === "carto_voyager") {
-    if (!configuredTemplate) {
-      return {
-        key: "carto_voyager",
-        template: KEYLESS_RASTER_TILE_TEMPLATE,
-        attribution: KEYLESS_ATTRIBUTION,
-        fallback: false,
-      };
-    }
-    if (
-      isUsablePublicTileTemplate(configuredTemplate) &&
-      keylessTileHost(configuredTemplate) === "carto"
-    ) {
-      return {
-        key: "carto_voyager",
-        template: configuredTemplate,
-        attribution: KEYLESS_ATTRIBUTION,
-        fallback: false,
-      };
-    }
-  }
-
-  if (["openstreetmap", "osm", "osm_standard"].includes(provider)) {
+  // SKIMA launches on the official OpenStreetMap Standard raster endpoint.
+  // Paid/API-key tile hosts and third-party "free tier" styles are never selected.
+  if (["openstreetmap", "osm", "osm_standard", "carto_voyager"].includes(provider)) {
     if (!configuredTemplate) {
       return {
         key: "osm_standard",
@@ -241,7 +219,7 @@ function selectKeylessRaster(
   };
 }
 
-function keylessTileHost(template: string): "carto" | "osm" | null {
+function keylessTileHost(template: string): "osm" | null {
   try {
     const hostname = new URL(
       template
@@ -249,7 +227,6 @@ function keylessTileHost(template: string): "carto" | "osm" | null {
         .replace("{x}", "1")
         .replace("{y}", "1"),
     ).hostname.toLowerCase();
-    if (hostname.endsWith(".basemaps.cartocdn.com")) return "carto";
     if (hostname === "tile.openstreetmap.org") return "osm";
     return null;
   } catch {
