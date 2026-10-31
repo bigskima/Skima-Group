@@ -1,5 +1,6 @@
 import { CheckCircle2, ClipboardCheck, Fuel, ScanLine, ShieldAlert } from "lucide-react-native";
 import { useMemo, useState } from "react";
+import { router } from "expo-router";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useGatewayMutation } from "../api/gateway";
 import {
@@ -198,8 +199,9 @@ export function StationBatchOperationsPanel({
         <View style={[styles.stageHint, { backgroundColor: palette.brandSofter }]}>
           <ScanLine color={palette.brand} size={18} />
           <Text style={[styles.stageHintText, { color: palette.ink }]}>
-            {incomingCount} incoming cylinder(s). Use the Scan tab and scan each cylinder once. SKIMA matches it to this station automatically.
+            {incomingCount} incoming cylinder(s). Scan each one once. SKIMA finds its order automatically.
           </Text>
+          <AppButton label="Receive cylinders" variant="primary" fullWidth onPress={() => router.push("/(station)/scan" as never)} />
         </View>
       ) : null}
 
@@ -284,8 +286,9 @@ export function StationBatchOperationsPanel({
         <View style={[styles.stageHint, { backgroundColor: palette.successSoft }]}>
           <CheckCircle2 color={palette.success} size={18} />
           <Text style={[styles.stageHintText, { color: palette.ink }]}>
-            {releaseCount} refill(s) ready for release verification. Use the Scan tab and scan each cylinder once before handover.
+            {releaseCount} refill(s) ready for release. Scan each filled cylinder once before handing it to its assigned driver.
           </Text>
+          <AppButton label="Release cylinders" variant="primary" fullWidth onPress={() => router.push("/(station)/scan" as never)} />
         </View>
       ) : null}
 
