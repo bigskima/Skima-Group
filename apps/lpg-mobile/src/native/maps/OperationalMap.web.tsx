@@ -65,6 +65,7 @@ export function OperationalMap({
   const attribution = useEmergencyTiles
     ? EMERGENCY_ATTRIBUTION
     : mapRenderer.attribution;
+  const activeTileMaxZoom = useEmergencyTiles ? 19 : providerTileMaxZoom;
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
   const interactive = Boolean(onSelectPoint);
   const derivedCenter = useMemo(
@@ -126,7 +127,7 @@ export function OperationalMap({
   }, [pointKey, interactive, width, height, initialZoom, mapRenderer.defaultZoom, effectiveMaxZoom, minZoom]);
 
   const layout = center
-    ? createLayout(center, points, width, height, zoom, tileTemplate, providerTileMaxZoom)
+    ? createLayout(center, points, width, height, zoom, tileTemplate, activeTileMaxZoom)
     : null;
   const onLayout = (event: LayoutChangeEvent) =>
     setWidth(Math.max(280, event.nativeEvent.layout.width));
