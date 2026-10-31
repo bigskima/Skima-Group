@@ -240,7 +240,9 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const refillActive = ["station_verified", "refill_in_progress", "refill_started"].includes(status);
   const releaseReady = ["refill_confirmed", "station_settled"].includes(status);
   const aiJobReference = firstString(order, ["public_reference", "publicReference", "reference", "id"]) ?? id ?? "this LPG job";
-  const orderDisplayReference = firstString(order, ["public_reference", "publicReference", "reference"]) ?? displayTitle(order);
+  const orderDisplayReference = order
+    ? (firstString(order, ["public_reference", "publicReference", "reference"]) ?? displayTitle(order))
+    : "Not available";
 
   const submitDriverScan = async () => {
     if (!id || !token || !driverScanType) return;
