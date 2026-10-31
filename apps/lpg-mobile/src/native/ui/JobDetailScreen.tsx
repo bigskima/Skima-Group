@@ -252,7 +252,18 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
       return;
     }
     setNotice(null);
+    let scanSaved = false;
     try {
+      // Preserve the route-start event, but let a successful pickup scan move
+      // directly into station transit so the driver does not need a second tap.
+      if (driverScanType === "customer_pickup" && status === "driver_accepted") {
+        await action.mutateAsync({
+          actionKey: "lpg.pickup.start",
+          lpgOrderId: id,
+          source: "skima.lpg.mobile",
+          idempotencyKey: operationIdempotencyKey("lpg.pickup.start", id),
+        });
+      }
       const location = await readOperationalLocation().catch(() => null);
       await scan.mutateAsync({
         ...(location ?? {}),
@@ -265,13 +276,25 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
           scannedToken: token,
         },
       });
+      scanSaved = true;
+      if (driverScanType === "customer_pickup") {
+        await action.mutateAsync({
+          actionKey: "lpg.station.start",
+          lpgOrderId: id,
+          source: "skima.lpg.mobile",
+          idempotencyKey: operationIdempotencyKey("lpg.station.start", id),
+        });
+      }
       setToken("");
       setNoticeSuccess(true);
       setNotice(workspace === "station_driver" && driverScanType === "customer_delivery" ? "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments." : driverScanSuccess(driverScanType));
       void detail.refetch().catch(() => undefined);
     } catch (cause) {
-      setNoticeSuccess(false);
-      setNotice(friendlyError(cause, "SKIMA could not verify this cylinder. Scan the code again."));
+      setNoticeSuccess(scanSaved);
+      setNotice(scanSaved
+        ? "Cylinder pickup was verified, but the station route did not start. Use the next route action to continue; the successful scan has been saved."
+        : friendlyError(cause, "SKIMA could not verify this cylinder. Scan the code again."));
+      void detail.refetch().catch(() => undefined);
     }
   };
 
