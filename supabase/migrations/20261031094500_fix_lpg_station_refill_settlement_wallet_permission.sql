@@ -495,8 +495,7 @@ begin
 
   return settlement_execution_id;
 end;
-$function$
-
+$function$;
 
 comment on function public.ensure_lpg_station_settlement_wallet(uuid,uuid,text,text) is
   'Private station settlement wallet resolver. Reuses an active organization partner wallet and creates one only from the authorized LPG station settlement path.';
