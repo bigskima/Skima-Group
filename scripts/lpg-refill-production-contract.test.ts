@@ -701,6 +701,8 @@ Deno.test("verified OTP orders can resume delivery completion without requesting
   assertIncludes(mapRuntime, "clamp(Math.round(tileMaxZoom), 1, 19)");
   assertIncludes(rendererHook, "Math.min(configuration.max_zoom ?? runtimeTile.maxZoom, runtimeTile.maxZoom, 19)");
   assertIncludes(nativeMap, "maxzoom: 19");
+  assertIncludes(nativeMap, "TransformRequestManager.addHeader");
+  assertIncludes(nativeMap, "SKIMA-LPG/1.0");
   assertIncludes(webMap, "Math.min(maxZoom ?? providerTileMaxZoom, providerTileMaxZoom, 19)");
 });
 
