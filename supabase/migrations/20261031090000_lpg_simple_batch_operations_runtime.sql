@@ -73,6 +73,9 @@ begin
     raise exception 'idempotency key is required';
   end if;
 
+  -- Never trust a caller-supplied source namespace for scan idempotency.
+  target_source := 'skima.lpg.continuous';
+
   -- A retry returns the original result. It must not reinterpret the same
   -- token against the order's next lifecycle stage.
   select existing.id, existing.lpg_order_id, existing.scan_type,
@@ -143,7 +146,7 @@ begin
      );
 
   if candidate_count = 0 then
-    raise exception 'cylinder code was not recognised. Check the code and try again.';
+    raise exception 'no matching active assigned order for this cylinder. Check the code or ask the dispatcher to confirm the assignment.';
   elsif candidate_count > 1 then
     raise exception 'this code matches more than one cylinder. Open the assigned order for manual review.';
   end if;
