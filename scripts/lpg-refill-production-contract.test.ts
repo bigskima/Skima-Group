@@ -77,6 +77,9 @@ Deno.test("station quick operations preserve per-cylinder safety and per-order r
   assertIncludes(panel, "for (const row of enteredRows)");
   assertIncludes(panel, 'actionKey: "lpg.refill.start"');
   assertIncludes(panel, 'path: "/lpg/refills/confirm"');
+  assertIncludes(panel, 'permissions.has("lpg.stations.scan")');
+  assertIncludes(panel, "Station release requires an authorised scanner on this branch.");
+  assertIncludes(panel, "An authorised station scanner or pump operator must receive these cylinders.");
   assertIncludes(panel, "Each order is confirmed separately. One failed order does not block the other entered refills.");
   assertIncludes(panel, "failures.push");
   assertIncludes(jobs, "StationBatchOperationsPanel");
