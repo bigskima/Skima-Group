@@ -49,7 +49,8 @@ set search_path = public, extensions, pg_temp
 as $function$
 declare
   token_value text;
-  cylinder_record record;
+  matched_cylinder_id uuid;
+  matched_cylinder_identifier text;
   candidate_count integer := 0;
   order_id uuid;
   order_status text;
@@ -76,7 +77,7 @@ begin
   -- token against the order's next lifecycle stage.
   select existing.id, existing.lpg_order_id, existing.scan_type,
          order_row.public_reference, cylinder.cylinder_identifier, order_row.status
-  into scan_id, order_id, scan_type, order_reference, cylinder_record.cylinder_identifier, final_status
+  into scan_id, order_id, scan_type, order_reference, matched_cylinder_identifier, final_status
   from public.lpg_cylinder_scans existing
   join public.lpg_refill_orders order_row on order_row.id = existing.lpg_order_id
   join public.lpg_cylinders cylinder on cylinder.id = existing.cylinder_id
@@ -87,7 +88,7 @@ begin
       'scanId', scan_id,
       'lpgOrderId', order_id,
       'orderReference', order_reference,
-      'cylinderIdentifier', cylinder_record.cylinder_identifier,
+      'cylinderIdentifier', matched_cylinder_identifier,
       'scanType', scan_type,
       'status', final_status,
       'replayed', true
@@ -99,7 +100,7 @@ begin
   select count(distinct cylinder.id),
          (array_agg(cylinder.id order by cylinder.created_at desc))[1],
          (array_agg(cylinder.cylinder_identifier order by cylinder.created_at desc))[1]
-  into candidate_count, cylinder_record.id, cylinder_record.cylinder_identifier
+  into candidate_count, matched_cylinder_id, matched_cylinder_identifier
   from public.lpg_cylinders cylinder
   where upper(cylinder.cylinder_identifier) = upper(token_value)
      or upper(coalesce(cylinder.public_reference, '')) = upper(token_value)
@@ -136,7 +137,7 @@ begin
         end as scan_type
       from public.lpg_refill_orders order_row
       left join public.driver_profiles driver on driver.id = order_row.driver_profile_id
-      where order_row.cylinder_id = cylinder_record.id
+      where order_row.cylinder_id = matched_cylinder_id
         and (driver.user_id = auth.uid() or public.is_lpg_station_managed_order_driver(order_row.id, auth.uid()))
         and order_row.status in (
           'driver_accepted', 'pickup_en_route', 'pickup_verified',
@@ -157,7 +158,7 @@ begin
           else null
         end as scan_type
       from public.lpg_refill_orders order_row
-      where order_row.cylinder_id = cylinder_record.id
+      where order_row.cylinder_id = matched_cylinder_id
         and order_row.station_branch_id is not null
         and public.user_can_operate_lpg_station_branch(auth.uid(), order_row.station_branch_id, 'lpg.orders.read')
         and (
@@ -201,7 +202,7 @@ begin
     target_accuracy_meters,
     jsonb_build_object(
       'scannedToken', token_value,
-      'scannedCylinderId', cylinder_record.id,
+      'scannedCylinderId', matched_cylinder_id,
       'continuousScan', true,
       'scanWorkspace', target_workspace
     ),
@@ -227,7 +228,7 @@ begin
     'scanId', scan_id,
     'lpgOrderId', order_id,
     'orderReference', order_reference,
-    'cylinderIdentifier', cylinder_record.cylinder_identifier,
+    'cylinderIdentifier', matched_cylinder_identifier,
     'scanType', scan_type,
     'status', final_status,
     'replayed', false
