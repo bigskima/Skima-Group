@@ -460,11 +460,20 @@ Deno.test("mobile basemap follows Admin's public keyless renderer and preserves 
   assertIncludes(webMap, "mapRenderer.tileTemplate");
   assertIncludes(webMap, "mapRenderer.defaultCenter");
   assertIncludes(webMap, "mapRenderer.defaultZoom");
-  assertIncludes(webMap, "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png");
+  assertIncludes(runtime, "SAFE_FALLBACK_MAP_TILE_TEMPLATE");
+  assertIncludes(runtime, "SAFE_FALLBACK_MAP_ATTRIBUTION");
+  assertIncludes(rendererHook, "SAFE_FALLBACK_MAP_TILE_TEMPLATE");
+  assertIncludes(rendererHook, "SAFE_FALLBACK_MAP_ATTRIBUTION");
+  assertIncludes(webMap, "PanResponder.create");
+  assertIncludes(webMap, "onPanResponderMove");
+  assertIncludes(webMap, "touchDistance");
+  assertIncludes(webMap, "SAFE_FALLBACK_MAP_TILE_TEMPLATE");
   assertIncludes(webMap, "onError={() => setUseEmergencyTiles(true)}");
   assertIncludes(nativeMap, "useMapsRendererConfiguration");
   assertIncludes(nativeMap, "mapRenderer.tileTemplate");
   assertIncludes(nativeMap, "mapRenderer.defaultCenter");
+  assertIncludes(nativeMap, "onDidFailLoadingMap");
+  assertIncludes(nativeMap, "SAFE_FALLBACK_MAP_TILE_TEMPLATE");
 
   // Keep the small-screen map dimensions and viewport clipping unchanged.
   assertIncludes(webMap, 'map: { width: "100%", overflow: "hidden"');
