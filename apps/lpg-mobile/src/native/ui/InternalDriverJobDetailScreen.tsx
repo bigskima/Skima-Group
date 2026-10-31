@@ -168,8 +168,13 @@ export function InternalDriverJobDetailScreen() {
         ),
         source: "skima.lpg.continuous",
       });
-      const completedScanType = result && typeof result === "object"
-        ? firstString(result, ["scanType"]) ?? scanType
+      const responseScanType = result && typeof result === "object"
+        ? firstString(result, ["scanType"])
+        : null;
+      const completedScanType = responseScanType === "customer_pickup"
+          || responseScanType === "station_receipt"
+          || responseScanType === "customer_delivery"
+        ? responseScanType
         : scanType;
       setToken("");
       setNoticeSuccess(true);
