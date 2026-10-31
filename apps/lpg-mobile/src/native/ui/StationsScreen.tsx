@@ -1,8 +1,8 @@
 import { router } from "expo-router";
 import { ChevronRight, Gauge, MapPin, ShieldCheck } from "lucide-react-native";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { domainQueries } from "../api/domains";
-import { displayStatus, firstNumber, firstString, recordId } from "../api/records";
+import { domainQueries, useEntityMediaLinks } from "../api/domains";
+import { displayStatus, firstNumber, firstString, recordId, type PlatformRecord } from "../api/records";
 import { OperationalMap, type MapPoint } from "../maps/OperationalMap";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -10,6 +10,7 @@ import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
 import { StatusPill } from "./StatusPill";
+import { RuntimeMediaImage } from "./RuntimeMediaImage";
 
 export function StationsScreen() {
   const { palette } = useAppTheme();
@@ -80,63 +81,88 @@ export function StationsScreen() {
           ) : null}
 
           <View style={styles.list}>
-            {(stations.data ?? []).map((station, index) => {
-              const id = recordId(station);
-              const status = displayStatus(station) ?? firstString(station, ["availability_status", "availabilityStatus"]) ?? "configured";
-              const capacity = firstNumber(station, ["currentAvailableKg", "current_available_kg"]);
-              const name = firstString(station, ["display_name", "displayName", "name"]) ?? "SKIMA station";
-              const address = firstString(station, ["formatted_address", "formattedAddress", "address"]) ?? "Address will appear when available";
-              const distanceMeters = firstNumber(station, ["distance_meters", "distanceMeters"]);
-              const distanceLabel = distanceMeters === null
-                ? null
-                : distanceMeters < 1000
-                  ? `${Math.round(distanceMeters)} m away`
-                  : `${(distanceMeters / 1000).toFixed(distanceMeters < 10000 ? 1 : 0)} km away`;
-
-              return (
-                <Pressable
-                  key={id ?? String(index)}
-                  accessibilityRole="button"
-                  disabled={!id}
-                  onPress={() => router.push(`/(customer)/station/${id}` as never)}
-                  style={({ pressed }) => [
-                    styles.station,
-                    shadows.soft,
-                    { backgroundColor: palette.surface, borderColor: palette.border, opacity: pressed ? 0.76 : 1 },
-                  ]}
-                >
-                  <View style={[styles.icon, { backgroundColor: palette.brandSoft }]}>
-                    <MapPin color={palette.brand} size={22} />
-                  </View>
-
-                  <View style={styles.copy}>
-                    <View style={styles.nameRow}>
-                      <Text numberOfLines={1} style={[styles.title, { color: palette.ink }]}>{name}</Text>
-                      <View style={[styles.verified, { backgroundColor: palette.successSoft }]}>
-                        <ShieldCheck color={palette.success} size={12} />
-                        <Text style={[styles.verifiedText, { color: palette.success }]}>Verified</Text>
-                      </View>
-                    </View>
-                    <Text numberOfLines={2} style={[styles.body, { color: palette.muted }]}>{address}</Text>
-                    {distanceLabel ? <Text style={[styles.distance, { color: palette.brand }]}>{distanceLabel}</Text> : null}
-                    <StatusPill label={friendlyStationStatus(status)} tone={stationStatusTone(status)} />
-                  </View>
-
-                  <View style={styles.trailing}>
-                    <View style={[styles.capacity, { backgroundColor: palette.soft }]}>
-                      <Gauge color={palette.mutedStrong} size={15} />
-                      <Text style={[styles.capacityText, { color: palette.ink }]}>{capacity ?? "—"}</Text>
-                      <Text style={[styles.capacityUnit, { color: palette.muted }]}>kg</Text>
-                    </View>
-                    <ChevronRight color={palette.muted} size={18} />
-                  </View>
-                </Pressable>
-              );
-            })}
+            {(stations.data ?? []).map((station, index) => (
+              <StationListItem key={recordId(station) ?? `station-${index}`} station={station} />
+            ))}
           </View>
         </>
       )}
     </Screen>
+  );
+}
+
+function StationListItem({ station }: { station: PlatformRecord }) {
+  const { palette } = useAppTheme();
+  const id = recordId(station);
+  const media = useEntityMediaLinks("station", id);
+  const activeMedia = (media.data ?? []).filter(
+    (item) => (firstString(item, ["status"]) ?? "active") === "active",
+  );
+  const logoLink = activeMedia.find((item) =>
+    firstString(item, ["media_role", "mediaRole"]) === "station.logo.public"
+  ) ?? null;
+  const logoAssetId = firstString(logoLink, ["media_asset_id", "mediaAssetId"]);
+  const status = displayStatus(station) ??
+    firstString(station, ["availability_status", "availabilityStatus"]) ?? "configured";
+  const capacity = firstNumber(station, ["currentAvailableKg", "current_available_kg"]);
+  const name = firstString(station, ["display_name", "displayName", "name"]) ?? "SKIMA station";
+  const address = firstString(station, ["formatted_address", "formattedAddress", "address"]) ??
+    "Address will appear when available";
+  const distanceMeters = firstNumber(station, ["distance_meters", "distanceMeters"]);
+  const distanceLabel = distanceMeters === null
+    ? null
+    : distanceMeters < 1000
+      ? `${Math.round(distanceMeters)} m away`
+      : `${(distanceMeters / 1000).toFixed(distanceMeters < 10000 ? 1 : 0)} km away`;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={!id}
+      onPress={() => {
+        if (id) router.push(`/(customer)/station/${id}` as never);
+      }}
+      style={({ pressed }) => [
+        styles.station,
+        shadows.soft,
+        { backgroundColor: palette.surface, borderColor: palette.border, opacity: pressed ? 0.76 : 1 },
+      ]}
+    >
+      <View style={[styles.icon, { backgroundColor: palette.brandSoft }]}>
+        {logoAssetId ? (
+          <RuntimeMediaImage
+            assetId={logoAssetId}
+            label={`${name} logo`}
+            variant="avatarCompact"
+            contentFit="contain"
+          />
+        ) : (
+          <MapPin color={palette.brand} size={22} />
+        )}
+      </View>
+
+      <View style={styles.copy}>
+        <View style={styles.nameRow}>
+          <Text numberOfLines={1} style={[styles.title, { color: palette.ink }]}>{name}</Text>
+          <View style={[styles.verified, { backgroundColor: palette.successSoft }]}>
+            <ShieldCheck color={palette.success} size={12} />
+            <Text style={[styles.verifiedText, { color: palette.success }]}>Verified</Text>
+          </View>
+        </View>
+        <Text numberOfLines={2} style={[styles.body, { color: palette.muted }]}>{address}</Text>
+        {distanceLabel ? <Text style={[styles.distance, { color: palette.brand }]}>{distanceLabel}</Text> : null}
+        <StatusPill label={friendlyStationStatus(status)} tone={stationStatusTone(status)} />
+      </View>
+
+      <View style={styles.trailing}>
+        <View style={[styles.capacity, { backgroundColor: palette.soft }]}>
+          <Gauge color={palette.mutedStrong} size={15} />
+          <Text style={[styles.capacityText, { color: palette.ink }]}>{capacity ?? "—"}</Text>
+          <Text style={[styles.capacityUnit, { color: palette.muted }]}>kg</Text>
+        </View>
+        <ChevronRight color={palette.muted} size={18} />
+      </View>
+    </Pressable>
   );
 }
 
