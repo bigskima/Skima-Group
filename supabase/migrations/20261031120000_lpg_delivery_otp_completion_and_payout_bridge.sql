@@ -146,4 +146,78 @@ begin
 end;
 $migration$;
 
+-- Recover orders where the OTP was already accepted before this migration,
+-- but the old verification function never transitioned the order to delivered.
+-- Only server-verified, current challenges with completed station settlement
+-- are eligible. Station Managed jobs additionally require an active driver
+-- assignment; the established delivered-event trigger performs their correct
+-- station-owned completion, or the marketplace commission execution.
+do $migration$
+declare
+  stuck_order record;
+begin
+  for stuck_order in
+    select
+      order_record.id,
+      order_record.status,
+      order_record.customer_user_id,
+      order_record.delivery_challenge_id,
+      order_record.fulfillment_channel,
+      order_record.fulfillment_mode
+    from public.lpg_refill_orders order_record
+    where order_record.status = 'delivery_verification_pending'
+      and order_record.delivery_challenge_id is not null
+      and order_record.station_settlement_execution_id is not null
+      and order_record.driver_profile_id is not null
+      and public.lpg_delivery_challenge_is_verified(
+        order_record.id,
+        order_record.delivery_challenge_id
+      )
+      and (
+        order_record.fulfillment_mode is distinct from 'station_managed'
+        or exists (
+          select 1
+          from public.lpg_station_managed_driver_assignments station_assignment
+          where station_assignment.lpg_order_id = order_record.id
+            and station_assignment.status in ('assigned', 'accepted', 'en_route', 'delivered')
+        )
+      )
+      and (
+        coalesce(order_record.fulfillment_channel, 'marketplace') <> 'marketplace'
+        or exists (
+          select 1
+          from public.driver_profiles assigned_driver
+          where assigned_driver.id = order_record.driver_profile_id
+            and assigned_driver.verification_status = 'approved'
+            and assigned_driver.user_id is not null
+        )
+      )
+    order by order_record.updated_at, order_record.id
+    for update
+  loop
+    update public.lpg_refill_orders
+    set status = 'delivered',
+        updated_at = timezone('utc', now())
+    where id = stuck_order.id
+      and status = 'delivery_verification_pending';
+
+    if found then
+      perform public.record_lpg_order_event(
+        stuck_order.id,
+        'lpg.delivery.completed',
+        stuck_order.status,
+        'delivered',
+        'lpg-delivery-otp-completion-backfill:' || stuck_order.id::text,
+        jsonb_build_object(
+          'challenge_id', stuck_order.delivery_challenge_id,
+          'verification', 'previously_verified_customer_otp',
+          'customer_user_id', stuck_order.customer_user_id,
+          'repair', '20261031120000_lpg_delivery_otp_completion_and_payout_bridge'
+        )
+      );
+    end if;
+  end loop;
+end;
+$migration$;
+
 commit;
