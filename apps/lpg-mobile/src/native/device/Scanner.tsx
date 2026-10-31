@@ -5,7 +5,7 @@ import {
 } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { Flashlight, Keyboard, ScanLine } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -14,10 +14,12 @@ export function Scanner({
   enabled,
   onDetected,
   allowManualEntry = true,
+  continuous = false,
 }: {
   enabled: boolean;
   onDetected(value: string): void;
   allowManualEntry?: boolean;
+  continuous?: boolean;
 }) {
   const { height: windowHeight, width } = useWindowDimensions();
   const { palette } = useAppTheme();
@@ -25,6 +27,12 @@ export function Scanner({
   const [locked, setLocked] = useState(false);
   const [torch, setTorch] = useState(false);
   const [manualValue, setManualValue] = useState("");
+
+  useEffect(() => {
+    if (!continuous || !locked) return;
+    const timer = setTimeout(() => setLocked(false), 1100);
+    return () => clearTimeout(timer);
+  }, [continuous, locked]);
 
   const detected = (event: BarcodeScanningResult) => {
     if (locked || !enabled || !event.data.trim()) return;
@@ -82,7 +90,7 @@ export function Scanner({
           >
             <Flashlight color="white" size={21} />
           </Pressable>
-          {locked ? (
+          {locked && !continuous ? (
             <Pressable onPress={() => setLocked(false)} style={[styles.rescan, { backgroundColor: palette.brand }]}>
               <Text style={styles.buttonText}>Scan again</Text>
             </Pressable>
@@ -96,7 +104,7 @@ export function Scanner({
             <View style={[styles.manualIcon, { backgroundColor: palette.brandSoft }]}><Keyboard color={palette.brand} size={18} /></View>
             <View style={styles.manualCopy}>
               <Text style={[styles.manualTitle, { color: palette.ink }]}>Can’t scan? Enter permanent Cylinder ID</Text>
-              <Text style={[styles.manualBody, { color: palette.muted }]}>Use the ID beginning with “SKIMA-CYL-”. For older cylinders, the registry reference beginning with “CYL-” is also accepted. SKIMA will confirm the identity belongs to this order before the hand-over continues.</Text>
+              <Text style={[styles.manualBody, { color: palette.muted }]}>Enter the five-character Cylinder ID printed on the cylinder. SKIMA matches it to one of your assigned orders before recording the hand-over.</Text>
             </View>
           </View>
           <TextInput
@@ -105,7 +113,7 @@ export function Scanner({
             autoCorrect={false}
             onChangeText={setManualValue}
             onSubmitEditing={submitManual}
-            placeholder="Example: SKIMA-CYL-6697AECA96A54A"
+            placeholder="Example: M6D48"
             placeholderTextColor={palette.muted}
             returnKeyType="go"
             style={[styles.manualInput, { borderColor: palette.borderStrong, color: palette.ink, backgroundColor: palette.input }]}
