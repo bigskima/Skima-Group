@@ -63,7 +63,7 @@ function safeErrorMessage(error: Error): string {
     .slice(0, 260);
 }
 
-function summarizeComponentStack(value: string | null): string | null {
+function summarizeComponentStack(value: string | null | undefined): string | null {
   if (!value) return null;
   const names = value
     .split("\n")
