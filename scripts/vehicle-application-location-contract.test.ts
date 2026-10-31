@@ -23,7 +23,7 @@ Deno.test("vehicle application location supplement only appends version-bound ev
 
 Deno.test("canonical location evidence casts accuracy and service key to the policy signature", async () => {
   const migration = await read(
-    "supabase/migrations/20261031051436_fix_canonical_location_quality_argument_types.sql",
+    "supabase/migrations/20261031051444_fix_canonical_location_quality_argument_types.sql",
   );
   assertIncludes(migration, "new.accuracy_meters::numeric");
   assertIncludes(migration, "null::text");
