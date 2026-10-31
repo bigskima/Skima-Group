@@ -9,7 +9,7 @@ import {
 } from "@maplibre/maplibre-react-native";
 import { Crosshair, MapPin, Maximize2, Minimize2, X } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import {
   averageCoordinate,
   cameraBounds,
@@ -47,7 +47,6 @@ export function OperationalMap({
 }: OperationalMapProps) {
   const camera = useRef<CameraRef>(null);
   const mapRenderer = useMapsRendererConfiguration();
-  const window = useWindowDimensions();
   const [expanded, setExpanded] = useState(false);
   const pathCoordinates = routeCoordinates ?? (connectPoints ? points : []);
   const fitPoints = pathCoordinates.length ? [...points, ...pathCoordinates] : points;
