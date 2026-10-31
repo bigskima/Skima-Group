@@ -335,7 +335,7 @@ Deno.test("station scanner includes incoming receipt and shows visible confirmat
   ]);
   assertIncludes(scanner, '["station_en_route", "refill_confirmed", "station_settled"]');
   assertIncludes(scanner, "stationArrivalStage");
-  assertIncludes(scanner, "Verify incoming cylinders at reception");
+  assertIncludes(scanner, "Scan each arriving or refilled cylinder once.");
   assertNotIncludes(scanner, "Nothing ready for release");
   assertIncludes(jobDetail, 'if (status === "station_en_route") return "station_receipt";');
   assertIncludes(jobDetail, "Enter Cylinder ID (e.g. M6D48)");
