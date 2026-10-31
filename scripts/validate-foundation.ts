@@ -1252,3 +1252,15 @@ function requireMatch(value: string, pattern: RegExp, message: string): void {
     throw new Error(message);
   }
 }
+
+
+const driverWalletSelfProvisioningMigration = migrationTexts.find((migration) =>
+  migration.path.endsWith("20261031095000_lpg_driver_self_wallet_provisioning.sql")
+)?.contents ?? "";
+requireCondition(
+  driverWalletSelfProvisioningMigration.includes("target_wallet_type = 'driver'") &&
+    driverWalletSelfProvisioningMigration.includes("target_owner_entity_type = 'driver'") &&
+    driverWalletSelfProvisioningMigration.includes("driver.user_id = auth.uid()") &&
+    driverWalletSelfProvisioningMigration.includes("driver.verification_status = 'approved'"),
+  "An approved driver may provision only their own driver payout wallet; the generic platform wallet permission gate must remain in place.",
+);
