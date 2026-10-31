@@ -1,7 +1,8 @@
 import { Image } from "expo-image";
 import { Crosshair, MapPin, Minus, Plus } from "lucide-react-native";
-import { PanResponder, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
