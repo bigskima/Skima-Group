@@ -385,11 +385,11 @@ export function InternalDriverJobDetailScreen() {
                 assetTypeKey="media.lpg.procurement_receipt"
                 label={receiptMediaAssetId ? "Supplier receipt uploaded" : "Upload supplier receipt"}
                 draftType={`internal-procurement-receipt-${id ?? "unknown"}`}
-                onUploaded={(assetId) => {
+                onUploaded={(assetId) => Promise.resolve().then(() => {
                   setReceiptMediaAssetId(assetId);
                   setNoticeSuccess(true);
                   setNotice("Supplier receipt uploaded. You can confirm the refill when the other details are complete.");
-                }}
+                })}
               />
 
               <AppButton
