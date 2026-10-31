@@ -190,7 +190,7 @@ export function StationManagedDriverJobsScreen() {
               {job.status === "accepted" && !["station_settled", "return_en_route"].includes(job.orderStatus) ? (
                 <View style={[styles.notice, { backgroundColor: palette.brandSofter }]}>
                   <Text style={[styles.noticeText, { color: palette.ink }]}>
-                    Open the job workflow below to collect the customer's cylinder and check it in at your station. The return trip unlocks after the station completes refill, settlement and release.
+                    Open the pickup workflow below. Scan the cylinder once at the customer; station staff scan it on receipt. The return trip unlocks after refill, settlement and release.
                   </Text>
                 </View>
               ) : null}
