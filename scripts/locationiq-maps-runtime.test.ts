@@ -312,7 +312,7 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
   // Admin rendering must not require an env-only basemap to be usable.
   assertIncludes(adminGeometry, 'supabase.rpc("read_maps_renderer_configuration")');
   assertIncludes(adminGeometry, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
-  assertNotIncludes(adminGeometry, "basemaps.cartocdn.com");
+  assertNotIncludes(adminGeometry, "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png");
   assertNotIncludes(
     adminGeometry,
     "Configure VITE_MAP_TILE_URL_TEMPLATE for the provider basemap",
