@@ -461,10 +461,14 @@ Deno.test("mobile basemap follows Admin's public keyless renderer and preserves 
   assertIncludes(webMap, "mapRenderer.defaultCenter");
   assertIncludes(webMap, "mapRenderer.defaultZoom");
   assertIncludes(webMap, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+  assertIncludes(webMap, "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png");
+  assertIncludes(webMap, 'mapRenderer.tileTemplate.includes("tile.openstreetmap.org")');
+  assertIncludes(webMap, "tileTemplate: OPENSTREETMAP_RASTER_TILE_TEMPLATE");
+  assertIncludes(webMap, "tileTemplate: CARTO_VOYAGER_RASTER_TILE_TEMPLATE");
+  assertIncludes(webMap, "activeTileMaxZoom");
   assertIncludes(webMap, "onError={() => setUseEmergencyTiles(true)}");
   assertIncludes(webMap, "PanResponder.create");
   assertIncludes(webMap, "Drag to move the map");
-  assertNotIncludes(webMap, "a.basemaps.cartocdn.com/rastertiles/voyager");
   assertIncludes(nativeMap, "useMapsRendererConfiguration");
   assertIncludes(nativeMap, "mapRenderer.tileTemplate");
   assertIncludes(nativeMap, "mapRenderer.defaultCenter");
