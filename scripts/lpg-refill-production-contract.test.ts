@@ -665,13 +665,19 @@ Deno.test("customer live tracking renders the current driver marker separately f
   const webMap = await read("apps/lpg-mobile/src/native/maps/OperationalMap.web.tsx");
   const nativeMap = await read("apps/lpg-mobile/src/native/maps/OperationalMap.native.tsx");
   assertIncludes(tracking, "const latestDriver = driverPath.at(-1)");
-  assertIncludes(tracking, "routeCoordinates={driverPath}");
+  assertIncludes(tracking, "useMapsGatewayAdapter()");
+  assertIncludes(tracking, "mapsGateway.routeEstimate.mutateAsync");
+  assertIncludes(tracking, "readRouteCoordinates(estimate.routeGeometry)");
+  assertIncludes(tracking, "routeCoordinates={roadRoute?.coordinates ?? driverPath}");
+  assertIncludes(tracking, "customer-live-road-route");
   assertIncludes(tracking, "const mapped = [...(latestDriver ? [latestDriver] : [])");
   assertIncludes(tracking, "!Number.isFinite(recordedAt)");
   assertIncludes(webMap, "routeCoordinates?: readonly");
   assertIncludes(nativeMap, "routeCoordinates?: readonly");
   assertIncludes(webMap, "Open full-screen map");
   assertIncludes(nativeMap, "Open full-screen map");
+  assertNotIncludes(webMap, "Map tiles are temporarily unavailable");
+  assertNotIncludes(webMap, "tileFailure");
 });
 
 Deno.test("driver job detail is progressive rather than one long single-page workflow", async () => {
@@ -769,5 +775,16 @@ Deno.test("independent driver earnings are split into gross, SKIMA commission an
   assertIncludes(driverJob, "SKIMA commission (");
   assertIncludes(driverJob, "Your net driver payout");
   assertIncludes(driverJob, 'payoutFulfillmentMode === "independent_driver"');
+});
+
+
+
+Deno.test("Admin maps integration exposes the active geocoder and road router independently", async () => {
+  const adminLocation = await read("apps/admin/src/features/platform/PlatformLocationIntegrationScreen.tsx");
+  assertIncludes(adminLocation, "activeGeocoderKey");
+  assertIncludes(adminLocation, "activeRouterKey");
+  assertIncludes(adminLocation, 'label="Active geocoder"');
+  assertIncludes(adminLocation, 'label="Active road router"');
+  assertIncludes(adminLocation, "/admin/maps/location/status");
 });
 
