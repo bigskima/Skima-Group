@@ -8,7 +8,7 @@ import {
   type CameraRef,
 } from "@maplibre/maplibre-react-native";
 import { Crosshair, MapPin, Maximize2, Minimize2, X } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import {
   averageCoordinate,
@@ -49,7 +49,9 @@ export function OperationalMap({
   const mapRenderer = useMapsRendererConfiguration();
   const [expanded, setExpanded] = useState(false);
   const pathCoordinates = routeCoordinates ?? (connectPoints ? points : []);
-  const fitPoints = pathCoordinates.length ? [...points, ...pathCoordinates] : points;
+  const fitPoints: MapPoint[] = pathCoordinates.length
+    ? [...points, ...pathCoordinates.map((point) => ({ ...point, label: "" }))]
+    : [...points];
   const first = averageCoordinate(fitPoints) ?? (onSelectPoint ? mapRenderer.defaultCenter : null);
   const pointKey = fitPoints.map((point) => `${point.latitude}:${point.longitude}`).join("|");
   const zoom = clamp(fitPoints.length ? initialZoom : mapRenderer.defaultZoom, minZoom, maxZoom);
@@ -108,7 +110,7 @@ export function OperationalMap({
         touchZoom
       >
         <Camera
-          initialViewState={{ center: toLngLat(first), zoom, pitch: 0, bearing: 0 }}
+          initialViewState={{ center: toLngLat(first ?? mapRenderer.defaultCenter), zoom, pitch: 0, bearing: 0 }}
           maxZoom={maxZoom}
           minZoom={minZoom}
           ref={camera}
@@ -226,6 +228,13 @@ function keylessRasterStyle(tileTemplate: string, attribution: string) {
 
 const styles = StyleSheet.create({
   frame: { width: "100%", overflow: "hidden", borderRadius: radii.lg, backgroundColor: "#DCE5DF" },
+  fullscreen: { flex: 1, backgroundColor: "#FFFFFF" },
+  fullscreenMap: { flex: 1, width: "100%", overflow: "hidden", backgroundColor: "#DCE5DF" },
+  fullscreenHeader: { minHeight: 64, paddingHorizontal: spacing.lg, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#E0E0E0" },
+  fullscreenEyebrow: { color: colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  fullscreenTitle: { color: colors.ink, fontSize: 18, fontWeight: "900" },
+  fullscreenClose: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, backgroundColor: "#F0F0F0" },
+  expand: { position: "absolute", right: spacing.sm, top: spacing.sm + 52, width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: "white", elevation: 7 },
   empty: { width: "100%", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.lg, backgroundColor: "#E8ECE9" },
   emptyPin: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, backgroundColor: "white" },
   emptyTitle: { color: colors.muted, fontSize: 13, fontWeight: "800" },
