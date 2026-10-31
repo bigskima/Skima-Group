@@ -93,8 +93,8 @@ Deno.test("driver job final delivery uses the assigned-cylinder resolver and ref
   const [detail, internal, projection, payoutAuthorization] = await Promise.all([
     read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
-    read("supabase/migrations/20261031103000_lpg_job_details_delivery_challenge_verification_state.sql"),
-    read("supabase/migrations/20261031100500_lpg_driver_self_wallet_payout_authorization.sql"),
+    read("supabase/migrations/20261031104121_lpg_job_delivery_verification_state.sql"),
+    read("supabase/migrations/20261031104058_lpg_driver_self_wallet_payout_authorization.sql"),
   ]);
   const driverScan = detail.slice(
     detail.indexOf("const submitDriverScan"),
