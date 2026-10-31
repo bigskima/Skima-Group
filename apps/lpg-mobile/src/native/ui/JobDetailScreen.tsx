@@ -234,10 +234,13 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const navigationTarget = driverWorkspace && stationDriverCanNavigate
     ? navigationPointForStatus(status, routePoints)
     : null;
-  const stationWaitingForDriverScan = workspace === "station" && ["pickup_verified", "station_en_route"].includes(status);
+  const stationWaitingForDriverScan = workspace === "station"
+    && ["pickup_verified", "station_en_route"].includes(status)
+    && !canStationScan;
   const refillActive = ["station_verified", "refill_in_progress", "refill_started"].includes(status);
   const releaseReady = ["refill_confirmed", "station_settled"].includes(status);
-  const aiJobReference = firstString(order, ["public_reference", "reference", "id"]) ?? id ?? "this LPG job";
+  const aiJobReference = firstString(order, ["public_reference", "publicReference", "reference", "id"]) ?? id ?? "this LPG job";
+  const orderDisplayReference = firstString(order, ["public_reference", "publicReference", "reference"]) ?? displayTitle(order);
 
   const submitDriverScan = async () => {
     if (!id || !token || !driverScanType) return;
@@ -263,6 +266,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
       setToken("");
       setNoticeSuccess(true);
       setNotice(workspace === "station_driver" && driverScanType === "customer_delivery" ? "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments." : driverScanSuccess(driverScanType));
+      void detail.refetch().catch(() => undefined);
     } catch (cause) {
       setNoticeSuccess(false);
       setNotice(friendlyError(cause, "SKIMA could not verify this cylinder. Scan the code again."));
@@ -282,7 +286,10 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
       });
       setToken("");
       setNoticeSuccess(true);
-      setNotice("Cylinder release verified. The filled cylinder is ready for the assigned driver.");
+      setNotice(stationScanType === "station_receipt"
+        ? "Cylinder arrival verified at this station. The safety check is now available."
+        : "Cylinder release verified. The filled cylinder is ready for the assigned driver.");
+      void Promise.all([detail.refetch(), inspections.refetch()]).catch(() => undefined);
     } catch (cause) {
       setNoticeSuccess(false);
       setNotice(friendlyError(cause, "SKIMA could not verify this cylinder release. Scan the code again."));
@@ -388,7 +395,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   return (
     <Screen
       eyebrow={workspace === "station" ? "Station order" : workspace === "station_driver" ? "Station Managed delivery" : "Delivery job"}
-      title={order ? displayTitle(order) : "Job details"}
+      title={order ? orderDisplayReference : "Job details"}
       subtitle={workspace === "station" ? "Verify the matched arrival, complete safety checks and record the actual refill." : workspace === "station_driver" ? "Follow your station-assigned delivery, confirm customer hand-over and record only the operational steps. Your station handles your compensation." : "Follow the assigned route, scan the SKIMA cylinder at required hand-offs and complete delivery."}
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
@@ -411,6 +418,12 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             </View>
             <StatusPill label={friendlyJobStatus(status)} tone={statusTone(status)} />
           </View>
+
+          {notice ? (
+            <View accessibilityLiveRegion="polite" style={[styles.notice, { backgroundColor: noticeSuccess ? palette.successSoft : palette.dangerSoft }]}>
+              <Text accessibilityRole="alert" style={[styles.noticeText, { color: noticeSuccess ? palette.success : palette.danger }]}>{notice}</Text>
+            </View>
+          ) : null}
 
           <AiContextAction
             workspace={workspace === "station_driver" ? "driver" : workspace}
@@ -435,7 +448,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
           <View style={[styles.summaryCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <SummaryField label="Cylinder" value={cylinder ? displayTitle(cylinder) : "Not available"} />
             <Divider />
-            <SummaryField label="Reference" value={firstString(order, ["public_reference", "reference", "id"]) ?? "Not available"} />
+            <SummaryField label="Reference" value={orderDisplayReference} />
             {requestedKg !== null ? <><Divider /><SummaryField label="Requested refill" value={`${requestedKg} kg`} /></> : null}
             {filledKg !== null ? <><Divider /><SummaryField label="Actual refill" value={`${filledKg} kg`} /></> : null}
             {workspace === "station" && driver ? <><Divider /><SummaryField label="Assigned driver" value={firstString(driver, ["displayName", "display_name", "name"]) ?? displayTitle(driver)} /></> : null}
@@ -527,12 +540,35 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
               <View style={styles.sectionLead}>
                 <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
                 <View style={styles.sectionCopy}>
-                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>Verify cylinder release</Text>
-                  <Text style={[styles.sectionBody, { color: palette.muted }]}>Scan the filled cylinder before handing it back to the assigned driver.</Text>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>
+                    {stationScanType === "station_receipt" ? "Verify incoming cylinder" : "Verify filled cylinder release"}
+                  </Text>
+                  <Text style={[styles.sectionBody, { color: palette.muted }]}>
+                    {stationScanType === "station_receipt"
+                      ? "When the driver physically arrives, scan the cylinder or enter its five-character ID. SKIMA will match it to this station order before safety checks."
+                      : "Scan the filled cylinder or enter its five-character ID before handing it back to the assigned driver."}
+                  </Text>
                 </View>
               </View>
-              {!token ? <Scanner enabled onDetected={setToken} /> : null}
-              {token ? <AppButton label="Confirm cylinder release" fullWidth loading={scan.isPending} onPress={() => void submitStationScan()} /> : null}
+              <Scanner enabled onDetected={setToken} />
+              <TextInput
+                value={token}
+                onChangeText={setToken}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                accessibilityLabel="Five-character cylinder verification code"
+                placeholder="Enter Cylinder ID (e.g. M6D48)"
+                placeholderTextColor={palette.muted}
+                returnKeyType="go"
+                style={[styles.input, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
+              />
+              <AppButton
+                label={stationScanType === "station_receipt" ? "Confirm cylinder arrival" : "Confirm cylinder release"}
+                fullWidth
+                loading={scan.isPending}
+                disabled={!token.trim()}
+                onPress={() => void submitStationScan()}
+              />
             </View>
           ) : null}
 
@@ -546,7 +582,9 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
           {workspace === "station" && stationWaitingForDriverScan ? (
             <InfoNotice
               icon={<ScanLine color={palette.brand} size={19} />}
-              text="Waiting for the assigned driver to scan the cylinder at reception. After SKIMA confirms it, you can complete the safety check."
+              text={status === "pickup_verified"
+                ? "The driver has collected the cylinder. Wait until the driver starts the station journey and arrives before receiving it."
+                : "The order is on its way to this station. When the cylinder physically arrives, an authorised station operator can scan or enter its five-character ID to confirm receipt."}
             />
           ) : null}
 
@@ -665,11 +703,6 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             />
           ) : null}
 
-          {notice ? (
-            <View style={[styles.notice, { backgroundColor: noticeSuccess ? palette.successSoft : palette.dangerSoft }]}>
-              <Text accessibilityRole="alert" style={[styles.noticeText, { color: noticeSuccess ? palette.success : palette.danger }]}>{notice}</Text>
-            </View>
-          ) : null}
         </>
       )}
     </Screen>
@@ -712,7 +745,7 @@ function StationProgress({ status }: { status: string }) {
   const readyComplete = ["station_settled", "return_en_route", "delivery_verification_pending", "delivered", "completed"].includes(status);
   return (
     <View style={[styles.progressCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-      <ProgressStep number="1" label="Driver checked in" complete={receiptComplete} active={!receiptComplete} />
+      <ProgressStep number="1" label="Station receipt" complete={receiptComplete} active={!receiptComplete} />
       <View style={[styles.progressLine, { backgroundColor: palette.border }]} />
       <ProgressStep number="2" label="Safety & refill" complete={refillComplete} active={receiptComplete && !refillComplete} />
       <View style={[styles.progressLine, { backgroundColor: palette.border }]} />
@@ -799,7 +832,8 @@ function driverScanTypeForStatus(status: string): "customer_pickup" | "station_r
   return null;
 }
 
-function stationScanTypeForStatus(status: string): "station_release" | null {
+function stationScanTypeForStatus(status: string): "station_receipt" | "station_release" | null {
+  if (status === "station_en_route") return "station_receipt";
   return ["refill_confirmed", "station_settled"].includes(status) ? "station_release" : null;
 }
 
@@ -830,9 +864,9 @@ function driverScanButton(type: "customer_pickup" | "station_receipt" | "custome
 }
 
 function driverScanSuccess(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
-  if (type === "station_receipt") return "Station arrival confirmed. The station can now begin the refill.";
+  if (type === "station_receipt") return "Station arrival verified. The station has been notified and can now begin its safety check.";
   if (type === "customer_delivery") return "Delivery verified. SKIMA is completing the order and releasing your payout automatically.";
-  return "Cylinder pickup confirmed.";
+  return "Cylinder pickup verified successfully. You can now continue to the assigned station.";
 }
 
 function driverActionLabel(actionKey: string) {
