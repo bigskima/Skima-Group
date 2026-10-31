@@ -2,23 +2,25 @@ import { Component, type ErrorInfo, type PropsWithChildren } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, radii, spacing } from "../theme/tokens";
 
-type State = { error: Error | null };
+type State = { error: Error | null; componentTrace: string | null };
 
 export class AppErrorBoundary extends Component<PropsWithChildren, State> {
-  state: State = { error: null };
+  state: State = { error: null, componentTrace: null };
 
   static getDerivedStateFromError(error: Error): State {
-    return { error };
+    return { error, componentTrace: null };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Keep screen crashes diagnosable in production browser builds.
+    const componentTrace = summarizeComponentStack(info.componentStack);
+    // Keep client-side route/render failures diagnosable in production builds.
     console.error("SKIMA LPG render failure", {
       name: error.name,
       message: safeErrorMessage(error),
       stack: error.stack,
       componentStack: info.componentStack,
     });
+    this.setState({ componentTrace });
   }
 
   render() {
@@ -35,9 +37,14 @@ export class AppErrorBoundary extends Component<PropsWithChildren, State> {
           <Text selectable style={styles.detail}>
             {safeErrorMessage(this.state.error)}
           </Text>
+          {this.state.componentTrace ? (
+            <Text selectable style={styles.trace}>
+              Screen trace: {this.state.componentTrace}
+            </Text>
+          ) : null}
           <Pressable
             accessibilityRole="button"
-            onPress={() => this.setState({ error: null })}
+            onPress={() => this.setState({ error: null, componentTrace: null })}
             style={styles.button}
           >
             <Text style={styles.buttonText}>Try again</Text>
@@ -54,6 +61,16 @@ function safeErrorMessage(error: Error): string {
     .replace(/((?:access|refresh|anon|service[_-]?role)[_-]?key\s*[:=]\s*)[^\s,;]+/gi, "$1[redacted]")
     .replace(/(https?:\/\/[^\s?]+)\?[^\s]+/gi, "$1?[redacted]")
     .slice(0, 260);
+}
+
+function summarizeComponentStack(value: string | null): string | null {
+  if (!value) return null;
+  const names = value
+    .split("\n")
+    .map((line) => line.match(/^\s*in\s+([\w.$-]+)/i)?.[1] ?? line.match(/^\s*at\s+([\w.$-]+)/i)?.[1])
+    .filter((name): name is string => Boolean(name))
+    .slice(0, 4);
+  return names.length ? names.join(" > ").slice(0, 180) : null;
 }
 
 const styles = StyleSheet.create({
@@ -83,6 +100,7 @@ const styles = StyleSheet.create({
   title: { color: colors.ink, fontSize: 24, fontWeight: "900" },
   body: { color: colors.muted, lineHeight: 21 },
   detail: { color: colors.danger, fontSize: 12 },
+  trace: { color: colors.muted, fontSize: 11, lineHeight: 16 },
   button: {
     minHeight: 54,
     alignItems: "center",
