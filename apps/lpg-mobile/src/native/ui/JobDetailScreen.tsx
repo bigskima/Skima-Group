@@ -252,7 +252,18 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
       return;
     }
     setNotice(null);
+    let scanSaved = false;
     try {
+      // Preserve the route-start event, but let a successful pickup scan move
+      // directly into station transit so the driver does not need a second tap.
+      if (driverScanType === "customer_pickup" && status === "driver_accepted") {
+        await action.mutateAsync({
+          actionKey: "lpg.pickup.start",
+          lpgOrderId: id,
+          source: "skima.lpg.mobile",
+          idempotencyKey: operationIdempotencyKey("lpg.pickup.start", id),
+        });
+      }
       const location = await readOperationalLocation().catch(() => null);
       await scan.mutateAsync({
         ...(location ?? {}),
@@ -265,13 +276,25 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
           scannedToken: token,
         },
       });
+      scanSaved = true;
+      if (driverScanType === "customer_pickup") {
+        await action.mutateAsync({
+          actionKey: "lpg.station.start",
+          lpgOrderId: id,
+          source: "skima.lpg.mobile",
+          idempotencyKey: operationIdempotencyKey("lpg.station.start", id),
+        });
+      }
       setToken("");
       setNoticeSuccess(true);
       setNotice(workspace === "station_driver" && driverScanType === "customer_delivery" ? "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments." : driverScanSuccess(driverScanType));
       void detail.refetch().catch(() => undefined);
     } catch (cause) {
-      setNoticeSuccess(false);
-      setNotice(friendlyError(cause, "SKIMA could not verify this cylinder. Scan the code again."));
+      setNoticeSuccess(scanSaved);
+      setNotice(scanSaved
+        ? "Cylinder pickup was verified, but the station route did not start. Use the next route action to continue; the successful scan has been saved."
+        : friendlyError(cause, "SKIMA could not verify this cylinder. Scan the code again."));
+      void detail.refetch().catch(() => undefined);
     }
   };
 
@@ -446,6 +469,13 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
           ) : null}
 
           {workspace === "station" ? <StationProgress status={status} /> : null}
+
+          {driverWorkspace && ["pickup_verified", "station_en_route"].includes(status) ? (
+            <InfoNotice
+              icon={<CheckCircle2 color={palette.success} size={19} />}
+              text="Pickup is recorded. Hand the cylinder to the assigned station; station staff scan it at reception. You do not need another driver scan."
+            />
+          ) : null}
 
           {workspace === "station" && status === "station_verified" ? (
             <InfoNotice
@@ -721,7 +751,6 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
 
 function stationManagedDriverScanTypeForStatus(status: string): "customer_pickup" | "station_receipt" | "customer_delivery" | null {
   if (status === "pickup_en_route") return "customer_pickup";
-  if (status === "station_en_route") return "station_receipt";
   return ["return_en_route", "delivery_verification_pending"].includes(status) ? "customer_delivery" : null;
 }
 
@@ -737,7 +766,7 @@ function stationManagedDriverStageDescription(status: string) {
   if (status === "driver_accepted") return "Start the pickup route to the customer, then scan the cylinder to verify collection.";
   if (status === "pickup_en_route") return "Navigate to the customer and scan the cylinder after you collect it.";
   if (status === "pickup_verified") return "Pickup is verified. Start transit to your station and scan the cylinder when you arrive.";
-  if (status === "station_en_route") return "Head to your station. Scan the cylinder at reception so the station can begin safety checks and refill.";
+  if (status === "station_en_route") return "Head to your station and hand over the cylinder. Station staff scan it into the station queue.";
   if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is checking and refilling the cylinder. Wait until refill and settlement are complete.";
   if (status === "refill_confirmed") return "The refill is complete. The station must finish settlement and release the cylinder before the return leg.";
   if (status === "station_settled") return "The station has settled the refill. Start the return leg from My Deliveries, or wait for the station to complete its release scan.";
@@ -836,7 +865,6 @@ function usesDeliveryContact(status: string) {
 
 function driverScanTypeForStatus(status: string): "customer_pickup" | "station_receipt" | "customer_delivery" | null {
   if (["driver_accepted", "pickup_en_route"].includes(status)) return "customer_pickup";
-  if (["pickup_verified", "station_en_route"].includes(status)) return "station_receipt";
   if (["return_en_route", "delivery_verification_pending"].includes(status)) return "customer_delivery";
   return null;
 }
@@ -923,7 +951,7 @@ function friendlyJobStatus(value: string) {
 function driverStageDescription(status: string) {
   if (["driver_offered", "driver_accepted"].includes(status)) return "This order has been assigned to you.";
   if (["pickup_en_route"].includes(status)) return "Navigate to the customer and verify the cylinder before taking custody.";
-  if (["pickup_verified", "station_en_route"].includes(status)) return "Take the verified cylinder to the assigned station and scan it at reception.";
+  if (["pickup_verified", "station_en_route"].includes(status)) return "Take the verified cylinder to the assigned station. Station staff scan it at reception.";
   if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is processing the verified refill.";
   if (["refill_confirmed", "station_settled", "return_en_route"].includes(status)) return "The filled cylinder is ready to return to the customer.";
   if (status === "delivery_verification_pending") return "The customer must complete delivery verification before the final cylinder scan.";

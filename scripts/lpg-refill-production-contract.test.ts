@@ -1,3 +1,90 @@
+Deno.test("Station Managed drivers get a continuous scan tab while SKIMA Internal keeps supplier verification", async () => {
+  const [screen, route, tabs, list, internal, detail, migration] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/StationManagedDriverScanScreen.tsx"),
+    read("apps/lpg-mobile/app/(station-driver)/scan.tsx"),
+    read("apps/lpg-mobile/src/native/navigation/WorkspaceTabs.tsx"),
+    read("apps/lpg-mobile/src/native/ui/StationManagedDriverJobsScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+    read("supabase/migrations/20261031090000_lpg_simple_batch_operations_runtime.sql"),
+  ]);
+  assertIncludes(screen, "read_lpg_station_managed_driver_jobs");
+  assertIncludes(screen, 'workspace="driver"');
+  assertIncludes(route, "StationManagedDriverScanScreen");
+  assertIncludes(tabs, '{ name: "scan", title: "Scan", icon: QrCode }');
+  assertIncludes(list, 'router.push("/(station-driver)/scan"');
+  assertIncludes(internal, 'actionKey: "lpg.station.start"');
+  assertIncludes(internal, 'source: "skima.lpg.internal_mobile"');
+  assertIncludes(detail, "station staff scan it at reception");
+  assertIncludes(migration, "fulfillment_channel = 'skima_internal'");
+});
+
+Deno.test("continuous LPG cylinder scanning matches only the signed-in actor's active assigned order", async () => {
+  const [migration, gateway, scanScreen, scanner, jobDetail] = await Promise.all([
+    read("supabase/migrations/20261031090000_lpg_simple_batch_operations_runtime.sql"),
+    read("supabase/functions/api-gateway/index.ts"),
+    read("apps/lpg-mobile/src/native/ui/ScanWorkspaceScreen.tsx"),
+    read("apps/lpg-mobile/src/native/device/Scanner.tsx"),
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+  ]);
+  assertIncludes(migration, "public.record_lpg_cylinder_scan_for_active_job");
+  assertIncludes(migration, "auth.uid()");
+  assertIncludes(migration, "public.user_can_operate_lpg_station_branch");
+  assertIncludes(migration, "public.is_lpg_station_managed_order_driver");
+  assertIncludes(migration, "public.hash_lpg_cylinder_tag_credential");
+  assertIncludes(migration, "legacyCylinderIdentifiers");
+  assertIncludes(migration, "public.record_lpg_cylinder_scan(");
+  assertIncludes(migration, "public.process_lpg_order_action(");
+  assertIncludes(migration, "'lpg.pickup.start'");
+  assertIncludes(migration, "'lpg.station.start'");
+  assertIncludes(gateway, '"/lpg/scans/continuous"');
+  assertIncludes(gateway, 'supabase.rpc("record_lpg_cylinder_scan_for_active_job"');
+  assertIncludes(scanScreen, 'path: "/lpg/scans/continuous"');
+  assertIncludes(scanScreen, "Scan next cylinder");
+  assertIncludes(scanScreen, "automatically finds the matching active order");
+  assertIncludes(scanner, "continuous?: boolean");
+  assertIncludes(scanner, "setTimeout(() => setLocked(false), 1100)");
+  assertIncludes(scanner, "Scan the same cylinder again");
+  assertIncludes(jobDetail, 'actionKey: "lpg.station.start"');
+  assertIncludes(jobDetail, "station staff scan it at reception");
+  const driverScanRules = jobDetail.slice(
+    jobDetail.indexOf("function driverScanTypeForStatus"),
+    jobDetail.indexOf("function stationScanTypeForStatus"),
+  );
+  const stationScanRules = jobDetail.slice(
+    jobDetail.indexOf("function stationScanTypeForStatus"),
+    jobDetail.indexOf("function driverActionForStatus"),
+  );
+  assertNotIncludes(driverScanRules, 'return "station_receipt"');
+  assertIncludes(stationScanRules, 'return "station_receipt"');
+  assertIncludes(migration, "order_row.fulfillment_channel = 'skima_internal'");
+});
+
+Deno.test("station quick operations preserve per-cylinder safety and per-order refill settlement", async () => {
+  const [migration, panel, jobs] = await Promise.all([
+    read("supabase/migrations/20261031090000_lpg_simple_batch_operations_runtime.sql"),
+    read("apps/lpg-mobile/src/native/ui/StationBatchOperationsPanel.tsx"),
+    read("apps/lpg-mobile/src/native/ui/JobListScreen.tsx"),
+  ]);
+  assertIncludes(migration, "'latestInspectionResult'");
+  assertIncludes(migration, "'fulfillmentChannel'");
+  assertIncludes(migration, "case when resolved.queue_name in ('driver','station','admin') then resolved.fulfillment_channel else null end");
+  assertIncludes(migration, "latest_inspection.result");
+  assertIncludes(panel, 'path: "/lpg/inspections"');
+  assertIncludes(panel, 'result,');
+  assertIncludes(panel, 'result === "safe"');
+  assertIncludes(panel, '"safe" | "manual_review"');
+  assertIncludes(panel, "for (const row of enteredRows)");
+  assertIncludes(panel, 'actionKey: "lpg.refill.start"');
+  assertIncludes(panel, 'path: "/lpg/refills/confirm"');
+  assertIncludes(panel, 'permissions.has("lpg.stations.scan")');
+  assertIncludes(panel, "Station release requires an authorised scanner on this branch.");
+  assertIncludes(panel, "An authorised station scanner or pump operator must receive these cylinders.");
+  assertIncludes(panel, "Each order is confirmed separately. One failed order does not block the other entered refills.");
+  assertIncludes(panel, "failures.push");
+  assertIncludes(jobs, "StationBatchOperationsPanel");
+});
+
 const root = new URL("../", import.meta.url);
 const read = (path: string) => Deno.readTextFile(new URL(path, root));
 
@@ -252,7 +339,7 @@ Deno.test("station scanner includes incoming receipt and shows visible confirmat
   ]);
   assertIncludes(scanner, '["station_en_route", "refill_confirmed", "station_settled"]');
   assertIncludes(scanner, "stationArrivalStage");
-  assertIncludes(scanner, "Verify incoming cylinders at reception");
+  assertIncludes(scanner, "Scan each arriving or refilled cylinder once.");
   assertNotIncludes(scanner, "Nothing ready for release");
   assertIncludes(jobDetail, 'if (status === "station_en_route") return "station_receipt";');
   assertIncludes(jobDetail, "Enter Cylinder ID (e.g. M6D48)");

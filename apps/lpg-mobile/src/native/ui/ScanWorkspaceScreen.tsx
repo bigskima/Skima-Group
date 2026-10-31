@@ -1,7 +1,7 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { CheckCircle2, QrCode, ScanLine, ShieldCheck } from "lucide-react-native";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   cylinderPermanentIdentifier,
@@ -10,8 +10,11 @@ import {
   firstString,
   recordId,
   type PlatformRecord,
+  ActionResponseSchema,
 } from "../api/records";
 import { Scanner } from "../device/Scanner";
+import { readOperationalLocation } from "../device/location";
+import { useGatewayMutation } from "../api/gateway";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -31,12 +34,21 @@ export function ScanWorkspaceScreen({
 }) {
   const { palette } = useAppTheme();
   const session = useSession();
-  const actionable = (jobs.data ?? []).filter((job) => scanReady(displayStatus(job) ?? "", workspace));
+  const actionable = (jobs.data ?? []).filter((job) => scanReady(job, workspace));
   const [selectedId, setSelectedId] = useState("");
   const [manualCylinderId, setManualCylinderId] = useState("");
   const [physicalTagReference, setPhysicalTagReference] = useState("");
   const [tagNotice, setTagNotice] = useState<string | null>(null);
   const [bindingTag, setBindingTag] = useState(false);
+  const [showManualOrderSelection, setShowManualOrderSelection] = useState(false);
+  const [fastManualId, setFastManualId] = useState("");
+  const [fastScanNotice, setFastScanNotice] = useState<{ success: boolean; text: string } | null>(null);
+  const fastScanAttemptKeys = useRef(new Map<string, string>());
+  const continuousScan = useGatewayMutation({
+    path: "/lpg/scans/continuous",
+    schema: ActionResponseSchema,
+    invalidate: [["jobs"], ["orders"], ["scans"], ["station-runtime"]],
+  });
   const jobId = selectedId || (actionable.length === 1 ? (recordId(actionable[0]) ?? "") : "");
   const selectedJob = actionable.find((job) => recordId(job) === jobId) ?? (actionable.length === 1 ? actionable[0] : null);
   const cylinderId = firstString(selectedJob, ["cylinderId", "cylinder_id"]);
@@ -60,6 +72,53 @@ export function ScanWorkspaceScreen({
     const value = manualCylinderId.trim().toUpperCase();
     if (!jobId || !value) return;
     detected(value);
+  };
+
+  const processContinuousScan = async (rawToken: string) => {
+    const token = rawToken.trim();
+    if (!token || continuousScan.isPending) return;
+    setFastScanNotice(null);
+    try {
+      const existingAttemptKey = fastScanAttemptKeys.current.get(token);
+      const scanAttemptKey = existingAttemptKey ?? idempotencyKey(`continuous-${workspace}-cylinder-scan`, `${workspace}:${Date.now()}:${token.slice(-12)}`);
+      fastScanAttemptKeys.current.set(token, scanAttemptKey);
+      const location = workspace === "driver" ? await readOperationalLocation().catch(() => null) : null;
+      const response = await continuousScan.mutateAsync({
+        ...(location ?? {}),
+        workspace,
+        token,
+        idempotencyKey: scanAttemptKey,
+        source: "skima.lpg.continuous",
+      });
+      const result = response && typeof response === "object" ? response as PlatformRecord : {};
+      const orderReference = firstString(result, ["orderReference", "publicReference", "public_reference"]) ?? "Assigned order";
+      const cylinderId = firstString(result, ["cylinderIdentifier", "cylinderReference"]) ?? "Cylinder";
+      const scanType = firstString(result, ["scanType"]) ?? "verification";
+      const nextStep = scanType === "customer_pickup"
+        ? "Pickup verified. Station transit has started."
+        : scanType === "station_receipt"
+          ? "Station receipt verified. Safety checks can begin."
+          : scanType === "station_release"
+            ? "Station release verified. Return journey is ready."
+            : scanType === "customer_delivery"
+              ? "Customer hand-over verified. Order completed."
+              : "Verification recorded.";
+      fastScanAttemptKeys.current.delete(token);
+      setFastManualId("");
+      setFastScanNotice({ success: true, text: `${cylinderId} · ${orderReference}. ${nextStep}` });
+      await jobs.refetch().catch(() => undefined);
+    } catch (cause) {
+      setFastScanNotice({
+        success: false,
+        text: friendlyError(cause, "SKIMA could not match this code to an assigned order. Check the cylinder code and workspace."),
+      });
+    }
+  };
+
+  const submitFastManualId = () => {
+    const token = fastManualId.trim().toUpperCase();
+    if (!token) return;
+    void processContinuousScan(token);
   };
 
   const bindFirstPhysicalTag = async () => {
@@ -91,8 +150,8 @@ export function ScanWorkspaceScreen({
       eyebrow={workspace === "station" ? "Station verification" : "Cylinder scan"}
       title={workspace === "station" ? "Verify station cylinder" : "Verify SKIMA cylinder"}
       subtitle={workspace === "station"
-        ? "Verify incoming cylinders at reception. After the refill, use this same screen to verify the filled cylinder before release."
-        : "Choose the assigned job first. Scan the cylinder when possible, or enter its five-character Cylinder ID when the physical code cannot be read."}
+        ? "Scan each arriving or refilled cylinder once. SKIMA matches it to the order assigned to this station."
+        : "Scan each cylinder once. SKIMA matches it to one of your assigned jobs and records the next hand-over. No manual order selection is needed."}
       action={<Pressable onPress={() => router.back()}><Text style={[styles.back, { color: palette.brand }]}>Back</Text></Pressable>}
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
@@ -108,6 +167,65 @@ export function ScanWorkspaceScreen({
         </View>
       </View>
 
+      <View style={[styles.scannerCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <View style={styles.scannerHead}>
+          <View style={[styles.scannerIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
+          <View style={styles.scannerCopy}>
+            <Text style={[styles.scannerTitle, { color: palette.ink }]}>Scan next cylinder</Text>
+            <Text style={[styles.scannerBody, { color: palette.muted }]}>
+              SKIMA automatically finds the matching active order in your {workspace} queue. You do not need to select an order first.
+            </Text>
+          </View>
+          <StatusPill label={`${actionable.length} ready`} tone={actionable.length ? "success" : "neutral"} />
+        </View>
+        <Scanner
+          enabled={!continuousScan.isPending}
+          onDetected={(value) => void processContinuousScan(value)}
+          allowManualEntry={false}
+          continuous
+        />
+        <View style={[styles.fallbackDivider, { backgroundColor: palette.border }]} />
+        <Text style={[styles.fallbackBody, { color: palette.muted }]}>Can't scan? Enter the five-character Cylinder ID.</Text>
+        <TextInput
+          autoCapitalize="characters"
+          autoCorrect={false}
+          accessibilityLabel="Five-character Cylinder ID"
+          maxLength={5}
+          onChangeText={setFastManualId}
+          onSubmitEditing={submitFastManualId}
+          placeholder="Example: M6D48"
+          placeholderTextColor={palette.muted}
+          returnKeyType="go"
+          style={[styles.manualInput, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
+          value={fastManualId}
+        />
+        <AppButton
+          label="Verify cylinder"
+          fullWidth
+          loading={continuousScan.isPending}
+          disabled={fastManualId.trim().length !== 5}
+          onPress={submitFastManualId}
+        />
+        {fastScanNotice ? (
+          <View style={[styles.tagNoticeCard, { backgroundColor: fastScanNotice.success ? palette.successSoft : palette.dangerSoft }]}>
+            <CheckCircle2 color={fastScanNotice.success ? palette.success : palette.danger} size={18} />
+            <Text style={[styles.tagNotice, { color: fastScanNotice.success ? palette.success : palette.danger }]}>{fastScanNotice.text}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setShowManualOrderSelection((value) => !value)}
+        style={[styles.manualFallbackToggle, { borderColor: palette.border }]}
+      >
+        <Text style={[styles.manualFallbackToggleText, { color: palette.brand }]}>
+          {showManualOrderSelection ? "Hide individual order tools" : "Open an individual order instead"}
+        </Text>
+      </Pressable>
+
+      {showManualOrderSelection ? (
+        <>
       {actionable.length > 1 ? (
         <View style={styles.jobsSection}>
           <Text style={[styles.sectionLabel, { color: palette.muted }]}>CHOOSE THE JOB FIRST</Text>
@@ -262,6 +380,9 @@ export function ScanWorkspaceScreen({
         </View>
       ) : null}
 
+        </>
+      ) : null}
+
       <View style={[styles.security, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <ShieldCheck color={palette.mutedStrong} size={18} />
         <Text style={[styles.securityText, { color: palette.muted }]}>QR is the fastest option. The five-character Cylinder ID is the simple manual fallback. SKIMA still checks the assigned order, cylinder and operator before the hand-over advances.</Text>
@@ -270,16 +391,16 @@ export function ScanWorkspaceScreen({
   );
 }
 
-function scanReady(status: string, workspace: "driver" | "station") {
-  const value = status.toLowerCase().replace(/[\s-]+/g, "_");
+function scanReady(job: PlatformRecord, workspace: "driver" | "station") {
+  const value = (displayStatus(job) ?? "").toLowerCase().replace(/[\\s-]+/g, "_");
   if (workspace === "station") return ["station_en_route", "refill_confirmed", "station_settled"].includes(value);
+  const fulfillmentChannel = firstString(job, ["fulfillmentChannel", "fulfillment_channel"]);
+  if (["pickup_verified", "station_en_route"].includes(value)) return fulfillmentChannel === "skima_internal";
   return [
     "driver_accepted",
     "pickup_pending",
     "pickup_arrived",
     "pickup_en_route",
-    "pickup_verified",
-    "station_en_route",
     "delivery_verification_pending",
     "return_en_route",
   ].includes(value);
@@ -344,6 +465,9 @@ const styles = StyleSheet.create({
   identityBody: { ...typography.caption, lineHeight: 18 },
   identityNote: { ...typography.caption, lineHeight: 18 },
   tagNotice: { ...typography.caption, lineHeight: 18, fontWeight: "700" },
+  tagNoticeCard: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md },
+  manualFallbackToggle: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.pill, minHeight: 42, alignItems: "center", justifyContent: "center" },
+  manualFallbackToggleText: { ...typography.caption, fontWeight: "900" },
   scannerCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
   scannerHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
   scannerIcon: { width: 46, height: 46, borderRadius: 16, alignItems: "center", justifyContent: "center" },

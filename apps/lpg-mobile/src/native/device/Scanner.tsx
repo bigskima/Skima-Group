@@ -5,7 +5,7 @@ import {
 } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { Flashlight, Keyboard, ScanLine } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -14,10 +14,12 @@ export function Scanner({
   enabled,
   onDetected,
   allowManualEntry = true,
+  continuous = false,
 }: {
   enabled: boolean;
   onDetected(value: string): void;
   allowManualEntry?: boolean;
+  continuous?: boolean;
 }) {
   const { height: windowHeight, width } = useWindowDimensions();
   const { palette } = useAppTheme();
@@ -25,12 +27,22 @@ export function Scanner({
   const [locked, setLocked] = useState(false);
   const [torch, setTorch] = useState(false);
   const [manualValue, setManualValue] = useState("");
+  const [lastContinuousValue, setLastContinuousValue] = useState<{ value: string } | null>(null);
+
+  useEffect(() => {
+    if (!continuous || !locked) return;
+    const timer = setTimeout(() => setLocked(false), 1100);
+    return () => clearTimeout(timer);
+  }, [continuous, locked]);
 
   const detected = (event: BarcodeScanningResult) => {
     if (locked || !enabled || !event.data.trim()) return;
+    const scannedValue = event.data.trim();
+    if (continuous && lastContinuousValue?.value === scannedValue) return;
+    if (continuous) setLastContinuousValue({ value: scannedValue });
     setLocked(true);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    onDetected(event.data.trim());
+    onDetected(scannedValue);
   };
 
   const submitManual = () => {
@@ -82,7 +94,7 @@ export function Scanner({
           >
             <Flashlight color="white" size={21} />
           </Pressable>
-          {locked ? (
+          {locked && !continuous ? (
             <Pressable onPress={() => setLocked(false)} style={[styles.rescan, { backgroundColor: palette.brand }]}>
               <Text style={styles.buttonText}>Scan again</Text>
             </Pressable>
@@ -90,13 +102,26 @@ export function Scanner({
         </View>
       )}
 
+      {continuous && lastContinuousValue ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            setLastContinuousValue(null);
+            setLocked(false);
+          }}
+          style={[styles.rescan, styles.continuousRetry, { backgroundColor: palette.brand }]}
+        >
+          <Text style={styles.buttonText}>Scan the same cylinder again</Text>
+        </Pressable>
+      ) : null}
+
       {allowManualEntry ? (
         <View style={[styles.manualCard, { borderColor: palette.border, backgroundColor: palette.surface }]}>
           <View style={styles.manualHead}>
             <View style={[styles.manualIcon, { backgroundColor: palette.brandSoft }]}><Keyboard color={palette.brand} size={18} /></View>
             <View style={styles.manualCopy}>
               <Text style={[styles.manualTitle, { color: palette.ink }]}>Can’t scan? Enter permanent Cylinder ID</Text>
-              <Text style={[styles.manualBody, { color: palette.muted }]}>Use the ID beginning with “SKIMA-CYL-”. For older cylinders, the registry reference beginning with “CYL-” is also accepted. SKIMA will confirm the identity belongs to this order before the hand-over continues.</Text>
+              <Text style={[styles.manualBody, { color: palette.muted }]}>Enter the five-character Cylinder ID printed on the cylinder. SKIMA matches it to one of your assigned orders before recording the hand-over.</Text>
             </View>
           </View>
           <TextInput
@@ -105,7 +130,7 @@ export function Scanner({
             autoCorrect={false}
             onChangeText={setManualValue}
             onSubmitEditing={submitManual}
-            placeholder="Example: SKIMA-CYL-6697AECA96A54A"
+            placeholder="Example: M6D48"
             placeholderTextColor={palette.muted}
             returnKeyType="go"
             style={[styles.manualInput, { borderColor: palette.borderStrong, color: palette.ink, backgroundColor: palette.input }]}
@@ -143,6 +168,7 @@ const styles = StyleSheet.create({
   button: { borderRadius: radii.pill, paddingHorizontal: 20, paddingVertical: 12 },
   buttonText: { color: "white", fontWeight: "800" },
   rescan: { position: "absolute", bottom: spacing.lg, left: spacing.lg, borderRadius: radii.pill, paddingHorizontal: 20, paddingVertical: 12 },
+  continuousRetry: { position: "relative", left: 0, bottom: 0, alignSelf: "center" },
   manualCard: { gap: spacing.md, padding: spacing.md, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth },
   manualHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   manualIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },

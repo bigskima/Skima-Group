@@ -22,6 +22,7 @@ import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
 import { StatusPill } from "./StatusPill";
+import { StationBatchOperationsPanel } from "./StationBatchOperationsPanel";
 
 const JOB_PAGE_SIZE = 8;
 
@@ -56,7 +57,7 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
       subtitle={workspace === "driver"
         ? isSkimaManaged
           ? "Your SKIMA Managed orders arrive here. Open an assigned delivery to continue its internal-refill and customer hand-over workflow."
-          : "See what needs your attention now and open a delivery for the full route."
+          : "Scan each cylinder once. SKIMA finds the matching assigned order and moves it to the next step."
         : "See expected SKIMA arrivals and open one when the driver reaches reception."}
       refreshControl={
         <RefreshControl
@@ -92,6 +93,7 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
             </View>
           </View>
           <Text style={[styles.workloadHint, { color: palette.muted }]}>{isSkimaManaged ? "New SKIMA Managed jobs appear when your approval, eligible SKIMA fleet vehicle and configured coverage meet dispatch requirements." : "New work is assigned only when your route, vehicle and availability are suitable."}</Text>
+          <AppButton label="Scan next cylinder" fullWidth variant="primary" icon={<ScanLine color="#FFFFFF" size={17} />} onPress={() => router.push("/(driver)/scan" as never)} />
         </View>
       ) : null}
 
@@ -107,6 +109,10 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
             </Text>
           </View>
         </View>
+      ) : null}
+
+      {workspace === "station" ? (
+        <StationBatchOperationsPanel jobs={allJobs} onRefresh={() => jobs.refetch()} />
       ) : null}
 
       {workspace === "station" ? (
