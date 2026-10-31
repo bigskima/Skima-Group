@@ -34,7 +34,7 @@ export function ScanWorkspaceScreen({
 }) {
   const { palette } = useAppTheme();
   const session = useSession();
-  const actionable = (jobs.data ?? []).filter((job) => scanReady(displayStatus(job) ?? "", workspace));
+  const actionable = (jobs.data ?? []).filter((job) => scanReady(job, workspace));
   const [selectedId, setSelectedId] = useState("");
   const [manualCylinderId, setManualCylinderId] = useState("");
   const [physicalTagReference, setPhysicalTagReference] = useState("");
@@ -391,16 +391,16 @@ export function ScanWorkspaceScreen({
   );
 }
 
-function scanReady(status: string, workspace: "driver" | "station") {
-  const value = status.toLowerCase().replace(/[\s-]+/g, "_");
+function scanReady(job: PlatformRecord, workspace: "driver" | "station") {
+  const value = (displayStatus(job) ?? "").toLowerCase().replace(/[\\s-]+/g, "_");
   if (workspace === "station") return ["station_en_route", "refill_confirmed", "station_settled"].includes(value);
+  const fulfillmentChannel = firstString(job, ["fulfillmentChannel", "fulfillment_channel"]);
+  if (["pickup_verified", "station_en_route"].includes(value)) return fulfillmentChannel === "skima_internal";
   return [
     "driver_accepted",
     "pickup_pending",
     "pickup_arrived",
     "pickup_en_route",
-    "pickup_verified",
-    "station_en_route",
     "delivery_verification_pending",
     "return_en_route",
   ].includes(value);
