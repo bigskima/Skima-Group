@@ -4,6 +4,7 @@ Deno.test("customer delivery verification is visible to the assigned driver befo
   const migration = await readRepositoryFile("supabase/migrations/20261031100000_lpg_delivery_challenge_driver_read_model.sql");
   const screen = await readRepositoryFile("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx");
   const errors = await readRepositoryFile("apps/lpg-mobile/src/native/utilities/friendlyError.ts");
+  const walletMigration = await readRepositoryFile("supabase/migrations/20261031100500_lpg_driver_self_wallet_payout_authorization.sql");
 
   assertIncludes(migration, "public.lpg_delivery_challenge_is_verified(target_order.id, target_order.delivery_challenge_id)");
   assertIncludes(screen, "order?.deliveryChallengeVerified === true");
@@ -11,6 +12,11 @@ Deno.test("customer delivery verification is visible to the assigned driver befo
   assertIncludes(screen, "driverStageDescription(status, deliveryChallengeVerified)");
   assertIncludes(errors, "verified lpg delivery challenge is required");
   assertIncludes(errors, "complete the in-app verification, then scan the same cylinder again");
+  assertIncludes(walletMigration, "can_create_driver_wallet");
+  assertIncludes(walletMigration, "driver.user_id = auth.uid()");
+  assertIncludes(walletMigration, "driver.verification_status = 'approved'");
+  assertIncludes(walletMigration, "and not can_create_driver_wallet then");
+  assertNotIncludes(walletMigration, "grant execute on function public.ensure_wallet_account");
 });
 
 Deno.test("web operational map uses the Admin-safe OpenStreetMap fallback and supports drag panning", async () => {
