@@ -13,7 +13,7 @@ import {
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
-import { idempotencyKey } from "../utilities/idempotency";
+import { operationIdempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
 import { StatusPill } from "./StatusPill";
 
@@ -77,7 +77,7 @@ export function StationBatchOperationsPanel({
     row.status === "station_verified" && ["manual_review", "unsafe", "rejected"].includes(row.inspection),
   );
   const refillRows = rows.filter((row) =>
-    ["station_verified", "refill_started", "refill_in_progress"].includes(row.status)
+    ["station_verified", "refill_in_progress"].includes(row.status)
       && row.inspection === "safe",
   );
   const releaseCount = rows.filter((row) => ["refill_confirmed", "station_settled"].includes(row.status)).length;
@@ -100,7 +100,7 @@ export function StationBatchOperationsPanel({
         },
         evidenceMediaAssetIds: [],
         source: "skima.lpg.mobile",
-        idempotencyKey: idempotencyKey("station-quick-inspection", row.id),
+        idempotencyKey: operationIdempotencyKey("station-inspection", row.id),
       });
       setNoticeSuccess(result === "safe");
       setNotice(result === "safe"
@@ -130,7 +130,7 @@ export function StationBatchOperationsPanel({
             actionKey: "lpg.refill.start",
             lpgOrderId: row.id,
             source: "skima.lpg.mobile",
-            idempotencyKey: idempotencyKey("station-batch-refill-start", row.id),
+            idempotencyKey: operationIdempotencyKey("lpg.refill.start", row.id),
           });
         }
         await confirmRefill.mutateAsync({
@@ -138,7 +138,7 @@ export function StationBatchOperationsPanel({
           actualKg,
           safetyObservations: { result: "safe", workflow: "station_batch_refill" },
           source: "skima.lpg.mobile",
-          idempotencyKey: idempotencyKey("station-batch-refill-confirm", row.id),
+          idempotencyKey: operationIdempotencyKey("station-refill-confirm", row.id),
         });
         confirmed += 1;
         setActualKgByOrder((current) => {
