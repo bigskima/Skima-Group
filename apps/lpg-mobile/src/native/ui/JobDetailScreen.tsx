@@ -251,6 +251,21 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const orderDisplayReference = order
     ? (firstString(order, ["public_reference", "publicReference", "reference"]) ?? displayTitle(order))
     : "Not available";
+  const orderMetadata = nestedRecord(order, "metadata");
+  const payoutFulfillmentMode = firstString(order, ["fulfillmentMode", "fulfillment_mode"])
+    ?? firstString(orderMetadata, ["fulfillmentMode", "fulfillment_mode"])
+    ?? "independent_driver";
+  const payoutFulfillmentChannel = firstString(order, ["fulfillmentChannel", "fulfillment_channel"])
+    ?? firstString(orderMetadata, ["fulfillmentChannel", "fulfillment_channel"])
+    ?? "marketplace";
+  const showIndependentDriverPayout = workspace === "driver"
+    && payoutFulfillmentMode === "independent_driver"
+    && payoutFulfillmentChannel === "marketplace";
+  const driverGrossEarningAmount = firstNumber(order, ["driverCommissionGrossAmount", "driver_commission_gross_amount"]);
+  const driverPlatformCommissionAmount = firstNumber(order, ["driverCommissionPlatformShareAmount", "driver_commission_platform_share_amount"]);
+  const driverPlatformCommissionPercent = firstNumber(order, ["driverCommissionPlatformPercent", "driver_commission_platform_percent"]);
+  const driverNetEarningAmount = firstNumber(order, ["driverCommissionAmount", "driver_commission_amount"]);
+  const payoutCurrencyCode = firstString(order, ["currencyCode", "currency_code"]) ?? "NGN";
 
   const submitDriverScan = async () => {
     if (!id || !token || !driverScanType) return;
@@ -540,6 +555,32 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             {driverWorkspace && firstString(contactLocation, ["contactPhone", "contact_phone"]) ? <><Divider /><SummaryField label="Contact phone" value={firstString(contactLocation, ["contactPhone", "contact_phone"]) ?? "Not available"} /></> : null}
             {driverWorkspace && (firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"])) ? <><Divider /><SummaryField label="Contact email" value={firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"]) ?? "Not available"} /></> : null}
           </View>
+          ) : null}
+
+          {showIndependentDriverPayout && driverSection === "details"
+            && driverGrossEarningAmount !== null && driverNetEarningAmount !== null ? (
+            <View style={[styles.summaryCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <Text style={[styles.sectionTitle, { color: palette.ink }]}>YOUR DELIVERY EARNINGS</Text>
+              <SummaryField
+                label="Gross delivery earning"
+                value={formatPayoutMoney(driverGrossEarningAmount, payoutCurrencyCode)}
+              />
+              <Divider />
+              <SummaryField
+                label={driverPlatformCommissionPercent === null
+                  ? "SKIMA commission"
+                  : `SKIMA commission (${driverPlatformCommissionPercent.toLocaleString()}%)`}
+                value={`−${formatPayoutMoney(driverPlatformCommissionAmount ?? Math.max(0, driverGrossEarningAmount - driverNetEarningAmount), payoutCurrencyCode)}`}
+              />
+              <Divider />
+              <SummaryField
+                label="Your net driver payout"
+                value={formatPayoutMoney(driverNetEarningAmount, payoutCurrencyCode)}
+              />
+              <Text style={[styles.infoNoticeText, { color: palette.muted }]}>
+                SKIMA deducts only its configured percentage from your gross delivery earning. The remaining amount is yours; this is separate from the LPG refill value and station settlement.
+              </Text>
+            </View>
           ) : null}
 
           {driverWorkspace && driverSection === "route" && (routeDistance !== null || routeDuration !== null) ? (
@@ -1022,6 +1063,10 @@ function inspectionLabel(value: string) {
     recorded: "Saved",
   };
   return labels[value] ?? value.replace(/_/g, " ");
+}
+
+function formatPayoutMoney(amount: number, currencyCode: string): string {
+  return `${currencyCode} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function statusTone(status: string): "neutral" | "brand" | "success" | "warning" | "danger" {
