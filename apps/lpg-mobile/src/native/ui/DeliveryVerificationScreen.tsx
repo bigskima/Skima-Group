@@ -51,7 +51,7 @@ export function DeliveryVerificationScreen() {
         idempotencyKey: idempotencyKey("delivery-code", savedChallengeId),
         source: "skima.lpg.mobile",
       });
-      const restoredCode = firstString(delivery, ["code"]);
+      const restoredCode = delivery && typeof delivery === "object" ? firstString(delivery, ["code"]) : null;
       if (!restoredCode) {
         throw new Error("The delivery code is active, but SKIMA could not retrieve it. Request a new code.");
       }
@@ -101,7 +101,7 @@ export function DeliveryVerificationScreen() {
         idempotencyKey: idempotencyKey("delivery-code", resultId),
         source: "skima.lpg.mobile",
       });
-      const issuedCode = firstString(delivery, ["code"]);
+      const issuedCode = delivery && typeof delivery === "object" ? firstString(delivery, ["code"]) : null;
       if (!issuedCode) {
         throw new Error("The verification challenge was created, but SKIMA did not return the delivery code. Request a new code.");
       }
