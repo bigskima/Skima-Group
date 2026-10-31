@@ -445,6 +445,13 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
 
           {workspace === "station" ? <StationProgress status={status} /> : null}
 
+          {workspace === "station" && status === "station_verified" ? (
+            <InfoNotice
+              icon={<CheckCircle2 color={palette.success} size={19} />}
+              text="Station receipt verified. SKIMA matched the driver's scanned cylinder to this order. Complete the safety check before filling."
+            />
+          ) : null}
+
           <View style={[styles.summaryCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <SummaryField label="Cylinder" value={cylinder ? displayTitle(cylinder) : "Not available"} />
             <Divider />
