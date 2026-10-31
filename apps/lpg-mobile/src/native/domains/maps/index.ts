@@ -103,7 +103,7 @@ export function getMapsRuntimeConfig(): MapsRuntimeConfig {
       styleUrl: safeStyle,
       rasterTileTemplate: selectedRaster.template,
       attribution: selectedRaster.attribution,
-      maxZoom: Number.isFinite(tileMaxZoom) ? clamp(Math.round(tileMaxZoom), 1, 24) : 19,
+      maxZoom: Number.isFinite(tileMaxZoom) ? clamp(Math.round(tileMaxZoom), 1, 19) : 19,
     },
     geocodingProviderKey: readEnv("EXPO_PUBLIC_MAP_GEOCODING_PROVIDER", "skima_gateway"),
     reverseGeocodingProviderKey: readEnv("EXPO_PUBLIC_MAP_REVERSE_GEOCODING_PROVIDER", "skima_gateway"),
