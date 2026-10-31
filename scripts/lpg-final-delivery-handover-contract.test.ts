@@ -35,7 +35,7 @@ Deno.test("final LPG handover requires the driver cylinder scan after customer v
   assertIncludes(gateway, 'supabase.rpc("record_lpg_cylinder_scan"');
   assertIncludes(scanMigration, "public.lpg_delivery_challenge_is_verified(order_record.id, delivery_challenge_id)");
   assertIncludes(scanMigration, "new_status := 'delivered'");
-  assertIncludes(scanMigration, "delivery verification challenge is required");
+  assertIncludes(scanMigration, "verified LPG delivery challenge is required");
 
   // The delivered event is the only event that invokes the normal independent
   // driver payout path; Station Managed drivers are separately paid by station.
