@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Crosshair, Maximize2, Minimize2, Minus, Plus, RotateCcw } from "lucide-react";
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
 import { z } from "zod";
 
 import { Button, StatusBadge } from "@skima/ui";
@@ -78,7 +78,25 @@ export function AdminGeometryEditor(props: {
   );
   const [fullScreen, setFullScreen] = useState(false);
   const [tileFailure, setTileFailure] = useState(false);
-  const renderer = tileFailure ? BUILD_RENDERER : (rendererQuery.data ?? BUILD_RENDERER);
+  const renderer: RendererConfiguration = tileFailure
+    ? {
+        ...BUILD_RENDERER,
+        key: "renderer.maps.osm-safe-fallback",
+        tileTemplate: SAFE_TILE_TEMPLATE,
+        attribution: SAFE_ATTRIBUTION,
+        maxZoom: 19,
+        source: "safe-fallback",
+      }
+    : (rendererQuery.data ?? BUILD_RENDERER);
+  const drag = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    center: Coordinate;
+    zoom: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressMapClick = useRef(false);
 
   useEffect(() => {
     const next = initial.length ? initial : [[]];
@@ -132,6 +150,11 @@ export function AdminGeometryEditor(props: {
     }
   };
   const select = (event: MouseEvent<SVGSVGElement>) => {
+    if (suppressMapClick.current) {
+      suppressMapClick.current = false;
+      event.preventDefault();
+      return;
+    }
     const rect = event.currentTarget.getBoundingClientRect();
     const point = unproject(
       center,
@@ -145,6 +168,42 @@ export function AdminGeometryEditor(props: {
       return;
     }
     emit(polygons.map((polygon, index) => index === active ? [...polygon, point] : polygon));
+  };
+  const onMapPointerDown = (event: PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0) return;
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+    drag.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      center,
+      zoom,
+      moved: false,
+    };
+  };
+  const onMapPointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    const current = drag.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const dx = ((event.clientX - current.startX) / rect.width) * WIDTH;
+    const dy = ((event.clientY - current.startY) / rect.height) * HEIGHT;
+    if (!current.moved && Math.abs(dx) + Math.abs(dy) < 5) return;
+    current.moved = true;
+    setCenter(unproject(current.center, current.zoom, WIDTH / 2 - dx, HEIGHT / 2 - dy));
+  };
+  const onMapPointerUp = (event: PointerEvent<SVGSVGElement>) => {
+    const current = drag.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    if (current.moved) suppressMapClick.current = true;
+    drag.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+  const onMapWheel = (event: WheelEvent<SVGSVGElement>) => {
+    event.preventDefault();
+    setZoom((value) => Math.max(1, Math.min(renderer.maxZoom, value + (event.deltaY < 0 ? 1 : -1))));
   };
   const undo = () => emit(
     polygons.map((polygon, index) => index === active ? polygon.slice(0, -1) : polygon),
@@ -191,8 +250,8 @@ export function AdminGeometryEditor(props: {
           <h3>{props.mode === "polygon" ? "Interactive boundary editor" : "Select radius center"}</h3>
           <p className="skima-muted">
             {props.mode === "polygon"
-              ? "Click the map to add vertices. Create another ring for a MultiPolygon."
-              : "Click the map to set the approved center point."}
+              ? "Drag to pan, use the wheel or zoom controls, then click to add vertices. Create another ring for a MultiPolygon."
+              : "Drag to pan, use the wheel or zoom controls, then click to set the approved center point."}
           </p>
         </div>
         <div className="skima-action-row">
@@ -235,6 +294,11 @@ export function AdminGeometryEditor(props: {
           ? "Interactive polygon boundary map"
           : "Interactive radius center map"}
         onClick={select}
+        onPointerDown={onMapPointerDown}
+        onPointerMove={onMapPointerMove}
+        onPointerUp={onMapPointerUp}
+        onPointerCancel={onMapPointerUp}
+        onWheel={onMapWheel}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         style={{
           width: "100%",
@@ -242,7 +306,8 @@ export function AdminGeometryEditor(props: {
           border: "1px solid #ccd7dc",
           borderRadius: 16,
           background: "#eaf0f2",
-          cursor: "crosshair",
+          cursor: drag.current?.moved ? "grabbing" : "crosshair",
+          touchAction: "none",
         }}
       >
         {layout.map((tile) => (
