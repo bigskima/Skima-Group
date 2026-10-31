@@ -8,11 +8,13 @@ import {
   type CameraRef,
 } from "@maplibre/maplibre-react-native";
 import { Crosshair, MapPin } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
   averageCoordinate,
   cameraBounds,
+  SAFE_FALLBACK_MAP_ATTRIBUTION,
+  SAFE_FALLBACK_MAP_TILE_TEMPLATE,
   fromLngLat,
   pointCollection,
   routeCollection,
@@ -45,6 +47,16 @@ export function OperationalMap({
 }: OperationalMapProps) {
   const camera = useRef<CameraRef>(null);
   const mapRenderer = useMapsRendererConfiguration();
+  const [useFallbackTiles, setUseFallbackTiles] = useState(false);
+  useEffect(() => {
+    setUseFallbackTiles(false);
+  }, [mapRenderer.tileTemplate]);
+  const activeTileTemplate = useFallbackTiles
+    ? SAFE_FALLBACK_MAP_TILE_TEMPLATE
+    : mapRenderer.tileTemplate;
+  const activeAttribution = useFallbackTiles
+    ? SAFE_FALLBACK_MAP_ATTRIBUTION
+    : mapRenderer.attribution;
   const first = points[0] ?? averageCoordinate(points) ?? (onSelectPoint ? mapRenderer.defaultCenter : null);
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
   const zoom = clamp(points.length ? initialZoom : mapRenderer.defaultZoom, minZoom, maxZoom);
@@ -95,7 +107,8 @@ export function OperationalMap({
         doubleTapZoom
         dragPan
         logo={false}
-        mapStyle={keylessRasterStyle(mapRenderer.tileTemplate, mapRenderer.attribution)}
+        mapStyle={keylessRasterStyle(activeTileTemplate, activeAttribution)}
+        onDidFailLoadingMap={() => setUseFallbackTiles(true)}
         onPress={(event) => {
           if (!onSelectPoint) return;
           onSelectPoint(fromLngLat(event.nativeEvent.lngLat));
