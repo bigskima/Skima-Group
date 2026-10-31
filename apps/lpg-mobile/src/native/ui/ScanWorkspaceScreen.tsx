@@ -150,8 +150,8 @@ export function ScanWorkspaceScreen({
       eyebrow={workspace === "station" ? "Station verification" : "Cylinder scan"}
       title={workspace === "station" ? "Verify station cylinder" : "Verify SKIMA cylinder"}
       subtitle={workspace === "station"
-        ? "Verify incoming cylinders at reception. After the refill, use this same screen to verify the filled cylinder before release."
-        : "Choose the assigned job first. Scan the cylinder when possible, or enter its five-character Cylinder ID when the physical code cannot be read."}
+        ? "Scan each arriving or refilled cylinder once. SKIMA matches it to the order assigned to this station."
+        : "Scan each cylinder once. SKIMA matches it to one of your assigned jobs and records the next hand-over. No manual order selection is needed."}
       action={<Pressable onPress={() => router.back()}><Text style={[styles.back, { color: palette.brand }]}>Back</Text></Pressable>}
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
