@@ -638,3 +638,46 @@ Deno.test("admin location and coverage workflows keep physical dispatch gates in
   assertNotIncludes(driverCutoverMigration, "from public.driver_service_areas");
 });
 
+
+
+Deno.test("verified LPG customer hand-over advances the order and invokes the existing payout trigger", async () => {
+  const migration = await read("supabase/migrations/20261031120000_lpg_delivery_otp_completion_and_payout_bridge.sql");
+  const verification = await read("apps/lpg-mobile/src/native/ui/DeliveryVerificationScreen.tsx");
+  assertIncludes(migration, "order_record.delivery_challenge_id is distinct from target_challenge_id");
+  assertIncludes(migration, "set status = 'delivered'");
+  assertIncludes(migration, "'lpg.delivery.completed'");
+  assertIncludes(migration, "target_idempotency_key || ':delivery-completed'");
+  assertIncludes(migration, "public.lpg_delivery_challenge_is_verified");
+  assertIncludes(migration, "verified_order.fulfillment_mode = 'independent_driver'");
+  assertIncludes(migration, "verified_order.fulfillment_channel = 'marketplace'");
+  assertNotIncludes(migration, "set driver_commission_amount");
+  assertIncludes(verification, "const refreshed = await details.refetch()");
+  assertIncludes(verification, '["delivered", "completed"].includes(finalStatus ?? "")');
+  assertIncludes(verification, "deliveryChallengeVerified");
+});
+
+Deno.test("customer live tracking renders the current driver marker separately from the chronological route", async () => {
+  const tracking = await read("apps/lpg-mobile/src/native/ui/LiveTrackingScreen.tsx");
+  const webMap = await read("apps/lpg-mobile/src/native/maps/OperationalMap.web.tsx");
+  const nativeMap = await read("apps/lpg-mobile/src/native/maps/OperationalMap.native.tsx");
+  assertIncludes(tracking, "const latestDriver = driverPath.at(-1)");
+  assertIncludes(tracking, "routeCoordinates={driverPath}");
+  assertIncludes(tracking, "const mapped = [...(latestDriver ? [latestDriver] : [])");
+  assertIncludes(tracking, "!Number.isFinite(recordedAt)");
+  assertIncludes(webMap, "routeCoordinates: readonly");
+  assertIncludes(nativeMap, "routeCoordinates: readonly");
+  assertIncludes(webMap, "Open full-screen map");
+  assertIncludes(nativeMap, "Open full-screen map");
+});
+
+Deno.test("driver job detail is progressive rather than one long single-page workflow", async () => {
+  const job = await read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx");
+  assertIncludes(job, 'useState<"overview" | "route" | "actions" | "details">("overview")');
+  assertIncludes(job, 'driverSection === "overview"');
+  assertIncludes(job, 'driverSection === "route"');
+  assertIncludes(job, 'driverSection === "actions"');
+  assertIncludes(job, 'driverSection === "details"');
+  assertIncludes(job, 'accessibilityRole="tablist"');
+  assertIncludes(job, "Open route and navigation");
+});
+
