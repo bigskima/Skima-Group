@@ -845,23 +845,23 @@ $old$;
   end if;
 $new$;
   old_exec_metadata text := $old$
-      target_metadata || jsonb_build_object(
-        'lpg_order_id', order_record.id,
-        'zero_amount_execution', payout_amount = 0,
-        'policy_version_id', payout_policy ->> 'policyVersionId'
-      ),
+    target_metadata || jsonb_build_object(
+      'lpg_order_id', order_record.id,
+      'zero_amount_execution', payout_amount = 0,
+      'policy_version_id', payout_policy ->> 'policyVersionId'
+    ),
 $old$;
   new_exec_metadata text := $new$
-      target_metadata || jsonb_build_object(
-        'lpg_order_id', order_record.id,
-        'zero_amount_execution', payout_amount = 0,
-        'policy_version_id', payout_policy ->> 'policyVersionId',
-        'gross_driver_earning_amount', gross_payout_amount,
-        'platform_driver_commission_amount', platform_commission_amount,
-        'platform_driver_commission_percent', platform_commission_percent,
-        'net_driver_payout_amount', payout_amount,
-        'legacy_zero_payout_correction', legacy_zero_correction
-      ),
+    target_metadata || jsonb_build_object(
+      'lpg_order_id', order_record.id,
+      'zero_amount_execution', payout_amount = 0,
+      'policy_version_id', payout_policy ->> 'policyVersionId',
+      'gross_driver_earning_amount', gross_payout_amount,
+      'platform_driver_commission_amount', platform_commission_amount,
+      'platform_driver_commission_percent', platform_commission_percent,
+      'net_driver_payout_amount', payout_amount,
+      'legacy_zero_payout_correction', legacy_zero_correction
+    ),
 $new$;
   old_order_update text := $old$
   update public.lpg_refill_orders
