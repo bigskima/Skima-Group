@@ -106,7 +106,7 @@ export function ScanWorkspaceScreen({
       fastScanAttemptKeys.current.delete(token);
       setFastManualId("");
       setFastScanNotice({ success: true, text: `${cylinderId} · ${orderReference}. ${nextStep}` });
-      await jobs.refetch();
+      await jobs.refetch().catch(() => undefined);
     } catch (cause) {
       setFastScanNotice({
         success: false,
