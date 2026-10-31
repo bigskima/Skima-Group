@@ -22,6 +22,7 @@ import { AppButton } from "./AppButton";
 import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
 import { StatusPill } from "./StatusPill";
+import { StationBatchOperationsPanel } from "./StationBatchOperationsPanel";
 
 const JOB_PAGE_SIZE = 8;
 
@@ -107,6 +108,10 @@ export function JobListScreen({ workspace }: { workspace: "driver" | "station" }
             </Text>
           </View>
         </View>
+      ) : null}
+
+      {workspace === "station" ? (
+        <StationBatchOperationsPanel jobs={allJobs} onRefresh={() => jobs.refetch()} />
       ) : null}
 
       {workspace === "station" ? (
