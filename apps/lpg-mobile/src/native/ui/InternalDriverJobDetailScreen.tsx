@@ -614,13 +614,7 @@ function stageDescription(status: string, deliveryChallengeVerified = false) {
 
 const styles = StyleSheet.create({
   hero: { borderRadius: radii.xl, padding: spacing.xl, gap: spacing.md },
-  sectionSwitcher: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, padding: spacing.xs, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.pill },
-  sectionTab: { minHeight: 42, flexGrow: 1, minWidth: 58, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.pill, borderWidth: 1 },
-  sectionTabText: { fontSize: 12, fontWeight: "900" },
-  nextStepCard: { gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
-  nextStepEyebrow: { ...typography.eyebrow, fontSize: 9 },
-  nextStepTitle: { ...typography.subheading, fontSize: 17 },
-  nextStepBody: { ...typography.caption, lineHeight: 18 },
+
 
   sectionSwitcher: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, padding: spacing.xs, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.pill },
   sectionTab: { minHeight: 42, flexGrow: 1, minWidth: 58, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.pill, borderWidth: 1 },
