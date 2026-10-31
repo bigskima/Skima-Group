@@ -11,11 +11,11 @@ declare
   next_version integer;
   new_version_id uuid;
   now_at timestamptz := now();
-  module_id uuid;
+  target_module_id uuid;
   commission_percent numeric(10, 6);
   next_configuration jsonb;
 begin
-  select id into module_id from public.business_modules where key = 'lpg';
+  select id into target_module_id from public.business_modules where key = 'lpg';
 
   select * into definition_record
   from public.financial_policy_definitions
@@ -30,7 +30,7 @@ begin
   from public.financial_policy_versions
   where policy_definition_id = definition_record.id
     and currency_code = 'NGN'
-    and module_id is not distinct from module_id
+    and version.module_id is not distinct from target_module_id
     and service_key = 'lpg.refill.delivery'
     and organization_id is null
     and geography_type = 'global'
@@ -324,7 +324,7 @@ $new$;
   old_revenue_entry text := $old$
   if tax_amount_value > 0 then
     liability_wallet_id := public.ensure_platform_liability_wallet(
-$new$;
+$old$;
   commission_entry text := $entry$
   if independent_driver_commission_amount > 0 then
     transaction_entries := transaction_entries || jsonb_build_array(
