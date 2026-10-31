@@ -27,7 +27,7 @@ export function Scanner({
   const [locked, setLocked] = useState(false);
   const [torch, setTorch] = useState(false);
   const [manualValue, setManualValue] = useState("");
-  const [lastContinuousValue, setLastContinuousValue] = useState<{ value: string; at: number } | null>(null);
+  const [lastContinuousValue, setLastContinuousValue] = useState<{ value: string } | null>(null);
 
   useEffect(() => {
     if (!continuous || !locked) return;
@@ -38,8 +38,8 @@ export function Scanner({
   const detected = (event: BarcodeScanningResult) => {
     if (locked || !enabled || !event.data.trim()) return;
     const scannedValue = event.data.trim();
-    if (continuous && lastContinuousValue?.value === scannedValue && Date.now() - lastContinuousValue.at < 15000) return;
-    if (continuous) setLastContinuousValue({ value: scannedValue, at: Date.now() });
+    if (continuous && lastContinuousValue?.value === scannedValue) return;
+    if (continuous) setLastContinuousValue({ value: scannedValue });
     setLocked(true);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onDetected(scannedValue);
