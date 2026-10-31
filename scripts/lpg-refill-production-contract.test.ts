@@ -681,3 +681,26 @@ Deno.test("driver job detail is progressive rather than one long single-page wor
   assertIncludes(job, "Open route and navigation");
 });
 
+
+
+Deno.test("verified OTP orders can resume delivery completion without requesting a second code", async () => {
+  const verification = await read("apps/lpg-mobile/src/native/ui/DeliveryVerificationScreen.tsx");
+  const feedback = await read("apps/lpg-mobile/src/native/ui/OrderFeedbackScreen.tsx");
+  const mapRuntime = await read("apps/lpg-mobile/src/native/domains/maps/index.ts");
+  const rendererHook = await read("apps/lpg-mobile/src/native/domains/maps/useMapsRendererConfiguration.ts");
+  const nativeMap = await read("apps/lpg-mobile/src/native/maps/OperationalMap.native.tsx");
+  const webMap = await read("apps/lpg-mobile/src/native/maps/OperationalMap.web.tsx");
+
+  assertIncludes(verification, '["deliveryChallengeId", "delivery_challenge_id"]');
+  assertIncludes(verification, "currentChallengeVerified");
+  assertIncludes(verification, "delivery-finalize-verified");
+  assertIncludes(verification, 'canFinalizeVerifiedChallenge ? "0000" : code.trim()');
+  assertIncludes(verification, 'label={canFinalizeVerifiedChallenge ? "Finish delivery" : "Confirm delivery"}');
+  assertIncludes(feedback, "Finish delivery confirmation");
+  assertIncludes(feedback, "orders/\${orderId}/verify");
+  assertIncludes(mapRuntime, "clamp(Math.round(tileMaxZoom), 1, 19)");
+  assertIncludes(rendererHook, "Math.min(configuration.max_zoom ?? runtimeTile.maxZoom, runtimeTile.maxZoom, 19)");
+  assertIncludes(nativeMap, "maxzoom: 19");
+  assertIncludes(webMap, "Math.min(maxZoom ?? providerTileMaxZoom, providerTileMaxZoom, 19)");
+});
+
