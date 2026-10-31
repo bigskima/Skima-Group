@@ -1,7 +1,7 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { CheckCircle2, QrCode, ScanLine, ShieldCheck } from "lucide-react-native";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   cylinderPermanentIdentifier,
@@ -13,6 +13,7 @@ import {
   ActionResponseSchema,
 } from "../api/records";
 import { Scanner } from "../device/Scanner";
+import { readOperationalLocation } from "../device/location";
 import { useGatewayMutation } from "../api/gateway";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -42,6 +43,7 @@ export function ScanWorkspaceScreen({
   const [showManualOrderSelection, setShowManualOrderSelection] = useState(false);
   const [fastManualId, setFastManualId] = useState("");
   const [fastScanNotice, setFastScanNotice] = useState<{ success: boolean; text: string } | null>(null);
+  const fastScanAttemptKeys = useRef(new Map<string, string>());
   const continuousScan = useGatewayMutation({
     path: "/lpg/scans/continuous",
     schema: ActionResponseSchema,
@@ -77,10 +79,15 @@ export function ScanWorkspaceScreen({
     if (!token || continuousScan.isPending) return;
     setFastScanNotice(null);
     try {
+      const existingAttemptKey = fastScanAttemptKeys.current.get(token);
+      const scanAttemptKey = existingAttemptKey ?? idempotencyKey(`continuous-${workspace}-cylinder-scan`, `${workspace}:${Date.now()}:${token.slice(-12)}`);
+      fastScanAttemptKeys.current.set(token, scanAttemptKey);
+      const location = workspace === "driver" ? await readOperationalLocation().catch(() => null) : null;
       const response = await continuousScan.mutateAsync({
+        ...(location ?? {}),
         workspace,
         token,
-        idempotencyKey: idempotencyKey(`continuous-${workspace}-cylinder-scan`, `${workspace}:${Date.now()}:${token.slice(-12)}`),
+        idempotencyKey: scanAttemptKey,
         source: "skima.lpg.mobile",
       });
       const result = response && typeof response === "object" ? response as PlatformRecord : {};
@@ -96,6 +103,7 @@ export function ScanWorkspaceScreen({
             : scanType === "customer_delivery"
               ? "Customer hand-over verified. Order completed."
               : "Verification recorded.";
+      fastScanAttemptKeys.current.delete(token);
       setFastManualId("");
       setFastScanNotice({ success: true, text: `${cylinderId} · ${orderReference}. ${nextStep}` });
       await jobs.refetch();
