@@ -1,7 +1,8 @@
 import { Image } from "expo-image";
 import { Crosshair, MapPin, Minus, Plus } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
@@ -11,6 +12,8 @@ import {
 } from "react-native";
 import {
   averageCoordinate,
+  SAFE_FALLBACK_MAP_ATTRIBUTION,
+  SAFE_FALLBACK_MAP_TILE_TEMPLATE,
   type MapPoint,
 } from "../domains/maps";
 import { useMapsRendererConfiguration } from "../domains/maps/useMapsRendererConfiguration";
@@ -31,9 +34,15 @@ export interface OperationalMapProps {
 
 const TILE = 256;
 const DEFAULT_HEIGHT = 420;
-const EMERGENCY_RASTER_TILE_TEMPLATE =
-  "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
-const EMERGENCY_ATTRIBUTION = "© OpenStreetMap contributors, © CARTO";
+const EMERGENCY_RASTER_TILE_TEMPLATE = SAFE_FALLBACK_MAP_TILE_TEMPLATE;
+const EMERGENCY_ATTRIBUTION = SAFE_FALLBACK_MAP_ATTRIBUTION;
+
+type MapTouch = { pageX: number; pageY: number };
+type MapGestureOrigin = {
+  center: { latitude: number; longitude: number } | null;
+  zoom: number;
+  distance: number | null;
+};
 
 export function OperationalMap({
   points,
@@ -65,6 +74,44 @@ export function OperationalMap({
   const automaticZoom = points.length ? initialZoom : mapRenderer.defaultZoom;
   const [center, setCenter] = useState(derivedCenter);
   const [zoom, setZoom] = useState(() => clamp(automaticZoom, minZoom, effectiveMaxZoom));
+  const mapStateRef = useRef({ center, zoom });
+  const gestureOrigin = useRef<MapGestureOrigin>({ center, zoom, distance: null });
+  useEffect(() => {
+    mapStateRef.current = { center, zoom };
+  }, [center, zoom]);
+
+  const panResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (event, gesture) => {
+      const touches = (event.nativeEvent as unknown as { touches?: MapTouch[] }).touches ?? [];
+      return touches.length > 1 || Math.abs(gesture.dx) + Math.abs(gesture.dy) > 5;
+    },
+    onPanResponderGrant: (event) => {
+      const touches = (event.nativeEvent as unknown as { touches?: MapTouch[] }).touches ?? [];
+      const current = mapStateRef.current;
+      gestureOrigin.current = {
+        center: current.center,
+        zoom: current.zoom,
+        distance: touchDistance(touches),
+      };
+    },
+    onPanResponderMove: (event, gesture) => {
+      const origin = gestureOrigin.current;
+      if (!origin.center) return;
+      const touches = (event.nativeEvent as unknown as { touches?: MapTouch[] }).touches ?? [];
+      const currentDistance = touchDistance(touches);
+      if (touches.length > 1 && origin.distance && currentDistance) {
+        setZoom(clamp(
+          origin.zoom + Math.log2(currentDistance / origin.distance),
+          minZoom,
+          effectiveMaxZoom,
+        ));
+        return;
+      }
+      const originPixel = project(origin.center.latitude, origin.center.longitude, origin.zoom);
+      setCenter(unproject(originPixel.x - gesture.dx, originPixel.y - gesture.dy, origin.zoom));
+    },
+    onPanResponderTerminationRequest: () => false,
+  }), [minZoom, effectiveMaxZoom]);
 
   useEffect(() => {
     setUseEmergencyTiles(false);
@@ -112,6 +159,7 @@ export function OperationalMap({
       accessibilityLabel={onSelectPoint ? "Interactive map. Tap to move the location pin." : "Map showing relevant locations"}
       onLayout={onLayout}
       onPress={select}
+      {...panResponder.panHandlers}
       style={[styles.map, { height, borderColor: palette.border }]}
     >
       {layout.tiles.map((tile) => (
@@ -172,6 +220,15 @@ export function OperationalMap({
       <Text pointerEvents="none" style={styles.attribution}>{attribution}</Text>
     </Pressable>
   );
+}
+
+function touchDistance(touches: readonly MapTouch[]): number | null {
+  if (touches.length < 2) return null;
+  const [first, second] = touches;
+  const x = second.pageX - first.pageX;
+  const y = second.pageY - first.pageY;
+  const distance = Math.sqrt(x * x + y * y);
+  return Number.isFinite(distance) && distance > 0 ? distance : null;
 }
 
 function fitZoom(points: readonly MapPoint[], width: number, height: number, minimum: number, maximum: number) {
