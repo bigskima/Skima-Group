@@ -197,6 +197,7 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
     geographyCutover,
     adminCoverage,
     adminGeometry,
+    coverageMap,
     customerLocationSave,
     partnerApplication,
     driverApplication,
@@ -227,6 +228,7 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
       ),
       readRepositoryFile("apps/admin/src/admin-service-coverage-workspace.tsx"),
       readRepositoryFile("apps/admin/src/admin-geometry-editor.tsx"),
+      readRepositoryFile("apps/admin/src/features/operations/CoverageMapScreen.tsx"),
       readRepositoryFile("apps/lpg-mobile/src/native/ui/locationSave.ts"),
       readRepositoryFile("apps/lpg-mobile/src/native/ui/ApplicationOverviewScreen.tsx"),
       readRepositoryFile("apps/lpg-mobile/src/native/ui/DriverApplicationEntryScreen.tsx"),
@@ -319,6 +321,11 @@ Deno.test("LocationIQ runtime stays provider-neutral, governed, and Admin synchr
   assertIncludes(adminGeometry, '"locationiq.com"');
   assertIncludes(adminGeometry, '"Open full map"');
   assertIncludes(adminGeometry, '"Exit full map"');
+  assertIncludes(adminGeometry, "onPointerMove={onMapPointerMove}");
+  assertIncludes(adminGeometry, "onWheel={onMapWheel}");
+  assertIncludes(coverageMap, "onPointerMove={onMapPointerMove}");
+  assertIncludes(coverageMap, "onWheel={onMapWheel}");
+  assertIncludes(coverageMap, "Drag to pan · Scroll to zoom");
   assertIncludes(adminGeometry, 'position: "fixed"');
   assertIncludes(adminGeometry, 'onError={() => setTileFailure(true)}');
 
