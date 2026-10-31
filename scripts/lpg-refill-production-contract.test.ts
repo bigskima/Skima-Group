@@ -257,6 +257,7 @@ Deno.test("station scanner includes incoming receipt and shows visible confirmat
   assertIncludes(jobDetail, 'if (status === "station_en_route") return "station_receipt";');
   assertIncludes(jobDetail, "Enter Cylinder ID (e.g. M6D48)");
   assertIncludes(jobDetail, "Cylinder arrival verified at this station.");
+  assertIncludes(jobDetail, "Station receipt verified. SKIMA matched the driver's scanned cylinder to this order.");
   assertIncludes(jobDetail, 'accessibilityLiveRegion="polite"');
   assertIncludes(jobDetail, '["public_reference", "publicReference", "reference"]');
   assertIncludes(migration, "'lpg.stations.scan'");
