@@ -41,7 +41,8 @@ export function StationBatchOperationsPanel({
     ...(session.context?.permissions ?? []),
     ...(session.context?.roles.flatMap((role) => role.permissions) ?? []),
   ]);
-  const canInspect = Boolean(session.context?.platformAdmin || permissions.has("lpg.stations.scan") || permissions.has("lpg.stations.pump"));
+  const canScan = Boolean(session.context?.platformAdmin || permissions.has("lpg.stations.scan"));
+  const canInspect = Boolean(canScan || session.context?.platformAdmin || permissions.has("lpg.stations.pump"));
   const canPump = Boolean(session.context?.platformAdmin || permissions.has("lpg.stations.pump"));
   const [actualKgByOrder, setActualKgByOrder] = useState<Record<string, string>>({});
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
@@ -201,7 +202,11 @@ export function StationBatchOperationsPanel({
           <Text style={[styles.stageHintText, { color: palette.ink }]}>
             {incomingCount} incoming cylinder(s). Scan each one once. SKIMA finds its order automatically.
           </Text>
-          <AppButton label="Receive cylinders" variant="primary" fullWidth onPress={() => router.push("/(station)/scan" as never)} />
+          {canInspect ? (
+            <AppButton label="Receive cylinders" variant="primary" fullWidth onPress={() => router.push("/(station)/scan" as never)} />
+          ) : (
+            <Text style={[styles.body, { color: palette.muted }]}>An authorised station scanner or pump operator must receive these cylinders.</Text>
+          )}
         </View>
       ) : null}
 
@@ -288,7 +293,11 @@ export function StationBatchOperationsPanel({
           <Text style={[styles.stageHintText, { color: palette.ink }]}>
             {releaseCount} refill(s) ready for release. Scan each filled cylinder once before handing it to its assigned driver.
           </Text>
-          <AppButton label="Release cylinders" variant="primary" fullWidth onPress={() => router.push("/(station)/scan" as never)} />
+          {canScan ? (
+            <AppButton label="Release cylinders" variant="primary" fullWidth onPress={() => router.push("/(station)/scan" as never)} />
+          ) : (
+            <Text style={[styles.body, { color: palette.muted }]}>Station release requires an authorised scanner on this branch.</Text>
+          )}
         </View>
       ) : null}
 
