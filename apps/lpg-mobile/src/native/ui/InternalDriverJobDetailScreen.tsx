@@ -156,7 +156,24 @@ export function InternalDriverJobDetailScreen() {
       return;
     }
     setNotice(null);
+    let scanSaved = false;
     try {
+      if (scanType === "customer_pickup" && status === "driver_accepted") {
+        await action.mutateAsync({
+          actionKey: "lpg.pickup.start",
+          lpgOrderId: id,
+          source: "skima.lpg.internal_mobile",
+          idempotencyKey: operationIdempotencyKey("lpg.pickup.start", id),
+        });
+      }
+      if (scanType === "station_receipt" && status === "pickup_verified") {
+        await action.mutateAsync({
+          actionKey: "lpg.station.start",
+          lpgOrderId: id,
+          source: "skima.lpg.internal_mobile",
+          idempotencyKey: operationIdempotencyKey("lpg.station.start", id),
+        });
+      }
       const location = await readOperationalLocation().catch(() => null);
       await scan.mutateAsync({
         ...(location ?? {}),
@@ -170,13 +187,24 @@ export function InternalDriverJobDetailScreen() {
           fulfillmentChannel: "skima_internal",
         },
       });
+      scanSaved = true;
+      if (scanType === "customer_pickup") {
+        await action.mutateAsync({
+          actionKey: "lpg.station.start",
+          lpgOrderId: id,
+          source: "skima.lpg.internal_mobile",
+          idempotencyKey: operationIdempotencyKey("lpg.station.start", id),
+        });
+      }
       setToken("");
       setNoticeSuccess(true);
       setNotice(scanSuccess(scanType));
       await detail.refetch();
     } catch (cause) {
-      setNoticeSuccess(false);
-      setNotice(friendlyError(cause, "SKIMA could not verify this cylinder scan."));
+      setNoticeSuccess(scanSaved);
+      setNotice(scanSaved
+        ? "Cylinder pickup was verified. The supplier journey did not start; use the next action to continue. The scan has been saved."
+        : friendlyError(cause, "SKIMA could not verify this cylinder scan."));
     }
   };
 
