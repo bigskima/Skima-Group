@@ -2,8 +2,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import { CheckCircle2, KeyRound, ShieldCheck } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
+import { useJobDetails } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
-import { ActionResponseSchema, firstString } from "../api/records";
+import { ActionResponseSchema, firstString, nestedRecord } from "../api/records";
 import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -20,6 +21,7 @@ export function DeliveryVerificationScreen() {
   const session = useSession();
   const { palette } = useAppTheme();
   const owner = session.context?.profile?.id ?? session.context?.user.id ?? "";
+  const details = useJobDetails(id ?? null);
   const draftType = `customer-delivery-verification-${id ?? "unknown"}`;
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [deliveryCode, setDeliveryCode] = useState<string | null>(null);
@@ -143,6 +145,20 @@ export function DeliveryVerificationScreen() {
         source: "skima.lpg.mobile",
         idempotencyKey: idempotencyKey("delivery-verify", challengeId),
       });
+
+      // Do not send the customer to feedback just because the OTP endpoint
+      // accepted the code. Confirm that the order read model has crossed the
+      // delivered/completed boundary after the payout/assignment trigger ran.
+      const refreshed = await details.refetch();
+      const verifiedOrder = nestedRecord(refreshed.data, "order") ?? refreshed.data;
+      const finalStatus = firstString(verifiedOrder, ["status", "orderStatus", "order_status"]);
+      const challengeVerified = verifiedOrder?.deliveryChallengeVerified === true
+        || verifiedOrder?.delivery_challenge_verified === true;
+
+      if (!challengeVerified || !["delivered", "completed"].includes(finalStatus ?? "")) {
+        throw new Error("Your code was accepted, but SKIMA has not finished closing the delivery yet. Your order is safe; retry confirmation or contact support if it remains here.");
+      }
+
       await draftStore.clear(owner, draftType);
       setNoticeTone("success");
       setNotice("Delivery confirmed successfully.");
