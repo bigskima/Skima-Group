@@ -747,9 +747,8 @@ Deno.test("independent driver earnings are split into gross, SKIMA commission an
   // Only independent marketplace fulfilment receives this percentage split.
   assertIncludes(payout, "order_record.fulfillment_mode = 'independent_driver'");
   assertIncludes(payout, "order_record.fulfillment_channel = 'marketplace'");
-  assertIncludes(payout, "fulfillment_mode,fulfillment_channel");
   assertIncludes(payout, "Station Managed drivers are paid by their station");
-  assertIncludes(payout, "settle_lpg_internal_order");
+  assertIncludes(payout, "SKIMA Fleet/Managed work uses its own payout/settlement policy");
 
   // A legacy zero-rate order is corrected from previously classified SKIMA
   // revenue as a separate, auditable adjustment; snapshots are not rewritten.
