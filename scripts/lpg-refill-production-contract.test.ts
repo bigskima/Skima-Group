@@ -13,8 +13,11 @@ Deno.test("Station Managed drivers get a continuous scan tab while SKIMA Interna
   assertIncludes(route, "StationManagedDriverScanScreen");
   assertIncludes(tabs, '{ name: "scan", title: "Scan", icon: QrCode }');
   assertIncludes(list, 'router.push("/(station-driver)/scan"');
-  assertIncludes(internal, 'actionKey: "lpg.station.start"');
-  assertIncludes(internal, 'source: "skima.lpg.internal_mobile"');
+  assertIncludes(internal, "continuousScan.mutateAsync");
+  assertIncludes(internal, 'workspace: "driver"');
+  assertIncludes(internal, 'source: "skima.lpg.continuous"');
+  assertIncludes(migration, "order_status = 'pickup_verified'");
+  assertIncludes(migration, "'lpg.station.start'");
   assertIncludes(detail, "station staff scan it at reception");
   assertIncludes(migration, "fulfillment_channel = 'skima_internal'");
 });
@@ -45,8 +48,9 @@ Deno.test("continuous LPG cylinder scanning matches only the signed-in actor's a
   assertIncludes(scanner, "continuous?: boolean");
   assertIncludes(scanner, "setTimeout(() => setLocked(false), 1100)");
   assertIncludes(scanner, "Scan the same cylinder again");
-  assertIncludes(jobDetail, 'actionKey: "lpg.station.start"');
+  assertIncludes(jobDetail, "continuousScan.mutateAsync");
   assertIncludes(jobDetail, "station staff scan it at reception");
+  assertIncludes(migration, "'lpg.station.start'");
   const driverScanRules = jobDetail.slice(
     jobDetail.indexOf("function driverScanTypeForStatus"),
     jobDetail.indexOf("function stationScanTypeForStatus"),
