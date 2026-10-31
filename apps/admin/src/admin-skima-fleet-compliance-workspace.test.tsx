@@ -33,6 +33,8 @@ const ADMIN_USER_ID = "10000000-0000-4000-8000-000000000001";
 const VEHICLE_ID = "20000000-0000-4000-8000-000000000002";
 const SUBMISSION_ID = "30000000-0000-4000-8000-000000000003";
 
+let uuidSequence = 0;
+
 const vehicle = {
   vehicleId: VEHICLE_ID,
   registrationNumber: "ABC-123XY",
@@ -69,8 +71,9 @@ function wrapper({ children }: { children: ReactNode }) {
 
 describe("AdminSkimaFleetComplianceWorkspace document upload", () => {
   beforeEach(() => {
+    uuidSequence = 0;
     vi.stubGlobal("crypto", {
-      randomUUID: vi.fn(() => "40000000-0000-4000-8000-000000000004"),
+      randomUUID: vi.fn(() => `40000000-0000-4000-8000-${String(uuidSequence++).padStart(12, "0")}`),
     });
     session.rpc.mockReset();
     session.getUser.mockReset();
@@ -109,9 +112,12 @@ describe("AdminSkimaFleetComplianceWorkspace document upload", () => {
     const file = new File(["roadworthiness evidence"], "roadworthiness.pdf", {
       type: "application/pdf",
     });
-    fireEvent.change(screen.getByLabelText("Document or image"), {
-      target: { files: [file] },
+    const fileInput = screen.getByLabelText("Document or image");
+    Object.defineProperty(fileInput, "files", {
+      configurable: true,
+      value: [file],
     });
+    fireEvent.change(fileInput);
     fireEvent.change(screen.getByLabelText("Admin review note"), {
       target: { value: "Checked current certificate against fleet records." },
     });

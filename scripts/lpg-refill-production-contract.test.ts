@@ -13,8 +13,11 @@ Deno.test("Station Managed drivers get a continuous scan tab while SKIMA Interna
   assertIncludes(route, "StationManagedDriverScanScreen");
   assertIncludes(tabs, '{ name: "scan", title: "Scan", icon: QrCode }');
   assertIncludes(list, 'router.push("/(station-driver)/scan"');
-  assertIncludes(internal, 'actionKey: "lpg.station.start"');
-  assertIncludes(internal, 'source: "skima.lpg.internal_mobile"');
+  assertIncludes(internal, "continuousScan.mutateAsync");
+  assertIncludes(internal, 'workspace: "driver"');
+  assertIncludes(internal, 'source: "skima.lpg.continuous"');
+  assertIncludes(migration, "order_status = 'pickup_verified'");
+  assertIncludes(migration, "'lpg.station.start'");
   assertIncludes(detail, "station staff scan it at reception");
   assertIncludes(migration, "fulfillment_channel = 'skima_internal'");
 });
@@ -45,8 +48,9 @@ Deno.test("continuous LPG cylinder scanning matches only the signed-in actor's a
   assertIncludes(scanner, "continuous?: boolean");
   assertIncludes(scanner, "setTimeout(() => setLocked(false), 1100)");
   assertIncludes(scanner, "Scan the same cylinder again");
-  assertIncludes(jobDetail, 'actionKey: "lpg.station.start"');
+  assertIncludes(jobDetail, "continuousScan.mutateAsync");
   assertIncludes(jobDetail, "station staff scan it at reception");
+  assertIncludes(migration, "'lpg.station.start'");
   const driverScanRules = jobDetail.slice(
     jobDetail.indexOf("function driverScanTypeForStatus"),
     jobDetail.indexOf("function stationScanTypeForStatus"),
@@ -83,6 +87,38 @@ Deno.test("station quick operations preserve per-cylinder safety and per-order r
   assertIncludes(panel, "Each order is confirmed separately. One failed order does not block the other entered refills.");
   assertIncludes(panel, "failures.push");
   assertIncludes(jobs, "StationBatchOperationsPanel");
+});
+
+Deno.test("driver job final delivery uses the assigned-cylinder resolver and reflects customer OTP verification", async () => {
+  const [detail, internal, projection, payoutAuthorization] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
+    read("supabase/migrations/20261031103000_lpg_job_details_delivery_challenge_verification_state.sql"),
+    read("supabase/migrations/20261031100500_lpg_driver_self_wallet_payout_authorization.sql"),
+  ]);
+  const driverScan = detail.slice(
+    detail.indexOf("const submitDriverScan"),
+    detail.indexOf("const submitStationScan"),
+  );
+  const internalScan = internal.slice(
+    internal.indexOf("const submitScan"),
+    internal.indexOf("const confirmInternalRefill"),
+  );
+  assertIncludes(driverScan, "continuousScan.mutateAsync");
+  assertIncludes(driverScan, 'workspace: "driver"');
+  assertIncludes(driverScan, "token: token.trim()");
+  assertNotIncludes(driverScan, "scan.mutateAsync");
+  assertIncludes(internalScan, "continuousScan.mutateAsync");
+  assertIncludes(internalScan, 'workspace: "driver"');
+  assertIncludes(detail, "deliveryChallengeVerified");
+  assertIncludes(detail, "Customer delivery verification is complete.");
+  assertIncludes(internal, "Customer delivery verification is complete.");
+  assertIncludes(projection, "deliveryChallengeVerified");
+  assertIncludes(projection, "public.lpg_delivery_challenge_is_verified");
+  assertIncludes(payoutAuthorization, "can_create_driver_wallet");
+  assertIncludes(payoutAuthorization, "driver.user_id = auth.uid()");
+  assertIncludes(payoutAuthorization, "driver.verification_status = 'approved'");
+  assertIncludes(payoutAuthorization, "platform.wallets.manage");
 });
 
 const root = new URL("../", import.meta.url);

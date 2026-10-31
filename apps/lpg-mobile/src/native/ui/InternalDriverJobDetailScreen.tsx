@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useJobDetails } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
-import { ActionResponseSchema, displayStatus, displayTitle, firstNumber, firstString, nestedRecord, recordId } from "../api/records";
+import { ActionResponseSchema, displayStatus, displayTitle, firstNumber, firstString, nestedRecord } from "../api/records";
 import { readOperationalLocation } from "../device/location";
 import { openDeviceNavigation } from "../device/navigation";
 import { Scanner } from "../device/Scanner";
@@ -90,8 +90,8 @@ export function InternalDriverJobDetailScreen() {
     });
   }, [actualKg, draftOwner, id, paymentMethod, receiptMediaAssetId, safetyConfirmed, safetyNotes, supplierAddress, supplierName, supplierPricePerKg]);
 
-  const scan = useGatewayMutation({
-    path: "/lpg/scans",
+  const continuousScan = useGatewayMutation({
+    path: "/lpg/scans/continuous",
     schema: ActionResponseSchema,
     invalidate: [["jobs"], ["orders"], ["scans"]],
   });
@@ -156,55 +156,39 @@ export function InternalDriverJobDetailScreen() {
       return;
     }
     setNotice(null);
-    let scanSaved = false;
     try {
-      if (scanType === "customer_pickup" && status === "driver_accepted") {
-        await action.mutateAsync({
-          actionKey: "lpg.pickup.start",
-          lpgOrderId: id,
-          source: "skima.lpg.internal_mobile",
-          idempotencyKey: operationIdempotencyKey("lpg.pickup.start", id),
-        });
-      }
-      if (scanType === "station_receipt" && status === "pickup_verified") {
-        await action.mutateAsync({
-          actionKey: "lpg.station.start",
-          lpgOrderId: id,
-          source: "skima.lpg.internal_mobile",
-          idempotencyKey: operationIdempotencyKey("lpg.station.start", id),
-        });
-      }
       const location = await readOperationalLocation().catch(() => null);
-      await scan.mutateAsync({
+      const result = await continuousScan.mutateAsync({
         ...(location ?? {}),
-        idempotencyKey: operationIdempotencyKey(`internal-${scanType}`, id),
-        lpgOrderId: id,
-        scanType,
-        source: "skima.lpg.internal_mobile",
-        payload: {
-          scannedCylinderId: recordId(cylinder ?? {}),
-          scannedToken: token,
-          fulfillmentChannel: "skima_internal",
-        },
+        workspace: "driver",
+        token: token.trim(),
+        idempotencyKey: operationIdempotencyKey(
+          `internal-continuous-${scanType}`,
+          `${id}:${token.trim().toUpperCase()}`,
+        ),
+        source: "skima.lpg.continuous",
       });
-      scanSaved = true;
-      if (scanType === "customer_pickup") {
-        await action.mutateAsync({
-          actionKey: "lpg.station.start",
-          lpgOrderId: id,
-          source: "skima.lpg.internal_mobile",
-          idempotencyKey: operationIdempotencyKey("lpg.station.start", id),
-        });
-      }
+      const responseScanType = result && typeof result === "object"
+        ? firstString(result, ["scanType"])
+        : null;
+      const completedScanType = responseScanType === "customer_pickup"
+          || responseScanType === "station_receipt"
+          || responseScanType === "customer_delivery"
+        ? responseScanType
+        : scanType;
       setToken("");
       setNoticeSuccess(true);
-      setNotice(scanSuccess(scanType));
+      setNotice(completedScanType === "customer_delivery"
+        ? "Final cylinder scan verified. Customer hand-over is complete and the order has moved to delivered."
+        : scanSuccess(completedScanType));
       await detail.refetch();
     } catch (cause) {
-      setNoticeSuccess(scanSaved);
-      setNotice(scanSaved
-        ? "Cylinder pickup was verified. The supplier journey did not start; use the next action to continue. The scan has been saved."
-        : friendlyError(cause, "SKIMA could not verify this cylinder scan."));
+      setNoticeSuccess(false);
+      setNotice(friendlyError(
+        cause,
+        "SKIMA could not match this cylinder to an active internal job assigned to you. Check the five-character Cylinder ID and try again.",
+      ));
+      void detail.refetch().catch(() => undefined);
     }
   };
 
@@ -294,7 +278,7 @@ export function InternalDriverJobDetailScreen() {
             <View style={styles.heroCopy}>
               <Text style={styles.heroEyebrow}>SKIMA MANAGED JOB</Text>
               <Text style={styles.heroTitle}>{friendlyStatus(status)}</Text>
-              <Text style={styles.heroBody}>{stageDescription(status)}</Text>
+              <Text style={styles.heroBody}>{stageDescription(status, order?.deliveryChallengeVerified === true || order?.delivery_challenge_verified === true)}</Text>
             </View>
             <StatusPill label={friendlyStatus(status)} tone={["completed", "delivered"].includes(status) ? "success" : "brand"} />
           </View>
@@ -346,7 +330,7 @@ export function InternalDriverJobDetailScreen() {
                 </View>
               </View>
               <Scanner enabled onDetected={setToken} />
-              {token ? <AppButton label={scanButton(scanType)} fullWidth loading={scan.isPending} onPress={() => void submitScan()} /> : null}
+              {token ? <AppButton label={scanButton(scanType)} fullWidth loading={continuousScan.isPending} onPress={() => void submitScan()} /> : null}
             </View>
           ) : null}
 
@@ -530,14 +514,15 @@ function friendlyStatus(status: string) {
   return labels[status] ?? status.replace(/_/g, " ");
 }
 
-function stageDescription(status: string) {
+function stageDescription(status: string, deliveryChallengeVerified = false) {
   if (["driver_offered", "driver_accepted"].includes(status)) return "This job is reserved for a managed SKIMA fulfillment driver.";
   if (status === "pickup_en_route") return "Collect and verify the customer's registered cylinder.";
   if (status === "pickup_verified") return "Continue to a suitable LPG supplier for the requested refill.";
   if (status === "station_en_route") return "Choose a safe supplier, then scan the cylinder when you arrive.";
   if (["station_verified", "refill_in_progress"].includes(status)) return "Record the supplier, actual price, actual kilograms, safety check and receipt.";
   if (["refill_confirmed", "return_en_route"].includes(status)) return "Return the filled cylinder to the customer.";
-  if (status === "delivery_verification_pending") return "Complete customer delivery verification and the final cylinder scan.";
+  if (status === "delivery_verification_pending" && deliveryChallengeVerified) return "Customer delivery verification is complete. Scan the same cylinder now to finish the hand-over and close the job.";
+  if (status === "delivery_verification_pending") return "Complete customer delivery verification, then scan the same cylinder to finish the hand-over.";
   return "Follow the SKIMA-managed fulfillment workflow.";
 }
 

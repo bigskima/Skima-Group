@@ -1,12 +1,12 @@
 import { Image } from "expo-image";
 import { Crosshair, MapPin, Minus, Plus } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
   View,
-  type GestureResponderEvent,
   type LayoutChangeEvent,
 } from "react-native";
 import {
@@ -31,9 +31,10 @@ export interface OperationalMapProps {
 
 const TILE = 256;
 const DEFAULT_HEIGHT = 420;
-const EMERGENCY_RASTER_TILE_TEMPLATE =
+const OPENSTREETMAP_RASTER_TILE_TEMPLATE =
+  "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const CARTO_VOYAGER_RASTER_TILE_TEMPLATE =
   "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
-const EMERGENCY_ATTRIBUTION = "© OpenStreetMap contributors, © CARTO";
 
 export function OperationalMap({
   points,
@@ -50,12 +51,24 @@ export function OperationalMap({
   const effectiveMaxZoom = maxZoom ?? Math.max(21, providerTileMaxZoom);
   const [width, setWidth] = useState(720);
   const [useEmergencyTiles, setUseEmergencyTiles] = useState(false);
+  const emergencyFallback = mapRenderer.tileTemplate.includes("tile.openstreetmap.org")
+    ? {
+        tileTemplate: CARTO_VOYAGER_RASTER_TILE_TEMPLATE,
+        attribution: "© OpenStreetMap contributors, © CARTO",
+        maxZoom: 20,
+      }
+    : {
+        tileTemplate: OPENSTREETMAP_RASTER_TILE_TEMPLATE,
+        attribution: "© OpenStreetMap contributors",
+        maxZoom: 19,
+      };
   const tileTemplate = useEmergencyTiles
-    ? EMERGENCY_RASTER_TILE_TEMPLATE
+    ? emergencyFallback.tileTemplate
     : mapRenderer.tileTemplate;
   const attribution = useEmergencyTiles
-    ? EMERGENCY_ATTRIBUTION
+    ? emergencyFallback.attribution
     : mapRenderer.attribution;
+  const activeTileMaxZoom = useEmergencyTiles ? emergencyFallback.maxZoom : providerTileMaxZoom;
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
   const interactive = Boolean(onSelectPoint);
   const derivedCenter = useMemo(
@@ -79,7 +92,7 @@ export function OperationalMap({
   }, [pointKey, interactive, width, height, initialZoom, mapRenderer.defaultZoom, effectiveMaxZoom, minZoom]);
 
   const layout = center
-    ? createLayout(center, points, width, height, zoom, tileTemplate, providerTileMaxZoom)
+    ? createLayout(center, points, width, height, zoom, tileTemplate, activeTileMaxZoom)
     : null;
   const onLayout = (event: LayoutChangeEvent) =>
     setWidth(Math.max(280, event.nativeEvent.layout.width));
@@ -90,13 +103,51 @@ export function OperationalMap({
       ? fitZoom(points, width, height, minZoom, effectiveMaxZoom)
       : clamp(points.length ? initialZoom : mapRenderer.defaultZoom, minZoom, effectiveMaxZoom));
   };
-  const select = (event: GestureResponderEvent) => {
-    if (!center || !onSelectPoint) return;
-    const centerPixel = project(center.latitude, center.longitude, zoom);
-    const worldX = centerPixel.x + event.nativeEvent.locationX - width / 2;
-    const worldY = centerPixel.y + event.nativeEvent.locationY - height / 2;
-    onSelectPoint(unproject(worldX, worldY, zoom));
-  };
+  const centerRef = useRef(center);
+  const zoomRef = useRef(zoom);
+  const dragOrigin = useRef<{
+    center: { latitude: number; longitude: number };
+    zoom: number;
+    moved: boolean;
+  } | null>(null);
+  centerRef.current = center;
+  zoomRef.current = zoom;
+
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => Boolean(onSelectPoint),
+    onMoveShouldSetPanResponder: (_event, gesture) =>
+      gesture.numberActiveTouches > 1 || Math.abs(gesture.dx) > 4 || Math.abs(gesture.dy) > 4,
+    onPanResponderGrant: () => {
+      const currentCenter = centerRef.current;
+      if (!currentCenter) return;
+      dragOrigin.current = {
+        center: currentCenter,
+        zoom: zoomRef.current,
+        moved: false,
+      };
+    },
+    onPanResponderMove: (_event, gesture) => {
+      const origin = dragOrigin.current;
+      if (!origin) return;
+      if (Math.abs(gesture.dx) > 3 || Math.abs(gesture.dy) > 3) origin.moved = true;
+      if (!origin.moved) return;
+      const projectedCenter = project(origin.center.latitude, origin.center.longitude, origin.zoom);
+      setCenter(unproject(projectedCenter.x - gesture.dx, projectedCenter.y - gesture.dy, origin.zoom));
+    },
+    onPanResponderRelease: (event, gesture) => {
+      const origin = dragOrigin.current;
+      dragOrigin.current = null;
+      if (!origin || origin.moved || Math.abs(gesture.dx) > 4 || Math.abs(gesture.dy) > 4 || !onSelectPoint) return;
+      const projectedCenter = project(origin.center.latitude, origin.center.longitude, origin.zoom);
+      const pointX = projectedCenter.x + event.nativeEvent.locationX - width / 2;
+      const pointY = projectedCenter.y + event.nativeEvent.locationY - height / 2;
+      onSelectPoint(unproject(pointX, pointY, origin.zoom));
+    },
+    onPanResponderTerminate: () => {
+      dragOrigin.current = null;
+    },
+    onPanResponderTerminationRequest: () => false,
+  }), [height, onSelectPoint, width]);
 
   if (!center || !layout)
     return (
@@ -108,15 +159,15 @@ export function OperationalMap({
     );
 
   return (
-    <Pressable
-      accessibilityLabel={onSelectPoint ? "Interactive map. Tap to move the location pin." : "Map showing relevant locations"}
+    <View
+      accessibilityLabel={onSelectPoint ? "Interactive map. Drag to pan and tap to move the location pin." : "Interactive map. Drag to pan and use controls to zoom."}
       onLayout={onLayout}
-      onPress={select}
       style={[styles.map, { height, borderColor: palette.border }]}
     >
       {layout.tiles.map((tile) => (
         <Image
           key={`${tile.zoom}:${tile.x}:${tile.y}:${tile.left}`}
+          pointerEvents="none"
           source={tile.url}
           contentFit="cover"
           onError={() => setUseEmergencyTiles(true)}
@@ -128,6 +179,7 @@ export function OperationalMap({
         ? layout.segments.map((segment, index) => (
             <View
               key={`route:${index}`}
+              pointerEvents="none"
               style={[
                 styles.segment,
                 {
@@ -155,8 +207,9 @@ export function OperationalMap({
         );
       })}
       {onSelectPoint
-        ? <View pointerEvents="none" style={styles.selectionHint}><Text style={styles.selectionHintText}>Tap the exact entrance or pickup point</Text></View>
+        ? <View pointerEvents="none" style={styles.selectionHint}><Text style={styles.selectionHintText}>Drag to move the map · Tap to set the exact point</Text></View>
         : null}
+      <View {...panResponder.panHandlers} style={styles.interactionLayer} />
       <View style={styles.controls}>
         <Pressable accessibilityLabel="Recenter map" onPress={(event) => { event.stopPropagation(); recenter(); }} style={styles.control}>
           <Crosshair color={colors.ink} size={19} />
@@ -170,7 +223,7 @@ export function OperationalMap({
       </View>
       <View pointerEvents="none" style={styles.zoomBadge}><Text style={styles.zoomText}>{onSelectPoint ? "Pinpoint mode" : "Map view"}</Text></View>
       <Text pointerEvents="none" style={styles.attribution}>{attribution}</Text>
-    </Pressable>
+    </View>
   );
 }
 
@@ -266,6 +319,7 @@ function clamp(value: number, minimum: number, maximum: number) {
 const styles = StyleSheet.create({
   map: { width: "100%", overflow: "hidden", borderRadius: radii.lg, borderWidth: 1, backgroundColor: "#DCE5DF" },
   tile: { position: "absolute" },
+  interactionLayer: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
   segment: { position: "absolute", height: 5, borderRadius: 3, backgroundColor: colors.brand, transformOrigin: "left center" },
   markerWrap: { position: "absolute", width: 120, alignItems: "center" },
   marker: { width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 17, borderWidth: 4, backgroundColor: "white", boxShadow: "0 4px 14px rgba(0,0,0,.22)" },
