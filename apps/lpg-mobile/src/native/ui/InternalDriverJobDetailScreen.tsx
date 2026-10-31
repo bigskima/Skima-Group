@@ -1,6 +1,6 @@
 import { useNetInfo } from "@react-native-community/netinfo";
 import { router, useLocalSearchParams } from "expo-router";
-import { CheckCircle2, MapPin, Navigation, PackageCheck, ReceiptText, ScanLine, ShieldCheck, Store } from "lucide-react-native";
+import { CheckCircle2, Navigation, PackageCheck, ReceiptText, ScanLine, ShieldCheck, Store } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useJobDetails } from "../api/domains";
@@ -385,7 +385,7 @@ export function InternalDriverJobDetailScreen() {
                 assetTypeKey="media.lpg.procurement_receipt"
                 label={receiptMediaAssetId ? "Supplier receipt uploaded" : "Upload supplier receipt"}
                 draftType={`internal-procurement-receipt-${id ?? "unknown"}`}
-                onUploaded={async (assetId) => {
+                onUploaded={(assetId) => {
                   setReceiptMediaAssetId(assetId);
                   setNoticeSuccess(true);
                   setNotice("Supplier receipt uploaded. You can confirm the refill when the other details are complete.");
