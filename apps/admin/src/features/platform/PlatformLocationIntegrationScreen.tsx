@@ -97,7 +97,12 @@ export function PlatformLocationIntegrationScreen() {
   const failed24h = numeric(metrics.failed24h);
   const cacheHits24h = numeric(metrics.cacheHits24h);
   const activeEntries = numeric(cache.activeEntries);
-  const activeProvider = data.providers.find((provider) => provider.active) ?? null;
+  const activeGeocoder = data.activeGeocoderKey
+    ? providerName(data.providers, data.activeGeocoderKey)
+    : "Not configured";
+  const activeRouter = data.activeRouterKey
+    ? providerName(data.providers, data.activeRouterKey)
+    : "Not configured";
   const switchableProviders = data.providers.filter((provider) => provider.runtimeSupported && !provider.active);
 
   const providerColumns: TableColumn<Provider>[] = [
@@ -118,13 +123,14 @@ export function PlatformLocationIntegrationScreen() {
       <AdminV2PageHeader
         eyebrow="Integrations · Maps & location"
         title="Maps & location"
-        description="See the active geocoder and router, recent reliability and cache posture. Provider changes are explicit and audited; SKIMA never automatically falls back to a paid provider."
+        description="See the active address geocoder and road-routing engine separately, along with provider health, route request volume and cache posture. Provider changes are explicit and audited; SKIMA never automatically falls back to another paid provider."
         actions={<><Button icon={RefreshCcw} variant="outline" onClick={() => void query.refetch()}>Refresh</Button><Button icon={MapPinned} requiredPermission="platform.providers.manage" disabled={switchableProviders.length === 0} onClick={() => setChangeOpen(true)}>Change provider</Button></>}
       />
 
       <section className="skima-grid skima-grid--compact">
-        <MetricTile label="Active provider" value={activeProvider?.displayName ?? "Not configured"} icon={MapPinned} tone={activeProvider ? "success" : "warning"} />
-        <MetricTile label="Requests · 24h" value={requests24h} icon={Route} tone="info" />
+        <MetricTile label="Active geocoder" value={activeGeocoder} icon={MapPinned} tone={data.activeGeocoderKey ? "success" : "warning"} />
+        <MetricTile label="Active road router" value={activeRouter} icon={Route} tone={data.activeRouterKey ? "success" : "warning"} />
+        <MetricTile label="Requests · 24h" value={requests24h} icon={Clock3} tone="info" />
         <MetricTile label="Provider failures · 24h" value={failed24h} icon={ShieldCheck} tone={failed24h ? "warning" : "success"} />
         <MetricTile label="Cache hits · 24h" value={cacheHits24h} icon={Clock3} />
       </section>
