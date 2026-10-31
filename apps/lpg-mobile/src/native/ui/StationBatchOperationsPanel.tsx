@@ -100,7 +100,7 @@ export function StationBatchOperationsPanel({
         },
         evidenceMediaAssetIds: [],
         source: "skima.lpg.mobile",
-        idempotencyKey: operationIdempotencyKey("station-inspection", row.id),
+        idempotencyKey: operationIdempotencyKey(`station-inspection-${result}`, row.id),
       });
       setNoticeSuccess(result === "safe");
       setNotice(result === "safe"
