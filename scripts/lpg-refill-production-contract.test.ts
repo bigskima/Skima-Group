@@ -244,6 +244,39 @@ Deno.test("station, driver and customer operation queues avoid unbounded long sc
   assertIncludes(orders, "const ORDER_PAGE_SIZE = 8");
 });
 
+Deno.test("all LPG order read models expose the short Cylinder ID consistently", async () => {
+  const migration = await read(
+    "supabase/migrations/20261031073100_lpg_short_cylinder_order_read_models.sql",
+  );
+  assertIncludes(migration, "'cylinderReference',cylinder.cylinder_identifier");
+  assertIncludes(migration, "'cylinderIdentifier',cylinder.cylinder_identifier");
+  assertIncludes(migration, "'cylinderRegistryReference',cylinder.public_reference");
+  assertIncludes(migration, "'publicReference', cylinder.cylinder_identifier");
+  assertIncludes(migration, "'legacyRegistryReference', cylinder.public_reference");
+  assertIncludes(migration, "'cylinderReference', cylinder.cylinder_identifier");
+});
+
+Deno.test("LPG permanent Cylinder IDs are unique five-character alphanumeric codes with legacy scan aliases", async () => {
+  const [migration, scan, identity, detail] = await Promise.all([
+    read("supabase/migrations/20261031073000_lpg_short_cylinder_verification_ids.sql"),
+    read("apps/lpg-mobile/src/native/ui/ScanWorkspaceScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/CylinderIdentityScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/CylinderDetailScreen.tsx"),
+  ]);
+  assertIncludes(migration, "for index_value in 1..5 loop");
+  assertIncludes(migration, "candidate ~ '[A-HJ-NP-Z]'");
+  assertIncludes(migration, "candidate ~ '[2-9]'");
+  assertIncludes(migration, "lpg_cylinders_cylinder_identifier_global_unique");
+  assertIncludes(migration, "legacyCylinderIdentifiers");
+  assertIncludes(migration, "verifiedCylinderReference', cylinder_record.cylinder_identifier");
+  assertIncludes(scan, "five-character Cylinder ID");
+  assertIncludes(scan, "Example: A7KQ4");
+  assertNotIncludes(scan, "SKIMA-CYL-");
+  assertNotIncludes(scan, "CYL-000000");
+  assertNotIncludes(identity, "Registry ref ·");
+  assertNotIncludes(detail, "Registry ref ·");
+});
+
 Deno.test("nearby station query coordinates parse URL strings before validation", async () => {
   const gateway = await read("supabase/functions/api-gateway/index.ts");
   assertIncludes(gateway, 'requireNumberQuery(url.searchParams.get("latitude"), "latitude")');

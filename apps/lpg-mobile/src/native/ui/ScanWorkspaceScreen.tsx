@@ -90,7 +90,7 @@ export function ScanWorkspaceScreen({
       title={workspace === "station" ? "Verify cylinder release" : "Verify SKIMA cylinder"}
       subtitle={workspace === "station"
         ? "After the refill is confirmed, verify the cylinder before releasing it back to the assigned driver."
-        : "Choose the assigned job first. Scan the cylinder when possible, or use its permanent SKIMA Cylinder ID when the physical code cannot be read."}
+        : "Choose the assigned job first. Scan the cylinder when possible, or enter its five-character Cylinder ID when the physical code cannot be read."}
       action={<Pressable onPress={() => router.back()}><Text style={[styles.back, { color: palette.brand }]}>Back</Text></Pressable>}
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
@@ -102,7 +102,7 @@ export function ScanWorkspaceScreen({
               ? `${actionable.length} ${actionable.length === 1 ? "job" : "jobs"} ready for cylinder verification`
               : workspace === "station" ? "No cylinder is ready for release" : "No job needs verification right now"}
           </Text>
-          <Text style={styles.heroBody}>{workspace === "station" ? "Scan or enter the permanent Cylinder ID before the filled cylinder leaves the station." : "Scan or enter the Cylinder ID at pickup, station reception and final delivery."}</Text>
+          <Text style={styles.heroBody}>{workspace === "station" ? "Scan or enter the five-character Cylinder ID before the filled cylinder leaves the station." : "Scan or enter the five-character Cylinder ID at pickup, station reception and final delivery."}</Text>
         </View>
       </View>
 
@@ -175,7 +175,7 @@ export function ScanWorkspaceScreen({
           <View style={styles.identityHeader}>
             <ShieldCheck color={palette.brand} size={20} />
             <View style={styles.identityCopy}>
-              <Text style={[styles.identityTitle, { color: palette.ink }]}>Permanent SKIMA Cylinder ID</Text>
+              <Text style={[styles.identityTitle, { color: palette.ink }]}>Five-character Cylinder ID</Text>
               <Text style={[styles.identityBody, { color: palette.muted }]}>
                 {cylinderReference ?? "SKIMA cylinder"} · {tagStatusLabel(cylinderTagStatus)}
               </Text>
@@ -233,7 +233,7 @@ export function ScanWorkspaceScreen({
           <View style={styles.fallbackCopy}>
             <Text style={[styles.fallbackEyebrow, { color: palette.muted }]}>CAN'T SCAN?</Text>
             <Text style={[styles.fallbackTitle, { color: palette.ink }]}>Enter the permanent Cylinder ID</Text>
-            <Text style={[styles.fallbackBody, { color: palette.muted }]}>Enter the SKIMA Cylinder ID beginning with “SKIMA-CYL-”. Older “CYL-” registry references are also accepted. SKIMA will confirm that it belongs to this job.</Text>
+            <Text style={[styles.fallbackBody, { color: palette.muted }]}>Enter the five-character code printed on the cylinder identity card. SKIMA checks that it belongs to this exact order.</Text>
           </View>
           <TextInput
             autoCapitalize="characters"
@@ -241,7 +241,7 @@ export function ScanWorkspaceScreen({
             accessibilityLabel="Permanent SKIMA Cylinder ID"
             onChangeText={setManualCylinderId}
             onSubmitEditing={useManualCylinderId}
-            placeholder="Example: SKIMA-CYL-6697AECA96A54A"
+            placeholder="Example: A7KQ4"
             placeholderTextColor={palette.muted}
             returnKeyType="go"
             style={[
@@ -262,7 +262,7 @@ export function ScanWorkspaceScreen({
 
       <View style={[styles.security, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <ShieldCheck color={palette.mutedStrong} size={18} />
-        <Text style={[styles.securityText, { color: palette.muted }]}>QR is the fastest option, but the permanent Cylinder ID is always valid for manual verification. SKIMA confirms the assigned order, cylinder and operator before the hand-over advances.</Text>
+        <Text style={[styles.securityText, { color: palette.muted }]}>QR is the fastest option. The five-character Cylinder ID is the simple manual fallback. SKIMA still checks the assigned order, cylinder and operator before the hand-over advances.</Text>
       </View>
     </Screen>
   );

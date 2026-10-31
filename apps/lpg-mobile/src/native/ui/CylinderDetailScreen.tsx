@@ -45,7 +45,6 @@ export function CylinderDetailScreen() {
   const originalId = cylinder ? firstAssetId(cylinder.image_asset_ids ?? cylinder.imageAssetIds) : null;
   const displayName = firstString(cylinder, ["display_name", "displayName"]) ?? "Cylinder";
   const permanentId = cylinderPermanentIdentifier(cylinder);
-  const registryReference = cylinderRegistryReference(cylinder);
   const status = cylinder ? displayStatus(cylinder) ?? "registered" : "registered";
   const sizeKg = firstNumber(cylinder, ["size_kg", "sizeKg"]);
   const brand = firstString(cylinder, ["brand", "manufacturer"]) ?? "Not added";
@@ -86,9 +85,6 @@ export function CylinderDetailScreen() {
           <Text numberOfLines={1} style={[styles.reference, { color: palette.ink }]}>
             {permanentId ?? "SKIMA cylinder"}
           </Text>
-          {registryReference && registryReference !== permanentId ? (
-            <Text numberOfLines={1} style={[styles.registryReference, { color: palette.muted }]}>Registry ref · {registryReference}</Text>
-          ) : null}
           <Text style={[styles.meta, { color: palette.muted }]}>
             {sizeKg === null ? "Size not added" : String(sizeKg) + " kg"} · {colour}
           </Text>
@@ -220,7 +216,6 @@ const styles = StyleSheet.create({
   heroCopy: { flex: 1, minWidth: 0, alignItems: "flex-start", gap: 5 },
   identityLabel: { ...typography.eyebrow, fontSize: 8 },
   reference: { ...typography.subheading, fontSize: 16 },
-  registryReference: { ...typography.caption, fontSize: 9.5 },
   meta: { ...typography.caption, fontSize: 10 },
   quickGrid: { gap: spacing.sm },
   routeCard: {
