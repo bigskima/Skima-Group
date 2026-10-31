@@ -165,7 +165,7 @@ export function ScanWorkspaceScreen({
       ) : (
         <EmptyState
           icon={<ScanLine color={palette.brand} size={27} />}
-          title={workspace === "station" ? "Nothing ready for release" : "Nothing to verify yet"}
+          title={workspace === "station" ? "No station cylinder needs verification" : "Nothing to verify yet"}
           description={workspace === "station"
             ? "Incoming orders appear here while the driver is travelling to your station. Scan or enter the Cylinder ID when the cylinder arrives; after refilling, return here to verify its release."
             : "An assigned job appears here only when its current lifecycle stage requires the driver to verify the SKIMA cylinder."}
