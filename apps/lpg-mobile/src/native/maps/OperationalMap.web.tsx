@@ -60,7 +60,9 @@ export function OperationalMap({
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
   const routeKey = pathCoordinates.map((point) => `${point.latitude}:${point.longitude}`).join("|");
   const viewportKey = `${pointKey}::${routeKey}`;
-  const fitPoints = pathCoordinates.length ? [...points, ...pathCoordinates] : points;
+  const fitPoints: MapPoint[] = pathCoordinates.length
+    ? [...points, ...pathCoordinates.map((point) => ({ ...point, label: "" }))]
+    : [...points];
   const interactive = Boolean(onSelectPoint);
   const derivedCenter = useMemo(
     () => averageCoordinate(fitPoints) ?? (interactive ? mapRenderer.defaultCenter : null),
