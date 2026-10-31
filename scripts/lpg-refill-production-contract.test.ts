@@ -68,6 +68,7 @@ Deno.test("station quick operations preserve per-cylinder safety and per-order r
   ]);
   assertIncludes(migration, "'latestInspectionResult'");
   assertIncludes(migration, "'fulfillmentChannel'");
+  assertIncludes(migration, "case when resolved.queue_name in ('driver','station','admin') then resolved.fulfillment_channel else null end");
   assertIncludes(migration, "latest_inspection.result");
   assertIncludes(panel, 'path: "/lpg/inspections"');
   assertIncludes(panel, 'result,');
