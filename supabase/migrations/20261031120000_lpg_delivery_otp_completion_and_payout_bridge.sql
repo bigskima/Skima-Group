@@ -130,6 +130,31 @@ $old$;
             verified_order.delivery_challenge_id
           )
       )
+      or (
+        pg_trigger_depth() > 0
+        and target_source = 'lpg.wallet_engine'
+        and nullif(btrim(target_metadata ->> 'lpg_order_id'), '') is not null
+        and exists (
+          select 1
+          from public.lpg_refill_orders verified_order
+          join public.driver_profiles assigned_driver
+            on assigned_driver.id = verified_order.driver_profile_id
+          where verified_order.id::text = target_metadata ->> 'lpg_order_id'
+            and verified_order.driver_profile_id = target_owner_entity_id
+            and verified_order.fulfillment_mode = 'independent_driver'
+            and verified_order.fulfillment_channel = 'marketplace'
+            and verified_order.status = 'delivered'
+            and verified_order.currency_code = target_currency_code
+            and verified_order.station_settlement_execution_id is not null
+            and verified_order.driver_commission_execution_id is null
+            and verified_order.delivery_challenge_id is not null
+            and assigned_driver.verification_status = 'approved'
+            and public.lpg_delivery_challenge_is_verified(
+              verified_order.id,
+              verified_order.delivery_challenge_id
+            )
+        )
+      )
     );
 $new$;
 begin
