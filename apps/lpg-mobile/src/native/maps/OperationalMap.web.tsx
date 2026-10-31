@@ -48,8 +48,8 @@ export function OperationalMap({
   const { palette } = useAppTheme();
   const mapRenderer = useMapsRendererConfiguration();
   const window = useWindowDimensions();
-  const providerTileMaxZoom = mapRenderer.maxZoom;
-  const effectiveMaxZoom = maxZoom ?? providerTileMaxZoom;
+  const providerTileMaxZoom = Math.min(mapRenderer.maxZoom, 19);
+  const effectiveMaxZoom = Math.min(maxZoom ?? providerTileMaxZoom, providerTileMaxZoom, 19);
   const [width, setWidth] = useState(720);
   const [expanded, setExpanded] = useState(false);
   const [tileFailure, setTileFailure] = useState(false);
