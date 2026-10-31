@@ -146,6 +146,7 @@ $old$;
             and verified_order.status = 'delivered'
             and verified_order.currency_code = target_currency_code
             and verified_order.station_settlement_execution_id is not null
+            and verified_order.metadata ->> 'platform_revenue_classification_transaction_id' is not null
             and verified_order.driver_commission_execution_id is null
             and verified_order.delivery_challenge_id is not null
             and assigned_driver.verification_status = 'approved'
