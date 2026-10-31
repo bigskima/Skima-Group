@@ -706,3 +706,18 @@ Deno.test("verified OTP orders can resume delivery completion without requesting
   assertIncludes(webMap, "Math.min(maxZoom ?? providerTileMaxZoom, providerTileMaxZoom, 19)");
 });
 
+
+Deno.test("SKIMA Managed driver detail is split into progressive workflow sections", async () => {
+  const internal = await read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx");
+  assertIncludes(internal, 'useState<"overview" | "route" | "actions" | "refill" | "details">("overview")');
+  assertIncludes(internal, 'accessibilityRole="tablist"');
+  assertIncludes(internal, 'section === "overview"');
+  assertIncludes(internal, 'section === "route"');
+  assertIncludes(internal, 'section === "actions"');
+  assertIncludes(internal, 'section === "refill"');
+  assertIncludes(internal, 'section === "details"');
+  assertIncludes(internal, "draftStore.load");
+  assertIncludes(internal, "draftStore.save");
+  assertIncludes(internal, "confirmInternalRefill");
+  assertIncludes(internal, "submitScan");
+});
