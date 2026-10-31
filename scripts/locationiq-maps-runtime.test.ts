@@ -463,7 +463,8 @@ Deno.test("mobile basemap follows Admin's public keyless renderer and preserves 
   assertIncludes(webMap, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
   assertIncludes(webMap, "PanResponder.create");
   assertIncludes(webMap, "onPanResponderMove");
-  assertIncludes(webMap, "onError={() => setUseEmergencyTiles(true)}");
+  assertIncludes(webMap, "if (!useEmergencyTiles) setUseEmergencyTiles(true)");
+  assertIncludes(webMap, "setTilesUnavailable(true)");
   assertIncludes(nativeMap, "useMapsRendererConfiguration");
   assertIncludes(nativeMap, "mapRenderer.tileTemplate");
   assertIncludes(nativeMap, "mapRenderer.defaultCenter");
