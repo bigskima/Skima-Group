@@ -81,8 +81,23 @@ begin
   from public.lpg_cylinder_scans existing
   join public.lpg_refill_orders order_row on order_row.id = existing.lpg_order_id
   join public.lpg_cylinders cylinder on cylinder.id = existing.cylinder_id
+  join public.driver_profiles driver on driver.id = order_row.driver_profile_id
+  join public.driver_profiles driver on driver.id = order_row.driver_profile_id
   where existing.source = target_source
-    and existing.idempotency_key = target_idempotency_key;
+    and existing.idempotency_key = target_idempotency_key
+    and (
+      (target_workspace = 'driver' and (
+        driver.user_id = auth.uid()
+        or public.is_lpg_station_managed_order_driver(order_row.id, auth.uid())
+      ))
+      or
+      (target_workspace = 'station'
+        and public.user_can_operate_lpg_station_branch(
+          auth.uid(),
+          order_row.station_branch_id,
+          'lpg.orders.read'
+        ))
+    );
   if found then
     return jsonb_build_object(
       'scanId', scan_id,
@@ -106,7 +121,17 @@ begin
      or upper(coalesce(cylinder.public_reference, '')) = upper(token_value)
      or cylinder.qr_payload = token_value
      or cylinder.barcode_payload = token_value
-     or coalesce(cylinder.metadata->'legacyCylinderIdentifiers', '[]'::jsonb) ? token_value
+     or exists (
+       select 1
+       from jsonb_array_elements_text(
+         case
+           when jsonb_typeof(cylinder.metadata->'legacyCylinderIdentifiers') = 'array'
+             then cylinder.metadata->'legacyCylinderIdentifiers'
+           else '[]'::jsonb
+         end
+       ) legacy_alias
+       where upper(legacy_alias) = upper(token_value)
+     )
      or exists (
        select 1
        from public.lpg_cylinder_tags tag
@@ -189,6 +214,14 @@ begin
       'lpg.pickup.start',
       target_idempotency_key || ':pickup-start',
       jsonb_build_object('startedByContinuousScan', true),
+      target_source
+    );
+  elsif scan_type = 'station_receipt' and order_status = 'pickup_verified' then
+    perform public.process_lpg_order_action(
+      order_id,
+      'lpg.station.start',
+      target_idempotency_key || ':station-start',
+      jsonb_build_object('startedBeforeStationReceipt', true),
       target_source
     );
   end if;
