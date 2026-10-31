@@ -52,8 +52,6 @@ export function OperationalMap({
   const [width, setWidth] = useState(720);
   const [useEmergencyTiles, setUseEmergencyTiles] = useState(false);
   const [tilesUnavailable, setTilesUnavailable] = useState(false);
-  const centerRef = useRef(center);
-  const panOrigin = useRef(center);
   const tileTemplate = useEmergencyTiles
     ? EMERGENCY_RASTER_TILE_TEMPLATE
     : mapRenderer.tileTemplate;
@@ -68,6 +66,8 @@ export function OperationalMap({
   );
   const automaticZoom = points.length ? initialZoom : mapRenderer.defaultZoom;
   const [center, setCenter] = useState(derivedCenter);
+  const centerRef = useRef(center);
+  const panOrigin = useRef(center);
   const [zoom, setZoom] = useState(() => clamp(automaticZoom, minZoom, effectiveMaxZoom));
 
   useEffect(() => {
