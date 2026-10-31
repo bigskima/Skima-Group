@@ -86,10 +86,11 @@ Deno.test("station quick operations preserve per-cylinder safety and per-order r
 });
 
 Deno.test("driver job final delivery uses the assigned-cylinder resolver and reflects customer OTP verification", async () => {
-  const [detail, internal, projection] = await Promise.all([
+  const [detail, internal, projection, payoutAuthorization] = await Promise.all([
     read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
     read("supabase/migrations/20261031103000_lpg_job_details_delivery_challenge_verification_state.sql"),
+    read("supabase/migrations/20261031100500_lpg_driver_self_wallet_payout_authorization.sql"),
   ]);
   const driverScan = detail.slice(
     detail.indexOf("const submitDriverScan"),
@@ -110,6 +111,10 @@ Deno.test("driver job final delivery uses the assigned-cylinder resolver and ref
   assertIncludes(internal, "Customer delivery verification is complete.");
   assertIncludes(projection, "deliveryChallengeVerified");
   assertIncludes(projection, "public.lpg_delivery_challenge_is_verified");
+  assertIncludes(payoutAuthorization, "can_create_driver_wallet");
+  assertIncludes(payoutAuthorization, "driver.user_id = auth.uid()");
+  assertIncludes(payoutAuthorization, "driver.verification_status = 'approved'");
+  assertIncludes(payoutAuthorization, "platform.wallets.manage");
 });
 
 const root = new URL("../", import.meta.url);
