@@ -12,7 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries, useJobDetails } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
@@ -60,6 +60,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const [inspectionNotes, setInspectionNotes] = useState("");
   const [stationTrackingOrderId, setStationTrackingOrderId] = useState<string | null>(null);
   const [stationTrackingBusy, setStationTrackingBusy] = useState(false);
+  const [driverSection, setDriverSection] = useState<"overview" | "route" | "actions" | "details">("overview");
 
   useEffect(() => {
     if (params.scannedToken) setToken(params.scannedToken);
