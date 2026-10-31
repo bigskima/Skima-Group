@@ -269,7 +269,7 @@ export function DeliveryVerificationScreen() {
             label="Request a new code"
             variant="ghost"
             fullWidth
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || deliveryMutation.isPending}
             onPress={() => void request()}
           />
         </View>
