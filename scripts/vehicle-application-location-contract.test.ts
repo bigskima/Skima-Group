@@ -21,6 +21,16 @@ Deno.test("vehicle application location supplement only appends version-bound ev
   assertNotIncludes(migration, "update public.vehicles");
 });
 
+Deno.test("canonical location evidence casts accuracy and service key to the policy signature", async () => {
+  const migration = await read(
+    "supabase/migrations/20261031051444_fix_canonical_location_quality_argument_types.sql",
+  );
+  assertIncludes(migration, "new.accuracy_meters::numeric");
+  assertIncludes(migration, "null::text");
+  assertIncludes(migration, "public.evaluate_location_quality(");
+  assertIncludes(migration, "add column if not exists change_summary text");
+});
+
 Deno.test("vehicle approval requires verified location but inherits driver coverage", async () => {
   const migration = await read(
     "supabase/migrations/20261030221000_lpg_vehicle_application_location_evidence.sql",
