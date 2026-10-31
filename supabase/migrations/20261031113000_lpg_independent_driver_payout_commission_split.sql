@@ -648,6 +648,31 @@ $new$;
     raise exception 'zero driver payout must be explicitly authorized by the locked policy';
   end if;
 $old$;
+  old_wallet_call text := $old$
+  driver_wallet_id := coalesce(
+    target_driver_wallet_id,
+    public.ensure_wallet_account(
+      'driver', 'driver', order_record.driver_profile_id,
+      order_record.currency_code, 'lpg.wallet_engine',
+      jsonb_build_object('wallet_purpose', 'lpg_driver_payout'),
+      target_idempotency_key || ':driver-wallet'
+    )
+  );
+$old$;
+  new_wallet_call text := $new$
+  driver_wallet_id := coalesce(
+    target_driver_wallet_id,
+    public.ensure_wallet_account(
+      'driver', 'driver', order_record.driver_profile_id,
+      order_record.currency_code, 'lpg.wallet_engine',
+      jsonb_build_object(
+        'wallet_purpose', 'lpg_driver_payout',
+        'lpg_order_id', order_record.id
+      ),
+      target_idempotency_key || ':driver-wallet'
+    )
+  );
+$new$;
   new_assignment text := $new$
   payout_policy := order_record.financial_policy_snapshot -> 'driverPayout';
   payout_configuration := payout_policy -> 'configuration';
@@ -908,6 +933,7 @@ begin
 
   if position(old_declarations in function_sql) = 0
     or position(old_assignment in function_sql) = 0
+    or position(old_wallet_call in function_sql) = 0
     or position(old_release in function_sql) = 0
     or position(old_exec_metadata in function_sql) = 0
     or position(old_order_update in function_sql) = 0
@@ -917,6 +943,7 @@ begin
 
   function_sql := replace(function_sql, old_declarations, new_declarations);
   function_sql := replace(function_sql, old_assignment, new_assignment);
+  function_sql := replace(function_sql, old_wallet_call, new_wallet_call);
   function_sql := replace(function_sql, old_release, new_release);
   function_sql := replace(function_sql, old_exec_metadata, new_exec_metadata);
   function_sql := replace(function_sql, old_order_update, new_order_update);
