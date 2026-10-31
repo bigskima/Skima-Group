@@ -34,8 +34,6 @@ export interface OperationalMapProps {
 
 const TILE = 256;
 const DEFAULT_HEIGHT = 420;
-const OPENSTREETMAP_RASTER_TILE_TEMPLATE =
-  "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 export function OperationalMap({
   points,
