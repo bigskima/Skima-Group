@@ -286,7 +286,6 @@ const styles = StyleSheet.create({
   qrIdentityCopy: { alignItems: "center", gap: 3, maxWidth: 320 },
   qrLabel: { ...typography.eyebrow, fontSize: 8 },
   qrReference: { ...typography.subheading, fontSize: 17, textAlign: "center" },
-  qrRegistryReference: { ...typography.caption, fontSize: 10, textAlign: "center" },
   qrHelper: { ...typography.caption, fontSize: 10, lineHeight: 15, textAlign: "center" },
   exportSurface: {
     position: "absolute",
