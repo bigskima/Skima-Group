@@ -244,6 +244,18 @@ Deno.test("station, driver and customer operation queues avoid unbounded long sc
   assertIncludes(orders, "const ORDER_PAGE_SIZE = 8");
 });
 
+Deno.test("all LPG order read models expose the short Cylinder ID consistently", async () => {
+  const migration = await read(
+    "supabase/migrations/20261031073100_lpg_short_cylinder_order_read_models.sql",
+  );
+  assertIncludes(migration, "'cylinderReference',cylinder.cylinder_identifier");
+  assertIncludes(migration, "'cylinderIdentifier',cylinder.cylinder_identifier");
+  assertIncludes(migration, "'cylinderRegistryReference',cylinder.public_reference");
+  assertIncludes(migration, "'publicReference', cylinder.cylinder_identifier");
+  assertIncludes(migration, "'legacyRegistryReference', cylinder.public_reference");
+  assertIncludes(migration, "'cylinderReference', cylinder.cylinder_identifier");
+});
+
 Deno.test("LPG permanent Cylinder IDs are unique five-character alphanumeric codes with legacy scan aliases", async () => {
   const [migration, scan, identity, detail] = await Promise.all([
     read("supabase/migrations/20261031073000_lpg_short_cylinder_verification_ids.sql"),
