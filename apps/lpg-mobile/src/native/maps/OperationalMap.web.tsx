@@ -52,7 +52,6 @@ export function OperationalMap({
   const effectiveMaxZoom = Math.min(maxZoom ?? providerTileMaxZoom, providerTileMaxZoom, 19);
   const [width, setWidth] = useState(720);
   const [expanded, setExpanded] = useState(false);
-  const [tileFailure, setTileFailure] = useState(false);
   const tileTemplate = mapRenderer.tileTemplate;
   const attribution = mapRenderer.attribution;
   const activeTileMaxZoom = providerTileMaxZoom;
@@ -73,10 +72,6 @@ export function OperationalMap({
   const [zoom, setZoom] = useState(() => clamp(automaticZoom, minZoom, effectiveMaxZoom));
   const canvasWidth = expanded ? Math.max(280, window.width) : width;
   const canvasHeight = expanded ? Math.max(360, window.height - 64) : height;
-
-  useEffect(() => {
-    setTileFailure(false);
-  }, [mapRenderer.tileTemplate]);
 
   useEffect(() => {
     if (!derivedCenter) return;
@@ -161,7 +156,6 @@ export function OperationalMap({
       >
         {layout.tiles.map((tile) => (
           <Image key={`${tile.zoom}:${tile.x}:${tile.y}:${tile.left}`} pointerEvents="none" source={tile.url} contentFit="cover"
-            onError={() => setTileFailure(true)}
             style={[styles.tile, { left: tile.left, top: tile.top, width: tile.size, height: tile.size }]} transition={60} />
         ))}
         {layout.segments.map((segment, index) => (
@@ -190,13 +184,6 @@ export function OperationalMap({
             ? <Pressable accessibilityLabel="Open full-screen map" onPress={(event) => {event.stopPropagation();setExpanded(true);}} style={styles.control}><Maximize2 color={colors.ink} size={18} /></Pressable>
             : <Pressable accessibilityLabel="Close full-screen map" onPress={() => setExpanded(false)} style={styles.control}><Minimize2 color={colors.ink} size={18} /></Pressable>}
         </View>
-        {tileFailure ? (
-          <View style={styles.tileError}>
-            <Text style={styles.tileErrorTitle}>Map tiles are temporarily unavailable</Text>
-            <Text style={styles.tileErrorBody}>SKIMA is using the keyless OpenStreetMap provider. Check your connection and retry.</Text>
-            <Pressable accessibilityRole="button" onPress={() => setTileFailure(false)} style={styles.tileRetry}><Text style={styles.tileRetryText}>Retry map</Text></Pressable>
-          </View>
-        ) : null}
         <View pointerEvents="none" style={styles.zoomBadge}><Text style={styles.zoomText}>{onSelectPoint ? "Pinpoint mode" : "Map view"}</Text></View>
         <Text pointerEvents="none" style={styles.attribution}>{attribution}</Text>
       </View>
@@ -324,11 +311,6 @@ const styles = StyleSheet.create({
   fullscreenEyebrow: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
   fullscreenTitle: { fontSize: 18, fontWeight: "900" },
   fullscreenClose: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21 },
-  tileError: { position: "absolute", left: 20, right: 20, top: "34%", alignItems: "center", gap: 8, padding: 18, borderRadius: radii.lg, backgroundColor: "rgba(255,255,255,.96)" },
-  tileErrorTitle: { color: colors.ink, fontSize: 15, fontWeight: "900", textAlign: "center" },
-  tileErrorBody: { color: colors.muted, fontSize: 12, lineHeight: 17, textAlign: "center" },
-  tileRetry: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: radii.pill, backgroundColor: colors.brand },
-  tileRetryText: { color: "white", fontSize: 12, fontWeight: "900" },
   tile: { position: "absolute" },
   interactionLayer: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
   segment: { position: "absolute", height: 5, borderRadius: 3, backgroundColor: colors.brand, transformOrigin: "left center" },
