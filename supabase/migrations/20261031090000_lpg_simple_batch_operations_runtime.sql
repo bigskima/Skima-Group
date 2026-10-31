@@ -12,7 +12,7 @@ begin
   if target_queue is not null and target_queue not in ('customer','driver','station','admin') then raise exception 'target_queue is not supported'; end if;
   resolved_limit := least(greatest(coalesce(target_limit,50),1),200);
   return coalesce((select jsonb_agg(job_payload order by (job_payload->>'updatedAt') desc) from (
-    select jsonb_build_object('queue',resolved.queue_name,'lpgOrderId',resolved.id,'publicReference',resolved.public_reference,'status',resolved.status,'assignmentStatus',resolved.assignment_status,'stationBranchId',resolved.station_branch_id,'stationDisplayName',station.display_name,'stationAddress',station.formatted_address,'driverProfileId',resolved.driver_profile_id,'driverDisplayName',assigned_driver.driver_display_name,'driverReference',assigned_driver.public_driver_id,'driverVerificationStatus',assigned_driver.verification_status,'cylinderId',resolved.cylinder_id,'cylinderReference',cylinder.cylinder_identifier,'cylinderIdentifier',cylinder.cylinder_identifier,'cylinderRegistryReference',cylinder.public_reference,'cylinderSizeKg',cylinder.size_kg,'cylinderTagStatus',cylinder.tag_status,'activeTagReference',active_tag.public_tag_reference,'requestedKg',resolved.requested_kg,'actualKg',resolved.actual_kg,'latestInspectionResult',case when resolved.queue_name in ('driver','station','admin') then latest_inspection.result else null end,'latestInspectionNotes',case when resolved.queue_name in ('station','admin') then latest_inspection.observations->>'notes' else null end,'latestInspectionAt',case when resolved.queue_name in ('driver','station','admin') then latest_inspection.created_at else null end,'updatedAt',resolved.updated_at,'metadata',resolved.metadata) as job_payload
+    select jsonb_build_object('queue',resolved.queue_name,'lpgOrderId',resolved.id,'publicReference',resolved.public_reference,'status',resolved.status,'assignmentStatus',resolved.assignment_status,'stationBranchId',resolved.station_branch_id,'stationDisplayName',station.display_name,'stationAddress',station.formatted_address,'driverProfileId',resolved.driver_profile_id,'driverDisplayName',assigned_driver.driver_display_name,'driverReference',assigned_driver.public_driver_id,'driverVerificationStatus',assigned_driver.verification_status,'fulfillmentMode',resolved.fulfillment_mode,'fulfillmentChannel',resolved.fulfillment_channel,'cylinderId',resolved.cylinder_id,'cylinderReference',cylinder.cylinder_identifier,'cylinderIdentifier',cylinder.cylinder_identifier,'cylinderRegistryReference',cylinder.public_reference,'cylinderSizeKg',cylinder.size_kg,'cylinderTagStatus',cylinder.tag_status,'activeTagReference',active_tag.public_tag_reference,'requestedKg',resolved.requested_kg,'actualKg',resolved.actual_kg,'latestInspectionResult',case when resolved.queue_name in ('driver','station','admin') then latest_inspection.result else null end,'latestInspectionNotes',case when resolved.queue_name in ('station','admin') then latest_inspection.observations->>'notes' else null end,'latestInspectionAt',case when resolved.queue_name in ('driver','station','admin') then latest_inspection.created_at else null end,'updatedAt',resolved.updated_at,'metadata',resolved.metadata) as job_payload
     from (
       select 'customer' as queue_name,target_order.* from public.lpg_refill_orders target_order where (target_queue is null or target_queue='customer') and target_order.customer_user_id=auth.uid() and target_order.status not in ('completed','cancelled','refunded','failed','expired')
       union all
@@ -81,13 +81,15 @@ begin
   from public.lpg_cylinder_scans existing
   join public.lpg_refill_orders order_row on order_row.id = existing.lpg_order_id
   join public.lpg_cylinders cylinder on cylinder.id = existing.cylinder_id
-  join public.driver_profiles driver on driver.id = order_row.driver_profile_id
-  join public.driver_profiles driver on driver.id = order_row.driver_profile_id
   where existing.source = target_source
     and existing.idempotency_key = target_idempotency_key
     and (
       (target_workspace = 'driver' and (
-        driver.user_id = auth.uid()
+        exists (
+          select 1 from public.driver_profiles assigned_driver
+          where assigned_driver.id = order_row.driver_profile_id
+            and assigned_driver.user_id = auth.uid()
+        )
         or public.is_lpg_station_managed_order_driver(order_row.id, auth.uid())
       ))
       or
@@ -156,7 +158,8 @@ begin
       select order_row.id, order_row.status, order_row.updated_at,
         case
           when order_row.status in ('driver_accepted', 'pickup_en_route') then 'customer_pickup'
-          when order_row.status in ('pickup_verified', 'station_en_route') then 'station_receipt'
+          when order_row.fulfillment_channel = 'skima_internal'
+            and order_row.status in ('pickup_verified', 'station_en_route') then 'station_receipt'
           when order_row.status in ('return_en_route', 'delivery_verification_pending') then 'customer_delivery'
           else null
         end as scan_type
@@ -164,9 +167,9 @@ begin
       left join public.driver_profiles driver on driver.id = order_row.driver_profile_id
       where order_row.cylinder_id = matched_cylinder_id
         and (driver.user_id = auth.uid() or public.is_lpg_station_managed_order_driver(order_row.id, auth.uid()))
-        and order_row.status in (
-          'driver_accepted', 'pickup_en_route', 'pickup_verified',
-          'station_en_route', 'return_en_route', 'delivery_verification_pending'
+        and (
+          order_row.status in ('driver_accepted', 'pickup_en_route', 'return_en_route', 'delivery_verification_pending')
+          or (order_row.fulfillment_channel = 'skima_internal' and order_row.status in ('pickup_verified', 'station_en_route'))
         )
     ) candidate;
   else
