@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Crosshair, Maximize2, Minimize2, Minus, Plus, RotateCcw } from "lucide-react";
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
 import { z } from "zod";
 
 import { Button, StatusBadge } from "@skima/ui";
@@ -78,6 +78,8 @@ export function AdminGeometryEditor(props: {
   );
   const [fullScreen, setFullScreen] = useState(false);
   const [tileFailure, setTileFailure] = useState(false);
+  const drag = useRef<{ pointerId: number; x: number; y: number; center: Coordinate; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
   const renderer = tileFailure ? BUILD_RENDERER : (rendererQuery.data ?? BUILD_RENDERER);
 
   useEffect(() => {
@@ -131,7 +133,35 @@ export function AdminGeometryEditor(props: {
       ));
     }
   };
+  const onMapPointerDown = (event: PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0) return;
+    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, center, moved: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const onMapPointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    const current = drag.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const dx = (event.clientX - current.x) * WIDTH / Math.max(rect.width, 1);
+    const dy = (event.clientY - current.y) * HEIGHT / Math.max(rect.height, 1);
+    if (Math.abs(dx) + Math.abs(dy) > 5) current.moved = true;
+    if (!current.moved) return;
+    setCenter(unproject(current.center, zoom, WIDTH / 2 - dx, HEIGHT / 2 - dy));
+  };
+  const onMapPointerUp = (event: PointerEvent<SVGSVGElement>) => {
+    if (!drag.current || drag.current.pointerId !== event.pointerId) return;
+    suppressClick.current = drag.current.moved;
+    drag.current = null;
+  };
+  const onMapWheel = (event: WheelEvent<SVGSVGElement>) => {
+    event.preventDefault();
+    setZoom((current) => Math.max(1, Math.min(renderer.maxZoom, current + (event.deltaY < 0 ? 1 : -1))));
+  };
   const select = (event: MouseEvent<SVGSVGElement>) => {
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      return;
+    }
     const rect = event.currentTarget.getBoundingClientRect();
     const point = unproject(
       center,
@@ -191,8 +221,8 @@ export function AdminGeometryEditor(props: {
           <h3>{props.mode === "polygon" ? "Interactive boundary editor" : "Select radius center"}</h3>
           <p className="skima-muted">
             {props.mode === "polygon"
-              ? "Click the map to add vertices. Create another ring for a MultiPolygon."
-              : "Click the map to set the approved center point."}
+              ? "Drag to pan, scroll to zoom, and click to add boundary vertices. Create another ring for a MultiPolygon."
+              : "Drag to pan, scroll to zoom, and click to set the approved center point."}
           </p>
         </div>
         <div className="skima-action-row">
@@ -235,6 +265,11 @@ export function AdminGeometryEditor(props: {
           ? "Interactive polygon boundary map"
           : "Interactive radius center map"}
         onClick={select}
+        onPointerDown={onMapPointerDown}
+        onPointerMove={onMapPointerMove}
+        onPointerUp={onMapPointerUp}
+        onPointerCancel={onMapPointerUp}
+        onWheel={onMapWheel}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         style={{
           width: "100%",
@@ -242,7 +277,8 @@ export function AdminGeometryEditor(props: {
           border: "1px solid #ccd7dc",
           borderRadius: 16,
           background: "#eaf0f2",
-          cursor: "crosshair",
+          cursor: "grab",
+          touchAction: "none",
         }}
       >
         {layout.map((tile) => (
