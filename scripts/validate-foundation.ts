@@ -1230,8 +1230,6 @@ requireMatch(
   "Service-role operational access must be explicit for foundation tables.",
 );
 
-console.log("Foundation migration validation passed.");
-
 async function requireFile(path: string): Promise<void> {
   try {
     const fileInfo = await Deno.stat(path);
@@ -1261,6 +1259,9 @@ requireCondition(
   driverWalletSelfProvisioningMigration.includes("target_wallet_type = 'driver'") &&
     driverWalletSelfProvisioningMigration.includes("target_owner_entity_type = 'driver'") &&
     driverWalletSelfProvisioningMigration.includes("driver.user_id = auth.uid()") &&
-    driverWalletSelfProvisioningMigration.includes("driver.verification_status = 'approved'"),
+    driverWalletSelfProvisioningMigration.includes("driver.verification_status = 'approved'") &&
+    driverWalletSelfProvisioningMigration.includes("not public.has_permission('platform.wallets.manage', null)"),
   "An approved driver may provision only their own driver payout wallet; the generic platform wallet permission gate must remain in place.",
 );
+
+console.log("Foundation migration validation passed.");
