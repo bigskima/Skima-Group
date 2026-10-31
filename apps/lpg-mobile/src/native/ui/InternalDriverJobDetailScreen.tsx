@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useJobDetails } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
-import { ActionResponseSchema, displayStatus, displayTitle, firstNumber, firstString, nestedRecord, recordId } from "../api/records";
+import { ActionResponseSchema, displayStatus, displayTitle, firstNumber, firstString, nestedRecord } from "../api/records";
 import { readOperationalLocation } from "../device/location";
 import { openDeviceNavigation } from "../device/navigation";
 import { Scanner } from "../device/Scanner";
