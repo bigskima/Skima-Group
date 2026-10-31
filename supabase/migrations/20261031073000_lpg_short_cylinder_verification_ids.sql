@@ -69,6 +69,7 @@ begin
   new.cylinder_identifier := public.generate_lpg_cylinder_short_identifier();
 
   if previous_identifier is not null
+    and lower(previous_identifier) not in ('none', 'null', 'n/a', 'na', 'unknown')
     and upper(previous_identifier) <> new.cylinder_identifier then
     existing_aliases := existing_aliases || jsonb_build_array(previous_identifier);
   end if;
@@ -114,6 +115,7 @@ begin
         nullif(btrim(cylinder_row.public_reference), '')
       ]) as aliases(alias_value)
       where alias_value is not null
+        and lower(btrim(alias_value)) not in ('none', 'null', 'n/a', 'na', 'unknown')
         and upper(alias_value) <> next_identifier
     ) aliases;
 
