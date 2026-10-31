@@ -968,17 +968,44 @@ $old$;
         where execution.id = target_order.driver_commission_execution_id
           and execution.status = 'posted'
       ), target_order.driver_commission_amount),
-      'driverCommissionGrossAmount', (
-        select nullif(execution.metadata ->> 'gross_driver_earning_amount', '')::numeric
-        from public.commission_executions execution
-        where execution.id = target_order.driver_commission_execution_id
-          and execution.status = 'posted'
+      'driverCommissionGrossAmount', coalesce(
+        (
+          select nullif(execution.metadata ->> 'gross_driver_earning_amount', '')::numeric
+          from public.commission_executions execution
+          where execution.id = target_order.driver_commission_execution_id
+            and execution.status = 'posted'
+        ),
+        nullif((
+          select quote.breakdown ->> 'driverGrossPayout'
+          from public.lpg_refill_quotes quote
+          where quote.id = target_order.lpg_refill_quote_id
+        ), '')::numeric
       ),
-      'driverCommissionPlatformShareAmount', (
-        select nullif(execution.metadata ->> 'platform_driver_commission_amount', '')::numeric
-        from public.commission_executions execution
-        where execution.id = target_order.driver_commission_execution_id
-          and execution.status = 'posted'
+      'driverCommissionPlatformShareAmount', coalesce(
+        (
+          select nullif(execution.metadata ->> 'platform_driver_commission_amount', '')::numeric
+          from public.commission_executions execution
+          where execution.id = target_order.driver_commission_execution_id
+            and execution.status = 'posted'
+        ),
+        nullif((
+          select quote.breakdown ->> 'platformDriverCommission'
+          from public.lpg_refill_quotes quote
+          where quote.id = target_order.lpg_refill_quote_id
+        ), '')::numeric
+      ),
+      'driverCommissionPlatformPercent', coalesce(
+        (
+          select nullif(execution.metadata ->> 'platform_driver_commission_percent', '')::numeric
+          from public.commission_executions execution
+          where execution.id = target_order.driver_commission_execution_id
+            and execution.status = 'posted'
+        ),
+        nullif((
+          select quote.breakdown ->> 'platformDriverCommissionPercent'
+          from public.lpg_refill_quotes quote
+          where quote.id = target_order.lpg_refill_quote_id
+        ), '')::numeric
       ),
 $new$;
 begin
