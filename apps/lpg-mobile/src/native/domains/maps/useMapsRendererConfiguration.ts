@@ -40,7 +40,7 @@ export function useMapsRendererConfiguration(): MapsRendererConfiguration {
   const fallback: MapsRendererConfiguration = {
     tileTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
     attribution: "© OpenStreetMap contributors",
-    maxZoom: runtimeTile.maxZoom,
+    maxZoom: 19,
     defaultCenter: DEFAULT_MAP_CENTER,
     defaultZoom: 6,
     source: "safe_fallback",
