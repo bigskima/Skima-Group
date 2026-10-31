@@ -15,7 +15,7 @@ Deno.test("Station Managed drivers get a continuous scan tab while SKIMA Interna
   assertIncludes(list, 'router.push("/(station-driver)/scan"');
   assertIncludes(internal, 'actionKey: "lpg.station.start"');
   assertIncludes(internal, 'source: "skima.lpg.internal_mobile"');
-  assertIncludes(detail, "Station staff scan it at reception");
+  assertIncludes(detail, "station staff scan it at reception");
   assertIncludes(migration, "fulfillment_channel = 'skima_internal'");
 });
 
@@ -46,7 +46,7 @@ Deno.test("continuous LPG cylinder scanning matches only the signed-in actor's a
   assertIncludes(scanner, "setTimeout(() => setLocked(false), 1100)");
   assertIncludes(scanner, "Scan the same cylinder again");
   assertIncludes(jobDetail, 'actionKey: "lpg.station.start"');
-  assertIncludes(jobDetail, "Station staff scan it at reception");
+  assertIncludes(jobDetail, "station staff scan it at reception");
   assertIncludes(migration, "order_row.fulfillment_channel = 'skima_internal'");
 });
 
@@ -66,7 +66,7 @@ Deno.test("station quick operations preserve per-cylinder safety and per-order r
   assertIncludes(panel, "for (const row of enteredRows)");
   assertIncludes(panel, 'actionKey: "lpg.refill.start"');
   assertIncludes(panel, 'path: "/lpg/refills/confirm"');
-  assertIncludes(panel, "Each order is processed and settled independently.");
+  assertIncludes(panel, "Each order is confirmed separately. One failed order does not block the other entered refills.");
   assertIncludes(panel, "failures.push");
   assertIncludes(jobs, "StationBatchOperationsPanel");
 });
