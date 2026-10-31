@@ -136,7 +136,7 @@ jobs:
       - name: Set up Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.122.0
       - name: Start ephemeral local Supabase and apply schema migrations
         shell: bash
         run: |
