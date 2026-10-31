@@ -1347,9 +1347,9 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
   }
 
   if (routePath === "/lpg/stations/nearby" && request.method === "GET") {
-    const latitude = requireNumber(url.searchParams.get("latitude"), "latitude");
-    const longitude = requireNumber(url.searchParams.get("longitude"), "longitude");
-    const radiusMeters = optionalNumber(url.searchParams.get("radiusMeters"), "radiusMeters") ?? 25000;
+    const latitude = requireNumberQuery(url.searchParams.get("latitude"), "latitude");
+    const longitude = requireNumberQuery(url.searchParams.get("longitude"), "longitude");
+    const radiusMeters = optionalNumberQuery(url.searchParams.get("radiusMeters"), "radiusMeters") ?? 25000;
     const limit = optionalIntegerQuery(url.searchParams.get("limit")) ?? 30;
 
     if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
@@ -13166,6 +13166,27 @@ function optionalIntegerQuery(value: string | null): number | null {
   }
 
   return parsed;
+}
+
+function requireNumberQuery(value: string | null, fieldName: string): number {
+  if (value === null || value.trim().length === 0) {
+    throw new RequestValidationError(`${fieldName} must be a finite number.`);
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new RequestValidationError(`${fieldName} must be a finite number.`);
+  }
+
+  return parsed;
+}
+
+function optionalNumberQuery(value: string | null, fieldName: string): number | null {
+  if (value === null || value.trim().length === 0) {
+    return null;
+  }
+
+  return requireNumberQuery(value, fieldName);
 }
 
 function requireNumber(value: unknown, fieldName: string): number {
