@@ -751,7 +751,6 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
 
 function stationManagedDriverScanTypeForStatus(status: string): "customer_pickup" | "station_receipt" | "customer_delivery" | null {
   if (status === "pickup_en_route") return "customer_pickup";
-  if (status === "station_en_route") return "station_receipt";
   return ["return_en_route", "delivery_verification_pending"].includes(status) ? "customer_delivery" : null;
 }
 
@@ -767,7 +766,7 @@ function stationManagedDriverStageDescription(status: string) {
   if (status === "driver_accepted") return "Start the pickup route to the customer, then scan the cylinder to verify collection.";
   if (status === "pickup_en_route") return "Navigate to the customer and scan the cylinder after you collect it.";
   if (status === "pickup_verified") return "Pickup is verified. Start transit to your station and scan the cylinder when you arrive.";
-  if (status === "station_en_route") return "Head to your station. Scan the cylinder at reception so the station can begin safety checks and refill.";
+  if (status === "station_en_route") return "Head to your station and hand over the cylinder. Station staff scan it into the station queue.";
   if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is checking and refilling the cylinder. Wait until refill and settlement are complete.";
   if (status === "refill_confirmed") return "The refill is complete. The station must finish settlement and release the cylinder before the return leg.";
   if (status === "station_settled") return "The station has settled the refill. Start the return leg from My Deliveries, or wait for the station to complete its release scan.";
