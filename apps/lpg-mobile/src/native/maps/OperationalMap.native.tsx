@@ -54,7 +54,8 @@ export function OperationalMap({
     : [...points];
   const first = averageCoordinate(fitPoints) ?? (onSelectPoint ? mapRenderer.defaultCenter : null);
   const pointKey = fitPoints.map((point) => `${point.latitude}:${point.longitude}`).join("|");
-  const zoom = clamp(fitPoints.length ? initialZoom : mapRenderer.defaultZoom, minZoom, maxZoom);
+  const effectiveMaxZoom = Math.min(maxZoom, mapRenderer.maxZoom, 19);
+  const zoom = clamp(fitPoints.length ? initialZoom : mapRenderer.defaultZoom, minZoom, effectiveMaxZoom);
   const markers = useMemo(() => pointCollection(points), [points.map((point) => `${point.latitude}:${point.longitude}`).join("|")]);
   const route = useMemo(() => routeCollection(pathCoordinates), [pointKey]);
 
@@ -111,7 +112,7 @@ export function OperationalMap({
       >
         <Camera
           initialViewState={{ center: toLngLat(first ?? mapRenderer.defaultCenter), zoom, pitch: 0, bearing: 0 }}
-          maxZoom={maxZoom}
+          maxZoom={effectiveMaxZoom}
           minZoom={minZoom}
           ref={camera}
         />
@@ -219,6 +220,7 @@ function keylessRasterStyle(tileTemplate: string, attribution: string) {
         type: "raster" as const,
         tiles: [tileTemplate],
         tileSize: 256,
+        maxzoom: 19,
         attribution,
       },
     },
