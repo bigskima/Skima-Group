@@ -244,6 +244,15 @@ Deno.test("station, driver and customer operation queues avoid unbounded long sc
   assertIncludes(orders, "const ORDER_PAGE_SIZE = 8");
 });
 
+Deno.test("nearby station query coordinates parse URL strings before validation", async () => {
+  const gateway = await read("supabase/functions/api-gateway/index.ts");
+  assertIncludes(gateway, 'requireNumberQuery(url.searchParams.get("latitude"), "latitude")');
+  assertIncludes(gateway, 'requireNumberQuery(url.searchParams.get("longitude"), "longitude")');
+  assertIncludes(gateway, 'optionalNumberQuery(url.searchParams.get("radiusMeters"), "radiusMeters")');
+  assertIncludes(gateway, "const parsed = Number(value);");
+  assertIncludes(gateway, "Number.isFinite(parsed)");
+});
+
 Deno.test("nearby station discovery is location and service-radius authoritative", async () => {
   const [migration, gateway, domains, stationsScreen] = await Promise.all([
     read("supabase/migrations/20260907104500_lpg_customer_nearby_station_public_media.sql"),
