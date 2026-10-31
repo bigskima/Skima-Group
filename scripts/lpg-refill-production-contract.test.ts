@@ -253,6 +253,18 @@ Deno.test("nearby station query coordinates parse URL strings before validation"
   assertIncludes(gateway, "Number.isFinite(parsed)");
 });
 
+Deno.test("approved LPG application evidence is projected into entity dispatch compliance", async () => {
+  const migration = await read(
+    "supabase/migrations/20261031055130_lpg_application_compliance_evidence_projection.sql",
+  );
+  assertIncludes(migration, "create or replace function public.sync_application_compliance_evidence(");
+  assertIncludes(migration, "requirement_record.key = 'driver.lpg_approval'");
+  assertIncludes(migration, "document.status = 'approved'");
+  assertIncludes(migration, "sourceApplicationId");
+  assertIncludes(migration, "application_records_sync_dispatch_compliance");
+  assertIncludes(migration, "document_submissions_sync_dispatch_compliance");
+});
+
 Deno.test("nearby station discovery is location and service-radius authoritative", async () => {
   const [migration, gateway, domains, stationsScreen] = await Promise.all([
     read("supabase/migrations/20260907104500_lpg_customer_nearby_station_public_media.sql"),
@@ -271,6 +283,9 @@ Deno.test("nearby station discovery is location and service-radius authoritative
   assertIncludes(domains, "nearbyStations:");
   assertIncludes(stationsScreen, "domainQueries.nearbyStations(latitude, longitude)");
   assertNotIncludes(stationsScreen, "domainQueries.stations()");
+  assertIncludes(stationsScreen, 'useEntityMediaLinks("station", id)');
+  assertIncludes(stationsScreen, '"station.logo.public"');
+  assertIncludes(stationsScreen, "RuntimeMediaImage");
   assertIncludes(stationDetail, "domainQueries.nearbyStations(deliveryLatitude, deliveryLongitude)");
   assertIncludes(stationDetail, 'useEntityMediaLinks("station", station ? id : null)');
   assertNotIncludes(stationDetail, "domainQueries.stations()");
