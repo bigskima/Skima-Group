@@ -81,6 +81,10 @@ export function OperationalMap({
     focus(true);
   }, [focus]);
 
+  useEffect(() => {
+    if (expanded) focus(false);
+  }, [expanded, focus]);
+
   const renderMap = (fullscreen: boolean) => (
     <View style={[fullscreen ? styles.fullscreenMap : styles.frame, fullscreen ? { flex: 1 } : { height }]}>
       <Map
