@@ -5,6 +5,7 @@ export type FinanceWorkspace = "customer" | "driver" | "station";
 export function selectWorkspaceWallet(
   walletList: readonly PlatformRecord[],
   workspace: FinanceWorkspace,
+  ownerEntityId?: string | null,
 ): PlatformRecord | null {
   const active = walletList.filter(
     (wallet) => firstString(wallet, ["wallet_status", "status"]) !== "closed",
@@ -26,15 +27,14 @@ export function selectWorkspaceWallet(
     ) ?? null;
   }
 
+  if (!ownerEntityId) return null;
+
   return active.find(
     (wallet) =>
       firstString(wallet, ["wallet_type", "walletType"]) === "partner" &&
-      firstString(wallet, ["owner_entity_type", "ownerEntityType"]) === "organization",
-  ) ??
-    active.find(
-      (wallet) => firstString(wallet, ["wallet_type", "walletType"]) === "partner",
-    ) ??
-    null;
+      firstString(wallet, ["owner_entity_type", "ownerEntityType"]) === "organization" &&
+      firstString(wallet, ["owner_entity_id", "ownerEntityId"]) === ownerEntityId,
+  ) ?? null;
 }
 
 export function walletRecordId(wallet: PlatformRecord | null): string | null {
