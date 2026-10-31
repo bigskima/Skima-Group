@@ -109,9 +109,12 @@ describe("AdminSkimaFleetComplianceWorkspace document upload", () => {
     const file = new File(["roadworthiness evidence"], "roadworthiness.pdf", {
       type: "application/pdf",
     });
-    fireEvent.change(screen.getByLabelText("Document or image"), {
-      target: { files: [file] },
+    const fileInput = screen.getByLabelText("Document or image");
+    Object.defineProperty(fileInput, "files", {
+      configurable: true,
+      value: [file],
     });
+    fireEvent.change(fileInput);
     fireEvent.change(screen.getByLabelText("Admin review note"), {
       target: { value: "Checked current certificate against fleet records." },
     });
