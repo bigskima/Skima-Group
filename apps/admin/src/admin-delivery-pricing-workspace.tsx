@@ -25,6 +25,8 @@ const MoneyPolicyConfigurationSchema = z.object({
   per_km_amount: z.coerce.number().nonnegative().default(0),
   minimum_amount: z.coerce.number().nonnegative().default(0),
   load_amount_per_kg: z.coerce.number().nonnegative().default(0),
+  payout_basis: z.enum(["delivery_fee", "route_formula"]).default("delivery_fee"),
+  platform_commission_percent: z.coerce.number().min(0).max(100).default(10),
   distance_bands: z.array(z.record(z.unknown())).optional(),
 }).passthrough();
 
@@ -72,6 +74,8 @@ type PricingForm = {
   perKmAmount: string;
   minimumAmount: string;
   loadAmountPerKg: string;
+  payoutBasis: "delivery_fee" | "route_formula";
+  platformCommissionPercent: string;
   reason: string;
 };
 
@@ -118,7 +122,7 @@ const PRICING_SPECS: Record<PricingKind, PricingSpec> = {
     eyebrow: "Money · Driver pricing",
     title: "Driver Pricing",
     description:
-      "Set how SKIMA pays drivers for LPG logistics. Driver payout is independent of LPG product value and cannot exceed the customer delivery fee.",
+      "Set the independent driver's gross LPG delivery earning and SKIMA's percentage deduction from that earning. By default, the delivery fee is the gross driver earning; SKIMA keeps only the configured percentage. SKIMA Fleet and Station Managed payouts are handled separately.",
     editTitle: "Driver payout formula",
     pendingTitle: "Pending driver pricing proposals",
     pendingDescription: "Delegated finance admins can propose driver payout changes here. Super Admin edits apply immediately.",
@@ -135,6 +139,8 @@ const EMPTY_FORM: PricingForm = {
   perKmAmount: "0",
   minimumAmount: "0",
   loadAmountPerKg: "0",
+  payoutBasis: "delivery_fee",
+  platformCommissionPercent: "10",
   reason: "",
 };
 
@@ -198,6 +204,8 @@ function AdminMoneyPricingWorkspace(props: { readonly kind: PricingKind }) {
       perKmAmount: String(config.per_km_amount ?? 0),
       minimumAmount: String(config.minimum_amount ?? 0),
       loadAmountPerKg: String(config.load_amount_per_kg ?? 0),
+      payoutBasis: config.payout_basis === "route_formula" ? "route_formula" : "delivery_fee",
+      platformCommissionPercent: String(config.platform_commission_percent ?? 10),
       reason: existing.reason,
     }));
   }, [current.data?.policyVersionId]);
@@ -623,6 +631,35 @@ function AdminMoneyPricingWorkspace(props: { readonly kind: PricingKind }) {
                   disabled={!canEdit || isSaving}
                   required
                 />
+                {spec.kind === "driver" ? (
+                  <>
+                    <label className="skima-field">
+                      <span>Independent-driver gross payout basis</span>
+                      <select
+                        className="skima-input"
+                        name="driver-payout-basis"
+                        value={form.payoutBasis}
+                        onChange={(event) => updateField("payoutBasis", event.currentTarget.value as PricingForm["payoutBasis"])}
+                        disabled={!canEdit || isSaving}
+                      >
+                        <option value="delivery_fee">Full customer delivery fee</option>
+                        <option value="route_formula">Configured base + distance + load formula</option>
+                      </select>
+                    </label>
+                    <TextInput
+                      label="SKIMA commission from independent-driver gross earnings (%)"
+                      name="driver-platform-commission-percent"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={form.platformCommissionPercent}
+                      onChange={(event) => updateField("platformCommissionPercent", event.currentTarget.value)}
+                      disabled={!canEdit || isSaving}
+                      required
+                    />
+                  </>
+                ) : null}
               </div>
 
               <TextAreaInput
@@ -717,6 +754,8 @@ function buildConfiguration(
       base_amount: values.baseAmount,
       per_km_amount: values.perKmAmount,
       load_amount_per_kg: values.loadAmountPerKg,
+      payout_basis: values.payoutBasis,
+      platform_commission_percent: values.platformCommissionPercent,
     };
   }
 
@@ -738,12 +777,17 @@ function parseForm(spec: PricingSpec, form: PricingForm) {
     perKmAmount: Number(form.perKmAmount),
     minimumAmount: spec.showMinimumAmount ? Number(form.minimumAmount) : 0,
     loadAmountPerKg: Number(form.loadAmountPerKg),
+    payoutBasis: spec.kind === "driver" ? form.payoutBasis : "delivery_fee",
+    platformCommissionPercent: spec.kind === "driver" ? Number(form.platformCommissionPercent) : 10,
   };
 
   for (const [key, value] of Object.entries(values)) {
     if (!Number.isFinite(value) || value < 0) {
       throw new Error(`${normalizeStatusLabel(key)} must be zero or greater.`);
     }
+  }
+  if (spec.kind === "driver" && (values.platformCommissionPercent < 0 || values.platformCommissionPercent > 100)) {
+    throw new Error("SKIMA's independent-driver commission must be between 0% and 100%.");
   }
   return values;
 }
@@ -777,6 +821,8 @@ function formChanged(
   return values.baseAmount !== configuration.base_amount ||
     values.perKmAmount !== configuration.per_km_amount ||
     values.loadAmountPerKg !== configuration.load_amount_per_kg ||
+    (spec.kind === "driver" && values.payoutBasis !== (configuration.payout_basis ?? "delivery_fee")) ||
+    (spec.kind === "driver" && values.platformCommissionPercent !== (configuration.platform_commission_percent ?? 10)) ||
     (spec.showIncludedKm && values.includedKm !== configuration.included_km) ||
     (spec.showMinimumAmount && values.minimumAmount !== configuration.minimum_amount);
 }
@@ -786,7 +832,8 @@ function pricingSummary(spec: PricingSpec, configuration: MoneyPolicyConfigurati
     return (
       <>
         Base <strong>{money(configuration.base_amount)}</strong><br />
-        <small>{money(configuration.per_km_amount)}/km · {money(configuration.load_amount_per_kg)}/kg carried</small>
+        <small>{money(configuration.per_km_amount)}/km · {money(configuration.load_amount_per_kg)}/kg carried</small><br />
+        <small>{configuration.payout_basis === "route_formula" ? "Route formula" : "Full delivery fee"} · SKIMA commission {configuration.platform_commission_percent ?? 10}%</small>
       </>
     );
   }
