@@ -2639,7 +2639,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_latitude: optionalNumber(payload.latitude, "latitude"),
         target_longitude: optionalNumber(payload.longitude, "longitude"),
-        target_source: optionalString(payload.source) ?? "skima.lpg.continuous",
+        target_source: "skima.lpg.continuous",
         target_token: requireString(payload.token, "token"),
         target_workspace: requireString(payload.workspace, "workspace"),
       }),
