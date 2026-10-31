@@ -77,6 +77,10 @@ const KEYLESS_MAP_STYLE_URL = "https://demotiles.maplibre.org/style.json";
 const KEYLESS_ATTRIBUTION = "© OpenStreetMap contributors, © CARTO";
 const KEYLESS_OSM_ATTRIBUTION = "© OpenStreetMap contributors";
 
+/** Independent, credential-free fallback used after the configured tile host fails. */
+export const SAFE_FALLBACK_MAP_TILE_TEMPLATE = KEYLESS_OSM_TILE_TEMPLATE;
+export const SAFE_FALLBACK_MAP_ATTRIBUTION = KEYLESS_OSM_ATTRIBUTION;
+
 export function getMapsRuntimeConfig(): MapsRuntimeConfig {
   const tileMaxZoom = Number(process.env.EXPO_PUBLIC_MAP_TILE_MAX_ZOOM);
   const configuredProvider = readEnv("EXPO_PUBLIC_MAP_TILE_PROVIDER", "openstreetmap")
