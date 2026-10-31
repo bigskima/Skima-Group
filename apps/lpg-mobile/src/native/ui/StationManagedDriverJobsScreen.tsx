@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useState, type ReactNode } from "react";
-import { BriefcaseBusiness, CheckCircle2, Clock3, MapPin, Truck, UserRound } from "lucide-react-native";
+import { BriefcaseBusiness, CheckCircle2, Clock3, MapPin, QrCode, Truck, UserRound } from "lucide-react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -85,6 +85,7 @@ export function StationManagedDriverJobsScreen() {
             <Text style={[styles.muted, { color: palette.muted }]}>Pull down to refresh or wait for automatic updates.</Text>
           </View>
         </View>
+        <AppButton label="Scan next cylinder" fullWidth icon={<QrCode color="#FFFFFF" size={17} />} onPress={() => router.push("/(station-driver)/scan" as never)} />
 
         <View style={[styles.tabBar, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
           <Pressable
