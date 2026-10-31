@@ -26,7 +26,7 @@ const MoneyPolicyConfigurationSchema = z.object({
   minimum_amount: z.coerce.number().nonnegative().default(0),
   load_amount_per_kg: z.coerce.number().nonnegative().default(0),
   payout_basis: z.enum(["delivery_fee", "route_formula"]).default("delivery_fee"),
-  platform_commission_percent: z.coerce.number().min(0).max(100).default(10),
+  platform_commission_percent: z.coerce.number().min(0).max(99.99).default(10),
   distance_bands: z.array(z.record(z.unknown())).optional(),
 }).passthrough();
 
@@ -651,7 +651,7 @@ function AdminMoneyPricingWorkspace(props: { readonly kind: PricingKind }) {
                       name="driver-platform-commission-percent"
                       type="number"
                       min="0"
-                      max="100"
+                      max="99.99"
                       step="0.1"
                       value={form.platformCommissionPercent}
                       onChange={(event) => updateField("platformCommissionPercent", event.currentTarget.value)}
@@ -688,7 +688,7 @@ function AdminMoneyPricingWorkspace(props: { readonly kind: PricingKind }) {
 
               {spec.kind === "driver" ? (
                 <div className="admin-money-guardrail">
-                  Driver payout = base + route distance × per-km rate + requested kg × per-kg rate. The quote engine rejects a driver payout that is greater than the customer delivery fee.
+                  Independent drivers only: set gross earnings to either the full customer delivery fee or the configured base + route distance + load formula. SKIMA deducts the percentage above from those gross earnings; the remaining net amount is paid to the driver. SKIMA Fleet uses its own managed payout policy, and Station Managed drivers are paid by their station.
                 </div>
               ) : null}
 
@@ -787,7 +787,7 @@ function parseForm(spec: PricingSpec, form: PricingForm) {
     }
   }
   if (spec.kind === "driver" && (values.platformCommissionPercent < 0 || values.platformCommissionPercent > 100)) {
-    throw new Error("SKIMA's independent-driver commission must be between 0% and 100%.");
+    throw new Error("SKIMA's independent-driver commission must be between 0% and 99.99%.");
   }
   return values;
 }
