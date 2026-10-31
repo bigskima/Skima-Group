@@ -260,7 +260,7 @@ Deno.test("LPG permanent Cylinder IDs are unique five-character alphanumeric cod
   assertIncludes(scan, "five-character Cylinder ID");
   assertIncludes(scan, "Example: A7KQ4");
   assertNotIncludes(scan, "SKIMA-CYL-");
-  assertNotIncludes(scan, "CYL-”");
+  assertNotIncludes(scan, "CYL-000000");
   assertNotIncludes(identity, "Registry ref ·");
   assertNotIncludes(detail, "Registry ref ·");
 });
