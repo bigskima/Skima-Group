@@ -135,6 +135,8 @@ export function friendlyError(
     return "This is not the cylinder assigned to this job.";
   if (message.includes("scanned cylinder identity is required"))
     return "This cylinder code could not be read. Align the SKIMA code and scan again.";
+  if (message.includes("verified lpg delivery challenge is required"))
+    return "The customer has not confirmed delivery yet. Ask them to complete the in-app verification, then scan the same cylinder again.";
   if (message.includes("scan is not valid for the current order status"))
     return "This scan has already been completed or is not needed at this step.";
   if (message.includes("lpg order access permission") || message.includes("assigned driver is required"))
