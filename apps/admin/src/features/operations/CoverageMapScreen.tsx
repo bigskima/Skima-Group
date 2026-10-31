@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layers3, MapPinned, RefreshCcw } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState, type PointerEvent, type WheelEvent } from "react";
 import { z } from "zod";
 
 import {
@@ -138,6 +138,8 @@ export function CoverageMapScreen() {
 
 function CoverageGeometryMap(props: { readonly features: CoverageMapFeature[]; readonly truncated: boolean }) {
   const [hiddenLayers, setHiddenLayers] = useState<string[]>([]);
+  const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
+  const drag = useRef<{ pointerId: number; x: number; y: number; startX: number; startY: number } | null>(null);
   const layerNames = [...new Set(props.features.map((feature) => feature.properties.layer))];
   const visibleFeatures = props.features.filter((feature) => !hiddenLayers.includes(feature.properties.layer));
   const points = visibleFeatures.flatMap((feature) => geometryPoints(feature.geometry.coordinates));
@@ -149,6 +151,31 @@ function CoverageGeometryMap(props: { readonly features: CoverageMapFeature[]; r
   const toggleLayer = (layer: string) => setHiddenLayers((current) =>
     current.includes(layer) ? current.filter((item) => item !== layer) : [...current, layer]
   );
+  const onMapPointerDown = (event: PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0) return;
+    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, startX: view.x, startY: view.y };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const onMapPointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    const current = drag.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setView((value) => ({
+      ...value,
+      x: current.startX + (event.clientX - current.x) * 900 / Math.max(rect.width, 1),
+      y: current.startY + (event.clientY - current.y) * 460 / Math.max(rect.height, 1),
+    }));
+  };
+  const onMapPointerUp = (event: PointerEvent<SVGSVGElement>) => {
+    if (drag.current?.pointerId === event.pointerId) drag.current = null;
+  };
+  const onMapWheel = (event: WheelEvent<SVGSVGElement>) => {
+    event.preventDefault();
+    setView((value) => ({
+      ...value,
+      scale: Math.max(0.65, Math.min(5, value.scale * (event.deltaY < 0 ? 1.15 : 0.87))),
+    }));
+  };
 
   if (!points.length) {
     return (
@@ -176,9 +203,27 @@ function CoverageGeometryMap(props: { readonly features: CoverageMapFeature[]; r
     <section className="sk-panel coverage-v2__map-panel">
       <div className="sk-panel__header"><div><h2>Effective coverage layers</h2><p className="skima-muted">Toggle layers to isolate service policy, partner coverage or recent location evidence.</p></div>{props.truncated ? <StatusBadge tone="warning">Too many items — narrow filters</StatusBadge> : null}</div>
       <LayerControls layers={layerNames} hiddenLayers={hiddenLayers} onToggle={toggleLayer} />
-      <svg role="img" aria-label="Effective SKIMA service and operational coverage" viewBox="0 0 900 460" className="coverage-v2__map-svg">
+      <div className="coverage-v2__layer-controls" aria-label="Map navigation">
+        <Button size="sm" variant="outline" onClick={() => setView((value) => ({ ...value, scale: Math.max(0.65, value.scale / 1.2) }))}>Zoom out</Button>
+        <Button size="sm" variant="outline" onClick={() => setView((value) => ({ ...value, scale: Math.min(5, value.scale * 1.2) }))}>Zoom in</Button>
+        <Button size="sm" variant="outline" onClick={() => setView({ x: 0, y: 0, scale: 1 })}>Reset map</Button>
+        <span className="skima-muted">Drag to pan · Scroll to zoom</span>
+      </div>
+      <svg
+        role="img"
+        aria-label="Interactive SKIMA service and operational coverage map"
+        viewBox="0 0 900 460"
+        className="coverage-v2__map-svg"
+        onPointerDown={onMapPointerDown}
+        onPointerMove={onMapPointerMove}
+        onPointerUp={onMapPointerUp}
+        onPointerCancel={onMapPointerUp}
+        onWheel={onMapWheel}
+        style={{ touchAction: "none", cursor: "grab" }}
+      >
         <defs><pattern id="coverage-v2-grid" width="45" height="45" patternUnits="userSpaceOnUse"><path d="M 45 0 L 0 0 0 45" fill="none" stroke="#dce4e7" strokeWidth="1" /></pattern></defs>
         <rect width="900" height="460" fill="url(#coverage-v2-grid)" />
+        <g transform={`translate(${view.x} ${view.y}) translate(450 230) scale(${view.scale}) translate(-450 -230)`}>
         {visibleFeatures.map((feature) => feature.geometry.type === "Point"
           ? <MapEvidencePoint key={`${feature.properties.layer}:${feature.id}`} feature={feature} project={project} />
           : <path
@@ -190,6 +235,7 @@ function CoverageGeometryMap(props: { readonly features: CoverageMapFeature[]; r
               strokeDasharray={feature.properties.layer === "REQUESTED_COVERAGE" ? "8 5" : undefined}
               fillRule="evenodd"
             ><title>{feature.properties.name} — {friendlyLayer(feature.properties.layer)}</title></path>)}
+        </g>
       </svg>
       <p className="skima-muted">Recent driver locations are only returned when your admin permissions allow tracking evidence.</p>
     </section>
