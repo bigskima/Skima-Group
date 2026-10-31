@@ -271,8 +271,13 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
         ),
         source: "skima.lpg.continuous",
       });
-      const completedScanType = result && typeof result === "object"
-        ? firstString(result, ["scanType"]) ?? driverScanType
+      const responseScanType = result && typeof result === "object"
+        ? firstString(result, ["scanType"])
+        : null;
+      const completedScanType = responseScanType === "customer_pickup"
+          || responseScanType === "station_receipt"
+          || responseScanType === "customer_delivery"
+        ? responseScanType
         : driverScanType;
       setToken("");
       setNoticeSuccess(true);
