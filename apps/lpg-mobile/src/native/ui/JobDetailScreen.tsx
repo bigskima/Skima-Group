@@ -962,7 +962,11 @@ function friendlyJobStatus(value: string) {
   return labels[normalized] ?? normalized.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
-function driverWorkspaceForDelivery(workspace: "driver" | "station" | "station_driver") {\n  return workspace === "driver" || workspace === "station_driver";\n}\n\nfunction driverStageDescription(status: string, deliveryChallengeVerified = false) {
+function driverWorkspaceForDelivery(workspace: "driver" | "station" | "station_driver") {
+  return workspace === "driver" || workspace === "station_driver";
+}
+
+function driverStageDescription(status: string, deliveryChallengeVerified = false) {
   if (["driver_offered", "driver_accepted"].includes(status)) return "This order has been assigned to you.";
   if (["pickup_en_route"].includes(status)) return "Navigate to the customer and verify the cylinder before taking custody.";
   if (["pickup_verified", "station_en_route"].includes(status)) return "Take the verified cylinder to the assigned station. Station staff scan it at reception.";
