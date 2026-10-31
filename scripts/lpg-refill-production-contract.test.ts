@@ -641,7 +641,7 @@ Deno.test("admin location and coverage workflows keep physical dispatch gates in
 
 
 Deno.test("verified LPG customer hand-over advances the order and invokes the existing payout trigger", async () => {
-  const migration = await read("supabase/migrations/20261031120000_lpg_delivery_otp_completion_and_payout_bridge.sql");
+  const migration = await read("supabase/migrations/20261031171508_lpg_delivery_otp_completion_and_payout_bridge.sql");
   const verification = await read("apps/lpg-mobile/src/native/ui/DeliveryVerificationScreen.tsx");
   assertIncludes(migration, "order_record.delivery_challenge_id is distinct from target_challenge_id");
   assertIncludes(migration, "set status = 'delivered'");
@@ -734,8 +734,8 @@ Deno.test("SKIMA Managed driver detail is split into progressive workflow sectio
 
 
 Deno.test("independent driver earnings are split into gross, SKIMA commission and net without mixing fulfilment ownership", async () => {
-  const payout = await read("supabase/migrations/20261031113000_lpg_independent_driver_payout_commission_split.sql");
-  const delivery = await read("supabase/migrations/20261031120000_lpg_delivery_otp_completion_and_payout_bridge.sql");
+  const payout = await read("supabase/migrations/20261031171501_lpg_independent_driver_payout_commission_split.sql");
+  const delivery = await read("supabase/migrations/20261031171508_lpg_delivery_otp_completion_and_payout_bridge.sql");
   const admin = await read("apps/admin/src/admin-delivery-pricing-workspace.tsx");
   const driverJob = await read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx");
 
