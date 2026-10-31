@@ -470,6 +470,13 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
 
           {workspace === "station" ? <StationProgress status={status} /> : null}
 
+          {driverWorkspace && ["pickup_verified", "station_en_route"].includes(status) ? (
+            <InfoNotice
+              icon={<CheckCircle2 color={palette.success} size={19} />}
+              text="Pickup is recorded. Hand the cylinder to the assigned station; station staff scan it at reception. You do not need another driver scan."
+            />
+          ) : null}
+
           {workspace === "station" && status === "station_verified" ? (
             <InfoNotice
               icon={<CheckCircle2 color={palette.success} size={19} />}
@@ -859,7 +866,6 @@ function usesDeliveryContact(status: string) {
 
 function driverScanTypeForStatus(status: string): "customer_pickup" | "station_receipt" | "customer_delivery" | null {
   if (["driver_accepted", "pickup_en_route"].includes(status)) return "customer_pickup";
-  if (["pickup_verified", "station_en_route"].includes(status)) return "station_receipt";
   if (["return_en_route", "delivery_verification_pending"].includes(status)) return "customer_delivery";
   return null;
 }
@@ -946,7 +952,7 @@ function friendlyJobStatus(value: string) {
 function driverStageDescription(status: string) {
   if (["driver_offered", "driver_accepted"].includes(status)) return "This order has been assigned to you.";
   if (["pickup_en_route"].includes(status)) return "Navigate to the customer and verify the cylinder before taking custody.";
-  if (["pickup_verified", "station_en_route"].includes(status)) return "Take the verified cylinder to the assigned station and scan it at reception.";
+  if (["pickup_verified", "station_en_route"].includes(status)) return "Take the verified cylinder to the assigned station. Station staff scan it at reception.";
   if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is processing the verified refill.";
   if (["refill_confirmed", "station_settled", "return_en_route"].includes(status)) return "The filled cylinder is ready to return to the customer.";
   if (status === "delivery_verification_pending") return "The customer must complete delivery verification before the final cylinder scan.";
