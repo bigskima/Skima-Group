@@ -1,3 +1,51 @@
+Deno.test("continuous LPG cylinder scanning matches only the signed-in actor's active assigned order", async () => {
+  const [migration, gateway, scanScreen, scanner, jobDetail] = await Promise.all([
+    read("supabase/migrations/20261031090000_lpg_simple_batch_operations_runtime.sql"),
+    read("supabase/functions/api-gateway/index.ts"),
+    read("apps/lpg-mobile/src/native/ui/ScanWorkspaceScreen.tsx"),
+    read("apps/lpg-mobile/src/native/device/Scanner.tsx"),
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+  ]);
+  assertIncludes(migration, "public.record_lpg_cylinder_scan_for_active_job");
+  assertIncludes(migration, "auth.uid()");
+  assertIncludes(migration, "public.user_can_operate_lpg_station_branch");
+  assertIncludes(migration, "public.is_lpg_station_managed_order_driver");
+  assertIncludes(migration, "public.hash_lpg_cylinder_tag_credential");
+  assertIncludes(migration, "legacyCylinderIdentifiers");
+  assertIncludes(migration, "public.record_lpg_cylinder_scan(");
+  assertIncludes(migration, "public.process_lpg_order_action(");
+  assertIncludes(migration, "'lpg.pickup.start'");
+  assertIncludes(migration, "'lpg.station.start'");
+  assertIncludes(gateway, '"/lpg/scans/continuous"');
+  assertIncludes(gateway, 'supabase.rpc("record_lpg_cylinder_scan_for_active_job"');
+  assertIncludes(scanScreen, 'path: "/lpg/scans/continuous"');
+  assertIncludes(scanScreen, "Scan next cylinder");
+  assertIncludes(scanScreen, "automatically finds the matching active order");
+  assertIncludes(scanner, "continuous?: boolean");
+  assertIncludes(scanner, "setTimeout(() => setLocked(false), 1100)");
+  assertIncludes(jobDetail, 'actionKey: "lpg.station.start"');
+});
+
+Deno.test("station quick operations preserve per-cylinder safety and per-order refill settlement", async () => {
+  const [migration, panel, jobs] = await Promise.all([
+    read("supabase/migrations/20261031090000_lpg_simple_batch_operations_runtime.sql"),
+    read("apps/lpg-mobile/src/native/ui/StationBatchOperationsPanel.tsx"),
+    read("apps/lpg-mobile/src/native/ui/JobListScreen.tsx"),
+  ]);
+  assertIncludes(migration, "'latestInspectionResult'");
+  assertIncludes(migration, "latest_inspection.result");
+  assertIncludes(panel, 'path: "/lpg/inspections"');
+  assertIncludes(panel, 'result,');
+  assertIncludes(panel, 'result === "safe"');
+  assertIncludes(panel, 'result === "manual_review"');
+  assertIncludes(panel, "for (const row of enteredRows)");
+  assertIncludes(panel, 'actionKey: "lpg.refill.start"');
+  assertIncludes(panel, 'path: "/lpg/refills/confirm"');
+  assertIncludes(panel, "Each order is processed and settled independently.");
+  assertIncludes(panel, "failures.push");
+  assertIncludes(jobs, "StationBatchOperationsPanel");
+});
+
 const root = new URL("../", import.meta.url);
 const read = (path: string) => Deno.readTextFile(new URL(path, root));
 
