@@ -38,8 +38,8 @@ export function useMapsRendererConfiguration(): MapsRendererConfiguration {
   const runtimeTile = getMapsRuntimeConfig().tile;
 
   const fallback: MapsRendererConfiguration = {
-    tileTemplate: runtimeTile.rasterTileTemplate,
-    attribution: runtimeTile.attribution,
+    tileTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: "© OpenStreetMap contributors",
     maxZoom: runtimeTile.maxZoom,
     defaultCenter: DEFAULT_MAP_CENTER,
     defaultZoom: 6,
