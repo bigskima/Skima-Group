@@ -27,9 +27,9 @@ begin
   end if;
 
   select * into current_version
-  from public.financial_policy_versions
-  where policy_definition_id = definition_record.id
-    and currency_code = 'NGN'
+  from public.financial_policy_versions version
+  where version.policy_definition_id = definition_record.id
+    and version.currency_code = 'NGN'
     and version.module_id is not distinct from target_module_id
     and service_key = 'lpg.refill.delivery'
     and organization_id is null
