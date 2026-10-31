@@ -664,8 +664,8 @@ Deno.test("customer live tracking renders the current driver marker separately f
   assertIncludes(tracking, "routeCoordinates={driverPath}");
   assertIncludes(tracking, "const mapped = [...(latestDriver ? [latestDriver] : [])");
   assertIncludes(tracking, "!Number.isFinite(recordedAt)");
-  assertIncludes(webMap, "routeCoordinates: readonly");
-  assertIncludes(nativeMap, "routeCoordinates: readonly");
+  assertIncludes(webMap, "routeCoordinates?: readonly");
+  assertIncludes(nativeMap, "routeCoordinates?: readonly");
   assertIncludes(webMap, "Open full-screen map");
   assertIncludes(nativeMap, "Open full-screen map");
 });
