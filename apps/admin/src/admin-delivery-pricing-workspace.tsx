@@ -782,11 +782,11 @@ function parseForm(spec: PricingSpec, form: PricingForm) {
   };
 
   for (const [key, value] of Object.entries(values)) {
-    if (!Number.isFinite(value) || value < 0) {
+    if (typeof value === "number" && (!Number.isFinite(value) || value < 0)) {
       throw new Error(`${normalizeStatusLabel(key)} must be zero or greater.`);
     }
   }
-  if (spec.kind === "driver" && (values.platformCommissionPercent < 0 || values.platformCommissionPercent > 100)) {
+  if (spec.kind === "driver" && (values.platformCommissionPercent < 0 || values.platformCommissionPercent > 99.99)) {
     throw new Error("SKIMA's independent-driver commission must be between 0% and 99.99%.");
   }
   return values;
