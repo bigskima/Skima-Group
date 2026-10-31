@@ -140,5 +140,6 @@ export const stationTabs = [
 export const stationDriverTabs = [
   { name: "index", title: "Today", icon: Home },
   { name: "jobs", title: "Deliveries", icon: BriefcaseBusiness },
+  { name: "scan", title: "Scan", icon: QrCode },
   { name: "account", title: "Account", icon: CircleUserRound },
 ] as const;
