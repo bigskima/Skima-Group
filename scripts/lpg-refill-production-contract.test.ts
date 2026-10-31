@@ -638,3 +638,153 @@ Deno.test("admin location and coverage workflows keep physical dispatch gates in
   assertNotIncludes(driverCutoverMigration, "from public.driver_service_areas");
 });
 
+
+
+Deno.test("verified LPG customer hand-over advances the order and invokes the existing payout trigger", async () => {
+  const migration = await read("supabase/migrations/20261031120000_lpg_delivery_otp_completion_and_payout_bridge.sql");
+  const verification = await read("apps/lpg-mobile/src/native/ui/DeliveryVerificationScreen.tsx");
+  assertIncludes(migration, "order_record.delivery_challenge_id is distinct from target_challenge_id");
+  assertIncludes(migration, "set status = 'delivered'");
+  assertIncludes(migration, "'lpg.delivery.completed'");
+  assertIncludes(migration, "target_idempotency_key || ':delivery-completed'");
+  assertIncludes(migration, "public.lpg_delivery_challenge_is_verified");
+  assertIncludes(migration, "previously_verified_customer_otp");
+  assertIncludes(migration, "station_settlement_execution_id is not null");
+  assertIncludes(migration, "for update");
+  assertIncludes(migration, "lpg-delivery-otp-completion-backfill:");
+  assertIncludes(migration, "verified_order.fulfillment_mode = 'independent_driver'");
+  assertIncludes(migration, "verified_order.fulfillment_channel = 'marketplace'");
+  assertNotIncludes(migration, "set driver_commission_amount");
+  assertIncludes(verification, "const refreshed = await details.refetch()");
+  assertIncludes(verification, '["delivered", "completed"].includes(finalStatus ?? "")');
+  assertIncludes(verification, "deliveryChallengeVerified");
+});
+
+Deno.test("customer live tracking renders the current driver marker separately from the chronological route", async () => {
+  const tracking = await read("apps/lpg-mobile/src/native/ui/LiveTrackingScreen.tsx");
+  const webMap = await read("apps/lpg-mobile/src/native/maps/OperationalMap.web.tsx");
+  const nativeMap = await read("apps/lpg-mobile/src/native/maps/OperationalMap.native.tsx");
+  assertIncludes(tracking, "const latestDriver = driverPath.at(-1)");
+  assertIncludes(tracking, "useMapsGatewayAdapter()");
+  assertIncludes(tracking, "mapsGateway.routeEstimate.mutateAsync");
+  assertIncludes(tracking, "readRouteCoordinates(estimate.routeGeometry)");
+  assertIncludes(tracking, "routeCoordinates={roadRoute?.coordinates ?? driverPath}");
+  assertIncludes(tracking, "customer-live-road-route");
+  assertIncludes(tracking, "const mapped = [...(latestDriver ? [latestDriver] : [])");
+  assertIncludes(tracking, "!Number.isFinite(recordedAt)");
+  assertIncludes(webMap, "routeCoordinates?: readonly");
+  assertIncludes(nativeMap, "routeCoordinates?: readonly");
+  assertIncludes(webMap, "Open full-screen map");
+  assertIncludes(nativeMap, "Open full-screen map");
+  assertNotIncludes(webMap, "Map tiles are temporarily unavailable");
+  assertNotIncludes(webMap, "tileFailure");
+});
+
+Deno.test("driver job detail is progressive rather than one long single-page workflow", async () => {
+  const job = await read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx");
+  assertIncludes(job, 'useState<"overview" | "route" | "actions" | "details">("overview")');
+  assertIncludes(job, 'driverSection === "overview"');
+  assertIncludes(job, 'driverSection === "route"');
+  assertIncludes(job, 'driverSection === "actions"');
+  assertIncludes(job, 'driverSection === "details"');
+  assertIncludes(job, 'accessibilityRole="tablist"');
+  assertIncludes(job, "Open route and navigation");
+});
+
+
+
+Deno.test("verified OTP orders can resume delivery completion without requesting a second code", async () => {
+  const verification = await read("apps/lpg-mobile/src/native/ui/DeliveryVerificationScreen.tsx");
+  const feedback = await read("apps/lpg-mobile/src/native/ui/OrderFeedbackScreen.tsx");
+  const mapRuntime = await read("apps/lpg-mobile/src/native/domains/maps/index.ts");
+  const rendererHook = await read("apps/lpg-mobile/src/native/domains/maps/useMapsRendererConfiguration.ts");
+  const nativeMap = await read("apps/lpg-mobile/src/native/maps/OperationalMap.native.tsx");
+  const webMap = await read("apps/lpg-mobile/src/native/maps/OperationalMap.web.tsx");
+
+  assertIncludes(verification, '["deliveryChallengeId", "delivery_challenge_id"]');
+  assertIncludes(verification, "currentChallengeVerified");
+  assertIncludes(verification, "delivery-finalize-verified");
+  assertIncludes(verification, 'canFinalizeVerifiedChallenge ? "0000" : code.trim()');
+  assertIncludes(verification, 'label={canFinalizeVerifiedChallenge ? "Finish delivery" : "Confirm delivery"}');
+  assertIncludes(feedback, "Finish delivery confirmation");
+  assertIncludes(feedback, "orders/\${orderId}/verify");
+  assertIncludes(mapRuntime, "clamp(Math.round(tileMaxZoom), 1, 19)");
+  assertIncludes(rendererHook, "Math.min(configuration.max_zoom ?? runtimeTile.maxZoom, runtimeTile.maxZoom, 19)");
+  assertIncludes(nativeMap, "maxzoom: 19");
+  assertIncludes(nativeMap, "TransformRequestManager.addHeader");
+  assertIncludes(nativeMap, "SKIMA-LPG/1.0");
+  assertIncludes(webMap, "Math.min(maxZoom ?? providerTileMaxZoom, providerTileMaxZoom, 19)");
+});
+
+
+Deno.test("SKIMA Managed driver detail is split into progressive workflow sections", async () => {
+  const internal = await read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx");
+  assertIncludes(internal, 'useState<"overview" | "route" | "actions" | "refill" | "details">("overview")');
+  assertIncludes(internal, 'accessibilityRole="tablist"');
+  assertIncludes(internal, 'section === "overview"');
+  assertIncludes(internal, 'section === "route"');
+  assertIncludes(internal, 'section === "actions"');
+  assertIncludes(internal, 'section === "refill"');
+  assertIncludes(internal, 'section === "details"');
+  assertIncludes(internal, "draftStore.load");
+  assertIncludes(internal, "draftStore.save");
+  assertIncludes(internal, "confirmInternalRefill");
+  assertIncludes(internal, "submitScan");
+});
+
+
+Deno.test("independent driver earnings are split into gross, SKIMA commission and net without mixing fulfilment ownership", async () => {
+  const payout = await read("supabase/migrations/20261031113000_lpg_independent_driver_payout_commission_split.sql");
+  const delivery = await read("supabase/migrations/20261031120000_lpg_delivery_otp_completion_and_payout_bridge.sql");
+  const admin = await read("apps/admin/src/admin-delivery-pricing-workspace.tsx");
+  const driverJob = await read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx");
+
+  // The accepted quote must distinguish gross earning, the platform deduction,
+  // the net payout and any separate logistics margin.
+  assertIncludes(payout, "platform_commission_percent");
+  assertIncludes(payout, "payout_basis");
+  assertIncludes(payout, "gross_driver_payout := customer_delivery_fee");
+  assertIncludes(payout, "platform_driver_commission := round(gross_driver_payout * platform_commission_percent / 100, 2)");
+  assertIncludes(payout, "driver_payout := round(gross_driver_payout - platform_driver_commission, 2)");
+  assertIncludes(payout, "logistics_margin := round(customer_delivery_fee - gross_driver_payout, 2)");
+  assertIncludes(payout, "'revenue_stream', 'driver_commission'");
+  assertIncludes(payout, "'driver_commission', independent_driver_commission_amount");
+
+  // Only independent marketplace fulfilment receives this percentage split.
+  assertIncludes(payout, "order_record.fulfillment_mode = 'independent_driver'");
+  assertIncludes(payout, "order_record.fulfillment_channel = 'marketplace'");
+  assertIncludes(payout, "Station Managed drivers are paid by their station");
+  assertIncludes(payout, "SKIMA Fleet/Managed work uses its own payout/settlement policy");
+
+  // A legacy zero-rate order is corrected from previously classified SKIMA
+  // revenue as a separate, auditable adjustment; snapshots are not rewritten.
+  assertIncludes(payout, "legacy_zero_payout_correction");
+  assertIncludes(payout, "driver_payout_correction");
+  assertIncludes(payout, "gross_driver_earning_amount");
+  assertIncludes(delivery, "target_source = 'lpg.wallet_engine'");
+  assertIncludes(delivery, "verified_order.id::text = target_metadata ->> 'lpg_order_id'");
+  assertIncludes(delivery, "verified_order.metadata ->> 'platform_revenue_classification_transaction_id' is not null");
+  assertIncludes(delivery, "public.lpg_delivery_challenge_is_verified");
+
+  // Admin configuration and the Driver screen both expose the policy-driven
+  // split; client code reads amounts, it never invents a commission.
+  assertIncludes(admin, "platform_commission_percent");
+  assertIncludes(admin, "payout_basis");
+  assertIncludes(admin, "SKIMA commission from independent-driver gross earnings (%)");
+  assertIncludes(driverJob, "Gross delivery earning");
+  assertIncludes(driverJob, "SKIMA commission (");
+  assertIncludes(driverJob, "Your net driver payout");
+  assertIncludes(driverJob, 'payoutFulfillmentMode === "independent_driver"');
+});
+
+
+
+Deno.test("Admin maps integration exposes the active geocoder and road router independently", async () => {
+  const adminLocation = await read("apps/admin/src/features/platform/PlatformLocationIntegrationScreen.tsx");
+  assertIncludes(adminLocation, "activeGeocoderKey");
+  assertIncludes(adminLocation, "activeRouterKey");
+  assertIncludes(adminLocation, 'label="Active geocoder"');
+  assertIncludes(adminLocation, 'label="Active road router"');
+  assertIncludes(adminLocation, "/admin/maps/location/status");
+});
+

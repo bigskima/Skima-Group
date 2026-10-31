@@ -3,6 +3,7 @@ import type { MapPoint } from "../domains/maps";
 export type { MapPoint } from "../domains/maps";
 export interface OperationalMapProps {
   points: readonly MapPoint[];
+  routeCoordinates?: readonly { latitude: number; longitude: number }[];
   connectPoints?: boolean;
   height?: number;
   initialZoom?: number;

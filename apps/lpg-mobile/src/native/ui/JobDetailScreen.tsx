@@ -12,7 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { domainQueries, useJobDetails } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import {
@@ -60,6 +60,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const [inspectionNotes, setInspectionNotes] = useState("");
   const [stationTrackingOrderId, setStationTrackingOrderId] = useState<string | null>(null);
   const [stationTrackingBusy, setStationTrackingBusy] = useState(false);
+  const [driverSection, setDriverSection] = useState<"overview" | "route" | "actions" | "details">("overview");
 
   useEffect(() => {
     if (params.scannedToken) setToken(params.scannedToken);
@@ -250,6 +251,21 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const orderDisplayReference = order
     ? (firstString(order, ["public_reference", "publicReference", "reference"]) ?? displayTitle(order))
     : "Not available";
+  const orderMetadata = nestedRecord(order, "metadata");
+  const payoutFulfillmentMode = firstString(order, ["fulfillmentMode", "fulfillment_mode"])
+    ?? firstString(orderMetadata, ["fulfillmentMode", "fulfillment_mode"])
+    ?? "independent_driver";
+  const payoutFulfillmentChannel = firstString(order, ["fulfillmentChannel", "fulfillment_channel"])
+    ?? firstString(orderMetadata, ["fulfillmentChannel", "fulfillment_channel"])
+    ?? "marketplace";
+  const showIndependentDriverPayout = workspace === "driver"
+    && payoutFulfillmentMode === "independent_driver"
+    && payoutFulfillmentChannel === "marketplace";
+  const driverGrossEarningAmount = firstNumber(order, ["driverCommissionGrossAmount", "driver_commission_gross_amount"]);
+  const driverPlatformCommissionAmount = firstNumber(order, ["driverCommissionPlatformShareAmount", "driver_commission_platform_share_amount"]);
+  const driverPlatformCommissionPercent = firstNumber(order, ["driverCommissionPlatformPercent", "driver_commission_platform_percent"]);
+  const driverNetEarningAmount = firstNumber(order, ["driverCommissionAmount", "driver_commission_amount"]);
+  const payoutCurrencyCode = firstString(order, ["currencyCode", "currency_code"]) ?? "NGN";
 
   const submitDriverScan = async () => {
     if (!id || !token || !driverScanType) return;
@@ -461,7 +477,49 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             }
           />
 
-          {driverWorkspace && routePoints.length ? (
+          {driverWorkspace ? (
+            <View accessibilityRole="tablist" style={[styles.driverSectionSwitcher, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+              {[
+                ["overview", "Overview"],
+                ["route", "Route"],
+                ["actions", "Actions"],
+                ["details", "Details"],
+              ].map(([key, label]) => {
+                const selected = driverSection === key;
+                return (
+                  <Pressable
+                    key={key}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected }}
+                    onPress={() => setDriverSection(key as "overview" | "route" | "actions" | "details")}
+                    style={[styles.driverSectionTab, { backgroundColor: selected ? palette.brand : "transparent", borderColor: selected ? palette.brand : "transparent" }]}
+                  >
+                    <Text style={[styles.driverSectionTabText, { color: selected ? "#FFFFFF" : palette.mutedStrong }]}>{label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {driverWorkspace && driverSection === "overview" ? (
+            <View style={[styles.nextStepCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <Text style={[styles.nextStepEyebrow, { color: palette.muted }]}>YOUR NEXT STEP</Text>
+              <Text style={[styles.nextStepTitle, { color: palette.ink }]}>{friendlyJobStatus(status)}</Text>
+              <Text style={[styles.nextStepBody, { color: palette.muted }]}>
+                {workspace === "station_driver"
+                  ? stationManagedDriverStageDescription(status)
+                  : driverStageDescription(status, deliveryChallengeVerified)}
+              </Text>
+              <AppButton
+                label={navigationTarget ? "Open route and navigation" : "Open job actions"}
+                fullWidth
+                variant="secondary"
+                onPress={() => setDriverSection(navigationTarget ? "route" : "actions")}
+              />
+            </View>
+          ) : null}
+
+          {driverWorkspace && driverSection === "route" && routePoints.length ? (
             <View style={[styles.mapShell, shadows.soft]}>
               <OperationalMap points={routePoints} height={390} />
             </View>
@@ -469,7 +527,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
 
           {workspace === "station" ? <StationProgress status={status} /> : null}
 
-          {driverWorkspace && ["pickup_verified", "station_en_route"].includes(status) ? (
+          {driverWorkspace && driverSection === "overview" && ["pickup_verified", "station_en_route"].includes(status) ? (
             <InfoNotice
               icon={<CheckCircle2 color={palette.success} size={19} />}
               text="Pickup is recorded. Hand the cylinder to the assigned station; station staff scan it at reception. You do not need another driver scan."
@@ -483,6 +541,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             />
           ) : null}
 
+          {(!driverWorkspace || driverSection === "details") ? (
           <View style={[styles.summaryCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <SummaryField label="Cylinder" value={cylinder ? displayTitle(cylinder) : "Not available"} />
             <Divider />
@@ -496,15 +555,42 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             {driverWorkspace && firstString(contactLocation, ["contactPhone", "contact_phone"]) ? <><Divider /><SummaryField label="Contact phone" value={firstString(contactLocation, ["contactPhone", "contact_phone"]) ?? "Not available"} /></> : null}
             {driverWorkspace && (firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"])) ? <><Divider /><SummaryField label="Contact email" value={firstString(contactLocation, ["contactEmail", "contact_email"]) ?? firstString(customer, ["email"]) ?? "Not available"} /></> : null}
           </View>
+          ) : null}
 
-          {driverWorkspace && (routeDistance !== null || routeDuration !== null) ? (
+          {showIndependentDriverPayout && driverSection === "details"
+            && driverGrossEarningAmount !== null && driverNetEarningAmount !== null ? (
+            <View style={[styles.summaryCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <Text style={[styles.sectionTitle, { color: palette.ink }]}>YOUR DELIVERY EARNINGS</Text>
+              <SummaryField
+                label="Gross delivery earning"
+                value={formatPayoutMoney(driverGrossEarningAmount, payoutCurrencyCode)}
+              />
+              <Divider />
+              <SummaryField
+                label={driverPlatformCommissionPercent === null
+                  ? "SKIMA commission"
+                  : `SKIMA commission (${driverPlatformCommissionPercent.toLocaleString()}%)`}
+                value={`−${formatPayoutMoney(driverPlatformCommissionAmount ?? Math.max(0, driverGrossEarningAmount - driverNetEarningAmount), payoutCurrencyCode)}`}
+              />
+              <Divider />
+              <SummaryField
+                label="Your net driver payout"
+                value={formatPayoutMoney(driverNetEarningAmount, payoutCurrencyCode)}
+              />
+              <Text style={[styles.infoNoticeText, { color: palette.muted }]}>
+                SKIMA deducts only its configured percentage from your gross delivery earning. The remaining amount is yours; this is separate from the LPG refill value and station settlement.
+              </Text>
+            </View>
+          ) : null}
+
+          {driverWorkspace && driverSection === "route" && (routeDistance !== null || routeDuration !== null) ? (
             <View style={styles.metricGrid}>
               <Metric icon={<MapPin color={palette.brand} size={19} />} label="Route distance" value={routeDistance !== null ? `${(routeDistance / 1000).toFixed(1)} km` : "Unavailable"} />
               <Metric icon={<Clock3 color={palette.brand} size={19} />} label="Estimated time" value={routeDuration !== null ? `${Math.ceil(routeDuration / 60)} min` : "Unavailable"} />
             </View>
           ) : null}
 
-          {driverWorkspace && navigationTarget ? (
+          {driverWorkspace && driverSection === "route" && navigationTarget ? (
             <AppButton
               label={`Navigate to ${navigationTarget.label.toLowerCase()}`}
               fullWidth
@@ -517,7 +603,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             />
           ) : null}
 
-          {driverWorkspace && driverAction ? (
+          {driverWorkspace && driverSection === "actions" && driverAction ? (
             <AppButton
               label={driverActionLabel(driverAction)}
               fullWidth
@@ -527,7 +613,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             />
           ) : null}
 
-          {canShareStationDriverLocation ? (
+          {canShareStationDriverLocation && driverSection === "actions" ? (
             <View style={[styles.trackingCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <View style={styles.sectionLead}>
                 <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><MapPin color={palette.brand} size={21} /></View>
@@ -549,7 +635,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             </View>
           ) : null}
 
-          {canDriverScan && driverScanType ? (
+          {canDriverScan && driverSection === "actions" && driverScanType ? (
             <View style={[styles.scanCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <View style={styles.sectionLead}>
                 <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
@@ -734,7 +820,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             />
           ) : null}
 
-          {driverWorkspace && ["delivered", "completed"].includes(status) ? (
+          {driverWorkspace && driverSection === "overview" && ["delivered", "completed"].includes(status) ? (
             <InfoNotice
               icon={<CheckCircle2 color={palette.success} size={19} />}
               text={workspace === "station_driver" ? "Customer hand-over is confirmed. Any driver compensation is handled by your station, not paid by SKIMA." : "Delivery is confirmed. Your earnings will be added automatically; no further action is needed."}
@@ -979,6 +1065,10 @@ function inspectionLabel(value: string) {
   return labels[value] ?? value.replace(/_/g, " ");
 }
 
+function formatPayoutMoney(amount: number, currencyCode: string): string {
+  return `${currencyCode} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function statusTone(status: string): "neutral" | "brand" | "success" | "warning" | "danger" {
   if (["completed", "delivered", "station_settled", "refill_confirmed"].includes(status)) return "success";
   if (["cancelled", "disputed"].includes(status)) return "danger";
@@ -988,6 +1078,14 @@ function statusTone(status: string): "neutral" | "brand" | "success" | "warning"
 
 const styles = StyleSheet.create({
   hero: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md, padding: spacing.lg, borderRadius: radii.xl },
+  driverSectionSwitcher: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, padding: spacing.xs, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.pill },
+  driverSectionTab: { minHeight: 42, flexGrow: 1, minWidth: 70, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.pill, borderWidth: 1 },
+  driverSectionTabText: { fontSize: 12, fontWeight: "900" },
+  nextStepCard: { gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  nextStepEyebrow: { ...typography.eyebrow, fontSize: 9 },
+  nextStepTitle: { ...typography.subheading, fontSize: 17 },
+  nextStepBody: { ...typography.caption, lineHeight: 18 },
+
   heroCopy: { flex: 1, gap: 3 },
   heroEyebrow: { color: "rgba(255,255,255,.72)", ...typography.eyebrow, fontSize: 9 },
   heroTitle: { color: "#FFFFFF", ...typography.heading, fontSize: 21 },

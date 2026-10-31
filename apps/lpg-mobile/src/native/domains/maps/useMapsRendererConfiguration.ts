@@ -63,7 +63,7 @@ export function useMapsRendererConfiguration(): MapsRendererConfiguration {
       return {
         tileTemplate: configuration.tile_url_template.trim(),
         attribution: configuration.attribution?.trim() || runtimeTile.attribution,
-        maxZoom: configuration.max_zoom ?? runtimeTile.maxZoom,
+        maxZoom: Math.min(configuration.max_zoom ?? runtimeTile.maxZoom, runtimeTile.maxZoom, 19),
         defaultCenter: configuration.default_center
           ? {
               latitude: configuration.default_center.latitude,

@@ -438,12 +438,12 @@ Deno.test("mobile basemap follows Admin's public keyless renderer and preserves 
   const nativeMap = await readRepositoryFile("apps/lpg-mobile/src/native/maps/OperationalMap.native.tsx");
   const environment = await readRepositoryFile(".env.example");
 
-  assertIncludes(runtime, "KEYLESS_RASTER_TILE_TEMPLATE");
   assertIncludes(runtime, "KEYLESS_OSM_TILE_TEMPLATE");
   assertIncludes(runtime, 'readEnv("EXPO_PUBLIC_MAP_TILE_PROVIDER", "openstreetmap")');
   assertIncludes(runtime, "selectKeylessRaster");
   assertIncludes(runtime, "keylessTileHost");
-  assertIncludes(runtime, "basemaps.cartocdn.com");
+  assertIncludes(runtime, 'keylessTileHost(normalized) === "osm"');
+  assertNotIncludes(runtime, "basemaps.cartocdn.com");
   assertIncludes(runtime, "tile.openstreetmap.org");
   assertIncludes(runtime, "requiresPublicMapCredential");
   assertIncludes(runtime, '"locationiq.com"');
@@ -451,8 +451,8 @@ Deno.test("mobile basemap follows Admin's public keyless renderer and preserves 
   assertIncludes(runtime, '"maps.googleapis.com"');
   assertIncludes(runtime, '"keyless_raster_fallback"');
 
-  // The mobile web and native renderers use the same public renderer setting
-  // as the Admin geometry editor, and independently allowlist tile hosts.
+  // Every shared map uses OSM Standard without paid/API-key tiles, and
+  // exposes an expanded viewport while preserving tap/drag map interaction.
   assertIncludes(rendererHook, 'supabase.rpc("read_maps_renderer_configuration")');
   assertIncludes(rendererHook, "isUsablePublicTileTemplate");
   assertIncludes(rendererHook, "safe_fallback");
@@ -461,17 +461,16 @@ Deno.test("mobile basemap follows Admin's public keyless renderer and preserves 
   assertIncludes(webMap, "mapRenderer.defaultCenter");
   assertIncludes(webMap, "mapRenderer.defaultZoom");
   assertIncludes(webMap, "https://tile.openstreetmap.org/{z}/{x}/{y}.png");
-  assertIncludes(webMap, "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png");
-  assertIncludes(webMap, 'mapRenderer.tileTemplate.includes("tile.openstreetmap.org")');
-  assertIncludes(webMap, "tileTemplate: OPENSTREETMAP_RASTER_TILE_TEMPLATE");
-  assertIncludes(webMap, "tileTemplate: CARTO_VOYAGER_RASTER_TILE_TEMPLATE");
-  assertIncludes(webMap, "activeTileMaxZoom");
-  assertIncludes(webMap, "onError={() => setUseEmergencyTiles(true)}");
+  assertNotIncludes(webMap, "basemaps.cartocdn.com");
   assertIncludes(webMap, "PanResponder.create");
-  assertIncludes(webMap, "Drag to move the map");
+  assertIncludes(webMap, "Drag to pan");
+  assertIncludes(webMap, "Open full-screen map");
+  assertIncludes(webMap, "routeCoordinates: readonly");
   assertIncludes(nativeMap, "useMapsRendererConfiguration");
   assertIncludes(nativeMap, "mapRenderer.tileTemplate");
   assertIncludes(nativeMap, "mapRenderer.defaultCenter");
+  assertIncludes(nativeMap, "Open full-screen map");
+  assertIncludes(nativeMap, "pathCoordinates = routeCoordinates");
 
   // Keep the small-screen map dimensions and viewport clipping unchanged.
   assertIncludes(webMap, 'map: { width: "100%", overflow: "hidden"');

@@ -66,7 +66,11 @@ export function OrderFeedbackScreen() {
   if (!state.data?.eligible) {
     return (
       <Screen eyebrow="Service feedback" title="Rate service">
-        <EmptyState title="Available after delivery" description="You can rate the driver and station after the cylinder has been returned and the delivery is completed." action={<AppButton label="Back to order" onPress={() => router.back()} />} />
+        <EmptyState
+          title="Delivery still needs finishing"
+          description="Your delivery OTP may already have been accepted. Return to the secure hand-over screen to finish closing the order; ratings unlock as soon as the order is completed."
+          action={<AppButton label="Finish delivery confirmation" onPress={() => router.replace(`/(customer)/orders/${orderId}/verify` as never)} />}
+        />
       </Screen>
     );
   }

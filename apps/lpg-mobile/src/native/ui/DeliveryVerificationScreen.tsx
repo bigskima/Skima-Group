@@ -2,8 +2,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import { CheckCircle2, KeyRound, ShieldCheck } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
+import { useJobDetails } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
-import { ActionResponseSchema, firstString } from "../api/records";
+import { ActionResponseSchema, firstString, nestedRecord } from "../api/records";
 import { useSession } from "../session/SessionProvider";
 import { draftStore } from "../storage/drafts";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -20,6 +21,7 @@ export function DeliveryVerificationScreen() {
   const session = useSession();
   const { palette } = useAppTheme();
   const owner = session.context?.profile?.id ?? session.context?.user.id ?? "";
+  const details = useJobDetails(id ?? null);
   const draftType = `customer-delivery-verification-${id ?? "unknown"}`;
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [deliveryCode, setDeliveryCode] = useState<string | null>(null);
@@ -48,6 +50,23 @@ export function DeliveryVerificationScreen() {
       setNotice(friendlyError(cause, "The saved delivery challenge could not be restored."));
     });
   }, [draftType, id, owner]);
+
+  const currentOrder = nestedRecord(details.data, "order") ?? details.data;
+  const currentChallengeId = firstString(currentOrder, ["deliveryChallengeId", "delivery_challenge_id"]);
+  const currentChallengeVerified = currentOrder?.deliveryChallengeVerified === true
+    || currentOrder?.delivery_challenge_verified === true;
+  const canFinalizeVerifiedChallenge = Boolean(
+    challengeId && currentChallengeId === challengeId && currentChallengeVerified,
+  );
+
+  useEffect(() => {
+    if (!currentChallengeId || !currentChallengeVerified) return;
+    setChallengeId(currentChallengeId);
+    setDeliveryCode(null);
+    setCode("");
+    setNoticeTone("neutral");
+    setNotice("Your delivery OTP has already been verified. Finish the hand-over below to close the order.");
+  }, [currentChallengeId, currentChallengeVerified]);
 
   const revealCode = async (targetChallengeId: string): Promise<boolean> => {
     setNotice(null);
@@ -128,7 +147,7 @@ export function DeliveryVerificationScreen() {
 
   const verify = async () => {
     setNotice(null);
-    if (!id || !challengeId || code.trim().length < 4) {
+    if (!id || !challengeId || (!canFinalizeVerifiedChallenge && code.trim().length < 4)) {
       setNoticeTone("error");
       setNotice("Enter the verification code for this delivery.");
       return;
@@ -139,10 +158,29 @@ export function DeliveryVerificationScreen() {
         action: "verify",
         lpgOrderId: id,
         challengeId,
-        code: code.trim(),
+        // The server has independently confirmed this existing challenge as verified.
+        // The placeholder is ignored by verify_otp_challenge for a verified challenge.
+        code: canFinalizeVerifiedChallenge ? "0000" : code.trim(),
         source: "skima.lpg.mobile",
-        idempotencyKey: idempotencyKey("delivery-verify", challengeId),
+        idempotencyKey: idempotencyKey(
+          canFinalizeVerifiedChallenge ? "delivery-finalize-verified" : "delivery-verify",
+          challengeId,
+        ),
       });
+
+      // Do not send the customer to feedback just because the OTP endpoint
+      // accepted the code. Confirm that the order read model has crossed the
+      // delivered/completed boundary after the payout/assignment trigger ran.
+      const refreshed = await details.refetch();
+      const verifiedOrder = nestedRecord(refreshed.data, "order") ?? refreshed.data;
+      const finalStatus = firstString(verifiedOrder, ["status", "orderStatus", "order_status"]);
+      const challengeVerified = verifiedOrder?.deliveryChallengeVerified === true
+        || verifiedOrder?.delivery_challenge_verified === true;
+
+      if (!challengeVerified || !["delivered", "completed"].includes(finalStatus ?? "")) {
+        throw new Error("Your code was accepted, but SKIMA has not finished closing the delivery yet. Your order is safe; retry confirmation or contact support if it remains here.");
+      }
+
       await draftStore.clear(owner, draftType);
       setNoticeTone("success");
       setNotice("Delivery confirmed successfully.");
@@ -198,12 +236,14 @@ export function DeliveryVerificationScreen() {
         </View>
         <View style={styles.stepCopy}>
           <Text style={[styles.stepTitle, { color: palette.ink }]}>
-            {challengeId ? "Verification code ready" : "Get your verification code"}
+            {canFinalizeVerifiedChallenge ? "Verification already completed" : challengeId ? "Verification code ready" : "Get your verification code"}
           </Text>
           <Text style={[styles.stepBody, { color: palette.muted }]}>
-            {challengeId
-              ? "Enter the code generated for this order. It can only be used for this delivery confirmation."
-              : "Request a code for this order before confirming the hand-over."}
+            {canFinalizeVerifiedChallenge
+              ? "Your customer OTP was accepted earlier. You do not need another code; finish the hand-over to close this order."
+              : challengeId
+                ? "Enter the code generated for this order. It can only be used for this delivery confirmation."
+                : "Request a code for this order before confirming the hand-over."}
           </Text>
         </View>
       </View>
@@ -219,59 +259,73 @@ export function DeliveryVerificationScreen() {
         />
       ) : (
         <View style={[styles.codeCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-          <Text style={[styles.fieldLabel, { color: palette.ink }]}>Your delivery code</Text>
-          <View style={[styles.deliveryCodeDisplay, { backgroundColor: palette.successSoft, borderColor: palette.success }]}>
-            <Text accessibilityLabel="Your delivery verification code" selectable style={[styles.deliveryCodeText, { color: palette.success }]}>
-              {deliveryCode ?? "••••••"}
-            </Text>
-            <Text style={[styles.deliveryCodeHint, { color: palette.muted }]}>
-              {deliveryCode
-                ? "Show this code to your driver for this order. Keep it private until your cylinder is physically with you."
-                : "Your code is protected. Reveal it when the cylinder is ready to be handed over."}
-            </Text>
-          </View>
-          {!deliveryCode ? (
-            <AppButton
-              label="Show delivery code"
-              fullWidth
-              variant="secondary"
-              loading={deliveryMutation.isPending}
-              disabled={deliveryMutation.isPending}
-              onPress={() => challengeId ? void revealCode(challengeId) : undefined}
-            />
-          ) : null}
-          <Text style={[styles.fieldLabel, { color: palette.ink }]}>Confirm the code</Text>
-          <TextInput
-            accessibilityLabel="Delivery verification code"
-            value={code}
-            onChangeText={setCode}
-            keyboardType="number-pad"
-            autoComplete="one-time-code"
-            placeholder="••••••"
-            placeholderTextColor={palette.muted}
-            maxLength={8}
-            style={[
-              styles.input,
-              { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink },
-            ]}
-          />
-          <Text style={[styles.hint, { color: palette.muted }]}>Check the code carefully before confirming the delivery.</Text>
+          {canFinalizeVerifiedChallenge ? (
+            <View style={[styles.deliveryCodeDisplay, { backgroundColor: palette.successSoft, borderColor: palette.success }]}>
+              <CheckCircle2 color={palette.success} size={24} />
+              <Text style={[styles.fieldLabel, { color: palette.success }]}>Customer verification complete</Text>
+              <Text style={[styles.deliveryCodeHint, { color: palette.muted }]}>
+                SKIMA has already confirmed this order's OTP. No replacement code is needed.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <Text style={[styles.fieldLabel, { color: palette.ink }]}>Your delivery code</Text>
+              <View style={[styles.deliveryCodeDisplay, { backgroundColor: palette.successSoft, borderColor: palette.success }]}>
+                <Text accessibilityLabel="Your delivery verification code" selectable style={[styles.deliveryCodeText, { color: palette.success }]}>
+                  {deliveryCode ?? "••••••"}
+                </Text>
+                <Text style={[styles.deliveryCodeHint, { color: palette.muted }]}>
+                  {deliveryCode
+                    ? "Show this code to your driver for this order. Keep it private until your cylinder is physically with you."
+                    : "Your code is protected. Reveal it when the cylinder is ready to be handed over."}
+                </Text>
+              </View>
+              {!deliveryCode ? (
+                <AppButton
+                  label="Show delivery code"
+                  fullWidth
+                  variant="secondary"
+                  loading={deliveryMutation.isPending}
+                  disabled={deliveryMutation.isPending}
+                  onPress={() => challengeId ? void revealCode(challengeId) : undefined}
+                />
+              ) : null}
+              <Text style={[styles.fieldLabel, { color: palette.ink }]}>Confirm the code</Text>
+              <TextInput
+                accessibilityLabel="Delivery verification code"
+                value={code}
+                onChangeText={setCode}
+                keyboardType="number-pad"
+                autoComplete="one-time-code"
+                placeholder="••••••"
+                placeholderTextColor={palette.muted}
+                maxLength={8}
+                style={[
+                  styles.input,
+                  { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink },
+                ]}
+              />
+              <Text style={[styles.hint, { color: palette.muted }]}>Check the code carefully before confirming the delivery.</Text>
+            </>
+          )}
           <AppButton
-            label="Confirm delivery"
+            label={canFinalizeVerifiedChallenge ? "Finish delivery" : "Confirm delivery"}
             fullWidth
             size="lg"
             loading={mutation.isPending}
-            disabled={code.trim().length < 4}
+            disabled={!canFinalizeVerifiedChallenge && code.trim().length < 4}
             icon={<CheckCircle2 color="#FFFFFF" size={18} />}
             onPress={() => void verify()}
           />
-          <AppButton
-            label="Request a new code"
-            variant="ghost"
-            fullWidth
-            disabled={mutation.isPending || deliveryMutation.isPending}
-            onPress={() => void request()}
-          />
+          {!canFinalizeVerifiedChallenge ? (
+            <AppButton
+              label="Request a new code"
+              variant="ghost"
+              fullWidth
+              disabled={mutation.isPending || deliveryMutation.isPending}
+              onPress={() => void request()}
+            />
+          ) : null}
         </View>
       )}
 

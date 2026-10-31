@@ -4,12 +4,13 @@ import {
   Layer,
   Map,
   NativeUserLocation,
+  TransformRequestManager,
   ViewAnnotation,
   type CameraRef,
 } from "@maplibre/maplibre-react-native";
-import { Crosshair, MapPin } from "lucide-react-native";
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Crosshair, MapPin, Maximize2, Minimize2, X } from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import {
   averageCoordinate,
   cameraBounds,
@@ -26,6 +27,7 @@ export type { MapPoint } from "../domains/maps";
 
 export interface OperationalMapProps {
   points: readonly MapPoint[];
+  routeCoordinates?: readonly { latitude: number; longitude: number }[];
   connectPoints?: boolean;
   height?: number;
   initialZoom?: number;
@@ -36,6 +38,7 @@ export interface OperationalMapProps {
 
 export function OperationalMap({
   points,
+  routeCoordinates,
   connectPoints = false,
   height = 420,
   initialZoom = points.length > 1 ? 14 : 20,
@@ -45,16 +48,33 @@ export function OperationalMap({
 }: OperationalMapProps) {
   const camera = useRef<CameraRef>(null);
   const mapRenderer = useMapsRendererConfiguration();
-  const first = points[0] ?? averageCoordinate(points) ?? (onSelectPoint ? mapRenderer.defaultCenter : null);
-  const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
-  const zoom = clamp(points.length ? initialZoom : mapRenderer.defaultZoom, minZoom, maxZoom);
-  const markers = useMemo(() => pointCollection(points), [pointKey]);
-  const route = useMemo(() => routeCollection(points), [pointKey]);
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    // OpenStreetMap's public tile service requires native clients to identify
+    // themselves. Match only the official keyless raster host.
+    TransformRequestManager.addHeader({
+      id: "skima-osm-native-user-agent",
+      name: "User-Agent",
+      value: "SKIMA-LPG/1.0",
+      match: /^https:\/\/tile\.openstreetmap\.org\//,
+    });
+  }, []);
+
+  const pathCoordinates = routeCoordinates ?? (connectPoints ? points : []);
+  const fitPoints: MapPoint[] = pathCoordinates.length
+    ? [...points, ...pathCoordinates.map((point) => ({ ...point, label: "" }))]
+    : [...points];
+  const first = averageCoordinate(fitPoints) ?? (onSelectPoint ? mapRenderer.defaultCenter : null);
+  const pointKey = fitPoints.map((point) => `${point.latitude}:${point.longitude}`).join("|");
+  const effectiveMaxZoom = Math.min(maxZoom, mapRenderer.maxZoom, 19);
+  const zoom = clamp(fitPoints.length ? initialZoom : mapRenderer.defaultZoom, minZoom, effectiveMaxZoom);
+  const markers = useMemo(() => pointCollection(points), [points.map((point) => `${point.latitude}:${point.longitude}`).join("|")]);
+  const route = useMemo(() => routeCollection(pathCoordinates), [pointKey]);
 
   const focus = useCallback((animated: boolean) => {
     if (!camera.current || !first) return;
     if (points.length > 1) {
-      const bounds = cameraBounds(points);
+      const bounds = cameraBounds(fitPoints);
       if (bounds) {
         camera.current.fitBounds(bounds, {
           padding: { top: 64, right: 46, bottom: 72, left: 46 },
@@ -76,16 +96,12 @@ export function OperationalMap({
     focus(true);
   }, [focus]);
 
-  if (!first)
-    return (
-      <View style={[styles.empty, { height }]}>
-        <View style={styles.emptyPin}><MapPin color={colors.brand} size={20} /></View>
-        <Text style={styles.emptyTitle}>Your precise location will appear here</Text>
-      </View>
-    );
+  useEffect(() => {
+    if (expanded) focus(false);
+  }, [expanded, focus]);
 
-  return (
-    <View style={[styles.frame, { height }]}>
+  const renderMap = (fullscreen: boolean) => (
+    <View style={[fullscreen ? styles.fullscreenMap : styles.frame, fullscreen ? { flex: 1 } : { height }]}>
       <Map
         accessibilityLabel={onSelectPoint ? "Interactive location map" : "Map showing relevant locations"}
         attribution
@@ -107,18 +123,13 @@ export function OperationalMap({
         touchZoom
       >
         <Camera
-          initialViewState={{
-            center: toLngLat(first),
-            zoom,
-            pitch: 0,
-            bearing: 0,
-          }}
-          maxZoom={maxZoom}
+          initialViewState={{ center: toLngLat(first ?? mapRenderer.defaultCenter), zoom, pitch: 0, bearing: 0 }}
+          maxZoom={effectiveMaxZoom}
           minZoom={minZoom}
           ref={camera}
         />
         <NativeUserLocation />
-        {connectPoints && points.length > 1 ? (
+        {connectPoints && pathCoordinates.length > 1 ? (
           <GeoJSONSource id="skima-route-source" data={route} lineMetrics>
             <Layer
               id="skima-route-line"
@@ -164,17 +175,48 @@ export function OperationalMap({
         ))}
       </Map>
 
-      {onSelectPoint
-        ? <View pointerEvents="none" style={styles.hint}><Text style={styles.hintText}>Tap the exact entrance or pickup point</Text></View>
-        : null}
-      <Pressable
-        accessibilityLabel="Recenter map"
-        onPress={() => focus(true)}
-        style={styles.recenter}
-      >
+      {onSelectPoint ? <View pointerEvents="none" style={styles.hint}><Text style={styles.hintText}>Tap the exact entrance or pickup point</Text></View> : null}
+      <Pressable accessibilityLabel="Recenter map" onPress={() => focus(true)} style={styles.recenter}>
         <Crosshair color={colors.ink} size={20} />
       </Pressable>
+      {!fullscreen ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Open full-screen map" onPress={() => setExpanded(true)} style={styles.expand}>
+          <Maximize2 color={colors.ink} size={19} />
+        </Pressable>
+      ) : (
+        <Pressable accessibilityRole="button" accessibilityLabel="Close full-screen map" onPress={() => setExpanded(false)} style={styles.expand}>
+          <Minimize2 color={colors.ink} size={19} />
+        </Pressable>
+      )}
     </View>
+  );
+
+  if (!first)
+    return (
+      <View style={[styles.empty, { height }]}>
+        <View style={styles.emptyPin}><MapPin color={colors.brand} size={20} /></View>
+        <Text style={styles.emptyTitle}>Your precise location will appear here</Text>
+      </View>
+    );
+
+  return (
+    <>
+      {!expanded ? renderMap(false) : null}
+      <Modal visible={expanded} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setExpanded(false)}>
+        <View style={styles.fullscreen}>
+          <View style={styles.fullscreenHeader}>
+            <View>
+              <Text style={styles.fullscreenEyebrow}>SKIMA MAP</Text>
+              <Text style={styles.fullscreenTitle}>Full map view</Text>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close full-screen map" onPress={() => setExpanded(false)} style={styles.fullscreenClose}>
+              <X color={colors.ink} size={22} />
+            </Pressable>
+          </View>
+          {renderMap(true)}
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -190,6 +232,7 @@ function keylessRasterStyle(tileTemplate: string, attribution: string) {
         type: "raster" as const,
         tiles: [tileTemplate],
         tileSize: 256,
+        maxzoom: 19,
         attribution,
       },
     },
@@ -199,6 +242,13 @@ function keylessRasterStyle(tileTemplate: string, attribution: string) {
 
 const styles = StyleSheet.create({
   frame: { width: "100%", overflow: "hidden", borderRadius: radii.lg, backgroundColor: "#DCE5DF" },
+  fullscreen: { flex: 1, backgroundColor: "#FFFFFF" },
+  fullscreenMap: { flex: 1, width: "100%", overflow: "hidden", backgroundColor: "#DCE5DF" },
+  fullscreenHeader: { minHeight: 64, paddingHorizontal: spacing.lg, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#E0E0E0" },
+  fullscreenEyebrow: { color: colors.muted, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  fullscreenTitle: { color: colors.ink, fontSize: 18, fontWeight: "900" },
+  fullscreenClose: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, backgroundColor: "#F0F0F0" },
+  expand: { position: "absolute", right: spacing.sm, top: spacing.sm + 52, width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: "white", elevation: 7 },
   empty: { width: "100%", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.lg, backgroundColor: "#E8ECE9" },
   emptyPin: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21, backgroundColor: "white" },
   emptyTitle: { color: colors.muted, fontSize: 13, fontWeight: "800" },

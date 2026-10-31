@@ -2,7 +2,7 @@ import { useNetInfo } from "@react-native-community/netinfo";
 import { router, useLocalSearchParams } from "expo-router";
 import { CheckCircle2, Navigation, PackageCheck, ReceiptText, ScanLine, ShieldCheck, Store } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useJobDetails } from "../api/domains";
 import { useGatewayMutation } from "../api/gateway";
 import { ActionResponseSchema, displayStatus, displayTitle, firstNumber, firstString, nestedRecord } from "../api/records";
@@ -43,6 +43,7 @@ export function InternalDriverJobDetailScreen() {
   const [safetyConfirmed, setSafetyConfirmed] = useState(false);
   const [safetyNotes, setSafetyNotes] = useState("");
   const [confirmingRefill, setConfirmingRefill] = useState(false);
+  const [section, setSection] = useState<"overview" | "route" | "actions" | "refill" | "details">("overview");
 
   useEffect(() => {
     if (params.scannedToken) setToken(params.scannedToken);
@@ -274,73 +275,154 @@ export function InternalDriverJobDetailScreen() {
         />
       ) : (
         <>
-          <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
-            <View style={styles.heroCopy}>
-              <Text style={styles.heroEyebrow}>SKIMA MANAGED JOB</Text>
-              <Text style={styles.heroTitle}>{friendlyStatus(status)}</Text>
-              <Text style={styles.heroBody}>{stageDescription(status, order?.deliveryChallengeVerified === true || order?.delivery_challenge_verified === true)}</Text>
-            </View>
-            <StatusPill label={friendlyStatus(status)} tone={["completed", "delivered"].includes(status) ? "success" : "brand"} />
+          <View accessibilityRole="tablist" style={[styles.sectionSwitcher, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+            {([
+              ["overview", "Overview"],
+              ["route", "Route"],
+              ["actions", "Actions"],
+              ["refill", "Refill"],
+              ["details", "Details"],
+            ] as const).map(([key, label]) => {
+              const available = key === "overview" || key === "details"
+                || (key === "route" && (routePoints.length > 0 || Boolean(navigationTarget)))
+                || (key === "actions" && Boolean(actionKey || scanType))
+                || (key === "refill" && supplierFormReady);
+              if (!available) return null;
+              const selected = section === key;
+              return (
+                <Pressable
+                  key={key}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected }}
+                  onPress={() => setSection(key)}
+                  style={[
+                    styles.sectionTab,
+                    {
+                      backgroundColor: selected ? palette.brand : "transparent",
+                      borderColor: selected ? palette.brand : "transparent",
+                    },
+                  ]}
+                >
+                  <Text style={[styles.sectionTabText, { color: selected ? "#FFFFFF" : palette.mutedStrong }]}>{label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
 
-          <View style={[styles.noticeCard, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}>
-            <ShieldCheck color={palette.brand} size={22} />
-            <Text style={[styles.noticeBody, { color: palette.ink }]}>This is a SKIMA-managed fulfillment. Do not ask a marketplace Station to process it in the Station app. Use a suitable supplier and record the real purchase below.</Text>
-          </View>
-
-          {routePoints.length ? <View style={[styles.mapShell, shadows.soft]}><OperationalMap points={routePoints} height={330} /></View> : null}
-
-          <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <Field label="Cylinder" value={cylinder ? displayTitle(cylinder) : "Not available"} />
-            <Field label="Requested refill" value={requestedKg === null ? "Not available" : `${requestedKg} kg`} />
-            <Field label="Internal earning" value={earningAmount === null ? "Calculated by policy" : `${currencyCode} ${earningAmount.toLocaleString()}`} />
-            <Text style={[styles.helper, { color: palette.muted }]}>Internal earnings accrue separately and are not added to the self-withdrawable marketplace Driver wallet.</Text>
-          </View>
-
-          {navigationTarget ? (
-            <AppButton
-              label={`Navigate to ${navigationTarget.label}`}
-              fullWidth
-              size="lg"
-              icon={<Navigation color="#FFFFFF" size={18} />}
-              onPress={() => void openDeviceNavigation(navigationTarget).catch((cause) => {
-                setNoticeSuccess(false);
-                setNotice(friendlyError(cause, "Navigation could not be opened."));
-              })}
-            />
-          ) : null}
-
-          {actionKey ? (
-            <AppButton
-              label={actionLabel(actionKey)}
-              fullWidth
-              size="lg"
-              loading={action.isPending}
-              onPress={() => void runAction(actionKey)}
-            />
-          ) : null}
-
-          {scanType ? (
-            <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              <View style={styles.sectionLead}>
-                <ScanLine color={palette.brand} size={22} />
-                <View style={styles.sectionCopy}>
-                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>{scanTitle(scanType)}</Text>
-                  <Text style={[styles.helper, { color: palette.muted }]}>{scanDescription(scanType)}</Text>
+          {section === "overview" ? (
+            <>
+              <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
+                <View style={styles.heroCopy}>
+                  <Text style={styles.heroEyebrow}>SKIMA MANAGED JOB</Text>
+                  <Text style={styles.heroTitle}>{friendlyStatus(status)}</Text>
+                  <Text style={styles.heroBody}>{stageDescription(status, order?.deliveryChallengeVerified === true || order?.delivery_challenge_verified === true)}</Text>
                 </View>
+                <StatusPill label={friendlyStatus(status)} tone={["completed", "delivered"].includes(status) ? "success" : "brand"} />
               </View>
-              <Scanner enabled onDetected={setToken} />
-              {token ? <AppButton label={scanButton(scanType)} fullWidth loading={continuousScan.isPending} onPress={() => void submitScan()} /> : null}
-            </View>
+
+              <View style={[styles.noticeCard, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}>
+                <ShieldCheck color={palette.brand} size={22} />
+                <Text style={[styles.noticeBody, { color: palette.ink }]}>
+                  This is a SKIMA-managed fulfillment. Do not ask a marketplace Station to process it in the Station app. Use a suitable supplier and record the real purchase below.
+                </Text>
+              </View>
+
+              <View style={[styles.nextStepCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                <Text style={[styles.nextStepEyebrow, { color: palette.muted }]}>YOUR NEXT STEP</Text>
+                <Text style={[styles.nextStepTitle, { color: palette.ink }]}>{friendlyStatus(status)}</Text>
+                <Text style={[styles.nextStepBody, { color: palette.muted }]}>
+                  {stageDescription(status, order?.deliveryChallengeVerified === true || order?.delivery_challenge_verified === true)}
+                </Text>
+                <AppButton
+                  label={navigationTarget ? "Open route and navigation" : scanType || actionKey ? "Open job actions" : supplierFormReady ? "Record supplier refill" : "View job details"}
+                  fullWidth
+                  variant="secondary"
+                  onPress={() => setSection(navigationTarget ? "route" : scanType || actionKey ? "actions" : supplierFormReady ? "refill" : "details")}
+                />
+              </View>
+
+              {["delivered", "completed"].includes(status) ? (
+                <View style={[styles.noticeCard, { backgroundColor: palette.successSoft, borderColor: palette.border }]}>
+                  <CheckCircle2 color={palette.success} size={22} />
+                  <Text style={[styles.noticeBody, { color: palette.ink }]}>
+                    Delivery is verified. Your internal earning is recorded separately for SKIMA Operations approval/payment; no marketplace wallet withdrawal is created.
+                  </Text>
+                </View>
+              ) : null}
+            </>
           ) : null}
 
-          {supplierFormReady ? (
+          {section === "route" ? (
+            <>
+              {routePoints.length ? (
+                <View style={[styles.mapShell, shadows.soft]}>
+                  <OperationalMap points={routePoints} height={430} />
+                </View>
+              ) : (
+                <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                  <Text style={[styles.helper, { color: palette.muted }]}>No pickup, customer or current driver coordinates are available yet.</Text>
+                </View>
+              )}
+              {navigationTarget ? (
+                <AppButton
+                  label={`Navigate to ${navigationTarget.label}`}
+                  fullWidth
+                  size="lg"
+                  icon={<Navigation color="#FFFFFF" size={18} />}
+                  onPress={() => void openDeviceNavigation(navigationTarget).catch((cause) => {
+                    setNoticeSuccess(false);
+                    setNotice(friendlyError(cause, "Navigation could not be opened."));
+                  })}
+                />
+              ) : null}
+            </>
+          ) : null}
+
+          {section === "actions" ? (
+            <>
+              {actionKey ? (
+                <AppButton
+                  label={actionLabel(actionKey)}
+                  fullWidth
+                  size="lg"
+                  loading={action.isPending}
+                  onPress={() => void runAction(actionKey)}
+                />
+              ) : null}
+
+              {scanType ? (
+                <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                  <View style={styles.sectionLead}>
+                    <ScanLine color={palette.brand} size={22} />
+                    <View style={styles.sectionCopy}>
+                      <Text style={[styles.sectionTitle, { color: palette.ink }]}>{scanTitle(scanType)}</Text>
+                      <Text style={[styles.helper, { color: palette.muted }]}>{scanDescription(scanType)}</Text>
+                    </View>
+                  </View>
+                  <Scanner enabled onDetected={setToken} />
+                  {token ? (
+                    <AppButton label={scanButton(scanType)} fullWidth loading={continuousScan.isPending} onPress={() => void submitScan()} />
+                  ) : null}
+                </View>
+              ) : null}
+
+              {!actionKey && !scanType ? (
+                <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                  <Text style={[styles.helper, { color: palette.muted }]}>There are no operational actions waiting at this stage.</Text>
+                </View>
+              ) : null}
+            </>
+          ) : null}
+
+          {section === "refill" && supplierFormReady ? (
             <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <View style={styles.sectionLead}>
                 <Store color={palette.brand} size={22} />
                 <View style={styles.sectionCopy}>
                   <Text style={[styles.sectionTitle, { color: palette.ink }]}>Record supplier refill</Text>
-                  <Text style={[styles.helper, { color: palette.muted }]}>Use the real supplier name, actual kg and actual price. SKIMA blocks prices above the configured procurement ceiling unless Operations approves an override.</Text>
+                  <Text style={[styles.helper, { color: palette.muted }]}>
+                    Use the real supplier name, actual kg and actual price. SKIMA blocks prices above the configured procurement ceiling unless Operations approves an override.
+                  </Text>
                 </View>
               </View>
 
@@ -388,10 +470,14 @@ export function InternalDriverJobDetailScreen() {
             </View>
           ) : null}
 
-          {["delivered", "completed"].includes(status) ? (
-            <View style={[styles.noticeCard, { backgroundColor: palette.successSoft, borderColor: palette.border }]}>
-              <CheckCircle2 color={palette.success} size={22} />
-              <Text style={[styles.noticeBody, { color: palette.ink }]}>Delivery is verified. Your internal earning is recorded separately for SKIMA Operations approval/payment; no marketplace wallet withdrawal is created.</Text>
+          {section === "details" ? (
+            <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <Field label="Cylinder" value={cylinder ? displayTitle(cylinder) : "Not available"} />
+              <Field label="Requested refill" value={requestedKg === null ? "Not available" : `${requestedKg} kg`} />
+              <Field label="Internal earning" value={earningAmount === null ? "Calculated by policy" : `${currencyCode} ${earningAmount.toLocaleString()}`} />
+              <Text style={[styles.helper, { color: palette.muted }]}>
+                Internal earnings accrue separately and are not added to the self-withdrawable marketplace Driver wallet.
+              </Text>
             </View>
           ) : null}
 
@@ -528,6 +614,16 @@ function stageDescription(status: string, deliveryChallengeVerified = false) {
 
 const styles = StyleSheet.create({
   hero: { borderRadius: radii.xl, padding: spacing.xl, gap: spacing.md },
+
+
+  sectionSwitcher: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, padding: spacing.xs, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.pill },
+  sectionTab: { minHeight: 42, flexGrow: 1, minWidth: 58, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.sm, borderRadius: radii.pill, borderWidth: 1 },
+  sectionTabText: { fontSize: 12, fontWeight: "900" },
+  nextStepCard: { gap: spacing.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg },
+  nextStepEyebrow: { ...typography.eyebrow, fontSize: 9 },
+  nextStepTitle: { ...typography.subheading, fontSize: 17 },
+  nextStepBody: { ...typography.caption, lineHeight: 18 },
+
   heroCopy: { gap: 6 },
   heroEyebrow: { color: "rgba(255,255,255,0.72)", fontSize: 12, fontWeight: "900", letterSpacing: 1 },
   heroTitle: { color: "#FFFFFF", fontSize: typography.title.fontSize, fontWeight: "900" },
