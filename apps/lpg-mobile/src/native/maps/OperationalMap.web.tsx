@@ -1,12 +1,14 @@
 import { Image } from "expo-image";
-import { Crosshair, MapPin, Minus, Plus } from "lucide-react-native";
+import { Crosshair, MapPin, Maximize2, Minimize2, Minus, Plus, X } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Modal,
   PanResponder,
   Pressable,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type LayoutChangeEvent,
 } from "react-native";
 import {
@@ -21,6 +23,7 @@ export type { MapPoint } from "../domains/maps";
 
 export interface OperationalMapProps {
   points: readonly MapPoint[];
+  routeCoordinates?: readonly { latitude: number; longitude: number }[];
   connectPoints?: boolean;
   height?: number;
   initialZoom?: number;
@@ -33,11 +36,10 @@ const TILE = 256;
 const DEFAULT_HEIGHT = 420;
 const OPENSTREETMAP_RASTER_TILE_TEMPLATE =
   "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const CARTO_VOYAGER_RASTER_TILE_TEMPLATE =
-  "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
 
 export function OperationalMap({
   points,
+  routeCoordinates,
   connectPoints = false,
   height = DEFAULT_HEIGHT,
   initialZoom = points.length > 1 ? 13 : 20,
@@ -47,61 +49,54 @@ export function OperationalMap({
 }: OperationalMapProps) {
   const { palette } = useAppTheme();
   const mapRenderer = useMapsRendererConfiguration();
+  const window = useWindowDimensions();
   const providerTileMaxZoom = mapRenderer.maxZoom;
-  const effectiveMaxZoom = maxZoom ?? Math.max(21, providerTileMaxZoom);
+  const effectiveMaxZoom = maxZoom ?? providerTileMaxZoom;
   const [width, setWidth] = useState(720);
-  const [useEmergencyTiles, setUseEmergencyTiles] = useState(false);
-  const emergencyFallback = mapRenderer.tileTemplate.includes("tile.openstreetmap.org")
-    ? {
-        tileTemplate: CARTO_VOYAGER_RASTER_TILE_TEMPLATE,
-        attribution: "© OpenStreetMap contributors, © CARTO",
-        maxZoom: 20,
-      }
-    : {
-        tileTemplate: OPENSTREETMAP_RASTER_TILE_TEMPLATE,
-        attribution: "© OpenStreetMap contributors",
-        maxZoom: 19,
-      };
-  const tileTemplate = useEmergencyTiles
-    ? emergencyFallback.tileTemplate
-    : mapRenderer.tileTemplate;
-  const attribution = useEmergencyTiles
-    ? emergencyFallback.attribution
-    : mapRenderer.attribution;
-  const activeTileMaxZoom = useEmergencyTiles ? emergencyFallback.maxZoom : providerTileMaxZoom;
+  const [expanded, setExpanded] = useState(false);
+  const [tileFailure, setTileFailure] = useState(false);
+  const tileTemplate = mapRenderer.tileTemplate;
+  const attribution = mapRenderer.attribution;
+  const activeTileMaxZoom = providerTileMaxZoom;
+  const pathCoordinates = routeCoordinates ?? (connectPoints ? points : []);
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
+  const routeKey = pathCoordinates.map((point) => `${point.latitude}:${point.longitude}`).join("|");
+  const viewportKey = `${pointKey}::${routeKey}`;
+  const fitPoints = pathCoordinates.length ? [...points, ...pathCoordinates] : points;
   const interactive = Boolean(onSelectPoint);
   const derivedCenter = useMemo(
-    () => averageCoordinate(points) ?? (interactive ? mapRenderer.defaultCenter : null),
-    [pointKey, interactive, mapRenderer.defaultCenter.latitude, mapRenderer.defaultCenter.longitude],
+    () => averageCoordinate(fitPoints) ?? (interactive ? mapRenderer.defaultCenter : null),
+    [viewportKey, interactive, mapRenderer.defaultCenter.latitude, mapRenderer.defaultCenter.longitude],
   );
-  const automaticZoom = points.length ? initialZoom : mapRenderer.defaultZoom;
+  const automaticZoom = fitPoints.length ? initialZoom : mapRenderer.defaultZoom;
   const [center, setCenter] = useState(derivedCenter);
   const [zoom, setZoom] = useState(() => clamp(automaticZoom, minZoom, effectiveMaxZoom));
+  const canvasWidth = expanded ? Math.max(280, window.width) : width;
+  const canvasHeight = expanded ? Math.max(360, window.height - 64) : height;
 
   useEffect(() => {
-    setUseEmergencyTiles(false);
+    setTileFailure(false);
   }, [mapRenderer.tileTemplate]);
 
   useEffect(() => {
     if (!derivedCenter) return;
     setCenter(derivedCenter);
-    setZoom(points.length > 1
-      ? fitZoom(points, width, height, minZoom, effectiveMaxZoom)
-      : clamp(points.length ? initialZoom : mapRenderer.defaultZoom, minZoom, effectiveMaxZoom));
-  }, [pointKey, interactive, width, height, initialZoom, mapRenderer.defaultZoom, effectiveMaxZoom, minZoom]);
+    setZoom(fitPoints.length > 1
+      ? fitZoom(fitPoints, canvasWidth, canvasHeight, minZoom, effectiveMaxZoom)
+      : clamp(fitPoints.length ? initialZoom : mapRenderer.defaultZoom, minZoom, effectiveMaxZoom));
+  }, [viewportKey, interactive, canvasWidth, canvasHeight, initialZoom, mapRenderer.defaultZoom, effectiveMaxZoom, minZoom]);
 
   const layout = center
-    ? createLayout(center, points, width, height, zoom, tileTemplate, activeTileMaxZoom)
+    ? createLayout(center, points, pathCoordinates, canvasWidth, canvasHeight, zoom, tileTemplate, activeTileMaxZoom)
     : null;
   const onLayout = (event: LayoutChangeEvent) =>
     setWidth(Math.max(280, event.nativeEvent.layout.width));
   const recenter = () => {
     if (!derivedCenter) return;
     setCenter(derivedCenter);
-    setZoom(points.length > 1
-      ? fitZoom(points, width, height, minZoom, effectiveMaxZoom)
-      : clamp(points.length ? initialZoom : mapRenderer.defaultZoom, minZoom, effectiveMaxZoom));
+    setZoom(fitPoints.length > 1
+      ? fitZoom(fitPoints, canvasWidth, canvasHeight, minZoom, effectiveMaxZoom)
+      : clamp(fitPoints.length ? initialZoom : mapRenderer.defaultZoom, minZoom, effectiveMaxZoom));
   };
   const centerRef = useRef(center);
   const zoomRef = useRef(zoom);
@@ -147,83 +142,83 @@ export function OperationalMap({
       dragOrigin.current = null;
     },
     onPanResponderTerminationRequest: () => false,
-  }), [height, onSelectPoint, width]);
+  }), [canvasHeight, canvasWidth, onSelectPoint]);
 
-  if (!center || !layout)
+  const renderMapSurface = (fullscreen: boolean) => {
+    if (!center || !layout) {
+      return (
+        <View onLayout={fullscreen ? undefined : onLayout} style={[styles.empty, { height: fullscreen ? canvasHeight : height, backgroundColor: palette.soft, borderColor: palette.border }]}>
+          <View style={[styles.emptyPin, { backgroundColor: palette.elevated }]}><MapPin color={colors.brand} size={24} /></View>
+          <Text style={[styles.emptyTitle, { color: palette.ink }]}>Your precise location will appear here</Text>
+          <Text style={[styles.emptyBody, { color: palette.muted }]}>Use your current location or search for an address to begin.</Text>
+        </View>
+      );
+    }
     return (
-      <View onLayout={onLayout} style={[styles.empty, { height, backgroundColor: palette.soft, borderColor: palette.border }]}>
-        <View style={[styles.emptyPin, { backgroundColor: palette.elevated }]}><MapPin color={colors.brand} size={24} /></View>
-        <Text style={[styles.emptyTitle, { color: palette.ink }]}>Your precise location will appear here</Text>
-        <Text style={[styles.emptyBody, { color: palette.muted }]}>Use your current location or search for an address to begin.</Text>
+      <View accessibilityLabel={onSelectPoint ? "Interactive map. Drag to pan and tap to move the location pin." : "Interactive map. Drag to pan and use controls to zoom."}
+        onLayout={fullscreen ? undefined : onLayout}
+        style={[styles.map, { height: fullscreen ? canvasHeight : height, borderColor: palette.border, borderRadius: fullscreen ? 0 : radii.lg }]}
+      >
+        {layout.tiles.map((tile) => (
+          <Image key={`${tile.zoom}:${tile.x}:${tile.y}:${tile.left}`} pointerEvents="none" source={tile.url} contentFit="cover"
+            onError={() => setTileFailure(true)}
+            style={[styles.tile, { left: tile.left, top: tile.top, width: tile.size, height: tile.size }]} transition={60} />
+        ))}
+        {layout.segments.map((segment, index) => (
+          <View key={`route:${index}`} pointerEvents="none" style={[styles.segment,{
+            left: segment.left, top: segment.top, width: segment.length,
+            transform: [{ rotate: `${segment.angle}rad` }],
+          }]} />
+        ))}
+        {layout.markers.map((marker, index) => {
+          const tone = markerColor(marker.kind);
+          return (
+            <View key={`${marker.label}:${index}`} pointerEvents="none" style={[styles.markerWrap,{left:marker.left-60,top:marker.top-44}]}>
+              <View style={[styles.marker,{borderColor:tone}]}><View style={[styles.markerDot,{backgroundColor:tone}]} /></View>
+              <View style={[styles.markerTip,{borderTopColor:tone}]} />
+              <Text numberOfLines={1} style={styles.markerLabel}>{marker.label}</Text>
+            </View>
+          );
+        })}
+        {onSelectPoint ? <View pointerEvents="none" style={styles.selectionHint}><Text style={styles.selectionHintText}>Drag to pan · Tap to set the exact point</Text></View> : null}
+        <View {...panResponder.panHandlers} style={styles.interactionLayer} />
+        <View style={styles.controls}>
+          <Pressable accessibilityLabel="Recenter map" onPress={(event) => { event.stopPropagation(); recenter(); }} style={styles.control}><Crosshair color={colors.ink} size={19} /></Pressable>
+          <Pressable accessibilityLabel="Zoom map in" onPress={(event) => { event.stopPropagation(); setZoom((value) => Math.min(effectiveMaxZoom,value+1)); }} style={styles.control}><Plus color={colors.ink} size={19} /></Pressable>
+          <Pressable accessibilityLabel="Zoom map out" onPress={(event) => { event.stopPropagation(); setZoom((value) => Math.max(minZoom,value-1)); }} style={styles.control}><Minus color={colors.ink} size={19} /></Pressable>
+          {!fullscreen
+            ? <Pressable accessibilityLabel="Open full-screen map" onPress={(event) => {event.stopPropagation();setExpanded(true);}} style={styles.control}><Maximize2 color={colors.ink} size={18} /></Pressable>
+            : <Pressable accessibilityLabel="Close full-screen map" onPress={() => setExpanded(false)} style={styles.control}><Minimize2 color={colors.ink} size={18} /></Pressable>}
+        </View>
+        {tileFailure ? (
+          <View style={styles.tileError}>
+            <Text style={styles.tileErrorTitle}>Map tiles are temporarily unavailable</Text>
+            <Text style={styles.tileErrorBody}>SKIMA is using the keyless OpenStreetMap provider. Check your connection and retry.</Text>
+            <Pressable accessibilityRole="button" onPress={() => setTileFailure(false)} style={styles.tileRetry}><Text style={styles.tileRetryText}>Retry map</Text></Pressable>
+          </View>
+        ) : null}
+        <View pointerEvents="none" style={styles.zoomBadge}><Text style={styles.zoomText}>{onSelectPoint ? "Pinpoint mode" : "Map view"}</Text></View>
+        <Text pointerEvents="none" style={styles.attribution}>{attribution}</Text>
       </View>
     );
+  };
 
   return (
-    <View
-      accessibilityLabel={onSelectPoint ? "Interactive map. Drag to pan and tap to move the location pin." : "Interactive map. Drag to pan and use controls to zoom."}
-      onLayout={onLayout}
-      style={[styles.map, { height, borderColor: palette.border }]}
-    >
-      {layout.tiles.map((tile) => (
-        <Image
-          key={`${tile.zoom}:${tile.x}:${tile.y}:${tile.left}`}
-          pointerEvents="none"
-          source={tile.url}
-          contentFit="cover"
-          onError={() => setUseEmergencyTiles(true)}
-          style={[styles.tile, { left: tile.left, top: tile.top, width: tile.size, height: tile.size }]}
-          transition={60}
-        />
-      ))}
-      {connectPoints
-        ? layout.segments.map((segment, index) => (
-            <View
-              key={`route:${index}`}
-              pointerEvents="none"
-              style={[
-                styles.segment,
-                {
-                  left: segment.left,
-                  top: segment.top,
-                  width: segment.length,
-                  transform: [{ rotate: `${segment.angle}rad` }],
-                },
-              ]}
-            />
-          ))
-        : null}
-      {layout.markers.map((marker, index) => {
-        const tone = markerColor(marker.kind);
-        return (
-          <View
-            key={`${marker.label}:${index}`}
-            pointerEvents="none"
-            style={[styles.markerWrap, { left: marker.left - 60, top: marker.top - 44 }]}
-          >
-            <View style={[styles.marker, { borderColor: tone }]}><View style={[styles.markerDot, { backgroundColor: tone }]} /></View>
-            <View style={[styles.markerTip, { borderTopColor: tone }]} />
-            <Text numberOfLines={1} style={styles.markerLabel}>{marker.label}</Text>
+    <>
+      {!expanded ? renderMapSurface(false) : null}
+      <Modal visible={expanded} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setExpanded(false)}>
+        <View style={[styles.fullscreen,{backgroundColor:palette.canvas}]}>
+          <View style={[styles.fullscreenHeader,{backgroundColor:palette.surface,borderBottomColor:palette.border}]}>
+            <View style={styles.fullscreenHeaderCopy}>
+              <Text style={[styles.fullscreenEyebrow,{color:palette.muted}]}>SKIMA MAP</Text>
+              <Text style={[styles.fullscreenTitle,{color:palette.ink}]}>Full map view</Text>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close full-screen map" onPress={() => setExpanded(false)} style={styles.fullscreenClose}><X color={palette.ink} size={22} /></Pressable>
           </View>
-        );
-      })}
-      {onSelectPoint
-        ? <View pointerEvents="none" style={styles.selectionHint}><Text style={styles.selectionHintText}>Drag to move the map · Tap to set the exact point</Text></View>
-        : null}
-      <View {...panResponder.panHandlers} style={styles.interactionLayer} />
-      <View style={styles.controls}>
-        <Pressable accessibilityLabel="Recenter map" onPress={(event) => { event.stopPropagation(); recenter(); }} style={styles.control}>
-          <Crosshair color={colors.ink} size={19} />
-        </Pressable>
-        <Pressable accessibilityLabel="Zoom map in" onPress={(event) => { event.stopPropagation(); setZoom((value) => Math.min(effectiveMaxZoom, value + 1)); }} style={styles.control}>
-          <Plus color={colors.ink} size={19} />
-        </Pressable>
-        <Pressable accessibilityLabel="Zoom map out" onPress={(event) => { event.stopPropagation(); setZoom((value) => Math.max(minZoom, value - 1)); }} style={styles.control}>
-          <Minus color={colors.ink} size={19} />
-        </Pressable>
-      </View>
-      <View pointerEvents="none" style={styles.zoomBadge}><Text style={styles.zoomText}>{onSelectPoint ? "Pinpoint mode" : "Map view"}</Text></View>
-      <Text pointerEvents="none" style={styles.attribution}>{attribution}</Text>
-    </View>
+          {renderMapSurface(true)}
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -243,6 +238,7 @@ function fitZoom(points: readonly MapPoint[], width: number, height: number, min
 function createLayout(
   center: { latitude: number; longitude: number },
   points: readonly MapPoint[],
+  routeCoordinates: readonly { latitude: number; longitude: number }[],
   width: number,
   height: number,
   zoom: number,
@@ -278,8 +274,12 @@ function createLayout(
     const pixel = project(point.latitude, point.longitude, zoom);
     return { ...point, left: pixel.x - leftWorld, top: pixel.y - topWorld };
   });
-  const segments = markers.slice(1).map((point, index) => {
-    const previous = markers[index];
+  const routePixels = routeCoordinates.map((point) => {
+    const pixel = project(point.latitude, point.longitude, zoom);
+    return { left: pixel.x - leftWorld, top: pixel.y - topWorld };
+  });
+  const segments = routePixels.slice(1).map((point, index) => {
+    const previous = routePixels[index];
     const dx = point.left - previous.left;
     const dy = point.top - previous.top;
     return { left: previous.left, top: previous.top, length: Math.sqrt(dx * dx + dy * dy), angle: Math.atan2(dy, dx) };
@@ -318,6 +318,17 @@ function clamp(value: number, minimum: number, maximum: number) {
 
 const styles = StyleSheet.create({
   map: { width: "100%", overflow: "hidden", borderRadius: radii.lg, borderWidth: 1, backgroundColor: "#DCE5DF" },
+  fullscreen: { flex: 1 },
+  fullscreenHeader: { minHeight: 64, paddingHorizontal: spacing.lg, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderBottomWidth: StyleSheet.hairlineWidth },
+  fullscreenHeaderCopy: { gap: 2 },
+  fullscreenEyebrow: { fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  fullscreenTitle: { fontSize: 18, fontWeight: "900" },
+  fullscreenClose: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 21 },
+  tileError: { position: "absolute", left: 20, right: 20, top: "34%", alignItems: "center", gap: 8, padding: 18, borderRadius: radii.lg, backgroundColor: "rgba(255,255,255,.96)" },
+  tileErrorTitle: { color: colors.ink, fontSize: 15, fontWeight: "900", textAlign: "center" },
+  tileErrorBody: { color: colors.muted, fontSize: 12, lineHeight: 17, textAlign: "center" },
+  tileRetry: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: radii.pill, backgroundColor: colors.brand },
+  tileRetryText: { color: "white", fontSize: 12, fontWeight: "900" },
   tile: { position: "absolute" },
   interactionLayer: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
   segment: { position: "absolute", height: 5, borderRadius: 3, backgroundColor: colors.brand, transformOrigin: "left center" },
