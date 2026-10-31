@@ -725,3 +725,50 @@ Deno.test("SKIMA Managed driver detail is split into progressive workflow sectio
   assertIncludes(internal, "confirmInternalRefill");
   assertIncludes(internal, "submitScan");
 });
+
+
+Deno.test("independent driver earnings are split into gross, SKIMA commission and net without mixing fulfilment ownership", async () => {
+  const payout = await read("supabase/migrations/20261031113000_lpg_independent_driver_payout_commission_split.sql");
+  const delivery = await read("supabase/migrations/20261031120000_lpg_delivery_otp_completion_and_payout_bridge.sql");
+  const admin = await read("apps/admin/src/admin-delivery-pricing-workspace.tsx");
+  const driverJob = await read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx");
+
+  // The accepted quote must distinguish gross earning, the platform deduction,
+  // the net payout and any separate logistics margin.
+  assertIncludes(payout, "platform_commission_percent");
+  assertIncludes(payout, "payout_basis");
+  assertIncludes(payout, "gross_driver_payout := customer_delivery_fee");
+  assertIncludes(payout, "platform_driver_commission := round(gross_driver_payout * platform_commission_percent / 100, 2)");
+  assertIncludes(payout, "driver_payout := round(gross_driver_payout - platform_driver_commission, 2)");
+  assertIncludes(payout, "logistics_margin := round(customer_delivery_fee - gross_driver_payout, 2)");
+  assertIncludes(payout, "'revenue_stream', 'driver_commission'");
+  assertIncludes(payout, "'driver_commission', independent_driver_commission_amount");
+
+  // Only independent marketplace fulfilment receives this percentage split.
+  assertIncludes(payout, "order_record.fulfillment_mode = 'independent_driver'");
+  assertIncludes(payout, "order_record.fulfillment_channel = 'marketplace'");
+  assertIncludes(payout, "fulfillment_mode,fulfillment_channel");
+  assertIncludes(payout, "Station Managed drivers are paid by their station");
+  assertIncludes(payout, "settle_lpg_internal_order");
+
+  // A legacy zero-rate order is corrected from previously classified SKIMA
+  // revenue as a separate, auditable adjustment; snapshots are not rewritten.
+  assertIncludes(payout, "legacy_zero_payout_correction");
+  assertIncludes(payout, "driver_payout_correction");
+  assertIncludes(payout, "gross_driver_earning_amount");
+  assertIncludes(delivery, "target_source = 'lpg.wallet_engine'");
+  assertIncludes(delivery, "verified_order.id::text = target_metadata ->> 'lpg_order_id'");
+  assertIncludes(delivery, "verified_order.metadata ->> 'platform_revenue_classification_transaction_id' is not null");
+  assertIncludes(delivery, "public.lpg_delivery_challenge_is_verified");
+
+  // Admin configuration and the Driver screen both expose the policy-driven
+  // split; client code reads amounts, it never invents a commission.
+  assertIncludes(admin, "platform_commission_percent");
+  assertIncludes(admin, "payout_basis");
+  assertIncludes(admin, "SKIMA commission from independent-driver gross earnings (%)");
+  assertIncludes(driverJob, "Gross delivery earning");
+  assertIncludes(driverJob, "SKIMA commission (");
+  assertIncludes(driverJob, "Your net driver payout");
+  assertIncludes(driverJob, 'payoutFulfillmentMode === "independent_driver"');
+});
+
