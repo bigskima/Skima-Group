@@ -11,6 +11,7 @@ import {
   type PlatformRecord,
 } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
+import { useSession } from "../session/SessionProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { operationIdempotencyKey } from "../utilities/idempotency";
@@ -24,7 +25,6 @@ type StationWorkRow = {
   status: string;
   inspection: string;
   requestedKg: number | null;
-  notes: string | null;
 };
 
 export function StationBatchOperationsPanel({
@@ -35,6 +35,13 @@ export function StationBatchOperationsPanel({
   onRefresh(): Promise<unknown> | void;
 }) {
   const { palette } = useAppTheme();
+  const session = useSession();
+  const permissions = new Set([
+    ...(session.context?.permissions ?? []),
+    ...(session.context?.roles.flatMap((role) => role.permissions) ?? []),
+  ]);
+  const canInspect = Boolean(session.context?.platformAdmin || permissions.has("lpg.stations.scan") || permissions.has("lpg.stations.pump"));
+  const canPump = Boolean(session.context?.platformAdmin || permissions.has("lpg.stations.pump"));
   const [actualKgByOrder, setActualKgByOrder] = useState<Record<string, string>>({});
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
   const [batchBusy, setBatchBusy] = useState(false);
@@ -67,7 +74,6 @@ export function StationBatchOperationsPanel({
       status: (displayStatus(job) ?? "unknown").toLowerCase().replace(/[\\s-]+/g, "_"),
       inspection: (firstString(job, ["latestInspectionResult", "latest_inspection_result"]) ?? "").toLowerCase(),
       requestedKg: firstNumber(job, ["requestedKg", "requested_kg"]),
-      notes: firstString(job, ["latestInspectionNotes", "latest_inspection_notes"]),
     }];
   }), [jobs]);
 
@@ -106,7 +112,7 @@ export function StationBatchOperationsPanel({
       setNotice(result === "safe"
         ? `${row.reference}: safety check saved. The refill is now ready to record.`
         : `${row.reference}: sent for supervisor review. Refill remains blocked.`);
-      await onRefresh();
+      await Promise.resolve(onRefresh()).catch(() => undefined);
     } catch (cause) {
       setNoticeSuccess(false);
       setNotice(friendlyError(cause, `Could not save the safety check for ${row.reference}.`));
@@ -156,7 +162,7 @@ export function StationBatchOperationsPanel({
       ? `${confirmed} refill(s) confirmed. ${failures.length} need attention: ${failures.slice(0, 2).join(" · ")}`
       : `${confirmed} refill(s) confirmed. Each order was processed and settled independently.`);
     setBatchBusy(false);
-    await onRefresh();
+    await Promise.resolve(onRefresh()).catch(() => undefined);
   };
 
   if (rows.length === 0) return null;
@@ -200,7 +206,7 @@ export function StationBatchOperationsPanel({
       {inspectionRows.length > 0 ? (
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: palette.ink }]}>Safety checks · one per cylinder</Text>
-          {inspectionRows.map((row) => (
+          {canInspect ? inspectionRows.map((row) => (
             <View key={row.id} style={[styles.workRow, { borderColor: palette.border }]}>
               <View style={styles.rowCopy}>
                 <Text style={[styles.rowTitle, { color: palette.ink }]}>{row.reference}</Text>
@@ -223,7 +229,7 @@ export function StationBatchOperationsPanel({
                 onPress={() => void saveInspection(row, "manual_review")}
               />
             </View>
-          ))}
+          )) : <Text style={[styles.body, { color: palette.muted }]}>Your station role is read-only for safety checks.</Text>}
         </View>
       ) : null}
 
@@ -236,7 +242,7 @@ export function StationBatchOperationsPanel({
         </View>
       ) : null}
 
-      {refillRows.length > 0 ? (
+      {refillRows.length > 0 && canPump ? (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: palette.ink }]}>Refill quantities</Text>
