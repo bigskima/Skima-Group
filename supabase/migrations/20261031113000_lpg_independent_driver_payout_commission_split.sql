@@ -417,15 +417,60 @@ $classifier$;
 do $posting_guard$
 declare
   function_sql text;
-  old_gate text := $old$
+  gate_start integer;
+  gate_end integer;
+  gate_relative_end integer;
+  new_gate text := $gate$
+  if auth.role() <> 'service_role'
+    and not public.has_permission('platform.financial.manage', null)
+    and not (
+      (
+        pg_trigger_depth() > 0
+        and target_source = 'lpg.settlement_engine'
+        and target_metadata ->> 'automatic_refill_settlement' = 'true'
+        and target_subject_type = 'service_request'
+        and exists (
+          select 1
+          from public.lpg_refill_orders lpg_order
+          join public.lpg_order_events refill_event
+            on refill_event.lpg_order_id = lpg_order.id
+           and refill_event.id::text = target_metadata ->> 'source_event_id'
+           and refill_event.event_type = 'lpg.refill.confirmed'
+           and refill_event.to_status = 'refill_confirmed'
+          join public.lpg_refill_records refill_record
+            on refill_record.lpg_order_id = lpg_order.id
+           and refill_record.id::text = refill_event.metadata ->> 'refill_record_id'
+          where lpg_order.id::text = target_metadata ->> 'lpg_order_id'
+            and lpg_order.service_request_id = target_subject_id
+            and lpg_order.status = 'refill_confirmed'
+            and lpg_order.actual_kg = refill_record.actual_kg
+        )
       )
-    )
-    ) then
-    raise exception 'platform financial management permission is required';
-$old$;
-  new_gate text := $new$
+      or (
+        pg_trigger_depth() > 0
+        and target_source = 'lpg.revenue_classifier'
+        and target_subject_type = 'lpg_refill_order'
+        and exists (
+          select 1
+          from public.lpg_refill_orders lpg_order
+          join public.settlement_executions settlement
+            on settlement.id = lpg_order.station_settlement_execution_id
+           and settlement.status = 'posted'
+           and settlement.source = 'lpg.settlement_engine'
+          join public.lpg_order_events refill_event
+            on refill_event.lpg_order_id = lpg_order.id
+           and refill_event.event_type = 'lpg.refill.confirmed'
+           and refill_event.to_status = 'refill_confirmed'
+          join public.lpg_refill_records refill_record
+            on refill_record.lpg_order_id = lpg_order.id
+           and refill_record.id::text = refill_event.metadata ->> 'refill_record_id'
+          where lpg_order.id = target_subject_id
+            and lpg_order.id::text = target_metadata ->> 'lpg_order_id'
+            and lpg_order.station_settlement_execution_id::text = target_metadata ->> 'station_settlement_execution_id'
+            and lpg_order.status = 'station_settled'
+            and lpg_order.actual_kg = refill_record.actual_kg
+        )
       )
-    )
       or (
         pg_trigger_depth() > 0
         and target_source = 'lpg.driver_payout.auto_delivery'
@@ -523,19 +568,33 @@ $old$;
       )
     ) then
     raise exception 'platform financial management permission is required';
-$new$;
+  end if;
+$gate$;
 begin
   select pg_get_functiondef(
     'public.post_financial_transaction(text,text,text,text,uuid,jsonb,text,uuid,text,jsonb,jsonb)'::regprocedure
   ) into function_sql;
 
-  if position(old_gate in function_sql) = 0 then
-    raise exception 'financial posting permission gate changed; refusing unsafe driver payout allowance';
+  gate_start := strpos(function_sql, '  if auth.role() <> ''service_role''');
+  if gate_start = 0 then
+    raise exception 'financial posting permission gate could not be located';
   end if;
-  function_sql := replace(function_sql, old_gate, new_gate);
+
+  gate_relative_end := strpos(substring(function_sql from gate_start), '  end if;');
+  if gate_relative_end = 0 then
+    raise exception 'financial posting permission gate terminator could not be located';
+  end if;
+
+  gate_end := gate_start + gate_relative_end + char_length('  end if;') - 2;
+  function_sql :=
+    substring(function_sql from 1 for gate_start - 1)
+    || new_gate
+    || substring(function_sql from gate_end + 1);
+
   execute function_sql;
 end;
 $posting_guard$;
+
 
 -- The new quote path stores the driver's NET earnings in the existing
 -- driver_commission_amount field. For the one already-settled legacy test order
