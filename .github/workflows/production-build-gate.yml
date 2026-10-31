@@ -71,6 +71,8 @@ jobs:
         run: npm run ai-runtime:contract
       - name: Verify LPG refill production contracts
         run: npm run lpg-refill:contract
+      - name: Verify keyless interactive map contracts
+        run: npm run location-maps:contract
       - name: Verify independent driver vehicle onboarding contracts
         run: npm run lpg-driver-vehicle:contract
       - name: Verify independent driver vehicle location review contracts
