@@ -31,9 +31,10 @@ export interface OperationalMapProps {
 
 const TILE = 256;
 const DEFAULT_HEIGHT = 420;
-const EMERGENCY_RASTER_TILE_TEMPLATE =
+const OPENSTREETMAP_RASTER_TILE_TEMPLATE =
   "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const EMERGENCY_ATTRIBUTION = "© OpenStreetMap contributors";
+const CARTO_VOYAGER_RASTER_TILE_TEMPLATE =
+  "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png";
 
 export function OperationalMap({
   points,
@@ -50,12 +51,24 @@ export function OperationalMap({
   const effectiveMaxZoom = maxZoom ?? Math.max(21, providerTileMaxZoom);
   const [width, setWidth] = useState(720);
   const [useEmergencyTiles, setUseEmergencyTiles] = useState(false);
+  const emergencyFallback = mapRenderer.tileTemplate.includes("tile.openstreetmap.org")
+    ? {
+        tileTemplate: CARTO_VOYAGER_RASTER_TILE_TEMPLATE,
+        attribution: "© OpenStreetMap contributors, © CARTO",
+        maxZoom: 20,
+      }
+    : {
+        tileTemplate: OPENSTREETMAP_RASTER_TILE_TEMPLATE,
+        attribution: "© OpenStreetMap contributors",
+        maxZoom: 19,
+      };
   const tileTemplate = useEmergencyTiles
-    ? EMERGENCY_RASTER_TILE_TEMPLATE
+    ? emergencyFallback.tileTemplate
     : mapRenderer.tileTemplate;
   const attribution = useEmergencyTiles
-    ? EMERGENCY_ATTRIBUTION
+    ? emergencyFallback.attribution
     : mapRenderer.attribution;
+  const activeTileMaxZoom = useEmergencyTiles ? emergencyFallback.maxZoom : providerTileMaxZoom;
   const pointKey = points.map((point) => `${point.latitude}:${point.longitude}`).join("|");
   const interactive = Boolean(onSelectPoint);
   const derivedCenter = useMemo(
@@ -79,7 +92,7 @@ export function OperationalMap({
   }, [pointKey, interactive, width, height, initialZoom, mapRenderer.defaultZoom, effectiveMaxZoom, minZoom]);
 
   const layout = center
-    ? createLayout(center, points, width, height, zoom, tileTemplate, providerTileMaxZoom)
+    ? createLayout(center, points, width, height, zoom, tileTemplate, activeTileMaxZoom)
     : null;
   const onLayout = (event: LayoutChangeEvent) =>
     setWidth(Math.max(280, event.nativeEvent.layout.width));
