@@ -22,6 +22,7 @@ export function DeliveryVerificationScreen() {
   const owner = session.context?.profile?.id ?? session.context?.user.id ?? "";
   const draftType = `customer-delivery-verification-${id ?? "unknown"}`;
   const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [deliveryCode, setDeliveryCode] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeTone, setNoticeTone] = useState<NoticeTone>("neutral");
@@ -31,6 +32,10 @@ export function DeliveryVerificationScreen() {
     schema: ActionResponseSchema,
     invalidate: [["orders"]],
   });
+  const deliveryMutation = useGatewayMutation({
+    path: "/runtime/otp/delivery",
+    schema: ActionResponseSchema,
+  });
 
   useEffect(() => {
     if (!owner || !id) return;
@@ -38,8 +43,35 @@ export function DeliveryVerificationScreen() {
       if (typeof draft?.values.challengeId === "string") {
         setChallengeId(draft.values.challengeId);
       }
+    }).catch((cause) => {
+      setNoticeTone("error");
+      setNotice(friendlyError(cause, "The saved delivery challenge could not be restored."));
     });
   }, [draftType, id, owner]);
+
+  const revealCode = async (targetChallengeId: string): Promise<boolean> => {
+    setNotice(null);
+    try {
+      const delivery = await deliveryMutation.mutateAsync({
+        challengeId: targetChallengeId,
+        idempotencyKey: idempotencyKey("delivery-code", targetChallengeId),
+        source: "skima.lpg.mobile",
+      });
+      const retrievedCode = delivery && typeof delivery === "object"
+        ? firstString(delivery, ["code"])
+        : null;
+      if (!retrievedCode) {
+        throw new Error("The delivery code is unavailable. Request a new code and try again.");
+      }
+      setDeliveryCode(retrievedCode);
+      setCode(retrievedCode);
+      return true;
+    } catch (cause) {
+      setNoticeTone("error");
+      setNotice(friendlyError(cause, "The delivery code could not be retrieved."));
+      return false;
+    }
+  };
 
   const request = async () => {
     setNotice(null);
@@ -68,6 +100,10 @@ export function DeliveryVerificationScreen() {
       }
 
       setChallengeId(resultId);
+      setDeliveryCode(null);
+      setCode("");
+      const codeRetrieved = await revealCode(resultId);
+
       const now = new Date().toISOString();
       await draftStore.save({
         version: 1,
@@ -80,8 +116,10 @@ export function DeliveryVerificationScreen() {
         createdAt: now,
         updatedAt: now,
       });
-      setNoticeTone("success");
-      setNotice("Your verification code is ready in SKIMA.");
+      if (codeRetrieved) {
+        setNoticeTone("success");
+        setNotice("Your delivery code is ready. Show it to your driver only when the cylinder is with you.");
+      }
     } catch (cause) {
       setNoticeTone("error");
       setNotice(friendlyError(cause, "The verification code could not be created."));
@@ -175,13 +213,34 @@ export function DeliveryVerificationScreen() {
           label="Get verification code"
           fullWidth
           size="lg"
-          loading={mutation.isPending}
+          loading={mutation.isPending || deliveryMutation.isPending}
           icon={<KeyRound color="#FFFFFF" size={18} />}
           onPress={() => void request()}
         />
       ) : (
         <View style={[styles.codeCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-          <Text style={[styles.fieldLabel, { color: palette.ink }]}>Verification code</Text>
+          <Text style={[styles.fieldLabel, { color: palette.ink }]}>Your delivery code</Text>
+          <View style={[styles.deliveryCodeDisplay, { backgroundColor: palette.successSoft, borderColor: palette.success }]}>
+            <Text accessibilityLabel="Your delivery verification code" selectable style={[styles.deliveryCodeText, { color: palette.success }]}>
+              {deliveryCode ?? "••••••"}
+            </Text>
+            <Text style={[styles.deliveryCodeHint, { color: palette.muted }]}>
+              {deliveryCode
+                ? "Show this code to your driver for this order. Keep it private until your cylinder is physically with you."
+                : "Your code is protected. Reveal it when the cylinder is ready to be handed over."}
+            </Text>
+          </View>
+          {!deliveryCode ? (
+            <AppButton
+              label="Show delivery code"
+              fullWidth
+              variant="secondary"
+              loading={deliveryMutation.isPending}
+              disabled={deliveryMutation.isPending}
+              onPress={() => challengeId ? void revealCode(challengeId) : undefined}
+            />
+          ) : null}
+          <Text style={[styles.fieldLabel, { color: palette.ink }]}>Confirm the code</Text>
           <TextInput
             accessibilityLabel="Delivery verification code"
             value={code}
@@ -210,7 +269,7 @@ export function DeliveryVerificationScreen() {
             label="Request a new code"
             variant="ghost"
             fullWidth
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || deliveryMutation.isPending}
             onPress={() => void request()}
           />
         </View>
@@ -269,6 +328,17 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   fieldLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" },
+  deliveryCodeDisplay: {
+    minHeight: 92,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+  },
+  deliveryCodeText: { fontSize: 32, fontWeight: "900", letterSpacing: 8 },
+  deliveryCodeHint: { ...typography.caption, textAlign: "center", lineHeight: 18 },
   input: {
     minHeight: 62,
     borderWidth: 1,
