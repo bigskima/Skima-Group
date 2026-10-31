@@ -88,7 +88,7 @@ export function ScanWorkspaceScreen({
         workspace,
         token,
         idempotencyKey: scanAttemptKey,
-        source: "skima.lpg.mobile",
+        source: "skima.lpg.continuous",
       });
       const result = response && typeof response === "object" ? response as PlatformRecord : {};
       const orderReference = firstString(result, ["orderReference", "publicReference", "public_reference"]) ?? "Assigned order";
