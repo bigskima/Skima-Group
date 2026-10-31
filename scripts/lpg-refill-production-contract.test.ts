@@ -244,6 +244,27 @@ Deno.test("station, driver and customer operation queues avoid unbounded long sc
   assertIncludes(orders, "const ORDER_PAGE_SIZE = 8");
 });
 
+Deno.test("station scanner includes incoming receipt and shows visible confirmation feedback", async () => {
+  const [scanner, jobDetail, migration] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/ScanWorkspaceScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+    read("supabase/migrations/20261031074200_lpg_station_operator_arrival_verification.sql"),
+  ]);
+  assertIncludes(scanner, '["station_en_route", "refill_confirmed", "station_settled"]');
+  assertIncludes(scanner, "stationArrivalStage");
+  assertIncludes(scanner, "Verify incoming cylinders at reception");
+  assertNotIncludes(scanner, "Nothing ready for release");
+  assertIncludes(jobDetail, 'if (status === "station_en_route") return "station_receipt";');
+  assertIncludes(jobDetail, "Enter Cylinder ID (e.g. M6D48)");
+  assertIncludes(jobDetail, "Cylinder arrival verified at this station.");
+  assertIncludes(jobDetail, "Station receipt verified. SKIMA matched the driver's scanned cylinder to this order.");
+  assertIncludes(jobDetail, 'accessibilityLiveRegion="polite"');
+  assertIncludes(jobDetail, '["public_reference", "publicReference", "reference"]');
+  assertIncludes(migration, "'lpg.stations.scan'");
+  assertIncludes(migration, "'lpg.stations.pump'");
+  assertIncludes(migration, "authorized station operator is required for station receipt scan");
+});
+
 Deno.test("all LPG order read models expose the short Cylinder ID consistently", async () => {
   const migration = await read(
     "supabase/migrations/20261031073100_lpg_short_cylinder_order_read_models.sql",
