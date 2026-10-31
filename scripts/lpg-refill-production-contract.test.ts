@@ -47,6 +47,16 @@ Deno.test("continuous LPG cylinder scanning matches only the signed-in actor's a
   assertIncludes(scanner, "Scan the same cylinder again");
   assertIncludes(jobDetail, 'actionKey: "lpg.station.start"');
   assertIncludes(jobDetail, "station staff scan it at reception");
+  const driverScanRules = jobDetail.slice(
+    jobDetail.indexOf("function driverScanTypeForStatus"),
+    jobDetail.indexOf("function stationScanTypeForStatus"),
+  );
+  const stationScanRules = jobDetail.slice(
+    jobDetail.indexOf("function stationScanTypeForStatus"),
+    jobDetail.indexOf("function driverActionForStatus"),
+  );
+  assertNotIncludes(driverScanRules, 'return "station_receipt"');
+  assertIncludes(stationScanRules, 'return "station_receipt"');
   assertIncludes(migration, "order_row.fulfillment_channel = 'skima_internal'");
 });
 
