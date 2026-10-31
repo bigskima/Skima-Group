@@ -132,8 +132,8 @@ export function OperationalMap({
       dragOrigin.current = null;
       if (!origin || origin.moved || Math.abs(gesture.dx) > 4 || Math.abs(gesture.dy) > 4 || !onSelectPoint) return;
       const projectedCenter = project(origin.center.latitude, origin.center.longitude, origin.zoom);
-      const pointX = projectedCenter.x + event.nativeEvent.locationX - width / 2;
-      const pointY = projectedCenter.y + event.nativeEvent.locationY - height / 2;
+      const pointX = projectedCenter.x + event.nativeEvent.locationX - canvasWidth / 2;
+      const pointY = projectedCenter.y + event.nativeEvent.locationY - canvasHeight / 2;
       onSelectPoint(unproject(pointX, pointY, origin.zoom));
     },
     onPanResponderTerminate: () => {
