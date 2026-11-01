@@ -300,7 +300,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
       setNotice(completedScanType === "customer_delivery"
         ? workspace === "station_driver"
           ? "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments."
-          : "Final cylinder scan verified. Customer hand-over is complete and the order has moved to delivered."
+          : "Customer OTP confirmation completes the hand-over. Refresh the job to see the delivered state."
         : driverScanSuccess(completedScanType));
       await detail.refetch();
     } catch (cause) {
@@ -1015,7 +1015,7 @@ function driverScanButton(type: "customer_pickup" | "station_receipt" | "custome
 
 function driverScanSuccess(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
   if (type === "station_receipt") return "Station arrival verified. The station has been notified and can now begin its safety check.";
-  if (type === "customer_delivery") return "Delivery verified. SKIMA is completing the order and releasing your payout automatically.";
+  if (type === "customer_delivery") return "Customer OTP confirmation completes this hand-over. No second driver scan is required.";
   return "Cylinder pickup verified successfully. You can now continue to the assigned station.";
 }
 
