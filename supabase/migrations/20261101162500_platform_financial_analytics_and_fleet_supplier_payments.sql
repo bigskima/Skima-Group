@@ -139,7 +139,9 @@ begin
       or existing_payment.amount<>round(target_amount,2)
       or existing_payment.payment_method is distinct from target_payment_method
       or existing_payment.payment_reference is distinct from nullif(btrim(coalesce(target_payment_reference,'')),'')
-      or existing_payment.evidence_media_asset_id is distinct from target_evidence_media_asset_id then
+      or existing_payment.evidence_media_asset_id is distinct from target_evidence_media_asset_id
+      or existing_payment.paid_at is distinct from coalesce(target_paid_at,timezone('utc',now()))
+      or existing_payment.note is distinct from nullif(btrim(coalesce(target_note,'')),'') then
       raise exception using errcode='22023',message='supplier payment idempotency key was reused with different payment details';
     end if;
 
