@@ -1077,3 +1077,19 @@ Deno.test("LPG driver stages advance from verified events and live Admin routing
   assertIncludes(vercel, '"destination": "/index.html"');
 });
 
+
+
+Deno.test("LPG dynamic order routes survive direct browser refresh on Vercel", async () => {
+  const [expoConfig, vercelConfig, customerOrderRoute] = await Promise.all([
+    read("apps/lpg-mobile/app.config.ts"),
+    read("vercel.json"),
+    read("apps/lpg-mobile/app/(customer)/orders/[id].tsx"),
+  ]);
+
+  assertIncludes(expoConfig, 'output: "single"');
+  assertNotIncludes(expoConfig, 'output: "static"');
+  assertIncludes(vercelConfig, '"source": "/(.*)"');
+  assertIncludes(vercelConfig, '"destination": "/index.html"');
+  assertIncludes(customerOrderRoute, "useLocalSearchParams");
+  assertIncludes(customerOrderRoute, "useJobDetails(orderId)");
+});
