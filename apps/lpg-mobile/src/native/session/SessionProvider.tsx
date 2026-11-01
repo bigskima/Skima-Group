@@ -237,7 +237,29 @@ export function SessionProvider({ children }: PropsWithChildren) {
       supabase,
       clearAuthError: () => setError(null),
       refresh: async () => {
-        await apply(sessionRef.current);
+        const current = sessionRef.current;
+        if (!current) {
+          await apply(null);
+          return;
+        }
+
+        // A query retry alone reuses an expired access token. Force Supabase
+        // to exchange the stored refresh token first, then rebuild role context.
+        const { data, error: refreshError } = await supabase.auth.refreshSession({
+          refresh_token: current.refresh_token,
+        });
+        if (refreshError || !data.session) {
+          setError(
+            friendlyError(
+              refreshError ?? new Error("The session could not be renewed."),
+              "Your secure session has expired. Sign in again to continue.",
+            ),
+          );
+          await apply(null);
+          return;
+        }
+
+        await apply(data.session);
       },
       signIn: async (email, password) => {
         setError(null);
