@@ -8,6 +8,7 @@ const quotePatch = await Deno.readTextFile(
   "supabase/migrations/20261102001000_fuel_quote_arithmetic_correction.sql",
 );
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
+const customerScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelOrderDetailsScreen.tsx");
 
 function includes(source: string, fragment: string, message: string): void {
   if (!source.includes(fragment)) throw new Error(`${message}: missing "${fragment}"`);
@@ -43,6 +44,15 @@ Deno.test("the Fuel commercial quote total uses the server-calculated subtotal",
   excludes(quote, "grand_total:=subtotal_amount+platform_fee_amount+tax_amount;", "quote never references an undeclared subtotal variable");
   includes(quotePatch, "public.create_fuel_commercial_quote(uuid,text,jsonb)", "correction targets the existing quote function");
   includes(quotePatch, "correct_formula", "correction is safe for databases that already have the fixed function");
+});
+
+Deno.test("customers see settlement and rental-deposit status from persisted server evidence", () => {
+  includes(customerScreen, 'firstString(order, ["settlement_execution_id"])', "customer screen reads the posted settlement execution");
+  includes(customerScreen, 'firstString(order, ["settlement_transaction_id"])', "customer screen reads the financial transaction");
+  includes(customerScreen, 'firstString(order, ["settlement_statement_id"])', "customer screen reads the station statement");
+  includes(customerScreen, 'firstString(order, ["deposit_refunded_at"])', "customer screen reads the actual deposit refund timestamp");
+  includes(customerScreen, "Returned to your SKIMA wallet", "customer receives a clear wallet refund confirmation");
+  includes(customerScreen, 'stage === "completed"', "customer does not confuse an unposted deposit with a refund");
 });
 
 Deno.test("the Fuel operation read model exposes posted settlement evidence", () => {
