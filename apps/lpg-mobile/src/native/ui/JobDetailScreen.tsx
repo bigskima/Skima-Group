@@ -146,8 +146,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   );
   const deliveryChallengeVerified = order?.deliveryChallengeVerified === true
     || order?.delivery_challenge_verified === true;
-  const waitingForCustomerOtp = driverWorkspace
-    && status === "delivery_verification_pending"
+  const waitingForCustomerOtp = status === "delivery_verification_pending"
     && customerDeliveryScanVerified;
   const terminalOrderStatus = ["delivered", "completed", "cancelled", "failed", "refunded", "expired"].includes(status);
   const canShareStationDriverLocation = workspace === "station_driver" && Boolean(id)
@@ -466,7 +465,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             <View style={styles.heroCopy}>
               <Text style={styles.heroEyebrow}>CURRENT STAGE</Text>
               <Text style={styles.heroTitle}>{friendlyJobStatus(status)}</Text>
-              <Text style={styles.heroBody}>{workspace === "station_driver" ? stationManagedDriverStageDescription(status) : driverWorkspace ? driverStageDescription(status, deliveryChallengeVerified) : stationStageDescription(status)}</Text>
+              <Text style={styles.heroBody}>{workspace === "station_driver" ? stationManagedDriverStageDescription(status) : driverWorkspace ? driverStageDescription(status, deliveryChallengeVerified, customerDeliveryScanVerified) : stationStageDescription(status)}</Text>
             </View>
             <StatusPill label={friendlyJobStatus(status)} tone={statusTone(status)} />
           </View>
@@ -676,7 +675,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
             </View>
           ) : null}
 
-          {waitingForCustomerOtp && driverSection === "actions" ? (
+          {driverWorkspace && waitingForCustomerOtp && driverSection === "actions" ? (
             <View style={[styles.scanCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <View style={styles.sectionLead}>
                 <View style={[styles.sectionIcon, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={22} /></View>
@@ -1073,7 +1072,7 @@ function friendlyJobStatus(value: string) {
   return labels[normalized] ?? normalized.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
-function driverStageDescription(status: string, deliveryChallengeVerified = false) {
+function driverStageDescription(status: string, deliveryChallengeVerified = false, customerDeliveryScanVerified = false) {
   if (["driver_offered", "driver_accepted"].includes(status)) return "This order has been assigned to you.";
   if (["pickup_en_route"].includes(status)) return "Navigate to the customer and verify the cylinder before taking custody.";
   if (["pickup_verified", "station_en_route"].includes(status)) return "Take the verified cylinder to the assigned station. Station staff scan it at reception.";
