@@ -1,8 +1,8 @@
 const migration = await Deno.readTextFile(
-  "supabase/migrations/20261102002000_fuel_order_processing_runtime.sql",
+  "supabase/migrations/20261101202100_fuel_order_processing_runtime.sql",
 );
 const foundation = await Deno.readTextFile(
-  "supabase/migrations/20261102001000_fuel_liquid_fulfillment_foundation.sql",
+  "supabase/migrations/20261101202000_fuel_liquid_fulfillment_foundation.sql",
 );
 
 function requireIncludes(source: string, fragment: string, message: string): void {
