@@ -641,27 +641,50 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
           ) : null}
 
           {canDriverScan && driverSection === "actions" && driverScanType ? (
-            <View style={[styles.scanCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              <View style={styles.sectionLead}>
-                <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
-                <View style={styles.sectionCopy}>
-                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>{driverScanTitle(driverScanType)}</Text>
-                  <Text style={[styles.sectionBody, { color: palette.muted }]}>{driverScanDescription(driverScanType)}</Text>
+            driverScanType === "customer_delivery" ? (
+              <View style={[styles.scanCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                <View style={styles.sectionLead}>
+                  <View style={[styles.sectionIcon, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={22} /></View>
+                  <View style={styles.sectionCopy}>
+                    <Text style={[styles.sectionTitle, { color: palette.ink }]}>Customer hand-over confirmation</Text>
+                    <Text style={[styles.sectionBody, { color: palette.muted }]}>
+                      {status === "return_en_route"
+                        ? "Return the filled cylinder to the customer, then tap “Arrived for customer hand-over”. The customer can confirm the delivery from their SKIMA order."
+                        : "The customer must open SKIMA → Orders → this order → Confirm delivery, then complete the order-specific OTP. That confirmation closes the hand-over automatically. No second cylinder scan is required."}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-              <Scanner enabled onDetected={setToken} />
-              {token ? (
                 <AppButton
-                  label={driverScanButton(driverScanType)}
+                  label="Refresh hand-over status"
                   fullWidth
-                  loading={continuousScan.isPending}
-                  icon={<CheckCircle2 color="#FFFFFF" size={17} />}
-                  onPress={() => void submitDriverScan()}
+                  variant="secondary"
+                  loading={detail.isRefetching}
+                  onPress={() => void detail.refetch()}
                 />
-              ) : (
-                <Text style={[styles.scannerHint, { color: palette.muted }]}>Align the SKIMA cylinder code inside the scanner to continue.</Text>
-              )}
-            </View>
+              </View>
+            ) : (
+              <View style={[styles.scanCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                <View style={styles.sectionLead}>
+                  <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
+                  <View style={styles.sectionCopy}>
+                    <Text style={[styles.sectionTitle, { color: palette.ink }]}>{driverScanTitle(driverScanType)}</Text>
+                    <Text style={[styles.sectionBody, { color: palette.muted }]}>{driverScanDescription(driverScanType)}</Text>
+                  </View>
+                </View>
+                <Scanner enabled onDetected={setToken} />
+                {token ? (
+                  <AppButton
+                    label={driverScanButton(driverScanType)}
+                    fullWidth
+                    loading={continuousScan.isPending}
+                    icon={<CheckCircle2 color="#FFFFFF" size={17} />}
+                    onPress={() => void submitDriverScan()}
+                  />
+                ) : (
+                  <Text style={[styles.scannerHint, { color: palette.muted }]}>Align the SKIMA cylinder code inside the scanner to continue.</Text>
+                )}
+              </View>
+            )
           ) : null}
 
           {canStationScan && stationScanType ? (
@@ -980,13 +1003,13 @@ function driverScanTitle(type: "customer_pickup" | "station_receipt" | "customer
 
 function driverScanDescription(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
   if (type === "station_receipt") return "Scan the SKIMA cylinder code at reception so station staff can confirm the order and begin the refill.";
-  if (type === "customer_delivery") return "After the customer confirms delivery, scan the same cylinder code to complete the hand-over.";
+  if (type === "customer_delivery") return "Customer OTP confirmation in their SKIMA order completes the final hand-over. Do not scan the cylinder again at this stage.";
   return "Scan the customer's SKIMA cylinder code before collecting it.";
 }
 
 function driverScanButton(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
   if (type === "station_receipt") return "Confirm station arrival";
-  if (type === "customer_delivery") return "Complete hand-over";
+  if (type === "customer_delivery") return "Await customer confirmation";
   return "Confirm cylinder pickup";
 }
 
