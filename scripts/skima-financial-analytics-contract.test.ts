@@ -77,6 +77,17 @@ Deno.test("The combined Fleet and Finance migration is classified as a business-
   assertStringIncludes(migrationPolicy, "20261101162500_platform_financial_analytics_and_fleet_supplier_payments.sql");
 });
 
+Deno.test("Service-request reconciliation counts LPG order-linked quotes, holds, releases and refunds", () => {
+  assertStringIncludes(migration, "create or replace function public.reconcile_service_request_financials");
+  assertStringIncludes(migration, "from public.lpg_refill_quotes quote");
+  assertStringIncludes(migration, "from public.lpg_refill_orders order_record");
+  assertStringIncludes(migration, "transaction.subject_type = 'lpg_refill_order'");
+  assertStringIncludes(migration, "order_record.service_request_id = target_service_request_id");
+  assertStringIncludes(migration, "public.refresh_ai_finance_reconciliation_findings()");
+  assertStringIncludes(migration, "'lpgOrderAware', true");
+  assertStringIncludes(migration, "order_record.service_request_id = request.id");
+});
+
 Deno.test("Admin supplier payments attach registered media evidence without changing ordinary order receipt rules", () => {
   assertStringIncludes(workspace, '"/runtime/media/upload-sessions"');
   assertStringIncludes(workspace, '"/runtime/media/assets"');
