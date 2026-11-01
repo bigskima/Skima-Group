@@ -272,7 +272,10 @@ Deno.test("customer home keeps independent services visible in every refill stat
   assertIncludes(dashboard, "<CustomerBillsCard />");
   assertIncludes(dashboard, '"customer",\n    session.context?.user.id ?? session.session?.user.id ?? null');
   assertIncludes(dashboard, "await session.refresh()");
-  assertIncludes(await read("apps/lpg-mobile/src/native/session/SessionProvider.tsx"), "supabase.auth.refreshSession");
+  const sessionProvider = await read("apps/lpg-mobile/src/native/session/SessionProvider.tsx");
+  assertIncludes(sessionProvider, "supabase.auth.refreshSession");
+  assertIncludes(sessionProvider, "sessionIsInvalid");
+  assertIncludes(sessionProvider, "A temporary network failure must not sign the customer out");
   assertIncludes(dashboard, "customerPrimaryStack");
   assertIncludes(await read("apps/lpg-mobile/src/native/api/domains.ts"), 'path: "/lpg/orders?scope=customer"');
 });
