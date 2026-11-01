@@ -8,6 +8,32 @@ alter table public.fuel_order_operations
   add column if not exists deposit_refunded_at timestamptz,
   add column if not exists deposit_refund_amount numeric(28,8) not null default 0 check (deposit_refund_amount>=0);
 
+create or replace function public.sync_fuel_accepted_quote_deposit_amount()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $
+begin
+  if new.status='accepted' then
+    update public.fuel_order_operations
+    set deposit_refund_amount=new.refundable_deposit_amount,
+        updated_at=timezone('utc',now())
+    where order_id=new.order_id;
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists fuel_accepted_quote_deposit_amount on public.fuel_order_commercial_snapshots;
+create trigger fuel_accepted_quote_deposit_amount
+after update of status on public.fuel_order_commercial_snapshots
+for each row
+when (new.status='accepted' and old.status is distinct from new.status)
+execute function public.sync_fuel_accepted_quote_deposit_amount();
+
+revoke all on function public.sync_fuel_accepted_quote_deposit_amount() from public,anon,authenticated;
+
 create or replace function public.settle_fuel_order(
   target_order_id uuid,
   target_idempotency_key text,
@@ -32,9 +58,9 @@ declare
   platform_revenue_wallet_id uuid;
   platform_liability_wallet_id uuid;
   customer_wallet_id uuid;
-  settlement_execution_id uuid;
-  settlement_transaction_id uuid;
-  settlement_statement_id uuid;
+  v_settlement_execution_id uuid;
+  v_settlement_transaction_id uuid;
+  v_settlement_statement_id uuid;
   station_payout_amount numeric(28,8);
   driver_payout_amount numeric(28,8);
   platform_revenue_amount numeric(28,8);
@@ -332,7 +358,7 @@ begin
     )
   );
 
-  settlement_execution_id := public.execute_service_request_settlement(
+  v_settlement_execution_id := public.execute_service_request_settlement(
     operation_record.service_request_id,
     request_record.escrow_hold_id,
     distribution,
@@ -341,7 +367,7 @@ begin
     settlement_metadata
   );
 
-  select execution.transaction_id into settlement_transaction_id
+  select execution.transaction_id into v_settlement_transaction_id
   from public.settlement_executions execution
   where execution.id=settlement_execution_id;
 
@@ -356,7 +382,7 @@ begin
   )
   values(
     branch_record.organization_id,operation_record.service_request_id,target_order_id,
-    request_record.escrow_hold_id,settlement_execution_id,order_record.currency_code,
+    request_record.escrow_hold_id,v_settlement_execution_id,order_record.currency_code,
     station_payout_amount,0,station_payout_amount,'posted',
     operation_record.created_at,now_value,'fuel.settlement_engine',
     target_idempotency_key||':station-statement',
@@ -373,16 +399,16 @@ begin
   end if;
 
   update public.fuel_order_operations
-  set settlement_execution_id=settlement_execution_id,
-      settlement_transaction_id=settlement_transaction_id,
-      settlement_statement_id=settlement_statement_id,
+  set settlement_execution_id=v_settlement_execution_id,
+      settlement_transaction_id=v_settlement_transaction_id,
+      settlement_statement_id=v_settlement_statement_id,
       settled_at=now_value,
       deposit_refunded_at=case when v_deposit_refund_amount>0 then now_value else deposit_refunded_at end,
       deposit_refund_amount=v_deposit_refund_amount,
       metadata=metadata||jsonb_build_object(
-        'settlement_execution_id',settlement_execution_id,
-        'settlement_transaction_id',settlement_transaction_id,
-        'settlement_statement_id',settlement_statement_id,
+        'settlement_execution_id',v_settlement_execution_id,
+        'settlement_transaction_id',v_settlement_transaction_id,
+        'settlement_statement_id',v_settlement_statement_id,
         'deposit_refunded_at',case when v_deposit_refund_amount>0 then now_value else null end
       ),
       updated_at=now_value
@@ -391,8 +417,8 @@ begin
   update public.fuel_order_commercial_snapshots
   set status='settled',
       metadata=metadata||jsonb_build_object(
-        'settlement_execution_id',settlement_execution_id,
-        'settlement_transaction_id',settlement_transaction_id
+        'settlement_execution_id',v_settlement_execution_id,
+        'settlement_transaction_id',v_settlement_transaction_id
       ),
       updated_at=now_value
   where id=quote_record.id;
@@ -408,7 +434,7 @@ begin
       updated_at=now_value
   where id=target_order_id;
 
-  return settlement_execution_id;
+  return v_settlement_execution_id;
 end;
 $$;
 
