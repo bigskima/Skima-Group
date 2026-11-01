@@ -37,6 +37,7 @@ Deno.test("Fuel settlement routes each locked component to the correct beneficia
   includes(migration, "customer_refundable_deposit_return", "rental deposit is credited to the customer wallet");
   includes(migration, "all_rental_containers_received_and_inspected", "rental deposit waits for completed return and inspection");
   includes(migration, "remaining_escrow_amount-quote_record.grand_total", "escrow balance must match the accepted commercial quote");
+  includes(migration, "deposit_refund_amount=v_deposit_refund_amount", "the actual refundable deposit amount is persisted to the customer read model");
 });
 
 Deno.test("the Fuel commercial quote total uses the server-calculated subtotal", () => {
@@ -51,6 +52,7 @@ Deno.test("customers see settlement and rental-deposit status from persisted ser
   includes(customerScreen, 'firstString(order, ["settlement_transaction_id"])', "customer screen reads the financial transaction");
   includes(customerScreen, 'firstString(order, ["settlement_statement_id"])', "customer screen reads the station statement");
   includes(customerScreen, 'firstString(order, ["deposit_refunded_at"])', "customer screen reads the actual deposit refund timestamp");
+  includes(customerScreen, 'firstNumber(order, ["deposit_refund_amount"])', "customer screen distinguishes a zero deposit from a pending refund");
   includes(customerScreen, "Returned to your SKIMA wallet", "customer receives a clear wallet refund confirmation");
   includes(customerScreen, 'stage === "completed"', "customer does not confuse an unposted deposit with a refund");
 });
