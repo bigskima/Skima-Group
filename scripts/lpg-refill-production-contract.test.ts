@@ -1077,7 +1077,9 @@ Deno.test("LPG driver stages advance from verified events and live Admin routing
   assertIncludes(driver, '["return_en_route", "delivery_verification_pending"].includes(status)');
   assertIncludes(driver, "The order remains pending until that confirmation.");
   assertIncludes(internal, '["return_en_route", "delivery_verification_pending"].includes(status)');
-  assertIncludes(lifecycle, "final cylinder hand-over scan must be recorded before requesting customer OTP");
+  assertIncludes(lifecycle, "delivery challenge must be requested by the LPG order customer");
+  assertIncludes(lifecycle, "order_record.status not in ('return_en_route', 'delivery_verification_pending')");
+  assertIncludes(lifecycle, "public.lpg_delivery_challenge_is_verified(order_record.id, target_challenge_id)");
   assertIncludes(lifecycle, "delivery challenge must be requested by the LPG order customer");
 
   assertIncludes(priority, "Priority only controls which route is tried first in Hybrid mode.");
