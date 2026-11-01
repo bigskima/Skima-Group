@@ -4,6 +4,7 @@ const migration = await Deno.readTextFile("supabase/migrations/20261101162500_pl
 const workspace = await Deno.readTextFile("apps/admin/src/admin-financial-analytics-workspace.tsx");
 const router = await Deno.readTextFile("apps/admin/src/features/money/MoneyWorkspaceRouter.tsx");
 const navigation = await Deno.readTextFile("apps/admin/src/app/admin-v2-navigation.ts");
+const migrationPolicy = await Deno.readTextFile("supabase/migration-history-policy.json");
 
 Deno.test("Fleet supplier disbursements are separate from customer settlement", () => {
   assertStringIncludes(migration, "create table if not exists public.lpg_internal_supplier_payments");
@@ -55,7 +56,7 @@ Deno.test("Fleet analytics separates customer collection, procurement, explicit 
 });
 
 Deno.test("Admin analytics distinguishes supplier cash or bank payments and Driver wallet payouts", () => {
-  assertStringIncludes(workspace, "Customer wallet collections are credited to SKIMA-controlled platform clearing");
+  assertStringIncludes(workspace, "The customer payment is held in SKIMA-controlled escrow");
   assertStringIncludes(workspace, "How SKIMA paid the station");
   assertStringIncludes(workspace, "Bank transfer reference (required)");
   assertStringIncludes(workspace, "Actual supplier payment date and time");
@@ -63,6 +64,10 @@ Deno.test("Admin analytics distinguishes supplier cash or bank payments and Driv
   assertStringIncludes(workspace, "externally withdrawn are different states");
   assertStringIncludes(workspace, "Cumulative supplier disbursements in expense ledger");
   assertStringIncludes(workspace, "Procurement spread held in clearing");
+});
+
+Deno.test("The combined Fleet and Finance migration is classified as a business-module migration", () => {
+  assertStringIncludes(migrationPolicy, "20261101162500_platform_financial_analytics_and_fleet_supplier_payments.sql");
 });
 
 Deno.test("Financial analytics is linked from the existing Money workspace", () => {
