@@ -261,6 +261,7 @@ export function AdminFinancialAnalyticsWorkspace() {
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
   const [paymentDate, setPaymentDate] = useState(() => localDateTimeInput(new Date()));
+  const [supplierPaymentIdempotencyKey, setSupplierPaymentIdempotencyKey] = useState<string | null>(null);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [evidenceMediaAssetId, setEvidenceMediaAssetId] = useState<string | null>(null);
   const [evidenceFileName, setEvidenceFileName] = useState<string | null>(null);
@@ -384,6 +385,11 @@ export function AdminFinancialAnalyticsWorkspace() {
       if (!paymentDate || !Number.isFinite(paidAt.getTime())) {
         throw new Error("Enter a valid supplier payment date and time.");
       }
+      const paymentIdempotencyKey = supplierPaymentIdempotencyKey ?? createClientIdempotencyKey(
+        "admin.lpg.supplier-payment",
+        `${recordString(selectedOrder, "orderReference") ?? "order"}:${amount}:${paymentMethod}:${paymentReference.trim()}`,
+      );
+      if (!supplierPaymentIdempotencyKey) setSupplierPaymentIdempotencyKey(paymentIdempotencyKey);
       const { data, error } = await supabase.rpc("record_lpg_internal_supplier_payment", {
         target_procurement_id: recordString(selectedOrder, "procurementId"),
         target_amount: amount,
@@ -391,10 +397,7 @@ export function AdminFinancialAnalyticsWorkspace() {
         target_payment_reference: paymentReference.trim() || null,
         target_evidence_media_asset_id: evidenceMediaAssetId,
         target_note: paymentNote.trim() || null,
-        target_idempotency_key: createClientIdempotencyKey(
-          "admin.lpg.supplier-payment",
-          `${recordString(selectedOrder, "orderReference") ?? "order"}:${amount}:${paymentMethod}:${paymentReference.trim()}`,
-        ),
+        target_idempotency_key: paymentIdempotencyKey,
         target_paid_at: paidAt.toISOString(),
       });
       if (error) throw error;
@@ -410,6 +413,7 @@ export function AdminFinancialAnalyticsWorkspace() {
       setPaymentReference("");
       setPaymentNote("");
       setPaymentDate(localDateTimeInput(new Date()));
+      setSupplierPaymentIdempotencyKey(null);
       setEvidenceFile(null);
       setEvidenceMediaAssetId(null);
       setEvidenceFileName(null);
@@ -556,6 +560,7 @@ export function AdminFinancialAnalyticsWorkspace() {
                 setPaymentReference("");
                 setPaymentNote("");
                 setPaymentDate(localDateTimeInput(new Date()));
+                setSupplierPaymentIdempotencyKey(null);
                 setEvidenceFile(null);
                 setEvidenceMediaAssetId(null);
                 setEvidenceFileName(null);
@@ -569,7 +574,10 @@ export function AdminFinancialAnalyticsWorkspace() {
               step="0.01"
               value={paymentAmount}
               disabled={!selectedOrder}
-              onChange={(event) => setPaymentAmount(event.currentTarget.value)}
+              onChange={(event) => {
+                setPaymentAmount(event.currentTarget.value);
+                setSupplierPaymentIdempotencyKey(null);
+              }}
             />
             <SelectInput
               label="How SKIMA paid the station"
@@ -578,12 +586,18 @@ export function AdminFinancialAnalyticsWorkspace() {
                 { label: "Bank transfer", value: "bank_transfer" },
                 { label: "Physical cash", value: "cash" },
               ]}
-              onChange={(event) => setPaymentMethod(event.currentTarget.value as "cash" | "bank_transfer")}
+              onChange={(event) => {
+                setPaymentMethod(event.currentTarget.value as "cash" | "bank_transfer");
+                setSupplierPaymentIdempotencyKey(null);
+              }}
             />
             <TextInput
               label={paymentMethod === "bank_transfer" ? "Bank transfer reference (required)" : "Cash voucher / receipt reference (required)"}
               value={paymentReference}
-              onChange={(event) => setPaymentReference(event.currentTarget.value)}
+              onChange={(event) => {
+                setPaymentReference(event.currentTarget.value);
+                setSupplierPaymentIdempotencyKey(null);
+              }}
               disabled={!selectedOrder}
               placeholder={paymentMethod === "bank_transfer" ? "Enter the bank transaction reference" : "Enter the cash voucher or signed handover reference"}
             />
@@ -591,7 +605,10 @@ export function AdminFinancialAnalyticsWorkspace() {
               label="Actual supplier payment date and time"
               type="datetime-local"
               value={paymentDate}
-              onChange={(event) => setPaymentDate(event.currentTarget.value)}
+              onChange={(event) => {
+                setPaymentDate(event.currentTarget.value);
+                setSupplierPaymentIdempotencyKey(null);
+              }}
               disabled={!selectedOrder}
             />
             <TextInput
@@ -601,6 +618,7 @@ export function AdminFinancialAnalyticsWorkspace() {
               disabled={!selectedOrder || uploadEvidence.isPending}
               onChange={(event) => {
                 setEvidenceFile(event.currentTarget.files?.[0] ?? null);
+                setSupplierPaymentIdempotencyKey(null);
                 setEvidenceMediaAssetId(null);
                 setEvidenceFileName(null);
               }}
@@ -625,7 +643,10 @@ export function AdminFinancialAnalyticsWorkspace() {
             <TextAreaInput
               label="Payment note (optional)"
               value={paymentNote}
-              onChange={(event) => setPaymentNote(event.currentTarget.value)}
+              onChange={(event) => {
+                setPaymentNote(event.currentTarget.value);
+                setSupplierPaymentIdempotencyKey(null);
+              }}
               rows={2}
               disabled={!selectedOrder}
               placeholder="Recipient or cash handover details"
