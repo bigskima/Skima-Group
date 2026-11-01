@@ -44,6 +44,16 @@ alter table public.lpg_internal_supplier_payments enable row level security;
 revoke all on table public.lpg_internal_supplier_payments from public,anon,authenticated;
 grant all on table public.lpg_internal_supplier_payments to service_role;
 
+-- Financial evidence remains available only through the audited finance RPCs.
+drop policy if exists lpg_internal_supplier_payments_deny_direct_authenticated
+  on public.lpg_internal_supplier_payments;
+create policy lpg_internal_supplier_payments_deny_direct_authenticated
+  on public.lpg_internal_supplier_payments
+  for all
+  to authenticated
+  using (false)
+  with check (false);
+
 drop trigger if exists audit_lpg_internal_supplier_payments on public.lpg_internal_supplier_payments;
 create trigger audit_lpg_internal_supplier_payments
 after insert on public.lpg_internal_supplier_payments
