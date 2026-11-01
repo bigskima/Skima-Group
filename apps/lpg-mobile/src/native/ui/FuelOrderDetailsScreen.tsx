@@ -19,6 +19,12 @@ export function FuelOrderDetailsScreen() {
   const { palette } = useAppTheme();
   const params = useLocalSearchParams<{ id?: string }>();
   const orderId = typeof params.id === "string" ? params.id : "";
+  const products = useGatewayQuery({
+    key: ["fuel", "products"],
+    path: "/runtime/fuel/products",
+    schema: RecordArraySchema,
+    refetchInterval: 60000,
+  });
   const operations = useGatewayQuery({
     key: ["fuel", "order", orderId],
     path: `/runtime/fuel/orders/operations?orderId=${encodeURIComponent(orderId)}`,
@@ -56,8 +62,9 @@ export function FuelOrderDetailsScreen() {
   };
 
   const order = operations.data?.[0] ?? null;
-  const productKey = firstString(order, ["product_key"]) ?? "fuel.pms";
-  const product = productKey === "fuel.pms" ? "Petrol" : productKey === "fuel.ago" ? "Diesel" : "Kerosene";
+  const productKey = firstString(order, ["product_key"]) ?? "";
+  const productRecord = (products.data ?? []).find((item) => firstString(item, ["key"]) === productKey);
+  const product = firstString(productRecord, ["display_name"]) ?? productKey || "Fuel";
   const stage = firstString(order, ["stage_key"]) ?? "awaiting_station_acceptance";
   const litres = firstNumber(order, ["requested_litres"]) ?? 0;
   const filled = firstNumber(order, ["filled_litres"]) ?? 0;
