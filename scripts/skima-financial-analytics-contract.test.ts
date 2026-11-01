@@ -18,6 +18,8 @@ Deno.test("Fleet supplier disbursements are separate from customer settlement", 
   assertStringIncludes(migration, "wallet_type='platform_supplier'");
   assertStringIncludes(migration, "platform financial management permission is required");
   assertStringIncludes(migration, "bank transfer reference is required");
+  assertStringIncludes(migration, "existing_payment.paid_at is distinct from coalesce(target_paid_at,timezone('utc',now()))");
+  assertStringIncludes(migration, "existing_payment.note is distinct from nullif(btrim(coalesce(target_note,'')),'')");
   assertStringIncludes(migration, "payment exceeds the remaining supplier balance");
 });
 
@@ -77,6 +79,8 @@ Deno.test("Admin supplier payments attach registered media evidence without chan
   assertStringIncludes(workspace, "target_evidence_media_asset_id: evidenceMediaAssetId");
   assertStringIncludes(workspace, "Payment evidence file (optional)");
   assertStringIncludes(workspace, "Admin-recorded declarations");
+  assertStringIncludes(workspace, "supplierPaymentIdempotencyKey ?? createClientIdempotencyKey");
+  assertStringIncludes(workspace, "target_idempotency_key: paymentIdempotencyKey");
 });
 
 Deno.test("Finance analytics includes settlement statements, adjustments and open reconciliation evidence", () => {
