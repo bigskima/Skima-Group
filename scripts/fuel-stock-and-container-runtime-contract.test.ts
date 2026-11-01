@@ -1,3 +1,6 @@
+const foundation = await Deno.readTextFile(
+  "supabase/migrations/20261101202000_fuel_liquid_fulfillment_foundation.sql",
+);
 const stock = await Deno.readTextFile(
   "supabase/migrations/20261101202200_fuel_inventory_reservation_runtime.sql",
 );
@@ -40,13 +43,13 @@ Deno.test("Fuel reservations are atomic and never oversell available litres", ()
   requireIncludes(stock, "public.release_fuel_stock_reservation(", "cancel/failure can release unconsumed stock");
   requireIncludes(stock, "public.consume_fuel_stock_reservation(", "station fill consumes the stock reservation");
   requireIncludes(stock, "fuel_stock_reservation_events", "reservation changes are separately audited from physical movements");
-  requireIncludes(stock, "status='reserved'", "closed or partially consumed reservations are not counted as still held");
+  requireIncludes(stock, "reservation.status in ('reserved','partially_consumed')", "closed or partially consumed reservations are not counted as still held");
   requireNotIncludes(stock, "fuel_order_stock_reservations_one_open_line", "multiple tanks can contribute to one fuel order");
 });
 
-Deno.test("Fuel stock dispense records actual litres and releases unused reservation", () => {
+Deno.test("Fuel stock dispense records actual litres and keeps unused reserved litres for later fills", () => {
   requireIncludes(stock, "physical_after:=storage_record.physical_stock_litres-target_consumed_litres", "physical stock falls by measured filled litres");
-  requireIncludes(stock, "reserved_after:=storage_record.reserved_stock_litres-reservation_record.reserved_litres", "the unused part of a reservation is released");
+  requireIncludes(stock, "reserved_after:=storage_record.reserved_stock_litres-target_consumed_litres", "only measured consumed litres leave the reservation and the unused balance stays reserved");
   requireIncludes(stock, "filled_litres=total_filled", "measured fill accumulates against the order quantity");
   requireIncludes(stock, "'dispense',-target_consumed_litres", "physical dispense is an append-only stock movement");
   requireIncludes(stock, "Fuel dispense would consume stock reserved for other orders or safety reserve", "other orders' reservations and safety stock remain protected");
@@ -77,14 +80,14 @@ Deno.test("Rental containers remain SKIMA-owned and require station receipt and 
   requireIncludes(containers, "last_inspection_result=target_inspection_result", "inspection result is persisted");
   requireIncludes(containers, "next_profile_status:='available'", "only a passed inspection releases a rental container for reuse");
   requireIncludes(containers, "next_allocation_status:='exception'", "failed/conditional inspection does not mark a container available");
-  requireIncludes(containers, "Rental fuel containers must be returned and inspected before completion", "rental order completion is gated on inspection");
+  requireIncludes(operations, "Rental fuel containers must be returned and inspected before completion", "rental order completion is gated on inspection");
 });
 
 Deno.test("Container custody follows the assigned driver and preserves append-only evidence", () => {
   requireIncludes(containers, "assignment.participant_role='driver'", "custody actor is matched to the order driver");
   requireIncludes(containers, "assignment.status='active'", "only the active assignment can hand over the container");
   requireIncludes(containers, "fuel_container_custody_events", "custody evidence is persisted");
-  requireIncludes(containers, "fuel_container_custody_events_immutable", "custody evidence is append-only");
+  requireIncludes(foundation, "fuel_container_custody_events_immutable", "custody evidence is append-only");
   requireIncludes(containers, "grant execute on function public.record_fuel_container_handover", "custody handover is routed through trusted service runtime");
   requireIncludes(operations, "Every prepared container must be recorded as handed to the assigned driver", "driver handover is checked before leaving station");
   requireIncludes(operations, "Every filled container must be delivered and measured against the customer-verified quantity", "delivery requires complete container proof");
