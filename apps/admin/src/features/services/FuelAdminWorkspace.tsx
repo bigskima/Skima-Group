@@ -54,7 +54,7 @@ const empty = {
 type OfferForm = typeof empty;
 
 export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }) {
-  const { api, status } = useSessionState();
+  const { api, status, context } = useSessionState();
   const client = useQueryClient();
   const [offerForm, setOfferForm] = useState<OfferForm>(empty);
   const [selectedModes, setSelectedModes] = useState<string[]>([...FULFILLMENT_MODES]);
@@ -245,6 +245,45 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
     PRODUCTS.some((product) => product.key === catalogText(item, "key"))
   );
   const enabledCount = productRows.filter((item) => catalogText(item, "status") === "enabled").length;
+  const canManageFuel = context?.platformAdmin?.admin_kind === "super_admin"
+    || context?.permissions.includes("platform.fuel.manage") === true;
+
+  if (!canManageFuel) {
+    return (
+      <div className="catalog-v2">
+        <AdminV2PageHeader
+          eyebrow="Services · SKIMA Fuel"
+          title="Fuel administration"
+          description="Read the global product availability and station configuration. Platform Fuel management permission is required to change settings."
+          actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button>}
+        />
+        <div className="catalog-v2__review-grid">
+          <MetricTile label="Enabled products" value={String(enabledCount)} />
+          <MetricTile label="Station offers" value={String(offers.data?.filter((item) => catalogText(item, "status") === "active").length ?? 0)} />
+          <MetricTile label="Fuel tanks" value={String(tanks.data?.length ?? 0)} />
+          <MetricTile label="Container assets" value={String(containers.data?.length ?? 0)} />
+        </div>
+        <section className="sk-panel catalog-v2__form-card">
+          <div className="sk-panel__header">
+            <div><p className="admin-section-kicker">Platform-level switches</p><h2>Fuel products · Read only</h2></div>
+            <StatusBadge>{enabledCount} of 3 enabled</StatusBadge>
+          </div>
+          <div className="fuel-admin-product-grid">
+            {PRODUCTS.map((definition) => {
+              const record = productRows.find((item) => catalogText(item, "key") === definition.key);
+              const productStatus = catalogText(record, "status") || "not configured";
+              return (
+                <article className="fuel-admin-product" key={definition.key}>
+                  <div><strong>{definition.name}</strong><small>{definition.code} · {definition.key}</small></div>
+                  <StatusBadge tone={productStatus === "enabled" ? "success" : "warning"}>{productStatus}</StatusBadge>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="catalog-v2">
