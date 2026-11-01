@@ -9,6 +9,7 @@ const quotePatch = await Deno.readTextFile(
 );
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const customerScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelOrderDetailsScreen.tsx");
+const stationScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelStationOperationsScreen.tsx");
 
 function includes(source: string, fragment: string, message: string): void {
   if (!source.includes(fragment)) throw new Error(`${message}: missing "${fragment}"`);
@@ -57,6 +58,12 @@ Deno.test("customers see settlement and rental-deposit status from persisted ser
   includes(customerScreen, 'firstNumber(order, ["deposit_refund_amount"])', "customer screen distinguishes a zero deposit from a pending refund");
   includes(customerScreen, "Returned to your SKIMA wallet", "customer receives a clear wallet refund confirmation");
   includes(customerScreen, 'stage==="completed"', "customer distinguishes a completed zero-deposit rental from a pending deposit");
+});
+
+Deno.test("station workspace exposes the posted station settlement statement", () => {
+  includes(stationScreen, 'firstString(focusedOrder, ["settlement_execution_id"])', "station screen reads settlement execution");
+  includes(stationScreen, 'firstString(focusedOrder, ["settlement_statement_id"])', "station screen reads its statement reference");
+  includes(stationScreen, "Station settlement posted", "station sees explicit settlement confirmation");
 });
 
 Deno.test("the Fuel operation read model exposes posted settlement evidence", () => {
