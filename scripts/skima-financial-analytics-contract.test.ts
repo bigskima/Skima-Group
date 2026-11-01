@@ -17,7 +17,8 @@ Deno.test("Fleet supplier disbursements are separate from customer settlement", 
   assertStringIncludes(migration, "'skima_fleet_funds_disbursed_to_supplier'");
   assertStringIncludes(migration, "'skima_fleet_supplier_disbursement'");
   assertStringIncludes(migration, "wallet_type='platform_clearing'");
-  assertStringIncludes(migration, "wallet_type='platform_supplier'");
+  assertStringIncludes(migration, "wallet_type='platform'");
+  assertStringIncludes(migration, "'wallet_purpose','lpg_supplier_disbursements'");
   assertStringIncludes(migration, "platform financial management permission is required");
   assertStringIncludes(migration, "bank transfer reference is required");
   assertStringIncludes(migration, "existing_payment.paid_at is distinct from coalesce(target_paid_at,timezone('utc',now()))");
@@ -30,7 +31,8 @@ Deno.test("Supplier payment posting cannot credit a station wallet or a driver w
   const end = migration.indexOf("$function$;", start);
   assert(start >= 0 && end > start, "Supplier payment RPC must be present");
   const supplierPosting = migration.slice(start, end);
-  assertStringIncludes(supplierPosting, "'platform_supplier'");
+  assertStringIncludes(supplierPosting, "'platform'");
+  assertStringIncludes(supplierPosting, "'lpg_supplier_disbursements'");
   assertStringIncludes(supplierPosting, "'platform_clearing'");
   assertNotMatch(supplierPosting, /wallet_type\s*=\s*'partner'/);
   assertNotMatch(supplierPosting, /wallet_type\s*=\s*'driver'/);
