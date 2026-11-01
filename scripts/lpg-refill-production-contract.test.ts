@@ -898,3 +898,52 @@ Deno.test("SKIMA Managed supplier receipt remains optional evidence, not a refil
   assertIncludes(migration, "position('supplier receipt evidence is required for SKIMA internal refill' in function_ddl)>0");
   assertIncludes(originalProcurement, "target_receipt_media_asset_id is not null and not exists");
 });
+
+
+Deno.test("LPG final customer hand-over is OTP-only across all driver fulfillment models", async () => {
+  const [driver, internal, stationScan, scanScreen, verification, errors, stationHome, stationJobs] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/StationManagedDriverScanScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/ScanWorkspaceScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/DeliveryVerificationScreen.tsx"),
+    read("apps/lpg-mobile/src/native/utilities/friendlyError.ts"),
+    read("apps/lpg-mobile/src/native/ui/StationManagedDriverHomeScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/StationManagedDriverJobsScreen.tsx"),
+  ]);
+
+  const driverHandoverStart = driver.indexOf('driverScanType === "customer_delivery" ? (');
+  const driverHandoverEnd = driver.indexOf(') : (', driverHandoverStart);
+  if (driverHandoverStart < 0 || driverHandoverEnd < 0) throw new Error("Independent/Station Managed driver hand-over branch is missing");
+  const driverHandover = driver.slice(driverHandoverStart, driverHandoverEnd);
+  assertIncludes(driverHandover, "Customer hand-over confirmation");
+  assertIncludes(driverHandover, "order-specific OTP");
+  assertIncludes(driverHandover, "No second cylinder scan is required.");
+  assertNotIncludes(driverHandover, "<Scanner");
+
+  const internalHandoverStart = internal.indexOf('scanType === "customer_delivery" ? (');
+  const internalHandoverEnd = internal.indexOf(') : (', internalHandoverStart);
+  if (internalHandoverStart < 0 || internalHandoverEnd < 0) throw new Error("SKIMA Managed driver hand-over branch is missing");
+  const internalHandover = internal.slice(internalHandoverStart, internalHandoverEnd);
+  assertIncludes(internalHandover, "Customer hand-over confirmation");
+  assertIncludes(internalHandover, "order-specific OTP");
+  assertIncludes(internalHandover, "No second cylinder scan is required.");
+  assertNotIncludes(internalHandover, "<Scanner");
+
+  assertIncludes(stationScan, 'jobRouteWorkspace="station_driver"');
+  assertIncludes(stationHome, "No second driver scan is required.");
+  assertIncludes(stationJobs, "order-specific delivery OTP");
+
+  const scanReadyStart = scanScreen.indexOf("function scanReady");
+  const scanReadyEnd = scanScreen.indexOf("function scanStatus", scanReadyStart);
+  const scanReady = scanScreen.slice(scanReadyStart, scanReadyEnd);
+  assertNotIncludes(scanReady, '"return_en_route"');
+  assertNotIncludes(scanReady, '"delivery_verification_pending"');
+  assertIncludes(scanScreen, "Customer hand-over · OTP confirmation");
+  assertIncludes(scanScreen, "handoverJobs");
+
+  assertIncludes(verification, 'path: "/lpg/orders/delivery-challenge"');
+  assertIncludes(verification, 'action: "verify"');
+  assertIncludes(verification, '["delivered", "completed"].includes(finalStatus ?? "")');
+  assertIncludes(errors, "verified lpg delivery challenge is required");
+});
