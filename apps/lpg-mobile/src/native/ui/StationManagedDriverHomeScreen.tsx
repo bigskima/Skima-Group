@@ -141,7 +141,7 @@ export function StationManagedDriverHomeScreen() {
         <Text style={[styles.sectionTitle, { color: palette.ink }]}>Your delivery workflow</Text>
         <Step number="1" title="Pickup and station handover" detail="Open the assigned job and follow its required pickup and cylinder-verification steps." />
         <Step number="2" title="Wait for station release" detail="The station completes its refill and settlement steps before the return leg is available." />
-        <Step number="3" title="Customer handover" detail="Return the cylinder, record arrival in the job, then ask the customer to confirm delivery from their SKIMA order using the order-specific OTP. No second driver scan is required." />
+        <Step number="3" title="Customer handover" detail="Return the cylinder, record arrival, then scan its QR or permanent five-character ID at the customer's address. The customer confirms the order-specific OTP afterwards." />
         <Text style={[styles.disclaimer, { color: palette.muted }]}>Station Managed drivers keep a station-owned identity. Station compensation is handled by the station, not through SKIMA driver payouts.</Text>
       </View>
     </Screen>
