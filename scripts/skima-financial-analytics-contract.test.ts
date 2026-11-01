@@ -88,6 +88,13 @@ Deno.test("Admin supplier payments attach registered media evidence without chan
   assertStringIncludes(workspace, "target_idempotency_key: paymentIdempotencyKey");
 });
 
+Deno.test("Revenue-only permission cannot expose expense, supplier or Driver finance details", () => {
+  assertStringIncludes(workspace, 'context?.permissions.includes("platform.financial.read")');
+  assertStringIncludes(workspace, 'context?.permissions.includes("platform.financial.manage")');
+  assertNotMatch(workspace.slice(workspace.indexOf("const canRead ="), workspace.indexOf("const canRecordSupplierPayment")),
+    /platform\.revenue\.read/);
+});
+
 Deno.test("Finance analytics includes settlement statements, adjustments and open reconciliation evidence", () => {
   assertStringIncludes(migration, "'settlementStatements'");
   assertStringIncludes(migration, "'financialAdjustments'");
