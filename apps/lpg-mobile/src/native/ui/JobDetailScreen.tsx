@@ -137,8 +137,18 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   const routeDistance = firstNumber(root, ["routeDistanceMeters", "route_distance_meters", "distanceMeters"]);
   const routeDuration = firstNumber(root, ["routeDurationSeconds", "route_duration_seconds", "durationSeconds"]);
   const status = displayStatus(order ?? {}) ?? "unknown";
+  const orderScanRows = Array.isArray(root?.scans)
+    ? root.scans as Array<Record<string, unknown>>
+    : [];
+  const customerDeliveryScanVerified = orderScanRows.some((scan) =>
+    (scan.scanType === "customer_delivery" || scan.scan_type === "customer_delivery")
+      && scan.result === "passed",
+  );
   const deliveryChallengeVerified = order?.deliveryChallengeVerified === true
     || order?.delivery_challenge_verified === true;
+  const waitingForCustomerOtp = driverWorkspace
+    && status === "delivery_verification_pending"
+    && customerDeliveryScanVerified;
   const terminalOrderStatus = ["delivered", "completed", "cancelled", "failed", "refunded", "expired"].includes(status);
   const canShareStationDriverLocation = workspace === "station_driver" && Boolean(id)
     && ["driver_accepted", "pickup_en_route", "pickup_verified", "station_en_route", "station_verified", "refill_started", "refill_in_progress", "refill_confirmed", "station_settled", "return_en_route", "delivery_verification_pending"].includes(status);
@@ -230,7 +240,9 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
 
   const driverScanType = workspace === "station_driver" ? stationManagedDriverScanTypeForStatus(status) : driverScanTypeForStatus(status);
   const stationScanType = stationScanTypeForStatus(status);
-  const canDriverScan = driverWorkspace && Boolean(driverScanType);
+  const canDriverScan = driverWorkspace
+    && Boolean(driverScanType)
+    && !(driverScanType === "customer_delivery" && customerDeliveryScanVerified);
   const canStationScan = workspace === "station" && stationCanInspect && Boolean(stationScanType);
   const driverAction = workspace === "station_driver" ? stationManagedDriverActionForStatus(status) : driverWorkspace ? driverActionForStatus(status) : null;
   // Station drivers follow the same customer → station → customer route as the
@@ -661,6 +673,29 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
               ) : (
                 <Text style={[styles.scannerHint, { color: palette.muted }]}>Align the SKIMA cylinder code inside the scanner to continue.</Text>
               )}
+            </View>
+          ) : null}
+
+          {waitingForCustomerOtp && driverSection === "actions" ? (
+            <View style={[styles.scanCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.sectionLead}>
+                <View style={[styles.sectionIcon, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={22} /></View>
+                <View style={styles.sectionCopy}>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }}>Returned cylinder verified</Text>
+                  <Text style={[styles.sectionBody, { color: palette.muted }]}>
+                    {deliveryChallengeVerified
+                      ? "Customer OTP has been verified. Refresh this job to confirm the completed delivery state."
+                      : "The physical hand-over scan is complete. The customer must now open this order in SKIMA and complete the order-specific OTP. No more driver scans are needed."}
+                  </Text>
+                </View>
+              </View>
+              <AppButton
+                label="Refresh hand-over status"
+                fullWidth
+                variant="secondary"
+                loading={detail.isRefetching}
+                onPress={() => void detail.refetch()}
+              />
             </View>
           ) : null}
 
