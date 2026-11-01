@@ -101,6 +101,7 @@
     "20261029182549_nigeria_location_enablement_fulfilment_gates.sql",
     "20261030131328_admin_coverage_refresh_reject_map_tile_and_driver_fixes.sql",
     "20261030134717_managed_driver_coverage_universal_assignment_cutover.sql",
-    "20261101162500_platform_financial_analytics_and_fleet_supplier_payments.sql"
+    "20261101162500_platform_financial_analytics_and_fleet_supplier_payments.sql",
+    "20261101171000_lpg_payment_status_settled_and_service_request_reconciliation.sql"
   ]
 }
