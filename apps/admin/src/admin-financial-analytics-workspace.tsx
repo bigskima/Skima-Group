@@ -219,8 +219,10 @@ export function AdminFinancialAnalyticsWorkspace() {
       if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding) {
         throw new Error("Enter a positive amount no greater than the outstanding supplier balance.");
       }
-      if (paymentMethod === "bank_transfer" && !paymentReference.trim()) {
-        throw new Error("Enter the bank transfer reference before recording this payment.");
+      if (!paymentReference.trim()) {
+        throw new Error(paymentMethod === "bank_transfer"
+          ? "Enter the bank transfer reference before recording this payment."
+          : "Enter the cash voucher or receipt reference before recording this payment.");
       }
       const paidAt = new Date(paymentDate);
       if (!paymentDate || !Number.isFinite(paidAt.getTime())) {
@@ -417,11 +419,11 @@ export function AdminFinancialAnalyticsWorkspace() {
               onChange={(event) => setPaymentMethod(event.currentTarget.value as "cash" | "bank_transfer")}
             />
             <TextInput
-              label={paymentMethod === "bank_transfer" ? "Bank transfer reference (required)" : "Cash voucher / receipt reference (optional)"}
+              label={paymentMethod === "bank_transfer" ? "Bank transfer reference (required)" : "Cash voucher / receipt reference (required)"}
               value={paymentReference}
               onChange={(event) => setPaymentReference(event.currentTarget.value)}
               disabled={!selectedOrder}
-              placeholder={paymentMethod === "bank_transfer" ? "Enter the bank transaction reference" : "Enter cash voucher reference"}
+              placeholder={paymentMethod === "bank_transfer" ? "Enter the bank transaction reference" : "Enter the cash voucher or signed handover reference"}
             />
             <TextInput
               label="Actual supplier payment date and time"
@@ -440,7 +442,7 @@ export function AdminFinancialAnalyticsWorkspace() {
             />
             <div className="sk-panel">
               <strong>Payment control</strong>
-              <p className="skima-muted">This records a disbursement from the SKIMA platform clearing account and credits the supplier-disbursement ledger. A bank transfer reference is mandatory for bank payments. Cash payments retain the recording Admin and timestamp.</p>
+              <p className="skima-muted">This records a disbursement from the SKIMA platform clearing account and credits the supplier-disbursement ledger. Both payment methods require an auditable reference: the bank transaction reference or the cash voucher / signed handover reference.</p>
               <Button
                 disabled={!selectedOrder || recordSupplierPayment.isPending || Number(paymentAmount) <= 0}
                 isLoading={recordSupplierPayment.isPending}
