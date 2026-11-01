@@ -3,7 +3,7 @@ const admin = await Deno.readTextFile(
 );
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const migration = await Deno.readTextFile(
-  "supabase/migrations/20261102012000_fuel_global_product_controls.sql",
+  "supabase/migrations/20261101203100_fuel_global_product_controls.sql",
 );
 
 function requireIncludes(source: string, fragment: string, message: string): void {
