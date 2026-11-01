@@ -696,7 +696,8 @@ begin
         from public.lpg_refill_orders order_record
         join public.settlement_executions settlement
           on settlement.id=order_record.internal_settlement_execution_id and settlement.status='posted'
-        join public.lpg_internal_refill_procurements procurement on procurement.lpg_order_id=order_record.id
+        join public.lpg_internal_refill_procurements procurement
+          on procurement.lpg_order_id=order_record.id and procurement.status='approved'
         where order_record.fulfillment_channel='skima_internal'
           and order_record.currency_code=currency_code_value
           and (from_value is null or settlement.created_at>=from_value)
@@ -733,9 +734,14 @@ begin
         select sum(procurement.procurement_amount)
         from public.lpg_internal_refill_procurements procurement
         join public.lpg_refill_orders order_record on order_record.id=procurement.lpg_order_id
-        where order_record.currency_code=currency_code_value
-          and (from_value is null or procurement.created_at>=from_value)
-          and (until_value is null or procurement.created_at<until_value)
+        join public.settlement_executions settlement
+          on settlement.id=order_record.internal_settlement_execution_id
+          and settlement.status='posted'
+        where order_record.fulfillment_channel='skima_internal'
+          and order_record.currency_code=currency_code_value
+          and procurement.status='approved'
+          and (from_value is null or settlement.created_at>=from_value)
+          and (until_value is null or settlement.created_at<until_value)
       ),0),
       'supplierPaid',coalesce((
         select sum(payment.amount)
@@ -748,13 +754,18 @@ begin
         select sum(greatest(procurement.procurement_amount-coalesce(paid.amount,0),0))
         from public.lpg_internal_refill_procurements procurement
         join public.lpg_refill_orders order_record on order_record.id=procurement.lpg_order_id
+        join public.settlement_executions settlement
+          on settlement.id=order_record.internal_settlement_execution_id
+          and settlement.status='posted'
         left join lateral (
           select sum(payment.amount) amount from public.lpg_internal_supplier_payments payment
           where payment.procurement_id=procurement.id
         ) paid on true
-        where order_record.currency_code=currency_code_value
-          and (from_value is null or procurement.created_at>=from_value)
-          and (until_value is null or procurement.created_at<until_value)
+        where order_record.fulfillment_channel='skima_internal'
+          and order_record.currency_code=currency_code_value
+          and procurement.status='approved'
+          and (from_value is null or settlement.created_at>=from_value)
+          and (until_value is null or settlement.created_at<until_value)
       ),0),
       'driverEarnings',coalesce((
         select sum(earning.earning_amount)
@@ -801,16 +812,20 @@ begin
             procurement.supplier_price_per_kg,procurement.reference_price_per_kg,procurement.variance_percent,
             procurement.procurement_amount,coalesce(paid.amount,0) supplier_paid
           from public.lpg_refill_orders order_record
-          left join public.lpg_internal_refill_procurements procurement on procurement.lpg_order_id=order_record.id
+          join public.lpg_internal_refill_procurements procurement
+            on procurement.lpg_order_id=order_record.id and procurement.status='approved'
+          join public.settlement_executions settlement
+            on settlement.id=order_record.internal_settlement_execution_id
+            and settlement.status='posted'
           left join lateral (
             select sum(payment.amount) amount from public.lpg_internal_supplier_payments payment
             where payment.procurement_id=procurement.id
           ) paid on true
           where order_record.fulfillment_channel='skima_internal'
             and order_record.currency_code=currency_code_value
-            and (from_value is null or order_record.created_at>=from_value)
-            and (until_value is null or order_record.created_at<until_value)
-          order by order_record.created_at desc limit 100
+            and (from_value is null or settlement.created_at>=from_value)
+            and (until_value is null or settlement.created_at<until_value)
+          order by settlement.created_at desc limit 100
         ) item
       ),'[]'::jsonb),
       'supplierPayments',coalesce((
