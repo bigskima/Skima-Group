@@ -19,8 +19,7 @@ begin
     return;
   end if;
 
-  select count(*) into matches
-  from regexp_matches(function_ddl, 'requires_receipt:=coalesce\\(\\(config->>''require_supplier_receipt''\\)::boolean,true\\);', 'gi');
+  matches:=(length(function_ddl)-length(replace(function_ddl,old_setting,'')))/length(old_setting);
 
   if matches<>1 or position(old_guard in function_ddl)=0 then
     raise exception 'Expected exactly one supplier receipt requirement in confirm_lpg_internal_refill; refusing to alter unrelated refill validations';
