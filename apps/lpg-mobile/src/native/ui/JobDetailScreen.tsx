@@ -883,8 +883,8 @@ function stationManagedDriverStageDescription(status: string) {
   if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is checking and refilling the cylinder. Wait until refill and settlement are complete.";
   if (status === "refill_confirmed") return "The refill is complete. The station must finish settlement and release the cylinder before the return leg.";
   if (status === "station_settled") return "The station has settled the refill. Start the return leg from My Deliveries, or wait for the station to complete its release scan.";
-  if (status === "return_en_route") return "Return to the customer, request delivery verification at hand-over, then scan the cylinder to finish the order.";
-  if (status === "delivery_verification_pending") return "Complete the customer's delivery verification before scanning the cylinder for the final hand-over.";
+  if (status === "return_en_route") return "Return the filled cylinder to the customer, then record that you have arrived for hand-over. The customer completes the final confirmation in their SKIMA order.";
+  if (status === "delivery_verification_pending") return "The customer must open this order in SKIMA, choose Confirm delivery and complete the order-specific OTP. No second cylinder scan is required."
   if (["delivered", "completed"].includes(status)) return "The hand-over is verified. Any driver compensation is recorded and paid by the station, not by SKIMA.";
   return "Follow the station's delivery instructions and complete each required cylinder and customer verification step.";
 }
@@ -1067,8 +1067,8 @@ function driverStageDescription(status: string, deliveryChallengeVerified = fals
   if (["pickup_verified", "station_en_route"].includes(status)) return "Take the verified cylinder to the assigned station. Station staff scan it at reception.";
   if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is processing the verified refill.";
   if (["refill_confirmed", "station_settled", "return_en_route"].includes(status)) return "The filled cylinder is ready to return to the customer.";
-  if (status === "delivery_verification_pending" && deliveryChallengeVerified) return "Customer delivery verification is complete. Scan the same cylinder now to finish the hand-over and close the order.";
-  if (status === "delivery_verification_pending") return "The customer must confirm the cylinder hand-over first. Once verified, scan the same cylinder to complete delivery.";
+  if (status === "delivery_verification_pending" && deliveryChallengeVerified) return "Customer verification is recorded. Refresh this job; the hand-over closes through the customer's order confirmation.";
+  if (status === "delivery_verification_pending") return "Ask the customer to open this order in SKIMA, choose Confirm delivery and complete the order-specific OTP. No further driver cylinder scan is needed."
   if (["delivered", "completed"].includes(status)) return "The hand-over is confirmed and payment processing continues automatically.";
   return "Follow the next available action for this assigned job.";
 }
