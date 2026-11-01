@@ -321,8 +321,7 @@ export function AdminFinancialAnalyticsWorkspace() {
   const isSuperAdmin = context?.platformAdmin?.admin_kind === "super_admin";
   const canRead = Boolean(isSuperAdmin ||
     context?.permissions.includes("platform.financial.read") ||
-    context?.permissions.includes("platform.financial.manage") ||
-    context?.permissions.includes("platform.revenue.read"));
+    context?.permissions.includes("platform.financial.manage"));
   const canRecordSupplierPayment = Boolean(isSuperAdmin || context?.permissions.includes("platform.financial.manage"));
 
   const range = useMemo(() => {
@@ -479,7 +478,7 @@ export function AdminFinancialAnalyticsWorkspace() {
     return (
       <ErrorState
         title="Financial analytics access restricted"
-        message="Your Admin role does not include platform financial or revenue read access."
+        message="This workspace requires platform Finance read or manage permission. Revenue read permission alone does not grant access to supplier costs, Driver payouts or platform wallet activity."
       />
     );
   }
