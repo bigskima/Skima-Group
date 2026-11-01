@@ -1058,9 +1058,12 @@ Deno.test("LPG driver stages advance from verified events and live Admin routing
   assertIncludes(migration, "'lpg.return.start'");
   assertIncludes(migration, "automatic_transition");
   assertIncludes(migration, "assignment.status = ''accepted''");
-  assertIncludes(migration, "public.read_lpg_eligible_stations(");
-  assertIncludes(migration, "eligible.station_branch_id = quote_record.station_branch_id");
-  assertIncludes(migration, "current Admin routing settings");
+  assertIncludes(migration, "public.read_lpg_marketplace_eligible_stations(");
+  assertIncludes(migration, "public.read_lpg_station_managed_eligible_stations(");
+  assertIncludes(migration, "quote_record.fulfillment_channel = ''skima_internal''");
+  assertIncludes(migration, "eligible Partner Network provider can serve this order");
+  assertIncludes(migration, "current Admin fulfillment availability settings");
+  assertIncludes(migration, "marketplace_first_fallback_only");
 
   assertIncludes(driverActions, "return null;");
   assertNotIncludes(driverActions, "lpg.return.start");
@@ -1096,11 +1099,10 @@ Deno.test("LPG dynamic order routes survive direct browser refresh on Vercel", a
 
 
 Deno.test("Admin fulfillment availability saves and confirms the effective network policy", async () => {
-  const [admin, eligibilityGate, stationManagedGate, quoteCreate] = await Promise.all([
+  const [admin, eligibilityGate, stationManagedGate] = await Promise.all([
     read("apps/admin/src/admin-launch-assurance-workspace.tsx"),
     read("supabase/migrations/20261101145500_lpg_automatic_driver_stage_advancement.sql"),
     read("supabase/migrations/20261101152000_lpg_station_managed_availability_policy_gate.sql"),
-    read("supabase/migrations/20261101141629_lpg_order_bound_cylinder_scan.sql").catch(() => ""),
   ]);
 
   assertIncludes(admin, "Available fulfillment networks");
@@ -1113,6 +1115,6 @@ Deno.test("Admin fulfillment availability saves and confirms the effective netwo
   assertIncludes(eligibilityGate, "Partner Network is disabled by the current Admin fulfillment availability settings");
   assertIncludes(eligibilityGate, "marketplace_first_fallback_only");
   assertIncludes(stationManagedGate, "read_lpg_station_managed_eligible_stations");
-  assertIncludes(stationManagedGate, "mode'') = ''internal_only''");
+  assertIncludes(stationManagedGate, "= ''internal_only'' then");
   assertIncludes(stationManagedGate, "read_lpg_station_managed_eligible_stations_for_amount");
 });
