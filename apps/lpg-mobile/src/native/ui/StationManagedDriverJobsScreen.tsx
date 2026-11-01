@@ -128,7 +128,7 @@ export function StationManagedDriverJobsScreen() {
             icon={<CheckCircle2 color={palette.brand} size={26} />}
             title={showCompleted ? "No completed deliveries yet" : "No active deliveries"}
             description={showCompleted
-              ? "Completed station deliveries will appear here after the backend verifies the final customer hand-over scan."
+              ? "Completed station deliveries appear here after the customer confirms the order-specific delivery OTP in SKIMA."
               : "When your station enables Station Managed and an eligible order has an active driver and approved vehicle, SKIMA assigns it automatically. You do not need an independent-driver profile."}
           />
         ) : null}
