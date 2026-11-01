@@ -210,7 +210,7 @@ export function DeliveryVerificationScreen() {
     <Screen
       eyebrow="Secure hand-over"
       title="Confirm your delivery"
-      subtitle="Complete this final check only after your cylinder has been returned to you."
+      subtitle="After the driver scans the returned cylinder at your address, request your order-specific OTP and confirm delivery here."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
@@ -221,7 +221,7 @@ export function DeliveryVerificationScreen() {
           <Text style={styles.heroEyebrow}>SKIMA SECURE DELIVERY</Text>
           <Text style={styles.heroTitle}>Confirm only when the cylinder is with you</Text>
           <Text style={styles.heroBody}>
-            Verification completes the hand-over and allows the order lifecycle to move to its confirmed delivery state.
+            The driver must first scan the returned cylinder. Your OTP is the final confirmation that closes this order.
           </Text>
         </View>
       </View>
@@ -243,7 +243,7 @@ export function DeliveryVerificationScreen() {
               ? "Your customer OTP was accepted earlier. You do not need another code; finish the hand-over to close this order."
               : challengeId
                 ? "Enter the code generated for this order. It can only be used for this delivery confirmation."
-                : "Request a code for this order before confirming the hand-over."}
+                : "Once the driver has scanned the returned cylinder at your address, request a code for this order and confirm the hand-over."}
           </Text>
         </View>
       </View>
