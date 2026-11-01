@@ -373,29 +373,34 @@ $settle_lpg_payment_status$;
 
 update public.lpg_refill_orders order_record
 set payment_status=case
-  when coalesce(refund.total_amount,0)>=order_record.total_amount then 'refunded'
+  when coalesce((
+    select sum(refund.total_amount)
+    from public.financial_transactions refund
+    where refund.id=order_record.underfill_refund_transaction_id
+      and refund.transaction_type='refund'
+      and refund.status='posted'
+  ),0)>=order_record.total_amount then 'refunded'
   else 'settled'
 end,
 updated_at=timezone('utc',now())
 from public.escrow_holds hold_record
-join public.settlement_executions settlement
-  on settlement.status='posted'
-join public.financial_transactions release_transaction
-  on release_transaction.id=settlement.transaction_id
- and release_transaction.status='posted'
-left join public.financial_transactions refund
-  on refund.id=order_record.underfill_refund_transaction_id
- and refund.transaction_type='refund'
- and refund.status='posted'
 where order_record.payment_status='reserved'
   and hold_record.id=order_record.escrow_hold_id
   and hold_record.status='released'
   and hold_record.released_amount=hold_record.hold_amount
-  and settlement.id in (
-    order_record.internal_settlement_execution_id,
-    order_record.station_settlement_execution_id
-  )
-  and release_transaction.transaction_type in ('release','transfer');
+  and exists (
+    select 1
+    from public.settlement_executions settlement
+    join public.financial_transactions release_transaction
+      on release_transaction.id=settlement.transaction_id
+     and release_transaction.status='posted'
+     and release_transaction.transaction_type in ('release','transfer')
+    where settlement.status='posted'
+      and settlement.id in (
+        order_record.internal_settlement_execution_id,
+        order_record.station_settlement_execution_id
+      )
+  );
 
 -- Refresh advisory findings after replacing both the authoritative and batch
 -- reconciliation projections. This only updates finding status/evidence.
