@@ -26,7 +26,6 @@ Deno.test("Fuel module uses the shared order engine with its own order-processin
   requireIncludes(migration, "'settlement.fuel.escrow.station-driver.v1'", "Fuel settlement is linked to its own escrow policy");
   requireIncludes(migration, "insert into public.workflow_versions (workflow_id, version, status, definition, activated_at)", "Fuel workflow version is registered in the shared workflow engine");
   requireIncludes(migration, "status = 'active'", "Fuel workflow version is activated by its migration");
-  requireIncludes(migration, "status = 'active'", "the configured Fuel workflow is activated while products remain gated");
   requireIncludes(foundation, "status text not null default 'disabled'", "all products remain disabled until explicitly enabled");
 });
 
