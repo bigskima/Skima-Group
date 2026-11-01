@@ -369,9 +369,9 @@ begin
 
   select execution.transaction_id into v_settlement_transaction_id
   from public.settlement_executions execution
-  where execution.id=settlement_execution_id;
+  where execution.id=v_settlement_execution_id;
 
-  if settlement_transaction_id is null then
+  if v_settlement_transaction_id is null then
     raise exception using errcode='55000',message='Fuel settlement execution did not produce a financial transaction';
   end if;
 
@@ -389,10 +389,10 @@ begin
     settlement_metadata||jsonb_build_object('statement_role','station','wallet_id',station_wallet_id)
   )
   on conflict(source,idempotency_key) do nothing
-  returning id into settlement_statement_id;
+  returning id into v_settlement_statement_id;
 
-  if settlement_statement_id is null then
-    select statement.id into settlement_statement_id
+  if v_settlement_statement_id is null then
+    select statement.id into v_settlement_statement_id
     from public.settlement_statements statement
     where statement.source='fuel.settlement_engine'
       and statement.idempotency_key=target_idempotency_key||':station-statement';
@@ -427,9 +427,9 @@ begin
   set status='completed',
       completed_at=coalesce(completed_at,now_value),
       metadata=metadata||jsonb_build_object(
-        'fuel_settlement_execution_id',settlement_execution_id,
-        'fuel_settlement_transaction_id',settlement_transaction_id,
-        'fuel_settlement_statement_id',settlement_statement_id
+        'fuel_settlement_execution_id',v_settlement_execution_id,
+        'fuel_settlement_transaction_id',v_settlement_transaction_id,
+        'fuel_settlement_statement_id',v_settlement_statement_id
       ),
       updated_at=now_value
   where id=target_order_id;
