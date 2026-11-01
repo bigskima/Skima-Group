@@ -52,6 +52,13 @@ export function DeliveryVerificationScreen() {
   }, [draftType, id, owner]);
 
   const currentOrder = nestedRecord(details.data, "order") ?? details.data;
+  const deliveryScans = Array.isArray(details.data?.scans)
+    ? details.data.scans as Array<Record<string, unknown>>
+    : [];
+  const returnCylinderScanVerified = deliveryScans.some((scan) =>
+    (scan.scanType === "customer_delivery" || scan.scan_type === "customer_delivery")
+      && scan.result === "passed",
+  );
   const currentChallengeId = firstString(currentOrder, ["deliveryChallengeId", "delivery_challenge_id"]);
   const currentChallengeVerified = currentOrder?.deliveryChallengeVerified === true
     || currentOrder?.delivery_challenge_verified === true;
@@ -94,6 +101,11 @@ export function DeliveryVerificationScreen() {
 
   const request = async () => {
     setNotice(null);
+    if (!returnCylinderScanVerified) {
+      setNoticeTone("neutral");
+      setNotice("Wait for the assigned driver to scan the returned cylinder at your address. You can request the delivery OTP once that scan is recorded.");
+      return;
+    }
     if (!id || !session.context?.user.email) {
       setNoticeTone("error");
       setNotice("A valid order and verified account email are required.");
@@ -248,7 +260,24 @@ export function DeliveryVerificationScreen() {
         </View>
       </View>
 
-      {!challengeId ? (
+      {!returnCylinderScanVerified ? (
+        <View style={[styles.codeCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <View style={[styles.deliveryCodeDisplay, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+            <Clock3 color={palette.mutedStrong} size={22} />
+            <Text style={[styles.fieldLabel, { color: palette.ink }]}>Waiting for returned-cylinder scan</Text>
+            <Text style={[styles.deliveryCodeHint, { color: palette.muted }]}>
+              Your driver must scan the cylinder's QR or permanent five-character ID at your address first. Then request a fresh OTP for this order.
+            </Text>
+          </View>
+          <AppButton
+            label="Refresh order status"
+            fullWidth
+            variant="secondary"
+            loading={details.isRefetching}
+            onPress={() => void details.refetch()}
+          />
+        </View>
+      ) : !challengeId ? (
         <AppButton
           label="Get verification code"
           fullWidth
@@ -322,7 +351,7 @@ export function DeliveryVerificationScreen() {
               label="Request a new code"
               variant="ghost"
               fullWidth
-              disabled={mutation.isPending || deliveryMutation.isPending}
+              disabled={mutation.isPending || deliveryMutation.isPending || !returnCylinderScanVerified}
               onPress={() => void request()}
             />
           ) : null}
