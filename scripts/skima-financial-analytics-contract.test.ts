@@ -87,7 +87,7 @@ Deno.test("Finance analytics includes settlement statements, adjustments and ope
   assertStringIncludes(workspace, "Settlement statement records");
   assertStringIncludes(workspace, "LPG financial adjustments");
   assertStringIncludes(workspace, "Finance reconciliation findings");
-  assertStringIncludes(workspace, "Advisory only · no ledger posting");
+  assertStringIncludes(workspace, "Advisory only · no funds moved or ledger posted");
 });
 
 Deno.test("Financial analytics is linked from the existing Money workspace", () => {
