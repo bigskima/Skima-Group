@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { CheckCircle2, KeyRound, ShieldCheck } from "lucide-react-native";
+import { CheckCircle2, Clock3, KeyRound, ShieldCheck } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { useJobDetails } from "../api/domains";
@@ -52,6 +52,13 @@ export function DeliveryVerificationScreen() {
   }, [draftType, id, owner]);
 
   const currentOrder = nestedRecord(details.data, "order") ?? details.data;
+  const deliveryScans = Array.isArray(details.data?.scans)
+    ? details.data.scans as Array<Record<string, unknown>>
+    : [];
+  const returnCylinderScanVerified = deliveryScans.some((scan) =>
+    (scan.scanType === "customer_delivery" || scan.scan_type === "customer_delivery")
+      && scan.result === "passed",
+  );
   const currentChallengeId = firstString(currentOrder, ["deliveryChallengeId", "delivery_challenge_id"]);
   const currentChallengeVerified = currentOrder?.deliveryChallengeVerified === true
     || currentOrder?.delivery_challenge_verified === true;
@@ -94,6 +101,11 @@ export function DeliveryVerificationScreen() {
 
   const request = async () => {
     setNotice(null);
+    if (!returnCylinderScanVerified) {
+      setNoticeTone("neutral");
+      setNotice("Wait for the assigned driver to scan the returned cylinder at your address. You can request the delivery OTP once that scan is recorded.");
+      return;
+    }
     if (!id || !session.context?.user.email) {
       setNoticeTone("error");
       setNotice("A valid order and verified account email are required.");
@@ -210,7 +222,7 @@ export function DeliveryVerificationScreen() {
     <Screen
       eyebrow="Secure hand-over"
       title="Confirm your delivery"
-      subtitle="Complete this final check only after your cylinder has been returned to you."
+      subtitle="After the driver scans the returned cylinder at your address, request your order-specific OTP and confirm delivery here."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
@@ -221,7 +233,7 @@ export function DeliveryVerificationScreen() {
           <Text style={styles.heroEyebrow}>SKIMA SECURE DELIVERY</Text>
           <Text style={styles.heroTitle}>Confirm only when the cylinder is with you</Text>
           <Text style={styles.heroBody}>
-            Verification completes the hand-over and allows the order lifecycle to move to its confirmed delivery state.
+            The driver must first scan the returned cylinder. Your OTP is the final confirmation that closes this order.
           </Text>
         </View>
       </View>
@@ -243,12 +255,29 @@ export function DeliveryVerificationScreen() {
               ? "Your customer OTP was accepted earlier. You do not need another code; finish the hand-over to close this order."
               : challengeId
                 ? "Enter the code generated for this order. It can only be used for this delivery confirmation."
-                : "Request a code for this order before confirming the hand-over."}
+                : "Once the driver has scanned the returned cylinder at your address, request a code for this order and confirm the hand-over."}
           </Text>
         </View>
       </View>
 
-      {!challengeId ? (
+      {!returnCylinderScanVerified ? (
+        <View style={[styles.codeCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <View style={[styles.deliveryCodeDisplay, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+            <Clock3 color={palette.mutedStrong} size={22} />
+            <Text style={[styles.fieldLabel, { color: palette.ink }]}>Waiting for returned-cylinder scan</Text>
+            <Text style={[styles.deliveryCodeHint, { color: palette.muted }]}>
+              Your driver must scan the cylinder's QR or permanent five-character ID at your address first. Then request a fresh OTP for this order.
+            </Text>
+          </View>
+          <AppButton
+            label="Refresh order status"
+            fullWidth
+            variant="secondary"
+            loading={details.isRefetching}
+            onPress={() => void details.refetch()}
+          />
+        </View>
+      ) : !challengeId ? (
         <AppButton
           label="Get verification code"
           fullWidth
@@ -322,7 +351,7 @@ export function DeliveryVerificationScreen() {
               label="Request a new code"
               variant="ghost"
               fullWidth
-              disabled={mutation.isPending || deliveryMutation.isPending}
+              disabled={mutation.isPending || deliveryMutation.isPending || !returnCylinderScanVerified}
               onPress={() => void request()}
             />
           ) : null}

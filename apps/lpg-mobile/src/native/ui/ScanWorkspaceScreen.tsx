@@ -28,12 +28,24 @@ import { StatusPill } from "./StatusPill";
 export function ScanWorkspaceScreen({
   jobs,
   workspace = "driver",
+  jobRouteWorkspace,
 }: {
   jobs: UseQueryResult<PlatformRecord[], Error>;
   workspace?: "driver" | "station";
+  jobRouteWorkspace?: "driver" | "station" | "station_driver";
 }) {
   const { palette } = useAppTheme();
   const session = useSession();
+  const routeWorkspace = jobRouteWorkspace ?? workspace;
+  const routeGroup = routeWorkspace === "station_driver"
+    ? "(station-driver)"
+    : `(${routeWorkspace})`;
+  const handoverJobs = workspace === "driver"
+    ? (jobs.data ?? []).filter((job) => {
+        const status = (displayStatus(job) ?? "").toLowerCase().replace(/[\\s-]+/g, "_");
+        return ["return_en_route", "delivery_verification_pending"].includes(status);
+      })
+    : [];
   const actionable = (jobs.data ?? []).filter((job) => scanReady(job, workspace));
   const [selectedId, setSelectedId] = useState("");
   const [manualCylinderId, setManualCylinderId] = useState("");
@@ -65,7 +77,7 @@ export function ScanWorkspaceScreen({
   const detected = (value: string) => {
     if (!jobId) return;
     router.push(
-      `/(${workspace})/job/${encodeURIComponent(jobId)}?scannedToken=${encodeURIComponent(value)}` as never,
+      `/(${routeWorkspace})/job/${encodeURIComponent(jobId)}?scannedToken=${encodeURIComponent(value)}` as never,
     );
   };
 
@@ -106,7 +118,7 @@ export function ScanWorkspaceScreen({
             : scanType === "station_release"
               ? "Station release verified. Return journey is ready."
               : scanType === "customer_delivery"
-                ? "Customer hand-over verified. Order completed."
+                ? "Returned-cylinder scan recorded. Ask the customer to complete the order-specific OTP in SKIMA; that final confirmation closes delivery."
                 : "Verification recorded."; 
       fastScanAttemptKeys.current.delete(token);
       setFastManualId("");
@@ -130,8 +142,6 @@ export function ScanWorkspaceScreen({
           "refill_in_progress",
           "refill_confirmed",
           "station_settled",
-          "return_en_route",
-          "delivery_verification_pending",
           "delivered",
           "completed",
         ]);
@@ -196,12 +206,53 @@ export function ScanWorkspaceScreen({
           <Text style={styles.heroTitle}>
             {actionable.length
               ? `${actionable.length} ${actionable.length === 1 ? "order" : "orders"} need cylinder verification`
+              : handoverJobs.length
+              ? "Customer hand-over awaiting confirmation"
               : workspace === "station" ? "No station cylinder needs verification" : "No job needs verification right now"}
           </Text>
-          <Text style={styles.heroBody}>{workspace === "station" ? "Verify the driver's incoming cylinder at reception, then verify the filled cylinder before it leaves the station." : "Scan or enter the five-character Cylinder ID at pickup, station reception and final delivery."}</Text>
+          <Text style={styles.heroBody}>{workspace === "station" ? "Verify the driver's incoming cylinder at reception, then verify the filled cylinder before it leaves the station." : "Scan pickup, supplier arrival and the returned cylinder at the customer. The customer OTP is the final confirmation."}</Text>
         </View>
       </View>
 
+      {handoverJobs.length ? (
+        <View style={[styles.scannerCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <View style={styles.scannerHead}>
+            <View style={[styles.scannerIcon, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={22} /></View>
+            <View style={styles.scannerCopy}>
+              <Text style={[styles.scannerTitle, { color: palette.ink }]}>Customer hand-over · OTP confirmation</Text>
+              <Text style={[styles.scannerBody, { color: palette.muted }]}>
+                These cylinders are returning to customers. First scan the returned cylinder at the customer's address. Then the customer confirms the order-specific OTP inside SKIMA.
+              </Text>
+            </View>
+            <StatusPill label={`${handoverJobs.length} waiting`} tone="warning" />
+          </View>
+          {handoverJobs.map((job) => {
+            const orderId = recordId(job);
+            const status = (displayStatus(job) ?? "").toLowerCase().replace(/[\\s-]+/g, "_");
+            return (
+              <View key={orderId ?? displayReference(job)} style={[styles.tagNoticeCard, { backgroundColor: palette.surfaceSubtle }]}>
+                <View style={styles.scannerCopy}>
+                  <Text style={[styles.scannerTitle, { color: palette.ink }]}>{displayReference(job) ?? "LPG order"}</Text>
+                  <Text style={[styles.scannerBody, { color: palette.muted }]}>
+                    {cylinderPermanentIdentifier(job) ? `Cylinder ${cylinderPermanentIdentifier(job)} · ` : ""}
+                    {status === "return_en_route" ? "Returning to customer · record arrival, then scan the cylinder." : "Returned-cylinder scan is required first; customer OTP closes the order afterwards."}
+                  </Text>
+                </View>
+                {orderId ? (
+                  <AppButton
+                    label="Open hand-over details"
+                    fullWidth
+                    variant="secondary"
+                    onPress={() => router.push(`/${routeGroup}/job/${encodeURIComponent(orderId)}` as never)}
+                  />
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+
+      {actionable.length ? (
       <View style={[styles.scannerCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={styles.scannerHead}>
           <View style={[styles.scannerIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
@@ -247,15 +298,16 @@ export function ScanWorkspaceScreen({
             <Text style={[styles.tagNotice, { color: fastScanNotice.success ? palette.success : palette.danger }]}>{fastScanNotice.text}</Text>
           </View>
         ) : null}
-        {fastScanNotice?.success && fastScanOrderId ? (
+        {fastScanOrderId ? (
           <AppButton
-            label="Open verified order"
+            label="Open hand-over details"
             fullWidth
             variant="secondary"
-            onPress={() => router.push(`/(${workspace})/job/${encodeURIComponent(fastScanOrderId)}` as never)}
+            onPress={() => router.push(`/${routeGroup}/job/${encodeURIComponent(fastScanOrderId)}` as never)}
           />
         ) : null}
       </View>
+      ) : null}
 
       <Pressable
         accessibilityRole="button"
@@ -439,13 +491,14 @@ function scanReady(job: PlatformRecord, workspace: "driver" | "station") {
   if (workspace === "station") return ["station_en_route", "refill_confirmed", "station_settled"].includes(value);
   const fulfillmentChannel = firstString(job, ["fulfillmentChannel", "fulfillment_channel"]);
   if (["pickup_verified", "station_en_route"].includes(value)) return fulfillmentChannel === "skima_internal";
+  if (["return_en_route", "delivery_verification_pending"].includes(value)) {
+    return job.customerDeliveryScanVerified !== true;
+  }
   return [
     "driver_accepted",
     "pickup_pending",
     "pickup_arrived",
     "pickup_en_route",
-    "delivery_verification_pending",
-    "return_en_route",
   ].includes(value);
 }
 
@@ -460,8 +513,8 @@ function scanStatus(value: string) {
     station_en_route: "Driver arriving · station receipt pending",
     refill_confirmed: "Refill confirmed · release verification ready",
     station_settled: "Station settlement posted · release verification ready",
-    delivery_verification_pending: "Ready for final hand-over",
-    return_en_route: "Returning to customer",
+    delivery_verification_pending: "Waiting for customer OTP confirmation",
+    return_en_route: "Returning to customer · arrival needed",
   };
   return labels[normalized] ?? "Ready to verify";
 }

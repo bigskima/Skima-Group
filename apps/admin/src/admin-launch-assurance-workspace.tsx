@@ -309,8 +309,22 @@ export function AdminLaunchAssuranceWorkspace() {
       if (error) throw error;
       return data;
     },
-    onSuccess: async () => {
-      setNotice("Fulfillment settings saved.");
+    onSuccess: async (saved) => {
+      const configuration = LaunchConfigSchema.parse(saved);
+      const modeLabel = configuration.mode === "hybrid"
+        ? "Partner Network + SKIMA Fleet"
+        : configuration.mode === "marketplace_only"
+          ? "Partner Network only"
+          : "SKIMA Fleet only";
+      const priorityLabel = configuration.priority === "marketplace_first"
+        ? "Partner Network first"
+        : "SKIMA Fleet first";
+      const fallbackLabel = configuration.marketplaceFirstFallbackOnly
+        ? "Fleet only if Partner Network cannot serve"
+        : "both eligible options can be shown";
+      setNotice(
+        `Saved and verified: ${modeLabel}; SKIMA Fleet ${configuration.enabled ? "On" : "Off"}; ${priorityLabel}; ${fallbackLabel}.`,
+      );
       setConfigurationReason("");
       await refresh();
     },
@@ -469,8 +483,12 @@ export function AdminLaunchAssuranceWorkspace() {
       <section className="sk-panel stack-md">
         <div className="section-heading"><div><span className="section-kicker">1 · Order coverage</span><h2>How should SKIMA fulfil LPG orders?</h2></div></div>
         <div className="skima-form-grid">
-          <SelectInput label="Fulfillment mode" value={mode} onChange={(event) => setMode(event.currentTarget.value as FulfillmentMode)} options={[
-            { label: "Partner Network + SKIMA Fleet", value: "hybrid" },
+          <div className="skima-form-help">
+            <strong>Choose which fulfillment networks can receive new orders.</strong>
+            <p>Partner Network only excludes SKIMA Fleet. SKIMA Fleet only excludes Partner Network. Both keeps both routes eligible and uses the priority and fallback rule below. These controls affect new quotes; already assigned orders continue.</p>
+          </div>
+          <SelectInput label="Available fulfillment networks" value={mode} onChange={(event) => setMode(event.currentTarget.value as FulfillmentMode)} options={[
+            { label: "Both: Partner Network + SKIMA Fleet", value: "hybrid" },
             { label: "Partner Network only", value: "marketplace_only" },
             { label: "SKIMA Fleet only", value: "internal_only" },
           ]} />
@@ -478,7 +496,7 @@ export function AdminLaunchAssuranceWorkspace() {
             { label: "Marketplace first", value: "marketplace_first" },
             { label: "SKIMA Managed Drivers first", value: "internal_first" },
           ]} />
-          <SelectInput label="SKIMA managed fulfillment" value={enabled ? "enabled" : "disabled"} onChange={(event) => setEnabled(event.currentTarget.value === "enabled")} options={[
+          <SelectInput label="SKIMA Fleet master switch" value={enabled ? "enabled" : "disabled"} onChange={(event) => setEnabled(event.currentTarget.value === "enabled")} options={[
             { label: "Off", value: "disabled" },
             { label: "On", value: "enabled" },
           ]} />

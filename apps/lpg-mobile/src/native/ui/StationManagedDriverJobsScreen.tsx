@@ -128,7 +128,7 @@ export function StationManagedDriverJobsScreen() {
             icon={<CheckCircle2 color={palette.brand} size={26} />}
             title={showCompleted ? "No completed deliveries yet" : "No active deliveries"}
             description={showCompleted
-              ? "Completed station deliveries will appear here after the backend verifies the final customer hand-over scan."
+              ? "Completed station deliveries appear here after the customer confirms the order-specific delivery OTP in SKIMA."
               : "When your station enables Station Managed and an eligible order has an active driver and approved vehicle, SKIMA assigns it automatically. You do not need an independent-driver profile."}
           />
         ) : null}
@@ -180,23 +180,24 @@ export function StationManagedDriverJobsScreen() {
                 <AppButton label="Accept delivery" loading={busy} disabled={updateStatus.isPending} onPress={() => updateStatus.mutate({ job, nextStatus: "accepted" })} />
               ) : null}
               {job.status === "accepted" && ["station_settled", "return_en_route"].includes(job.orderStatus) ? (
-                <AppButton
-                  label={job.orderStatus === "station_settled" ? "Start return delivery" : "Continue return delivery"}
-                  loading={busy}
-                  disabled={updateStatus.isPending}
-                  onPress={() => updateStatus.mutate({ job, nextStatus: "en_route" })}
-                />
+                <View style={[styles.notice, { backgroundColor: palette.brandSofter }]}>
+                  <Text style={[styles.noticeText, { color: palette.ink }]}>
+                    {job.orderStatus === "station_settled"
+                      ? "The refill is settled. When station staff scan and release the filled cylinder, SKIMA automatically starts your return assignment. No extra button is needed."
+                      : "The station has released the cylinder. SKIMA is activating your return assignment automatically; refresh the list if the assignment has not updated yet."}
+                  </Text>
+                </View>
               ) : null}
               {job.status === "accepted" && !["station_settled", "return_en_route"].includes(job.orderStatus) ? (
                 <View style={[styles.notice, { backgroundColor: palette.brandSofter }]}>
                   <Text style={[styles.noticeText, { color: palette.ink }]}>
-                    Open the pickup workflow below. Scan the cylinder once at the customer; station staff scan it on receipt. The return trip unlocks after refill, settlement and release.
+                    Accept the delivery once. Then open the pickup workflow and scan the cylinder at the customer. Station staff scan it on receipt; SKIMA advances the journey automatically.
                   </Text>
                 </View>
               ) : null}
               {job.status === "en_route" ? (
                 <View style={[styles.notice, { backgroundColor: palette.brandSofter }]}>
-                  <Text style={[styles.noticeText, { color: palette.ink }]}>The station has released the filled cylinder. Navigate to the customer, request delivery verification and complete the final cylinder scan.</Text>
+                  <Text style={[styles.noticeText, { color: palette.ink }]}>The station has released the filled cylinder. Return it to the customer, record arrival, then scan the returned cylinder's QR or permanent ID at the customer's address. The customer completes the order-specific OTP afterwards.</Text>
                 </View>
               ) : null}
               {job.status !== "delivered" ? (

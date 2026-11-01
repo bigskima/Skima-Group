@@ -159,6 +159,7 @@ const ROUTES = new Set([
   "/lpg/inspections",
   "/lpg/scans",
   "/lpg/scans/continuous",
+  "/lpg/scans/order-bound",
   "/lpg/refills/confirm",
   "/lpg/driver-locations",
   "/lpg/safety-incidents",
@@ -2623,6 +2624,29 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         id,
       );
     }
+  }
+
+  if (routePath === "/lpg/scans/order-bound" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    return rpcDataResponse(
+      supabase.rpc("record_lpg_cylinder_scan_for_order", {
+        target_accuracy_meters: optionalNumber(payload.accuracyMeters, "accuracyMeters"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_latitude: optionalNumber(payload.latitude, "latitude"),
+        target_longitude: optionalNumber(payload.longitude, "longitude"),
+        target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId"),
+        target_source: "skima.lpg.order_bound",
+        target_token: requireString(payload.token, "token"),
+        target_workspace: requireString(payload.workspace, "workspace"),
+      }),
+      id,
+    );
   }
 
   if (routePath === "/lpg/scans/continuous" && request.method === "POST") {

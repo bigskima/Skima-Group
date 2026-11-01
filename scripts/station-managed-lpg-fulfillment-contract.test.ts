@@ -170,10 +170,13 @@ Deno.test("Station Managed drivers have a separate authenticated job workspace",
   requireText(workspaceGate, '"station_driver"', "station driver workspace gate");
   requireText(workspaceSwitcher, 'workspaces.includes("station_driver")', "station driver workspace switcher");
   requireText(driverScreen, "Accept delivery", "driver accepts station assignment");
-  requireText(driverScreen, "Start return delivery", "driver starts the return leg after station release");
+  requireText(driverScreen, "SKIMA automatically starts your return assignment", "station release automatically starts the driver return assignment");
+  if (driverScreen.includes("Start return delivery") || driverScreen.includes("Continue return delivery")) {
+    throw new Error("Station Managed drivers must not manually start or continue the return route.");
+  }
   requireText(driverScreen, "Open delivery details & hand-over", "driver opens customer hand-over");
   requireText(driverDetailRoute, 'workspace="station_driver"', "dedicated station driver hand-over route");
-  requireText(jobDetailScreen, "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments.", "station driver hand-over has no SKIMA payout messaging");
+  requireText(jobDetailScreen, "Returned-cylinder scan recorded. Ask the customer to complete the order-specific OTP in SKIMA. The station remains responsible for your compensation.", "station driver hand-over has no SKIMA payout messaging");
   requireText(jobDetailScreen, "stationManagedDriverScanTypeForStatus", "station driver uses customer hand-over scan");
   requireText(driverScreen, "station's normal safety and cylinder-verification process", "verified completion guard");
 });
@@ -197,12 +200,15 @@ Deno.test("Station Managed driver can progress the full pickup → station → r
   requireText(driverPickupLifecycleMigration, "order_status_before not in (''station_settled'',''return_en_route'')", "return route starts only after station release or settlement");
   requireText(driverPickupLifecycleMigration, "set status = ''delivered''", "verified customer hand-over closes station assignment");
   requireText(driverPickupLifecycleMigration, "Station Managed pickup and receipt scans require the order''s active station-driver assignment.", "legacy pickup scan block is retired");
-  requireText(jobDetailScreen, 'if (status === "driver_accepted") return "lpg.pickup.start";', "station drivers can start pickup");
-  requireText(jobDetailScreen, 'if (status === "pickup_verified") return "lpg.station.start";', "station drivers can proceed to refill station");
-  requireText(jobDetailScreen, 'if (status === "pickup_en_route") return "customer_pickup";', "station drivers can scan customer pickup");
-  requireText(jobDetailScreen, 'if (status === "station_en_route") return "station_receipt";', "station drivers can scan station arrival");
+  requireText(jobDetailScreen, 'function stationManagedDriverScanTypeForStatus(status: string)', "station driver can scan from its accepted assignment");
+  requireText(jobDetailScreen, '["driver_accepted", "pickup_en_route"].includes(status)', "pickup scan is available without a separate start-pickup action");
+  requireText(jobDetailScreen, 'function stationManagedDriverActionForStatus(_status: string)', "Station Managed route transitions are automatic");
+  requireText(jobDetailScreen, "The station's verified release scan starts the return assignment", "station release automatically activates the return leg");
+  if (jobDetailScreen.includes('return "lpg.pickup.start"') || jobDetailScreen.includes('return "lpg.station.start"') || jobDetailScreen.includes('return "lpg.delivery.pending"')) {
+    throw new Error("Station Managed drivers must not be asked to manually start pickup, station transit or hand-over arrival.");
+  }
   requireText(driverScreen, "Open pickup & station workflow", "driver queue opens the pickup workflow before return delivery");
-  requireText(driverScreen, "Continue return delivery", "driver can continue after the station has already released the cylinder");
+  requireText(driverScreen, "Open delivery details & hand-over", "driver opens the customer hand-over after automatic return assignment");
 });
 
 Deno.test("Customer AI launcher opens as an overlay modal, not in the home layout", () => {

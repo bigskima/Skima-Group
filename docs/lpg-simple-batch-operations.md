@@ -13,7 +13,7 @@ This is an operational presentation and scan-resolution layer. It does not creat
 3. Scan the five-character Cylinder ID, existing QR/barcode payload, or active physical tag. The backend matches only exact registered credentials against the signed-in driver's active assigned orders.
 4. For ordinary marketplace orders, a successful customer pickup scan starts the existing pickup and station-transit actions. The driver does not scan again at station arrival: the station scans the incoming cylinder when it physically receives it.
 5. For SKIMA Internal orders, the supplier-arrival scan remains available because the internal supplier refill flow has its own receipt, safety, purchase and settlement requirements.
-6. At return, the existing customer delivery challenge must still be verified before the final cylinder scan can complete delivery.
+6. At return, the customer verifies the order-specific delivery challenge from their SKIMA order. That OTP confirmation completes delivery and triggers the existing release/settlement flow; the driver does not scan the cylinder a second time.
 
 The scan resolver rejects ambiguous IDs and does not allow a driver to scan an order outside their assignment. A retry with the same idempotency key returns the original scan rather than applying it to the next lifecycle stage.
 
