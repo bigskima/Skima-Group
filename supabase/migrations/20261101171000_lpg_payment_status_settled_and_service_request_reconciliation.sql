@@ -394,7 +394,6 @@ where order_record.payment_status='reserved'
     join public.financial_transactions release_transaction
       on release_transaction.id=settlement.transaction_id
      and release_transaction.status='posted'
-     and release_transaction.transaction_type in ('release','transfer')
     where settlement.status='posted'
       and settlement.id in (
         order_record.internal_settlement_execution_id,
