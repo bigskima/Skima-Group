@@ -180,7 +180,7 @@ export function InternalDriverJobDetailScreen() {
       setToken("");
       setNoticeSuccess(true);
       setNotice(completedScanType === "customer_delivery"
-        ? "Final cylinder scan verified. Customer hand-over is complete and the order has moved to delivered."
+        ? "Customer OTP confirmation completes the hand-over. Refresh the job to see the delivered state."
         : scanSuccess(completedScanType));
       await detail.refetch();
     } catch (cause) {
@@ -603,7 +603,7 @@ function scanButton(type: "customer_pickup" | "station_receipt" | "customer_deli
 
 function scanSuccess(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
   if (type === "station_receipt") return "Supplier arrival verified. Record the real refill and supplier receipt next.";
-  if (type === "customer_delivery") return "Delivery verified. SKIMA is closing the internal settlement and approving your accrued earning.";
+  if (type === "customer_delivery") return "Customer OTP confirmation completes this hand-over. No second driver scan is required.";
   return "Cylinder pickup verified.";
 }
 
