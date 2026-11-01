@@ -221,7 +221,7 @@ export function ScanWorkspaceScreen({
             <View style={styles.scannerCopy}>
               <Text style={[styles.scannerTitle, { color: palette.ink }]}>Customer hand-over · OTP confirmation</Text>
               <Text style={[styles.scannerBody, { color: palette.muted }]}>
-                These cylinders are returning to customers. The customer must confirm receipt inside their SKIMA order. Do not scan these cylinders again.
+                These cylinders are returning to customers. First scan the returned cylinder at the customer's address. Then the customer confirms the order-specific OTP inside SKIMA.
               </Text>
             </View>
             <StatusPill label={`${handoverJobs.length} waiting`} tone="warning" />
