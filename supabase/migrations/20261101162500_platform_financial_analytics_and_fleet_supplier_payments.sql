@@ -464,9 +464,9 @@ begin
       ),0),
       'orders',coalesce((
         select jsonb_agg(jsonb_build_object(
-          'orderId',item.id,'orderReference',item.public_reference,
+          'orderId',item.id,'procurementId',item.procurement_id,'orderReference',item.public_reference,
           'createdAt',item.created_at,'completedAt',item.updated_at,
-          'actualKg',item.actual_kg,'customerTotal',item.total_amount,
+          'actualKg',item.actual_kg,'customerTotal',item.total_amount,'currencyCode',item.currency_code,
           'platformMarkup',item.platform_fee_amount,'deliveryFee',item.delivery_fee_amount,
           'driverEarning',item.driver_commission_amount,
           'supplierName',item.supplier_name,'procurementCost',item.procurement_amount,
@@ -475,10 +475,10 @@ begin
           'settlementId',item.internal_settlement_execution_id
         ) order by item.created_at desc)
         from (
-          select order_record.id,order_record.public_reference,order_record.created_at,order_record.updated_at,
+          select order_record.id,procurement.id procurement_id,order_record.public_reference,order_record.created_at,order_record.updated_at,
             order_record.actual_kg,order_record.total_amount,order_record.platform_fee_amount,
             order_record.delivery_fee_amount,order_record.driver_commission_amount,
-            order_record.internal_settlement_execution_id,procurement.supplier_name,procurement.procurement_amount,
+            order_record.internal_settlement_execution_id,order_record.currency_code,procurement.supplier_name,procurement.procurement_amount,
             coalesce(paid.amount,0) supplier_paid
           from public.lpg_refill_orders order_record
           join public.lpg_internal_refill_procurements procurement on procurement.lpg_order_id=order_record.id
@@ -543,7 +543,7 @@ begin
           order by payout.paid_at desc limit 100
         ) item
       ),'[]'::jsonb),
-      'driverEarnings',coalesce((
+      'earningRecords',coalesce((
         select jsonb_agg(jsonb_build_object(
           'earningId',item.id,'orderReference',item.public_reference,
           'driverName',item.driver_name,'basisAmount',item.basis_amount,
