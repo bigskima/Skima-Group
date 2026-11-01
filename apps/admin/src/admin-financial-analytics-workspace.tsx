@@ -139,6 +139,17 @@ const paymentColumns: readonly TableColumn<RecordValue>[] = [
   { key: "paymentReference", header: "Reference", render: (row) => recordString(row, "paymentReference") ?? "Cash / no bank reference" },
   { key: "amount", header: "Amount", render: (row) => money(numberValue(row, "amount"), recordString(row, "currencyCode") ?? "NGN") },
   { key: "paidBy", header: "Recorded by", render: (row) => recordString(row, "paidBy") ?? "—" },
+  {
+    key: "evidenceMediaAssetId",
+    header: "Supporting file",
+    render: (row) => {
+      const evidenceId = recordString(row, "evidenceMediaAssetId");
+      return evidenceId
+        ? <StatusBadge tone="success">Attached · {shortId(evidenceId)}</StatusBadge>
+        : <StatusBadge tone="warning">Reference only</StatusBadge>;
+    },
+  },
+  { key: "note", header: "Payment note", render: (row) => recordString(row, "note") ?? "—" },
   { key: "financialTransactionId", header: "Ledger transaction", render: (row) => shortId(recordString(row, "financialTransactionId")) },
 ];
 
@@ -412,7 +423,7 @@ export function AdminFinancialAnalyticsWorkspace() {
           icon={ArrowUpRight}
           tone="success"
         />
-        <MetricTile label="Supplier paid out" value={money(fleet.supplierPaid, currency)} icon={Banknote} />
+        <MetricTile label="Supplier payments recorded" value={money(fleet.supplierPaid, currency)} icon={Banknote} />
         <MetricTile label="Driver paid to SKIMA Wallet" value={money(fleet.driverPaidToWallet, currency)} icon={WalletCards} />
         <MetricTile label="Unpaid supplier balance" value={money(fleet.supplierOutstanding, currency)} icon={CircleAlert} tone={fleet.supplierOutstanding > 0 ? "warning" : "success"} />
         <MetricTile label="Unpaid driver earnings" value={money(fleet.driverUnpaidEarnings, currency)} icon={Activity} tone={fleet.driverUnpaidEarnings > 0 ? "warning" : "success"} />
@@ -453,7 +464,7 @@ export function AdminFinancialAnalyticsWorkspace() {
           <div>
             <p className="admin-section-kicker">Order-level accounting</p>
             <h2>Fleet collections, procurement and supplier balance</h2>
-            <p className="skima-muted">Each row reconciles the customer amount collected by SKIMA against the actual station purchase cost and recorded supplier payment. Procurement alone does not count as proof of payment.</p>
+            <p className="skima-muted">Each row reconciles the customer amount collected by SKIMA against the actual station purchase cost and recorded supplier payment. Procurement alone does not count as proof of payment. Payment entries are Admin-recorded declarations; supporting files and transaction references are shown for reconciliation.</p>
           </div>
         </div>
         <DataTable columns={orderColumns} caption="SKIMA Fleet orders and supplier balances" records={fleet.orders as FleetOrder[]}
@@ -569,8 +580,8 @@ export function AdminFinancialAnalyticsWorkspace() {
 
       <section className="sk-panel stack-md">
         <div className="sk-panel__header">
-          <div><p className="admin-section-kicker">Supplier expenses</p><h2>Actual SKIMA payments to stations</h2></div>
-          <StatusBadge tone="success">Separate from customer collections</StatusBadge>
+          <div><p className="admin-section-kicker">Supplier expenses</p><h2>Admin-recorded SKIMA payments to stations</h2></div>
+          <StatusBadge tone="neutral">Separate from customer collections</StatusBadge>
         </div>
         <DataTable columns={paymentColumns} caption="Supplier payment history" records={fleet.supplierPayments as RecordValue[]}
           getRowKey={(row) => recordString(row, "id") ?? JSON.stringify(row)}
