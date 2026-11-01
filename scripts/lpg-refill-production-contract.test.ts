@@ -270,7 +270,9 @@ Deno.test("customer home keeps independent services visible in every refill stat
   const dashboard = await read("apps/lpg-mobile/src/native/ui/PremiumDashboard.tsx");
   assertIncludes(dashboard, "function CustomerBillsCard()");
   assertIncludes(dashboard, "<CustomerBillsCard />");
-  assertIncludes(dashboard, 'selectWorkspaceWallet(wallets.data ?? [], "customer")');
+  assertIncludes(dashboard, '"customer",\n    session.context?.user.id ?? session.session?.user.id ?? null');
+  assertIncludes(dashboard, "await session.refresh()");
+  assertIncludes(await read("apps/lpg-mobile/src/native/session/SessionProvider.tsx"), "supabase.auth.refreshSession");
   assertIncludes(dashboard, "customerPrimaryStack");
   assertIncludes(await read("apps/lpg-mobile/src/native/api/domains.ts"), 'path: "/lpg/orders?scope=customer"');
 });
