@@ -680,7 +680,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
               <View style={styles.sectionLead}>
                 <View style={[styles.sectionIcon, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={22} /></View>
                 <View style={styles.sectionCopy}>
-                  <Text style={[styles.sectionTitle, { color: palette.ink }}>Returned cylinder verified</Text>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>Returned cylinder verified</Text>
                   <Text style={[styles.sectionBody, { color: palette.muted }]}>
                     {deliveryChallengeVerified
                       ? "Customer OTP has been verified. Refresh this job to confirm the completed delivery state."
