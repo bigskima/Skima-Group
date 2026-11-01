@@ -163,7 +163,7 @@ export function CustomerOrdersScreen() {
                     <Text numberOfLines={1} style={[styles.orderRef, { color: palette.ink }]}>{displayReference(order) ?? "Refill order"}</Text>
                     <Text style={[styles.date, { color: palette.muted }]}>{formatDate(firstString(order, ["created_at", "createdAt"]))}</Text>
                   </View>
-                  <StatusPill label={friendlyOrderStatus(customerDisplayStatus, fulfillmentChannel)} tone={orderStatusTone(customerDisplayStatus)} />
+                  <StatusPill label={friendlyOrderStatus(status, fulfillmentChannel)} tone={orderStatusTone(status)} />
                 </View>
 
                 <View style={[styles.divider, { backgroundColor: palette.border }]} />
@@ -320,7 +320,7 @@ export function CustomerOrderDetailScreen() {
           <Card padding="lg">
             <View style={styles.detailStatusRow}>
               <Text style={[styles.detailSectionTitle, { color: palette.ink }]}>Order summary</Text>
-              <StatusPill label={friendlyOrderStatus(status, fulfillmentChannel)} tone={orderStatusTone(status)} />
+              <StatusPill label={friendlyOrderStatus(customerDisplayStatus, fulfillmentChannel)} tone={orderStatusTone(customerDisplayStatus)} />
             </View>
             <View style={styles.infoGrid}>
               <InfoField label="Cylinder" value={cylinderSummary(cylinder)} />
