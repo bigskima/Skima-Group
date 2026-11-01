@@ -20,7 +20,7 @@ function requireNotIncludes(source: string, fragment: string, message: string): 
 Deno.test("Fuel module uses the shared order engine with its own order-processing workflow", () => {
   requireIncludes(migration, "'fuel'", "Fuel module is configured");
   requireIncludes(migration, "'workflow.fuel.station-fill-delivery'", "Fuel-specific workflow is defined");
-  requireIncludes(migration, "'purpose','order_processing'", "generic order engine can resolve the Fuel workflow");
+  requireIncludes(migration, "\"purpose\":\"order_processing\"", "generic order engine can resolve the Fuel workflow");
   requireIncludes(migration, "'order.acceptance.fuel.manual.v1'", "station order acceptance is manual by default");
   requireIncludes(migration, "'pricing.fuel.commercial-snapshot.v1'", "Fuel pricing uses the locked commercial snapshot");
   requireIncludes(migration, "'settlement.fuel.escrow.station-driver.v1'", "Fuel settlement is linked to its own escrow policy");
