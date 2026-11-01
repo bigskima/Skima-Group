@@ -99,6 +99,8 @@ Deno.test("Finance analytics includes settlement statements, adjustments and ope
   assertStringIncludes(migration, "'settlementStatements'");
   assertStringIncludes(migration, "'financialAdjustments'");
   assertStringIncludes(migration, "'reconciliationFindings'");
+  assertStringIncludes(migration, "'transactionSources'");
+  assertStringIncludes(migration, "'platformAccountMovements'");
   assertStringIncludes(migration, "public.read_ai_finance_reconciliation_findings('info'");
   assertStringIncludes(workspace, "Settlement statement records");
   assertStringIncludes(workspace, "LPG financial adjustments");
@@ -108,6 +110,8 @@ Deno.test("Finance analytics includes settlement statements, adjustments and ope
   assertStringIncludes(workspace, "Net revenue by component");
   assertStringIncludes(workspace, "Linked subject");
   assertStringIncludes(workspace, "Ledger role");
+  assertStringIncludes(workspace, "Transaction totals by source system");
+  assertStringIncludes(workspace, "Platform wallet movement by source");
 });
 
 Deno.test("Financial analytics is linked from the existing Money workspace", () => {
