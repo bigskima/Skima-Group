@@ -473,6 +473,10 @@ export function InternalDriverJobDetailScreen() {
           {section === "details" ? (
             <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <Field label="Cylinder" value={cylinder ? displayTitle(cylinder) : "Not available"} />
+              <Field
+                label="Permanent Cylinder ID"
+                value={firstString(cylinder, ["cylinderIdentifier", "cylinder_identifier", "publicReference", "public_reference"]) ?? "Not available"}
+              />
               <Field label="Requested refill" value={requestedKg === null ? "Not available" : `${requestedKg} kg`} />
               <Field label="Internal earning" value={earningAmount === null ? "Calculated by policy" : `${currencyCode} ${earningAmount.toLocaleString()}`} />
               <Text style={[styles.helper, { color: palette.muted }]}>
