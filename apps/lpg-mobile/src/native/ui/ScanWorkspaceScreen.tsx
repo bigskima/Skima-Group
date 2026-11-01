@@ -28,12 +28,21 @@ import { StatusPill } from "./StatusPill";
 export function ScanWorkspaceScreen({
   jobs,
   workspace = "driver",
+  jobRouteWorkspace,
 }: {
   jobs: UseQueryResult<PlatformRecord[], Error>;
   workspace?: "driver" | "station";
+  jobRouteWorkspace?: "driver" | "station" | "station_driver";
 }) {
   const { palette } = useAppTheme();
   const session = useSession();
+  const routeWorkspace = jobRouteWorkspace ?? workspace;
+  const handoverJobs = workspace === "driver"
+    ? (jobs.data ?? []).filter((job) => {
+        const status = (displayStatus(job) ?? "").toLowerCase().replace(/[\\s-]+/g, "_");
+        return ["return_en_route", "delivery_verification_pending"].includes(status);
+      })
+    : [];
   const actionable = (jobs.data ?? []).filter((job) => scanReady(job, workspace));
   const [selectedId, setSelectedId] = useState("");
   const [manualCylinderId, setManualCylinderId] = useState("");
@@ -65,7 +74,7 @@ export function ScanWorkspaceScreen({
   const detected = (value: string) => {
     if (!jobId) return;
     router.push(
-      `/(${workspace})/job/${encodeURIComponent(jobId)}?scannedToken=${encodeURIComponent(value)}` as never,
+      `/(${routeWorkspace})/job/${encodeURIComponent(jobId)}?scannedToken=${encodeURIComponent(value)}` as never,
     );
   };
 
@@ -80,6 +89,26 @@ export function ScanWorkspaceScreen({
     if (!token || continuousScan.isPending) return;
     setFastScanNotice(null);
     setFastScanOrderId(null);
+    const matchingHandover = handoverJobs.find((job) => {
+      const identityValues = [
+        cylinderPermanentIdentifier(job),
+        firstString(job, ["cylinderIdentifier", "cylinder_identifier"]),
+        firstString(job, ["qrPayload", "qr_payload"]),
+        firstString(job, ["barcodePayload", "barcode_payload"]),
+        firstString(job, ["activeTagReference", "active_tag_reference"]),
+        firstString(job, ["publicReference", "public_reference"]),
+      ].filter((value): value is string => Boolean(value));
+      return identityValues.some((value) => value.trim().toUpperCase() === token.toUpperCase());
+    });
+    if (matchingHandover) {
+      const orderId = recordId(matchingHandover);
+      setFastScanOrderId(orderId);
+      setFastScanNotice({
+        success: false,
+        text: "This cylinder is already on its return-to-customer stage. Do not scan it again. Ask the customer to open this order in SKIMA and complete Confirm delivery with the order-specific OTP.",
+      });
+      return;
+    }
     try {
       const existingAttemptKey = fastScanAttemptKeys.current.get(token);
       const scanAttemptKey = existingAttemptKey ?? idempotencyKey(`continuous-${workspace}-cylinder-scan`, `${workspace}:${Date.now()}:${token.slice(-12)}`);
@@ -196,12 +225,53 @@ export function ScanWorkspaceScreen({
           <Text style={styles.heroTitle}>
             {actionable.length
               ? `${actionable.length} ${actionable.length === 1 ? "order" : "orders"} need cylinder verification`
+              : handoverJobs.length
+              ? "Customer hand-over awaiting confirmation"
               : workspace === "station" ? "No station cylinder needs verification" : "No job needs verification right now"}
           </Text>
-          <Text style={styles.heroBody}>{workspace === "station" ? "Verify the driver's incoming cylinder at reception, then verify the filled cylinder before it leaves the station." : "Scan or enter the five-character Cylinder ID at pickup, station reception and final delivery."}</Text>
+          <Text style={styles.heroBody}>{workspace === "station" ? "Verify the driver's incoming cylinder at reception, then verify the filled cylinder before it leaves the station." : "Scan pickup and supplier stages here. Final customer hand-over is confirmed from the customer's order using its OTP; no second driver scan is required."}</Text>
         </View>
       </View>
 
+      {handoverJobs.length ? (
+        <View style={[styles.scannerCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <View style={styles.scannerHead}>
+            <View style={[styles.scannerIcon, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={22} /></View>
+            <View style={styles.scannerCopy}>
+              <Text style={[styles.scannerTitle, { color: palette.ink }]}>Customer hand-over · OTP confirmation</Text>
+              <Text style={[styles.scannerBody, { color: palette.muted }]}>
+                These cylinders are returning to customers. The customer must confirm receipt inside their SKIMA order. Do not scan these cylinders again.
+              </Text>
+            </View>
+            <StatusPill label={`${handoverJobs.length} waiting`} tone="warning" />
+          </View>
+          {handoverJobs.map((job) => {
+            const orderId = recordId(job);
+            const status = (displayStatus(job) ?? "").toLowerCase().replace(/[\\s-]+/g, "_");
+            return (
+              <View key={orderId ?? displayReference(job)} style={[styles.tagNoticeCard, { backgroundColor: palette.surfaceSubtle }]}>
+                <View style={styles.scannerCopy}>
+                  <Text style={[styles.scannerTitle, { color: palette.ink }]}>{displayReference(job) ?? "LPG order"}</Text>
+                  <Text style={[styles.scannerBody, { color: palette.muted }]}>
+                    {cylinderPermanentIdentifier(job) ? `Cylinder ${cylinderPermanentIdentifier(job)} · ` : ""}
+                    {status === "return_en_route" ? "Returning to customer · record arrival first." : "Waiting for customer to confirm delivery in their SKIMA app."}
+                  </Text>
+                </View>
+                {orderId ? (
+                  <AppButton
+                    label="Open hand-over details"
+                    fullWidth
+                    variant="secondary"
+                    onPress={() => router.push(`/(${routeWorkspace})/job/${encodeURIComponent(orderId)}` as never)}
+                  />
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+
+      {actionable.length ? (
       <View style={[styles.scannerCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={styles.scannerHead}>
           <View style={[styles.scannerIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
@@ -247,15 +317,16 @@ export function ScanWorkspaceScreen({
             <Text style={[styles.tagNotice, { color: fastScanNotice.success ? palette.success : palette.danger }]}>{fastScanNotice.text}</Text>
           </View>
         ) : null}
-        {fastScanNotice?.success && fastScanOrderId ? (
+        {fastScanOrderId ? (
           <AppButton
-            label="Open verified order"
+            label="Open hand-over details"
             fullWidth
             variant="secondary"
-            onPress={() => router.push(`/(${workspace})/job/${encodeURIComponent(fastScanOrderId)}` as never)}
+            onPress={() => router.push(`/(${routeWorkspace})/job/${encodeURIComponent(fastScanOrderId)}` as never)}
           />
         ) : null}
       </View>
+      ) : null}
 
       <Pressable
         accessibilityRole="button"
@@ -444,8 +515,6 @@ function scanReady(job: PlatformRecord, workspace: "driver" | "station") {
     "pickup_pending",
     "pickup_arrived",
     "pickup_en_route",
-    "delivery_verification_pending",
-    "return_en_route",
   ].includes(value);
 }
 
@@ -460,8 +529,8 @@ function scanStatus(value: string) {
     station_en_route: "Driver arriving · station receipt pending",
     refill_confirmed: "Refill confirmed · release verification ready",
     station_settled: "Station settlement posted · release verification ready",
-    delivery_verification_pending: "Ready for final hand-over",
-    return_en_route: "Returning to customer",
+    delivery_verification_pending: "Waiting for customer OTP confirmation",
+    return_en_route: "Returning to customer · arrival needed",
   };
   return labels[normalized] ?? "Ready to verify";
 }
