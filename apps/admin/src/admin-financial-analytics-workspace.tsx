@@ -402,7 +402,7 @@ export function AdminFinancialAnalyticsWorkspace() {
     },
     onSuccess: async (result) => {
       setNotice(
-        `Supplier payment recorded · ${money(numberValue(result, "amount"), recordString(result, "currencyCode") ?? currency)} · ${recordString(result, "orderReference") ?? ""}`,
+        `Supplier payment accounting record posted · ${money(numberValue(result, "amount"), recordString(result, "currencyCode") ?? currency)} · ${recordString(result, "orderReference") ?? ""}`,
       );
       setNoticeTone("success");
       setSelectedOrder(null);
@@ -632,7 +632,7 @@ export function AdminFinancialAnalyticsWorkspace() {
             />
             <div className="sk-panel">
               <strong>Payment control</strong>
-              <p className="skima-muted">This records a disbursement from the SKIMA platform clearing account and credits the supplier-disbursement ledger. Both payment methods require an auditable reference: the bank transaction reference or the cash voucher / signed handover reference.</p>
+              <p className="skima-muted">Use this to record a supplier payment SKIMA has already made. The order must first have a posted SKIMA customer collection. Enter the actual earlier payment time when back-recording. This creates the internal accounting allocation from SKIMA clearing to the supplier-cost control ledger; it does not initiate a bank transfer or independently verify the bank. Both methods require a bank reference or cash voucher / signed handover reference.</p>
               <Button
                 disabled={!selectedOrder || recordSupplierPayment.isPending || Number(paymentAmount) <= 0}
                 isLoading={recordSupplierPayment.isPending}
