@@ -17,12 +17,6 @@ function requireIncludes(source: string, fragment: string, message: string): voi
   }
 }
 
-function requireNotIncludes(source: string, fragment: string, message: string): void {
-  if (source.includes(fragment)) {
-    throw new Error(`${message}: unexpected "${fragment}"`);
-  }
-}
-
 Deno.test("Fuel stock receipts and adjustments are capacity- and reserve-safe", () => {
   requireIncludes(stock, "public.receive_fuel_stock(", "stock receipt RPC exists");
   requireIncludes(stock, "public.adjust_fuel_stock(", "stock adjustment RPC exists");
