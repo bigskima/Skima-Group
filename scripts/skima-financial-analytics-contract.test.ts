@@ -1,6 +1,7 @@
 import { assert, assertStringIncludes, assertNotMatch } from "jsr:@std/assert@1.0.18";
 
 const migration = await Deno.readTextFile("supabase/migrations/20261101162500_platform_financial_analytics_and_fleet_supplier_payments.sql");
+const lifecycleMigration = await Deno.readTextFile("supabase/migrations/20261101171000_lpg_payment_status_settled_and_service_request_reconciliation.sql");
 const workspace = await Deno.readTextFile("apps/admin/src/admin-financial-analytics-workspace.tsx");
 const router = await Deno.readTextFile("apps/admin/src/features/money/MoneyWorkspaceRouter.tsx");
 const navigation = await Deno.readTextFile("apps/admin/src/app/admin-v2-navigation.ts");
@@ -131,4 +132,27 @@ Deno.test("Financial analytics is linked from the existing Money workspace", () 
   assertStringIncludes(router, 'href: "/money/analytics"');
   assertStringIncludes(navigation, 'label: "Financial analytics", href: "/money/analytics"');
   assertStringIncludes(navigation, '"/money/analytics": "Financial analytics"');
+});
+
+
+Deno.test("LPG settlement closes payment status only after posted settlement and released escrow", () => {
+  assertStringIncludes(lifecycleMigration, "add constraint lpg_refill_orders_payment_status_check");
+  assertStringIncludes(lifecycleMigration, "'settled'::text");
+  assertStringIncludes(lifecycleMigration, "payment_status='settled'");
+  assertStringIncludes(lifecycleMigration, "when underfill_refund_amount >= order_record.total_amount then 'refunded'");
+  assertStringIncludes(lifecycleMigration, "hold_record.status='released'");
+  assertStringIncludes(lifecycleMigration, "settlement.status='posted'");
+  assertStringIncludes(lifecycleMigration, "release_transaction.status='posted'");
+});
+
+Deno.test("LPG service-request reconciliation follows the linked LPG settlement instead of only generic release subjects", () => {
+  assertStringIncludes(lifecycleMigration, "public.read_service_request_financial_reconciliation_projection");
+  assertStringIncludes(lifecycleMigration, "order_record.service_request_id=target_service_request_id");
+  assertStringIncludes(lifecycleMigration, "order_record.internal_settlement_execution_id");
+  assertStringIncludes(lifecycleMigration, "order_record.station_settlement_execution_id");
+  assertStringIncludes(lifecycleMigration, "order_record.underfill_refund_transaction_id");
+  assertStringIncludes(lifecycleMigration, "public.reconcile_service_request_financials");
+  assertStringIncludes(lifecycleMigration, "public.refresh_ai_finance_reconciliation_findings()");
+  assertStringIncludes(lifecycleMigration, "lpg_release_total");
+  assertStringIncludes(lifecycleMigration, "lpg_refund_total");
 });
