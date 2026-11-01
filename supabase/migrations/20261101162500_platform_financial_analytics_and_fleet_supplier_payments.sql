@@ -40,6 +40,15 @@ create index if not exists lpg_internal_supplier_payments_procurement_idx
   on public.lpg_internal_supplier_payments(procurement_id,paid_at desc);
 create index if not exists lpg_internal_supplier_payments_transaction_idx
   on public.lpg_internal_supplier_payments(financial_transaction_id);
+
+-- One accounting control account per platform currency and purpose.
+create unique index if not exists wallet_accounts_lpg_supplier_disbursement_currency_uidx
+  on public.wallet_accounts(currency_code, (metadata->>'wallet_purpose'))
+  where wallet_type='platform_supplier'
+    and owner_entity_type='platform'
+    and owner_entity_id is null
+    and status='active'
+    and metadata->>'wallet_purpose'='lpg_supplier_disbursements';
 alter table public.lpg_internal_supplier_payments enable row level security;
 revoke all on table public.lpg_internal_supplier_payments from public,anon,authenticated;
 grant all on table public.lpg_internal_supplier_payments to service_role;
@@ -537,6 +546,42 @@ begin
         from public.lpg_refill_orders order_record
         join public.settlement_executions settlement on settlement.id=order_record.internal_settlement_execution_id and settlement.status='posted'
         where order_record.fulfillment_channel='skima_internal' and order_record.currency_code=currency_code_value
+          and (from_value is null or settlement.created_at>=from_value)
+          and (until_value is null or settlement.created_at<until_value)
+      ),0),
+      'platformAllocatedCollections',coalesce((
+        select sum(ledger.amount)
+        from public.lpg_refill_orders order_record
+        join public.settlement_executions settlement
+          on settlement.id=order_record.internal_settlement_execution_id and settlement.status='posted'
+        join public.wallet_ledger_entries ledger
+          on ledger.transaction_id=settlement.transaction_id
+          and ledger.direction='credit'
+          and ledger.currency_code=order_record.currency_code
+        join public.wallet_accounts wallet
+          on wallet.id=ledger.wallet_id
+          and wallet.owner_entity_type='platform'
+        where order_record.fulfillment_channel='skima_internal'
+          and order_record.currency_code=currency_code_value
+          and (from_value is null or settlement.created_at>=from_value)
+          and (until_value is null or settlement.created_at<until_value)
+      ),0),
+      'unallocatedCustomerCollections',coalesce((
+        select sum(settlement.gross_amount)-coalesce(sum(allocations.platform_credits),0)
+        from public.lpg_refill_orders order_record
+        join public.settlement_executions settlement
+          on settlement.id=order_record.internal_settlement_execution_id and settlement.status='posted'
+        left join lateral (
+          select sum(ledger.amount) platform_credits
+          from public.wallet_ledger_entries ledger
+          join public.wallet_accounts wallet
+            on wallet.id=ledger.wallet_id and wallet.owner_entity_type='platform'
+          where ledger.transaction_id=settlement.transaction_id
+            and ledger.direction='credit'
+            and ledger.currency_code=order_record.currency_code
+        ) allocations on true
+        where order_record.fulfillment_channel='skima_internal'
+          and order_record.currency_code=currency_code_value
           and (from_value is null or settlement.created_at>=from_value)
           and (until_value is null or settlement.created_at<until_value)
       ),0),
