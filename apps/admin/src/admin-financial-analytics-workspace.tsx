@@ -218,9 +218,23 @@ const reconciliationColumns: readonly TableColumn<RecordValue>[] = [
       const evidence = recordObject(row, "evidence");
       const advisoryOnly = evidence?.advisoryOnly === true;
       const noMovement = evidence?.doesNotMoveFunds === true && evidence?.doesNotPostLedger === true;
-      return advisoryOnly && noMovement
-        ? <StatusBadge tone="warning">Advisory only · no ledger posting</StatusBadge>
-        : <StatusBadge tone="neutral">Review evidence</StatusBadge>;
+      if (!evidence) return <StatusBadge tone="neutral">Evidence unavailable</StatusBadge>;
+      const currency = recordString(row, "currencyCode") ?? "NGN";
+      const breakdown = [
+        `Hold ${money(recordNumber(evidence, "holdTotal"), currency)}`,
+        `Quote ${money(recordNumber(evidence, "quoteTotal"), currency)}`,
+        `Order ${money(recordNumber(evidence, "orderTotal"), currency)}`,
+        `Release ${money(recordNumber(evidence, "releaseTotal"), currency)}`,
+        `Refund ${money(recordNumber(evidence, "refundTotal"), currency)}`,
+      ].join(" · ");
+      return (
+        <div className="stack-xs">
+          <span>{breakdown}</span>
+          {advisoryOnly && noMovement
+            ? <StatusBadge tone="warning">Advisory only · no funds moved or ledger posted</StatusBadge>
+            : <StatusBadge tone="neutral">Review authoritative records</StatusBadge>}
+        </div>
+      );
     },
   },
   { key: "recommendedAction", header: "Recommended review", render: (row) => recordString(row, "recommendedAction") ?? "Review source records." },
@@ -784,6 +798,13 @@ function recordObject(record: RecordValue | null | undefined, key: string): Reco
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as RecordValue
     : null;
+}
+
+function recordNumber(record: RecordValue | null | undefined, key: string): number {
+  const value = record?.[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return 0;
 }
 
 function numberValue(record: RecordValue | null | undefined, key: string): number {
