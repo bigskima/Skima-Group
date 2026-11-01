@@ -54,11 +54,17 @@ export function DeliveryVerificationScreen() {
   const currentOrder = nestedRecord(details.data, "order") ?? details.data;
   const deliveryScans = Array.isArray(details.data?.scans)
     ? details.data.scans as Array<Record<string, unknown>>
-    : [];
-  const returnCylinderScanVerified = deliveryScans.some((scan) =>
-    (scan.scanType === "customer_delivery" || scan.scan_type === "customer_delivery")
-      && scan.result === "passed",
-  );
+    : Array.isArray(currentOrder?.scans)
+      ? currentOrder.scans as Array<Record<string, unknown>>
+      : [];
+  const returnCylinderScanVerified = currentOrder?.customerDeliveryScanVerified === true
+    || currentOrder?.customer_delivery_scan_verified === true
+    || details.data?.customerDeliveryScanVerified === true
+    || details.data?.customer_delivery_scan_verified === true
+    || deliveryScans.some((scan) =>
+      String(scan.scanType ?? scan.scan_type ?? "").toLowerCase() === "customer_delivery"
+        && String(scan.result ?? "").toLowerCase() === "passed",
+    );
   const currentChallengeId = firstString(currentOrder, ["deliveryChallengeId", "delivery_challenge_id"]);
   const currentChallengeVerified = currentOrder?.deliveryChallengeVerified === true
     || currentOrder?.delivery_challenge_verified === true;
