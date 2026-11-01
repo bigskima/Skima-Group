@@ -13,7 +13,7 @@ declare
   old_guard constant text := E'    if delivery_challenge_id is null\n      or not public.lpg_delivery_challenge_is_verified(order_record.id, delivery_challenge_id) then\n      raise exception ''verified LPG delivery challenge is required'';\n    end if;';
   new_guard constant text := E'    -- The assigned driver records the physical cylinder hand-over first.\n    -- Customer OTP verification is a separate final confirmation below.';
   old_status constant text := E'    new_status := ''delivered'';\n    history_event := ''delivery_verified'';';
-  new_status constant text := E'    new_status := order_record.status;\n    history_event := ''delivery_handover_scan'';';
+  new_status constant text := E'    new_status := order_record.status;\n    history_event := ''verified'';';
   old_tracking constant text := E'  if target_scan_type = ''customer_delivery''\n    and order_record.tracking_session_id is not null then';
   new_tracking constant text := E'  if target_scan_type = ''customer_delivery''\n    and new_status = ''delivered''\n    and order_record.tracking_session_id is not null then';
 begin
@@ -21,7 +21,7 @@ begin
     'public.record_lpg_cylinder_scan(uuid,text,text,numeric,numeric,numeric,jsonb,text)'::regprocedure
   );
 
-  if position('history_event := ''delivery_handover_scan''' in function_ddl)>0
+  if position('history_event := ''verified''' in function_ddl)>0
      and position('verified LPG delivery challenge is required' in function_ddl)=0 then
     return;
   end if;
