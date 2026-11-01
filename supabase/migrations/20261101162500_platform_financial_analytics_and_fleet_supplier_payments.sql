@@ -517,6 +517,53 @@ begin
             and (until_value is null or payment.paid_at<until_value)
           order by payment.paid_at desc limit 100
         ) item
+      ),'[]'::jsonb),
+      'driverPayouts',coalesce((
+        select jsonb_agg(jsonb_build_object(
+          'payoutId',item.id,'payoutReference',item.payout_reference,
+          'batchReference',item.batch_reference,'driverName',item.driver_name,
+          'amount',item.total_amount,'currencyCode',item.currency_code,
+          'status',item.status,'paidAt',item.paid_at,
+          'financialTransactionId',item.financial_transaction_id,
+          'allocationCount',item.allocation_count
+        ) order by item.paid_at desc)
+        from (
+          select payout.id,payout.payout_reference,batch.batch_reference,profile.display_name driver_name,
+            payout.total_amount,payout.currency_code,payout.status,payout.paid_at,
+            payout.financial_transaction_id,
+            (select count(*) from public.lpg_internal_driver_payout_allocations allocation
+              where allocation.payout_id=payout.id) allocation_count
+          from public.lpg_internal_driver_payouts payout
+          left join public.lpg_internal_driver_payout_batches batch on batch.id=payout.batch_id
+          left join public.driver_profiles driver on driver.id=payout.driver_profile_id
+          left join public.profiles profile on profile.id=driver.user_id
+          where payout.currency_code=currency_code_value
+            and (from_value is null or payout.paid_at>=from_value)
+            and (until_value is null or payout.paid_at<until_value)
+          order by payout.paid_at desc limit 100
+        ) item
+      ),'[]'::jsonb),
+      'driverEarnings',coalesce((
+        select jsonb_agg(jsonb_build_object(
+          'earningId',item.id,'orderReference',item.public_reference,
+          'driverName',item.driver_name,'basisAmount',item.basis_amount,
+          'ratePercent',item.rate_percent,'earningAmount',item.earning_amount,
+          'paidAmount',item.paid_amount,'unpaidAmount',greatest(item.earning_amount-coalesce(item.paid_amount,0),0),
+          'currencyCode',item.currency_code,'status',item.status,'createdAt',item.created_at,'paidAt',item.paid_at
+        ) order by item.created_at desc)
+        from (
+          select earning.id,order_record.public_reference,profile.display_name driver_name,
+            earning.basis_amount,earning.rate_percent,earning.earning_amount,earning.paid_amount,
+            earning.currency_code,earning.status,earning.created_at,earning.paid_at
+          from public.lpg_internal_driver_earnings earning
+          join public.lpg_refill_orders order_record on order_record.id=earning.lpg_order_id
+          left join public.driver_profiles driver on driver.id=earning.driver_profile_id
+          left join public.profiles profile on profile.id=driver.user_id
+          where earning.currency_code=currency_code_value
+            and (from_value is null or earning.created_at>=from_value)
+            and (until_value is null or earning.created_at<until_value)
+          order by earning.created_at desc limit 100
+        ) item
       ),'[]'::jsonb)
     ),
     'recentTransactions',coalesce((
