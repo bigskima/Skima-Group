@@ -464,46 +464,59 @@ begin
       ),0),
       'orders',coalesce((
         select jsonb_agg(jsonb_build_object(
-          'orderId',order_record.id,'orderReference',order_record.public_reference,
-          'createdAt',order_record.created_at,'completedAt',order_record.updated_at,
-          'actualKg',order_record.actual_kg,'customerTotal',order_record.total_amount,
-          'platformMarkup',order_record.platform_fee_amount,'deliveryFee',order_record.delivery_fee_amount,
-          'driverEarning',order_record.driver_commission_amount,
-          'supplierName',procurement.supplier_name,'procurementCost',procurement.procurement_amount,
-          'supplierPaid',coalesce(paid.amount,0),
-          'supplierOutstanding',greatest(procurement.procurement_amount-coalesce(paid.amount,0),0),
-          'settlementId',order_record.internal_settlement_execution_id
-        ) order by order_record.created_at desc)
-        from public.lpg_refill_orders order_record
-        join public.lpg_internal_refill_procurements procurement on procurement.lpg_order_id=order_record.id
-        left join lateral (
-          select sum(payment.amount) amount from public.lpg_internal_supplier_payments payment
-          where payment.procurement_id=procurement.id
-        ) paid on true
-        where order_record.fulfillment_channel='skima_internal'
-          and order_record.currency_code=currency_code_value
-          and (from_value is null or order_record.created_at>=from_value)
-          and (until_value is null or order_record.created_at<until_value)
-        order by order_record.created_at desc limit 100
+          'orderId',item.id,'orderReference',item.public_reference,
+          'createdAt',item.created_at,'completedAt',item.updated_at,
+          'actualKg',item.actual_kg,'customerTotal',item.total_amount,
+          'platformMarkup',item.platform_fee_amount,'deliveryFee',item.delivery_fee_amount,
+          'driverEarning',item.driver_commission_amount,
+          'supplierName',item.supplier_name,'procurementCost',item.procurement_amount,
+          'supplierPaid',item.supplier_paid,
+          'supplierOutstanding',greatest(item.procurement_amount-item.supplier_paid,0),
+          'settlementId',item.internal_settlement_execution_id
+        ) order by item.created_at desc)
+        from (
+          select order_record.id,order_record.public_reference,order_record.created_at,order_record.updated_at,
+            order_record.actual_kg,order_record.total_amount,order_record.platform_fee_amount,
+            order_record.delivery_fee_amount,order_record.driver_commission_amount,
+            order_record.internal_settlement_execution_id,procurement.supplier_name,procurement.procurement_amount,
+            coalesce(paid.amount,0) supplier_paid
+          from public.lpg_refill_orders order_record
+          join public.lpg_internal_refill_procurements procurement on procurement.lpg_order_id=order_record.id
+          left join lateral (
+            select sum(payment.amount) amount from public.lpg_internal_supplier_payments payment
+            where payment.procurement_id=procurement.id
+          ) paid on true
+          where order_record.fulfillment_channel='skima_internal'
+            and order_record.currency_code=currency_code_value
+            and (from_value is null or order_record.created_at>=from_value)
+            and (until_value is null or order_record.created_at<until_value)
+          order by order_record.created_at desc limit 100
+        ) item
       ),'[]'::jsonb),
       'supplierPayments',coalesce((
         select jsonb_agg(jsonb_build_object(
-          'id',payment.id,'procurementId',payment.procurement_id,
-          'orderReference',order_record.public_reference,'supplierName',procurement.supplier_name,
-          'amount',payment.amount,'currencyCode',payment.currency_code,
-          'paymentMethod',payment.payment_method,'paymentReference',payment.payment_reference,
-          'paidAt',payment.paid_at,'paidBy',profile.display_name,
-          'evidenceMediaAssetId',payment.evidence_media_asset_id,
-          'financialTransactionId',payment.financial_transaction_id,'note',payment.note
-        ) order by payment.paid_at desc)
-        from public.lpg_internal_supplier_payments payment
-        join public.lpg_internal_refill_procurements procurement on procurement.id=payment.procurement_id
-        join public.lpg_refill_orders order_record on order_record.id=procurement.lpg_order_id
-        left join public.profiles profile on profile.id=payment.paid_by
-        where payment.currency_code=currency_code_value
-          and (from_value is null or payment.paid_at>=from_value)
-          and (until_value is null or payment.paid_at<until_value)
-        order by payment.paid_at desc limit 100
+          'id',item.id,'procurementId',item.procurement_id,
+          'orderReference',item.public_reference,'supplierName',item.supplier_name,
+          'amount',item.amount,'currencyCode',item.currency_code,
+          'paymentMethod',item.payment_method,'paymentReference',item.payment_reference,
+          'paidAt',item.paid_at,'paidBy',item.display_name,
+          'evidenceMediaAssetId',item.evidence_media_asset_id,
+          'financialTransactionId',item.financial_transaction_id,'note',item.note
+        ) order by item.paid_at desc)
+        from (
+          select payment.id,payment.procurement_id,order_record.public_reference,procurement.supplier_name,
+            payment.amount,payment.currency_code,payment.payment_method,payment.payment_reference,
+            payment.paid_at,profile.display_name,payment.evidence_media_asset_id,
+            payment.financial_transaction_id,payment.note
+          from public.lpg_internal_supplier_payments payment
+          join public.lpg_internal_refill_procurements procurement on procurement.id=payment.procurement_id
+          join public.lpg_refill_orders order_record on order_record.id=procurement.lpg_order_id
+          left join public.profiles profile on profile.id=payment.paid_by
+          where payment.currency_code=currency_code_value
+            and (from_value is null or payment.paid_at>=from_value)
+            and (until_value is null or payment.paid_at<until_value)
+          order by payment.paid_at desc limit 100
+        ) item
       ),'[]'::jsonb)
     ),
     'recentTransactions',coalesce((
