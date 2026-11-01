@@ -193,7 +193,7 @@ const transactionSourceColumns: readonly TableColumn<RecordValue>[] = [
   { key: "transactionType", header: "Type", render: (row) => label(recordString(row, "transactionType")) },
   { key: "status", header: "Status", render: (row) => label(recordString(row, "status")) },
   { key: "count", header: "Entries", render: (row) => numberValue(row, "count").toLocaleString("en-NG") },
-  { key: "amount", header: "Total amount", render: (row) => money(numberValue(row, "amount"), "NGN") },
+  { key: "amount", header: "Total amount", render: (row) => money(numberValue(row, "amount"), recordString(row, "currencyCode") ?? "NGN") },
 ];
 
 const accountMovementColumns: readonly TableColumn<RecordValue>[] = [
