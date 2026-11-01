@@ -288,7 +288,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
       <AdminV2PageHeader
         eyebrow="Services · SKIMA Fuel"
         title="Fuel administration"
-        description="Control petrol, diesel and kerosene as one Fuel module. Configure global product availability, each station's local offer, tank stock, reusable containers and product-qualified delivery teams."
+        description="Control registered Fuel products, global availability, station offers, tank stock, reusable containers and product-qualified delivery teams."
         actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button>}
       />
 
@@ -307,7 +307,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
           <div><p className="admin-section-kicker">Platform-level switches</p><h2>Fuel products</h2></div>
           <StatusBadge>{enabledCount} of 3 enabled</StatusBadge>
         </div>
-        <p className="skima-muted">The Fuel module remains available to administrators while product switches control customer orderability globally. Use the bulk controls to enable or disable PMS, AGO and DPK together; accepted orders are not cancelled.</p>
+        <p className="skima-muted">The Fuel module remains available to administrators while product switches control customer orderability globally. Use the bulk controls to enable or disable all registered Fuel products together; accepted orders are not cancelled.</p>
         <div className="fuel-admin-product-grid">
           {productRows.map((record) => {
             const productKey = catalogText(record, "key");
