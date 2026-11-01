@@ -721,7 +721,6 @@ export function AdminFinancialAnalyticsWorkspace() {
                 setPaymentReference("");
                 setPaymentNote("");
                 setPaymentDate(localDateTimeInput(new Date()));
-                setSupplierPaymentIdempotencyKey(null);
                 setEvidenceFile(null);
                 setEvidenceMediaAssetId(null);
                 setEvidenceFileName(null);
@@ -737,7 +736,6 @@ export function AdminFinancialAnalyticsWorkspace() {
               disabled={!selectedOrder}
               onChange={(event) => {
                 setPaymentAmount(event.currentTarget.value);
-                setSupplierPaymentIdempotencyKey(null);
               }}
             />
             <SelectInput
@@ -749,7 +747,6 @@ export function AdminFinancialAnalyticsWorkspace() {
               ]}
               onChange={(event) => {
                 setPaymentMethod(event.currentTarget.value as "cash" | "bank_transfer");
-                setSupplierPaymentIdempotencyKey(null);
               }}
             />
             <TextInput
@@ -757,7 +754,6 @@ export function AdminFinancialAnalyticsWorkspace() {
               value={paymentReference}
               onChange={(event) => {
                 setPaymentReference(event.currentTarget.value);
-                setSupplierPaymentIdempotencyKey(null);
               }}
               disabled={!selectedOrder}
               placeholder={paymentMethod === "bank_transfer" ? "Enter the bank transaction reference" : "Enter the cash voucher or signed handover reference"}
@@ -768,7 +764,6 @@ export function AdminFinancialAnalyticsWorkspace() {
               value={paymentDate}
               onChange={(event) => {
                 setPaymentDate(event.currentTarget.value);
-                setSupplierPaymentIdempotencyKey(null);
               }}
               disabled={!selectedOrder}
             />
@@ -779,7 +774,6 @@ export function AdminFinancialAnalyticsWorkspace() {
               disabled={!selectedOrder || uploadEvidence.isPending}
               onChange={(event) => {
                 setEvidenceFile(event.currentTarget.files?.[0] ?? null);
-                setSupplierPaymentIdempotencyKey(null);
                 setEvidenceMediaAssetId(null);
                 setEvidenceFileName(null);
               }}
@@ -806,7 +800,6 @@ export function AdminFinancialAnalyticsWorkspace() {
               value={paymentNote}
               onChange={(event) => {
                 setPaymentNote(event.currentTarget.value);
-                setSupplierPaymentIdempotencyKey(null);
               }}
               rows={2}
               disabled={!selectedOrder}
