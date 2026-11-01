@@ -809,7 +809,7 @@ Deno.test("SKIMA Managed-only coverage can load and quote its own internal fulfi
   assertIncludes(referencePolicy, "public.geography_migration_mappings");
   assertIncludes(referencePolicy, "mapping.migration_status='verified'");
   assertNotIncludes(referencePolicy, "public.resolve_lpg_serviceability(");
-  assertIncludes(quoteRuntime, "create_lpg_internal_route_snapshot");
+  assertIncludes(quoteRuntime, "resolve_lpg_internal_route_snapshot");
   assertIncludes(quoteRuntime, "SKIMA_INTERNAL_FULFILLMENT_ID");
 });
 
