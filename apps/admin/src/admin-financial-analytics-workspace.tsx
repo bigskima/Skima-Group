@@ -222,12 +222,24 @@ const transactionColumns: readonly TableColumn<RecordValue>[] = [
     header: "Evidence details",
     render: (row) => {
       const metadata = recordObject(row, "metadata");
-      return metadata ? [
+      if (!metadata) return "—";
+      const references = [
         recordString(metadata, "lpg_public_reference"),
         recordString(metadata, "lpg_order_id"),
         recordString(metadata, "payoutReference"),
         recordString(metadata, "payment_reference"),
-      ].filter(Boolean).join(" · ") || "See source record" : "—";
+      ].filter(Boolean).join(" · ");
+      return (
+        <div className="stack-xs">
+          <span>{references || "See source record"}</span>
+          <details>
+            <summary>Full transaction metadata</summary>
+            <pre style={{ maxWidth: "560px", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+              {JSON.stringify(metadata, null, 2)}
+            </pre>
+          </details>
+        </div>
+      );
     },
   },
 ];
@@ -289,6 +301,12 @@ const reconciliationColumns: readonly TableColumn<RecordValue>[] = [
           {advisoryOnly && noMovement
             ? <StatusBadge tone="warning">Advisory only · no funds moved or ledger posted</StatusBadge>
             : <StatusBadge tone="neutral">Review authoritative records</StatusBadge>}
+          <details>
+            <summary>Full reconciliation evidence</summary>
+            <pre style={{ maxWidth: "560px", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+              {JSON.stringify(evidence, null, 2)}
+            </pre>
+          </details>
         </div>
       );
     },
@@ -309,7 +327,18 @@ const ledgerColumns: readonly TableColumn<RecordValue>[] = [
     header: "Ledger role",
     render: (row) => {
       const metadata = recordObject(row, "metadata");
-      return label(recordString(metadata, "role"));
+      if (!metadata) return "—";
+      return (
+        <div className="stack-xs">
+          <span>{label(recordString(metadata, "role"))}</span>
+          <details>
+            <summary>Full ledger metadata</summary>
+            <pre style={{ maxWidth: "560px", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+              {JSON.stringify(metadata, null, 2)}
+            </pre>
+          </details>
+        </div>
+      );
     },
   },
   {
