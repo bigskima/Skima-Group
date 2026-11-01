@@ -1,11 +1,11 @@
 const dispatch = await Deno.readTextFile(
-  "supabase/migrations/20261102009000_fuel_dispatch_assignment_runtime.sql",
+  "supabase/migrations/20261101202800_fuel_dispatch_assignment_runtime.sql",
 );
 const permissions = await Deno.readTextFile(
-  "supabase/migrations/20261102010000_fuel_platform_admin_permissions.sql",
+  "supabase/migrations/20261101202900_fuel_platform_admin_permissions.sql",
 );
 const batchStatus = await Deno.readTextFile(
-  "supabase/migrations/20261102011000_fuel_stock_batch_status_sync.sql",
+  "supabase/migrations/20261101203000_fuel_stock_batch_status_sync.sql",
 );
 const gateway = await Deno.readTextFile(
   "supabase/functions/api-gateway/index.ts",
