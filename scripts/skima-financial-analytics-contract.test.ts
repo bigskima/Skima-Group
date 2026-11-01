@@ -72,6 +72,11 @@ Deno.test("Admin analytics distinguishes supplier cash or bank payments and Driv
   assertStringIncludes(workspace, "Supplier price / kg");
   assertStringIncludes(workspace, "Wallet ledger transaction");
   assertStringIncludes(workspace, "Procurement spread held in clearing");
+  assertStringIncludes(workspace, "Supplier amount without payment record");
+  assertStringIncludes(workspace, "it does not prove the station was not physically paid");
+  assertStringIncludes(workspace, "Full transaction metadata");
+  assertStringIncludes(workspace, "Full ledger metadata");
+  assertStringIncludes(workspace, "Full reconciliation evidence");
 });
 
 Deno.test("The combined Fleet and Finance migration is classified as a business-module migration", () => {
