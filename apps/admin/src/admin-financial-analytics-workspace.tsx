@@ -38,6 +38,10 @@ const RevenueSchema = z.object({
   grossCredits: z.coerce.number().default(0),
   reversalsAndDebits: z.coerce.number().default(0),
   entryCount: z.coerce.number().default(0),
+  treasuryEntryCount: z.coerce.number().default(0),
+  treasuryNetOutflow: z.coerce.number().default(0),
+  byStream: z.array(RecordSchema).default([]),
+  byComponent: z.array(RecordSchema).default([]),
 }).passthrough();
 
 const FleetSchema = z.object({
@@ -174,6 +178,20 @@ const transactionColumns: readonly TableColumn<RecordValue>[] = [
   { key: "amount", header: "Amount", render: (row) => money(numberValue(row, "amount"), recordString(row, "currencyCode") ?? "NGN") },
   { key: "externalReference", header: "Reference", render: (row) => recordString(row, "externalReference") ?? "—" },
   { key: "transactionId", header: "Transaction ID", render: (row) => shortId(recordString(row, "transactionId")) },
+  { key: "subject", header: "Linked subject", render: (row) => `${label(recordString(row, "subjectType"))} · ${shortId(recordString(row, "subjectId"))}` },
+  {
+    key: "metadata",
+    header: "Evidence details",
+    render: (row) => {
+      const metadata = recordObject(row, "metadata");
+      return metadata ? [
+        recordString(metadata, "lpg_public_reference"),
+        recordString(metadata, "lpg_order_id"),
+        recordString(metadata, "payoutReference"),
+        recordString(metadata, "payment_reference"),
+      ].filter(Boolean).join(" · ") || "See source record" : "—";
+    },
+  },
 ];
 
 const settlementStatementColumns: readonly TableColumn<RecordValue>[] = [
@@ -248,6 +266,22 @@ const ledgerColumns: readonly TableColumn<RecordValue>[] = [
   { key: "source", header: "Source", render: (row) => recordString(row, "source") ?? "—" },
   { key: "reference", header: "Reference", render: (row) => recordString(row, "reference") ?? "—" },
   { key: "transactionStatus", header: "Transaction status", render: (row) => label(recordString(row, "transactionStatus")) },
+  {
+    key: "role",
+    header: "Ledger role",
+    render: (row) => {
+      const metadata = recordObject(row, "metadata");
+      return label(recordString(metadata, "role"));
+    },
+  },
+  {
+    key: "linkedOrder",
+    header: "Linked order / procurement",
+    render: (row) => {
+      const metadata = recordObject(row, "metadata");
+      return shortId(recordString(metadata, "lpg_order_id") ?? recordString(metadata, "procurement_id"));
+    },
+  },
 ];
 
 export function AdminFinancialAnalyticsWorkspace() {
@@ -719,12 +753,41 @@ export function AdminFinancialAnalyticsWorkspace() {
       <section className="sk-panel stack-md">
         <div className="sk-panel__header"><div><p className="admin-section-kicker">Platform-wide finance</p><h2>Revenue, withdrawals and settlements</h2></div></div>
         {data.canReadRevenue && data.revenue ? (
-          <div className="skima-grid skima-grid--compact">
-            <MetricTile label="Gross SKIMA revenue credits" value={money(data.revenue.grossCredits, currency)} />
-            <MetricTile label="Revenue reversals / debits" value={money(data.revenue.reversalsAndDebits, currency)} />
-            <MetricTile label="Net SKIMA revenue" value={money(data.revenue.netRevenue, currency)} />
-            <MetricTile label="Current revenue wallet" value={money(data.revenue.currentRevenueBalance, currency)} />
-          </div>
+          <>
+            <div className="skima-grid skima-grid--compact">
+              <MetricTile label="Gross SKIMA revenue credits" value={money(data.revenue.grossCredits, currency)} />
+              <MetricTile label="Revenue reversals / debits" value={money(data.revenue.reversalsAndDebits, currency)} />
+              <MetricTile label="Net SKIMA revenue" value={money(data.revenue.netRevenue, currency)} />
+              <MetricTile label="Current revenue wallet" value={money(data.revenue.currentRevenueBalance, currency)} />
+              <MetricTile label="Treasury net outflow" value={money(data.revenue.treasuryNetOutflow, currency)} />
+              <MetricTile label="Treasury entries" value={data.revenue.treasuryEntryCount} />
+            </div>
+            <h3>Net revenue by stream</h3>
+            <DataTable
+              columns={[
+                { key: "key", header: "Revenue stream", render: (row) => label(recordString(row, "key")) },
+                { key: "amount", header: "Net amount", render: (row) => money(numberValue(row, "amount"), currency) },
+              ]}
+              caption="Net revenue by accounting stream"
+              records={data.revenue.byStream as RecordValue[]}
+              getRowKey={(row) => recordString(row, "key") ?? JSON.stringify(row)}
+              emptyTitle="No classified revenue streams"
+              emptyMessage="No revenue stream totals were returned for the selected period."
+            />
+            <h3>Net revenue by component</h3>
+            <DataTable
+              columns={[
+                { key: "stream", header: "Stream", render: (row) => label(recordString(row, "stream")) },
+                { key: "component", header: "Component", render: (row) => label(recordString(row, "component")) },
+                { key: "amount", header: "Net amount", render: (row) => money(numberValue(row, "amount"), currency) },
+              ]}
+              caption="Revenue components"
+              records={data.revenue.byComponent as RecordValue[]}
+              getRowKey={(row) => `${recordString(row, "stream") ?? "stream"}:${recordString(row, "component") ?? "component"}`}
+              emptyTitle="No classified revenue components"
+              emptyMessage="No revenue component totals were returned for the selected period."
+            />
+          </>
         ) : (
           <p className="skima-muted">Revenue figures require platform revenue read permission.</p>
         )}
