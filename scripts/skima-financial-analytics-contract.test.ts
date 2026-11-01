@@ -126,6 +126,7 @@ Deno.test("Admin supplier payments attach registered media evidence without chan
   assertStringIncludes(workspace, "const supplierPaymentAttemptsRef = useRef(new Map<string, string>());");
   assertStringIncludes(workspace, "supplierPaymentAttemptsRef.current.get(paymentFingerprint)");
   assertStringIncludes(workspace, "supplierPaymentAttemptsRef.current.clear();");
+  assert(!workspace.includes("setSupplierPaymentIdempotencyKey"), "The obsolete asynchronous idempotency setter must not remain.");
   assertStringIncludes(workspace, "target_idempotency_key: paymentIdempotencyKey");
 });
 
