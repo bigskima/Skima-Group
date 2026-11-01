@@ -107,26 +107,56 @@ begin
     'public.create_lpg_refill_order(uuid,text,jsonb,text)'::regprocedure
   );
 
-  old_block := E'  update public.lpg_refill_quotes\n  set status = ''accepted'',\n      updated_at = timezone(''utc'', now())\n  where id = quote_record.id;';
-  new_block := E'  -- Revalidate against the live Admin availability + priority policy
-  -- immediately before consuming the quote. A quote made before an Admin
-  -- switch must not create an order on a route that is now disabled or has
-  -- fallen outside the configured priority/fallback rules.
-  if not exists (
-    select 1
-    from public.read_lpg_eligible_stations(
-      quote_record.pickup_location_id,
-      quote_record.delivery_location_id,
-      quote_record.cylinder_id,
-      quote_record.requested_kg,
-      50,
-      timezone(''utc'', now())
-    ) eligible
-    where eligible.station_branch_id = quote_record.station_branch_id
-  ) then
-    raise exception using
-      errcode = ''55000'',
-      message = ''This fulfillment option is no longer available under the current Admin routing settings. Refresh the quote and select an available option.'';
+  old_block := E'  update public.lpg_refill_quotes\\n  set status = ''accepted'',\\n      updated_at = timezone(''utc'', now())\\n  where id = quote_record.id;';
+  new_block := E'  -- Revalidate the quote against the live Admin network policy immediately
+  -- before consuming it. Fleet quotes have no physical station_branch_id, so
+  -- use fulfillment_channel and the live partner candidate resolvers instead.
+  if quote_record.fulfillment_channel = ''skima_internal'' then
+    if not coalesce((public.lpg_policy_config(''lpg.fulfillment.launch_assurance'')->>''enabled'')::boolean,false)
+      or coalesce(public.lpg_policy_config(''lpg.fulfillment.launch_assurance'')->>''mode'',''hybrid'') = ''marketplace_only'' then
+      raise exception using
+        errcode = ''55000'',
+        message = ''SKIMA Fleet is disabled by the current Admin fulfillment availability settings. Refresh the quote and choose a Partner Network option.'';
+    end if;
+
+    if coalesce(public.lpg_policy_config(''lpg.fulfillment.launch_assurance'')->>''mode'',''hybrid'') = ''hybrid''
+      and coalesce(public.lpg_policy_config(''lpg.fulfillment.launch_assurance'')->>''priority'',''marketplace_first'') = ''marketplace_first''
+      and coalesce((public.lpg_policy_config(''lpg.fulfillment.launch_assurance'')->>''marketplace_first_fallback_only'')::boolean,true)
+      and (
+        exists (
+          select 1
+          from public.read_lpg_marketplace_eligible_stations(
+            quote_record.pickup_location_id,
+            quote_record.delivery_location_id,
+            quote_record.cylinder_id,
+            quote_record.requested_kg,
+            1,
+            timezone(''utc'',now())
+          ) partner
+        )
+        or exists (
+          select 1
+          from public.read_lpg_station_managed_eligible_stations(
+            quote_record.pickup_location_id,
+            quote_record.delivery_location_id,
+            quote_record.cylinder_id,
+            quote_record.requested_kg,
+            1,
+            timezone(''utc'',now())
+          ) station_partner
+        )
+      ) then
+      raise exception using
+        errcode = ''55000'',
+        message = ''A Partner Network provider can serve this order and Partner Network has priority. SKIMA Fleet is only used when partner fulfillment cannot serve the trip.'';
+    end if;
+  elsif quote_record.fulfillment_channel in (''marketplace'',''partner_network'') then
+    if coalesce((public.lpg_policy_config(''lpg.fulfillment.launch_assurance'')->>''enabled'')::boolean,false)
+      and coalesce(public.lpg_policy_config(''lpg.fulfillment.launch_assurance'')->>''mode'',''hybrid'') = ''internal_only'' then
+      raise exception using
+        errcode = ''55000'',
+        message = ''Partner Network is disabled by the current Admin fulfillment availability settings. Refresh the quote and choose SKIMA Fleet.'';
+    end if;
   end if;
 
   update public.lpg_refill_quotes
