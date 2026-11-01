@@ -196,7 +196,7 @@ export function StationManagedDriverJobsScreen() {
               ) : null}
               {job.status === "en_route" ? (
                 <View style={[styles.notice, { backgroundColor: palette.brandSofter }]}>
-                  <Text style={[styles.noticeText, { color: palette.ink }]}>The station has released the filled cylinder. Navigate to the customer, request delivery verification and complete the final cylinder scan.</Text>
+                  <Text style={[styles.noticeText, { color: palette.ink }]}>The station has released the filled cylinder. Return it to the customer, record arrival, then ask the customer to confirm delivery from their SKIMA order using the order-specific OTP. No second cylinder scan is required.</Text>
                 </View>
               ) : null}
               {job.status !== "delivered" ? (
