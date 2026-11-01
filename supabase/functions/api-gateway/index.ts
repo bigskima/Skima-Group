@@ -3918,20 +3918,21 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     if (!operation.data || operation.data.stage_key !== "ready_for_driver") {
       return jsonResponse({ ok: false, error: "fuel_order_not_ready_for_driver", requestId: id }, 409);
     }
+    const operationData = operation.data;
 
     const qualificationQuery = supabase
       .from("fuel_driver_product_qualifications")
       .select("id,driver_user_id,driver_profile_id,station_managed_driver_id,branch_id,vehicle_id,product_key,maximum_load_litres,status,valid_until")
       .eq("vehicle_id", vehicleId)
-      .eq("product_key", operation.data.product_key)
+      .eq("product_key", operationData.product_key)
       .eq("status", "approved")
-      .gte("maximum_load_litres", operation.data.requested_litres)
-      .or(`branch_id.is.null,branch_id.eq.${operation.data.station_branch_id}`)
+      .gte("maximum_load_litres", operationData.requested_litres)
+      .or(`branch_id.is.null,branch_id.eq.${operationData.station_branch_id}`)
       .or(`valid_until.is.null,valid_until.gt.${new Date().toISOString()}`);
     const qualificationResult = await qualificationQuery;
     if (qualificationResult.error) return databaseError(qualificationResult.error, id);
     const qualification = (qualificationResult.data ?? []).find((record) =>
-      operation.data.fulfillment_mode === "station_managed"
+      operationData.fulfillment_mode === "station_managed"
         ? record.station_managed_driver_id === driverEntityId && record.driver_profile_id === null
         : record.driver_profile_id === driverEntityId && record.station_managed_driver_id === null
     ) ?? null;
@@ -4037,7 +4038,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
     if (!allowed) return jsonResponse({ ok: false, error: "forbidden", message: "The current user is not authorized to record this Fuel order stage.", requestId: id }, 403);
 
-    const stageMetadata = optionalRecord(payload.metadata) ?? {};
+    const stageMetadata: Record<string, unknown> = { ...(optionalRecord(payload.metadata) ?? {}) };
     if (stageKey === "delivered") {
       const deliveredLitres = requireNumber(payload.deliveredLitres ?? stageMetadata.delivered_litres, "deliveredLitres");
       if (deliveredLitres <= 0) throw new RequestValidationError("deliveredLitres must be greater than zero.");
@@ -4108,6 +4109,8 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const resolvedDriver = await resolveFuelAssignedDriver(supabase, allocation.data.order_id);
     if (resolvedDriver.error) return databaseError(resolvedDriver.error, id);
     if (!resolvedDriver.assignment) return jsonResponse({ ok: false, error: "driver_not_assigned", requestId: id }, 409);
+    const assignedDriverEntityId = stringOrNull(resolvedDriver.assignment.entity_id);
+    if (!assignedDriverEntityId) return jsonResponse({ ok: false, error: "driver_identity_invalid", requestId: id }, 409);
     const isAssignedDriver = resolvedDriver.userId === authResult.user.id;
     const isStationOperator = access.allowed && allocation.data.station_branch_id === access.order.branch_id;
 
@@ -4122,18 +4125,18 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     } else if (eventKey === "handed_to_driver") {
       if (!isStationOperator) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
       fromType = "station"; fromId = allocation.data.station_branch_id;
-      toType = "driver"; toId = resolvedDriver.assignment.entity_id;
+      toType = "driver"; toId = assignedDriverEntityId;
     } else if (eventKey === "delivered_to_customer") {
       if (!isAssignedDriver) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
-      fromType = "driver"; fromId = resolvedDriver.assignment.entity_id;
+      fromType = "driver"; fromId = assignedDriverEntityId;
       toType = "customer"; toId = allocation.data.customer_user_id;
     } else if (eventKey === "returned_to_driver") {
       if (!isAssignedDriver) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
       fromType = "customer"; fromId = allocation.data.customer_user_id;
-      toType = "driver"; toId = resolvedDriver.assignment.entity_id;
+      toType = "driver"; toId = assignedDriverEntityId;
     } else if (eventKey === "received_at_station") {
       if (!isAssignedDriver) return jsonResponse({ ok: false, error: "forbidden", requestId: id }, 403);
-      fromType = "driver"; fromId = resolvedDriver.assignment.entity_id;
+      fromType = "driver"; fromId = assignedDriverEntityId;
       toType = "station"; toId = allocation.data.station_branch_id;
     } else {
       throw new RequestValidationError("Unsupported fuel container handover event.");
