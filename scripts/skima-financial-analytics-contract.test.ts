@@ -70,6 +70,26 @@ Deno.test("The combined Fleet and Finance migration is classified as a business-
   assertStringIncludes(migrationPolicy, "20261101162500_platform_financial_analytics_and_fleet_supplier_payments.sql");
 });
 
+Deno.test("Admin supplier payments attach registered media evidence without changing ordinary order receipt rules", () => {
+  assertStringIncludes(workspace, '"/runtime/media/upload-sessions"');
+  assertStringIncludes(workspace, '"/runtime/media/assets"');
+  assertStringIncludes(workspace, 'assetTypeKey: "media.lpg.supplier_payment_evidence"');
+  assertStringIncludes(workspace, "target_evidence_media_asset_id: evidenceMediaAssetId");
+  assertStringIncludes(workspace, "Payment evidence file (optional)");
+  assertStringIncludes(workspace, "Admin-recorded declarations");
+});
+
+Deno.test("Finance analytics includes settlement statements, adjustments and open reconciliation evidence", () => {
+  assertStringIncludes(migration, "'settlementStatements'");
+  assertStringIncludes(migration, "'financialAdjustments'");
+  assertStringIncludes(migration, "'reconciliationFindings'");
+  assertStringIncludes(migration, "public.read_ai_finance_reconciliation_findings('info'");
+  assertStringIncludes(workspace, "Settlement statement records");
+  assertStringIncludes(workspace, "LPG financial adjustments");
+  assertStringIncludes(workspace, "Finance reconciliation findings");
+  assertStringIncludes(workspace, "Advisory only · no ledger posting");
+});
+
 Deno.test("Financial analytics is linked from the existing Money workspace", () => {
   assertStringIncludes(router, 'props.route === "/money/analytics"');
   assertStringIncludes(router, "AdminFinancialAnalyticsWorkspace");
