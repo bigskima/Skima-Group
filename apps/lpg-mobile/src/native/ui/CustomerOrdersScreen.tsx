@@ -163,7 +163,7 @@ export function CustomerOrdersScreen() {
                     <Text numberOfLines={1} style={[styles.orderRef, { color: palette.ink }]}>{displayReference(order) ?? "Refill order"}</Text>
                     <Text style={[styles.date, { color: palette.muted }]}>{formatDate(firstString(order, ["created_at", "createdAt"]))}</Text>
                   </View>
-                  <StatusPill label={friendlyOrderStatus(status, fulfillmentChannel)} tone={orderStatusTone(status)} />
+                  <StatusPill label={friendlyOrderStatus(customerDisplayStatus, fulfillmentChannel)} tone={orderStatusTone(customerDisplayStatus)} />
                 </View>
 
                 <View style={[styles.divider, { backgroundColor: palette.border }]} />
@@ -249,8 +249,13 @@ export function CustomerOrderDetailScreen() {
   const customerReturnScanVerified = hasVerifiedCustomerDeliveryScan(root, order);
   // The return scan intentionally leaves the order in return_en_route.
   // Expose the customer's OTP action only after this order's scan has passed.
-  const canVerifyDelivery = DELIVERY_CONFIRMATION_STATES.has(normalized)
-    || (["return_en_route", "returning"].includes(normalized) && customerReturnScanVerified);
+  const deliveryConfirmationStage = DELIVERY_CONFIRMATION_STATES.has(normalized)
+    || ["return_en_route", "returning"].includes(normalized);
+  const canVerifyDelivery = deliveryConfirmationStage && customerReturnScanVerified;
+  const customerDisplayStatus = customerReturnScanVerified
+    && ["return_en_route", "returning"].includes(normalized)
+    ? "delivery_verification_pending"
+    : status;
   const canShowReceipt = FINAL_ORDER_STATES.has(normalized) || ["paid", "settled"].includes(normalizeStatus(paymentStatus));
   const aiOrderReference = order ? (displayReference(order) ?? id ?? "this refill") : "this refill";
   const fulfillmentChannel = firstString(order, ["fulfillment_channel", "fulfillmentChannel"]);
