@@ -895,6 +895,6 @@ Deno.test("SKIMA Managed supplier receipt remains optional evidence, not a refil
   assertIncludes(migration, "requires_receipt:=false;");
   assertIncludes(migration, "Receipt attachment is optional.");
   assertIncludes(migration, "'{require_supplier_receipt}','false'::jsonb");
-  assertNotIncludes(migration, "supplier receipt evidence is required for SKIMA internal refill");
+  assertIncludes(migration, "position('supplier receipt evidence is required for SKIMA internal refill' in function_ddl)>0");
   assertIncludes(originalProcurement, "target_receipt_media_asset_id is not null and not exists");
 });
