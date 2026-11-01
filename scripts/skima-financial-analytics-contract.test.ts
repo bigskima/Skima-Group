@@ -58,6 +58,18 @@ Deno.test("Fleet analytics separates customer collection, procurement, explicit 
   assertStringIncludes(migration, "'platformMarkupCollected'");
   assertStringIncludes(migration, "'supplierPaid'");
   assertStringIncludes(migration, "'supplierOutstanding'");
+  const payableOrdersStart = migration.indexOf("'orders',coalesce(");
+  const supplierPaymentsStart = migration.indexOf("'supplierPayments',coalesce(", payableOrdersStart);
+  const payableOrdersQuery = migration.slice(payableOrdersStart, supplierPaymentsStart);
+  assertStringIncludes(payableOrdersQuery, "join public.settlement_executions settlement");
+  assertStringIncludes(payableOrdersQuery, "settlement.status='posted'");
+  assertStringIncludes(payableOrdersQuery, "procurement.status='approved'");
+  const outstandingStart = migration.indexOf("'supplierOutstanding',coalesce(");
+  const driverEarningsStart = migration.indexOf("'driverEarnings',coalesce(", outstandingStart);
+  const outstandingQuery = migration.slice(outstandingStart, driverEarningsStart);
+  assertStringIncludes(outstandingQuery, "settlement.status='posted'");
+  assertStringIncludes(outstandingQuery, "procurement.status='approved'");
+  assertStringIncludes(migration, "order_record.fulfillment_channel='skima_internal'");
   assertStringIncludes(migration, "'driverPaidToWallet'");
   assertStringIncludes(migration, "'driverUnpaidEarnings'");
   assertStringIncludes(migration, "'driverPayouts'");
@@ -104,7 +116,9 @@ Deno.test("Admin supplier payments attach registered media evidence without chan
   assertStringIncludes(workspace, "target_evidence_media_asset_id: evidenceMediaAssetId");
   assertStringIncludes(workspace, "Payment evidence file (optional)");
   assertStringIncludes(workspace, "Admin-recorded declarations");
-  assertStringIncludes(workspace, "supplierPaymentIdempotencyKey ?? createClientIdempotencyKey");
+  assertStringIncludes(workspace, "const supplierPaymentAttemptsRef = useRef(new Map<string, string>());");
+  assertStringIncludes(workspace, "supplierPaymentAttemptsRef.current.get(paymentFingerprint)");
+  assertStringIncludes(workspace, "supplierPaymentAttemptsRef.current.clear();");
   assertStringIncludes(workspace, "target_idempotency_key: paymentIdempotencyKey");
 });
 
