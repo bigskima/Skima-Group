@@ -128,8 +128,10 @@ export function friendlyError(
   if (message.includes("cylinder capacity details changed after this request"))
     return "This cylinder changed after the review was submitted. Start a fresh capacity review.";
 
+  if (message.includes("final cylinder hand-over scan must be recorded"))
+    return "The driver has not recorded the returned-cylinder scan yet. Ask the driver to scan the cylinder at your address first; then request and confirm your delivery OTP.";
   if (message.includes("verified lpg delivery challenge is required"))
-    return "The cylinder and order are assigned, but customer confirmation is still pending. Ask the customer to open this order in SKIMA and complete Confirm delivery with the order-specific OTP. No final driver scan is required.";
+    return "Refresh the assigned job. SKIMA now records the driver's returned-cylinder scan first, then the customer confirms the order-specific OTP.";
   if (
     message.includes("scanned cylinder does not match") ||
     message.includes("scan cylinder does not exist")
