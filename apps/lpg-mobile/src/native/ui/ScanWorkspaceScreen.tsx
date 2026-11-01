@@ -92,26 +92,6 @@ export function ScanWorkspaceScreen({
     if (!token || continuousScan.isPending) return;
     setFastScanNotice(null);
     setFastScanOrderId(null);
-    const matchingHandover = handoverJobs.find((job) => {
-      const identityValues = [
-        cylinderPermanentIdentifier(job),
-        firstString(job, ["cylinderIdentifier", "cylinder_identifier"]),
-        firstString(job, ["qrPayload", "qr_payload"]),
-        firstString(job, ["barcodePayload", "barcode_payload"]),
-        firstString(job, ["activeTagReference", "active_tag_reference"]),
-        firstString(job, ["publicReference", "public_reference"]),
-      ].filter((value): value is string => Boolean(value));
-      return identityValues.some((value) => value.trim().toUpperCase() === token.toUpperCase());
-    });
-    if (matchingHandover) {
-      const orderId = recordId(matchingHandover);
-      setFastScanOrderId(orderId);
-      setFastScanNotice({
-        success: false,
-        text: "This cylinder is already on its return-to-customer stage. Do not scan it again. Ask the customer to open this order in SKIMA and complete Confirm delivery with the order-specific OTP.",
-      });
-      return;
-    }
     try {
       const existingAttemptKey = fastScanAttemptKeys.current.get(token);
       const scanAttemptKey = existingAttemptKey ?? idempotencyKey(`continuous-${workspace}-cylinder-scan`, `${workspace}:${Date.now()}:${token.slice(-12)}`);
@@ -138,7 +118,7 @@ export function ScanWorkspaceScreen({
             : scanType === "station_release"
               ? "Station release verified. Return journey is ready."
               : scanType === "customer_delivery"
-                ? "Customer hand-over verified. Order completed."
+                ? "Returned-cylinder scan recorded. Ask the customer to complete the order-specific OTP in SKIMA; that final confirmation closes delivery."
                 : "Verification recorded."; 
       fastScanAttemptKeys.current.delete(token);
       setFastManualId("");
@@ -162,8 +142,6 @@ export function ScanWorkspaceScreen({
           "refill_in_progress",
           "refill_confirmed",
           "station_settled",
-          "return_en_route",
-          "delivery_verification_pending",
           "delivered",
           "completed",
         ]);
@@ -232,7 +210,7 @@ export function ScanWorkspaceScreen({
               ? "Customer hand-over awaiting confirmation"
               : workspace === "station" ? "No station cylinder needs verification" : "No job needs verification right now"}
           </Text>
-          <Text style={styles.heroBody}>{workspace === "station" ? "Verify the driver's incoming cylinder at reception, then verify the filled cylinder before it leaves the station." : "Scan pickup and supplier stages here. Final customer hand-over is confirmed from the customer's order using its OTP; no second driver scan is required."}</Text>
+          <Text style={styles.heroBody}>{workspace === "station" ? "Verify the driver's incoming cylinder at reception, then verify the filled cylinder before it leaves the station." : "Scan pickup, supplier arrival and the returned cylinder at the customer. The customer OTP is the final confirmation."}</Text>
         </View>
       </View>
 
@@ -257,7 +235,7 @@ export function ScanWorkspaceScreen({
                   <Text style={[styles.scannerTitle, { color: palette.ink }]}>{displayReference(job) ?? "LPG order"}</Text>
                   <Text style={[styles.scannerBody, { color: palette.muted }]}>
                     {cylinderPermanentIdentifier(job) ? `Cylinder ${cylinderPermanentIdentifier(job)} · ` : ""}
-                    {status === "return_en_route" ? "Returning to customer · record arrival first." : "Waiting for customer to confirm delivery in their SKIMA app."}
+                    {status === "return_en_route" ? "Returning to customer · record arrival, then scan the cylinder." : "Returned-cylinder scan is required first; customer OTP closes the order afterwards."}
                   </Text>
                 </View>
                 {orderId ? (
@@ -518,6 +496,8 @@ function scanReady(job: PlatformRecord, workspace: "driver" | "station") {
     "pickup_pending",
     "pickup_arrived",
     "pickup_en_route",
+    "return_en_route",
+    "delivery_verification_pending",
   ].includes(value);
 }
 
