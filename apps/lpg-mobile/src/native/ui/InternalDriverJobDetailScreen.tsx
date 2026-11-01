@@ -442,6 +442,9 @@ export function InternalDriverJobDetailScreen() {
               />
               <Input label="Safety / supplier note (optional)" value={safetyNotes} onChangeText={setSafetyNotes} placeholder="Add any relevant observation" multiline />
 
+              <Text style={[styles.helper, { color: palette.muted }]}>
+                Optional: attach a receipt photo when practical. Otherwise, keep the paper receipt for physical hand-over and continue recording the refill here.
+              </Text>
               <EvidenceCapture
                 assetTypeKey="media.lpg.procurement_receipt"
                 label={receiptMediaAssetId ? "Supplier receipt uploaded (optional evidence)" : "Upload supplier receipt (optional)"}
