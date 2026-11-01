@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, ArrowDownLeft, ArrowUpRight, Banknote, CircleAlert, RefreshCcw, WalletCards } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { z } from "zod";
 
 import { createClientIdempotencyKey, type ApiGatewayClient } from "@skima/frontend-core";
@@ -362,7 +362,7 @@ export function AdminFinancialAnalyticsWorkspace() {
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
   const [paymentDate, setPaymentDate] = useState(() => localDateTimeInput(new Date()));
-  const [supplierPaymentIdempotencyKey, setSupplierPaymentIdempotencyKey] = useState<string | null>(null);
+  const supplierPaymentAttemptsRef = useRef(new Map<string, string>());
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [evidenceMediaAssetId, setEvidenceMediaAssetId] = useState<string | null>(null);
   const [evidenceFileName, setEvidenceFileName] = useState<string | null>(null);
@@ -485,20 +485,32 @@ export function AdminFinancialAnalyticsWorkspace() {
       if (!paymentDate || !Number.isFinite(paidAt.getTime())) {
         throw new Error("Enter a valid supplier payment date and time.");
       }
-      const paymentIdempotencyKey = supplierPaymentIdempotencyKey ?? createClientIdempotencyKey(
-        "admin.lpg.supplier-payment",
-        `${recordString(selectedOrder, "orderReference") ?? "order"}:${amount}:${paymentMethod}:${paymentReference.trim()}`,
-      );
-      if (!supplierPaymentIdempotencyKey) setSupplierPaymentIdempotencyKey(paymentIdempotencyKey);
+      const procurementId = recordString(selectedOrder, "procurementId");
+      if (!procurementId) throw new Error("The selected Fleet order is missing its procurement record.");
+      const paymentReferenceValue = paymentReference.trim();
+      const paymentNoteValue = paymentNote.trim();
+      const paidAtValue = paidAt.toISOString();
+      const paymentFingerprint = JSON.stringify([
+        procurementId,
+        amount,
+        paymentMethod,
+        paymentReferenceValue,
+        evidenceMediaAssetId,
+        paymentNoteValue,
+        paidAtValue,
+      ]);
+      const paymentIdempotencyKey = supplierPaymentAttemptsRef.current.get(paymentFingerprint)
+        ?? createClientIdempotencyKey("admin.lpg.supplier-payment", paymentFingerprint);
+      supplierPaymentAttemptsRef.current.set(paymentFingerprint, paymentIdempotencyKey);
       const { data, error } = await supabase.rpc("record_lpg_internal_supplier_payment", {
-        target_procurement_id: recordString(selectedOrder, "procurementId"),
+        target_procurement_id: procurementId,
         target_amount: amount,
         target_payment_method: paymentMethod,
-        target_payment_reference: paymentReference.trim() || null,
+        target_payment_reference: paymentReferenceValue,
         target_evidence_media_asset_id: evidenceMediaAssetId,
-        target_note: paymentNote.trim() || null,
+        target_note: paymentNoteValue || null,
         target_idempotency_key: paymentIdempotencyKey,
-        target_paid_at: paidAt.toISOString(),
+        target_paid_at: paidAtValue,
       });
       if (error) throw error;
       return data as RecordValue;
@@ -513,7 +525,7 @@ export function AdminFinancialAnalyticsWorkspace() {
       setPaymentReference("");
       setPaymentNote("");
       setPaymentDate(localDateTimeInput(new Date()));
-      setSupplierPaymentIdempotencyKey(null);
+      supplierPaymentAttemptsRef.current.clear();
       setEvidenceFile(null);
       setEvidenceMediaAssetId(null);
       setEvidenceFileName(null);
@@ -536,7 +548,13 @@ export function AdminFinancialAnalyticsWorkspace() {
 
   if (analytics.isPending) return <LoadingState label="Loading financial analytics from the ledger…" />;
   if (analytics.error || !analytics.data) {
-    return <ErrorState error={analytics.error ?? new Error("Financial analytics could not be loaded.")} onRetry={() => void refresh()} />;
+    return (
+      <ErrorState
+        title="Financial analytics unavailable"
+        message="The live ledger analytics service did not return data. Retry after checking your Finance access. If the problem continues, share this screen and the time of the failure with Platform Admin."
+        onRetry={() => void refresh()}
+      />
+    );
   }
 
   const data = analytics.data;
