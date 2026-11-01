@@ -180,7 +180,7 @@ export function InternalDriverJobDetailScreen() {
       setToken("");
       setNoticeSuccess(true);
       setNotice(completedScanType === "customer_delivery"
-        ? "Customer OTP confirmation completes the hand-over. Refresh the job to see the delivered state."
+        ? "Returned cylinder scan verified. Ask the customer to complete the order-specific OTP in SKIMA; that final confirmation closes delivery."
         : scanSuccess(completedScanType));
       await detail.refetch();
     } catch (cause) {
@@ -386,42 +386,23 @@ export function InternalDriverJobDetailScreen() {
               ) : null}
 
               {scanType ? (
-                scanType === "customer_delivery" ? (
-                  <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                    <View style={styles.sectionLead}>
-                      <ShieldCheck color={palette.success} size={22} />
-                      <View style={styles.sectionCopy}>
-                        <Text style={[styles.sectionTitle, { color: palette.ink }]}>Customer hand-over confirmation</Text>
-                        <Text style={[styles.helper, { color: palette.muted }]}>
-                          {status === "return_en_route"
-                            ? "Return the filled cylinder to the customer, then tap “Arrived for customer hand-over”. The customer can confirm the delivery from their SKIMA order."
-                            : "The customer must open SKIMA → Orders → this order → Confirm delivery, then complete the order-specific OTP. That confirmation closes the hand-over automatically. No second cylinder scan is required."}
-                        </Text>
-                      </View>
+                <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                  <View style={styles.sectionLead}>
+                    {scanType === "customer_delivery"
+                      ? <ShieldCheck color={palette.success} size={22} />
+                      : <ScanLine color={palette.brand} size={22} />}
+                    <View style={styles.sectionCopy}>
+                      <Text style={[styles.sectionTitle, { color: palette.ink }]}>{scanTitle(scanType)}</Text>
+                      <Text style={[styles.helper, { color: palette.muted }]}>{scanDescription(scanType)}</Text>
                     </View>
-                    <AppButton
-                      label="Refresh hand-over status"
-                      fullWidth
-                      variant="secondary"
-                      loading={detail.isRefetching}
-                      onPress={() => void detail.refetch()}
-                    />
                   </View>
-                ) : (
-                  <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                    <View style={styles.sectionLead}>
-                      <ScanLine color={palette.brand} size={22} />
-                      <View style={styles.sectionCopy}>
-                        <Text style={[styles.sectionTitle, { color: palette.ink }]}>{scanTitle(scanType)}</Text>
-                        <Text style={[styles.helper, { color: palette.muted }]}>{scanDescription(scanType)}</Text>
-                      </View>
-                    </View>
-                    <Scanner enabled onDetected={setToken} />
-                    {token ? (
-                      <AppButton label={scanButton(scanType)} fullWidth loading={continuousScan.isPending} onPress={() => void submitScan()} />
-                    ) : null}
-                  </View>
-                )
+                  <Scanner enabled onDetected={setToken} />
+                  {token ? (
+                    <AppButton label={scanButton(scanType)} fullWidth loading={continuousScan.isPending} onPress={() => void submitScan()} />
+                  ) : (
+                    <Text style={[styles.helper, { color: palette.muted }]}>Scan the QR or enter the permanent five-character Cylinder ID printed on the cylinder.</Text>
+                  )}
+                </View>
               ) : null}
 
               {!actionKey && !scanType ? (
@@ -591,19 +572,19 @@ function scanTitle(type: "customer_pickup" | "station_receipt" | "customer_deliv
 
 function scanDescription(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
   if (type === "station_receipt") return "At the supplier, scan the same SKIMA cylinder before recording the purchase and refill.";
-  if (type === "customer_delivery") return "Customer OTP confirmation in their SKIMA order completes the final hand-over. Do not scan the cylinder again at this stage.";
+  if (type === "customer_delivery") return "At the customer's address, scan the returned cylinder or enter its five-character ID first. The customer then confirms the order-specific OTP in their SKIMA order to close delivery.";
   return "Scan the customer's registered SKIMA cylinder before taking custody.";
 }
 
 function scanButton(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
   if (type === "station_receipt") return "Confirm supplier arrival";
-  if (type === "customer_delivery") return "Await customer confirmation";
+  if (type === "customer_delivery") return "Verify returned cylinder";
   return "Confirm pickup";
 }
 
 function scanSuccess(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
   if (type === "station_receipt") return "Supplier arrival verified. Record the real refill and supplier receipt next.";
-  if (type === "customer_delivery") return "Customer OTP confirmation completes this hand-over. No second driver scan is required.";
+  if (type === "customer_delivery") return "Returned cylinder scan recorded. Ask the customer to complete the order-specific OTP; that is the final delivery confirmation.";
   return "Cylinder pickup verified.";
 }
 
@@ -632,8 +613,8 @@ function stageDescription(status: string, deliveryChallengeVerified = false) {
   if (status === "station_en_route") return "Choose a safe supplier, then scan the cylinder when you arrive.";
   if (["station_verified", "refill_in_progress"].includes(status)) return "Record the supplier, actual price, actual kilograms, safety check and receipt.";
   if (["refill_confirmed", "return_en_route"].includes(status)) return "Return the filled cylinder to the customer.";
-  if (status === "delivery_verification_pending" && deliveryChallengeVerified) return "Customer verification is recorded. Refresh this job; the hand-over closes through the customer's order confirmation.";
-  if (status === "delivery_verification_pending") return "Ask the customer to open this order in SKIMA, choose Confirm delivery and complete the order-specific OTP. No further driver cylinder scan is needed."
+  if (status === "delivery_verification_pending" && deliveryChallengeVerified) return "Customer OTP is verified. Refresh the job to see the delivered status and settlement update.";
+  if (status === "delivery_verification_pending") return "Scan the returned cylinder at the customer's address first. Then ask the customer to open this order in SKIMA, choose Confirm delivery and complete the order-specific OTP."
   return "Follow the SKIMA-managed fulfillment workflow.";
 }
 
