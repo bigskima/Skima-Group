@@ -111,6 +111,21 @@ const orderColumns: readonly TableColumn<FleetOrder>[] = [
     render: (row) => money(numberValue(row, "lpgPrincipalAllocated"), recordString(row, "currencyCode") ?? "NGN"),
   },
   {
+    key: "supplierPricePerKg",
+    header: "Supplier price / kg",
+    render: (row) => money(numberValue(row, "supplierPricePerKg"), recordString(row, "currencyCode") ?? "NGN"),
+  },
+  {
+    key: "referencePricePerKg",
+    header: "Reference price / kg",
+    render: (row) => money(numberValue(row, "referencePricePerKg"), recordString(row, "currencyCode") ?? "NGN"),
+  },
+  {
+    key: "supplierVariancePercent",
+    header: "Price variance",
+    render: (row) => `${numberValue(row, "supplierVariancePercent").toFixed(2)}%`,
+  },
+  {
     key: "procurementCost",
     header: "Actual supplier cost",
     render: (row) => money(numberValue(row, "procurementCost"), recordString(row, "currencyCode") ?? "NGN"),
@@ -168,6 +183,7 @@ const payoutColumns: readonly TableColumn<RecordValue>[] = [
   { key: "amount", header: "Amount", render: (row) => money(numberValue(row, "amount"), recordString(row, "currencyCode") ?? "NGN") },
   { key: "status", header: "Status", render: (row) => <StatusBadge tone={recordString(row, "status") === "posted" ? "success" : "warning"}>{label(recordString(row, "status"))}</StatusBadge> },
   { key: "allocationCount", header: "Orders paid", render: (row) => numberValue(row, "allocationCount").toString() },
+  { key: "financialTransactionId", header: "Wallet ledger transaction", render: (row) => shortId(recordString(row, "financialTransactionId")) },
 ];
 
 const transactionColumns: readonly TableColumn<RecordValue>[] = [
