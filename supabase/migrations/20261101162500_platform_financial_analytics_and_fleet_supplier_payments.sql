@@ -3,6 +3,107 @@ begin;
 -- Supplier disbursements use the existing platform wallet class with a distinct
 -- wallet_purpose. Do not broaden or replace the canonical wallet type constraint.
 
+-- Dedicated SKIMA Fleet operating-funds account. The existing generic clearing helper
+-- selects only by wallet_type and would otherwise collapse Fleet funds back into
+-- the shared platform clearing account.
+create unique index if not exists wallet_accounts_lpg_fleet_operating_funds_currency_uidx
+  on public.wallet_accounts(currency_code, (metadata->>'wallet_purpose'))
+  where wallet_type='platform_clearing'
+    and owner_entity_type='platform'
+    and owner_entity_id is null
+    and status='active'
+    and metadata->>'wallet_purpose'='lpg_fleet_operating_funds';
+
+create or replace function public.ensure_lpg_fleet_operating_funds_wallet(
+  target_currency_code text default 'NGN',
+  target_source text default 'lpg.internal_settlement',
+  target_idempotency_key text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $function$
+declare
+  wallet_id uuid;
+  idempotency_value text;
+begin
+  if target_currency_code is null
+    or not exists(select 1 from public.currency_definitions currency
+      where currency.code=upper(target_currency_code) and currency.status='enabled') then
+    raise exception using errcode='22023',message='an enabled settlement currency is required for SKIMA Fleet operating funds';
+  end if;
+
+  select wallet.id into wallet_id
+  from public.wallet_accounts wallet
+  where wallet.wallet_type='platform_clearing'
+    and wallet.owner_entity_type='platform'
+    and wallet.owner_entity_id is null
+    and wallet.currency_code=upper(target_currency_code)
+    and wallet.status='active'
+    and wallet.metadata->>'wallet_purpose'='lpg_fleet_operating_funds'
+  for update;
+
+  if wallet_id is not null then return wallet_id; end if;
+
+  idempotency_value:=coalesce(
+    nullif(btrim(target_idempotency_key),''),
+    'lpg-fleet-operating-funds:'||lower(target_currency_code)
+  );
+
+  insert into public.wallet_accounts(
+    wallet_type,owner_entity_type,owner_entity_id,currency_code,status,metadata,
+    created_by,source,idempotency_key
+  ) values (
+    'platform_clearing','platform',null,upper(target_currency_code),'active',
+    jsonb_build_object(
+      'wallet_purpose','lpg_fleet_operating_funds',
+      'display_name','SKIMA Fleet Operating Funds',
+      'platform_internal',true,
+      'accounting_scope','skima_fleet'
+    ),
+    auth.uid(),
+    coalesce(nullif(target_source,''),'lpg.internal_settlement'),
+    idempotency_value
+  )
+  on conflict do nothing
+  returning id into wallet_id;
+
+  if wallet_id is null then
+    select wallet.id into wallet_id
+    from public.wallet_accounts wallet
+    where wallet.wallet_type='platform_clearing'
+      and wallet.owner_entity_type='platform'
+      and wallet.owner_entity_id is null
+      and wallet.currency_code=upper(target_currency_code)
+      and wallet.status='active'
+      and wallet.metadata->>'wallet_purpose'='lpg_fleet_operating_funds'
+    for update;
+  end if;
+
+  if wallet_id is null then
+    raise exception using errcode='55000',message='SKIMA Fleet operating-funds account could not be ensured';
+  end if;
+
+  insert into public.wallet_account_events(
+    wallet_account_id,event_type,status,idempotency_key,metadata,created_by
+  ) values (
+    wallet_id,'created','active',idempotency_value||':created',
+    jsonb_build_object(
+      'source',coalesce(nullif(target_source,''),'lpg.internal_settlement'),
+      'wallet_purpose','lpg_fleet_operating_funds',
+      'display_name','SKIMA Fleet Operating Funds'
+    ),
+    auth.uid()
+  ) on conflict do nothing;
+
+  return wallet_id;
+end;
+$function$;
+
+revoke all on function public.ensure_lpg_fleet_operating_funds_wallet(text,text,text) from public,anon,authenticated;
+grant execute on function public.ensure_lpg_fleet_operating_funds_wallet(text,text,text) to service_role;
+
 -- Immutable evidence for supplier payments made by SKIMA outside the customer wallet flow.
 -- Procurement confirmation is not proof that a supplier has actually been paid.
 create table if not exists public.lpg_internal_supplier_payments (
