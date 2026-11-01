@@ -318,7 +318,7 @@ begin
   taxable_base:=fuel_amount+container_amount+driver_amount+platform_fee_amount;
   tax_amount:=round(taxable_base*offer_record.tax_rate_percent/100,currency_decimals);
   resolved_subtotal_amount:=fuel_amount+container_amount+driver_amount+refundable_deposit_amount;
-  grand_total:=subtotal_amount+platform_fee_amount+tax_amount;
+  grand_total:=resolved_subtotal_amount+platform_fee_amount+tax_amount;
 
   if grand_total<=0 then
     raise exception using errcode='23514',message='Fuel commercial quote must have a positive total';
