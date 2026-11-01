@@ -521,6 +521,43 @@ export function AdminFinancialAnalyticsWorkspace() {
   const revenueBalance = data.revenue?.currentRevenueBalance ?? 0;
   const selectedOutstanding = selectedOrder ? numberValue(selectedOrder, "supplierOutstanding") : 0;
 
+  const openSupplierEvidence = async (row: RecordValue) => {
+    const bucket = recordString(row, "evidenceStorageBucket");
+    const storagePath = recordString(row, "evidenceStoragePath");
+    if (!bucket || !storagePath) {
+      setNotice("No stored payment evidence is attached to this supplier payment.");
+      setNoticeTone("danger");
+      return;
+    }
+    const popup = window.open("about:blank", "_blank");
+    if (!popup) {
+      setNotice("Allow pop-ups for SKIMA Admin to open private payment evidence.");
+      setNoticeTone("danger");
+      return;
+    }
+    popup.opener = null;
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(storagePath, 300);
+    if (error || !data?.signedUrl) {
+      popup.close();
+      setNotice(error?.message ?? "The payment evidence link could not be created.");
+      setNoticeTone("danger");
+      return;
+    }
+    popup.location.href = data.signedUrl;
+  };
+
+  const paymentColumnsWithEvidence: readonly TableColumn<RecordValue>[] = [
+    ...paymentColumns,
+    {
+      key: "openEvidence",
+      header: "Evidence file",
+      render: (row) => recordString(row, "evidenceStoragePath")
+        ? <Button variant="outline" onClick={() => { void openSupplierEvidence(row); }}>View file</Button>
+        : <StatusBadge tone="warning">No file attached</StatusBadge>,
+    },
+  ];
+
+
   return (
     <div className="money-v2 skima-financial-analytics stack-lg">
       <PageHeader
@@ -748,7 +785,7 @@ export function AdminFinancialAnalyticsWorkspace() {
           <div><p className="admin-section-kicker">Supplier expenses</p><h2>Admin-recorded SKIMA payments to stations</h2></div>
           <StatusBadge tone="neutral">Separate from customer collections</StatusBadge>
         </div>
-        <DataTable columns={paymentColumns} caption="Supplier payment history" records={fleet.supplierPayments as RecordValue[]}
+        <DataTable columns={paymentColumnsWithEvidence} caption="Supplier payment history" records={fleet.supplierPayments as RecordValue[]}
           getRowKey={(row) => recordString(row, "id") ?? JSON.stringify(row)}
           emptyTitle="No supplier payments recorded" emptyMessage="No supplier disbursements have been recorded yet. An approved procurement is not counted as paid." />
         <div className="skima-grid skima-grid--compact">
