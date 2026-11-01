@@ -381,15 +381,15 @@ export function AdminFinancialAnalyticsWorkspace() {
             <SelectInput
               label="Order with outstanding supplier balance"
               value={recordString(selectedOrder, "orderId") ?? ""}
-              placeholder="Select an order"
               options={fleet.orders
                 .filter((order) => numberValue(order, "supplierOutstanding") > 0)
                 .map((order) => ({
                   label: `${recordString(order, "orderReference") ?? "Order"} · ${money(numberValue(order, "supplierOutstanding"), currency)} outstanding`,
                   value: recordString(order, "orderId") ?? "",
                 }))}
-              onChange={(next) => {
-                const selected = fleet.orders.find((order) => recordString(order, "orderId") === next) ?? null;
+              onChange={(event) => {
+                const selectedId = event.currentTarget.value;
+                const selected = fleet.orders.find((order) => recordString(order, "orderId") === selectedId) ?? null;
                 setSelectedOrder(selected);
                 setPaymentAmount(selected ? String(numberValue(selected, "supplierOutstanding")) : "");
                 setPaymentReference("");
