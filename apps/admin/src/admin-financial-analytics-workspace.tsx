@@ -222,6 +222,10 @@ export function AdminFinancialAnalyticsWorkspace() {
       if (paymentMethod === "bank_transfer" && !paymentReference.trim()) {
         throw new Error("Enter the bank transfer reference before recording this payment.");
       }
+      const paidAt = new Date(paymentDate);
+      if (!paymentDate || !Number.isFinite(paidAt.getTime())) {
+        throw new Error("Enter a valid supplier payment date and time.");
+      }
       const { data, error } = await supabase.rpc("record_lpg_internal_supplier_payment", {
         target_procurement_id: recordString(selectedOrder, "procurementId"),
         target_amount: amount,
@@ -233,7 +237,7 @@ export function AdminFinancialAnalyticsWorkspace() {
           "admin.lpg.supplier-payment",
           `${recordString(selectedOrder, "orderReference") ?? "order"}:${amount}:${paymentMethod}:${paymentReference.trim()}`,
         ),
-        target_paid_at: new Date(paymentDate).toISOString(),
+        target_paid_at: paidAt.toISOString(),
       });
       if (error) throw error;
       return data as RecordValue;
@@ -337,7 +341,7 @@ export function AdminFinancialAnalyticsWorkspace() {
             <p className="admin-section-kicker">SKIMA Fleet · Customer collections</p>
             <h2>Money collected by SKIMA from in-app orders</h2>
             <p className="skima-muted">
-              Customer wallet collections are credited to SKIMA-controlled platform clearing. They are not station wallet credits. The supplier cash/bank transfer is a separate company disbursement below.
+              The customer payment is held in SKIMA-controlled escrow, then settled into SKIMA platform clearing, revenue and driver-liability accounts. None of these are station wallet credits. SKIMA pays the physical supplier separately by cash or bank transfer below.
             </p>
           </div>
           <StatusBadge tone="success">SKIMA is funds recipient</StatusBadge>
@@ -349,7 +353,7 @@ export function AdminFinancialAnalyticsWorkspace() {
           <MetricTile label="Procurement spread held in clearing · not revenue-classified" value={money(fleet.procurementSpread, currency)} tone={fleet.procurementSpread !== 0 ? "warning" : "success"} />
           <MetricTile label="Customer delivery fees" value={money(fleet.deliveryFeesCollected, currency)} />
           <MetricTile label="Recorded procurement cost" value={money(fleet.procurementCost, currency)} />
-          <MetricTile label="Current clearing balance" value={money(clearingBalance, currency)} />
+          <MetricTile label="Current shared SKIMA clearing balance" value={money(clearingBalance, currency)} />
         </div>
         {data.canReadRevenue ? (
           <p className="skima-muted">
@@ -541,7 +545,7 @@ export function AdminFinancialAnalyticsWorkspace() {
           getRowKey={(row) => recordString(row, "ledgerEntryId") ?? JSON.stringify(row)}
           emptyTitle="No ledger activity" emptyMessage="No ledger activity found." />
         <h3>Platform wallet and accounting control balances</h3>
-        <p className="skima-muted">The supplier disbursement control account is an expense-side ledger total, not cash available in a bank account. Platform clearing is a shared SKIMA-controlled account, not a separate Fleet bank wallet.</p>
+        <p className="skima-muted">The supplier disbursement control account is an expense-side ledger total, not cash available in a bank account. Platform clearing is a shared SKIMA-controlled account, not a separate Fleet bank wallet. Ledger balances are not bank statement balances.</p>
         <DataTable
           columns={[
             { key: "walletType", header: "Wallet class", render: (row) => label(recordString(row, "walletType")) },
