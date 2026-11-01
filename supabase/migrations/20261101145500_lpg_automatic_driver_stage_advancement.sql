@@ -97,6 +97,27 @@ begin
 end;
 $automatic_lpg_internal_return$;
 
+do $avoid_duplicate_order_bound_pickup_advance$
+declare
+  function_sql text;
+  old_block text;
+begin
+  function_sql := pg_get_functiondef(
+    'public.record_lpg_cylinder_scan_for_order(uuid,text,text,text,numeric,numeric,numeric,text)'::regprocedure
+  );
+
+  old_block := E'  if scan_type = ''customer_pickup'' then\\n    perform public.process_lpg_order_action(\\n      order_id,\\n      ''lpg.station.start'',\\n      target_idempotency_key || '':station-start'',\\n      jsonb_build_object(''startedAfterPickupVerification'', true),\\n      target_source\\n    );\\n  end if;\\n\\n';
+
+  if position(old_block in function_sql) = 0 then
+    raise exception 'Could not locate the legacy post-scan station-start block in the order-bound RPC';
+  end if;
+
+  function_sql := replace(function_sql, old_block, '');
+  execute function_sql;
+end;
+$avoid_duplicate_order_bound_pickup_advance$;
+
+
 do $enforce_current_lpg_route_policy$
 declare
   function_sql text;
