@@ -14,12 +14,21 @@ import { StatusPill } from "./StatusPill";
 
 export function FuelOrdersScreen() {
   const { palette } = useAppTheme();
+  const products = useGatewayQuery({
+    key: ["fuel", "products"],
+    path: "/runtime/fuel/products",
+    schema: RecordArraySchema,
+    refetchInterval: 60000,
+  });
   const orders = useGatewayQuery({
     key: ["fuel", "orders", "customer"],
     path: "/runtime/fuel/orders/operations?scope=customer",
     schema: RecordArraySchema,
     refetchInterval: 15000,
   });
+
+  const productNameForKey = (key: string) =>
+    firstString((products.data ?? []).find((item) => firstString(item, ["key"]) === key), ["display_name"]) || key || "Fuel";
 
   return (
     <Screen
@@ -43,7 +52,7 @@ export function FuelOrdersScreen() {
         <EmptyState
           icon={<Fuel color={palette.brand} size={28} />}
           title="No fuel orders yet"
-          description="Your petrol, diesel and kerosene deliveries will appear here."
+          description="Your liquid-fuel deliveries will appear here."
           action={<AppButton label="Order fuel" onPress={() => router.push("/(customer)/fuel" as never)} />}
         />
       ) : (
@@ -51,7 +60,7 @@ export function FuelOrdersScreen() {
           {(orders.data ?? []).map((order, index) => {
             const orderId = firstString(order, ["order_id"]) ?? String(index);
             const productKey = firstString(order, ["product_key"]) ?? "fuel";
-            const product = productKey === "fuel.pms" ? "Petrol" : productKey === "fuel.ago" ? "Diesel" : "Kerosene";
+            const product = productNameForKey(productKey);
             const litres = firstNumber(order, ["requested_litres"]) ?? 0;
             const status = firstString(order, ["stage_key"]) ?? "awaiting_station_acceptance";
             const containerMode = firstString(order, ["container_mode"]) === "rental" ? "Rental container" : "Purchased container";
