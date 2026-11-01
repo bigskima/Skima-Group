@@ -32,5 +32,5 @@ export function StationManagedDriverScanScreen() {
     },
     refetchInterval: 10000,
   });
-  return <ScanWorkspaceScreen jobs={jobs} workspace="driver" />;
+  return <ScanWorkspaceScreen jobs={jobs} workspace="driver" jobRouteWorkspace="station_driver" />;
 }
