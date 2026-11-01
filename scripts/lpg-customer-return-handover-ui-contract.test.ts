@@ -15,7 +15,8 @@ Deno.test("driver scan workspace keeps returned-cylinder handover cards readable
 
 Deno.test("customer delivery confirmation becomes ready after the returned-cylinder scan, not before", () => {
   includes(customer, 'const customerReturnScanVerified = hasVerifiedCustomerDeliveryScan(root, order)', "customer screen reads the per-order return scan");
-  includes(customer, '["return_en_route", "returning"].includes(normalized) && customerReturnScanVerified', "customer CTA unlocks in the return stage only after a passed scan");
+  includes(customer, "const canVerifyDelivery = deliveryConfirmationStage && customerReturnScanVerified", "customer CTA requires a passed return scan in an eligible delivery stage");
+  includes(customer, '? "delivery_verification_pending"', "customer sees Ready for hand-over after the physical scan");
   includes(customer, 'scanType === "customer_delivery" && result === "passed"', "only the passed customer-delivery scan unlocks the action");
   includes(verification, "customerDeliveryScanVerified === true", "OTP screen consumes the server read-model readiness flag");
   includes(verification, 'String(scan.scanType ?? scan.scan_type ?? "").toLowerCase() === "customer_delivery"', "OTP screen supports both camelCase and database scan fields");
