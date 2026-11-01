@@ -439,7 +439,7 @@ language sql
 stable
 security definer
 set search_path = public
-as $
+as $$
   select auth.role() = 'service_role'
     or public.can_read_platform_runtime()
     or exists (
@@ -466,7 +466,7 @@ as $
           )
         )
     );
-$;
+$$;
 
 create or replace function public.prevent_fuel_event_mutation()
 returns trigger
@@ -524,7 +524,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   branch_organization_id uuid;
 begin
@@ -538,14 +538,14 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 create or replace function public.validate_fuel_container_allocation()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   profile_record record;
   order_record record;
@@ -648,7 +648,7 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 create or replace function public.set_fuel_product_status(
   target_product_key text,
