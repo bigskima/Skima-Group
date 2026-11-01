@@ -995,3 +995,33 @@ Deno.test("LPG final customer hand-over records the physical cylinder first, the
   assertIncludes(otpCompletionMigration, "'lpg.delivery.completed'");
   assertIncludes(otpCompletionMigration, "target_idempotency_key || ':delivery-completed'");
 });
+
+
+Deno.test("open LPG job scans are bound to that exact order and cylinder", async () => {
+  const [migration, gateway, driverJob, internalJob, autoScan, stationDriverScan] = await Promise.all([
+    read("supabase/migrations/20261101134500_lpg_order_bound_cylinder_scan.sql"),
+    read("supabase/functions/api-gateway/index.ts"),
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/ScanWorkspaceScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/StationManagedDriverScanScreen.tsx"),
+  ]);
+
+  assertIncludes(migration, "public.record_lpg_cylinder_scan_for_order");
+  assertIncludes(migration, "target_lpg_order_id uuid");
+  assertIncludes(migration, "where order_row.id = target_lpg_order_id");
+  assertIncludes(migration, "scanned_identity_cylinder_id is distinct from matched_cylinder_id");
+  assertIncludes(migration, "scanned cylinder does not match the cylinder assigned to this exact LPG order");
+  assertIncludes(migration, "public.record_lpg_cylinder_scan(");
+  assertIncludes(gateway, '"/lpg/scans/order-bound"');
+  assertIncludes(gateway, 'supabase.rpc("record_lpg_cylinder_scan_for_order"');
+  assertIncludes(gateway, 'target_lpg_order_id: requireUuid(payload.lpgOrderId, "lpgOrderId")');
+  assertIncludes(driverJob, 'path: "/lpg/scans/order-bound"');
+  assertIncludes(driverJob, "lpgOrderId: id");
+  assertIncludes(driverJob, "resolvedOrderId !== id");
+  assertIncludes(internalJob, 'path: "/lpg/scans/order-bound"');
+  assertIncludes(internalJob, "lpgOrderId: id");
+  assertIncludes(internalJob, "resolvedOrderId !== id");
+  assertIncludes(autoScan, 'path: "/lpg/scans/continuous"');
+  assertIncludes(stationDriverScan, 'jobRouteWorkspace="station_driver"');
+});
