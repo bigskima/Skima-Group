@@ -386,19 +386,42 @@ export function InternalDriverJobDetailScreen() {
               ) : null}
 
               {scanType ? (
-                <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                  <View style={styles.sectionLead}>
-                    <ScanLine color={palette.brand} size={22} />
-                    <View style={styles.sectionCopy}>
-                      <Text style={[styles.sectionTitle, { color: palette.ink }]}>{scanTitle(scanType)}</Text>
-                      <Text style={[styles.helper, { color: palette.muted }]}>{scanDescription(scanType)}</Text>
+                scanType === "customer_delivery" ? (
+                  <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                    <View style={styles.sectionLead}>
+                      <ShieldCheck color={palette.success} size={22} />
+                      <View style={styles.sectionCopy}>
+                        <Text style={[styles.sectionTitle, { color: palette.ink }]}>Customer hand-over confirmation</Text>
+                        <Text style={[styles.helper, { color: palette.muted }]}>
+                          {status === "return_en_route"
+                            ? "Return the filled cylinder to the customer, then tap “Arrived for customer hand-over”. The customer can confirm the delivery from their SKIMA order."
+                            : "The customer must open SKIMA → Orders → this order → Confirm delivery, then complete the order-specific OTP. That confirmation closes the hand-over automatically. No second cylinder scan is required."}
+                        </Text>
+                      </View>
                     </View>
+                    <AppButton
+                      label="Refresh hand-over status"
+                      fullWidth
+                      variant="secondary"
+                      loading={detail.isRefetching}
+                      onPress={() => void detail.refetch()}
+                    />
                   </View>
-                  <Scanner enabled onDetected={setToken} />
-                  {token ? (
-                    <AppButton label={scanButton(scanType)} fullWidth loading={continuousScan.isPending} onPress={() => void submitScan()} />
-                  ) : null}
-                </View>
+                ) : (
+                  <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                    <View style={styles.sectionLead}>
+                      <ScanLine color={palette.brand} size={22} />
+                      <View style={styles.sectionCopy}>
+                        <Text style={[styles.sectionTitle, { color: palette.ink }]}>{scanTitle(scanType)}</Text>
+                        <Text style={[styles.helper, { color: palette.muted }]}>{scanDescription(scanType)}</Text>
+                      </View>
+                    </View>
+                    <Scanner enabled onDetected={setToken} />
+                    {token ? (
+                      <AppButton label={scanButton(scanType)} fullWidth loading={continuousScan.isPending} onPress={() => void submitScan()} />
+                    ) : null}
+                  </View>
+                )
               ) : null}
 
               {!actionKey && !scanType ? (
@@ -556,7 +579,7 @@ function actionLabel(key: string) {
 function actionSuccess(key: string) {
   if (key === "lpg.station.start") return "Supplier leg started. Choose a suitable LPG supplier and verify the cylinder on arrival.";
   if (key === "lpg.return.start") return "Return delivery started.";
-  if (key === "lpg.delivery.pending") return "Arrival recorded. Complete the customer verification and final cylinder scan.";
+  if (key === "lpg.delivery.pending") return "Arrival recorded. Ask the customer to confirm delivery from their SKIMA order using the order-specific OTP. No final driver scan is required.";
   return "Job updated.";
 }
 
@@ -568,13 +591,13 @@ function scanTitle(type: "customer_pickup" | "station_receipt" | "customer_deliv
 
 function scanDescription(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
   if (type === "station_receipt") return "At the supplier, scan the same SKIMA cylinder before recording the purchase and refill.";
-  if (type === "customer_delivery") return "The customer delivery challenge must be verified before this final cylinder scan can close the order.";
+  if (type === "customer_delivery") return "Customer OTP confirmation in their SKIMA order completes the final hand-over. Do not scan the cylinder again at this stage.";
   return "Scan the customer's registered SKIMA cylinder before taking custody.";
 }
 
 function scanButton(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
   if (type === "station_receipt") return "Confirm supplier arrival";
-  if (type === "customer_delivery") return "Complete hand-over";
+  if (type === "customer_delivery") return "Await customer confirmation";
   return "Confirm pickup";
 }
 
