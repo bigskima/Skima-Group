@@ -529,6 +529,14 @@ Deno.test("LPG dispatch decision snapshot conflict target is unambiguous", async
   assertNotIncludes(migration, "ON CONFLICT(dispatch_request_id) DO NOTHING");
 });
 
+Deno.test("SKIMA internal dispatch decision snapshot conflict target is unambiguous", async () => {
+  const migration = await read("supabase/migrations/20261101102000_lpg_internal_dispatch_snapshot_conflict_fix.sql");
+  assertIncludes(migration, "public.dispatch_lpg_internal_order(uuid,integer,text,text)");
+  assertIncludes(migration, "dispatch_location_decision_snapshots_dispatch_request_id_key");
+  assertIncludes(migration, "ON CONFLICT ON CONSTRAINT");
+  assertNotIncludes(migration, "ON CONFLICT(dispatch_request_id) DO NOTHING");
+});
+
 Deno.test("SKIMA Managed LPG reference-price save avoids ambiguous module_id binding", async () => {
   const migration = await read("supabase/migrations/20261029132000_lpg_internal_reference_price_ambiguity_fix.sql");
   assertIncludes(migration, "resolved_module_id uuid;");
