@@ -25,7 +25,7 @@ Deno.test("Fuel module uses the shared order engine with its own order-processin
   requireIncludes(migration, "'pricing.fuel.commercial-snapshot.v1'", "Fuel pricing uses the locked commercial snapshot");
   requireIncludes(migration, "'settlement.fuel.escrow.station-driver.v1'", "Fuel settlement is linked to its own escrow policy");
   requireIncludes(migration, "insert into public.workflow_versions (workflow_id, version, status, definition, activated_at)", "Fuel workflow version is registered in the shared workflow engine");
-  requireIncludes(migration, "status = 'active'", "Fuel workflow version is activated by its migration");
+  requireIncludes(migration, "'active',\n  '{\n    \"module_key\":\"fuel\"", "Fuel workflow version is activated by its migration");
   requireIncludes(foundation, "status text not null default 'disabled'", "all products remain disabled until explicitly enabled");
 });
 
