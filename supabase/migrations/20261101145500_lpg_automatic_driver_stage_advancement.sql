@@ -107,7 +107,7 @@ begin
     'public.create_lpg_refill_order(uuid,text,jsonb,text)'::regprocedure
   );
 
-  old_block := E'  update public.lpg_refill_quotes\\n  set status = ''accepted'',\\n      updated_at = timezone(''utc'', now())\\n  where id = quote_record.id;';
+  old_block := E'  update public.lpg_refill_quotes\n  set status = ''accepted'',\n      updated_at = timezone(''utc'', now())\n  where id = quote_record.id;';
   new_block := E'  -- Revalidate the quote against the live Admin network policy immediately
   -- before consuming it. Fleet quotes have no physical station_branch_id, so
   -- use fulfillment_channel and the live partner candidate resolvers instead.
