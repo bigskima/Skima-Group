@@ -149,7 +149,7 @@ const orderColumns: readonly TableColumn<FleetOrder>[] = [
   },
   {
     key: "supplierOutstanding",
-    header: "Unpaid supplier balance",
+    header: "Supplier amount without payment record",
     render: (row) => {
       const outstanding = numberValue(row, "supplierOutstanding");
       return <StatusBadge tone={outstanding > 0 ? "warning" : "success"}>{money(outstanding, recordString(row, "currencyCode") ?? "NGN")}</StatusBadge>;
@@ -442,7 +442,7 @@ export function AdminFinancialAnalyticsWorkspace() {
       const amount = Number(paymentAmount);
       const outstanding = numberValue(selectedOrder, "supplierOutstanding");
       if (!Number.isFinite(amount) || amount <= 0 || amount > outstanding) {
-        throw new Error("Enter a positive amount no greater than the outstanding supplier balance.");
+        throw new Error("Enter a positive amount no greater than the supplier amount not yet matched to a recorded payment.");
       }
       if (!paymentReference.trim()) {
         throw new Error(paymentMethod === "bank_transfer"
@@ -604,7 +604,7 @@ export function AdminFinancialAnalyticsWorkspace() {
         />
         <MetricTile label="Supplier payments recorded" value={money(fleet.supplierPaid, currency)} icon={Banknote} />
         <MetricTile label="Driver paid to SKIMA Wallet" value={money(fleet.driverPaidToWallet, currency)} icon={WalletCards} />
-        <MetricTile label="Unpaid supplier balance" value={money(fleet.supplierOutstanding, currency)} icon={CircleAlert} tone={fleet.supplierOutstanding > 0 ? "warning" : "success"} />
+        <MetricTile label="Supplier amount without payment record" value={money(fleet.supplierOutstanding, currency)} icon={CircleAlert} tone={fleet.supplierOutstanding > 0 ? "warning" : "success"} />
         <MetricTile label="Unpaid driver earnings" value={money(fleet.driverUnpaidEarnings, currency)} icon={Activity} tone={fleet.driverUnpaidEarnings > 0 ? "warning" : "success"} />
       </section>
 
@@ -649,7 +649,7 @@ export function AdminFinancialAnalyticsWorkspace() {
           <div>
             <p className="admin-section-kicker">Order-level accounting</p>
             <h2>Fleet collections, procurement and supplier balance</h2>
-            <p className="skima-muted">Each row reconciles the customer amount collected by SKIMA against the actual station purchase cost and recorded supplier payment. Procurement alone does not count as proof of payment. Payment entries are Admin-recorded declarations; supporting files and transaction references are shown for reconciliation.</p>
+            <p className="skima-muted">Each row reconciles the customer amount collected by SKIMA against the actual station purchase cost and payment records. The amount not matched to a payment record is not proof that the station has not physically been paid. Payment entries are Admin-recorded declarations; supporting files and transaction references are shown for reconciliation.</p>
           </div>
         </div>
         <DataTable columns={orderColumns} caption="SKIMA Fleet orders and supplier balances" records={fleet.orders as FleetOrder[]}
@@ -658,12 +658,12 @@ export function AdminFinancialAnalyticsWorkspace() {
         {canRecordSupplierPayment && fleet.orders.some((order) => numberValue(order, "supplierOutstanding") > 0) ? (
           <div className="skima-form-grid">
             <SelectInput
-              label="Order with outstanding supplier balance"
+              label="Order with supplier amount not yet recorded as paid"
               value={recordString(selectedOrder, "orderId") ?? ""}
               options={fleet.orders
                 .filter((order) => numberValue(order, "supplierOutstanding") > 0)
                 .map((order) => ({
-                  label: `${recordString(order, "orderReference") ?? "Order"} · ${money(numberValue(order, "supplierOutstanding"), currency)} outstanding`,
+                  label: `${recordString(order, "orderReference") ?? "Order"} · ${money(numberValue(order, "supplierOutstanding"), currency)} not yet recorded`,
                   value: recordString(order, "orderId") ?? "",
                 }))}
               onChange={(event) => {
@@ -787,7 +787,7 @@ export function AdminFinancialAnalyticsWorkspace() {
         </div>
         <DataTable columns={paymentColumnsWithEvidence} caption="Supplier payment history" records={fleet.supplierPayments as RecordValue[]}
           getRowKey={(row) => recordString(row, "id") ?? JSON.stringify(row)}
-          emptyTitle="No supplier payments recorded" emptyMessage="No supplier disbursements have been recorded yet. An approved procurement is not counted as paid." />
+          emptyTitle="No supplier payments recorded" emptyMessage="No supplier disbursement entries have been recorded yet. This means the database has no payment evidence; it does not prove the station was not physically paid." />
         <div className="skima-grid skima-grid--compact">
           <MetricTile label="Procurement cost recorded" value={money(fleet.procurementCost, currency)} />
           <MetricTile label="Supplier cash / bank transfer recorded" value={money(fleet.supplierPaid, currency)} />
