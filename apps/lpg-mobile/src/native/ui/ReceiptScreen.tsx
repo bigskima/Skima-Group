@@ -150,7 +150,7 @@ function friendly(value: string) {
 
 function paymentTone(value: string): "neutral" | "brand" | "success" | "warning" | "danger" {
   const normalized = value.toLowerCase();
-  if (["paid", "confirmed", "completed", "successful", "succeeded", "credited"].some((part) => normalized.includes(part))) return "success";
+  if (["paid", "settled", "confirmed", "completed", "successful", "succeeded", "credited"].some((part) => normalized.includes(part))) return "success";
   if (["failed", "rejected", "cancelled", "expired"].some((part) => normalized.includes(part))) return "danger";
   if (["pending", "processing", "reserved"].some((part) => normalized.includes(part))) return "warning";
   return "brand";

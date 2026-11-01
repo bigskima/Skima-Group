@@ -62,7 +62,7 @@
     "supabase:start": "supabase start",
     "supabase:reset": "supabase db reset",
     "ai-runtime:contract": "deno test --allow-read scripts/ai-runtime-contract.test.ts scripts/ai-driver-daily-brief-contract.test.ts",
-    "lpg-refill:contract": "deno test --allow-read scripts/lpg-refill-production-contract.test.ts scripts/lpg-job-route-production-contract.test.ts scripts/notification-event-production-contract.test.ts scripts/lpg-ui-progressive-disclosure-contract.test.ts scripts/lpg-ui-visual-regression-contract.test.ts",
+    "lpg-refill:contract": "deno test --allow-read scripts/skima-financial-analytics-contract.test.ts scripts/lpg-refill-production-contract.test.ts scripts/lpg-job-route-production-contract.test.ts scripts/notification-event-production-contract.test.ts scripts/lpg-ui-progressive-disclosure-contract.test.ts scripts/lpg-ui-visual-regression-contract.test.ts",
     "lpg-driver-vehicle:contract": "deno test --allow-read scripts/driver-vehicle-workspace-contract.test.ts scripts/vehicle-document-flow-contract.test.ts",
     "lpg-vehicle-location:contract": "deno test --allow-read scripts/vehicle-application-location-contract.test.ts",
     "lpg-auth:contract": "deno test --allow-read scripts/lpg-auth-production-contract.test.ts",
@@ -70,7 +70,8 @@
     "payout-runtime:contract": "deno test --allow-read scripts/payout-runtime-production-contract.test.ts",
     "vercel-ignore:test": "node scripts/vercel-ignore.test.mjs",
     "utility-billing:contract": "deno test --allow-read scripts/utility-billing-production-contract.test.ts",
-    "verification-runtime:contract": "deno test --allow-read scripts/verification-runtime-contract.test.ts"
+    "verification-runtime:contract": "deno test --allow-read scripts/verification-runtime-contract.test.ts",
+    "financial-analytics:contract": "deno test --allow-read scripts/skima-financial-analytics-contract.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.110.9",
