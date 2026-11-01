@@ -146,7 +146,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
   );
   const deliveryChallengeVerified = order?.deliveryChallengeVerified === true
     || order?.delivery_challenge_verified === true;
-  const waitingForCustomerOtp = status === "delivery_verification_pending"
+  const waitingForCustomerOtp = ["return_en_route", "delivery_verification_pending"].includes(status)
     && customerDeliveryScanVerified;
   const terminalOrderStatus = ["delivered", "completed", "cancelled", "failed", "refunded", "expired"].includes(status);
   const canShareStationDriverLocation = workspace === "station_driver" && Boolean(id)
@@ -328,8 +328,8 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
       setNoticeSuccess(true);
       setNotice(completedScanType === "customer_delivery"
         ? workspace === "station_driver"
-          ? "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments."
-          : "Customer OTP confirmation completes the hand-over. Refresh the job to see the delivered state."
+          ? "Returned-cylinder scan recorded. Ask the customer to complete the order-specific OTP in SKIMA. The station remains responsible for your compensation."
+          : "Returned-cylinder scan recorded. The customer must complete the order-specific OTP in SKIMA before delivery and payment can be finalized."
         : driverScanSuccess(completedScanType));
       await detail.refetch();
     } catch (cause) {
@@ -702,7 +702,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
                   <Text style={[styles.sectionBody, { color: palette.muted }]}>
                     {deliveryChallengeVerified
                       ? "Customer OTP has been verified. Refresh this job to confirm the completed delivery state."
-                      : "The physical hand-over scan is complete. The customer must now open this order in SKIMA and complete the order-specific OTP. No more driver scans are needed."}
+                      : "The physical cylinder scan is complete. The customer must open this order in SKIMA and complete the order-specific OTP. The order remains pending until that confirmation."}
                   </Text>
                 </View>
               </View>
@@ -1093,6 +1093,7 @@ function driverStageDescription(status: string, deliveryChallengeVerified = fals
   if (["pickup_en_route"].includes(status)) return "Navigate to the customer and verify the cylinder before taking custody.";
   if (["pickup_verified", "station_en_route"].includes(status)) return "Take the verified cylinder to the assigned station. Station staff scan it at reception.";
   if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is processing the verified refill.";
+  if (status === "return_en_route" && customerDeliveryScanVerified) return "The returned cylinder is verified. Ask the customer to open this order in SKIMA and complete the one-time OTP. No other driver action is needed.";
   if (["refill_confirmed", "station_settled", "return_en_route"].includes(status)) return "The filled cylinder is ready to return to the customer.";
   if (status === "delivery_verification_pending" && deliveryChallengeVerified) return "Customer OTP is verified. Refresh this job; the completed hand-over and settlement status will appear here.";
   if (status === "delivery_verification_pending") return "Scan the returned cylinder first. Then ask the customer to open this order in SKIMA, choose Confirm delivery and complete the order-specific OTP."

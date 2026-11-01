@@ -1028,8 +1028,9 @@ Deno.test("open LPG job scans are bound to that exact order and cylinder", async
 
 
 Deno.test("LPG driver stages advance from verified events and live Admin routing policy", async () => {
-  const [migration, driver, internal, priority, vercel] = await Promise.all([
+  const [migration, lifecycle, driver, internal, priority, vercel] = await Promise.all([
     read("supabase/migrations/20261101145500_lpg_automatic_driver_stage_advancement.sql"),
+    read("supabase/migrations/20260801040000_lpg_integrated_lifecycle_runtime.sql"),
     read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
     read("apps/admin/src/admin-fulfillment-priority-control.tsx"),
@@ -1061,7 +1062,7 @@ Deno.test("LPG driver stages advance from verified events and live Admin routing
   assertIncludes(migration, "public.read_lpg_marketplace_eligible_stations(");
   assertIncludes(migration, "public.read_lpg_station_managed_eligible_stations(");
   assertIncludes(migration, "quote_record.fulfillment_channel = ''skima_internal''");
-  assertIncludes(migration, "eligible Partner Network provider can serve this order");
+  assertIncludes(migration, "A Partner Network provider can serve this order and Partner Network has priority.");
   assertIncludes(migration, "current Admin fulfillment availability settings");
   assertIncludes(migration, "marketplace_first_fallback_only");
 
@@ -1073,6 +1074,11 @@ Deno.test("LPG driver stages advance from verified events and live Admin routing
   assertNotIncludes(stationManagedActions, "lpg.delivery.pending");
   assertIncludes(internalActions, "return null;");
   assertNotIncludes(internalActions, "lpg.return.start");
+  assertIncludes(driver, '["return_en_route", "delivery_verification_pending"].includes(status)');
+  assertIncludes(driver, "The order remains pending until that confirmation.");
+  assertIncludes(internal, '["return_en_route", "delivery_verification_pending"].includes(status)');
+  assertIncludes(lifecycle, "final cylinder hand-over scan must be recorded before requesting customer OTP");
+  assertIncludes(lifecycle, "delivery challenge must be requested by the LPG order customer");
 
   assertIncludes(priority, "Priority only controls which route is tried first in Hybrid mode.");
   assertIncludes(priority, "Priority saved for Hybrid mode.");
