@@ -124,9 +124,15 @@ begin
   end if;
   if target_evidence_media_asset_id is not null and not exists(
     select 1 from public.media_assets media
-    where media.id=target_evidence_media_asset_id and media.status='active'
+    where media.id=target_evidence_media_asset_id
+      and media.status='active'
+      and media.asset_type_key='media.lpg.supplier_payment_evidence'
+      and media.source='skima.admin.financial.analytics'
+      and media.owner_user_id=auth.uid()
+      and media.metadata->>'procurementId'=target_procurement_id::text
   ) then
-    raise exception using errcode='22023',message='payment evidence must reference an active media asset';
+    raise exception using errcode='22023',
+      message='payment evidence must be an active Fleet supplier-payment file owned by this Admin and linked to the selected procurement';
   end if;
 
   select * into procurement
@@ -725,17 +731,23 @@ begin
           'paymentMethod',item.payment_method,'paymentReference',item.payment_reference,
           'paidAt',item.paid_at,'paidBy',item.display_name,
           'evidenceMediaAssetId',item.evidence_media_asset_id,
+          'evidenceStorageBucket',item.evidence_storage_bucket,
+          'evidenceStoragePath',item.evidence_storage_path,
+          'evidenceFileName',item.evidence_file_name,
           'financialTransactionId',item.financial_transaction_id,'note',item.note
         ) order by item.paid_at desc)
         from (
           select payment.id,payment.procurement_id,order_record.public_reference,procurement.supplier_name,
             payment.amount,payment.currency_code,payment.payment_method,payment.payment_reference,
             payment.paid_at,profile.display_name,payment.evidence_media_asset_id,
+            media.storage_bucket evidence_storage_bucket,media.storage_path evidence_storage_path,
+            media.metadata->>'originalFileName' evidence_file_name,
             payment.financial_transaction_id,payment.note
           from public.lpg_internal_supplier_payments payment
           join public.lpg_internal_refill_procurements procurement on procurement.id=payment.procurement_id
           join public.lpg_refill_orders order_record on order_record.id=procurement.lpg_order_id
           left join public.profiles profile on profile.id=payment.paid_by
+          left join public.media_assets media on media.id=payment.evidence_media_asset_id
           where payment.currency_code=currency_code_value
             and (from_value is null or payment.paid_at>=from_value)
             and (until_value is null or payment.paid_at<until_value)
