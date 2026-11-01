@@ -13,7 +13,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public
-as $
+as $fuel_accepted_quote_deposit$
 begin
   if new.status='accepted' then
     update public.fuel_order_operations
@@ -23,7 +23,7 @@ begin
   end if;
   return new;
 end;
-$;
+$fuel_accepted_quote_deposit$;
 
 drop trigger if exists fuel_accepted_quote_deposit_amount on public.fuel_order_commercial_snapshots;
 create trigger fuel_accepted_quote_deposit_amount
