@@ -491,13 +491,14 @@ function scanReady(job: PlatformRecord, workspace: "driver" | "station") {
   if (workspace === "station") return ["station_en_route", "refill_confirmed", "station_settled"].includes(value);
   const fulfillmentChannel = firstString(job, ["fulfillmentChannel", "fulfillment_channel"]);
   if (["pickup_verified", "station_en_route"].includes(value)) return fulfillmentChannel === "skima_internal";
+  if (["return_en_route", "delivery_verification_pending"].includes(value)) {
+    return job.customerDeliveryScanVerified !== true;
+  }
   return [
     "driver_accepted",
     "pickup_pending",
     "pickup_arrived",
     "pickup_en_route",
-    "return_en_route",
-    "delivery_verification_pending",
   ].includes(value);
 }
 
