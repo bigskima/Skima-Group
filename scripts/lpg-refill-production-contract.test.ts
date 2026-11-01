@@ -914,6 +914,7 @@ Deno.test("LPG final customer hand-over records the physical cylinder first, the
     idempotencyMigration,
     otpCompletionMigration,
     returnScanReadModelMigration,
+    otpScanGuardMigration,
   ] = await Promise.all([
     read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
@@ -927,6 +928,7 @@ Deno.test("LPG final customer hand-over records the physical cylinder first, the
     read("supabase/migrations/20261101113502_lpg_delivery_scan_idempotency.sql"),
     read("supabase/migrations/20261031171508_lpg_delivery_otp_completion_and_payout_bridge.sql"),
     read("supabase/migrations/20261101120000_lpg_job_reads_expose_return_scan_state.sql"),
+    read("supabase/migrations/20261101121000_lpg_delivery_otp_enforces_return_scan.sql"),
   ]);
 
   // Independent and Station Managed drivers share the assigned-job scan surface.
@@ -980,6 +982,11 @@ Deno.test("LPG final customer hand-over records the physical cylinder first, the
   assertIncludes(returnScanReadModelMigration, "customerDeliveryScanVerified");
   assertIncludes(returnScanReadModelMigration, "public.read_lpg_jobs(text,integer)");
   assertIncludes(returnScanReadModelMigration, "public.read_lpg_station_managed_driver_jobs(integer)");
+  assertIncludes(otpScanGuardMigration, "final cylinder hand-over scan must be recorded before requesting customer OTP");
+  assertIncludes(otpScanGuardMigration, "final cylinder hand-over scan must be recorded before customer OTP verification");
+  assertIncludes(otpScanGuardMigration, "public.request_lpg_delivery_challenge");
+  assertIncludes(otpScanGuardMigration, "public.verify_lpg_delivery_challenge");
+  assertIncludes(otpScanGuardMigration, "public.lpg_cylinder_scans handover_scan");
   assertIncludes(driver, "customerDeliveryScanVerified");
   assertIncludes(internal, "customerDeliveryScanVerified");
   assertIncludes(scanScreen, "job.customerDeliveryScanVerified !== true");
