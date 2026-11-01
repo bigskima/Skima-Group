@@ -305,11 +305,12 @@ export function useJobDetails(id: string | null) {
     refetchInterval: 15000,
   });
 }
-export function useStationRuntime() {
+export function useStationRuntime(enabled = true) {
   return useGatewayQuery({
     key: ["station-runtime"],
     path: "/lpg/stations/runtime",
     schema: RecordObjectSchema,
+    enabled,
     refetchInterval: 30000,
   });
 }
