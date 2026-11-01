@@ -38,6 +38,8 @@ Deno.test("Fuel settlement routes each locked component to the correct beneficia
   includes(migration, "all_rental_containers_received_and_inspected", "rental deposit waits for completed return and inspection");
   includes(migration, "remaining_escrow_amount-quote_record.grand_total", "escrow balance must match the accepted commercial quote");
   includes(migration, "deposit_refund_amount=v_deposit_refund_amount", "the actual refundable deposit amount is persisted to the customer read model");
+  includes(migration, "public.sync_fuel_accepted_quote_deposit_amount()", "accepted quotes sync the refund amount to the order read model");
+  includes(migration, "set deposit_refund_amount=new.refundable_deposit_amount", "customers can see the refundable amount before settlement");
 });
 
 Deno.test("the Fuel commercial quote total uses the server-calculated subtotal", () => {
