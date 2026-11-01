@@ -158,6 +158,7 @@ export function AdminFinancialAnalyticsWorkspace() {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "bank_transfer">("bank_transfer");
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
+  const [paymentDate, setPaymentDate] = useState(() => localDateTimeInput(new Date()));
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeTone, setNoticeTone] = useState<"success" | "danger">("success");
 
@@ -217,7 +218,7 @@ export function AdminFinancialAnalyticsWorkspace() {
           "admin.lpg.supplier-payment",
           `${recordString(selectedOrder, "orderReference") ?? "order"}:${amount}:${paymentMethod}:${paymentReference.trim()}`,
         ),
-        target_paid_at: new Date().toISOString(),
+        target_paid_at: new Date(paymentDate).toISOString(),
       });
       if (error) throw error;
       return data as RecordValue;
@@ -231,6 +232,7 @@ export function AdminFinancialAnalyticsWorkspace() {
       setPaymentAmount("");
       setPaymentReference("");
       setPaymentNote("");
+      setPaymentDate(localDateTimeInput(new Date()));
       await refresh();
     },
     onError: (error) => {
@@ -372,6 +374,7 @@ export function AdminFinancialAnalyticsWorkspace() {
                 setPaymentAmount(selected ? String(numberValue(selected, "supplierOutstanding")) : "");
                 setPaymentReference("");
                 setPaymentNote("");
+                setPaymentDate(localDateTimeInput(new Date()));
               }}
             />
             <TextInput
@@ -399,6 +402,13 @@ export function AdminFinancialAnalyticsWorkspace() {
               onChange={(event) => setPaymentReference(event.currentTarget.value)}
               disabled={!selectedOrder}
               placeholder={paymentMethod === "bank_transfer" ? "Enter the bank transaction reference" : "Enter cash voucher reference"}
+            />
+            <TextInput
+              label="Actual supplier payment date and time"
+              type="datetime-local"
+              value={paymentDate}
+              onChange={(event) => setPaymentDate(event.currentTarget.value)}
+              disabled={!selectedOrder}
             />
             <TextAreaInput
               label="Payment note (optional)"
@@ -565,6 +575,11 @@ function formatDate(value: string | null): string {
 function label(value: string | null): string {
   if (!value) return "—";
   return value.replace(/[._:-]+/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function localDateTimeInput(value: Date): string {
+  const local = new Date(value.getTime() - value.getTimezoneOffset() * 60 * 1000);
+  return local.toISOString().slice(0, 16);
 }
 
 function shortId(value: string | null): string {
