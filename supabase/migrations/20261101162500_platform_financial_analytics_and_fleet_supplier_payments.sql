@@ -1,5 +1,19 @@
 begin;
 
+-- Keep supplier disbursements in a dedicated platform account type rather than
+-- reusing the customer, revenue, or generic clearing account.
+alter table public.wallet_accounts
+  drop constraint if exists wallet_accounts_wallet_type_check;
+alter table public.wallet_accounts
+  add constraint wallet_accounts_wallet_type_check
+  check (wallet_type = any (array[
+    'customer'::text,'driver'::text,'partner'::text,'platform'::text,
+    'platform_clearing'::text,'platform_revenue'::text,'platform_liability'::text,
+    'platform_provider'::text,'platform_campaign'::text,'platform_supplier'::text,
+    'escrow'::text,'commission'::text,'refund'::text,'bonus'::text,
+    'loyalty'::text,'generic'::text
+  ]));
+
 -- Immutable evidence for supplier payments made by SKIMA outside the customer wallet flow.
 -- Procurement confirmation is not proof that a supplier has actually been paid.
 create table if not exists public.lpg_internal_supplier_payments (
@@ -145,7 +159,7 @@ begin
 
   select wallet.id into supplier_wallet_id
   from public.wallet_accounts wallet
-  where wallet.wallet_type='platform'
+  where wallet.wallet_type='platform_supplier'
     and wallet.owner_entity_type='platform'
     and wallet.owner_entity_id is null
     and wallet.currency_code=order_record.currency_code
@@ -157,7 +171,7 @@ begin
     insert into public.wallet_accounts(
       wallet_type,owner_entity_type,owner_entity_id,currency_code,status,metadata,created_by,source,idempotency_key
     ) values(
-      'platform','platform',null,order_record.currency_code,'active',
+      'platform_supplier','platform',null,order_record.currency_code,'active',
       jsonb_build_object('wallet_purpose','lpg_supplier_disbursements','platform_internal',true,'accounting_only',true),
       auth.uid(),'lpg.internal_supplier_payment','lpg-supplier-disbursements:'||lower(order_record.currency_code)
     )
@@ -167,7 +181,7 @@ begin
     if supplier_wallet_id is null then
       select wallet.id into supplier_wallet_id
       from public.wallet_accounts wallet
-      where wallet.wallet_type='platform' and wallet.owner_entity_type='platform'
+      where wallet.wallet_type='platform_supplier' and wallet.owner_entity_type='platform'
         and wallet.owner_entity_id is null and wallet.currency_code=order_record.currency_code
         and wallet.status='active' and wallet.metadata->>'wallet_purpose'='lpg_supplier_disbursements'
       limit 1;
