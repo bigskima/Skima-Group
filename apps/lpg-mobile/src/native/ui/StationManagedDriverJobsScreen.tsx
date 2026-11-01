@@ -180,17 +180,18 @@ export function StationManagedDriverJobsScreen() {
                 <AppButton label="Accept delivery" loading={busy} disabled={updateStatus.isPending} onPress={() => updateStatus.mutate({ job, nextStatus: "accepted" })} />
               ) : null}
               {job.status === "accepted" && ["station_settled", "return_en_route"].includes(job.orderStatus) ? (
-                <AppButton
-                  label={job.orderStatus === "station_settled" ? "Start return delivery" : "Continue return delivery"}
-                  loading={busy}
-                  disabled={updateStatus.isPending}
-                  onPress={() => updateStatus.mutate({ job, nextStatus: "en_route" })}
-                />
+                <View style={[styles.notice, { backgroundColor: palette.brandSofter }]}>
+                  <Text style={[styles.noticeText, { color: palette.ink }]}>
+                    {job.orderStatus === "station_settled"
+                      ? "The refill is settled. When station staff scan and release the filled cylinder, SKIMA automatically starts your return assignment. No extra button is needed."
+                      : "The station has released the cylinder. SKIMA is activating your return assignment automatically; refresh the list if the assignment has not updated yet."}
+                  </Text>
+                </View>
               ) : null}
               {job.status === "accepted" && !["station_settled", "return_en_route"].includes(job.orderStatus) ? (
                 <View style={[styles.notice, { backgroundColor: palette.brandSofter }]}>
                   <Text style={[styles.noticeText, { color: palette.ink }]}>
-                    Open the pickup workflow below. Scan the cylinder once at the customer; station staff scan it on receipt. The return trip unlocks after refill, settlement and release.
+                    Accept the delivery once. Then open the pickup workflow and scan the cylinder at the customer. Station staff scan it on receipt; SKIMA advances the journey automatically.
                   </Text>
                 </View>
               ) : null}
