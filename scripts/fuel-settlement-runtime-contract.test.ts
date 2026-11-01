@@ -36,6 +36,9 @@ Deno.test("Fuel settlement routes each locked component to the correct beneficia
   includes(migration, "ensure_platform_revenue_wallet", "container proceeds and platform fees use the platform revenue wallet");
   includes(migration, "ensure_platform_liability_wallet", "tax is credited to the platform liability wallet");
   includes(migration, "customer_refundable_deposit_return", "rental deposit is credited to the customer wallet");
+  includes(migration, "ledger.transaction_id=hold_record.source_transaction_id", "deposit is returned to the exact wallet used to fund escrow");
+  includes(migration, "ledger.direction='debit'", "refund wallet is traced from the customer's original funding debit");
+  excludes(migration, "order by wallet.created_at asc", "settlement never substitutes a different same-currency customer wallet");
   includes(migration, "all_rental_containers_received_and_inspected", "rental deposit waits for completed return and inspection");
   includes(migration, "remaining_escrow_amount-quote_record.grand_total", "escrow balance must match the accepted commercial quote");
   includes(migration, "deposit_refund_amount=v_deposit_refund_amount", "the actual refundable deposit amount is persisted to the customer read model");
