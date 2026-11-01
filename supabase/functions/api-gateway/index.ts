@@ -9107,7 +9107,7 @@ async function walletBalancesResponse(
   if (driverProfileIds.length > 0) {
     const driverResult = await supabase
       .from("driver_profiles")
-      .select("id,user_id,profiles(id,display_name,avatar_url,status)")
+      .select("id,user_id,profiles!driver_profiles_user_id_fkey(id,display_name,avatar_url,status)")
       .in("id", driverProfileIds);
 
     if (driverResult.error) return databaseError(driverResult.error, id);
