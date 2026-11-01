@@ -788,3 +788,49 @@ Deno.test("Admin maps integration exposes the active geocoder and road router in
   assertIncludes(adminLocation, "/admin/maps/location/status");
 });
 
+
+
+Deno.test("SKIMA Managed-only coverage can load and quote its own internal fulfillment option", async () => {
+  const [screen, serviceability, eligibility, referencePolicy, quoteRuntime] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx"),
+    read("apps/lpg-mobile/src/native/api/serviceability.ts"),
+    read("supabase/migrations/20261101094500_skima_managed_reference_policy_uses_managed_capability.sql"),
+    read("supabase/migrations/20260916162545_lpg_launch_assurance_quote_core.sql"),
+    read("apps/lpg-mobile/src/native/api/gateway.ts"),
+  ]);
+
+  assertIncludes(serviceability, "skimaManagedEnabled");
+  assertIncludes(screen, "skimaManagedTripEnabled");
+  assertIncludes(screen, "standardEligibilityAvailable");
+  assertIncludes(screen, "enabled: stationEligibilityReady && standardEligibilityAvailable");
+  assertIncludes(screen, "isSkimaInternalFulfillmentId(stationId) && skimaManagedTripEnabled");
+  assertIncludes(referencePolicy, "public.resolve_lpg_location_capability");
+  assertIncludes(referencePolicy, "'skima_managed_fulfillment'");
+  assertIncludes(referencePolicy, "public.geography_migration_mappings");
+  assertIncludes(referencePolicy, "mapping.migration_status='verified'");
+  assertNotIncludes(referencePolicy, "public.resolve_lpg_serviceability(");
+  assertIncludes(quoteRuntime, "create_lpg_internal_route_snapshot");
+  assertIncludes(quoteRuntime, "SKIMA_INTERNAL_FULFILLMENT_ID");
+});
+
+Deno.test("finance workspace wallets and history are scoped to the actual owner", async () => {
+  const [finance, walletSelector, walletActivity, domains, gateway] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/FinanceScreen.tsx"),
+    read("apps/lpg-mobile/src/native/utilities/financeWallet.ts"),
+    read("apps/lpg-mobile/src/native/api/walletActivity.ts"),
+    read("apps/lpg-mobile/src/native/api/domains.ts"),
+    read("supabase/functions/api-gateway/index.ts"),
+  ]);
+
+  assertIncludes(finance, "managedEarnings.data?.driverProfileId");
+  assertIncludes(finance, 'firstString(stationBranch, ["organizationId", "organization_id"])');
+  assertIncludes(finance, "selectWorkspaceWallet(wallets.data ?? [], workspace, walletOwnerId)");
+  assertIncludes(finance, "workspace === \"station\" ? stationRuntime.error : managedEarnings.error");
+  assertIncludes(walletSelector, "ownerEntityId");
+  assertIncludes(walletSelector, "belongsToOwner(wallet)");
+  assertNotIncludes(walletSelector, "active.find(\n      (wallet) => firstString(wallet, [\"wallet_type\", \"walletType\"]) === \"partner\"");
+  assertIncludes(walletActivity, "if (!walletId)");
+  assertIncludes(walletActivity, "totalCount: 0");
+  assertIncludes(domains, "export function useStationRuntime(enabled = true)");
+  assertIncludes(gateway, "profiles!driver_profiles_user_id_fkey");
+});
