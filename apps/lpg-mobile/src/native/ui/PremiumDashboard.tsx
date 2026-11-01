@@ -498,6 +498,7 @@ function CustomerServiceCards({
   };
 }) {
   const Icon = primary.icon;
+  const { palette } = useAppTheme();
   const live = primary.eyebrow.toLowerCase().includes("live") || primary.eyebrow.toLowerCase().includes("payment");
   return (
     <View style={styles.customerServiceGrid}>
