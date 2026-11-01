@@ -73,6 +73,12 @@ export function FuelOrderDetailsScreen() {
   const isRental = firstString(order, ["container_mode"]) === "rental";
   const fulfillment = firstString(order, ["fulfillment_mode"]) ?? "independent_driver";
   const rentalReturnPending = isRental && ["delivered", "return_due", "returned_to_driver", "received_at_station", "inspection"].includes(stage);
+  const settlementExecutionId = firstString(order, ["settlement_execution_id"]);
+  const settlementTransactionId = firstString(order, ["settlement_transaction_id"]);
+  const settlementStatementId = firstString(order, ["settlement_statement_id"]);
+  const settledAt = firstString(order, ["settled_at"]);
+  const depositRefundedAt = firstString(order, ["deposit_refunded_at"]);
+  const settlementReleased = Boolean(settlementExecutionId && settlementTransactionId && settledAt);
 
   return (
     <Screen
@@ -124,6 +130,27 @@ export function FuelOrderDetailsScreen() {
             <DetailRow icon={<Package color={palette.brand} size={18} />} label="Container option" value={isRental ? "Rent — return after transfer" : "Buy — keep after delivery"} />
             <DetailRow icon={<Truck color={palette.brand} size={18} />} label="Fulfilment" value={humanize(fulfillment)} />
             <DetailRow icon={<ShieldCheck color={palette.brand} size={18} />} label="Payment protection" value="Wallet funds held in SKIMA escrow" />
+          </Card>
+
+          <Card title="Payment settlement" description={settlementReleased ? "SKIMA has posted the verified financial distribution for this order." : "Your funds remain protected in SKIMA escrow until the delivery and any rental-container return checks are complete."}>
+            <View style={styles.statusLine}>
+              <DetailRow icon={<ShieldCheck color={settlementReleased ? palette.success : palette.brand} size={18} />} label="Settlement" value={settlementReleased ? "Released" : "Held in SKIMA escrow"} />
+              <StatusPill label={settlementReleased ? "Settled" : "Protected"} tone={settlementReleased ? "success" : "warning"} />
+            </View>
+            {settledAt ? <DetailRow icon={<CheckCircle2 color={palette.success} size={17} />} label="Released at" value={formatDate(settledAt)} /> : null}
+            {settlementTransactionId ? <DetailRow icon={<Package color={palette.mutedStrong} size={17} />} label="Financial transaction" value={settlementTransactionId.slice(0, 8).toUpperCase()} /> : null}
+            {settlementStatementId ? <DetailRow icon={<Package color={palette.mutedStrong} size={17} />} label="Station statement" value="Recorded" /> : null}
+            {isRental ? (
+              <DetailRow
+                icon={<RotateCcw color={depositRefundedAt ? palette.success : palette.warning} size={17} />}
+                label="Rental deposit"
+                value={depositRefundedAt
+                  ? `Returned to your SKIMA wallet · ${formatDate(depositRefundedAt)}`
+                  : stage === "completed"
+                    ? "No deposit refund has been posted"
+                    : "Awaiting station receipt and successful container inspection"}
+              />
+            ) : null}
           </Card>
 
           <Card title="Activity history" description="The operational history is recorded as the station and driver complete each verified step.">
