@@ -246,7 +246,11 @@ export function CustomerOrderDetailScreen() {
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
   const actualKg = firstNumber(order, ["actualKg", "actual_kg"]);
   const trackable = TRACKABLE_ORDER_STATES.has(normalized);
-  const canVerifyDelivery = DELIVERY_CONFIRMATION_STATES.has(normalized);
+  const customerReturnScanVerified = hasVerifiedCustomerDeliveryScan(root, order);
+  // The return scan intentionally leaves the order in return_en_route.
+  // Expose the customer's OTP action only after this order's scan has passed.
+  const canVerifyDelivery = DELIVERY_CONFIRMATION_STATES.has(normalized)
+    || (["return_en_route", "returning"].includes(normalized) && customerReturnScanVerified);
   const canShowReceipt = FINAL_ORDER_STATES.has(normalized) || ["paid", "settled"].includes(normalizeStatus(paymentStatus));
   const aiOrderReference = order ? (displayReference(order) ?? id ?? "this refill") : "this refill";
   const fulfillmentChannel = firstString(order, ["fulfillment_channel", "fulfillmentChannel"]);
@@ -492,6 +496,27 @@ function formatDate(value: string | null) {
   if (!value) return "Time unavailable";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function hasVerifiedCustomerDeliveryScan(
+  ...records: Array<PlatformRecord | null | undefined>
+): boolean {
+  return records.some((record) => {
+    if (!record) return false;
+    if (
+      record.customerDeliveryScanVerified === true
+      || record.customer_delivery_scan_verified === true
+    ) return true;
+
+    const scans = Array.isArray(record.scans) ? record.scans : [];
+    return scans.some((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+      const scan = value as PlatformRecord;
+      const scanType = firstString(scan, ["scanType", "scan_type"])?.toLowerCase();
+      const result = firstString(scan, ["result"])?.toLowerCase();
+      return scanType === "customer_delivery" && result === "passed";
+    });
+  });
 }
 
 function normalizeStatus(value: string) {
