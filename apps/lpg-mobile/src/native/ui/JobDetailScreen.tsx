@@ -545,6 +545,11 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
           <View style={[styles.summaryCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <SummaryField label="Cylinder" value={cylinder ? displayTitle(cylinder) : "Not available"} />
             <Divider />
+            <SummaryField
+              label="Permanent Cylinder ID"
+              value={firstString(cylinder, ["cylinderIdentifier", "cylinder_identifier", "publicReference", "public_reference"]) ?? "Not available"}
+            />
+            <Divider />
             <SummaryField label="Reference" value={orderDisplayReference} />
             {requestedKg !== null ? <><Divider /><SummaryField label="Requested refill" value={`${requestedKg} kg`} /></> : null}
             {filledKg !== null ? <><Divider /><SummaryField label="Actual refill" value={`${filledKg} kg`} /></> : null}
