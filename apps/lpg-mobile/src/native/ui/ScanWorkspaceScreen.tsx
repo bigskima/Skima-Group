@@ -231,7 +231,7 @@ export function ScanWorkspaceScreen({
             const status = (displayStatus(job) ?? "").toLowerCase().replace(/[\\s-]+/g, "_");
             return (
               <View key={orderId ?? displayReference(job)} style={[styles.tagNoticeCard, { backgroundColor: palette.surfaceSubtle }]}>
-                <View style={styles.scannerCopy}>
+                <View style={styles.tagNoticeCopy}>
                   <Text style={[styles.scannerTitle, { color: palette.ink }]}>{displayReference(job) ?? "LPG order"}</Text>
                   <Text style={[styles.scannerBody, { color: palette.muted }]}>
                     {cylinderPermanentIdentifier(job) ? `Cylinder ${cylinderPermanentIdentifier(job)} · ` : ""}
@@ -561,7 +561,8 @@ const styles = StyleSheet.create({
   identityBody: { ...typography.caption, lineHeight: 18 },
   identityNote: { ...typography.caption, lineHeight: 18 },
   tagNotice: { ...typography.caption, lineHeight: 18, fontWeight: "700" },
-  tagNoticeCard: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md },
+  tagNoticeCard: { flexDirection: "column", alignItems: "stretch", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md },
+  tagNoticeCopy: { width: "100%", minWidth: 0, gap: 3 },
   manualFallbackToggle: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.pill, minHeight: 42, alignItems: "center", justifyContent: "center" },
   manualFallbackToggleText: { ...typography.caption, fontWeight: "900" },
   scannerCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },
