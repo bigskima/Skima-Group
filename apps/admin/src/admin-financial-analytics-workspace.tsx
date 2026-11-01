@@ -71,6 +71,8 @@ const AnalyticsSchema = z.object({
   revenue: RevenueSchema.nullable().default(null),
   walletBalances: z.array(RecordSchema).default([]),
   transactionSummary: z.array(RecordSchema).default([]),
+  transactionSources: z.array(RecordSchema).default([]),
+  platformAccountMovements: z.array(RecordSchema).default([]),
   withdrawals: RecordSchema.default({}),
   settlements: RecordSchema.default({}),
   settlementStatements: z.array(RecordSchema).default([]),
@@ -184,6 +186,24 @@ const payoutColumns: readonly TableColumn<RecordValue>[] = [
   { key: "status", header: "Status", render: (row) => <StatusBadge tone={recordString(row, "status") === "posted" ? "success" : "warning"}>{label(recordString(row, "status"))}</StatusBadge> },
   { key: "allocationCount", header: "Orders paid", render: (row) => numberValue(row, "allocationCount").toString() },
   { key: "financialTransactionId", header: "Wallet ledger transaction", render: (row) => shortId(recordString(row, "financialTransactionId")) },
+];
+
+const transactionSourceColumns: readonly TableColumn<RecordValue>[] = [
+  { key: "source", header: "Financial source", render: (row) => recordString(row, "source") ?? "—" },
+  { key: "transactionType", header: "Type", render: (row) => label(recordString(row, "transactionType")) },
+  { key: "status", header: "Status", render: (row) => label(recordString(row, "status")) },
+  { key: "count", header: "Entries", render: (row) => numberValue(row, "count").toLocaleString("en-NG") },
+  { key: "amount", header: "Total amount", render: (row) => money(numberValue(row, "amount"), "NGN") },
+];
+
+const accountMovementColumns: readonly TableColumn<RecordValue>[] = [
+  { key: "walletType", header: "Account type", render: (row) => label(recordString(row, "walletType")) },
+  { key: "walletPurpose", header: "Account purpose", render: (row) => label(recordString(row, "walletPurpose")) },
+  { key: "direction", header: "Movement", render: (row) => <StatusBadge tone={recordString(row, "direction") === "credit" ? "success" : "warning"}>{label(recordString(row, "direction"))}</StatusBadge> },
+  { key: "entryType", header: "Entry classification", render: (row) => label(recordString(row, "entryType")) },
+  { key: "source", header: "Source", render: (row) => recordString(row, "source") ?? "—" },
+  { key: "count", header: "Entries", render: (row) => numberValue(row, "count").toLocaleString("en-NG") },
+  { key: "amount", header: "Total movement", render: (row) => money(numberValue(row, "amount"), "NGN") },
 ];
 
 const transactionColumns: readonly TableColumn<RecordValue>[] = [
@@ -852,6 +872,30 @@ export function AdminFinancialAnalyticsWorkspace() {
           caption="Financial transaction totals by type and status" records={data.transactionSummary as RecordValue[]}
           getRowKey={(row) => `${recordString(row, "transactionType") ?? "type"}:${recordString(row, "status") ?? "status"}`}
           emptyTitle="No transactions" emptyMessage="No financial transactions found for this period."
+        />
+        <h3>Financial activity by originating source</h3>
+        <DataTable
+          columns={transactionSourceColumns}
+          caption="Transaction totals by source system"
+          records={data.transactionSources as RecordValue[]}
+          getRowKey={(row) => `${recordString(row, "source") ?? "source"}:${recordString(row, "transactionType") ?? "type"}:${recordString(row, "status") ?? "status"}`}
+          emptyTitle="No source breakdown"
+          emptyMessage="No transaction-source totals were returned for this period."
+        />
+        <h3>Platform account inflows and outflows</h3>
+        <p className="skima-muted">These totals are ledger movements by account class and originating source. They are not bank statement totals and should not be added together as if they were separate cash balances.</p>
+        <DataTable
+          columns={accountMovementColumns}
+          caption="Platform wallet movement by source"
+          records={data.platformAccountMovements as RecordValue[]}
+          getRowKey={(row) => [
+            recordString(row, "walletType"),
+            recordString(row, "direction"),
+            recordString(row, "entryType"),
+            recordString(row, "source"),
+          ].join(":")}
+          emptyTitle="No platform account movements"
+          emptyMessage="No platform wallet ledger movements were returned for this period."
         />
       </section>
 
