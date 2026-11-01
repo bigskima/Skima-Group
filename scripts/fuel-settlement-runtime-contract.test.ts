@@ -56,9 +56,9 @@ Deno.test("customers see settlement and rental-deposit status from persisted ser
   includes(customerScreen, 'firstString(order, ["deposit_refunded_at"])', "customer screen reads the actual deposit refund timestamp");
   includes(customerScreen, 'firstNumber(order, ["deposit_refund_amount"])', "customer screen distinguishes a zero deposit from a pending refund");
   includes(customerScreen, "Returned to your SKIMA wallet", "customer receives a clear wallet refund confirmation");
-  includes(customerScreen, 'stage === "completed"', "customer does not confuse an unposted deposit with a refund");
+  includes(customerScreen, 'stage==="completed"', "customer distinguishes a completed zero-deposit rental from a pending deposit");
 });
 
 Deno.test("the Fuel operation read model exposes posted settlement evidence", () => {
-  includes(gateway, "settlement_execution_id,settlement_transaction_id,settlement_statement_id,settled_at,deposit_refunded_at", "operation read exposes settlement and deposit-return references");
+  includes(gateway, "settlement_execution_id,settlement_transaction_id,settlement_statement_id,settled_at,deposit_refund_amount,deposit_refunded_at", "operation read exposes settlement and deposit-return references");
 });
