@@ -46,7 +46,7 @@ const FleetSchema = z.object({
   orders: z.array(RecordSchema).default([]),
   supplierPayments: z.array(RecordSchema).default([]),
   driverPayouts: z.array(RecordSchema).default([]),
-  driverEarnings: z.array(RecordSchema).default([]),
+  earningRecords: z.array(RecordSchema).default([]),
 }).passthrough();
 
 const AnalyticsSchema = z.object({
@@ -85,24 +85,24 @@ const orderColumns: readonly TableColumn<FleetOrder>[] = [
   {
     key: "customerTotal",
     header: "Customer paid",
-    render: (row) => money(numberValue(row, "customerTotal"), "NGN"),
+    render: (row) => money(numberValue(row, "customerTotal"), recordString(row, "currencyCode") ?? "NGN"),
   },
   {
     key: "procurementCost",
     header: "Supplier cost",
-    render: (row) => money(numberValue(row, "procurementCost"), "NGN"),
+    render: (row) => money(numberValue(row, "procurementCost"), recordString(row, "currencyCode") ?? "NGN"),
   },
   {
     key: "supplierPaid",
     header: "Supplier paid",
-    render: (row) => money(numberValue(row, "supplierPaid"), "NGN"),
+    render: (row) => money(numberValue(row, "supplierPaid"), recordString(row, "currencyCode") ?? "NGN"),
   },
   {
     key: "supplierOutstanding",
     header: "Unpaid supplier balance",
     render: (row) => {
       const outstanding = numberValue(row, "supplierOutstanding");
-      return <StatusBadge tone={outstanding > 0 ? "warning" : "success"}>{money(outstanding, "NGN")}</StatusBadge>;
+      return <StatusBadge tone={outstanding > 0 ? "warning" : "success"}>{money(outstanding, recordString(row, "currencyCode") ?? "NGN")}</StatusBadge>;
     },
   },
 ];
@@ -281,17 +281,13 @@ export function AdminFinancialAnalyticsWorkspace() {
                 { label: "Last 90 days", value: "90" },
                 { label: "All time", value: "all" },
               ]}
-              onChange={setPeriod}
+              onChange={(event) => setPeriod(event.currentTarget.value)}
             />
             <SelectInput
               label="Currency"
               value={currency}
-              options={[
-                { label: "NGN", value: "NGN" },
-                { label: "USD", value: "USD" },
-                { label: "USDC", value: "USDC" },
-              ]}
-              onChange={setCurrency}
+              options={[{ label: "NGN", value: "NGN" }]}
+              onChange={(event) => setCurrency(event.currentTarget.value)}
             />
             <Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button>
           </>
@@ -355,7 +351,9 @@ export function AdminFinancialAnalyticsWorkspace() {
             <p className="skima-muted">Each row reconciles the customer amount collected by SKIMA against the actual station purchase cost and recorded supplier payment. Procurement alone does not count as proof of payment.</p>
           </div>
         </div>
-        <DataTable columns={orderColumns} rows={fleet.orders as FleetOrder[]} emptyMessage="No settled SKIMA Fleet procurement records are available for this period." />
+        <DataTable columns={orderColumns} caption="SKIMA Fleet orders and supplier balances" records={fleet.orders as FleetOrder[]}
+          getRowKey={(row) => recordString(row, "orderId") ?? JSON.stringify(row)}
+          emptyTitle="No SKIMA Fleet orders" emptyMessage="No settled SKIMA Fleet procurement records are available for this period." />
         {canRecordSupplierPayment && fleet.orders.some((order) => numberValue(order, "supplierOutstanding") > 0) ? (
           <div className="skima-form-grid">
             <SelectInput
@@ -393,7 +391,7 @@ export function AdminFinancialAnalyticsWorkspace() {
                 { label: "Bank transfer", value: "bank_transfer" },
                 { label: "Physical cash", value: "cash" },
               ]}
-              onChange={(next) => setPaymentMethod(next as "cash" | "bank_transfer")}
+              onChange={(event) => setPaymentMethod(event.currentTarget.value as "cash" | "bank_transfer")}
             />
             <TextInput
               label={paymentMethod === "bank_transfer" ? "Bank transfer reference (required)" : "Cash voucher / receipt reference (optional)"}
@@ -430,7 +428,9 @@ export function AdminFinancialAnalyticsWorkspace() {
           <div><p className="admin-section-kicker">Supplier expenses</p><h2>Actual SKIMA payments to stations</h2></div>
           <StatusBadge tone="success">Separate from customer collections</StatusBadge>
         </div>
-        <DataTable columns={paymentColumns} rows={fleet.supplierPayments as RecordValue[]} emptyMessage="No supplier disbursements have been recorded yet. An approved procurement is not counted as paid." />
+        <DataTable columns={paymentColumns} caption="Supplier payment history" records={fleet.supplierPayments as RecordValue[]}
+          getRowKey={(row) => recordString(row, "id") ?? JSON.stringify(row)}
+          emptyTitle="No supplier payments recorded" emptyMessage="No supplier disbursements have been recorded yet. An approved procurement is not counted as paid." />
         <div className="skima-grid skima-grid--compact">
           <MetricTile label="Procurement cost recorded" value={money(fleet.procurementCost, currency)} />
           <MetricTile label="Supplier cash / bank transfer recorded" value={money(fleet.supplierPaid, currency)} />
@@ -451,7 +451,9 @@ export function AdminFinancialAnalyticsWorkspace() {
           <MetricTile label="Still unpaid" value={money(fleet.driverUnpaidEarnings, currency)} tone={fleet.driverUnpaidEarnings > 0 ? "warning" : "success"} />
         </div>
         <h3>Recent payout batches</h3>
-        <DataTable columns={payoutColumns} rows={fleet.driverPayouts as RecordValue[]} emptyMessage="No driver wallet payouts found for this period." />
+        <DataTable columns={payoutColumns} caption="SKIMA Fleet driver wallet payout batches" records={fleet.driverPayouts as RecordValue[]}
+          getRowKey={(row) => recordString(row, "payoutId") ?? JSON.stringify(row)}
+          emptyTitle="No driver payouts" emptyMessage="No driver wallet payouts found for this period." />
         <h3>Driver earning records</h3>
         <DataTable
           columns={[
@@ -464,8 +466,10 @@ export function AdminFinancialAnalyticsWorkspace() {
             { key: "unpaidAmount", header: "Unpaid", render: (row) => money(numberValue(row, "unpaidAmount"), currency) },
             { key: "status", header: "Status", render: (row) => label(recordString(row, "status")) },
           ]}
-          rows={fleet.driverEarnings as RecordValue[]}
-          emptyMessage="No internal Driver earning records found for this period."
+          records={fleet.earningRecords as RecordValue[]}
+          getRowKey={(row) => recordString(row, "earningId") ?? JSON.stringify(row)}
+          caption="SKIMA Fleet driver earning records"
+          emptyTitle="No driver earning records" emptyMessage="No internal Driver earning records found for this period."
         />
       </section>
 
@@ -495,16 +499,21 @@ export function AdminFinancialAnalyticsWorkspace() {
             { key: "count", header: "Count", render: (row) => numberValue(row, "count").toLocaleString("en-NG") },
             { key: "amount", header: "Total amount", render: (row) => money(numberValue(row, "amount"), currency) },
           ]}
-          rows={data.transactionSummary as RecordValue[]}
-          emptyMessage="No financial transactions found for this period."
+          caption="Financial transaction totals by type and status" records={data.transactionSummary as RecordValue[]}
+          getRowKey={(row) => `${recordString(row, "transactionType") ?? "type"}:${recordString(row, "status") ?? "status"}`}
+          emptyTitle="No transactions" emptyMessage="No financial transactions found for this period."
         />
       </section>
 
       <section className="sk-panel stack-md">
         <div className="sk-panel__header"><div><p className="admin-section-kicker">Evidence and reconciliation</p><h2>Recent financial transactions</h2></div></div>
-        <DataTable columns={transactionColumns} rows={data.recentTransactions as RecordValue[]} emptyMessage="No posted financial transactions found." />
+        <DataTable columns={transactionColumns} caption="Recent financial transactions" records={data.recentTransactions as RecordValue[]}
+          getRowKey={(row) => recordString(row, "transactionId") ?? JSON.stringify(row)}
+          emptyTitle="No transactions" emptyMessage="No posted financial transactions found." />
         <h3>Recent wallet ledger entries</h3>
-        <DataTable columns={ledgerColumns} rows={data.recentLedgerEntries as RecordValue[]} emptyMessage="No ledger activity found." />
+        <DataTable columns={ledgerColumns} caption="Recent wallet ledger activity" records={data.recentLedgerEntries as RecordValue[]}
+          getRowKey={(row) => recordString(row, "ledgerEntryId") ?? JSON.stringify(row)}
+          emptyTitle="No ledger activity" emptyMessage="No ledger activity found." />
         <h3>Platform wallet balances</h3>
         <DataTable
           columns={[
@@ -514,8 +523,9 @@ export function AdminFinancialAnalyticsWorkspace() {
             { key: "balance", header: "Current balance", render: (row) => money(numberValue(row, "balance"), recordString(row, "currencyCode") ?? currency) },
             { key: "walletId", header: "Wallet ID", render: (row) => shortId(recordString(row, "walletId")) },
           ]}
-          rows={data.walletBalances as RecordValue[]}
-          emptyMessage="No platform wallet balances found."
+          caption="Platform-controlled wallet balances" records={data.walletBalances as RecordValue[]}
+          getRowKey={(row) => recordString(row, "walletId") ?? JSON.stringify(row)}
+          emptyTitle="No platform balances" emptyMessage="No platform wallet balances found."
         />
       </section>
 
