@@ -913,6 +913,7 @@ Deno.test("LPG final customer hand-over records the physical cylinder first, the
     allowedHistoryMigration,
     idempotencyMigration,
     otpCompletionMigration,
+    returnScanReadModelMigration,
   ] = await Promise.all([
     read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
@@ -925,6 +926,7 @@ Deno.test("LPG final customer hand-over records the physical cylinder first, the
     read("supabase/migrations/20261101112723_lpg_delivery_scan_uses_allowed_history_event.sql"),
     read("supabase/migrations/20261101113502_lpg_delivery_scan_idempotency.sql"),
     read("supabase/migrations/20261031171508_lpg_delivery_otp_completion_and_payout_bridge.sql"),
+    read("supabase/migrations/20261101120000_lpg_job_reads_expose_return_scan_state.sql"),
   ]);
 
   // Independent and Station Managed drivers share the assigned-job scan surface.
@@ -938,7 +940,7 @@ Deno.test("LPG final customer hand-over records the physical cylinder first, the
   assertIncludes(driver, "scan the returned cylinder's QR or permanent ID at the customer's address");
 
   // SKIMA Managed keeps a physical scan control at the return stage too.
-  assertIncludes(internal, "const scanType = driverScanTypeForStatus(status)");
+  assertIncludes(internal, "const detectedScanType = driverScanTypeForStatus(status)");
   assertIncludes(internal, "At the customer's address, scan the returned cylinder");
   assertIncludes(internal, "Verify returned cylinder");
   assertIncludes(internal, "Returned cylinder scan verified.");
@@ -975,6 +977,13 @@ Deno.test("LPG final customer hand-over records the physical cylinder first, the
   assertIncludes(allowedHistoryMigration, "history_event := 'verified';");
   assertIncludes(idempotencyMigration, "existing.scan_type = 'customer_delivery'");
   assertIncludes(idempotencyMigration, "'alreadyVerified', true");
+  assertIncludes(returnScanReadModelMigration, "customerDeliveryScanVerified");
+  assertIncludes(returnScanReadModelMigration, "public.read_lpg_jobs(text,integer)");
+  assertIncludes(returnScanReadModelMigration, "public.read_lpg_station_managed_driver_jobs(integer)");
+  assertIncludes(driver, "customerDeliveryScanVerified");
+  assertIncludes(internal, "customerDeliveryScanVerified");
+  assertIncludes(scanScreen, "job.customerDeliveryScanVerified !== true");
+  assertIncludes(verification, "Waiting for returned-cylinder scan");
   assertIncludes(otpCompletionMigration, "set status = 'delivered'");
   assertIncludes(otpCompletionMigration, "'lpg.delivery.completed'");
   assertIncludes(otpCompletionMigration, "target_idempotency_key || ':delivery-completed'");
