@@ -17,8 +17,7 @@ begin
   );
 
   if patched = fn and position(
-    'if target_wallet_id is null then return jsonb_build_object',
-    fn
+    'if target_wallet_id is null then return jsonb_build_object' in fn
   ) = 0 then
     raise exception 'could not apply null-wallet activity fallback';
   end if;
