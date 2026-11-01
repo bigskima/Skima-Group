@@ -96,7 +96,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
     invalidate: [["jobs"], ["orders"], ["scans"], ["station-runtime"]],
   });
   const continuousScan = useGatewayMutation({
-    path: "/lpg/scans/continuous",
+    path: "/lpg/scans/order-bound",
     schema: ActionResponseSchema,
     invalidate: [["jobs"], ["orders"], ["scans"], ["station-runtime"]],
   });
@@ -290,6 +290,7 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
       const location = await readOperationalLocation().catch(() => null);
       const result = await continuousScan.mutateAsync({
         ...(location ?? {}),
+        lpgOrderId: id,
         workspace: "driver",
         token: token.trim(),
         idempotencyKey: operationIdempotencyKey(
@@ -298,8 +299,25 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
         ),
         source: "skima.lpg.continuous",
       });
-      const responseScanType = result && typeof result === "object"
-        ? firstString(result, ["scanType"])
+      const resultRecord = result && typeof result === "object"
+        ? result as Record<string, unknown>
+        : null;
+      const resolvedOrderId = resultRecord
+        ? firstString(resultRecord, ["lpgOrderId", "lpg_order_id"])
+        : null;
+      const resolvedCylinderId = resultRecord
+        ? firstString(resultRecord, ["cylinderId", "cylinder_id"])
+        : null;
+      const expectedCylinderId = firstString(cylinder, ["id", "cylinderId", "cylinder_id"])
+        ?? firstString(order, ["cylinderId", "cylinder_id"]);
+      if (
+        resolvedOrderId !== id
+        || (expectedCylinderId !== null && resolvedCylinderId !== expectedCylinderId)
+      ) {
+        throw new Error("SKIMA rejected this scan because the returned cylinder match does not belong to this exact order. No verification success was accepted.");
+      }
+      const responseScanType = resultRecord
+        ? firstString(resultRecord, ["scanType"])
         : null;
       const completedScanType = responseScanType === "customer_pickup"
           || responseScanType === "station_receipt"
