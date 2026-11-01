@@ -1029,7 +1029,7 @@ Deno.test("open LPG job scans are bound to that exact order and cylinder", async
 
 Deno.test("LPG driver stages advance from verified events and live Admin routing policy", async () => {
   const [migration, lifecycle, driver, internal, priority, vercel] = await Promise.all([
-    read("supabase/migrations/20261101145500_lpg_automatic_driver_stage_advancement.sql"),
+    read("supabase/migrations/20261101160811_lpg_automatic_driver_stage_advancement.sql"),
     read("supabase/migrations/20260801040000_lpg_integrated_lifecycle_runtime.sql"),
     read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
@@ -1109,8 +1109,8 @@ Deno.test("LPG dynamic order routes survive direct browser refresh on Vercel", a
 Deno.test("Admin fulfillment availability saves and confirms the effective network policy", async () => {
   const [admin, eligibilityGate, stationManagedGate] = await Promise.all([
     read("apps/admin/src/admin-launch-assurance-workspace.tsx"),
-    read("supabase/migrations/20261101145500_lpg_automatic_driver_stage_advancement.sql"),
-    read("supabase/migrations/20261101152000_lpg_station_managed_availability_policy_gate.sql"),
+    read("supabase/migrations/20261101160811_lpg_automatic_driver_stage_advancement.sql"),
+    read("supabase/migrations/20261101160821_lpg_station_managed_availability_policy_gate.sql"),
   ]);
 
   assertIncludes(admin, "Available fulfillment networks");
