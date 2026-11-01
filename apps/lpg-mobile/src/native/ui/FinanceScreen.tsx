@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { ArrowDownToLine, Clock3, ReceiptText, WalletCards } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { domainQueries } from "../api/domains";
+import { domainQueries, useStationRuntime } from "../api/domains";
 import { useManagedDriverEarnings } from "../api/managedDriverEarnings";
 import { firstNumber, firstString, type PlatformRecord } from "../api/records";
 import { useWalletActivity } from "../api/walletActivity";
@@ -25,10 +25,15 @@ const PAGE_SIZE = 8;
 export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }) {
   const { palette } = useAppTheme();
   const wallets = domainQueries.wallets();
-  const wallet = selectWorkspaceWallet(wallets.data ?? [], workspace);
+  const stationRuntime = useStationRuntime(workspace === "station");
+  const managedEarnings = useManagedDriverEarnings(workspace === "driver");
+  const stationBranch = stationRuntime.data?.branch as PlatformRecord | undefined;
+  const walletOwnerId = workspace === "driver"
+    ? managedEarnings.data?.driverProfileId ?? null
+    : firstString(stationBranch, ["organizationId", "organization_id"]);
+  const wallet = selectWorkspaceWallet(wallets.data ?? [], workspace, walletOwnerId);
   const walletId = walletRecordId(wallet);
   const history = useWalletActivity(walletId, 100);
-  const managedEarnings = useManagedDriverEarnings(workspace === "driver");
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -55,7 +60,10 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
   );
   const visibleActivity = filteredActivity.slice(0, visibleCount);
   const withdrawPath = `/${workspace === "driver" ? "(driver)" : "(station)"}/withdraw` as never;
-  const financeError = wallets.error ?? history.error ?? managedEarnings.error;
+  const financeError =
+    wallets.error ??
+    (workspace === "station" ? stationRuntime.error : managedEarnings.error) ??
+    (walletId ? history.error : null);
   const managed = workspace === "driver" && managedEarnings.data?.isManaged ? managedEarnings.data : null;
 
   const selectFilter = (next: ActivityFilter) => {
@@ -89,12 +97,20 @@ export function FinanceScreen({ workspace }: { workspace: "driver" | "station" }
         </Text>
       </View>
 
-      {wallets.isPending || (Boolean(walletId) && history.isPending) || (workspace === "driver" && managedEarnings.isPending) ? (
+      {wallets.isPending ||
+      (workspace === "station" && stationRuntime.isPending) ||
+      (workspace === "driver" && managedEarnings.isPending) ||
+      (Boolean(walletId) && history.isPending) ? (
         <ScreenSkeleton cards={4} />
       ) : financeError ? (
         <RequestFailureState
           error={financeError}
-          onRetry={() => void Promise.all([wallets.refetch(), history.refetch(), managedEarnings.refetch()])}
+          onRetry={() => void Promise.all([
+            wallets.refetch(),
+            walletId ? history.refetch() : Promise.resolve(),
+            workspace === "driver" ? managedEarnings.refetch() : Promise.resolve(),
+            workspace === "station" ? stationRuntime.refetch() : Promise.resolve(),
+          ])}
           overrides={workspace === "station" ? {
             permission: {
               title: "Financial activity access restricted",

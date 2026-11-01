@@ -43,6 +43,7 @@ export function ScanWorkspaceScreen({
   const [showManualOrderSelection, setShowManualOrderSelection] = useState(false);
   const [fastManualId, setFastManualId] = useState("");
   const [fastScanNotice, setFastScanNotice] = useState<{ success: boolean; text: string } | null>(null);
+  const [fastScanOrderId, setFastScanOrderId] = useState<string | null>(null);
   const fastScanAttemptKeys = useRef(new Map<string, string>());
   const continuousScan = useGatewayMutation({
     path: "/lpg/scans/continuous",
@@ -78,6 +79,7 @@ export function ScanWorkspaceScreen({
     const token = rawToken.trim();
     if (!token || continuousScan.isPending) return;
     setFastScanNotice(null);
+    setFastScanOrderId(null);
     try {
       const existingAttemptKey = fastScanAttemptKeys.current.get(token);
       const scanAttemptKey = existingAttemptKey ?? idempotencyKey(`continuous-${workspace}-cylinder-scan`, `${workspace}:${Date.now()}:${token.slice(-12)}`);
@@ -94,24 +96,57 @@ export function ScanWorkspaceScreen({
       const orderReference = firstString(result, ["orderReference", "publicReference", "public_reference"]) ?? "Assigned order";
       const cylinderId = firstString(result, ["cylinderIdentifier", "cylinderReference"]) ?? "Cylinder";
       const scanType = firstString(result, ["scanType"]) ?? "verification";
-      const nextStep = scanType === "customer_pickup"
-        ? "Pickup verified. Station transit has started."
-        : scanType === "station_receipt"
-          ? "Station receipt verified. Safety checks can begin."
-          : scanType === "station_release"
-            ? "Station release verified. Return journey is ready."
-            : scanType === "customer_delivery"
-              ? "Customer hand-over verified. Order completed."
-              : "Verification recorded.";
+      const alreadyVerified = result.alreadyVerified === true;
+      const nextStep = alreadyVerified
+        ? `Already verified at this order stage (${firstString(result, ["status"]) ?? "in progress"}). Open the order and continue its next step; do not scan again.`
+        : scanType === "customer_pickup"
+          ? "Pickup verified. Station transit has started."
+          : scanType === "station_receipt"
+            ? "Station receipt verified. Safety checks can begin."
+            : scanType === "station_release"
+              ? "Station release verified. Return journey is ready."
+              : scanType === "customer_delivery"
+                ? "Customer hand-over verified. Order completed."
+                : "Verification recorded."; 
       fastScanAttemptKeys.current.delete(token);
       setFastManualId("");
+      setFastScanOrderId(firstString(result, ["lpgOrderId", "lpg_order_id"]));
       setFastScanNotice({ success: true, text: `${cylinderId} · ${orderReference}. ${nextStep}` });
       await jobs.refetch().catch(() => undefined);
     } catch (cause) {
-      setFastScanNotice({
-        success: false,
-        text: friendlyError(cause, "SKIMA could not match this code to an assigned order. Check the cylinder code and workspace."),
-      });
+      const message = friendlyError(cause, "SKIMA could not match this code to an assigned order. Check the cylinder code and workspace.");
+      if (message.toLowerCase().includes("no active order ready for verification")) {
+        const refreshed = await jobs.refetch().catch(() => null);
+        const matchedJob = (refreshed?.data ?? jobs.data ?? []).find((job) => {
+          const identifier = cylinderPermanentIdentifier(job)
+            ?? firstString(job, ["cylinderIdentifier", "cylinderReference"]);
+          return identifier?.trim().toUpperCase() === token.toUpperCase();
+        });
+        const currentStatus = (displayStatus(matchedJob ?? {}) ?? "").toLowerCase().replace(/[\\s-]+/g, "_");
+        const alreadyVerifiedStatuses = new Set([
+          "pickup_verified",
+          "station_verified",
+          "refill_started",
+          "refill_in_progress",
+          "refill_confirmed",
+          "station_settled",
+          "return_en_route",
+          "delivery_verification_pending",
+          "delivered",
+          "completed",
+        ]);
+        if (matchedJob && alreadyVerifiedStatuses.has(currentStatus)) {
+          const matchedId = recordId(matchedJob);
+          setFastScanOrderId(matchedId);
+          setFastScanNotice({
+            success: true,
+            text: `${cylinderPermanentIdentifier(matchedJob) ?? token.toUpperCase()} · ${displayReference(matchedJob) ?? "Assigned order"}. This cylinder is already verified for this order (currently ${currentStatus.replace(/_/g, " ")}). No new scan was recorded. Open the order to continue.`,
+          });
+          return;
+        }
+      }
+      setFastScanOrderId(null);
+      setFastScanNotice({ success: false, text: message });
     }
   };
 
@@ -211,6 +246,14 @@ export function ScanWorkspaceScreen({
             <CheckCircle2 color={fastScanNotice.success ? palette.success : palette.danger} size={18} />
             <Text style={[styles.tagNotice, { color: fastScanNotice.success ? palette.success : palette.danger }]}>{fastScanNotice.text}</Text>
           </View>
+        ) : null}
+        {fastScanNotice?.success && fastScanOrderId ? (
+          <AppButton
+            label="Open verified order"
+            fullWidth
+            variant="secondary"
+            onPress={() => router.push(`/(${workspace})/job/${encodeURIComponent(fastScanOrderId)}` as never)}
+          />
         ) : null}
       </View>
 

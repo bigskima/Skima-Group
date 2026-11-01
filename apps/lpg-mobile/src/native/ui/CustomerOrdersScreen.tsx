@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { ChevronRight, ClipboardList, MapPin, PackageCheck, ShieldCheck, Truck } from "lucide-react-native";
+import { ChevronRight, ClipboardList, MapPin, PackageCheck, QrCode, ShieldCheck, Truck } from "lucide-react-native";
+import QRCode from "react-native-qrcode-svg";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useJobDetails } from "../api/domains";
@@ -210,11 +211,19 @@ export function CustomerOrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const detail = useJobDetails(id ?? null);
   const orders = domainQueries.orders();
+  const cylinders = domainQueries.cylinders();
   const root = detail.data;
   const jobOrder = nestedRecord(root, "order") ?? (root && recordId(root) ? root : null);
   const savedOrder = (orders.data ?? []).find((item) => recordId(item) === id) ?? null;
   const order = jobOrder ?? savedOrder;
   const cylinder = nestedRecord(root, "cylinder") ?? nestedRecord(order, "cylinder");
+  const cylinderId = firstString(cylinder, ["id", "cylinderId", "cylinder_id"])
+    ?? firstString(order, ["cylinderId", "cylinder_id"]);
+  const customerCylinder = (cylinders.data ?? []).find((item) => recordId(item) === cylinderId) ?? null;
+  const permanentCylinderId =
+    firstString(cylinder, ["cylinderIdentifier", "cylinder_identifier"])
+    ?? firstString(customerCylinder, ["cylinder_identifier", "cylinderIdentifier", "public_reference", "publicReference"]);
+  const cylinderQrPayload = firstString(customerCylinder, ["qr_payload", "qrPayload"]);
   const station = nestedRecord(root, "station") ?? nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
   const pickup = nestedRecord(root, "pickupLocation") ?? nestedRecord(order, "pickupLocation") ?? nestedRecord(order, "pickup_location");
   const delivery = nestedRecord(root, "deliveryLocation") ?? nestedRecord(order, "deliveryLocation") ?? nestedRecord(order, "delivery_location");
@@ -258,7 +267,7 @@ export function CustomerOrderDetailScreen() {
       refreshControl={
         <RefreshControl
           refreshing={detail.isRefetching}
-          onRefresh={() => void detail.refetch()}
+          onRefresh={() => void Promise.all([detail.refetch(), orders.refetch(), cylinders.refetch()])}
           tintColor={palette.brand}
         />
       }
@@ -310,6 +319,37 @@ export function CustomerOrderDetailScreen() {
               <InfoField label="Pickup" value={pickupAddress} />
               <InfoField label="Return" value={returnAddress} />
             </View>
+          </Card>
+
+          <Card padding="lg">
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+              <QrCode color={palette.brand} size={20} />
+              <Text style={[styles.detailSectionTitle, { color: palette.ink }]}>Cylinder ID & QR for this order</Text>
+            </View>
+            <Text style={[styles.label, { color: palette.muted, marginTop: spacing.sm }]}>PERMANENT CYLINDER ID</Text>
+            <Text selectable style={{ color: palette.ink, fontSize: 25, fontWeight: "900", letterSpacing: 1.2 }}>
+              {permanentCylinderId ?? "ID unavailable"}
+            </Text>
+            {cylinderQrPayload ? (
+              <View style={{ alignItems: "center", gap: spacing.md, marginTop: spacing.md }}>
+                <View style={{ backgroundColor: "#FFFFFF", borderRadius: radii.xl, padding: spacing.md }}>
+                  <QRCode
+                    backgroundColor="#FFFFFF"
+                    color="#151A17"
+                    quietZone={12}
+                    size={210}
+                    value={cylinderQrPayload}
+                  />
+                </View>
+                <Text style={[styles.fieldValue, { color: palette.muted, textAlign: "center" }]}>
+                  This QR belongs to the cylinder assigned to {aiOrderReference}. Show it to the assigned SKIMA operator during hand-over.
+                </Text>
+              </View>
+            ) : (
+              <Text style={[styles.fieldValue, { color: palette.muted, marginTop: spacing.sm }]}>
+                The QR is loading or unavailable. The permanent five-character Cylinder ID above remains the manual verification fallback.
+              </Text>
+            )}
           </Card>
 
           <Card padding="lg">

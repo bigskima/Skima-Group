@@ -270,7 +270,12 @@ Deno.test("customer home keeps independent services visible in every refill stat
   const dashboard = await read("apps/lpg-mobile/src/native/ui/PremiumDashboard.tsx");
   assertIncludes(dashboard, "function CustomerBillsCard()");
   assertIncludes(dashboard, "<CustomerBillsCard />");
-  assertIncludes(dashboard, 'selectWorkspaceWallet(wallets.data ?? [], "customer")');
+  assertIncludes(dashboard, '"customer",\n    session.context?.user.id ?? session.session?.user.id ?? null');
+  assertIncludes(dashboard, "await session.refresh()");
+  const sessionProvider = await read("apps/lpg-mobile/src/native/session/SessionProvider.tsx");
+  assertIncludes(sessionProvider, "supabase.auth.refreshSession");
+  assertIncludes(sessionProvider, "sessionIsInvalid");
+  assertIncludes(sessionProvider, "A temporary network failure must not sign the");
   assertIncludes(dashboard, "customerPrimaryStack");
   assertIncludes(await read("apps/lpg-mobile/src/native/api/domains.ts"), 'path: "/lpg/orders?scope=customer"');
 });
@@ -519,6 +524,14 @@ function assertNotIncludes(value: string, expected: string) {
 
 Deno.test("LPG dispatch decision snapshot conflict target is unambiguous", async () => {
   const migration = await read("supabase/migrations/20261029122600_lpg_dispatch_decision_snapshot_conflict_fix.sql");
+  assertIncludes(migration, "dispatch_location_decision_snapshots_dispatch_request_id_key");
+  assertIncludes(migration, "ON CONFLICT ON CONSTRAINT");
+  assertNotIncludes(migration, "ON CONFLICT(dispatch_request_id) DO NOTHING");
+});
+
+Deno.test("SKIMA internal dispatch decision snapshot conflict target is unambiguous", async () => {
+  const migration = await read("supabase/migrations/20261101101832_lpg_internal_dispatch_snapshot_conflict_fix.sql");
+  assertIncludes(migration, "public.dispatch_lpg_internal_order(uuid,integer,text,text)");
   assertIncludes(migration, "dispatch_location_decision_snapshots_dispatch_request_id_key");
   assertIncludes(migration, "ON CONFLICT ON CONSTRAINT");
   assertNotIncludes(migration, "ON CONFLICT(dispatch_request_id) DO NOTHING");
@@ -788,3 +801,100 @@ Deno.test("Admin maps integration exposes the active geocoder and road router in
   assertIncludes(adminLocation, "/admin/maps/location/status");
 });
 
+
+
+Deno.test("SKIMA Managed-only coverage can load and quote its own internal fulfillment option", async () => {
+  const [screen, serviceability, eligibility, referencePolicy, quoteRuntime] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx"),
+    read("apps/lpg-mobile/src/native/api/serviceability.ts"),
+    read("supabase/migrations/20261101095005_lpg_skima_managed_reference_policy_uses_managed_capability.sql"),
+    read("supabase/migrations/20261101095005_lpg_skima_managed_reference_policy_uses_managed_capability.sql"),
+    read("apps/lpg-mobile/src/native/api/gateway.ts"),
+  ]);
+
+  assertIncludes(serviceability, "skimaManagedEnabled");
+  assertIncludes(screen, "skimaManagedTripEnabled");
+  assertIncludes(screen, "standardEligibilityAvailable");
+  assertIncludes(screen, "enabled: stationEligibilityReady && standardEligibilityAvailable");
+  assertIncludes(screen, "isSkimaInternalFulfillmentId(stationId) && skimaManagedTripEnabled");
+  assertIncludes(referencePolicy, "public.resolve_lpg_location_capability");
+  assertIncludes(referencePolicy, "'skima_managed_fulfillment'");
+  assertIncludes(referencePolicy, "public.geography_migration_mappings");
+  assertIncludes(referencePolicy, "mapping.migration_status='verified'");
+  assertNotIncludes(referencePolicy, "public.resolve_lpg_serviceability(");
+  assertIncludes(quoteRuntime, "resolve_lpg_internal_route_snapshot");
+  assertIncludes(quoteRuntime, "SKIMA_INTERNAL_FULFILLMENT_ID");
+});
+
+Deno.test("finance workspace wallets and history are scoped to the actual owner", async () => {
+  const [finance, walletSelector, walletActivity, domains, gateway] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/FinanceScreen.tsx"),
+    read("apps/lpg-mobile/src/native/utilities/financeWallet.ts"),
+    read("apps/lpg-mobile/src/native/api/walletActivity.ts"),
+    read("apps/lpg-mobile/src/native/api/domains.ts"),
+    read("supabase/functions/api-gateway/index.ts"),
+  ]);
+
+  assertIncludes(finance, "managedEarnings.data?.driverProfileId");
+  assertIncludes(finance, 'firstString(stationBranch, ["organizationId", "organization_id"])');
+  assertIncludes(finance, "selectWorkspaceWallet(wallets.data ?? [], workspace, walletOwnerId)");
+  assertIncludes(finance, "workspace === \"station\" ? stationRuntime.error : managedEarnings.error");
+  assertIncludes(walletSelector, "ownerEntityId");
+  assertIncludes(walletSelector, "belongsToOwner(wallet)");
+  assertNotIncludes(walletSelector, "active.find(\n      (wallet) => firstString(wallet, [\"wallet_type\", \"walletType\"]) === \"partner\"");
+  assertIncludes(walletActivity, "if (!walletId)");
+  assertIncludes(walletActivity, "totalCount: 0");
+  assertIncludes(domains, "export function useStationRuntime(enabled = true)");
+  assertIncludes(gateway, "profiles!driver_profiles_user_id_fkey");
+});
+
+
+Deno.test("customer order details show the assigned cylinder ID and QR without leaving the order", async () => {
+  const [orderScreen, driverJob, internalDriver, mobilePackage] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/CustomerOrdersScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
+    read("apps/lpg-mobile/package.json"),
+  ]);
+  assertIncludes(orderScreen, 'import QRCode from "react-native-qrcode-svg"');
+  assertIncludes(orderScreen, "domainQueries.cylinders()");
+  assertIncludes(orderScreen, "Cylinder ID & QR for this order");
+  assertIncludes(orderScreen, "cylinderQrPayload");
+  assertIncludes(orderScreen, "permanentCylinderId");
+  assertIncludes(orderScreen, "Show it to the assigned SKIMA operator during hand-over.");
+  assertIncludes(driverJob, "Permanent Cylinder ID");
+  assertIncludes(internalDriver, "Permanent Cylinder ID");
+  assertIncludes(mobilePackage, '"react-native-qrcode-svg"');
+});
+
+Deno.test("repeat scan feedback recognises a previously verified assigned cylinder and opens its order", async () => {
+  const scanScreen = await read("apps/lpg-mobile/src/native/ui/ScanWorkspaceScreen.tsx");
+  assertIncludes(scanScreen, "no active order ready for verification");
+  assertIncludes(scanScreen, "const refreshed = await jobs.refetch()");
+  assertIncludes(scanScreen, "alreadyVerifiedStatuses");
+  assertIncludes(scanScreen, "No new scan was recorded.");
+  assertIncludes(scanScreen, 'label="Open verified order"');
+  assertIncludes(scanScreen, "fastScanOrderId");
+});
+
+
+Deno.test("SKIMA Managed supplier receipt remains optional evidence, not a refill blocker", async () => {
+  const [screen, migration, originalProcurement] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
+    read("supabase/migrations/20261101105452_lpg_internal_supplier_receipt_optional.sql"),
+    read("supabase/migrations/20260916163041_lpg_internal_procurement_and_earnings.sql"),
+  ]);
+
+  assertIncludes(screen, "Upload supplier receipt (optional)");
+  assertIncludes(screen, "Supplier receipt uploaded (optional evidence)");
+  assertIncludes(screen, "disabled={!safetyConfirmed}");
+  assertIncludes(screen, "target_receipt_media_asset_id: receiptMediaAssetId");
+  assertNotIncludes(screen, "Upload the supplier receipt before confirming the refill.");
+  assertNotIncludes(screen, "disabled={!receiptMediaAssetId || !safetyConfirmed}");
+
+  assertIncludes(migration, "requires_receipt:=false;");
+  assertIncludes(migration, "Receipt attachment is optional.");
+  assertIncludes(migration, "'{require_supplier_receipt}','false'::jsonb");
+  assertIncludes(migration, "position('supplier receipt evidence is required for SKIMA internal refill' in function_ddl)>0");
+  assertIncludes(originalProcurement, "target_receipt_media_asset_id is not null and not exists");
+});

@@ -207,11 +207,6 @@ export function InternalDriverJobDetailScreen() {
       setNotice("Enter valid actual kilograms and supplier price per kg.");
       return;
     }
-    if (!receiptMediaAssetId) {
-      setNoticeSuccess(false);
-      setNotice("Upload the supplier receipt before confirming the refill.");
-      return;
-    }
     if (!safetyConfirmed) {
       setNoticeSuccess(false);
       setNotice("Confirm that the cylinder is safe to fill before continuing.");
@@ -261,7 +256,7 @@ export function InternalDriverJobDetailScreen() {
     <Screen
       eyebrow="SKIMA fulfillment"
       title={order ? displayTitle(order) : "Internal delivery job"}
-      subtitle="Pickup, source a safe LPG refill, record the supplier receipt and return the verified cylinder."
+      subtitle="Pickup, source a safe LPG refill, record the supplier details and safety check, then return the verified cylinder. Receipt upload is optional."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       {detail.isPending ? (
@@ -447,14 +442,17 @@ export function InternalDriverJobDetailScreen() {
               />
               <Input label="Safety / supplier note (optional)" value={safetyNotes} onChangeText={setSafetyNotes} placeholder="Add any relevant observation" multiline />
 
+              <Text style={[styles.helper, { color: palette.muted }]}>
+                Optional: attach a receipt photo when practical. Otherwise, keep the paper receipt for physical hand-over and continue recording the refill here.
+              </Text>
               <EvidenceCapture
                 assetTypeKey="media.lpg.procurement_receipt"
-                label={receiptMediaAssetId ? "Supplier receipt uploaded" : "Upload supplier receipt"}
+                label={receiptMediaAssetId ? "Supplier receipt uploaded (optional evidence)" : "Upload supplier receipt (optional)"}
                 draftType={`internal-procurement-receipt-${id ?? "unknown"}`}
                 onUploaded={(assetId) => Promise.resolve().then(() => {
                   setReceiptMediaAssetId(assetId);
                   setNoticeSuccess(true);
-                  setNotice("Supplier receipt uploaded. You can confirm the refill when the other details are complete.");
+                  setNotice("Supplier receipt attached as optional evidence. You can also confirm the refill without uploading a receipt.");
                 })}
               />
 
@@ -463,7 +461,7 @@ export function InternalDriverJobDetailScreen() {
                 fullWidth
                 size="lg"
                 loading={confirmingRefill}
-                disabled={!receiptMediaAssetId || !safetyConfirmed}
+                disabled={!safetyConfirmed}
                 icon={<ReceiptText color="#FFFFFF" size={18} />}
                 onPress={() => void confirmInternalRefill()}
               />
@@ -473,6 +471,10 @@ export function InternalDriverJobDetailScreen() {
           {section === "details" ? (
             <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               <Field label="Cylinder" value={cylinder ? displayTitle(cylinder) : "Not available"} />
+              <Field
+                label="Permanent Cylinder ID"
+                value={firstString(cylinder, ["cylinderIdentifier", "cylinder_identifier", "publicReference", "public_reference"]) ?? "Not available"}
+              />
               <Field label="Requested refill" value={requestedKg === null ? "Not available" : `${requestedKg} kg`} />
               <Field label="Internal earning" value={earningAmount === null ? "Calculated by policy" : `${currencyCode} ${earningAmount.toLocaleString()}`} />
               <Text style={[styles.helper, { color: palette.muted }]}>

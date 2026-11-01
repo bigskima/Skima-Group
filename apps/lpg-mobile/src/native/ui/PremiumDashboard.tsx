@@ -56,6 +56,7 @@ type Workspace = "customer" | "driver" | "station";
 type IconType = ComponentType<{ color?: string; size?: number; strokeWidth?: number }>;
 
 export function CustomerDashboard() {
+  const session = useSession();
   const cylinders = domainQueries.cylinders();
   const active = domainQueries.activeOrders();
   const locations = domainQueries.locations();
@@ -70,7 +71,11 @@ export function CustomerDashboard() {
   const cylinder = cylinders.data?.[0];
   const order = active.data?.[0];
   const orderId = order ? recordId(order) : null;
-  const customerWallet = selectWorkspaceWallet(wallets.data ?? [], "customer");
+  const customerWallet = selectWorkspaceWallet(
+    wallets.data ?? [],
+    "customer",
+    session.context?.user.id ?? session.session?.user.id ?? null,
+  );
   const balance = firstNumber(customerWallet, ["balance", "available_balance", "availableBalance"]) ?? 0;
   const currency = firstString(customerWallet, ["currency_code", "currencyCode"]) ?? "NGN";
   const primary = order && orderId
@@ -109,13 +114,16 @@ export function CustomerDashboard() {
         <ScreenSkeleton cards={3} />
       ) : failed ? (
         <LoadError
-          onRetry={() => void Promise.all([
-            cylinders.refetch(),
-            active.refetch(),
-            locations.refetch(),
-            wallets.refetch(),
-            stations.refetch(),
-          ])}
+          onRetry={() => void (async () => {
+            await session.refresh();
+            await Promise.all([
+              cylinders.refetch(),
+              active.refetch(),
+              locations.refetch(),
+              wallets.refetch(),
+              stations.refetch(),
+            ]);
+          })()}
         />
       ) : (
         <>

@@ -237,7 +237,39 @@ export function SessionProvider({ children }: PropsWithChildren) {
       supabase,
       clearAuthError: () => setError(null),
       refresh: async () => {
-        await apply(sessionRef.current);
+        const current = sessionRef.current;
+        if (!current) {
+          await apply(null);
+          return;
+        }
+
+        // A query retry alone reuses an expired access token. Force Supabase
+        // to exchange the stored refresh token first, then rebuild role context.
+        const { data, error: refreshError } = await supabase.auth.refreshSession({
+          refresh_token: current.refresh_token,
+        });
+        if (refreshError || !data.session) {
+          const message = (refreshError?.message ?? "").toLowerCase();
+          const statusCode = Number(refreshError?.status ?? 0);
+          const sessionIsInvalid =
+            !data.session ||
+            [400, 401, 403].includes(statusCode) ||
+            /invalid refresh token|refresh token not found|session not found|refresh token has already been used/.test(message);
+
+          setError(
+            friendlyError(
+              refreshError ?? new Error("The session could not be renewed."),
+              "Your secure session could not be refreshed. Check your connection and try again.",
+            ),
+          );
+          // Only clear authentication when the auth server rejects the refresh
+          // credential itself. A temporary network failure must not sign the
+          // customer out or clear their locally saved refill information.
+          if (sessionIsInvalid) await apply(null);
+          return;
+        }
+
+        await apply(data.session);
       },
       signIn: async (email, password) => {
         setError(null);
