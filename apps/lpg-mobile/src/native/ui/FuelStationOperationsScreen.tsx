@@ -466,7 +466,7 @@ export function FuelStationOperationsScreen() {
           action={<AppButton label="Refresh station" variant="secondary" onPress={() => void refreshAll()} />}
         />
       ) : loading ? (
-        <View style={styles.loading}><ActivityIndicator color={palette.brand} /><Text style={[styles.muted, { color: palette.muted }]}>Loading Fuel station operations…</Text></View>
+        <View style={styles.loading}><ActivityIndicator /><Text style={[styles.muted, { color: palette.muted }]}>Loading Fuel station operations…</Text></View>
       ) : failed ? (
         <EmptyState title="Fuel operations could not be loaded" description="Refresh and try again." action={<AppButton label="Refresh" onPress={() => void refreshAll()} />} />
       ) : (
@@ -490,7 +490,7 @@ export function FuelStationOperationsScreen() {
                 const productName = productKey === "fuel.pms" ? "Petrol" : productKey === "fuel.ago" ? "Diesel" : "Kerosene";
                 return (
                   <View key={productKey} style={[styles.stockTile, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
-                    <Fuel color={palette.brand} size={18} />
+                    <Fuel size={18} />
                     <Text style={[styles.stockProduct, { color: palette.ink }]}>{productName}</Text>
                     <Text style={[styles.stockAmount, { color: palette.brand }]}>{available.toLocaleString()} L</Text>
                     <Text style={[styles.muted, { color: palette.muted }]}>{units.length} active tank(s)</Text>
@@ -506,7 +506,7 @@ export function FuelStationOperationsScreen() {
 
           <Card title="Incoming Fuel orders" description="The station queue contains orders whose payment has already been reserved in escrow.">
             {sortedRows.length === 0 ? (
-              <EmptyState icon={<Fuel color={palette.brand} size={27} />} title="No Fuel orders waiting" description="New paid petrol, diesel and kerosene orders will appear here." />
+              <EmptyState icon={<Fuel size={27} />} title="No Fuel orders waiting" description="New paid petrol, diesel and kerosene orders will appear here." />
             ) : (
               <View style={styles.orderList}>
                 {sortedRows.map((order) => {
@@ -531,7 +531,7 @@ export function FuelStationOperationsScreen() {
           {focusedOrder ? (
             <Card title="Selected order" description="Each station action is validated against payment, stock, container custody and driver qualification.">
               <View style={styles.focusSummary}>
-                <View style={[styles.focusIcon, { backgroundColor: palette.brandSoft }]}><Package color={palette.brand} size={22} /></View>
+                <View style={[styles.focusIcon, { backgroundColor: palette.brandSoft }]}><Package size={22} /></View>
                 <View style={styles.orderCopy}>
                   <Text style={[styles.orderTitle, { color: palette.ink }]}>{focusedProduct === "fuel.pms" ? "Petrol" : focusedProduct === "fuel.ago" ? "Diesel" : "Kerosene"} · {focusedLitres} L</Text>
                   <Text style={[styles.muted, { color: palette.muted }]}>{focusedMode === "rental" ? "SKIMA rental containers" : "Purchased containers"} · {firstNumber(focusedOrder, ["container_count"]) ?? 0} total</Text>
@@ -575,12 +575,12 @@ export function FuelStationOperationsScreen() {
                         const vehicleLabel = firstString(vehicle, ["registration_number", "registrationNumber", "plate_number", "plateNumber"]) ?? vehicleId.slice(0, 8).toUpperCase();
                         return (
                           <Pressable key={id} onPress={() => setSelectedDriverQualificationId(id)} style={[styles.driverRow, { borderColor: selected ? palette.brand : palette.border, backgroundColor: selected ? palette.brandSoft : palette.surface }]}>
-                            <Truck color={palette.brand} size={19} />
+                            <Truck size={19} />
                             <View style={styles.orderCopy}>
                               <Text style={[styles.orderTitle, { color: palette.ink }]}>Driver {driverId.slice(0, 8).toUpperCase()}</Text>
                               <Text style={[styles.muted, { color: palette.muted }]}>{vehicleLabel} · up to {firstNumber(qualification, ["maximum_load_litres"])} L</Text>
                             </View>
-                            {selected ? <CheckCircle2 color={palette.success} size={19} /> : null}
+                            {selected ? <CheckCircle2 size={19} /> : null}
                           </Pressable>
                         );
                       })}
