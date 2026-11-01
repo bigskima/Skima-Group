@@ -442,6 +442,46 @@ begin
         and (from_value is null or settlement.created_at>=from_value)
         and (until_value is null or settlement.created_at<until_value)
     ),'{}'::jsonb) else '{}'::jsonb end,
+    'settlementStatements',case when can_read_finance then coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id',item.id,'publicReference',item.public_reference,
+        'orderId',item.order_id,'serviceRequestId',item.service_request_id,
+        'settlementExecutionId',item.settlement_execution_id,
+        'currencyCode',item.currency_code,'grossAmount',item.gross_amount,
+        'platformFeeAmount',item.platform_fee_amount,'netAmount',item.net_amount,
+        'status',item.status,'source',item.source,
+        'periodStart',item.period_start,'periodEnd',item.period_end,'createdAt',item.created_at
+      ) order by item.created_at desc)
+      from (
+        select statement.* from public.settlement_statements statement
+        where statement.currency_code=currency_code_value
+          and (from_value is null or statement.created_at>=from_value)
+          and (until_value is null or statement.created_at<until_value)
+        order by statement.created_at desc limit limit_value
+      ) item
+    ),'[]'::jsonb) else '[]'::jsonb end,
+    'financialAdjustments',case when can_read_finance then coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id',item.id,'orderId',item.lpg_order_id,'orderReference',item.public_reference,
+        'adjustmentType',item.adjustment_type,'currencyCode',item.currency_code,
+        'amount',item.amount,'transactionId',item.transaction_id,
+        'status',item.status,'reasonKey',item.reason_key,
+        'metadata',item.metadata,'source',item.source,
+        'createdAt',item.created_at
+      ) order by item.created_at desc)
+      from (
+        select adjustment.*,order_record.public_reference
+        from public.lpg_order_financial_adjustments adjustment
+        left join public.lpg_refill_orders order_record on order_record.id=adjustment.lpg_order_id
+        where adjustment.currency_code=currency_code_value
+          and (from_value is null or adjustment.created_at>=from_value)
+          and (until_value is null or adjustment.created_at<until_value)
+        order by adjustment.created_at desc limit limit_value
+      ) item
+    ),'[]'::jsonb) else '[]'::jsonb end,
+    'reconciliationFindings',case when can_read_finance
+      then public.read_ai_finance_reconciliation_findings('info',least(limit_value,100))
+      else '[]'::jsonb end,
     'fleet',case when can_read_finance then jsonb_build_object(
       'orderCount',(
         select count(*) from public.lpg_refill_orders order_record
