@@ -113,7 +113,7 @@ begin
 
   if target_order_id is null or target_container_profile_id is null
      or target_allocated_litres is null or target_allocated_litres<=0
-     or target_allocation_mode not in ('purchase','rental')
+     or target_allocation_mode is null or target_allocation_mode not in ('purchase','rental')
      or target_purchase_amount is null or target_purchase_amount<0
      or target_rental_amount is null or target_rental_amount<0
      or target_refundable_deposit_amount is null or target_refundable_deposit_amount<0
@@ -169,13 +169,6 @@ begin
     raise exception using errcode='55000',message='an accepted commercial quote is required before allocating fuel containers';
   end if;
 
-  if quote_record.product_key<>operation_record.product_key
-     or quote_record.container_mode<>operation_record.container_mode
-     or quote_record.currency_code<>target_currency_code
-     or profile_record.container_type_id<>operation_record.container_type_id then
-    raise exception using errcode='23514',message='container allocation does not match the accepted fuel quote';
-  end if;
-
   select * into profile_record
   from public.fuel_container_profiles
   where id=target_container_profile_id
@@ -183,6 +176,13 @@ begin
 
   if not found or profile_record.status<>'available' or profile_record.ownership_mode<>'skima' then
     raise exception using errcode='55000',message='only available SKIMA-owned containers can be allocated to a Fuel order';
+  end if;
+
+  if quote_record.product_key<>operation_record.product_key
+     or quote_record.container_mode<>operation_record.container_mode
+     or quote_record.currency_code<>target_currency_code
+     or profile_record.container_type_id<>operation_record.container_type_id then
+    raise exception using errcode='23514',message='container allocation does not match the accepted fuel quote';
   end if;
 
   select count(*),coalesce(sum(allocated_litres),0),
@@ -194,7 +194,7 @@ begin
 
   if existing_count>=quote_record.container_count
      or existing_litres+target_allocated_litres>quote_record.requested_litres
-     or existing_container_amount+case when target_allocation_mode='purchase' then target_purchase_amount else target_rental_amount end>quote_record.container_amount
+     or existing_container_amount+(case when target_allocation_mode='purchase' then target_purchase_amount else target_rental_amount end)>quote_record.container_amount
      or existing_deposit_amount+target_refundable_deposit_amount>quote_record.refundable_deposit_amount then
     raise exception using errcode='23514',message='container allocations exceed accepted quote count, litres or commercial amounts';
   end if;
