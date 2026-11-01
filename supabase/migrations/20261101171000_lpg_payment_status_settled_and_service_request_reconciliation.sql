@@ -199,19 +199,51 @@ $function$;
 -- authoritative service-request reconciliation RPC. This prevents LPG orders
 -- from being omitted merely because their release transaction is typed to the
 -- LPG order rather than to the generic service request.
-do $refresh_lpg_aware_reconciliation$
+-- Use a stable function definition instead of mutating pg_get_functiondef text.
+create or replace function public.refresh_ai_finance_reconciliation_findings()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
 declare
-  function_sql text;
-  old_cte text;
-  new_cte text;
-  old_select text;
-  new_select text;
-  old_evidence text;
-  new_evidence text;
+  rule_record public.ai_finance_reconciliation_rules%rowtype;
+  detected_keys text[] := array[]::text[];
+  now_at timestamptz := timezone('utc', now());
+  lookback_days integer;
+  minimum_variance numeric;
+  finding_record record;
+  finding_key_value text;
+  finding_severity text;
+  refreshed_count integer := 0;
+  resolved_count integer := 0;
 begin
-  function_sql:=pg_get_functiondef('public.refresh_ai_finance_reconciliation_findings()'::regprocedure);
+  select * into rule_record
+  from public.ai_finance_reconciliation_rules
+  where key = 'ai.finance.reconciliation.health'
+    and status = 'active';
 
-  old_cte:=$old$
+  if rule_record.id is null then
+    return jsonb_build_object(
+      'status', 'skipped',
+      'reason', 'finance_reconciliation_rule_inactive',
+      'refreshedCount', 0,
+      'resolvedCount', 0,
+      'refreshedAt', now_at,
+      'control', 'advisory_only'
+    );
+  end if;
+
+  lookback_days := greatest(
+    1,
+    least(365, (rule_record.config ->> 'lookback_days')::integer)
+  );
+  minimum_variance := greatest(
+    0::numeric,
+    (rule_record.config ->> 'minimum_variance')::numeric
+  );
+
+  for finding_record in
     with request_scope as (
       select request.id, request.status, request.updated_at
       from public.service_requests request
@@ -253,34 +285,6 @@ begin
             and transaction.transaction_type = 'release'
             and transaction.status = 'posted'
         ), 0)::numeric(28,8) as release_total,
-        coalesce((
-          select sum(transaction.total_amount)
-          from public.financial_transactions transaction
-          where transaction.subject_type = 'service_request'
-            and transaction.subject_id = request.id
-            and transaction.transaction_type = 'refund'
-            and transaction.status = 'posted'
-        ), 0)::numeric(28,8) as refund_total,
-        request.updated_at
-      from request_scope request
-    )
-$old$;
-
-  new_cte:=$new$
-    with request_scope as (
-      select request.id, request.status, request.updated_at
-      from public.service_requests request
-      where request.updated_at >= now_at - make_interval(days => lookback_days)
-        and exists (
-          select 1
-          from jsonb_array_elements_text(rule_record.config -> 'terminal_service_statuses') allowed(status)
-          where allowed.status = request.status
-        )
-    ),
-    reconciled as (
-      select
-        request.id as service_request_id,
-        request.status as service_status,
         coalesce((projection.financial->>'quoteTotal')::numeric,0)::numeric(28,8) as quote_total,
         coalesce((projection.financial->>'orderTotal')::numeric,0)::numeric(28,8) as order_total,
         coalesce((projection.financial->>'holdTotal')::numeric,0)::numeric(28,8) as hold_total,
@@ -295,48 +299,255 @@ $old$;
         select public.read_service_request_financial_reconciliation_projection(request.id) as financial
       ) projection
     )
-$new$;
-
-  if position(old_cte in function_sql)=0 then
-    raise exception 'Could not locate service-request reconciliation CTE in refresh function';
-  end if;
-  function_sql:=replace(function_sql,old_cte,new_cte);
-
-  old_select:=$old$
-      reconciliation.refund_total,
-      greatest(
-$old$;
-  new_select:=$new$
+    select
+      reconciliation.service_request_id,
+      reconciliation.service_status,
+      reconciliation.quote_total,
+      reconciliation.order_total,
+      greatest(reconciliation.quote_total, reconciliation.order_total)::numeric(28,8) as expected_total,
+      reconciliation.hold_total,
+      reconciliation.release_total,
       reconciliation.refund_total,
       reconciliation.lpg_order_total,
       reconciliation.lpg_release_total,
       reconciliation.lpg_refund_total,
       greatest(
-$new$;
-  if position(old_select in function_sql)=0 then
-    raise exception 'Could not locate service-request reconciliation select projection';
-  end if;
-  function_sql:=replace(function_sql,old_select,new_select);
+        abs(reconciliation.hold_total - greatest(reconciliation.quote_total, reconciliation.order_total)),
+        abs(reconciliation.hold_total - (reconciliation.release_total + reconciliation.refund_total))
+      )::numeric(28,8) as variance_amount,
+      reconciliation.updated_at
+    from reconciled reconciliation
+    where greatest(reconciliation.quote_total, reconciliation.order_total) > 0
+      and not (
+        reconciliation.hold_total = greatest(reconciliation.quote_total, reconciliation.order_total)
+        and reconciliation.hold_total = reconciliation.release_total + reconciliation.refund_total
+      )
+    order by variance_amount desc, reconciliation.updated_at desc
+    limit 250
+  loop
+    if finding_record.variance_amount < minimum_variance then
+      continue;
+    end if;
 
-  old_evidence:=$old$
-        'refundTotal', finding_record.refund_total,
-        'authoritativeCheck', 'reconcile_service_request_financials',
-$old$;
-  new_evidence:=$new$
+    finding_key_value :=
+      'ai.finance.service_request.unbalanced:' || finding_record.service_request_id::text;
+    detected_keys := array_append(detected_keys, finding_key_value);
+    finding_severity := case
+      when finding_record.service_status in ('completed','settled')
+        and finding_record.variance_amount >= greatest(finding_record.expected_total * 0.25, 1000::numeric)
+        then 'critical'
+      when finding_record.service_status in ('completed','settled') then 'high'
+      else 'warning'
+    end;
+
+    insert into public.ai_finance_reconciliation_findings (
+      rule_id, finding_key, finding_type, subject_type, subject_id, currency_code,
+      severity, status, expected_amount, observed_amount, variance_amount, evidence,
+      recommended_action, generated_at, last_detected_at, resolved_at, version
+    )
+    values (
+      rule_record.id,
+      finding_key_value,
+      'service_request_unbalanced',
+      'service_request',
+      finding_record.service_request_id,
+      null,
+      finding_severity,
+      'open',
+      finding_record.expected_total,
+      finding_record.release_total + finding_record.refund_total,
+      finding_record.variance_amount,
+      jsonb_build_object(
+        'advisoryOnly', true,
+        'serviceStatus', finding_record.service_status,
+        'quoteTotal', finding_record.quote_total,
+        'orderTotal', finding_record.order_total,
+        'expectedTotal', finding_record.expected_total,
+        'holdTotal', finding_record.hold_total,
+        'releaseTotal', finding_record.release_total,
         'refundTotal', finding_record.refund_total,
         'lpgOrderTotal', finding_record.lpg_order_total,
         'lpgReleaseTotal', finding_record.lpg_release_total,
         'lpgRefundTotal', finding_record.lpg_refund_total,
         'authoritativeCheck', 'reconcile_service_request_financials',
-$new$;
-  if position(old_evidence in function_sql)=0 then
-    raise exception 'Could not locate service-request financial reconciliation evidence fields';
-  end if;
-  function_sql:=replace(function_sql,old_evidence,new_evidence);
+        'doesNotPostLedger', true,
+        'doesNotMoveFunds', true
+      ),
+      'Run the existing service-request reconciliation view and review the underlying quote, hold, release and refund records before making any financial correction.',
+      now_at,
+      now_at,
+      null,
+      1
+    )
+    on conflict (finding_key) do update
+    set severity = excluded.severity,
+        status = 'open',
+        expected_amount = excluded.expected_amount,
+        observed_amount = excluded.observed_amount,
+        variance_amount = excluded.variance_amount,
+        evidence = excluded.evidence,
+        recommended_action = excluded.recommended_action,
+        generated_at = excluded.generated_at,
+        last_detected_at = excluded.last_detected_at,
+        resolved_at = null,
+        version = public.ai_finance_reconciliation_findings.version + 1,
+        updated_at = timezone('utc', now());
 
-  execute function_sql;
+    refreshed_count := refreshed_count + 1;
+  end loop;
+
+  for finding_record in
+    select
+      settlement.id,
+      settlement.service_request_id,
+      settlement.currency_code,
+      settlement.gross_amount,
+      settlement.created_at
+    from public.settlement_executions settlement
+    where settlement.status = 'posted'
+      and settlement.transaction_id is null
+      and settlement.created_at >= now_at - make_interval(days => lookback_days)
+    order by settlement.created_at desc
+    limit 250
+  loop
+    finding_key_value :=
+      'ai.finance.settlement.missing_transaction:' || finding_record.id::text;
+    detected_keys := array_append(detected_keys, finding_key_value);
+
+    insert into public.ai_finance_reconciliation_findings (
+      rule_id, finding_key, finding_type, subject_type, subject_id, currency_code,
+      severity, status, expected_amount, observed_amount, variance_amount, evidence,
+      recommended_action, generated_at, last_detected_at, resolved_at, version
+    )
+    values (
+      rule_record.id,
+      finding_key_value,
+      'settlement_missing_transaction',
+      'settlement_execution',
+      finding_record.id,
+      finding_record.currency_code,
+      'high',
+      'open',
+      finding_record.gross_amount,
+      null,
+      finding_record.gross_amount,
+      jsonb_build_object(
+        'advisoryOnly', true,
+        'serviceRequestId', finding_record.service_request_id,
+        'settlementGrossAmount', finding_record.gross_amount,
+        'postedWithoutTransactionId', true,
+        'doesNotPostLedger', true,
+        'doesNotMoveFunds', true
+      ),
+      'Review this posted settlement against its escrow and ledger transaction. Do not create an adjustment until the authoritative settlement and ledger records have been investigated.',
+      now_at,
+      now_at,
+      null,
+      1
+    )
+    on conflict (finding_key) do update
+    set severity = excluded.severity,
+        status = 'open',
+        expected_amount = excluded.expected_amount,
+        observed_amount = excluded.observed_amount,
+        variance_amount = excluded.variance_amount,
+        evidence = excluded.evidence,
+        recommended_action = excluded.recommended_action,
+        generated_at = excluded.generated_at,
+        last_detected_at = excluded.last_detected_at,
+        resolved_at = null,
+        version = public.ai_finance_reconciliation_findings.version + 1,
+        updated_at = timezone('utc', now());
+
+    refreshed_count := refreshed_count + 1;
+  end loop;
+
+  for finding_record in
+    select
+      deposit.id,
+      deposit.currency_code,
+      deposit.amount,
+      deposit.provider_reference,
+      deposit.created_at
+    from public.payment_deposit_requests deposit
+    where deposit.status = 'succeeded'
+      and deposit.transaction_id is null
+      and deposit.created_at >= now_at - make_interval(days => lookback_days)
+    order by deposit.created_at desc
+    limit 250
+  loop
+    finding_key_value :=
+      'ai.finance.deposit.missing_transaction:' || finding_record.id::text;
+    detected_keys := array_append(detected_keys, finding_key_value);
+
+    insert into public.ai_finance_reconciliation_findings (
+      rule_id, finding_key, finding_type, subject_type, subject_id, currency_code,
+      severity, status, expected_amount, observed_amount, variance_amount, evidence,
+      recommended_action, generated_at, last_detected_at, resolved_at, version
+    )
+    values (
+      rule_record.id,
+      finding_key_value,
+      'deposit_missing_transaction',
+      'payment_deposit',
+      finding_record.id,
+      finding_record.currency_code,
+      'high',
+      'open',
+      finding_record.amount,
+      null,
+      finding_record.amount,
+      jsonb_build_object(
+        'advisoryOnly', true,
+        'providerReference', finding_record.provider_reference,
+        'depositSucceededWithoutTransactionId', true,
+        'doesNotPostLedger', true,
+        'doesNotMoveFunds', true
+      ),
+      'Review the payment provider receipt and deposit event trail against the ledger before any manual correction is considered.',
+      now_at,
+      now_at,
+      null,
+      1
+    )
+    on conflict (finding_key) do update
+    set severity = excluded.severity,
+        status = 'open',
+        expected_amount = excluded.expected_amount,
+        observed_amount = excluded.observed_amount,
+        variance_amount = excluded.variance_amount,
+        evidence = excluded.evidence,
+        recommended_action = excluded.recommended_action,
+        generated_at = excluded.generated_at,
+        last_detected_at = excluded.last_detected_at,
+        resolved_at = null,
+        version = public.ai_finance_reconciliation_findings.version + 1,
+        updated_at = timezone('utc', now());
+
+    refreshed_count := refreshed_count + 1;
+  end loop;
+
+  with resolved as (
+    update public.ai_finance_reconciliation_findings finding
+    set status = 'resolved',
+        resolved_at = now_at,
+        updated_at = now_at
+    where finding.status = 'open'
+      and finding.rule_id = rule_record.id
+      and finding.finding_key <> all(coalesce(detected_keys, array[]::text[]))
+    returning finding.id
+  )
+  select count(*) into resolved_count from resolved;
+
+  return jsonb_build_object(
+    'status', 'completed',
+    'refreshedCount', refreshed_count,
+    'resolvedCount', resolved_count,
+    'refreshedAt', now_at,
+    'control', 'advisory_only'
+  );
 end;
-$refresh_lpg_aware_reconciliation$;
+$$;
 
 -- A posted LPG settlement (and any linked refund) completes the customer
 -- payment lifecycle. Keep historical records aligned with their posted escrow
