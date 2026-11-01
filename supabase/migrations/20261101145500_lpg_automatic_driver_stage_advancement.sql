@@ -106,7 +106,7 @@ begin
     'public.record_lpg_cylinder_scan_for_order(uuid,text,text,text,numeric,numeric,numeric,text)'::regprocedure
   );
 
-  old_block := E'  if scan_type = ''customer_pickup'' then\\n    perform public.process_lpg_order_action(\\n      order_id,\\n      ''lpg.station.start'',\\n      target_idempotency_key || '':station-start'',\\n      jsonb_build_object(''startedAfterPickupVerification'', true),\\n      target_source\\n    );\\n  end if;\\n\\n';
+  old_block := E'  if scan_type = ''customer_pickup'' then\n    perform public.process_lpg_order_action(\n      order_id,\n      ''lpg.station.start'',\n      target_idempotency_key || '':station-start'',\n      jsonb_build_object(''startedAfterPickupVerification'', true),\n      target_source\n    );\n  end if;\n\n';
 
   if position(old_block in function_sql) = 0 then
     raise exception 'Could not locate the legacy post-scan station-start block in the order-bound RPC';
