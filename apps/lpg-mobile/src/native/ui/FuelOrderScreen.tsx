@@ -43,12 +43,6 @@ type CreatedQuote = {
   componentSnapshot: PlatformRecord;
 };
 
-const productLabels: Record<ProductKey, { title: string; subtitle: string; icon: string }> = {
-  "fuel.pms": { title: "Petrol", subtitle: "PMS", icon: "P" },
-  "fuel.ago": { title: "Diesel", subtitle: "AGO", icon: "D" },
-  "fuel.dpk": { title: "Kerosene", subtitle: "DPK", icon: "K" },
-};
-
 export function FuelOrderScreen() {
   const { palette } = useAppTheme();
   const products = useGatewayQuery({
@@ -105,6 +99,8 @@ export function FuelOrderScreen() {
     ["fuel.pms", "fuel.ago", "fuel.dpk"].includes(firstString(item, ["key"]) ?? "")
   );
   const selectedProductRecord = activeProducts.find((item) => firstString(item, ["key"]) === selectedProductKey);
+  const selectedProductTitle = firstString(selectedProductRecord, ["display_name"]) ?? "Fuel";
+  const selectedProductCode = firstString(selectedProductRecord, ["short_code"]) ?? selectedProductKey;
   const selectedProductPrecision = firstNumber(selectedProductRecord, ["quantity_precision"]) ?? 2;
   const customerWallet = selectWorkspaceWallet(wallets.data ?? [], "customer");
   const walletId = firstString(customerWallet, ["wallet_id", "walletId", "id"]);
@@ -291,7 +287,7 @@ export function FuelOrderScreen() {
             <CheckCircle2 color={palette.success} size={28} />
             <View style={styles.flex}>
               <Text style={[styles.cardTitle, { color: palette.ink }]}>{createdQuote.orderId.slice(0, 8).toUpperCase()}</Text>
-              <Text style={[styles.muted, { color: palette.muted }]}>{productLabels[selectedProductKey].title} · {requestedLitres ?? 0} L</Text>
+              <Text style={[styles.muted, { color: palette.muted }]}>{selectedProductTitle} · {requestedLitres ?? 0} L</Text>
             </View>
             <StatusPill label="Payment reserved" tone="success" />
           </View>
@@ -300,7 +296,7 @@ export function FuelOrderScreen() {
       ) : createdQuote ? (
         <Card title="Review your price" eyebrow="SERVER-CALCULATED QUOTE" description="The station price and all configured charges are locked in this quote before you pay.">
           <Text style={[styles.orderReference, { color: palette.ink }]}>{createdQuote.orderId.slice(0, 8).toUpperCase()}</Text>
-          <Text style={[styles.muted, { color: palette.muted }]}>{productLabels[selectedProductKey].title} · {requestedLitres} L · {createdQuote.containerCount} container(s)</Text>
+          <Text style={[styles.muted, { color: palette.muted }]}>{selectedProductTitle} · {requestedLitres} L · {createdQuote.containerCount} container(s)</Text>
           <View style={[styles.breakdown, { borderColor: palette.border }]}>
             <PriceRow label="Fuel" value={firstNumber(createdQuote.componentSnapshot, ["fuel_amount"]) ?? 0} currency={createdQuote.currencyCode} />
             <PriceRow label={containerMode === "purchase" ? "Container purchase" : "Container rental"} value={firstNumber(createdQuote.componentSnapshot, ["container_amount"]) ?? 0} currency={createdQuote.currencyCode} />
@@ -345,15 +341,16 @@ export function FuelOrderScreen() {
               {activeProducts.map((product) => {
                 const key = firstString(product, ["key"]) as ProductKey;
                 const selected = selectedProductKey === key;
-                const label = productLabels[key];
-                if (!label) return null;
+                const title = firstString(product, ["display_name"]) ?? key;
+                const shortCode = firstString(product, ["short_code"]) ?? key;
+                const marker = shortCode.slice(0, 1).toUpperCase();
                 return (
                   <Pressable key={key} onPress={() => { setSelectedProductKey(key); setSelectedBranchId(""); setCreatedQuote(null); }} style={[styles.productOption, { backgroundColor: selected ? palette.brandSoft : palette.surfaceSubtle, borderColor: selected ? palette.brand : palette.border }]}>
                     <View style={[styles.productMark, { backgroundColor: selected ? palette.brand : palette.surface }]}>
-                      <Text style={[styles.productLetter, { color: selected ? "#FFFFFF" : palette.brand }]}>{label.icon}</Text>
+                      <Text style={[styles.productLetter, { color: selected ? "#FFFFFF" : palette.brand }]}>{marker}</Text>
                     </View>
-                    <Text style={[styles.productName, { color: palette.ink }]}>{label.title}</Text>
-                    <Text style={[styles.muted, { color: palette.muted }]}>{label.subtitle}</Text>
+                    <Text style={[styles.productName, { color: palette.ink }]}>{title}</Text>
+                    <Text style={[styles.muted, { color: palette.muted }]}>{shortCode}</Text>
                   </Pressable>
                 );
               })}
