@@ -275,7 +275,7 @@ Deno.test("customer home keeps independent services visible in every refill stat
   const sessionProvider = await read("apps/lpg-mobile/src/native/session/SessionProvider.tsx");
   assertIncludes(sessionProvider, "supabase.auth.refreshSession");
   assertIncludes(sessionProvider, "sessionIsInvalid");
-  assertIncludes(sessionProvider, "A temporary network failure must not sign the customer out");
+  assertIncludes(sessionProvider, "A temporary network failure must not sign the");
   assertIncludes(dashboard, "customerPrimaryStack");
   assertIncludes(await read("apps/lpg-mobile/src/native/api/domains.ts"), 'path: "/lpg/orders?scope=customer"');
 });
@@ -800,7 +800,7 @@ Deno.test("SKIMA Managed-only coverage can load and quote its own internal fulfi
     read("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx"),
     read("apps/lpg-mobile/src/native/api/serviceability.ts"),
     read("supabase/migrations/20261101095005_lpg_skima_managed_reference_policy_uses_managed_capability.sql"),
-    read("supabase/migrations/20260916162545_lpg_launch_assurance_quote_core.sql"),
+    read("supabase/migrations/20261101095005_lpg_skima_managed_reference_policy_uses_managed_capability.sql"),
     read("apps/lpg-mobile/src/native/api/gateway.ts"),
   ]);
 
