@@ -1,4 +1,5 @@
 import {
+  Activity,
   BadgeDollarSign,
   Landmark,
   ReceiptText,
@@ -11,6 +12,7 @@ import {
 import { usePermissionCheck } from "@skima/ui";
 
 import { AdminDeliveryPricingWorkspace, AdminDriverPricingWorkspace } from "../../admin-delivery-pricing-workspace";
+import { AdminFinancialAnalyticsWorkspace } from "../../admin-financial-analytics-workspace";
 import { AdminLaunchAssuranceWorkspace } from "../../admin-launch-assurance-workspace";
 import { AdminManagedDriverPayrollWorkspace } from "../../admin-managed-driver-payroll-workspace";
 import { AdminResourceConsole } from "../../admin-resource-console";
@@ -37,6 +39,7 @@ export function MoneyWorkspaceRouter(props: {
 
   if (props.route === "/money") return <MoneyOverviewScreen onNavigate={props.onNavigate} />;
   if (props.route === "/money/revenue") return <AdminRevenueWorkspace onOpenFinance={() => props.onNavigate("/money/balances")} />;
+  if (props.route === "/money/analytics") return <AdminFinancialAnalyticsWorkspace />;
   if (props.route === "/money/balances") return <MoneyBalancesScreenV2 onNavigate={props.onNavigate} />;
   if (props.route === "/money/withdrawals") return <MoneyWithdrawalsScreenV2 onNavigate={props.onNavigate} />;
   if (props.route === "/money/settlements") return <MoneySettlementsScreenV2 onNavigate={props.onNavigate} />;
@@ -99,6 +102,15 @@ function MoneyOverviewScreen(props: { readonly onNavigate: (href: string) => voi
           icon: BadgeDollarSign,
           meta: "Earnings",
           permissionKey: "revenue",
+        },
+        {
+          key: "financial-analytics",
+          title: "Financial analytics",
+          description: "Trace customer collections, company expenses, revenue, driver payouts, settlements, wallet balances and ledger evidence in one place.",
+          href: "/money/analytics",
+          icon: Activity,
+          meta: "Finance overview",
+          permissionKey: "finance",
         },
         {
           key: "balances",
