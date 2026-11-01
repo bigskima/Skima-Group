@@ -100,7 +100,6 @@ export function FuelOrderScreen() {
   );
   const selectedProductRecord = activeProducts.find((item) => firstString(item, ["key"]) === selectedProductKey);
   const selectedProductTitle = firstString(selectedProductRecord, ["display_name"]) ?? "Fuel";
-  const selectedProductCode = firstString(selectedProductRecord, ["short_code"]) ?? selectedProductKey;
   const selectedProductPrecision = firstNumber(selectedProductRecord, ["quantity_precision"]) ?? 2;
   const customerWallet = selectWorkspaceWallet(wallets.data ?? [], "customer");
   const walletId = firstString(customerWallet, ["wallet_id", "walletId", "id"]);
