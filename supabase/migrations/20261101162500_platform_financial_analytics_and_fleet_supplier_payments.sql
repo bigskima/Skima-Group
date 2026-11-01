@@ -78,6 +78,7 @@ set search_path=public,pg_temp
 as $function$
 declare
   procurement public.lpg_internal_refill_procurements%rowtype;
+  existing_payment public.lpg_internal_supplier_payments%rowtype;
   order_record public.lpg_refill_orders%rowtype;
   settlement public.settlement_executions%rowtype;
   funding_wallet_id uuid;
@@ -102,8 +103,12 @@ begin
     or coalesce(btrim(target_idempotency_key),'')='' then
     raise exception using errcode='22023',message='supplier, positive amount, payment method and idempotency key are required';
   end if;
-  if target_payment_method='bank_transfer' and nullif(btrim(coalesce(target_payment_reference,'')),'') is null then
-    raise exception using errcode='22023',message='bank transfer reference is required';
+  if nullif(btrim(coalesce(target_payment_reference,'')),'') is null then
+    raise exception using errcode='22023',
+      message=case when target_payment_method='bank_transfer'
+        then 'bank transfer reference is required'
+        else 'cash voucher or receipt reference is required for auditability'
+      end;
   end if;
   if target_paid_at is not null and target_paid_at>timezone('utc',now())+interval '5 minutes' then
     raise exception using errcode='22023',message='supplier payment time cannot be in the future';
@@ -113,6 +118,46 @@ begin
     where media.id=target_evidence_media_asset_id and media.status='active'
   ) then
     raise exception using errcode='22023',message='payment evidence must reference an active media asset';
+  end if;
+
+  -- Return an existing successful payment before recalculating its remaining balance.
+  -- This preserves true idempotency, including retries after the final partial payment.
+  select * into existing_payment
+  from public.lpg_internal_supplier_payments
+  where source='lpg.internal_supplier_payment'
+    and idempotency_key=target_idempotency_key;
+  if found then
+    if existing_payment.procurement_id is distinct from target_procurement_id
+      or existing_payment.amount<>round(target_amount,2)
+      or existing_payment.payment_method is distinct from target_payment_method
+      or existing_payment.payment_reference is distinct from nullif(btrim(coalesce(target_payment_reference,'')),'')
+      or existing_payment.evidence_media_asset_id is distinct from target_evidence_media_asset_id then
+      raise exception using errcode='22023',message='supplier payment idempotency key was reused with different payment details';
+    end if;
+
+    select * into procurement
+    from public.lpg_internal_refill_procurements
+    where id=target_procurement_id;
+    if not found then raise exception using errcode='22023',message='approved SKIMA Fleet procurement was not found'; end if;
+
+    select * into order_record from public.lpg_refill_orders where id=procurement.lpg_order_id;
+    select coalesce(sum(payment.amount),0) into prior_paid
+    from public.lpg_internal_supplier_payments payment
+    where payment.procurement_id=procurement.id;
+
+    return jsonb_build_object(
+      'paymentId',existing_payment.id,
+      'financialTransactionId',existing_payment.financial_transaction_id,
+      'procurementId',procurement.id,
+      'orderId',order_record.id,
+      'orderReference',order_record.public_reference,
+      'amount',existing_payment.amount,
+      'currencyCode',existing_payment.currency_code,
+      'paymentMethod',existing_payment.payment_method,
+      'paymentReference',existing_payment.payment_reference,
+      'paidAt',existing_payment.paid_at,
+      'remainingSupplierBalance',greatest(round(procurement.procurement_amount-prior_paid,2),0)
+    );
   end if;
 
   select * into procurement
