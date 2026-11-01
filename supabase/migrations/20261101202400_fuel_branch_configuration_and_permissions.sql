@@ -61,7 +61,7 @@ language sql
 stable
 security definer
 set search_path = public
-as $
+as $$
   select auth.role() = 'service_role'
     or public.can_manage_fuel_platform()
     or exists (
@@ -73,7 +73,7 @@ as $
           or public.has_permission('business.catalog.manage', branch_record.organization_id)
         )
     );
-$;
+$$;
 
 create or replace function public.can_read_fuel_order(target_order_id uuid)
 returns boolean
