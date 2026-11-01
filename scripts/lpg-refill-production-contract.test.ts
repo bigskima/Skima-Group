@@ -1093,3 +1093,26 @@ Deno.test("LPG dynamic order routes survive direct browser refresh on Vercel", a
   assertIncludes(customerOrderRoute, "useLocalSearchParams");
   assertIncludes(customerOrderRoute, "useJobDetails(orderId)");
 });
+
+
+Deno.test("Admin fulfillment availability saves and confirms the effective network policy", async () => {
+  const [admin, eligibilityGate, stationManagedGate, quoteCreate] = await Promise.all([
+    read("apps/admin/src/admin-launch-assurance-workspace.tsx"),
+    read("supabase/migrations/20261101145500_lpg_automatic_driver_stage_advancement.sql"),
+    read("supabase/migrations/20261101152000_lpg_station_managed_availability_policy_gate.sql"),
+    read("supabase/migrations/20261101141629_lpg_order_bound_cylinder_scan.sql").catch(() => ""),
+  ]);
+
+  assertIncludes(admin, "Available fulfillment networks");
+  assertIncludes(admin, "Both: Partner Network + SKIMA Fleet");
+  assertIncludes(admin, "Partner Network only");
+  assertIncludes(admin, "SKIMA Fleet only");
+  assertIncludes(admin, "SKIMA Fleet master switch");
+  assertIncludes(admin, "Saved and verified:");
+  assertIncludes(eligibilityGate, "SKIMA Fleet is disabled by the current Admin fulfillment availability settings");
+  assertIncludes(eligibilityGate, "Partner Network is disabled by the current Admin fulfillment availability settings");
+  assertIncludes(eligibilityGate, "marketplace_first_fallback_only");
+  assertIncludes(stationManagedGate, "read_lpg_station_managed_eligible_stations");
+  assertIncludes(stationManagedGate, "mode'') = ''internal_only''");
+  assertIncludes(stationManagedGate, "read_lpg_station_managed_eligible_stations_for_amount");
+});
