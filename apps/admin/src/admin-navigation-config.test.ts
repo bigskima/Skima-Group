@@ -28,6 +28,14 @@ describe("admin navigation access rules", () => {
     expect(canAccessAdminNavigationKey("fuel", () => false)).toBe(false);
   });
 
+  it("allows platform Fuel readers and managers to open Fuel administration", () => {
+    expect(canAccessAdminNavigationKey("fuel", (permission) =>
+      permission === "platform.fuel.read" || permission === "platform.fuel.manage"
+    )).toBe(true);
+    expect(canAccessAdminNavigationKey("fuel", (permission) => permission === "platform.fuel.read")).toBe(true);
+    expect(canAccessAdminNavigationKey("fuel", () => false)).toBe(false);
+  });
+
   it("still enforces simple focused-screen permissions", () => {
     expect(canAccessAdminNavigationKey("support", (permission) => permission === "platform.support.read")).toBe(true);
     expect(canAccessAdminNavigationKey("support", () => false)).toBe(false);
