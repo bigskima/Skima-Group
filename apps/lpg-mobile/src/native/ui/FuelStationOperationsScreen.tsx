@@ -41,6 +41,14 @@ export function FuelStationOperationsScreen() {
   const station = nestedRecord(stationInventory.data, "station");
   const stationBranchId = firstString(station, ["stationBranchId", "station_branch_id", "branchId", "branch_id"]) ?? "";
   const organizationId = firstString(station, ["organizationId", "organization_id"]) ?? "";
+  const products = useGatewayQuery({
+    key: ["fuel", "products"],
+    path: "/runtime/fuel/products",
+    schema: RecordArraySchema,
+    refetchInterval: 60000,
+  });
+  const productNameForKey = (key: string) =>
+    firstString((products.data ?? []).find((item) => firstString(item, ["key"]) === key), ["display_name"]) || key || "Fuel";
 
   const operations = useGatewayQuery({
     key: ["fuel", "station", "operations", stationBranchId],
@@ -487,7 +495,7 @@ export function FuelStationOperationsScreen() {
                     (firstNumber(unit, ["safety_reserve_litres"]) ?? 0)
                   ), 0
                 );
-                const productName = productKey === "fuel.pms" ? "Petrol" : productKey === "fuel.ago" ? "Diesel" : "Kerosene";
+                const productName = productNameForKey(productKey);
                 return (
                   <View key={productKey} style={[styles.stockTile, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
                     <Fuel size={18} />
@@ -506,7 +514,7 @@ export function FuelStationOperationsScreen() {
 
           <Card title="Incoming Fuel orders" description="The station queue contains orders whose payment has already been reserved in escrow.">
             {sortedRows.length === 0 ? (
-              <EmptyState icon={<Fuel size={27} />} title="No Fuel orders waiting" description="New paid petrol, diesel and kerosene orders will appear here." />
+              <EmptyState icon={<Fuel size={27} />} title="No Fuel orders waiting" description="New paid Fuel orders will appear here." />
             ) : (
               <View style={styles.orderList}>
                 {sortedRows.map((order) => {
@@ -517,7 +525,7 @@ export function FuelStationOperationsScreen() {
                   return (
                     <Pressable key={orderId} onPress={() => { setFocusedOrderId(orderId); setSelectedDriverQualificationId(""); void reservations.refetch(); void allocations.refetch(); }} style={[styles.orderRow, { borderColor: selected ? palette.brand : palette.border, backgroundColor: selected ? palette.brandSoft : palette.surface }]}>
                       <View style={styles.orderCopy}>
-                        <Text style={[styles.orderTitle, { color: palette.ink }]}>{productKey === "fuel.pms" ? "Petrol" : productKey === "fuel.ago" ? "Diesel" : "Kerosene"} · {firstNumber(order, ["requested_litres"]) ?? 0} L</Text>
+                        <Text style={[styles.orderTitle, { color: palette.ink }]}>{productNameForKey(productKey)} · {firstNumber(order, ["requested_litres"]) ?? 0} L</Text>
                         <Text style={[styles.muted, { color: palette.muted }]}>{orderId.slice(0, 8).toUpperCase()} · {firstNumber(order, ["container_count"]) ?? 0} container(s)</Text>
                       </View>
                       <StatusPill label={humanize(stage)} tone={stageTone(stage)} />
@@ -533,7 +541,7 @@ export function FuelStationOperationsScreen() {
               <View style={styles.focusSummary}>
                 <View style={[styles.focusIcon, { backgroundColor: palette.brandSoft }]}><Package size={22} /></View>
                 <View style={styles.orderCopy}>
-                  <Text style={[styles.orderTitle, { color: palette.ink }]}>{focusedProduct === "fuel.pms" ? "Petrol" : focusedProduct === "fuel.ago" ? "Diesel" : "Kerosene"} · {focusedLitres} L</Text>
+                  <Text style={[styles.orderTitle, { color: palette.ink }]}>{productNameForKey(focusedProduct)} · {focusedLitres} L</Text>
                   <Text style={[styles.muted, { color: palette.muted }]}>{focusedMode === "rental" ? "SKIMA rental containers" : "Purchased containers"} · {firstNumber(focusedOrder, ["container_count"]) ?? 0} total</Text>
                 </View>
                 <StatusPill label={humanize(focusedStage)} tone={stageTone(focusedStage)} />
