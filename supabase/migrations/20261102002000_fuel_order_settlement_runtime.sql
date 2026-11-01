@@ -249,23 +249,25 @@ begin
   end if;
 
   if v_deposit_refund_amount>0 then
-    select wallet.id into customer_wallet_id
-    from public.wallet_accounts wallet
-    where wallet.wallet_type='customer'
+    -- Return the deposit to the exact customer wallet debited by the original
+    -- escrow-funding transaction. Never choose a different same-currency wallet.
+    select ledger.wallet_id into customer_wallet_id
+    from public.wallet_ledger_entries ledger
+    join public.wallet_accounts wallet on wallet.id=ledger.wallet_id
+    where ledger.transaction_id=hold_record.source_transaction_id
+      and ledger.direction='debit'
+      and ledger.amount=hold_record.hold_amount
+      and wallet.wallet_type='customer'
       and wallet.owner_entity_type='user'
       and wallet.owner_entity_id=operation_record.customer_user_id
       and wallet.currency_code=order_record.currency_code
       and wallet.status='active'
-    order by wallet.created_at asc
-    limit 1;
+    order by ledger.created_at asc
+    limit 1
+    for share of ledger;
 
     if customer_wallet_id is null then
-      customer_wallet_id := public.ensure_wallet_account(
-        'customer','user',operation_record.customer_user_id,order_record.currency_code,
-        'fuel.settlement_engine',
-        jsonb_build_object('wallet_purpose','fuel_rental_deposit_refund'),
-        target_idempotency_key||':customer-wallet'
-      );
+      raise exception using errcode='55000',message='The original customer funding wallet could not be verified for the rental deposit return';
     end if;
   end if;
 
