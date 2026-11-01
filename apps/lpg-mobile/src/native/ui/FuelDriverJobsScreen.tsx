@@ -22,6 +22,15 @@ export function FuelDriverJobsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const products = useGatewayQuery({
+    key: ["fuel", "products"],
+    path: "/runtime/fuel/products",
+    schema: RecordArraySchema,
+    refetchInterval: 60000,
+  });
+  const productNameForKey = (key: string) =>
+    firstString((products.data ?? []).find((item) => firstString(item, ["key"]) === key), ["display_name"]) || key || "Fuel";
+
   const orders = useGatewayQuery({
     key: ["fuel", "driver", "orders"],
     path: "/runtime/fuel/orders/operations?scope=driver",
@@ -52,7 +61,7 @@ export function FuelDriverJobsScreen() {
   const isRental = firstString(selectedOrder, ["container_mode"]) === "rental";
   const currentStage = firstString(selectedOrder, ["stage_key"]) ?? "";
   const productKey = firstString(selectedOrder, ["product_key"]) ?? "fuel.pms";
-  const productName = productKey === "fuel.pms" ? "Petrol" : productKey === "fuel.ago" ? "Diesel" : "Kerosene";
+  const productName = productNameForKey(productKey);
   const requestedLitres = firstNumber(selectedOrder, ["requested_litres"]) ?? 0;
 
   const refresh = async () => {
@@ -228,7 +237,7 @@ export function FuelDriverJobsScreen() {
       ) : orders.error ? (
         <EmptyState title="Fuel jobs couldn't be loaded" description="Refresh your driver workspace and try again." action={<AppButton label="Refresh" onPress={() => void refresh()} />} />
       ) : records.length === 0 ? (
-        <EmptyState icon={<Fuel color={palette.brand} size={28} />} title="No Fuel jobs assigned" description="Only petrol, diesel or kerosene jobs assigned to your approved driver profile will appear here." action={<AppButton label="Refresh jobs" variant="secondary" onPress={() => void refresh()} />} />
+        <EmptyState icon={<Fuel color={palette.brand} size={28} />} title="No Fuel jobs assigned" description="Only Fuel jobs assigned to your approved driver profile will appear here." action={<AppButton label="Refresh jobs" variant="secondary" onPress={() => void refresh()} />} />
       ) : (
         <>
           {error ? <Text accessibilityRole="alert" style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
@@ -238,7 +247,7 @@ export function FuelDriverJobsScreen() {
               {records.map((order) => {
                 const orderId = firstString(order, ["order_id"]) ?? "";
                 const productKey = firstString(order, ["product_key"]) ?? "fuel.pms";
-                const product = productKey === "fuel.pms" ? "Petrol" : productKey === "fuel.ago" ? "Diesel" : "Kerosene";
+                const product = productNameForKey(productKey);
                 const stage = firstString(order, ["stage_key"]) ?? "unknown";
                 const selected = orderId === selectedOrderId;
                 const isRentalOrder = firstString(order, ["container_mode"]) === "rental";
