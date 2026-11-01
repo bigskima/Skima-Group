@@ -109,6 +109,13 @@ export function InternalDriverJobDetailScreen() {
   const delivery = nestedRecord(root, "deliveryLocation") ?? nestedRecord(order, "deliveryLocation");
   const latestDriver = nestedRecord(root, "latestDriverLocation") ?? nestedRecord(root, "driverLocation");
   const status = displayStatus(order ?? {}) ?? "unknown";
+  const orderScanRows = Array.isArray(root?.scans)
+    ? root.scans as Array<Record<string, unknown>>
+    : [];
+  const customerDeliveryScanVerified = orderScanRows.some((scan) =>
+    (scan.scanType === "customer_delivery" || scan.scan_type === "customer_delivery")
+      && scan.result === "passed",
+  );
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
   const earningAmount = firstNumber(order, ["driverCommissionAmount", "driver_commission_amount"]);
   const currencyCode = firstString(order, ["currencyCode", "currency_code"]) ?? "NGN";
@@ -122,7 +129,10 @@ export function InternalDriverJobDetailScreen() {
     : ["driver_accepted", "pickup_en_route"].includes(status)
       ? locationPoint(pickup, "customer")
       : null;
-  const scanType = driverScanTypeForStatus(status);
+  const detectedScanType = driverScanTypeForStatus(status);
+  const scanType = detectedScanType === "customer_delivery" && customerDeliveryScanVerified
+    ? null
+    : detectedScanType;
   const actionKey = driverActionForStatus(status);
   const supplierFormReady = status === "station_verified" || status === "refill_in_progress";
 
@@ -402,6 +412,27 @@ export function InternalDriverJobDetailScreen() {
                   ) : (
                     <Text style={[styles.helper, { color: palette.muted }]}>Scan the QR or enter the permanent five-character Cylinder ID printed on the cylinder.</Text>
                   )}
+                </View>
+              ) : null}
+
+              {status === "delivery_verification_pending" && customerDeliveryScanVerified ? (
+                <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                  <View style={styles.sectionLead}>
+                    <ShieldCheck color={palette.success} size={22} />
+                    <View style={styles.sectionCopy}>
+                      <Text style={[styles.sectionTitle, { color: palette.ink }]}>Returned cylinder verified</Text>
+                      <Text style={[styles.helper, { color: palette.muted }]}>
+                        The physical cylinder scan is complete. The customer must now confirm this order with the order-specific OTP in SKIMA. No further driver scan is needed.
+                      </Text>
+                    </View>
+                  </View>
+                  <AppButton
+                    label="Refresh hand-over status"
+                    fullWidth
+                    variant="secondary"
+                    loading={detail.isRefetching}
+                    onPress={() => void detail.refetch()}
+                  />
                 </View>
               ) : null}
 
