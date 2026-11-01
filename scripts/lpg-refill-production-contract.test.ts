@@ -847,3 +847,32 @@ Deno.test("finance workspace wallets and history are scoped to the actual owner"
   assertIncludes(domains, "export function useStationRuntime(enabled = true)");
   assertIncludes(gateway, "profiles!driver_profiles_user_id_fkey");
 });
+
+
+Deno.test("customer order details show the assigned cylinder ID and QR without leaving the order", async () => {
+  const [orderScreen, driverJob, internalDriver, mobilePackage] = await Promise.all([
+    read("apps/lpg-mobile/src/native/ui/CustomerOrdersScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
+    read("apps/lpg-mobile/package.json"),
+  ]);
+  assertIncludes(orderScreen, 'import QRCode from "react-native-qrcode-svg"');
+  assertIncludes(orderScreen, "domainQueries.cylinders()");
+  assertIncludes(orderScreen, "Cylinder ID & QR for this order");
+  assertIncludes(orderScreen, "cylinderQrPayload");
+  assertIncludes(orderScreen, "permanentCylinderId");
+  assertIncludes(orderScreen, "Show it to the assigned SKIMA operator during hand-over.");
+  assertIncludes(driverJob, "Permanent Cylinder ID");
+  assertIncludes(internalDriver, "Permanent Cylinder ID");
+  assertIncludes(mobilePackage, '"react-native-qrcode-svg"');
+});
+
+Deno.test("repeat scan feedback recognises a previously verified assigned cylinder and opens its order", async () => {
+  const scanScreen = await read("apps/lpg-mobile/src/native/ui/ScanWorkspaceScreen.tsx");
+  assertIncludes(scanScreen, "no active order ready for verification");
+  assertIncludes(scanScreen, "const refreshed = await jobs.refetch()");
+  assertIncludes(scanScreen, "alreadyVerifiedStatuses");
+  assertIncludes(scanScreen, "No new scan was recorded.");
+  assertIncludes(scanScreen, 'label="Open verified order"');
+  assertIncludes(scanScreen, "fastScanOrderId");
+});
