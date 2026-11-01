@@ -900,50 +900,82 @@ Deno.test("SKIMA Managed supplier receipt remains optional evidence, not a refil
 });
 
 
-Deno.test("LPG final customer hand-over is OTP-only across all driver fulfillment models", async () => {
-  const [driver, internal, stationScan, scanScreen, verification, errors, stationHome, stationJobs] = await Promise.all([
+Deno.test("LPG final customer hand-over records the physical cylinder first, then customer OTP, across all fulfillment models", async () => {
+  const [
+    driver,
+    internal,
+    stationScan,
+    stationJobs,
+    scanScreen,
+    verification,
+    errors,
+    scanBeforeOtpMigration,
+    allowedHistoryMigration,
+    idempotencyMigration,
+    otpCompletionMigration,
+  ] = await Promise.all([
     read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/StationManagedDriverScanScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/StationManagedDriverJobsScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/ScanWorkspaceScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/DeliveryVerificationScreen.tsx"),
     read("apps/lpg-mobile/src/native/utilities/friendlyError.ts"),
-    read("apps/lpg-mobile/src/native/ui/StationManagedDriverHomeScreen.tsx"),
-    read("apps/lpg-mobile/src/native/ui/StationManagedDriverJobsScreen.tsx"),
+    read("supabase/migrations/20261101112617_lpg_delivery_cylinder_scan_then_customer_otp.sql"),
+    read("supabase/migrations/20261101112723_lpg_delivery_scan_uses_allowed_history_event.sql"),
+    read("supabase/migrations/20261101113502_lpg_delivery_scan_idempotency.sql"),
+    read("supabase/migrations/20261031171508_lpg_delivery_otp_completion_and_payout_bridge.sql"),
   ]);
 
-  const driverHandoverStart = driver.indexOf('driverScanType === "customer_delivery" ? (');
-  const driverHandoverEnd = driver.indexOf(') : (', driverHandoverStart);
-  if (driverHandoverStart < 0 || driverHandoverEnd < 0) throw new Error("Independent/Station Managed driver hand-over branch is missing");
-  const driverHandover = driver.slice(driverHandoverStart, driverHandoverEnd);
-  assertIncludes(driverHandover, "Customer hand-over confirmation");
-  assertIncludes(driverHandover, "order-specific OTP");
-  assertIncludes(driverHandover, "No second cylinder scan is required.");
-  assertNotIncludes(driverHandover, "<Scanner");
+  // Independent and Station Managed drivers share the assigned-job scan surface.
+  assertIncludes(driver, 'if (["return_en_route", "delivery_verification_pending"].includes(status)) return "customer_delivery";');
+  assertIncludes(driver, "At the customer's address, scan the returned cylinder");
+  assertIncludes(driver, "Verify returned cylinder");
+  assertIncludes(driver, "Returned cylinder scan verified.");
+  assertIncludes(driver, "The customer then confirms the order-specific OTP");
+  assertIncludes(driver, "function stationManagedDriverScanTypeForStatus");
+  assertIncludes(driver, 'return ["return_en_route", "delivery_verification_pending"].includes(status) ? "customer_delivery" : null;');
+  assertIncludes(driver, "scan the returned cylinder's QR or permanent ID at the customer's address");
 
-  const internalHandoverStart = internal.indexOf('scanType === "customer_delivery" ? (');
-  const internalHandoverEnd = internal.indexOf(') : (', internalHandoverStart);
-  if (internalHandoverStart < 0 || internalHandoverEnd < 0) throw new Error("SKIMA Managed driver hand-over branch is missing");
-  const internalHandover = internal.slice(internalHandoverStart, internalHandoverEnd);
-  assertIncludes(internalHandover, "Customer hand-over confirmation");
-  assertIncludes(internalHandover, "order-specific OTP");
-  assertIncludes(internalHandover, "No second cylinder scan is required.");
-  assertNotIncludes(internalHandover, "<Scanner");
+  // SKIMA Managed keeps a physical scan control at the return stage too.
+  assertIncludes(internal, "const scanType = driverScanTypeForStatus(status)");
+  assertIncludes(internal, "At the customer's address, scan the returned cylinder");
+  assertIncludes(internal, "Verify returned cylinder");
+  assertIncludes(internal, "Returned-cylinder scan recorded.");
+  assertIncludes(internal, "<Scanner enabled onDetected={setToken} />");
+  assertNotIncludes(internal, "No further driver cylinder scan is needed.");
 
+  // Station Managed driver Scan tab opens the station-driver job route, while
+  // the shared scanner is allowed to handle return-stage scans.
   assertIncludes(stationScan, 'jobRouteWorkspace="station_driver"');
-  assertIncludes(stationHome, "No second driver scan is required.");
-  assertIncludes(stationJobs, "order-specific delivery OTP");
-
+  assertIncludes(stationJobs, "scan the returned cylinder's QR or permanent ID");
   const scanReadyStart = scanScreen.indexOf("function scanReady");
   const scanReadyEnd = scanScreen.indexOf("function scanStatus", scanReadyStart);
   const scanReady = scanScreen.slice(scanReadyStart, scanReadyEnd);
-  assertNotIncludes(scanReady, '"return_en_route"');
-  assertNotIncludes(scanReady, '"delivery_verification_pending"');
+  assertIncludes(scanReady, '"return_en_route"');
+  assertIncludes(scanReady, '"delivery_verification_pending"');
   assertIncludes(scanScreen, "Customer hand-over · OTP confirmation");
-  assertIncludes(scanScreen, "handoverJobs");
+  assertIncludes(scanScreen, "Returned-cylinder scan recorded.");
+  assertNotIncludes(scanScreen, "matchingHandover");
+  assertNotIncludes(scanScreen, "Do not scan these cylinders again.");
 
+  // The customer gets an order-specific OTP only after the driver has scanned.
+  assertIncludes(verification, "After the driver scans the returned cylinder at your address");
   assertIncludes(verification, 'path: "/lpg/orders/delivery-challenge"');
   assertIncludes(verification, 'action: "verify"');
   assertIncludes(verification, '["delivered", "completed"].includes(finalStatus ?? "")');
-  assertIncludes(errors, "verified lpg delivery challenge is required");
+  assertIncludes(errors, "final cylinder hand-over scan must be recorded");
+  assertIncludes(errors, "scan the cylinder at your address first");
+
+  // Production migrations remove the circular OTP gate from the scan, keep
+  // OTP as the final order completion step, and make repeated scans idempotent.
+  assertIncludes(scanBeforeOtpMigration, "new_status := order_record.status;");
+  assertIncludes(scanBeforeOtpMigration, "The driver records physical cylinder hand-over first.");
+  assertIncludes(scanBeforeOtpMigration, "new_status = 'delivered'");
+  assertIncludes(allowedHistoryMigration, "history_event := 'verified';");
+  assertIncludes(idempotencyMigration, "existing.scan_type = 'customer_delivery'");
+  assertIncludes(idempotencyMigration, "'alreadyVerified', true");
+  assertIncludes(otpCompletionMigration, "set status = 'delivered'");
+  assertIncludes(otpCompletionMigration, "'lpg.delivery.completed'");
+  assertIncludes(otpCompletionMigration, "target_idempotency_key || ':delivery-completed'");
 });
