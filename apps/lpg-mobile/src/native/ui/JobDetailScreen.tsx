@@ -892,26 +892,25 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
 
 
 function stationManagedDriverScanTypeForStatus(status: string): "customer_pickup" | "station_receipt" | "customer_delivery" | null {
-  if (status === "pickup_en_route") return "customer_pickup";
+  if (["driver_accepted", "pickup_en_route"].includes(status)) return "customer_pickup";
   return ["return_en_route", "delivery_verification_pending"].includes(status) ? "customer_delivery" : null;
 }
 
-function stationManagedDriverActionForStatus(status: string) {
-  if (status === "driver_accepted") return "lpg.pickup.start";
-  if (status === "pickup_verified") return "lpg.station.start";
-  if (status === "return_en_route") return "lpg.delivery.pending";
+function stationManagedDriverActionForStatus(_status: string) {
+  // The station's verified release scan starts the return assignment
+  // automatically. The driver only scans the cylinder at customer hand-over.
   return null;
 }
 
 function stationManagedDriverStageDescription(status: string) {
-  if (status === "driver_offered") return "Your station assigned this order. Accept it in My Deliveries to start the pickup workflow.";
-  if (status === "driver_accepted") return "Start the pickup route to the customer, then scan the cylinder to verify collection.";
+  if (status === "driver_offered") return "Your station assigned this order. Accept it in My Deliveries to take the job.";
+  if (status === "driver_accepted") return "Your pickup is ready. Go to the customer and scan the cylinder; SKIMA records the pickup automatically.";
   if (status === "pickup_en_route") return "Navigate to the customer and scan the cylinder after you collect it.";
-  if (status === "pickup_verified") return "Pickup is verified. Start transit to your station and scan the cylinder when you arrive.";
+  if (status === "pickup_verified") return "Pickup is verified. SKIMA has started the station leg automatically; navigate to your station and hand over the cylinder.";
   if (status === "station_en_route") return "Head to your station and hand over the cylinder. Station staff scan it into the station queue.";
   if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is checking and refilling the cylinder. Wait until refill and settlement are complete.";
   if (status === "refill_confirmed") return "The refill is complete. The station must finish settlement and release the cylinder before the return leg.";
-  if (status === "station_settled") return "The station has settled the refill. Start the return leg from My Deliveries, or wait for the station to complete its release scan.";
+  if (status === "station_settled") return "The refill is settled. Once the station scans and releases the cylinder, your return assignment starts automatically.";
   if (status === "return_en_route") return "Return the filled cylinder to the customer and record arrival. Then scan the returned cylinder's QR or permanent ID at the customer's address; the customer completes the order-specific OTP afterwards.";
   if (status === "delivery_verification_pending") return "Scan the returned cylinder first. Then ask the customer to confirm this order with the order-specific OTP in SKIMA."
   if (["delivered", "completed"].includes(status)) return "The hand-over is verified. Any driver compensation is recorded and paid by the station, not by SKIMA.";
@@ -1016,11 +1015,10 @@ function stationScanTypeForStatus(status: string): "station_receipt" | "station_
   return ["refill_confirmed", "station_settled"].includes(status) ? "station_release" : null;
 }
 
-function driverActionForStatus(status: string) {
-  if (status === "driver_accepted") return "lpg.pickup.start";
-  if (status === "pickup_verified") return "lpg.station.start";
-  if (["refill_confirmed", "station_settled"].includes(status)) return "lpg.return.start";
-  if (status === "return_en_route") return "lpg.delivery.pending";
+function driverActionForStatus(_status: string) {
+  // Assignment, verified pickup and station release/refill events advance
+  // their own lifecycle stages. Driver interaction is reserved for physical
+  // scans at pickup and customer hand-over.
   return null;
 }
 
