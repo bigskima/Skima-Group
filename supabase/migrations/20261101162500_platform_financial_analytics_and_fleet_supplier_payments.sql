@@ -606,8 +606,9 @@ begin
           'lpgPrincipalAllocated',item.station_amount,'procurementSpread',item.station_amount-item.procurement_amount,
           'platformMarkup',item.platform_fee_amount,'deliveryFee',item.delivery_fee_amount,
           'driverEarning',item.driver_commission_amount,
-          'supplierName',item.supplier_name,'procurementCost',item.procurement_amount,
-          'supplierPaid',item.supplier_paid,
+          'supplierName',item.supplier_name,'supplierPricePerKg',item.supplier_price_per_kg,
+          'referencePricePerKg',item.reference_price_per_kg,'supplierVariancePercent',item.variance_percent,
+          'procurementCost',item.procurement_amount,'supplierPaid',item.supplier_paid,
           'supplierOutstanding',greatest(item.procurement_amount-item.supplier_paid,0),
           'settlementId',item.internal_settlement_execution_id
         ) order by item.created_at desc)
@@ -615,8 +616,9 @@ begin
           select order_record.id,procurement.id procurement_id,order_record.public_reference,order_record.created_at,order_record.updated_at,
             order_record.actual_kg,order_record.total_amount,order_record.station_amount,order_record.platform_fee_amount,
             order_record.delivery_fee_amount,order_record.driver_commission_amount,
-            order_record.internal_settlement_execution_id,order_record.currency_code,procurement.supplier_name,procurement.procurement_amount,
-            coalesce(paid.amount,0) supplier_paid
+            order_record.internal_settlement_execution_id,order_record.currency_code,procurement.supplier_name,
+            procurement.supplier_price_per_kg,procurement.reference_price_per_kg,procurement.variance_percent,
+            procurement.procurement_amount,coalesce(paid.amount,0) supplier_paid
           from public.lpg_refill_orders order_record
           join public.lpg_internal_refill_procurements procurement on procurement.lpg_order_id=order_record.id
           left join lateral (
