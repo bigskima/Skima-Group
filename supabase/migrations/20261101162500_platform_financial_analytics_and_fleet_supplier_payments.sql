@@ -617,7 +617,7 @@ begin
           and (can_read_revenue or wallet.wallet_type<>'platform_revenue')
         order by ledger.created_at desc limit limit_value
       ) item
-    )
+    ),'[]'::jsonb)
   ) into result;
 
   return result;
