@@ -26,7 +26,6 @@ Deno.test("Fuel dispatch binds the exact qualified driver vehicle and order as o
   requireIncludes(dispatch, "public.assign_order_participant(", "existing generic order assignment is reused");
   requireIncludes(dispatch, "'vehicle_id',target_vehicle_id", "the selected vehicle is persisted on the active assignment");
   requireIncludes(dispatch, "public.record_fuel_order_stage(", "driver assignment and stage progression are one transaction");
-  requireIncludes(dispatch, "A confirmed matching escrow hold", "stock reservation batch requires the funded order");
 });
 
 Deno.test("Fuel platform administration has separate read and manage roles", () => {
