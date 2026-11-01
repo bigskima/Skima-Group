@@ -144,6 +144,7 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(getAdminWorkspaceNavigation("money", items).map((item) => item.href)).toEqual([
       "/money",
       "/money/revenue",
+      "/money/analytics",
       "/money/balances",
       "/money/withdrawals",
       "/money/settlements",
