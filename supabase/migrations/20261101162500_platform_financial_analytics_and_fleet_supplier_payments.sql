@@ -325,7 +325,7 @@ begin
     'canReadFinance',can_read_finance,
     'canReadRevenue',can_read_revenue,
     'revenue',case when can_read_revenue then revenue_summary else null end,
-    'walletBalances',coalesce((
+    'walletBalances',case when can_read_finance then coalesce((
       select jsonb_agg(jsonb_build_object(
         'walletId',wallet.id,'walletType',wallet.wallet_type,
         'walletPurpose',wallet.metadata->>'wallet_purpose',
@@ -337,8 +337,8 @@ begin
       where wallet.owner_entity_type='platform' and wallet.status='active'
         and wallet.currency_code=currency_code_value
         and (wallet.wallet_type<>'platform_revenue' or can_read_revenue)
-    ),'[]'::jsonb),
-    'transactionSummary',coalesce((
+    ),'[]'::jsonb) else '[]'::jsonb end,
+    'transactionSummary',case when can_read_finance then coalesce((
       select jsonb_agg(jsonb_build_object(
         'transactionType',grouped.transaction_type,'status',grouped.status,
         'count',grouped.entry_count,'amount',grouped.total_amount
@@ -353,8 +353,8 @@ begin
           and (can_read_revenue or not public.financial_transaction_touches_revenue(transaction.id))
         group by transaction.transaction_type,transaction.status
       ) grouped
-    ),'[]'::jsonb),
-    'withdrawals',coalesce((
+    ),'[]'::jsonb) else '[]'::jsonb end,
+    'withdrawals',case when can_read_finance then coalesce((
       select jsonb_build_object(
         'count',count(*),
         'requestedAmount',coalesce(sum(withdrawal.amount),0),
@@ -370,8 +370,8 @@ begin
         and (from_value is null or withdrawal.created_at>=from_value)
         and (until_value is null or withdrawal.created_at<until_value)
         and (wallet.wallet_type<>'platform_revenue' or can_read_revenue)
-    ),'{}'::jsonb),
-    'settlements',coalesce((
+    ),'{}'::jsonb) else '{}'::jsonb end,
+    'settlements',case when can_read_finance then coalesce((
       select jsonb_build_object(
         'count',count(*),'grossAmount',coalesce(sum(settlement.gross_amount),0),
         'postedAmount',coalesce(sum(settlement.gross_amount) filter(where settlement.status='posted'),0),
@@ -382,8 +382,8 @@ begin
       where settlement.currency_code=currency_code_value
         and (from_value is null or settlement.created_at>=from_value)
         and (until_value is null or settlement.created_at<until_value)
-    ),'{}'::jsonb),
-    'fleet',jsonb_build_object(
+    ),'{}'::jsonb) else '{}'::jsonb end,
+    'fleet',case when can_read_finance then jsonb_build_object(
       'orderCount',(
         select count(*) from public.lpg_refill_orders order_record
         join public.settlement_executions settlement on settlement.id=order_record.internal_settlement_execution_id and settlement.status='posted'
@@ -579,8 +579,8 @@ begin
           order by earning.created_at desc limit 100
         ) item
       ),'[]'::jsonb)
-    ),
-    'recentTransactions',coalesce((
+    ) else '{}'::jsonb end,
+    'recentTransactions',case when can_read_finance then coalesce((
       select jsonb_agg(jsonb_build_object(
         'transactionId',item.id,'createdAt',item.created_at,'transactionType',item.transaction_type,
         'status',item.status,'currencyCode',item.currency_code,'amount',item.total_amount,
@@ -595,8 +595,8 @@ begin
           and (can_read_revenue or not public.financial_transaction_touches_revenue(transaction.id))
         order by transaction.created_at desc limit limit_value
       ) item
-    ),'[]'::jsonb),
-    'recentLedgerEntries',coalesce((
+    ),'[]'::jsonb) else '[]'::jsonb end,
+    'recentLedgerEntries',case when can_read_finance then coalesce((
       select jsonb_agg(jsonb_build_object(
         'ledgerEntryId',item.id,'transactionId',item.transaction_id,
         'createdAt',item.created_at,'walletType',item.wallet_type,'walletPurpose',item.wallet_purpose,
@@ -617,7 +617,7 @@ begin
           and (can_read_revenue or wallet.wallet_type<>'platform_revenue')
         order by ledger.created_at desc limit limit_value
       ) item
-    ),'[]'::jsonb)
+    ),'[]'::jsonb) else '[]'::jsonb end
   ) into result;
 
   return result;
