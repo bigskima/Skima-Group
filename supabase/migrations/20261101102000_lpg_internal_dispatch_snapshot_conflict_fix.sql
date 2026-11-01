@@ -6,7 +6,7 @@ begin;
 do $migration$
 declare
   function_ddl text;
-  old_conflict_pattern constant text := 'ON CONFLICT\\s*\\(\\s*dispatch_request_id\\s*\\)\\s*DO NOTHING';
+  old_conflict_pattern constant text := 'on conflict[[:space:]]*[(][[:space:]]*dispatch_request_id[[:space:]]*[)][[:space:]]*do nothing';
   new_conflict_clause constant text := 'ON CONFLICT ON CONSTRAINT dispatch_location_decision_snapshots_dispatch_request_id_key DO NOTHING';
   conflict_count integer;
 begin
