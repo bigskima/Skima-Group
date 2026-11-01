@@ -176,7 +176,7 @@ Deno.test("Station Managed drivers have a separate authenticated job workspace",
   }
   requireText(driverScreen, "Open delivery details & hand-over", "driver opens customer hand-over");
   requireText(driverDetailRoute, 'workspace="station_driver"', "dedicated station driver hand-over route");
-  requireText(jobDetailScreen, "Customer hand-over verified. The station remains responsible for driver compensation; SKIMA does not execute station-driver payments.", "station driver hand-over has no SKIMA payout messaging");
+  requireText(jobDetailScreen, "Returned-cylinder scan recorded. Ask the customer to complete the order-specific OTP in SKIMA. The station remains responsible for your compensation.", "station driver hand-over has no SKIMA payout messaging");
   requireText(jobDetailScreen, "stationManagedDriverScanTypeForStatus", "station driver uses customer hand-over scan");
   requireText(driverScreen, "station's normal safety and cylinder-verification process", "verified completion guard");
 });
