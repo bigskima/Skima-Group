@@ -467,7 +467,7 @@ begin
     raise exception using errcode='42501',message='container inspection must be recorded by the authorized SKIMA operations runtime';
   end if;
 
-  if target_allocation_id is null or target_inspection_result not in ('passed','failed','conditional')
+  if target_allocation_id is null or target_inspection_result is null or target_inspection_result not in ('passed','failed','conditional')
      or target_actor_user_id is null or coalesce(btrim(target_idempotency_key),'')=''
      or target_metadata is null or jsonb_typeof(target_metadata)<>'object' then
     raise exception using errcode='22023',message='inspection requires allocation, result, actor, idempotency key and object metadata';
@@ -479,7 +479,7 @@ begin
 
   if found then
     if existing_event.allocation_id<>target_allocation_id
-       or existing_event.event_key<>case when target_inspection_result='passed' then 'inspection_passed' else 'inspection_failed' end then
+       or existing_event.event_key<>(case when target_inspection_result='passed' then 'inspection_passed' else 'inspection_failed' end) then
       raise exception using errcode='23505',message='container inspection idempotency key was reused with different details';
     end if;
     return existing_event.id;
