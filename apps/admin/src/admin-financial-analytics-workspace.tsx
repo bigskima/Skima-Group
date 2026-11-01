@@ -34,6 +34,8 @@ const RevenueSchema = z.object({
 const FleetSchema = z.object({
   orderCount: z.coerce.number().default(0),
   customerCollections: z.coerce.number().default(0),
+  customerLpgPrincipal: z.coerce.number().default(0),
+  procurementSpread: z.coerce.number().default(0),
   fundsAllocatedToFleet: z.coerce.number().default(0),
   platformMarkupCollected: z.coerce.number().default(0),
   deliveryFeesCollected: z.coerce.number().default(0),
@@ -88,9 +90,22 @@ const orderColumns: readonly TableColumn<FleetOrder>[] = [
     render: (row) => money(numberValue(row, "customerTotal"), recordString(row, "currencyCode") ?? "NGN"),
   },
   {
+    key: "lpgPrincipalAllocated",
+    header: "LPG principal credited to SKIMA",
+    render: (row) => money(numberValue(row, "lpgPrincipalAllocated"), recordString(row, "currencyCode") ?? "NGN"),
+  },
+  {
     key: "procurementCost",
-    header: "Supplier cost",
+    header: "Actual supplier cost",
     render: (row) => money(numberValue(row, "procurementCost"), recordString(row, "currencyCode") ?? "NGN"),
+  },
+  {
+    key: "procurementSpread",
+    header: "Procurement spread · unclassified",
+    render: (row) => {
+      const spread = numberValue(row, "procurementSpread");
+      return <StatusBadge tone={spread >= 0 ? "neutral" : "warning"}>{money(spread, recordString(row, "currencyCode") ?? "NGN")}</StatusBadge>;
+    },
   },
   {
     key: "supplierPaid",
@@ -329,8 +344,9 @@ export function AdminFinancialAnalyticsWorkspace() {
         </div>
         <div className="skima-grid skima-grid--compact">
           <MetricTile label="Settled orders" value={fleet.orderCount} />
-          <MetricTile label="Funds allocated to Fleet" value={money(fleet.fundsAllocatedToFleet, currency)} />
-          <MetricTile label="Per-kg platform markup collected" value={money(fleet.platformMarkupCollected, currency)} />
+          <MetricTile label="Customer LPG principal credited to SKIMA clearing" value={money(fleet.customerLpgPrincipal, currency)} />
+          <MetricTile label="Explicit per-kg platform markup" value={money(fleet.platformMarkupCollected, currency)} />
+          <MetricTile label="Procurement spread held in clearing · not revenue-classified" value={money(fleet.procurementSpread, currency)} tone={fleet.procurementSpread !== 0 ? "warning" : "success"} />
           <MetricTile label="Customer delivery fees" value={money(fleet.deliveryFeesCollected, currency)} />
           <MetricTile label="Recorded procurement cost" value={money(fleet.procurementCost, currency)} />
           <MetricTile label="Current clearing balance" value={money(clearingBalance, currency)} />
@@ -338,7 +354,7 @@ export function AdminFinancialAnalyticsWorkspace() {
         {data.canReadRevenue ? (
           <p className="skima-muted">
             Current SKIMA revenue wallet: <strong>{money(revenueBalance, currency)}</strong>.
-            This is distinct from platform clearing and Fleet supplier disbursements.
+            This is distinct from platform clearing and the supplier expense ledger. The procurement spread is shown separately and is not assumed to be recognized revenue.
           </p>
         ) : (
           <p className="skima-muted">Revenue wallet details are hidden because this Admin role does not have platform revenue read permission.</p>
@@ -445,7 +461,7 @@ export function AdminFinancialAnalyticsWorkspace() {
           <MetricTile label="Procurement cost recorded" value={money(fleet.procurementCost, currency)} />
           <MetricTile label="Supplier cash / bank transfer recorded" value={money(fleet.supplierPaid, currency)} />
           <MetricTile label="Supplier balance outstanding" value={money(fleet.supplierOutstanding, currency)} tone={fleet.supplierOutstanding > 0 ? "warning" : "success"} />
-          <MetricTile label="Supplier disbursement ledger" value={money(supplierExpenseBalance, currency)} />
+          <MetricTile label="Cumulative supplier disbursements in expense ledger" value={money(supplierExpenseBalance, currency)} />
         </div>
       </section>
 
@@ -524,13 +540,14 @@ export function AdminFinancialAnalyticsWorkspace() {
         <DataTable columns={ledgerColumns} caption="Recent wallet ledger activity" records={data.recentLedgerEntries as RecordValue[]}
           getRowKey={(row) => recordString(row, "ledgerEntryId") ?? JSON.stringify(row)}
           emptyTitle="No ledger activity" emptyMessage="No ledger activity found." />
-        <h3>Platform wallet balances</h3>
+        <h3>Platform wallet and accounting control balances</h3>
+        <p className="skima-muted">The supplier disbursement control account is an expense-side ledger total, not cash available in a bank account. Platform clearing is a shared SKIMA-controlled account, not a separate Fleet bank wallet.</p>
         <DataTable
           columns={[
             { key: "walletType", header: "Wallet class", render: (row) => label(recordString(row, "walletType")) },
             { key: "walletPurpose", header: "Purpose", render: (row) => label(recordString(row, "walletPurpose")) },
             { key: "currencyCode", header: "Currency", render: (row) => recordString(row, "currencyCode") ?? "—" },
-            { key: "balance", header: "Current balance", render: (row) => money(numberValue(row, "balance"), recordString(row, "currencyCode") ?? currency) },
+            { key: "balance", header: "Ledger balance / control amount", render: (row) => money(numberValue(row, "balance"), recordString(row, "currencyCode") ?? currency) },
             { key: "walletId", header: "Wallet ID", render: (row) => shortId(recordString(row, "walletId")) },
           ]}
           caption="Platform-controlled wallet balances" records={data.walletBalances as RecordValue[]}
