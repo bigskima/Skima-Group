@@ -418,7 +418,8 @@ begin
     'transactionSources',case when can_read_finance then coalesce((
       select jsonb_agg(jsonb_build_object(
         'source',grouped.source,'transactionType',grouped.transaction_type,
-        'status',grouped.status,'count',grouped.entry_count,'amount',grouped.total_amount
+        'status',grouped.status,'currencyCode',currency_code_value,
+        'count',grouped.entry_count,'amount',grouped.total_amount
       ) order by grouped.total_amount desc,grouped.source)
       from (
         select transaction.source,transaction.transaction_type,transaction.status,
@@ -435,7 +436,8 @@ begin
       select jsonb_agg(jsonb_build_object(
         'walletType',grouped.wallet_type,'walletPurpose',grouped.wallet_purpose,
         'direction',grouped.direction,'entryType',grouped.entry_type,
-        'source',grouped.source,'count',grouped.entry_count,'amount',grouped.total_amount
+        'source',grouped.source,'currencyCode',currency_code_value,
+        'count',grouped.entry_count,'amount',grouped.total_amount
       ) order by grouped.total_amount desc,grouped.wallet_type,grouped.direction)
       from (
         select wallet.wallet_type,wallet.metadata->>'wallet_purpose' wallet_purpose,
