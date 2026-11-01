@@ -637,7 +637,7 @@ function friendlyStatus(status: string) {
   return labels[status] ?? status.replace(/_/g, " ");
 }
 
-function stageDescription(status: string, deliveryChallengeVerified = false) {
+function stageDescription(status: string, deliveryChallengeVerified = false, customerDeliveryScanVerified = false) {
   if (["driver_offered", "driver_accepted"].includes(status)) return "This job is reserved for a managed SKIMA fulfillment driver.";
   if (status === "pickup_en_route") return "Collect and verify the customer's registered cylinder.";
   if (status === "pickup_verified") return "Continue to a suitable LPG supplier for the requested refill.";
@@ -645,6 +645,7 @@ function stageDescription(status: string, deliveryChallengeVerified = false) {
   if (["station_verified", "refill_in_progress"].includes(status)) return "Record the supplier, actual price, actual kilograms, safety check and receipt.";
   if (["refill_confirmed", "return_en_route"].includes(status)) return "Return the filled cylinder to the customer.";
   if (status === "delivery_verification_pending" && deliveryChallengeVerified) return "Customer OTP is verified. Refresh the job to see the delivered status and settlement update.";
+  if (status === "delivery_verification_pending" && customerDeliveryScanVerified) return "Returned cylinder verified. The customer must now confirm this order with the order-specific OTP in SKIMA.";
   if (status === "delivery_verification_pending") return "Scan the returned cylinder at the customer's address first. Then ask the customer to open this order in SKIMA, choose Confirm delivery and complete the order-specific OTP."
   return "Follow the SKIMA-managed fulfillment workflow.";
 }
