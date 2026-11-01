@@ -67,9 +67,13 @@ export function AdminFulfillmentPriorityControl(props: {
       return data;
     },
     onSuccess: async (_data, priority) => {
-      setNotice(priority === "marketplace_first"
-        ? "New LPG orders will try the Partner Network first."
-        : "New LPG orders will try the SKIMA Fleet first.");
+      const current = configuration.data;
+      const hybridIsActive = Boolean(current?.enabled && current.mode === "hybrid");
+      setNotice(hybridIsActive
+        ? priority === "marketplace_first"
+          ? "Saved. New orders will try the Partner Network first while both routes are enabled."
+          : "Saved. New orders will try SKIMA Fleet first while both routes are enabled."
+        : `Priority saved for Hybrid mode. Current availability remains ${fulfillmentModeLabel(current?.mode ?? "hybrid")}.`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["lpg-launch-assurance-configuration"] }),
         queryClient.invalidateQueries({ queryKey: ["lpg-launch-assurance-readiness"] }),
@@ -112,7 +116,7 @@ export function AdminFulfillmentPriorityControl(props: {
           <span className="section-kicker">LPG order routing</span>
           <h2>Who should get new LPG orders first?</h2>
           <p className="skima-muted">
-            Choose the first network SKIMA tries when both fulfillment routes are available. This does not change LPG prices, Driver pay, or settlement rules.
+            Priority only controls which route is tried first in Hybrid mode. It does not enable or disable a network. Use Service Availability to choose Partner Network only or SKIMA Fleet only.
           </p>
         </div>
         <StatusBadge tone={priorityIsActive ? "success" : "neutral"}>{currentPriorityLabel}</StatusBadge>
