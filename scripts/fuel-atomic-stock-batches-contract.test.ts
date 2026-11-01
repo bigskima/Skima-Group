@@ -1,8 +1,8 @@
 const batch = await Deno.readTextFile(
-  "supabase/migrations/20261102008000_fuel_atomic_order_stock_batches.sql",
+  "supabase/migrations/20261101202700_fuel_atomic_order_stock_batches.sql",
 );
 const inventory = await Deno.readTextFile(
-  "supabase/migrations/20261102003000_fuel_inventory_reservation_runtime.sql",
+  "supabase/migrations/20261101202200_fuel_inventory_reservation_runtime.sql",
 );
 
 function requireIncludes(source: string, value: string, message: string): void {
