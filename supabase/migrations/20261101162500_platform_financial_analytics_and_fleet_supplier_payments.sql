@@ -1,18 +1,7 @@
 begin;
 
--- Keep supplier disbursements in a dedicated platform account type rather than
--- reusing the customer, revenue, or generic clearing account.
-alter table public.wallet_accounts
-  drop constraint if exists wallet_accounts_wallet_type_check;
-alter table public.wallet_accounts
-  add constraint wallet_accounts_wallet_type_check
-  check (wallet_type = any (array[
-    'customer'::text,'driver'::text,'partner'::text,'platform'::text,
-    'platform_clearing'::text,'platform_revenue'::text,'platform_liability'::text,
-    'platform_provider'::text,'platform_campaign'::text,'platform_supplier'::text,
-    'escrow'::text,'commission'::text,'refund'::text,'bonus'::text,
-    'loyalty'::text,'generic'::text
-  ]));
+-- Supplier disbursements use the existing platform wallet class with a distinct
+-- wallet_purpose. Do not broaden or replace the canonical wallet type constraint.
 
 -- Immutable evidence for supplier payments made by SKIMA outside the customer wallet flow.
 -- Procurement confirmation is not proof that a supplier has actually been paid.
@@ -44,7 +33,7 @@ create index if not exists lpg_internal_supplier_payments_transaction_idx
 -- One accounting control account per platform currency and purpose.
 create unique index if not exists wallet_accounts_lpg_supplier_disbursement_currency_uidx
   on public.wallet_accounts(currency_code, (metadata->>'wallet_purpose'))
-  where wallet_type='platform_supplier'
+  where wallet_type='platform'
     and owner_entity_type='platform'
     and owner_entity_id is null
     and status='active'
@@ -235,7 +224,7 @@ begin
 
   select wallet.id into supplier_wallet_id
   from public.wallet_accounts wallet
-  where wallet.wallet_type='platform_supplier'
+  where wallet.wallet_type='platform'
     and wallet.owner_entity_type='platform'
     and wallet.owner_entity_id is null
     and wallet.currency_code=order_record.currency_code
@@ -247,7 +236,7 @@ begin
     insert into public.wallet_accounts(
       wallet_type,owner_entity_type,owner_entity_id,currency_code,status,metadata,created_by,source,idempotency_key
     ) values(
-      'platform_supplier','platform',null,order_record.currency_code,'active',
+      'platform','platform',null,order_record.currency_code,'active',
       jsonb_build_object('wallet_purpose','lpg_supplier_disbursements','platform_internal',true,'accounting_only',true),
       auth.uid(),'lpg.internal_supplier_payment','lpg-supplier-disbursements:'||lower(order_record.currency_code)
     )
@@ -257,7 +246,7 @@ begin
     if supplier_wallet_id is null then
       select wallet.id into supplier_wallet_id
       from public.wallet_accounts wallet
-      where wallet.wallet_type='platform_supplier' and wallet.owner_entity_type='platform'
+      where wallet.wallet_type='platform' and wallet.owner_entity_type='platform'
         and wallet.owner_entity_id is null and wallet.currency_code=order_record.currency_code
         and wallet.status='active' and wallet.metadata->>'wallet_purpose'='lpg_supplier_disbursements'
       limit 1;
@@ -700,7 +689,7 @@ begin
           'supplierName',item.supplier_name,'supplierPricePerKg',item.supplier_price_per_kg,
           'referencePricePerKg',item.reference_price_per_kg,'supplierVariancePercent',item.variance_percent,
           'procurementCost',item.procurement_amount,'supplierPaid',item.supplier_paid,
-          'supplierOutstanding',greatest(item.procurement_amount-item.supplier_paid,0),
+          'supplierOutstanding',greatest(coalesce(item.procurement_amount,0)-item.supplier_paid,0),
           'settlementId',item.internal_settlement_execution_id
         ) order by item.created_at desc)
         from (
@@ -711,7 +700,7 @@ begin
             procurement.supplier_price_per_kg,procurement.reference_price_per_kg,procurement.variance_percent,
             procurement.procurement_amount,coalesce(paid.amount,0) supplier_paid
           from public.lpg_refill_orders order_record
-          join public.lpg_internal_refill_procurements procurement on procurement.lpg_order_id=order_record.id
+          left join public.lpg_internal_refill_procurements procurement on procurement.lpg_order_id=order_record.id
           left join lateral (
             select sum(payment.amount) amount from public.lpg_internal_supplier_payments payment
             where payment.procurement_id=procurement.id
