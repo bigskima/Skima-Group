@@ -873,7 +873,7 @@ Deno.test("repeat scan feedback recognises a previously verified assigned cylind
   assertIncludes(scanScreen, "const refreshed = await jobs.refetch()");
   assertIncludes(scanScreen, "alreadyVerifiedStatuses");
   assertIncludes(scanScreen, "No new scan was recorded.");
-  assertIncludes(scanScreen, 'label="Open verified order"');
+  assertIncludes(scanScreen, 'label="Open hand-over details"');
   assertIncludes(scanScreen, "fastScanOrderId");
 });
 
@@ -941,7 +941,7 @@ Deno.test("LPG final customer hand-over records the physical cylinder first, the
   assertIncludes(internal, "const scanType = driverScanTypeForStatus(status)");
   assertIncludes(internal, "At the customer's address, scan the returned cylinder");
   assertIncludes(internal, "Verify returned cylinder");
-  assertIncludes(internal, "Returned-cylinder scan recorded.");
+  assertIncludes(internal, "Returned cylinder scan verified.");
   assertIncludes(internal, "<Scanner enabled onDetected={setToken} />");
   assertNotIncludes(internal, "No further driver cylinder scan is needed.");
 
