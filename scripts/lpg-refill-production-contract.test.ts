@@ -1025,3 +1025,55 @@ Deno.test("open LPG job scans are bound to that exact order and cylinder", async
   assertIncludes(autoScan, 'path: "/lpg/scans/continuous"');
   assertIncludes(stationDriverScan, 'jobRouteWorkspace="station_driver"');
 });
+
+
+Deno.test("LPG driver stages advance from verified events and live Admin routing policy", async () => {
+  const [migration, driver, internal, priority, vercel] = await Promise.all([
+    read("supabase/migrations/20261101145500_lpg_automatic_driver_stage_advancement.sql"),
+    read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
+    read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
+    read("apps/admin/src/admin-fulfillment-priority-control.tsx"),
+    read("vercel.json"),
+  ]);
+
+  const driverActions = driver.slice(
+    driver.indexOf("function driverActionForStatus"),
+    driver.indexOf("function driverScanTitle"),
+  );
+  const stationManagedPickup = driver.slice(
+    driver.indexOf("function stationManagedDriverScanTypeForStatus"),
+    driver.indexOf("function stationManagedDriverActionForStatus"),
+  );
+  const stationManagedActions = driver.slice(
+    driver.indexOf("function stationManagedDriverActionForStatus"),
+    driver.indexOf("function stationManagedDriverStageDescription"),
+  );
+  const internalActions = internal.slice(
+    internal.indexOf("function driverActionForStatus"),
+    internal.indexOf("function actionLabel"),
+  );
+
+  assertIncludes(migration, "'lpg.station.start'");
+  assertIncludes(migration, "target_scan_type = ''customer_pickup''");
+  assertIncludes(migration, "'lpg.return.start'");
+  assertIncludes(migration, "automatic_transition");
+  assertIncludes(migration, "assignment.status = ''accepted''");
+  assertIncludes(migration, "public.read_lpg_eligible_stations(");
+  assertIncludes(migration, "eligible.station_branch_id = quote_record.station_branch_id");
+  assertIncludes(migration, "current Admin routing settings");
+
+  assertIncludes(driverActions, "return null;");
+  assertNotIncludes(driverActions, "lpg.return.start");
+  assertNotIncludes(driverActions, "lpg.delivery.pending");
+  assertIncludes(stationManagedPickup, '"driver_accepted"');
+  assertIncludes(stationManagedActions, "return null;");
+  assertNotIncludes(stationManagedActions, "lpg.delivery.pending");
+  assertIncludes(internalActions, "return null;");
+  assertNotIncludes(internalActions, "lpg.return.start");
+
+  assertIncludes(priority, "Priority only controls which route is tried first in Hybrid mode.");
+  assertIncludes(priority, "Priority saved for Hybrid mode.");
+  assertIncludes(vercel, '"source": "/(.*)"');
+  assertIncludes(vercel, '"destination": "/index.html"');
+});
+
