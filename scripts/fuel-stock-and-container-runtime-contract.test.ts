@@ -1,11 +1,11 @@
 const stock = await Deno.readTextFile(
-  "supabase/migrations/20261102003000_fuel_inventory_reservation_runtime.sql",
+  "supabase/migrations/20261101202200_fuel_inventory_reservation_runtime.sql",
 );
 const containers = await Deno.readTextFile(
-  "supabase/migrations/20261102004000_fuel_container_custody_runtime.sql",
+  "supabase/migrations/20261101202300_fuel_container_custody_runtime.sql",
 );
 const operations = await Deno.readTextFile(
-  "supabase/migrations/20261102002000_fuel_order_processing_runtime.sql",
+  "supabase/migrations/20261101202100_fuel_order_processing_runtime.sql",
 );
 
 function requireIncludes(source: string, fragment: string, message: string): void {
