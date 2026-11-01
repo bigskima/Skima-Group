@@ -18,9 +18,9 @@ function requireIncludes(source: string, fragment: string, message: string): voi
 Deno.test("Fuel dispatch binds the exact qualified driver vehicle and order as one operation", () => {
   requireIncludes(dispatch, "create or replace function public.assign_fuel_order_driver(", "atomic Fuel assignment RPC exists");
   requireIncludes(dispatch, "operation_record.stage_key<>'ready_for_driver'", "dispatch only starts after the complete order is prepared");
-  requireIncludes(dispatch, "qualification_record.product_key", "qualification matches the exact fuel product");
-  requireIncludes(dispatch, "qualification_record.maximum_load_litres>=operation_record.requested_litres", "qualification covers the full requested load");
-  requireIncludes(dispatch, "qualification_record.vehicle_id", "qualification is bound to the selected vehicle");
+  requireIncludes(dispatch, "product_key=operation_record.product_key", "qualification matches the exact fuel product");
+  requireIncludes(dispatch, "maximum_load_litres>=operation_record.requested_litres", "qualification covers the full requested load");
+  requireIncludes(dispatch, "vehicle_id=target_vehicle_id", "qualification is bound to the selected vehicle");
   requireIncludes(dispatch, "station_managed_driver_id=target_driver_entity_id", "Station Managed driver identity is supported");
   requireIncludes(dispatch, "driver_profile_id=target_driver_entity_id", "independent and SKIMA Managed driver profile identity is supported");
   requireIncludes(dispatch, "public.assign_order_participant(", "existing generic order assignment is reused");
