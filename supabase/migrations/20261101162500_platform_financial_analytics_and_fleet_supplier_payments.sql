@@ -120,6 +120,14 @@ begin
     raise exception using errcode='22023',message='payment evidence must reference an active media asset';
   end if;
 
+  select * into procurement
+  from public.lpg_internal_refill_procurements
+  where id=target_procurement_id
+  for update;
+  if not found then
+    raise exception using errcode='22023',message='SKIMA Fleet procurement was not found';
+  end if;
+
   -- Return an existing successful payment before recalculating its remaining balance.
   -- This preserves true idempotency, including retries after the final partial payment.
   select * into existing_payment
@@ -160,11 +168,7 @@ begin
     );
   end if;
 
-  select * into procurement
-  from public.lpg_internal_refill_procurements
-  where id=target_procurement_id
-  for update;
-  if not found or procurement.status<>'approved' then
+  if procurement.status<>'approved' then
     raise exception using errcode='22023',message='approved SKIMA Fleet procurement was not found';
   end if;
 
