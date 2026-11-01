@@ -522,7 +522,7 @@ function CustomerServiceCards({
       <CustomerBillsCard />
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Order petrol, diesel or kerosene"
+        accessibilityLabel="Order liquid fuel"
         onPress={() => router.push("/(customer)/fuel" as never)}
         style={[styles.customerServiceCard, { backgroundColor: palette.surface, borderColor: palette.border }]}
       >
@@ -530,7 +530,7 @@ function CustomerServiceCards({
         <View style={styles.customerServiceCopy}>
           <Text style={[styles.customerServiceEyebrow, { color: colors.brand }]}>LIQUID FUEL DELIVERY</Text>
           <Text style={[styles.customerServiceTitle, { color: palette.ink }]}>Order fuel</Text>
-          <Text style={[styles.customerServiceBody, { color: palette.muted }]}>Petrol, diesel and kerosene by the litre.</Text>
+          <Text style={[styles.customerServiceBody, { color: palette.muted }]}>Order available fuel products by the litre.</Text>
         </View>
         <View style={[styles.customerServiceArrow, { backgroundColor: palette.soft }]}><ChevronRight color={palette.ink} size={17} /></View>
       </Pressable>
