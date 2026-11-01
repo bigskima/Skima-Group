@@ -150,7 +150,9 @@ export function FuelOrderDetailsScreen() {
                   ? `Returned to your SKIMA wallet · ${depositRefundAmount.toLocaleString()} · ${formatDate(depositRefundedAt)}`
                   : depositRefundAmount<=0 && stage==="completed"
                     ? "No refundable rental deposit was due"
-                    : `${depositRefundAmount.toLocaleString()} held until the station receives and inspects all rental containers`}
+                    : depositRefundAmount>0
+                    ? `${depositRefundAmount.toLocaleString()} held until the station receives and inspects all rental containers`
+                    : "Refundable deposit amount will be confirmed with your accepted quote and returned after station inspection"}
               />
             ) : null}
           </Card>
