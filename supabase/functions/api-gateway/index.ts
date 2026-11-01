@@ -3768,7 +3768,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     if (scope === "driver") {
       const assigned = await supabase
         .from("order_assignments")
-        .select("order_id,entity_type,entity_id")
+        .select("order_id,participant_role,entity_type,entity_id,status")
         .eq("participant_role", "driver")
         .eq("status", "active");
       if (assigned.error) return databaseError(assigned.error, id);
