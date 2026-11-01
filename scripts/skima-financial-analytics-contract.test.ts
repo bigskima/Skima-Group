@@ -2,6 +2,7 @@ import { assert, assertStringIncludes, assertNotMatch } from "jsr:@std/assert@1.
 
 const migration = await Deno.readTextFile("supabase/migrations/20261101162500_platform_financial_analytics_and_fleet_supplier_payments.sql");
 const lifecycleMigration = await Deno.readTextFile("supabase/migrations/20261101171000_lpg_payment_status_settled_and_service_request_reconciliation.sql");
+const receiptScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/ReceiptScreen.tsx");
 const workspace = await Deno.readTextFile("apps/admin/src/admin-financial-analytics-workspace.tsx");
 const router = await Deno.readTextFile("apps/admin/src/features/money/MoneyWorkspaceRouter.tsx");
 const navigation = await Deno.readTextFile("apps/admin/src/app/admin-v2-navigation.ts");
@@ -148,6 +149,7 @@ Deno.test("LPG settlement closes payment status only after posted settlement and
   assertStringIncludes(lifecycleMigration, "hold_record.status='released'");
   assertStringIncludes(lifecycleMigration, "settlement.status='posted'");
   assertStringIncludes(lifecycleMigration, "release_transaction.status='posted'");
+  assertStringIncludes(receiptScreen, '"paid", "settled", "confirmed"');
 });
 
 Deno.test("LPG service-request reconciliation follows the linked LPG settlement instead of only generic release subjects", () => {
