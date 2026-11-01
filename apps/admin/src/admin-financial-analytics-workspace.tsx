@@ -3,7 +3,7 @@ import { Activity, ArrowDownLeft, ArrowUpRight, Banknote, CircleAlert, RefreshCc
 import { useMemo, useState } from "react";
 import { z } from "zod";
 
-import { createClientIdempotencyKey } from "@skima/frontend-core";
+import { createClientIdempotencyKey, type ApiGatewayClient } from "@skima/frontend-core";
 import {
   Button,
   DataTable,
@@ -23,6 +23,15 @@ import { useSessionState } from "./session";
 type RecordValue = Readonly<Record<string, unknown>>;
 
 const RecordSchema = z.record(z.unknown());
+const UploadSessionSchema = z.object({
+  token: z.string(),
+  publicUrl: z.string().url(),
+  signedUrl: z.string().url(),
+  method: z.literal("PUT"),
+  storageBucket: z.string(),
+  storagePath: z.string(),
+});
+const MediaAssetSchema = z.object({ id: z.string().uuid() }).passthrough();
 const RevenueSchema = z.object({
   currentRevenueBalance: z.coerce.number().default(0),
   netRevenue: z.coerce.number().default(0),
@@ -164,7 +173,7 @@ const ledgerColumns: readonly TableColumn<RecordValue>[] = [
 ];
 
 export function AdminFinancialAnalyticsWorkspace() {
-  const { supabase, status, context } = useSessionState();
+  const { api, supabase, status, context } = useSessionState();
   const queryClient = useQueryClient();
   const [period, setPeriod] = useState("30");
   const [currency, setCurrency] = useState("NGN");
@@ -174,6 +183,9 @@ export function AdminFinancialAnalyticsWorkspace() {
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
   const [paymentDate, setPaymentDate] = useState(() => localDateTimeInput(new Date()));
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [evidenceMediaAssetId, setEvidenceMediaAssetId] = useState<string | null>(null);
+  const [evidenceFileName, setEvidenceFileName] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeTone, setNoticeTone] = useState<"success" | "danger">("success");
 
@@ -211,6 +223,69 @@ export function AdminFinancialAnalyticsWorkspace() {
     await queryClient.invalidateQueries({ queryKey: ["platform-financial-analytics"] });
   };
 
+  const uploadEvidence = useMutation({
+    mutationFn: async () => {
+      if (!evidenceFile) throw new Error("Choose a bank receipt, transfer confirmation or cash voucher first.");
+      const ownerUserId = context?.user.id;
+      if (!ownerUserId) throw new Error("The authenticated Admin identity is unavailable.");
+      if (evidenceFile.size <= 0 || evidenceFile.size > 10 * 1024 * 1024) {
+        throw new Error("Payment evidence must be a non-empty file no larger than 10 MB.");
+      }
+      const contentType = evidenceFile.type || "application/octet-stream";
+      if (!(contentType.startsWith("image/") || contentType === "application/pdf")) {
+        throw new Error("Payment evidence must be an image or PDF document.");
+      }
+      const upload = await api.post(
+        "/runtime/media/upload-sessions",
+        {
+          contentType,
+          fileName: evidenceFile.name,
+          idempotencyKey: createClientIdempotencyKey("admin.lpg.supplier-payment.upload", evidenceFile.name),
+          storageBucket: "skima-platform-media",
+        },
+        UploadSessionSchema,
+      );
+      const stored = await supabase.storage
+        .from(upload.storageBucket)
+        .uploadToSignedUrl(upload.storagePath, upload.token, evidenceFile, {
+          contentType,
+          upsert: true,
+        });
+      if (stored.error) throw new Error(stored.error.message || "The payment evidence upload did not complete.");
+      const media = await api.post(
+        "/runtime/media/assets",
+        {
+          assetTypeKey: "media.lpg.supplier_payment_evidence",
+          byteSize: evidenceFile.size,
+          contentType,
+          idempotencyKey: createClientIdempotencyKey("admin.lpg.supplier-payment.asset", evidenceFile.name),
+          metadata: {
+            originalFileName: evidenceFile.name,
+            purpose: "SKIMA Fleet supplier payment evidence",
+            procurementId: recordString(selectedOrder, "procurementId"),
+            orderReference: recordString(selectedOrder, "orderReference"),
+          },
+          ownerUserId,
+          source: "skima.admin.financial.analytics",
+          storageBucket: upload.storageBucket,
+          storagePath: upload.storagePath,
+        },
+        MediaAssetSchema,
+      );
+      return { id: media.id, fileName: evidenceFile.name };
+    },
+    onSuccess: (result) => {
+      setEvidenceMediaAssetId(result.id);
+      setEvidenceFileName(result.fileName);
+      setNotice("Payment evidence uploaded and registered in SKIMA media records.");
+      setNoticeTone("success");
+    },
+    onError: (error) => {
+      setNotice(readError(error));
+      setNoticeTone("danger");
+    },
+  });
+
   const recordSupplierPayment = useMutation({
     mutationFn: async () => {
       if (!selectedOrder) throw new Error("Choose the supplier order to record.");
@@ -224,6 +299,9 @@ export function AdminFinancialAnalyticsWorkspace() {
           ? "Enter the bank transfer reference before recording this payment."
           : "Enter the cash voucher or receipt reference before recording this payment.");
       }
+      if (evidenceFile && !evidenceMediaAssetId) {
+        throw new Error("Upload the selected evidence file before recording the supplier payment.");
+      }
       const paidAt = new Date(paymentDate);
       if (!paymentDate || !Number.isFinite(paidAt.getTime())) {
         throw new Error("Enter a valid supplier payment date and time.");
@@ -233,7 +311,7 @@ export function AdminFinancialAnalyticsWorkspace() {
         target_amount: amount,
         target_payment_method: paymentMethod,
         target_payment_reference: paymentReference.trim() || null,
-        target_evidence_media_asset_id: null,
+        target_evidence_media_asset_id: evidenceMediaAssetId,
         target_note: paymentNote.trim() || null,
         target_idempotency_key: createClientIdempotencyKey(
           "admin.lpg.supplier-payment",
@@ -254,6 +332,9 @@ export function AdminFinancialAnalyticsWorkspace() {
       setPaymentReference("");
       setPaymentNote("");
       setPaymentDate(localDateTimeInput(new Date()));
+      setEvidenceFile(null);
+      setEvidenceMediaAssetId(null);
+      setEvidenceFileName(null);
       await refresh();
     },
     onError: (error) => {
@@ -397,6 +478,9 @@ export function AdminFinancialAnalyticsWorkspace() {
                 setPaymentReference("");
                 setPaymentNote("");
                 setPaymentDate(localDateTimeInput(new Date()));
+                setEvidenceFile(null);
+                setEvidenceMediaAssetId(null);
+                setEvidenceFileName(null);
               }}
             />
             <TextInput
@@ -432,6 +516,34 @@ export function AdminFinancialAnalyticsWorkspace() {
               onChange={(event) => setPaymentDate(event.currentTarget.value)}
               disabled={!selectedOrder}
             />
+            <TextInput
+              label="Payment evidence file (optional)"
+              type="file"
+              accept="image/*,.pdf"
+              disabled={!selectedOrder || uploadEvidence.isPending}
+              onChange={(event) => {
+                setEvidenceFile(event.currentTarget.files?.[0] ?? null);
+                setEvidenceMediaAssetId(null);
+                setEvidenceFileName(null);
+              }}
+            />
+            <div className="skima-action-row">
+              <Button
+                variant="outline"
+                disabled={!selectedOrder || !evidenceFile || uploadEvidence.isPending}
+                isLoading={uploadEvidence.isPending}
+                onClick={() => uploadEvidence.mutate()}
+              >
+                Upload payment evidence
+              </Button>
+              {evidenceMediaAssetId ? (
+                <StatusBadge tone="success">Evidence attached: {evidenceFileName ?? "File uploaded"}</StatusBadge>
+              ) : evidenceFile ? (
+                <StatusBadge tone="warning">File selected · upload required before recording</StatusBadge>
+              ) : (
+                <StatusBadge>Optional · 10 MB maximum · image or PDF</StatusBadge>
+              )}
+            </div>
             <TextAreaInput
               label="Payment note (optional)"
               value={paymentNote}
