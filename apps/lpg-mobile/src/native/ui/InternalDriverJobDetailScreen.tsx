@@ -590,11 +590,9 @@ function driverScanTypeForStatus(status: string): "customer_pickup" | "station_r
   return null;
 }
 
-function driverActionForStatus(status: string) {
-  if (status === "driver_accepted") return "lpg.pickup.start";
-  if (status === "pickup_verified") return "lpg.station.start";
-  if (status === "refill_confirmed") return "lpg.return.start";
-  if (status === "return_en_route") return "lpg.delivery.pending";
+function driverActionForStatus(_status: string) {
+  // Pickup verification and supplier refill confirmation automatically
+  // advance the route. The next driver action is the physical hand-over scan.
   return null;
 }
 
