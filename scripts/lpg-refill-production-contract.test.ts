@@ -881,7 +881,7 @@ Deno.test("repeat scan feedback recognises a previously verified assigned cylind
 Deno.test("SKIMA Managed supplier receipt remains optional evidence, not a refill blocker", async () => {
   const [screen, migration, originalProcurement] = await Promise.all([
     read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
-    read("supabase/migrations/20261101105200_lpg_internal_supplier_receipt_optional.sql"),
+    read("supabase/migrations/20261101105452_lpg_internal_supplier_receipt_optional.sql"),
     read("supabase/migrations/20260916163041_lpg_internal_procurement_and_earnings.sql"),
   ]);
 
