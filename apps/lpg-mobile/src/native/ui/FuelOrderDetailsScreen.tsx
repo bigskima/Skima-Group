@@ -64,7 +64,7 @@ export function FuelOrderDetailsScreen() {
   const order = operations.data?.[0] ?? null;
   const productKey = firstString(order, ["product_key"]) ?? "";
   const productRecord = (products.data ?? []).find((item) => firstString(item, ["key"]) === productKey);
-  const product = firstString(productRecord, ["display_name"]) ?? productKey || "Fuel";
+  const product = (firstString(productRecord, ["display_name"]) ?? productKey) || "Fuel";
   const stage = firstString(order, ["stage_key"]) ?? "awaiting_station_acceptance";
   const litres = firstNumber(order, ["requested_litres"]) ?? 0;
   const filled = firstNumber(order, ["filled_litres"]) ?? 0;
