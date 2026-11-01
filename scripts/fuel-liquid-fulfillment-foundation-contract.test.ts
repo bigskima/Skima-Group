@@ -1,5 +1,5 @@
 const migration = await Deno.readTextFile(
-  "supabase/migrations/20261102001000_fuel_liquid_fulfillment_foundation.sql",
+  "supabase/migrations/20261101202000_fuel_liquid_fulfillment_foundation.sql",
 );
 const historyPolicy = JSON.parse(
   await Deno.readTextFile("supabase/migration-history-policy.json"),
@@ -161,7 +161,7 @@ Deno.test("fuel migration is tracked without advancing the production migration 
   if (historyPolicy.remoteHeadVersion !== "20261030142157") {
     throw new Error("The production migration head must remain at the verified live version.");
   }
-  if (!historyPolicy.businessModuleMigrations.includes("20261102001000_fuel_liquid_fulfillment_foundation.sql")) {
+  if (!historyPolicy.businessModuleMigrations.includes("20261101202000_fuel_liquid_fulfillment_foundation.sql")) {
     throw new Error("The fuel foundation migration must be tracked in migration-history-policy.json.");
   }
 });
