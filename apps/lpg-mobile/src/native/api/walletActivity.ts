@@ -20,6 +20,15 @@ export function useWalletActivity(walletId: string | null, limit = 25) {
     enabled: session.status === "authenticated" && Boolean(walletId),
     refetchInterval: 30000,
     queryFn: async () => {
+      if (!walletId) {
+        return WalletActivitySchema.parse({
+          items: [],
+          totalCount: 0,
+          offset: 0,
+          limit,
+          hasMore: false,
+        });
+      }
       const result = await session.supabase.rpc("read_wallet_activity", {
         target_wallet_id: walletId,
         target_limit: limit,
