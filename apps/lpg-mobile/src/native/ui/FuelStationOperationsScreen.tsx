@@ -160,6 +160,9 @@ export function FuelStationOperationsScreen() {
   const focusedMode = focusedOrder ? firstString(focusedOrder, ["container_mode"]) ?? "rental" : "rental";
   const focusedContainerTypeId = focusedOrder ? firstString(focusedOrder, ["container_type_id"]) ?? "" : "";
   const focusedStage = focusedOrder ? firstString(focusedOrder, ["stage_key"]) ?? "" : "";
+  const focusedSettlementExecutionId = firstString(focusedOrder, ["settlement_execution_id"]);
+  const focusedSettlementStatementId = firstString(focusedOrder, ["settlement_statement_id"]);
+  const focusedSettledAt = firstString(focusedOrder, ["settled_at"]);
   const branchOffers = (offers.data ?? []).filter((offer) =>
     firstString(offer, ["status"]) === "active" && firstString(offer, ["branch_id"]) === stationBranchId
   );
@@ -546,6 +549,14 @@ export function FuelStationOperationsScreen() {
                 </View>
                 <StatusPill label={humanize(focusedStage)} tone={stageTone(focusedStage)} />
               </View>
+
+              {focusedSettlementExecutionId ? (
+                <View style={styles.operationInfo}>
+                  <StatusPill label="Station settlement posted" tone="success" />
+                  {focusedSettledAt ? <Text style={[styles.muted, { color: palette.muted }]}>Posted {new Date(focusedSettledAt).toLocaleString()}</Text> : null}
+                  {focusedSettlementStatementId ? <Text style={[styles.muted, { color: palette.muted }]}>Statement reference · {focusedSettlementStatementId.slice(0, 8).toUpperCase()}</Text> : null}
+                </View>
+              ) : null}
 
               {focusedStage === "awaiting_station_acceptance" ? (
                 <AppButton label="Accept order & reserve full tank stock" fullWidth loading={busyOrderId === focusedOrderId || reserveBatch.isPending} onPress={() => void startOrderPreparation(focusedOrder)} icon={<ShieldCheck color="#FFFFFF" size={18} />} />
