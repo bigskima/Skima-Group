@@ -258,33 +258,6 @@ begin
       select
         request.id as service_request_id,
         request.status as service_status,
-        coalesce((
-          select max(quote.total_amount)
-          from public.price_quotes quote
-          where quote.service_request_id = request.id
-            and quote.status = 'accepted'
-        ), 0)::numeric(28,8) as quote_total,
-        coalesce((
-          select max(order_record.total_amount)
-          from public.order_records order_record
-          where order_record.service_request_id = request.id
-        ), 0)::numeric(28,8) as order_total,
-        coalesce((
-          select sum(transaction.total_amount)
-          from public.financial_transactions transaction
-          where transaction.subject_type = 'service_request'
-            and transaction.subject_id = request.id
-            and transaction.transaction_type = 'hold'
-            and transaction.status = 'posted'
-        ), 0)::numeric(28,8) as hold_total,
-        coalesce((
-          select sum(transaction.total_amount)
-          from public.financial_transactions transaction
-          where transaction.subject_type = 'service_request'
-            and transaction.subject_id = request.id
-            and transaction.transaction_type = 'release'
-            and transaction.status = 'posted'
-        ), 0)::numeric(28,8) as release_total,
         coalesce((projection.financial->>'quoteTotal')::numeric,0)::numeric(28,8) as quote_total,
         coalesce((projection.financial->>'orderTotal')::numeric,0)::numeric(28,8) as order_total,
         coalesce((projection.financial->>'holdTotal')::numeric,0)::numeric(28,8) as hold_total,
