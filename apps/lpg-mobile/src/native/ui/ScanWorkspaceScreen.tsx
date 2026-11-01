@@ -114,11 +114,39 @@ export function ScanWorkspaceScreen({
       setFastScanNotice({ success: true, text: `${cylinderId} · ${orderReference}. ${nextStep}` });
       await jobs.refetch().catch(() => undefined);
     } catch (cause) {
+      const message = friendlyError(cause, "SKIMA could not match this code to an assigned order. Check the cylinder code and workspace.");
+      if (message.toLowerCase().includes("no active order ready for verification")) {
+        const refreshed = await jobs.refetch().catch(() => null);
+        const matchedJob = (refreshed?.data ?? jobs.data ?? []).find((job) => {
+          const identifier = cylinderPermanentIdentifier(job)
+            ?? firstString(job, ["cylinderIdentifier", "cylinderReference"]);
+          return identifier?.trim().toUpperCase() === token.toUpperCase();
+        });
+        const currentStatus = (displayStatus(matchedJob ?? {}) ?? "").toLowerCase().replace(/[\\s-]+/g, "_");
+        const alreadyVerifiedStatuses = new Set([
+          "pickup_verified",
+          "station_verified",
+          "refill_started",
+          "refill_in_progress",
+          "refill_confirmed",
+          "station_settled",
+          "return_en_route",
+          "delivery_verification_pending",
+          "delivered",
+          "completed",
+        ]);
+        if (matchedJob && alreadyVerifiedStatuses.has(currentStatus)) {
+          const matchedId = recordId(matchedJob);
+          setFastScanOrderId(matchedId);
+          setFastScanNotice({
+            success: true,
+            text: `${cylinderPermanentIdentifier(matchedJob) ?? token.toUpperCase()} · ${displayReference(matchedJob) ?? "Assigned order"}. This cylinder is already verified for this order (currently ${currentStatus.replace(/_/g, " ")}). No new scan was recorded. Open the order to continue.`,
+          });
+          return;
+        }
+      }
       setFastScanOrderId(null);
-      setFastScanNotice({
-        success: false,
-        text: friendlyError(cause, "SKIMA could not match this code to an assigned order. Check the cylinder code and workspace."),
-      });
+      setFastScanNotice({ success: false, text: message });
     }
   };
 
