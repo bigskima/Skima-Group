@@ -23,7 +23,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   experiments: { typedRoutes: true },
   web: {
     bundler: "metro",
-    output: "static",
+    // Orders and workspace details use dynamic Expo Router params. Export one SPA shell
+    // so a browser refresh on /orders/:id is routed back through Expo Router.
+    output: "single",
     splash: {
       image: "./assets/skima-splash-logo.png",
       backgroundColor: "#0B1510",
