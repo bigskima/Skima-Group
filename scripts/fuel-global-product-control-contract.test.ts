@@ -13,7 +13,7 @@ function requireIncludes(source: string, fragment: string, message: string): voi
 Deno.test("global Fuel product controls expose enable-all and disable-all actions", () => {
   requireIncludes(admin, "Enable all products", "admin can enable the complete product group");
   requireIncludes(admin, "Disable all products", "admin can disable the complete product group");
-  requireIncludes(admin, 'productKeys: PRODUCTS.map((product) => product.key)', "UI submits the full canonical product group");
+  requireIncludes(admin, 'productKeys: [...PRODUCT_KEYS]', "UI submits the full canonical product group");
   requireIncludes(admin, 'createClientIdempotencyKey("admin.fuel.products.bulk", status)', "bulk change has a retry-safe idempotency key");
   requireIncludes(admin, "fuel.pms", "PMS is included");
   requireIncludes(admin, "fuel.ago", "AGO / diesel is included");
