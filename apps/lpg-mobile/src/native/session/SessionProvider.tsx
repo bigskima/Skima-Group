@@ -249,13 +249,23 @@ export function SessionProvider({ children }: PropsWithChildren) {
           refresh_token: current.refresh_token,
         });
         if (refreshError || !data.session) {
+          const message = (refreshError?.message ?? "").toLowerCase();
+          const statusCode = Number(refreshError?.status ?? 0);
+          const sessionIsInvalid =
+            !data.session ||
+            [400, 401, 403].includes(statusCode) ||
+            /invalid refresh token|refresh token not found|session not found|refresh token has already been used/.test(message);
+
           setError(
             friendlyError(
               refreshError ?? new Error("The session could not be renewed."),
-              "Your secure session has expired. Sign in again to continue.",
+              "Your secure session could not be refreshed. Check your connection and try again.",
             ),
           );
-          await apply(null);
+          // Only clear authentication when the auth server rejects the refresh
+          // credential itself. A temporary network failure must not sign the
+          // customer out or clear their locally saved refill information.
+          if (sessionIsInvalid) await apply(null);
           return;
         }
 
