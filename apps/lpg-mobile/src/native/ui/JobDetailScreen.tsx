@@ -641,50 +641,27 @@ export function JobDetailScreen({ workspace }: { workspace: "driver" | "station"
           ) : null}
 
           {canDriverScan && driverSection === "actions" && driverScanType ? (
-            driverScanType === "customer_delivery" ? (
-              <View style={[styles.scanCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                <View style={styles.sectionLead}>
-                  <View style={[styles.sectionIcon, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={22} /></View>
-                  <View style={styles.sectionCopy}>
-                    <Text style={[styles.sectionTitle, { color: palette.ink }]}>Customer hand-over confirmation</Text>
-                    <Text style={[styles.sectionBody, { color: palette.muted }]}>
-                      {status === "return_en_route"
-                        ? "Return the filled cylinder to the customer, then tap “Arrived for customer hand-over”. The customer can confirm the delivery from their SKIMA order."
-                        : "The customer must open SKIMA → Orders → this order → Confirm delivery, then complete the order-specific OTP. That confirmation closes the hand-over automatically. No second cylinder scan is required."}
-                    </Text>
-                  </View>
+            <View style={[styles.scanCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+              <View style={styles.sectionLead}>
+                <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
+                <View style={styles.sectionCopy}>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>{driverScanTitle(driverScanType)}</Text>
+                  <Text style={[styles.sectionBody, { color: palette.muted }]}>{driverScanDescription(driverScanType)}</Text>
                 </View>
+              </View>
+              <Scanner enabled onDetected={setToken} />
+              {token ? (
                 <AppButton
-                  label="Refresh hand-over status"
+                  label={driverScanButton(driverScanType)}
                   fullWidth
-                  variant="secondary"
-                  loading={detail.isRefetching}
-                  onPress={() => void detail.refetch()}
+                  loading={continuousScan.isPending}
+                  icon={<CheckCircle2 color="#FFFFFF" size={17} />}
+                  onPress={() => void submitDriverScan()}
                 />
-              </View>
-            ) : (
-              <View style={[styles.scanCard, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                <View style={styles.sectionLead}>
-                  <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><ScanLine color={palette.brand} size={22} /></View>
-                  <View style={styles.sectionCopy}>
-                    <Text style={[styles.sectionTitle, { color: palette.ink }]}>{driverScanTitle(driverScanType)}</Text>
-                    <Text style={[styles.sectionBody, { color: palette.muted }]}>{driverScanDescription(driverScanType)}</Text>
-                  </View>
-                </View>
-                <Scanner enabled onDetected={setToken} />
-                {token ? (
-                  <AppButton
-                    label={driverScanButton(driverScanType)}
-                    fullWidth
-                    loading={continuousScan.isPending}
-                    icon={<CheckCircle2 color="#FFFFFF" size={17} />}
-                    onPress={() => void submitDriverScan()}
-                  />
-                ) : (
-                  <Text style={[styles.scannerHint, { color: palette.muted }]}>Align the SKIMA cylinder code inside the scanner to continue.</Text>
-                )}
-              </View>
-            )
+              ) : (
+                <Text style={[styles.scannerHint, { color: palette.muted }]}>Align the SKIMA cylinder code inside the scanner to continue.</Text>
+              )}
+            </View>
           ) : null}
 
           {canStationScan && stationScanType ? (
@@ -1003,19 +980,19 @@ function driverScanTitle(type: "customer_pickup" | "station_receipt" | "customer
 
 function driverScanDescription(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
   if (type === "station_receipt") return "Scan the SKIMA cylinder code at reception so station staff can confirm the order and begin the refill.";
-  if (type === "customer_delivery") return "Customer OTP confirmation in their SKIMA order completes the final hand-over. Do not scan the cylinder again at this stage.";
+  if (type === "customer_delivery") return "At the customer's address, scan the returned cylinder or enter its five-character ID. The customer then confirms the order-specific OTP to close delivery.";
   return "Scan the customer's SKIMA cylinder code before collecting it.";
 }
 
 function driverScanButton(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
   if (type === "station_receipt") return "Confirm station arrival";
-  if (type === "customer_delivery") return "Await customer confirmation";
+  if (type === "customer_delivery") return "Verify returned cylinder";
   return "Confirm cylinder pickup";
 }
 
 function driverScanSuccess(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
   if (type === "station_receipt") return "Station arrival verified. The station has been notified and can now begin its safety check.";
-  if (type === "customer_delivery") return "Customer OTP confirmation completes this hand-over. No second driver scan is required.";
+  if (type === "customer_delivery") return "Returned cylinder scan verified. Ask the customer to complete the order-specific OTP in SKIMA; that final confirmation closes delivery and starts settlement.";
   return "Cylinder pickup verified successfully. You can now continue to the assigned station.";
 }
 
@@ -1034,7 +1011,7 @@ function driverActionSuccess(actionKey: string) {
     "lpg.pickup.start": "Pickup journey started.",
     "lpg.station.start": "Station journey started.",
     "lpg.return.start": "Return journey started.",
-    "lpg.delivery.pending": "Arrival recorded. The customer can complete delivery verification.",
+    "lpg.delivery.pending": "Arrival recorded. Scan the returned cylinder, then ask the customer to complete the order-specific OTP.",
   };
   return labels[actionKey] ?? "Job updated.";
 }
@@ -1067,8 +1044,8 @@ function driverStageDescription(status: string, deliveryChallengeVerified = fals
   if (["pickup_verified", "station_en_route"].includes(status)) return "Take the verified cylinder to the assigned station. Station staff scan it at reception.";
   if (["station_verified", "refill_started", "refill_in_progress"].includes(status)) return "The station is processing the verified refill.";
   if (["refill_confirmed", "station_settled", "return_en_route"].includes(status)) return "The filled cylinder is ready to return to the customer.";
-  if (status === "delivery_verification_pending" && deliveryChallengeVerified) return "Customer verification is recorded. Refresh this job; the hand-over closes through the customer's order confirmation.";
-  if (status === "delivery_verification_pending") return "Ask the customer to open this order in SKIMA, choose Confirm delivery and complete the order-specific OTP. No further driver cylinder scan is needed."
+  if (status === "delivery_verification_pending" && deliveryChallengeVerified) return "Customer OTP is verified. Refresh this job; the completed hand-over and settlement status will appear here.";
+  if (status === "delivery_verification_pending") return "Scan the returned cylinder first. Then ask the customer to open this order in SKIMA, choose Confirm delivery and complete the order-specific OTP."
   if (["delivered", "completed"].includes(status)) return "The hand-over is confirmed and payment processing continues automatically.";
   return "Follow the next available action for this assigned job.";
 }
