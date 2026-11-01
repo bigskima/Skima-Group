@@ -69,6 +69,9 @@ const AnalyticsSchema = z.object({
   transactionSummary: z.array(RecordSchema).default([]),
   withdrawals: RecordSchema.default({}),
   settlements: RecordSchema.default({}),
+  settlementStatements: z.array(RecordSchema).default([]),
+  financialAdjustments: z.array(RecordSchema).default([]),
+  reconciliationFindings: z.array(RecordSchema).default([]),
   fleet: FleetSchema,
   recentTransactions: z.array(RecordSchema).default([]),
   recentLedgerEntries: z.array(RecordSchema).default([]),
@@ -171,6 +174,56 @@ const transactionColumns: readonly TableColumn<RecordValue>[] = [
   { key: "amount", header: "Amount", render: (row) => money(numberValue(row, "amount"), recordString(row, "currencyCode") ?? "NGN") },
   { key: "externalReference", header: "Reference", render: (row) => recordString(row, "externalReference") ?? "—" },
   { key: "transactionId", header: "Transaction ID", render: (row) => shortId(recordString(row, "transactionId")) },
+];
+
+const settlementStatementColumns: readonly TableColumn<RecordValue>[] = [
+  { key: "publicReference", header: "Statement", render: (row) => <strong>{recordString(row, "publicReference") ?? "—"}</strong> },
+  { key: "createdAt", header: "Created", render: (row) => formatDate(recordString(row, "createdAt")) },
+  { key: "grossAmount", header: "Gross", render: (row) => money(numberValue(row, "grossAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "platformFeeAmount", header: "Platform fee", render: (row) => money(numberValue(row, "platformFeeAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "netAmount", header: "Net", render: (row) => money(numberValue(row, "netAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "status", header: "Status", render: (row) => <StatusBadge tone={recordString(row, "status") === "posted" ? "success" : "warning"}>{label(recordString(row, "status"))}</StatusBadge> },
+  { key: "source", header: "Source", render: (row) => recordString(row, "source") ?? "—" },
+  { key: "settlementExecutionId", header: "Execution", render: (row) => shortId(recordString(row, "settlementExecutionId")) },
+];
+
+const adjustmentColumns: readonly TableColumn<RecordValue>[] = [
+  { key: "createdAt", header: "Created", render: (row) => formatDate(recordString(row, "createdAt")) },
+  { key: "orderReference", header: "Order", render: (row) => recordString(row, "orderReference") ?? shortId(recordString(row, "orderId")) },
+  { key: "adjustmentType", header: "Adjustment", render: (row) => label(recordString(row, "adjustmentType")) },
+  { key: "amount", header: "Amount", render: (row) => money(numberValue(row, "amount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "status", header: "Status", render: (row) => <StatusBadge tone={recordString(row, "status") === "posted" ? "success" : recordString(row, "status") === "blocked" ? "warning" : "neutral"}>{label(recordString(row, "status"))}</StatusBadge> },
+  { key: "reasonKey", header: "Reason", render: (row) => label(recordString(row, "reasonKey")) },
+  { key: "transactionId", header: "Ledger transaction", render: (row) => shortId(recordString(row, "transactionId")) },
+];
+
+const reconciliationColumns: readonly TableColumn<RecordValue>[] = [
+  {
+    key: "severity",
+    header: "Severity",
+    render: (row) => {
+      const severity = recordString(row, "severity");
+      return <StatusBadge tone={severity === "critical" ? "danger" : severity === "high" ? "warning" : "neutral"}>{label(severity)}</StatusBadge>;
+    },
+  },
+  { key: "findingType", header: "Finding", render: (row) => label(recordString(row, "findingType")) },
+  { key: "subjectType", header: "Subject", render: (row) => `${label(recordString(row, "subjectType"))} · ${shortId(recordString(row, "subjectId"))}` },
+  { key: "expectedAmount", header: "Expected", render: (row) => money(numberValue(row, "expectedAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "observedAmount", header: "Observed", render: (row) => money(numberValue(row, "observedAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  { key: "varianceAmount", header: "Variance", render: (row) => money(numberValue(row, "varianceAmount"), recordString(row, "currencyCode") ?? "NGN") },
+  {
+    key: "evidence",
+    header: "Evidence posture",
+    render: (row) => {
+      const evidence = recordObject(row, "evidence");
+      const advisoryOnly = evidence?.advisoryOnly === true;
+      const noMovement = evidence?.doesNotMoveFunds === true && evidence?.doesNotPostLedger === true;
+      return advisoryOnly && noMovement
+        ? <StatusBadge tone="warning">Advisory only · no ledger posting</StatusBadge>
+        : <StatusBadge tone="neutral">Review evidence</StatusBadge>;
+    },
+  },
+  { key: "recommendedAction", header: "Recommended review", render: (row) => recordString(row, "recommendedAction") ?? "Review source records." },
 ];
 
 const ledgerColumns: readonly TableColumn<RecordValue>[] = [
@@ -646,6 +699,35 @@ export function AdminFinancialAnalyticsWorkspace() {
           <MetricTile label="Withdrawals pending" value={money(numberValue(data.withdrawals, "pendingAmount"), currency)} tone="warning" />
           <MetricTile label="Settlements posted" value={money(numberValue(data.settlements, "postedAmount"), currency)} />
         </div>
+        <h3>Settlement statements</h3>
+        <p className="skima-muted">Statements are counterpart/order-level settlement documents. A posted ledger transaction does not automatically mean a settlement statement exists for that order.</p>
+        <DataTable
+          columns={settlementStatementColumns}
+          caption="Settlement statement records"
+          records={data.settlementStatements as RecordValue[]}
+          getRowKey={(row) => recordString(row, "id") ?? JSON.stringify(row)}
+          emptyTitle="No settlement statements in this period"
+          emptyMessage="No statement records were generated for the selected period and currency."
+        />
+        <h3>Financial adjustments and exceptions</h3>
+        <DataTable
+          columns={adjustmentColumns}
+          caption="LPG financial adjustments"
+          records={data.financialAdjustments as RecordValue[]}
+          getRowKey={(row) => recordString(row, "id") ?? JSON.stringify(row)}
+          emptyTitle="No financial adjustments"
+          emptyMessage="No LPG financial adjustments were recorded for the selected period and currency."
+        />
+        <h3>Open reconciliation findings</h3>
+        <p className="skima-muted">These are review findings, not instructions to move money. Advisory findings must be reconciled to the original quote, escrow, settlement and refund records before any adjustment is made.</p>
+        <DataTable
+          columns={reconciliationColumns}
+          caption="Finance reconciliation findings"
+          records={data.reconciliationFindings as RecordValue[]}
+          getRowKey={(row) => recordString(row, "id") ?? recordString(row, "findingKey") ?? JSON.stringify(row)}
+          emptyTitle="No open reconciliation findings"
+          emptyMessage="No open findings at the configured severity threshold were returned."
+        />
         <h3>Financial transaction summary</h3>
         <DataTable
           columns={[
@@ -695,6 +777,13 @@ export function AdminFinancialAnalyticsWorkspace() {
 function recordString(record: RecordValue | null | undefined, key: string): string | null {
   const value = record?.[key];
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function recordObject(record: RecordValue | null | undefined, key: string): RecordValue | null {
+  const value = record?.[key];
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as RecordValue
+    : null;
 }
 
 function numberValue(record: RecordValue | null | undefined, key: string): number {
