@@ -530,7 +530,7 @@ Deno.test("LPG dispatch decision snapshot conflict target is unambiguous", async
 });
 
 Deno.test("SKIMA internal dispatch decision snapshot conflict target is unambiguous", async () => {
-  const migration = await read("supabase/migrations/20261101102000_lpg_internal_dispatch_snapshot_conflict_fix.sql");
+  const migration = await read("supabase/migrations/20261101101832_lpg_internal_dispatch_snapshot_conflict_fix.sql");
   assertIncludes(migration, "public.dispatch_lpg_internal_order(uuid,integer,text,text)");
   assertIncludes(migration, "dispatch_location_decision_snapshots_dispatch_request_id_key");
   assertIncludes(migration, "ON CONFLICT ON CONSTRAINT");
