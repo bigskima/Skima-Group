@@ -3759,7 +3759,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
   if (routePath === "/runtime/fuel/orders/operations" && request.method === "GET") {
     let query = supabase
       .from("fuel_order_operations")
-      .select("order_id,service_request_id,product_key,station_branch_id,customer_user_id,requested_litres,filled_litres,delivered_litres,container_mode,container_count,container_type_id,fulfillment_mode,stage_key,exception_reason,station_accepted_at,filled_at,driver_assigned_at,station_handover_at,delivered_at,return_received_at,completed_at,settlement_execution_id,settlement_transaction_id,settlement_statement_id,settled_at,metadata,created_at,updated_at,order:order_records(currency_code)")
+      .select("order_id,service_request_id,product_key,station_branch_id,customer_user_id,requested_litres,filled_litres,delivered_litres,container_mode,container_count,container_type_id,fulfillment_mode,stage_key,exception_reason,station_accepted_at,filled_at,driver_assigned_at,station_handover_at,delivered_at,return_received_at,completed_at,settlement_execution_id,settlement_transaction_id,settlement_statement_id,settled_at,deposit_refunded_at,metadata,created_at,updated_at,order:order_records(currency_code)")
       .order("created_at", { ascending: false });
     const branchId = optionalUuid(url.searchParams.get("branchId"), "branchId");
     const orderId = optionalUuid(url.searchParams.get("orderId"), "orderId");
