@@ -46,6 +46,9 @@ Deno.test("Financial analytics keeps Finance and Revenue permission boundaries s
 Deno.test("Fleet analytics separates customer collection, procurement, explicit markup and procurement spread", () => {
   assertStringIncludes(migration, "'customerCollections'");
   assertStringIncludes(migration, "'customerLpgPrincipal'");
+  assertStringIncludes(migration, "'supplierPricePerKg'");
+  assertStringIncludes(migration, "'referencePricePerKg'");
+  assertStringIncludes(migration, "'supplierVariancePercent'");
   assertStringIncludes(migration, "'procurementCost'");
   assertStringIncludes(migration, "'procurementSpread'");
   assertStringIncludes(migration, "'platformMarkupCollected'");
@@ -65,6 +68,8 @@ Deno.test("Admin analytics distinguishes supplier cash or bank payments and Driv
   assertStringIncludes(workspace, "Paid into Driver Wallets");
   assertStringIncludes(workspace, "externally withdrawn are different states");
   assertStringIncludes(workspace, "Cumulative supplier disbursements in expense ledger");
+  assertStringIncludes(workspace, "Supplier price / kg");
+  assertStringIncludes(workspace, "Wallet ledger transaction");
   assertStringIncludes(workspace, "Procurement spread held in clearing");
 });
 
