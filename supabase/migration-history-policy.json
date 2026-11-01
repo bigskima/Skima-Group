@@ -115,6 +115,8 @@
     "20261101202800_fuel_dispatch_assignment_runtime.sql",
     "20261101202900_fuel_platform_admin_permissions.sql",
     "20261101203000_fuel_stock_batch_status_sync.sql",
-    "20261101203100_fuel_global_product_controls.sql"
+    "20261101203100_fuel_global_product_controls.sql",
+    "20261102001000_fuel_quote_arithmetic_correction.sql",
+    "20261102002000_fuel_order_settlement_runtime.sql"
   ]
 }
