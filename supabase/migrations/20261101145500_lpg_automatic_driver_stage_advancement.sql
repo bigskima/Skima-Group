@@ -15,7 +15,7 @@ begin
 
   old_block := E'  return scan_id;\nend;\n$function$';
   new_block := E'
-  -- Once the customer's cylinder is physically collected, start the station
+  -- Once the customer''s cylinder is physically collected, start the station
   -- leg automatically. The scan function has already authenticated the
   -- assigned driver (including Station Managed assignments) and recorded
   -- the immutable pickup event above.
