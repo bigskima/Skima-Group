@@ -415,6 +415,44 @@ begin
         group by transaction.transaction_type,transaction.status
       ) grouped
     ),'[]'::jsonb) else '[]'::jsonb end,
+    'transactionSources',case when can_read_finance then coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'source',grouped.source,'transactionType',grouped.transaction_type,
+        'status',grouped.status,'count',grouped.entry_count,'amount',grouped.total_amount
+      ) order by grouped.total_amount desc,grouped.source)
+      from (
+        select transaction.source,transaction.transaction_type,transaction.status,
+          count(*) entry_count,sum(transaction.total_amount)::numeric(28,8) total_amount
+        from public.financial_transactions transaction
+        where transaction.currency_code=currency_code_value
+          and (from_value is null or transaction.created_at>=from_value)
+          and (until_value is null or transaction.created_at<until_value)
+          and (can_read_revenue or not public.financial_transaction_touches_revenue(transaction.id))
+        group by transaction.source,transaction.transaction_type,transaction.status
+      ) grouped
+    ),'[]'::jsonb) else '[]'::jsonb end,
+    'platformAccountMovements',case when can_read_finance then coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'walletType',grouped.wallet_type,'walletPurpose',grouped.wallet_purpose,
+        'direction',grouped.direction,'entryType',grouped.entry_type,
+        'source',grouped.source,'count',grouped.entry_count,'amount',grouped.total_amount
+      ) order by grouped.total_amount desc,grouped.wallet_type,grouped.direction)
+      from (
+        select wallet.wallet_type,wallet.metadata->>'wallet_purpose' wallet_purpose,
+          ledger.direction,ledger.entry_type,transaction.source,
+          count(*) entry_count,sum(ledger.amount)::numeric(28,8) total_amount
+        from public.wallet_ledger_entries ledger
+        join public.wallet_accounts wallet on wallet.id=ledger.wallet_id
+        join public.financial_transactions transaction on transaction.id=ledger.transaction_id
+        where wallet.owner_entity_type='platform'
+          and ledger.currency_code=currency_code_value
+          and (from_value is null or ledger.created_at>=from_value)
+          and (until_value is null or ledger.created_at<until_value)
+          and (can_read_revenue or wallet.wallet_type<>'platform_revenue')
+        group by wallet.wallet_type,wallet.metadata->>'wallet_purpose',
+          ledger.direction,ledger.entry_type,transaction.source
+      ) grouped
+    ),'[]'::jsonb) else '[]'::jsonb end,
     'withdrawals',case when can_read_finance then coalesce((
       select jsonb_build_object(
         'count',count(*),
