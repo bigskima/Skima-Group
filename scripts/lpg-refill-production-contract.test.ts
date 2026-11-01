@@ -111,8 +111,8 @@ Deno.test("driver job final delivery uses the assigned-cylinder resolver and ref
   assertIncludes(internalScan, "continuousScan.mutateAsync");
   assertIncludes(internalScan, 'workspace: "driver"');
   assertIncludes(detail, "deliveryChallengeVerified");
-  assertIncludes(detail, "Customer delivery verification is complete.");
-  assertIncludes(internal, "Customer delivery verification is complete.");
+  assertIncludes(detail, "Scan the returned cylinder first.");
+  assertIncludes(internal, "Scan the returned cylinder at the customer's address first.");
   assertIncludes(projection, "deliveryChallengeVerified");
   assertIncludes(projection, "public.lpg_delivery_challenge_is_verified");
   assertIncludes(payoutAuthorization, "can_create_driver_wallet");
