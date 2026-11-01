@@ -604,7 +604,7 @@ export function FuelStationOperationsScreen() {
                         <Text style={[styles.muted, { color: palette.muted }]}>{firstNumber(allocation, ["allocated_litres"])} L · Rental return received</Text>
                       </View>
                       <AppButton label="Pass" size="sm" onPress={() => void recordContainerInspection(allocation, "passed")} loading={busyOrderId === focusedOrderId || inspectContainer.isPending} />
-                      <AppButton label="Fail" size="sm" color="danger" variant="secondary" onPress={() => void recordContainerInspection(allocation, "failed")} loading={busyOrderId === focusedOrderId || inspectContainer.isPending} />
+                      <AppButton label="Fail" size="sm" variant="secondary" onPress={() => void recordContainerInspection(allocation, "failed")} loading={busyOrderId === focusedOrderId || inspectContainer.isPending} />
                     </View>
                   ))}
                   {existingAllocations.every((row) => firstString(row, ["status"]) !== "inspection") ? (
