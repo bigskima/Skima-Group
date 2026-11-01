@@ -44,7 +44,7 @@ Deno.test("Fuel reservations are atomic and never oversell available litres", ()
   requireIncludes(stock, "public.consume_fuel_stock_reservation(", "station fill consumes the stock reservation");
   requireIncludes(stock, "fuel_stock_reservation_events", "reservation changes are separately audited from physical movements");
   requireIncludes(stock, "reservation.status in ('reserved','partially_consumed')", "closed or partially consumed reservations are not counted as still held");
-  requireNotIncludes(stock, "fuel_order_stock_reservations_one_open_line", "multiple tanks can contribute to one fuel order");
+  requireIncludes(stock, "drop index if exists public.fuel_order_stock_reservations_one_open_line", "the old one-open-line constraint is removed to allow compatible multi-tank batch reservations");
 });
 
 Deno.test("Fuel stock dispense records actual litres and keeps unused reserved litres for later fills", () => {
