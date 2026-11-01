@@ -794,7 +794,7 @@ Deno.test("SKIMA Managed-only coverage can load and quote its own internal fulfi
   const [screen, serviceability, eligibility, referencePolicy, quoteRuntime] = await Promise.all([
     read("apps/lpg-mobile/src/native/ui/NewRefillScreen.tsx"),
     read("apps/lpg-mobile/src/native/api/serviceability.ts"),
-    read("supabase/migrations/20261101094500_skima_managed_reference_policy_uses_managed_capability.sql"),
+    read("supabase/migrations/20261101095005_lpg_skima_managed_reference_policy_uses_managed_capability.sql"),
     read("supabase/migrations/20260916162545_lpg_launch_assurance_quote_core.sql"),
     read("apps/lpg-mobile/src/native/api/gateway.ts"),
   ]);
