@@ -5,7 +5,8 @@ alter table public.fuel_order_operations
   add column if not exists settlement_transaction_id uuid references public.financial_transactions(id) on delete set null,
   add column if not exists settlement_statement_id uuid references public.settlement_statements(id) on delete set null,
   add column if not exists settled_at timestamptz,
-  add column if not exists deposit_refunded_at timestamptz;
+  add column if not exists deposit_refunded_at timestamptz,
+  add column if not exists deposit_refund_amount numeric(28,8) not null default 0 check (deposit_refund_amount>=0);
 
 create or replace function public.settle_fuel_order(
   target_order_id uuid,
@@ -38,7 +39,7 @@ declare
   driver_payout_amount numeric(28,8);
   platform_revenue_amount numeric(28,8);
   tax_liability_amount numeric(28,8);
-  deposit_refund_amount numeric(28,8);
+  v_deposit_refund_amount numeric(28,8);
   component_total numeric(28,8);
   remaining_escrow_amount numeric(28,8);
   distribution jsonb := '[]'::jsonb;
@@ -155,7 +156,7 @@ begin
 
   platform_revenue_amount := quote_record.container_amount+quote_record.platform_fee_amount;
   tax_liability_amount := quote_record.tax_amount;
-  deposit_refund_amount := case
+  v_deposit_refund_amount := case
     when operation_record.container_mode='rental' then quote_record.refundable_deposit_amount
     else 0
   end;
@@ -165,7 +166,7 @@ begin
   end if;
 
   if operation_record.container_mode='rental'
-     and deposit_refund_amount>0
+     and v_deposit_refund_amount>0
      and operation_record.stage_key<>'completed' then
     raise exception using errcode='55000',message='Rental deposit return requires completed container return and inspection';
   end if;
@@ -221,7 +222,7 @@ begin
     );
   end if;
 
-  if deposit_refund_amount>0 then
+  if v_deposit_refund_amount>0 then
     select wallet.id into customer_wallet_id
     from public.wallet_accounts wallet
     where wallet.wallet_type='customer'
@@ -293,10 +294,10 @@ begin
     ));
   end if;
 
-  if deposit_refund_amount>0 then
+  if v_deposit_refund_amount>0 then
     distribution := distribution||jsonb_build_array(jsonb_build_object(
       'wallet_id',customer_wallet_id,
-      'amount',deposit_refund_amount,
+      'amount',v_deposit_refund_amount,
       'entry_type','principal',
       'metadata',jsonb_build_object(
         'role','customer_refundable_deposit_return',
@@ -322,7 +323,7 @@ begin
     'driver_payout_amount',driver_payout_amount,
     'platform_revenue_amount',platform_revenue_amount,
     'tax_liability_amount',tax_liability_amount,
-    'deposit_refund_amount',deposit_refund_amount,
+    'deposit_refund_amount',v_deposit_refund_amount,
     'policy_snapshot',jsonb_build_object(
       'settlement_policy_key','settlement.fuel.escrow.station-driver.v1',
       'settlement_policy_id',request_record.settlement_policy_id,
@@ -376,12 +377,13 @@ begin
       settlement_transaction_id=settlement_transaction_id,
       settlement_statement_id=settlement_statement_id,
       settled_at=now_value,
-      deposit_refunded_at=case when deposit_refund_amount>0 then now_value else deposit_refunded_at end,
+      deposit_refunded_at=case when v_deposit_refund_amount>0 then now_value else deposit_refunded_at end,
+      deposit_refund_amount=v_deposit_refund_amount,
       metadata=metadata||jsonb_build_object(
         'settlement_execution_id',settlement_execution_id,
         'settlement_transaction_id',settlement_transaction_id,
         'settlement_statement_id',settlement_statement_id,
-        'deposit_refunded_at',case when deposit_refund_amount>0 then now_value else null end
+        'deposit_refunded_at',case when v_deposit_refund_amount>0 then now_value else null end
       ),
       updated_at=now_value
   where order_id=target_order_id;
