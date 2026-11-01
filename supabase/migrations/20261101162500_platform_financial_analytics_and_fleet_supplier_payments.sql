@@ -399,6 +399,27 @@ begin
           and (from_value is null or settlement.created_at>=from_value)
           and (until_value is null or settlement.created_at<until_value)
       ),0),
+      'customerLpgPrincipal',coalesce((
+        select sum(order_record.station_amount)
+        from public.lpg_refill_orders order_record
+        join public.settlement_executions settlement
+          on settlement.id=order_record.internal_settlement_execution_id and settlement.status='posted'
+        where order_record.fulfillment_channel='skima_internal'
+          and order_record.currency_code=currency_code_value
+          and (from_value is null or settlement.created_at>=from_value)
+          and (until_value is null or settlement.created_at<until_value)
+      ),0),
+      'procurementSpread',coalesce((
+        select sum(order_record.station_amount-procurement.procurement_amount)
+        from public.lpg_refill_orders order_record
+        join public.settlement_executions settlement
+          on settlement.id=order_record.internal_settlement_execution_id and settlement.status='posted'
+        join public.lpg_internal_refill_procurements procurement on procurement.lpg_order_id=order_record.id
+        where order_record.fulfillment_channel='skima_internal'
+          and order_record.currency_code=currency_code_value
+          and (from_value is null or settlement.created_at>=from_value)
+          and (until_value is null or settlement.created_at<until_value)
+      ),0),
       'fundsAllocatedToFleet',coalesce((
         select sum(ledger.amount)
         from public.wallet_ledger_entries ledger
@@ -481,6 +502,7 @@ begin
           'orderId',item.id,'procurementId',item.procurement_id,'orderReference',item.public_reference,
           'createdAt',item.created_at,'completedAt',item.updated_at,
           'actualKg',item.actual_kg,'customerTotal',item.total_amount,'currencyCode',item.currency_code,
+          'lpgPrincipalAllocated',item.station_amount,'procurementSpread',item.station_amount-item.procurement_amount,
           'platformMarkup',item.platform_fee_amount,'deliveryFee',item.delivery_fee_amount,
           'driverEarning',item.driver_commission_amount,
           'supplierName',item.supplier_name,'procurementCost',item.procurement_amount,
@@ -490,7 +512,7 @@ begin
         ) order by item.created_at desc)
         from (
           select order_record.id,procurement.id procurement_id,order_record.public_reference,order_record.created_at,order_record.updated_at,
-            order_record.actual_kg,order_record.total_amount,order_record.platform_fee_amount,
+            order_record.actual_kg,order_record.total_amount,order_record.station_amount,order_record.platform_fee_amount,
             order_record.delivery_fee_amount,order_record.driver_commission_amount,
             order_record.internal_settlement_execution_id,order_record.currency_code,procurement.supplier_name,procurement.procurement_amount,
             coalesce(paid.amount,0) supplier_paid
