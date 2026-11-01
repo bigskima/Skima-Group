@@ -37,6 +37,9 @@ export function ScanWorkspaceScreen({
   const { palette } = useAppTheme();
   const session = useSession();
   const routeWorkspace = jobRouteWorkspace ?? workspace;
+  const routeGroup = routeWorkspace === "station_driver"
+    ? "(station-driver)"
+    : `(${routeWorkspace})`;
   const handoverJobs = workspace === "driver"
     ? (jobs.data ?? []).filter((job) => {
         const status = (displayStatus(job) ?? "").toLowerCase().replace(/[\\s-]+/g, "_");
@@ -262,7 +265,7 @@ export function ScanWorkspaceScreen({
                     label="Open hand-over details"
                     fullWidth
                     variant="secondary"
-                    onPress={() => router.push(`/(${routeWorkspace})/job/${encodeURIComponent(orderId)}` as never)}
+                    onPress={() => router.push(`/${routeGroup}/job/${encodeURIComponent(orderId)}` as never)}
                   />
                 ) : null}
               </View>
@@ -322,7 +325,7 @@ export function ScanWorkspaceScreen({
             label="Open hand-over details"
             fullWidth
             variant="secondary"
-            onPress={() => router.push(`/(${routeWorkspace})/job/${encodeURIComponent(fastScanOrderId)}` as never)}
+            onPress={() => router.push(`/${routeGroup}/job/${encodeURIComponent(fastScanOrderId)}` as never)}
           />
         ) : null}
       </View>
