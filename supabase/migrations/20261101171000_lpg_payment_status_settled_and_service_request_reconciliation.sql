@@ -105,11 +105,11 @@ totals as (
     (select coalesce(max(order_record.total_amount),0)::numeric(28,8)
        from public.order_records order_record
       where order_record.service_request_id=target_service_request_id) as generic_order_total,
-    (select coalesce(sum(transaction.total_amount),0)::numeric(28,8) from hold_transactions) as hold_total,
-    (select coalesce(sum(transaction.total_amount),0)::numeric(28,8) from release_transactions) as release_total,
-    (select coalesce(sum(transaction.total_amount),0)::numeric(28,8) from refund_transactions) as refund_total,
-    (select coalesce(sum(transaction.total_amount),0)::numeric(28,8) from lpg_release_transactions) as lpg_release_total,
-    (select coalesce(sum(transaction.total_amount),0)::numeric(28,8) from lpg_refund_transactions) as lpg_refund_total
+    (select coalesce(sum(total_amount),0)::numeric(28,8) from hold_transactions) as hold_total,
+    (select coalesce(sum(total_amount),0)::numeric(28,8) from release_transactions) as release_total,
+    (select coalesce(sum(total_amount),0)::numeric(28,8) from refund_transactions) as refund_total,
+    (select coalesce(sum(total_amount),0)::numeric(28,8) from lpg_release_transactions) as lpg_release_total,
+    (select coalesce(sum(total_amount),0)::numeric(28,8) from lpg_refund_transactions) as lpg_refund_total
 )
 select jsonb_build_object(
   'lpgOrderCount',totals.lpg_order_count,
