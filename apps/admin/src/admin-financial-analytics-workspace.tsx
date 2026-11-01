@@ -47,6 +47,8 @@ const RevenueSchema = z.object({
 const FleetSchema = z.object({
   orderCount: z.coerce.number().default(0),
   customerCollections: z.coerce.number().default(0),
+  platformAllocatedCollections: z.coerce.number().default(0),
+  unallocatedCustomerCollections: z.coerce.number().default(0),
   customerLpgPrincipal: z.coerce.number().default(0),
   procurementSpread: z.coerce.number().default(0),
   fundsAllocatedToFleet: z.coerce.number().default(0),
@@ -582,6 +584,12 @@ export function AdminFinancialAnalyticsWorkspace() {
         </div>
         <div className="skima-grid skima-grid--compact">
           <MetricTile label="Settled orders" value={fleet.orderCount} />
+          <MetricTile label="Full amount credited to SKIMA-controlled accounts" value={money(fleet.platformAllocatedCollections, currency)} />
+          <MetricTile
+            label="Unallocated customer collection"
+            value={money(fleet.unallocatedCustomerCollections, currency)}
+            tone={Math.abs(fleet.unallocatedCustomerCollections) > 0.01 ? "warning" : "success"}
+          />
           <MetricTile label="Customer LPG principal credited to SKIMA clearing" value={money(fleet.customerLpgPrincipal, currency)} />
           <MetricTile label="Explicit per-kg platform markup" value={money(fleet.platformMarkupCollected, currency)} />
           <MetricTile label="Procurement spread held in clearing · not revenue-classified" value={money(fleet.procurementSpread, currency)} tone={fleet.procurementSpread !== 0 ? "warning" : "success"} />
