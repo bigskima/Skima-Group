@@ -26,11 +26,7 @@ import {
 } from "./service-catalog-v2-shared";
 import "./service-catalog-v2.css";
 
-const PRODUCTS = [
-  { key: "fuel.pms", name: "Petrol", code: "PMS" },
-  { key: "fuel.ago", name: "Diesel", code: "AGO" },
-  { key: "fuel.dpk", name: "Kerosene", code: "DPK" },
-] as const;
+const PRODUCT_KEYS = ["fuel.pms", "fuel.ago", "fuel.dpk"] as const;
 const CURRENCIES = [
   { label: "Nigerian naira (NGN)", value: "NGN" },
   { label: "USDC", value: "USDC" },
@@ -126,7 +122,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
 
   const onBulkToggleProducts = async (status: "enabled" | "disabled") => {
     await bulkToggleProducts.mutateAsync({
-      productKeys: PRODUCTS.map((product) => product.key),
+      productKeys: [...PRODUCT_KEYS],
       status,
       reason: status === "enabled"
         ? "All fuel products globally enabled by a platform administrator"
@@ -242,7 +238,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
   if (failed) return <ErrorState title="Fuel administration unavailable" message={catalogError(failed)} onRetry={() => void refresh()} />;
 
   const productRows = (products.data ?? []).filter((item) =>
-    PRODUCTS.some((product) => product.key === catalogText(item, "key"))
+    PRODUCT_KEYS.some((productKey) => productKey === catalogText(item, "key"))
   );
   const enabledCount = productRows.filter((item) => catalogText(item, "status") === "enabled").length;
   const canManageFuel = context?.platformAdmin?.admin_kind === "super_admin"
@@ -269,12 +265,14 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
             <StatusBadge>{enabledCount} of 3 enabled</StatusBadge>
           </div>
           <div className="fuel-admin-product-grid">
-            {PRODUCTS.map((definition) => {
-              const record = productRows.find((item) => catalogText(item, "key") === definition.key);
+            {productRows.map((record) => {
+              const productKey = catalogText(record, "key");
+              const productName = catalogText(record, "display_name") || productKey;
+              const productCode = catalogText(record, "short_code") || productKey;
               const productStatus = catalogText(record, "status") || "not configured";
               return (
-                <article className="fuel-admin-product" key={definition.key}>
-                  <div><strong>{definition.name}</strong><small>{definition.code} · {definition.key}</small></div>
+                <article className="fuel-admin-product" key={productKey}>
+                  <div><strong>{productName}</strong><small>{productCode} · {productKey}</small></div>
                   <StatusBadge tone={productStatus === "enabled" ? "success" : "warning"}>{productStatus}</StatusBadge>
                 </article>
               );
@@ -311,12 +309,14 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
         </div>
         <p className="skima-muted">The Fuel module remains available to administrators while product switches control customer orderability globally. Use the bulk controls to enable or disable PMS, AGO and DPK together; accepted orders are not cancelled.</p>
         <div className="fuel-admin-product-grid">
-          {PRODUCTS.map((definition) => {
-            const record = productRows.find((item) => catalogText(item, "key") === definition.key);
+          {productRows.map((record) => {
+            const productKey = catalogText(record, "key");
+            const productName = catalogText(record, "display_name") || productKey;
+            const productCode = catalogText(record, "short_code") || productKey;
             const enabled = catalogText(record, "status") === "enabled";
             return (
-              <article className="fuel-admin-product" key={definition.key}>
-                <div><strong>{definition.name}</strong><small>{definition.code} · {definition.key}</small></div>
+              <article className="fuel-admin-product" key={productKey}>
+                <div><strong>{productName}</strong><small>{productCode} · {productKey}</small></div>
                 <StatusBadge tone={enabled ? "success" : "warning"}>{enabled ? "Enabled" : "Disabled"}</StatusBadge>
                 <Button
                   variant={enabled ? "outline" : "primary"}
@@ -332,7 +332,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
           <Button
             variant="primary"
             isLoading={bulkToggleProducts.isPending}
-            disabled={enabledCount === PRODUCTS.length}
+            disabled={enabledCount === PRODUCT_KEYS.length}
             onClick={() => void onBulkToggleProducts("enabled")}
           >Enable all products</Button>
           <Button
@@ -349,7 +349,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
         <p className="skima-muted">Each branch and product has independent litre limits and prices. Container charges, delivery, platform fee and tax are stored with the station offer and included in the server-calculated customer quote.</p>
         <div className="skima-form-grid">
           <SelectInput label="Station branch" value={offerForm.branchId} onChange={(event) => setOfferForm({ ...offerForm, branchId: event.currentTarget.value })} options={branchOptions} />
-          <SelectInput label="Fuel product" value={offerForm.productKey} onChange={(event) => setOfferForm({ ...offerForm, productKey: event.currentTarget.value })} options={PRODUCTS.map((p) => ({ label: p.name, value: p.key }))} />
+          <SelectInput label="Fuel product" value={offerForm.productKey} onChange={(event) => setOfferForm({ ...offerForm, productKey: event.currentTarget.value })} options={productRows.map((product) => ({ label: catalogText(product, "display_name") || catalogText(product, "key"), value: catalogText(product, "key") }))} />
           <SelectInput label="Currency" value={offerForm.currencyCode} onChange={(event) => setOfferForm({ ...offerForm, currencyCode: event.currentTarget.value })} options={CURRENCIES} />
           <TextInput label="Price per litre" type="number" value={offerForm.pricePerLitre} onChange={(event) => setOfferForm({ ...offerForm, pricePerLitre: event.currentTarget.value })} />
           <TextInput label="Minimum litres" type="number" value={offerForm.minimumLitres} onChange={(event) => setOfferForm({ ...offerForm, minimumLitres: event.currentTarget.value })} />
@@ -373,7 +373,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
         <div className="fuel-admin-list">
           {(offers.data ?? []).map((offer) => (
             <article className="fuel-admin-list-row" key={catalogText(offer, "id")}>
-              <div><strong>{productName(catalogText(offer, "product_key"))}</strong><small>{branchName(branches.data ?? [], catalogText(offer, "branch_id"))} · {catalogText(offer, "currency_code")}</small></div>
+              <div><strong>{productName(catalogText(offer, "product_key"), productRows)}</strong><small>{branchName(branches.data ?? [], catalogText(offer, "branch_id"))} · {catalogText(offer, "currency_code")}</small></div>
               <div><strong>{formatMoney(catalogNumber(offer, "price_per_litre"), catalogText(offer, "currency_code"))} / L</strong><small>{catalogNumber(offer, "minimum_litres")}–{catalogNumber(offer, "maximum_litres")} L</small></div>
               <StatusBadge tone={catalogText(offer, "status") === "active" ? "success" : "warning"}>{catalogText(offer, "status")}</StatusBadge>
             </article>
@@ -386,7 +386,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
           <div className="sk-panel__header"><div><p className="admin-section-kicker">Station inventory</p><h2>Configure fuel tanks</h2></div><Warehouse size={21} /></div>
           <div className="skima-form-grid">
             <SelectInput label="Station branch" value={storageForm.branchId} onChange={(event) => setStorageForm({ ...storageForm, branchId: event.currentTarget.value })} options={branchOptions} />
-            <SelectInput label="Product" value={storageForm.productKey} onChange={(event) => setStorageForm({ ...storageForm, productKey: event.currentTarget.value })} options={PRODUCTS.map((p) => ({ label: p.name, value: p.key }))} />
+            <SelectInput label="Product" value={storageForm.productKey} onChange={(event) => setStorageForm({ ...storageForm, productKey: event.currentTarget.value })} options={productRows.map((product) => ({ label: catalogText(product, "display_name") || catalogText(product, "key"), value: catalogText(product, "key") }))} />
             <TextInput label="Tank key" value={storageForm.key} onChange={(event) => setStorageForm({ ...storageForm, key: event.currentTarget.value })} />
             <TextInput label="Tank name" value={storageForm.name} onChange={(event) => setStorageForm({ ...storageForm, name: event.currentTarget.value })} />
             <TextInput label="Capacity (litres)" type="number" value={storageForm.capacity} onChange={(event) => setStorageForm({ ...storageForm, capacity: event.currentTarget.value })} />
@@ -396,7 +396,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
           <div className="fuel-admin-list">
             {(tanks.data ?? []).map((tank) => (
               <article className="fuel-admin-list-row" key={catalogText(tank, "id")}>
-                <div><strong>{catalogLabel(tank)}</strong><small>{productName(catalogText(tank, "product_key"))} · {branchName(branches.data ?? [], catalogText(tank, "branch_id"))}</small></div>
+                <div><strong>{catalogLabel(tank)}</strong><small>{productName(catalogText(tank, "product_key"), productRows)} · {branchName(branches.data ?? [], catalogText(tank, "branch_id"))}</small></div>
                 <div><strong>{catalogNumber(tank, "physical_stock_litres").toLocaleString()} / {catalogNumber(tank, "capacity_litres").toLocaleString()} L</strong><small>{catalogNumber(tank, "reserved_stock_litres")} L reserved · {catalogNumber(tank, "safety_reserve_litres")} L safety reserve</small></div>
                 <StatusBadge>{catalogText(tank, "status")}</StatusBadge>
               </article>
@@ -414,9 +414,12 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
           </div>
           <AdminFormSection title="Compatible fuel products">
             <div className="fuel-admin-checks">
-              {PRODUCTS.map((product) => (
-                <label key={product.key}><input type="checkbox" checked={containerTypeForm.products.includes(product.key)} onChange={(event) => setContainerTypeForm({ ...containerTypeForm, products: event.currentTarget.checked ? [...containerTypeForm.products, product.key] : containerTypeForm.products.filter((value) => value !== product.key) })} />{product.name}</label>
-              ))}
+              {productRows.map((product) => {
+                const productKey = catalogText(product, "key");
+                return (
+                  <label key={productKey}><input type="checkbox" checked={containerTypeForm.products.includes(productKey)} onChange={(event) => setContainerTypeForm({ ...containerTypeForm, products: event.currentTarget.checked ? [...containerTypeForm.products, productKey] : containerTypeForm.products.filter((value) => value !== productKey) })} />{catalogText(product, "display_name") || productKey}</label>
+                );
+              })}
             </div>
           </AdminFormSection>
           <Button icon={Save} isLoading={saveContainerType.isPending} onClick={() => void submitContainerType()}>Save container type</Button>
@@ -424,7 +427,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
             {(containerTypes.data ?? []).map((type) => (
               <article className="fuel-admin-list-row" key={catalogText(type, "id")}>
                 <div><strong>{catalogLabel(type)}</strong><small>{catalogText(type, "key")}</small></div>
-                <div><strong>{catalogNumber(type, "nominal_capacity_litres")} L</strong><small>{Array.isArray(type.supported_product_keys) ? type.supported_product_keys.map((key) => productName(String(key))).join(", ") : ""}</small></div>
+                <div><strong>{catalogNumber(type, "nominal_capacity_litres")} L</strong><small>{Array.isArray(type.supported_product_keys) ? type.supported_product_keys.map((key) => productName(String(key), productRows)).join(", ") : ""}</small></div>
                 <StatusBadge>{catalogText(type, "status")}</StatusBadge>
               </article>
             ))}
@@ -468,7 +471,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
           <TextInput label="Station Managed driver ID (optional)" value={qualificationForm.stationManagedDriverId} onChange={(event) => setQualificationForm({ ...qualificationForm, stationManagedDriverId: event.currentTarget.value, driverProfileId: "" })} />
           <SelectInput label="Station branch (optional)" value={qualificationForm.branchId} onChange={(event) => setQualificationForm({ ...qualificationForm, branchId: event.currentTarget.value })} options={[{ label: "All branches (where permitted)", value: "" }, ...branchOptions.filter((option) => option.value)]} />
           <TextInput label="Vehicle ID" value={qualificationForm.vehicleId} onChange={(event) => setQualificationForm({ ...qualificationForm, vehicleId: event.currentTarget.value })} />
-          <SelectInput label="Fuel product" value={qualificationForm.productKey} onChange={(event) => setQualificationForm({ ...qualificationForm, productKey: event.currentTarget.value })} options={PRODUCTS.map((p) => ({ label: p.name, value: p.key }))} />
+          <SelectInput label="Fuel product" value={qualificationForm.productKey} onChange={(event) => setQualificationForm({ ...qualificationForm, productKey: event.currentTarget.value })} options={productRows.map((product) => ({ label: catalogText(product, "display_name") || catalogText(product, "key"), value: catalogText(product, "key") }))} />
           <TextInput label="Maximum approved load (litres)" type="number" value={qualificationForm.maximumLoad} onChange={(event) => setQualificationForm({ ...qualificationForm, maximumLoad: event.currentTarget.value })} />
           <SelectInput label="Qualification status" value={qualificationForm.status} onChange={(event) => setQualificationForm({ ...qualificationForm, status: event.currentTarget.value })} options={[{ label: "Pending", value: "pending" }, { label: "Approved", value: "approved" }, { label: "Rejected", value: "rejected" }, { label: "Suspended", value: "suspended" }]} />
         </div>
@@ -476,7 +479,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
         <div className="fuel-admin-list">
           {(qualifications.data ?? []).map((qualification) => (
             <article className="fuel-admin-list-row" key={catalogText(qualification, "id")}>
-              <div><strong>{productName(catalogText(qualification, "product_key"))} · {catalogNumber(qualification, "maximum_load_litres")} L</strong><small>{catalogText(qualification, "driver_user_id")} · {catalogText(qualification, "vehicle_id")}</small></div>
+              <div><strong>{productName(catalogText(qualification, "product_key"), productRows)} · {catalogNumber(qualification, "maximum_load_litres")} L</strong><small>{catalogText(qualification, "driver_user_id")} · {catalogText(qualification, "vehicle_id")}</small></div>
               <StatusBadge tone={catalogText(qualification, "status") === "approved" ? "success" : "warning"}>{catalogText(qualification, "status")}</StatusBadge>
             </article>
           ))}
@@ -527,8 +530,9 @@ function numeric(value: string): number {
   return Number.isFinite(result) ? result : 0;
 }
 
-function productName(key: string): string {
-  return PRODUCTS.find((product) => product.key === key)?.name ?? (key || "Fuel");
+function productName(key: string, products: readonly CatalogRecord[]): string {
+  const record = products.find((product) => catalogText(product, "key") === key);
+  return catalogText(record, "display_name") || key || "Fuel";
 }
 
 function branchName(branches: readonly CatalogRecord[], branchId: string): string {
