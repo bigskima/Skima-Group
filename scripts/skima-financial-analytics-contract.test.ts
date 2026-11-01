@@ -2,6 +2,7 @@ import { assert, assertStringIncludes, assertNotMatch } from "jsr:@std/assert@1.
 
 const migration = await Deno.readTextFile("supabase/migrations/20261101162500_platform_financial_analytics_and_fleet_supplier_payments.sql");
 const lifecycleMigration = await Deno.readTextFile("supabase/migrations/20261101171000_lpg_payment_status_settled_and_service_request_reconciliation.sql");
+const paymentIndexes = await Deno.readTextFile("supabase/migrations/20261101195319_lpg_internal_supplier_payment_foreign_key_indexes.sql");
 const receiptScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/ReceiptScreen.tsx");
 const workspace = await Deno.readTextFile("apps/admin/src/admin-financial-analytics-workspace.tsx");
 const router = await Deno.readTextFile("apps/admin/src/features/money/MoneyWorkspaceRouter.tsx");
@@ -96,6 +97,12 @@ Deno.test("Admin analytics distinguishes supplier cash or bank payments and Driv
 
 Deno.test("The combined Fleet and Finance migration is classified as a business-module migration", () => {
   assertStringIncludes(migrationPolicy, "20261101162500_platform_financial_analytics_and_fleet_supplier_payments.sql");
+});
+
+Deno.test("Supplier payment table indexes support currency analytics and its foreign-key joins", () => {
+  assertStringIncludes(paymentIndexes, "lpg_internal_supplier_payments_currency_paid_at_idx");
+  assertStringIncludes(paymentIndexes, "lpg_internal_supplier_payments_evidence_media_asset_idx");
+  assertStringIncludes(paymentIndexes, "lpg_internal_supplier_payments_paid_by_idx");
 });
 
 Deno.test("Service-request reconciliation counts LPG order-linked quotes, holds, releases and refunds", () => {
