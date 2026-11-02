@@ -481,11 +481,24 @@ async function handleFuelRuntimeRequest(
         throw new RequestValidationError("Choose Station Managed, Independent Driver or SKIMA Managed explicitly.");
       }
 
+      let branchOrganizationId: string | null = null;
+      if (branchId) {
+        const branchRecord = await supabase
+          .from("organization_branches")
+          .select("id,organization_id")
+          .eq("id", branchId)
+          .maybeSingle();
+        if (branchRecord.error) return databaseError(branchRecord.error, id);
+        branchOrganizationId = stringOrNull(branchRecord.data?.organization_id);
+        if (!branchOrganizationId) {
+          return jsonResponse({ ok: false, error: "fuel_branch_not_found", requestId: id }, 404);
+        }
+      }
       const manageResults = await Promise.all([
         supabase.rpc("can_manage_fuel_platform"),
         branchId ? supabase.rpc("has_permission_for_branch", {
           target_permission: "business.fuel.orders.manage",
-          target_organization_id: null,
+          target_organization_id: branchOrganizationId,
           target_branch_id: branchId,
         }) : Promise.resolve({ data: false, error: null }),
       ]);
