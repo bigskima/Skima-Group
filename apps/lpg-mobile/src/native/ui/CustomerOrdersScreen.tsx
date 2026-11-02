@@ -128,7 +128,7 @@ export function CustomerOrdersScreen() {
             const fulfillmentChannel = firstString(order, ["fulfillment_channel", "fulfillmentChannel"]);
             const internalFulfillment = isSkimaInternalFulfillmentChannel(fulfillmentChannel);
             const stationText = internalFulfillment
-              ? "SKIMA-managed fulfillment"
+              ? "SKIMA Managed / SKIMA Fleet"
               : station
                 ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned partner station")
                 : "Finding an available partner station";
