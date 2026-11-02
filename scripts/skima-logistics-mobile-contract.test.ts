@@ -281,3 +281,23 @@ Deno.test("Company booking workspace assigns an eligible driver and vehicle befo
   requireNotText(providerBookingDetail, "Submit delivery details", "provider cannot submit delivery in place of assigned driver");
 });
 
+
+
+Deno.test("Logistics marketplace administration is permission-gated and uses the existing governance APIs", () => {
+  requireText(account, '"logistics.marketplace.manage"', "admin navigation permission");
+  requireText(account, 'router.push("/logistics-admin"', "admin account entry");
+  requireText(logisticsAdminRoute, "LogisticsAdminScreen", "dedicated admin route");
+  requireText(logisticsAdmin, '"logistics.marketplace.manage"', "admin screen permission gate");
+  requireText(logisticsAdmin, '"/runtime/logistics/company"', "provider register uses RLS-protected provider list");
+  requireText(logisticsAdmin, '"/runtime/logistics/categories"', "database-driven service catalogue");
+  requireText(logisticsAdmin, '"/runtime/logistics/admin/providers/verification"', "provider verification lifecycle");
+  requireText(logisticsAdmin, '"/runtime/logistics/company/status"', "provider operational controls");
+  requireText(logisticsAdmin, '"/runtime/logistics/admin/categories"', "service category upsert API");
+  requireText(logisticsAdmin, 'decision: "verified"', "provider approval decision");
+  requireText(logisticsAdmin, 'decision: "rejected"', "provider rejection decision");
+  requireText(logisticsAdmin, 'status: "paused"', "provider pause control");
+  requireText(logisticsAdmin, 'status: "active"', "provider reactivation control");
+  requireText(logisticsAdmin, "parentKey", "hierarchical category management");
+  requireText(logisticsAdmin, "sortOrder", "category ordering");
+  requireNotText(logisticsAdmin, "SUPABASE_SERVICE_ROLE_KEY", "no privileged database credential in admin app");
+});
