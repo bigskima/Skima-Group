@@ -35,13 +35,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     infoPlist: {
       NSLocationWhenInUseUsageDescription:
-        "SKIMA uses your selected locations to find logistics companies that can serve your journey."
+        "SKIMA Logistics uses your location to share progress with the customer during an active delivery."
     }
   },
   plugins: [
     "expo-router",
     "expo-secure-store",
     "expo-font",
+    ["expo-location", {
+      locationWhenInUsePermission:
+        "Allow SKIMA Logistics to share your location with the customer while you fulfil an active delivery."
+    }],
     ["expo-splash-screen", {
       backgroundColor: "#F7F7F8",
       imageWidth: 180,
