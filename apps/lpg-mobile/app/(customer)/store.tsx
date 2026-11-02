@@ -321,58 +321,50 @@ export default function StoreScreen() {
 
   const checkout = useMutation({
     mutationFn: async () => {
-      if (!settings || !cart.length) throw new Error("Add a product before checking out.");
+      if (!settings || !cart.length || !customerWalletId || !canCheckout) {
+        throw new Error("Choose an available fulfillment option, delivery address and funded SKIMA Wallet before continuing.");
+      }
       const lineItems = cart.map((line) => ({
         itemId: line.itemId,
         variantId: line.variantId,
         quantity: line.quantity,
       }));
       return session.api.post(
-        "/runtime/orders",
+        "/runtime/storefront/checkout",
         {
-          moduleKey: "store",
-          organizationId: settings.organization_id,
-          branchId: settings.branch_id ?? null,
-          currencyCode: settings.currency_code,
-          fulfillmentMethod: settings.fulfillment_method,
-          acceptancePolicyKey: "store.order.acceptance.manual.v1",
           lineItems,
-          orderPayload: {
-            channel: "skima_store",
-            fulfillment_method: settings.fulfillment_method,
-            customer_note: null,
-          },
-          metadata: {
-            customer_app: "skima.lpg.mobile",
-            storefront_module: "store",
-          },
-          source: "skima.store.customer",
+          customerWalletId,
+          fulfillmentMethod,
+          deliveryLocationId: fulfillmentMethod === "delivery" ? deliveryLocationId : null,
+          customerNote: customerNote.trim() || null,
           idempotencyKey: checkoutAttemptKey,
         },
         ORDER_RESULT_SCHEMA,
       );
     },
     onSuccess: async (result) => {
-      const orderId = typeof result === "string"
-        ? result
-        : typeof result.id === "string"
-          ? result.id
-          : typeof result.orderId === "string"
-            ? result.orderId
-            : "received";
+      const record = typeof result === "object" && result !== null ? result : {};
+      const orderId = typeof record.orderId === "string"
+        ? record.orderId
+        : typeof result === "string" ? result : "received";
+      const paidTotal = typeof record.totalAmount === "number" ? record.totalAmount : estimatedCheckoutTotal ?? cartTotal;
+      const deliveryFee = typeof record.deliveryFeeAmount === "number" ? record.deliveryFeeAmount : estimatedDeliveryFee ?? 0;
       setCart([]);
       setCheckoutAttemptKey(idempotencyKey("store-order", userId));
       setCartOpen(false);
+      setCustomerNote("");
+      await Promise.all([wallets.refetch(), locations.refetch()]);
       Alert.alert(
-        "Order request received",
-        `Your SKIMA Store order ${orderId === "received" ? "has been received" : `(${orderId.slice(0, 8).toUpperCase()}) has been received`}. The Store team will confirm the order and the next fulfillment/payment step.`,
+        "Payment reserved",
+        `Your SKIMA Store order ${orderId === "received" ? "has been received" : `(${orderId.slice(0, 8).toUpperCase()}) is confirmed`}. ${formatMoney(paidTotal, currencyCode)} has been reserved safely in SKIMA escrow. ${deliveryFee > 0 ? `Delivery fee: ${formatMoney(deliveryFee, currencyCode)}. ` : ""}The Store team can now review and prepare your order.`,
       );
     },
     onError: (error) => {
-      Alert.alert(
-        "Order could not be submitted",
-        error instanceof Error ? error.message : "Please review your basket and try again.",
-      );
+      const message = error instanceof Error ? error.message : "Please review your basket and try again.";
+      if (/insufficient_wallet_balance|insufficient.*balance/i.test(message)) {
+        setCheckoutAttemptKey(idempotencyKey("store-order", userId));
+      }
+      Alert.alert("Checkout could not be completed", message);
     },
   });
 
@@ -675,10 +667,97 @@ export default function StoreScreen() {
             </ScrollView>
             {cart.length ? (
               <View style={[styles.checkoutFooter, { borderTopColor: palette.border }]}>
-                <View style={styles.checkoutTotalRow}><Text style={[styles.sectionSubtitle, { color: palette.muted }]}>Subtotal</Text><Text style={[styles.checkoutTotal, { color: palette.ink }]}>{formatMoney(cartTotal, currencyCode)}</Text></View>
-                <Text style={[styles.checkoutNote, { color: palette.muted }]}>The Store team will confirm availability and the next payment/fulfillment step after receiving your order request.</Text>
-                <Pressable disabled={checkout.isPending || !cartReady} onPress={() => checkout.mutate()} style={[styles.primaryButton, styles.checkoutButton, { backgroundColor: palette.brand, opacity: checkout.isPending ? 0.65 : 1 }]}>
-                  {checkout.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Submit order request</Text>}
+                <Text style={[styles.checkoutLabel, { color: palette.muted }]}>FULFILLMENT</Text>
+                <View style={styles.fulfillmentChoices}>
+                  {enabledFulfillmentMethods.includes("delivery") ? (
+                    <Pressable onPress={() => setFulfillmentMethod("delivery")} style={[styles.fulfillmentChoice, { backgroundColor: fulfillmentMethod === "delivery" ? palette.brandSoft : palette.surfaceSubtle, borderColor: fulfillmentMethod === "delivery" ? palette.brand : palette.border }]}>
+                      <Text style={[styles.fulfillmentChoiceTitle, { color: fulfillmentMethod === "delivery" ? palette.brand : palette.ink }]}>Delivery</Text>
+                      <Text style={[styles.fulfillmentChoiceHint, { color: palette.muted }]}>To your address</Text>
+                    </Pressable>
+                  ) : null}
+                  {enabledFulfillmentMethods.includes("pickup") ? (
+                    <Pressable onPress={() => setFulfillmentMethod("pickup")} style={[styles.fulfillmentChoice, { backgroundColor: fulfillmentMethod === "pickup" ? palette.brandSoft : palette.surfaceSubtle, borderColor: fulfillmentMethod === "pickup" ? palette.brand : palette.border }]}>
+                      <Text style={[styles.fulfillmentChoiceTitle, { color: fulfillmentMethod === "pickup" ? palette.brand : palette.ink }]}>Pickup</Text>
+                      <Text style={[styles.fulfillmentChoiceHint, { color: palette.muted }]}>Collect from SKIMA</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                {fulfillmentMethod === "delivery" ? (
+                  <View style={styles.checkoutAddressBlock}>
+                    <View style={styles.checkoutBlockHead}>
+                      <Text style={[styles.checkoutLabel, { color: palette.muted }]}>DELIVER TO</Text>
+                      <Pressable onPress={() => router.push("/(customer)/locations" as never)}>
+                        <Text style={[styles.addressManage, { color: palette.brand }]}>Manage addresses</Text>
+                      </Pressable>
+                    </View>
+                    {availableLocations.length ? (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.addressChoices}>
+                        {availableLocations.map((location, index) => {
+                          const locationId = firstString(location, ["id"]) ?? String(index);
+                          const selected = locationId === deliveryLocationId;
+                          return (
+                            <Pressable key={locationId} onPress={() => setDeliveryLocationId(locationId)} style={[styles.addressChoice, { backgroundColor: selected ? palette.brandSoft : palette.surfaceSubtle, borderColor: selected ? palette.brand : palette.border }]}>
+                              <Text numberOfLines={1} style={[styles.addressChoiceTitle, { color: selected ? palette.brand : palette.ink }]}>{firstString(location, ["label"]) ?? "Saved address"}</Text>
+                              <Text numberOfLines={2} style={[styles.addressChoiceAddress, { color: palette.muted }]}>{firstString(location, ["formatted_address", "formattedAddress"]) ?? "Address details unavailable"}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </ScrollView>
+                    ) : (
+                      <Pressable onPress={() => router.push("/(customer)/locations" as never)} style={[styles.addressEmpty, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+                        <Text style={[styles.fulfillmentChoiceTitle, { color: palette.ink }]}>Add a delivery address</Text>
+                        <Text style={[styles.fulfillmentChoiceHint, { color: palette.muted }]}>Save an address before continuing to checkout.</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                ) : (
+                  <View style={[styles.pickupNotice, { backgroundColor: palette.surfaceSubtle }]}>
+                    <Text style={[styles.fulfillmentChoiceTitle, { color: palette.ink }]}>{firstString(settings, ["pickup_location_label"]) ?? "SKIMA Store pickup"}</Text>
+                    <Text style={[styles.fulfillmentChoiceHint, { color: palette.muted }]}>{firstString(settings, ["pickup_formatted_address"]) ?? "Pickup address is not configured yet."}</Text>
+                    {firstString(settings, ["pickup_instructions"]) ? <Text style={[styles.fulfillmentChoiceHint, { color: palette.muted }]}>{firstString(settings, ["pickup_instructions"])}</Text> : null}
+                  </View>
+                )}
+
+                <TextInput
+                  value={customerNote}
+                  onChangeText={setCustomerNote}
+                  placeholder="Order note (optional)"
+                  placeholderTextColor={palette.muted}
+                  multiline
+                  maxLength={1200}
+                  style={[styles.customerNoteInput, { color: palette.ink, borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}
+                />
+
+                <View style={styles.checkoutTotalRow}>
+                  <Text style={[styles.sectionSubtitle, { color: palette.muted }]}>Subtotal</Text>
+                  <Text style={[styles.checkoutTotal, { color: palette.ink }]}>{formatMoney(cartTotal, currencyCode)}</Text>
+                </View>
+                <View style={styles.checkoutTotalRow}>
+                  <Text style={[styles.sectionSubtitle, { color: palette.muted }]}>Delivery</Text>
+                  <Text style={[styles.checkoutTotal, { color: palette.ink }]}>{estimatedDeliveryFee === null ? "Choose address" : estimatedDeliveryFee === 0 ? "Free" : formatMoney(estimatedDeliveryFee, currencyCode)}</Text>
+                </View>
+                <View style={styles.checkoutTotalRow}>
+                  <Text style={[styles.sectionSubtitle, { color: palette.muted }]}>Total</Text>
+                  <Text style={[styles.checkoutGrandTotal, { color: palette.ink }]}>{estimatedCheckoutTotal === null ? "—" : formatMoney(estimatedCheckoutTotal, currencyCode)}</Text>
+                </View>
+
+                <View style={[styles.walletSummary, { backgroundColor: palette.surfaceSubtle }]}>
+                  <View style={styles.walletSummaryCopy}>
+                    <Text style={[styles.checkoutLabel, { color: palette.muted }]}>PAY FROM SKIMA WALLET</Text>
+                    <Text style={[styles.walletSummaryBalance, { color: palette.ink }]}>{walletCurrency} {walletBalance.toLocaleString()}</Text>
+                  </View>
+                  <Pressable onPress={() => router.push("/(customer)/wallet" as never)}>
+                    <Text style={[styles.addressManage, { color: palette.brand }]}>Add funds</Text>
+                  </Pressable>
+                </View>
+                {cartTotal < minimumOrderAmount ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Minimum Store order is {formatMoney(minimumOrderAmount, currencyCode)}.</Text> : null}
+                {walletCurrency !== currencyCode ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Your wallet currency must match Store currency ({currencyCode}).</Text> : null}
+                {estimatedCheckoutTotal !== null && !walletSufficient ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Your wallet balance does not cover this order total.</Text> : null}
+                {deliveryDistanceKm !== null && Number.isFinite(deliveryDistanceKm) && firstNumber(settings, ["delivery_radius_km"]) !== null && deliveryDistanceKm > (firstNumber(settings, ["delivery_radius_km"]) ?? 0) ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>This address is outside the current delivery area. Choose pickup or another address.</Text> : null}
+                <Text style={[styles.checkoutNote, { color: palette.muted }]}>Payment is reserved in SKIMA escrow. The Store team can only prepare your order after the wallet reservation succeeds.</Text>
+                <Pressable disabled={checkout.isPending || !cartReady || !canCheckout} onPress={() => checkout.mutate()} style={[styles.primaryButton, styles.checkoutButton, { backgroundColor: palette.brand, opacity: checkout.isPending || !canCheckout ? 0.5 : 1 }]}>
+                  {checkout.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Pay and place order</Text>}
                 </Pressable>
               </View>
             ) : null}
@@ -858,6 +937,25 @@ const styles = StyleSheet.create({
   cartItemPrice: { fontSize: 11, fontWeight: "700" },
   cartLineActions: { flexDirection: "row", alignItems: "center", gap: 5 },
   removeLine: { padding: 5 },
+  checkoutLabel: { ...typography.eyebrow, fontSize: 8, letterSpacing: 0.9 },
+  fulfillmentChoices: { flexDirection: "row", gap: spacing.sm },
+  fulfillmentChoice: { flex: 1, minHeight: 56, borderWidth: 1, borderRadius: radii.md, padding: spacing.sm, gap: 3 },
+  fulfillmentChoiceTitle: { fontSize: 11, fontWeight: "900" },
+  fulfillmentChoiceHint: { fontSize: 9, lineHeight: 13, fontWeight: "600" },
+  checkoutAddressBlock: { gap: spacing.xs },
+  checkoutBlockHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  addressManage: { fontSize: 10, fontWeight: "900" },
+  addressChoices: { gap: spacing.sm, paddingRight: spacing.md },
+  addressChoice: { width: 175, minHeight: 70, borderWidth: 1, borderRadius: radii.md, padding: spacing.sm, gap: 4 },
+  addressChoiceTitle: { fontSize: 11, fontWeight: "900" },
+  addressChoiceAddress: { fontSize: 9, lineHeight: 13, fontWeight: "600" },
+  addressEmpty: { minHeight: 60, borderWidth: 1, borderRadius: radii.md, padding: spacing.sm, justifyContent: "center", gap: 3 },
+  pickupNotice: { borderRadius: radii.md, padding: spacing.sm, gap: 4 },
+  customerNoteInput: { minHeight: 42, maxHeight: 78, borderWidth: 1, borderRadius: radii.md, padding: spacing.sm, fontSize: 11, textAlignVertical: "top" },
+  walletSummary: { minHeight: 50, flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderRadius: radii.md, padding: spacing.sm },
+  walletSummaryCopy: { gap: 2 },
+  walletSummaryBalance: { fontSize: 14, fontWeight: "900" },
+  checkoutGrandTotal: { fontSize: 16, fontWeight: "900" },
   checkoutFooter: { paddingTop: 13, borderTopWidth: StyleSheet.hairlineWidth, gap: 9 },
   checkoutTotalRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   checkoutTotal: { fontSize: 20, fontWeight: "900" },
