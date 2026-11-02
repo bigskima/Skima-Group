@@ -62,9 +62,11 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
   });
   const [containerForm, setContainerForm] = useState({ serial: "", containerTypeId: "", branchId: "", organizationId: "" });
   const [qualificationForm, setQualificationForm] = useState({
+    fulfillmentMode: "independent_driver",
     driverUserId: "", driverProfileId: "", stationManagedDriverId: "", branchId: "",
     vehicleId: "", productKey: "fuel.pms", maximumLoad: "", status: "pending",
   });
+  const [dispatchQualificationByOrder, setDispatchQualificationByOrder] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -75,8 +77,9 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
   const containerTypes = useFuelQuery(api, status, "container-types", "/runtime/fuel/container-types");
   const containers = useFuelQuery(api, status, "containers", "/runtime/fuel/containers");
   const qualifications = useFuelQuery(api, status, "qualifications", "/runtime/fuel/driver-qualifications");
+  const dispatchQueue = useFuelQuery(api, status, "dispatch-queue", "/runtime/fuel/orders/operations?stage=ready_for_driver");
 
-  const queries = [products, branches, offers, tanks, containerTypes, containers, qualifications];
+  const queries = [products, branches, offers, tanks, containerTypes, containers, qualifications, dispatchQueue];
   const loading = queries.some((query) => query.isLoading);
   const failed = queries.find((query) => query.error)?.error;
   const branchOptions = useMemo(() => [
@@ -108,6 +111,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
   const saveContainerType = useFuelMutation(api, "/runtime/fuel/container-types", invalidate, setNotice, setActionError);
   const registerContainer = useFuelMutation(api, "/runtime/fuel/containers/register", invalidate, setNotice, setActionError);
   const saveQualification = useFuelMutation(api, "/runtime/fuel/driver-qualifications", invalidate, setNotice, setActionError);
+  const dispatchQualifiedDriver = useFuelMutation(api, "/runtime/fuel/orders/assign-driver", invalidate, setNotice, setActionError);
 
   const onProductToggle = async (product: CatalogRecord) => {
     const key = catalogText(product, "key");
@@ -214,24 +218,55 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
   };
 
   const submitQualification = async () => {
-    const hasDriverIdentity = Boolean(qualificationForm.driverProfileId) !== Boolean(qualificationForm.stationManagedDriverId);
-    if (!qualificationForm.driverUserId || !hasDriverIdentity || !qualificationForm.vehicleId || !qualificationForm.maximumLoad) {
-      setActionError("Provide the driver user, exactly one driver profile type, vehicle and maximum fuel load.");
+    const stationManaged = qualificationForm.fulfillmentMode === "station_managed";
+    const validMode = ["station_managed", "independent_driver", "skima_managed"].includes(qualificationForm.fulfillmentMode);
+    const correctIdentity = stationManaged
+      ? Boolean(qualificationForm.stationManagedDriverId && !qualificationForm.driverProfileId && qualificationForm.branchId)
+      : Boolean(qualificationForm.driverProfileId && !qualificationForm.stationManagedDriverId);
+    if (!validMode || !qualificationForm.driverUserId || !correctIdentity || !qualificationForm.vehicleId || Number(qualificationForm.maximumLoad) <= 0) {
+      setActionError("Choose one fulfilment mode and provide only its matching driver identity, vehicle and positive approved litre capacity.");
       return;
     }
     await saveQualification.mutateAsync({
+      fulfillmentMode: qualificationForm.fulfillmentMode,
       driverUserId: qualificationForm.driverUserId,
-      driverProfileId: qualificationForm.driverProfileId || undefined,
-      stationManagedDriverId: qualificationForm.stationManagedDriverId || undefined,
+      driverProfileId: stationManaged ? undefined : qualificationForm.driverProfileId,
+      stationManagedDriverId: stationManaged ? qualificationForm.stationManagedDriverId : undefined,
       branchId: qualificationForm.branchId || undefined,
       vehicleId: qualificationForm.vehicleId,
       productKey: qualificationForm.productKey,
       maximumLoadLitres: Number(qualificationForm.maximumLoad),
       status: qualificationForm.status,
-      idempotencyKey: createClientIdempotencyKey("admin.fuel.driver-qualification", `${qualificationForm.driverUserId}:${qualificationForm.vehicleId}:${qualificationForm.productKey}:${qualificationForm.branchId}`),
-      metadata: { reviewed_from: "admin_fuel_workspace" },
+      idempotencyKey: createClientIdempotencyKey("admin.fuel.driver-qualification", `${qualificationForm.fulfillmentMode}:${qualificationForm.driverUserId}:${qualificationForm.vehicleId}:${qualificationForm.productKey}:${qualificationForm.branchId}`),
+      metadata: { reviewed_from: "admin_fuel_workspace", fulfillment_mode: qualificationForm.fulfillmentMode },
     });
     setQualificationForm({ ...qualificationForm, maximumLoad: "" });
+  };
+
+  const assignDispatchDriver = async (order: CatalogRecord) => {
+    const orderId = catalogText(order, "order_id");
+    const mode = catalogText(order, "fulfillment_mode");
+    const qualificationId = dispatchQualificationByOrder[orderId];
+    const qualification = (qualifications.data ?? []).find((row) => catalogText(row, "id") === qualificationId);
+    const expectedIdentityField = mode === "station_managed" ? "station_managed_driver_id" : "driver_profile_id";
+    const driverEntityId = qualification ? catalogText(qualification, expectedIdentityField) : "";
+    const vehicleId = qualification ? catalogText(qualification, "vehicle_id") : "";
+    if (!orderId || !qualification || !driverEntityId || !vehicleId || catalogText(qualification, "fulfillment_mode") !== mode) {
+      setActionError("Choose an approved driver and vehicle for this exact order fulfilment mode.");
+      return;
+    }
+    await dispatchQualifiedDriver.mutateAsync({
+      orderId,
+      driverEntityId,
+      vehicleId,
+      idempotencyKey: createClientIdempotencyKey("admin.fuel.dispatch", orderId),
+      metadata: { dispatched_from: "admin_fuel_workspace", fulfillment_mode: mode },
+    });
+    setDispatchQualificationByOrder((current) => {
+      const next = { ...current };
+      delete next[orderId];
+      return next;
+    });
   };
 
   if (loading) return <LoadingState label="Loading SKIMA Fuel configuration" />;
@@ -464,12 +499,26 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
 
       <section className="sk-panel catalog-v2__form-card">
         <div className="sk-panel__header"><div><p className="admin-section-kicker">Driver & vehicle control</p><h2>Product-specific qualifications</h2></div><Truck size={21} /></div>
-        <p className="skima-muted">A driver must be separately approved for each fuel product, vehicle and maximum litre load. Station Managed qualifications use the existing station-managed driver identity; independent and SKIMA Managed qualifications use the existing driver profile.</p>
+        <p className="skima-muted">Fuel driver approvals are mode-specific. These three modes are not interchangeable: Station Managed uses the station's own registered driver and branch vehicle; Independent Driver uses an approved independent provider with their non-SKIMA vehicle; SKIMA Managed uses an internal SKIMA driver and SKIMA-owned fleet vehicle.</p>
         <div className="skima-form-grid">
+          <SelectInput label="Fulfilment mode" value={qualificationForm.fulfillmentMode} onChange={(event) => setQualificationForm({
+            ...qualificationForm,
+            fulfillmentMode: event.currentTarget.value,
+            branchId: event.currentTarget.value === "station_managed" ? qualificationForm.branchId : "",
+            driverProfileId: event.currentTarget.value === "station_managed" ? "" : qualificationForm.driverProfileId,
+            stationManagedDriverId: event.currentTarget.value === "station_managed" ? qualificationForm.stationManagedDriverId : "",
+          })} options={[
+            { label: "Station Managed · station driver + branch vehicle", value: "station_managed" },
+            { label: "Independent Driver · independent provider + own vehicle", value: "independent_driver" },
+            { label: "SKIMA Managed · internal driver + SKIMA fleet", value: "skima_managed" },
+          ]} />
           <TextInput label="Driver user ID" value={qualificationForm.driverUserId} onChange={(event) => setQualificationForm({ ...qualificationForm, driverUserId: event.currentTarget.value })} />
-          <TextInput label="Independent driver profile ID (optional)" value={qualificationForm.driverProfileId} onChange={(event) => setQualificationForm({ ...qualificationForm, driverProfileId: event.currentTarget.value, stationManagedDriverId: "" })} />
-          <TextInput label="Station Managed driver ID (optional)" value={qualificationForm.stationManagedDriverId} onChange={(event) => setQualificationForm({ ...qualificationForm, stationManagedDriverId: event.currentTarget.value, driverProfileId: "" })} />
-          <SelectInput label="Station branch (optional)" value={qualificationForm.branchId} onChange={(event) => setQualificationForm({ ...qualificationForm, branchId: event.currentTarget.value })} options={[{ label: "All branches (where permitted)", value: "" }, ...branchOptions.filter((option) => option.value)]} />
+          {qualificationForm.fulfillmentMode === "station_managed" ? (
+            <TextInput label="Station Managed driver ID" value={qualificationForm.stationManagedDriverId} onChange={(event) => setQualificationForm({ ...qualificationForm, stationManagedDriverId: event.currentTarget.value, driverProfileId: "" })} />
+          ) : (
+            <TextInput label={qualificationForm.fulfillmentMode === "skima_managed" ? "SKIMA Managed driver profile ID" : "Independent driver profile ID"} value={qualificationForm.driverProfileId} onChange={(event) => setQualificationForm({ ...qualificationForm, driverProfileId: event.currentTarget.value, stationManagedDriverId: "" })} />
+          )}
+          <SelectInput label={qualificationForm.fulfillmentMode === "station_managed" ? "Station branch (required)" : "Station branch (optional scope)"} value={qualificationForm.branchId} onChange={(event) => setQualificationForm({ ...qualificationForm, branchId: event.currentTarget.value })} options={[{ label: qualificationForm.fulfillmentMode === "station_managed" ? "Choose station branch" : "All branches (where permitted)", value: "" }, ...branchOptions.filter((option) => option.value)]} />
           <TextInput label="Vehicle ID" value={qualificationForm.vehicleId} onChange={(event) => setQualificationForm({ ...qualificationForm, vehicleId: event.currentTarget.value })} />
           <SelectInput label="Fuel product" value={qualificationForm.productKey} onChange={(event) => setQualificationForm({ ...qualificationForm, productKey: event.currentTarget.value })} options={productRows.map((product) => ({ label: catalogText(product, "display_name") || catalogText(product, "key"), value: catalogText(product, "key") }))} />
           <TextInput label="Maximum approved load (litres)" type="number" value={qualificationForm.maximumLoad} onChange={(event) => setQualificationForm({ ...qualificationForm, maximumLoad: event.currentTarget.value })} />
@@ -479,11 +528,67 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
         <div className="fuel-admin-list">
           {(qualifications.data ?? []).map((qualification) => (
             <article className="fuel-admin-list-row" key={catalogText(qualification, "id")}>
-              <div><strong>{productName(catalogText(qualification, "product_key"), productRows)} · {catalogNumber(qualification, "maximum_load_litres")} L</strong><small>{catalogText(qualification, "driver_user_id")} · {catalogText(qualification, "vehicle_id")}</small></div>
+              <div><strong>{productName(catalogText(qualification, "product_key"), productRows)} · {catalogNumber(qualification, "maximum_load_litres")} L</strong><small>{formatMode(catalogText(qualification, "fulfillment_mode"))} · {catalogText(qualification, "driver_user_id")} · {catalogText(qualification, "vehicle_id")}</small></div>
               <StatusBadge tone={catalogText(qualification, "status") === "approved" ? "success" : "warning"}>{catalogText(qualification, "status")}</StatusBadge>
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="sk-panel catalog-v2__form-card">
+        <div className="sk-panel__header">
+          <div><p className="admin-section-kicker">SKIMA dispatch</p><h2>Independent & SKIMA Managed orders ready for a driver</h2></div>
+          <Truck size={21} />
+        </div>
+        <p className="skima-muted">These two modes are dispatched by SKIMA, not by the station. Independent orders can only use an approved Independent Driver and a non-SKIMA vehicle. SKIMA Managed orders can only use an approved internal SKIMA driver and a SKIMA-owned fleet vehicle. Station Managed orders never appear in this queue.</p>
+        {dispatchQueue.isLoading ? <LoadingState label="Loading SKIMA Fuel dispatch queue" /> : null}
+        {(dispatchQueue.data ?? []).filter((order) => ["independent_driver", "skima_managed"].includes(catalogText(order, "fulfillment_mode"))).length === 0 ? (
+          <p className="skima-muted">No Independent Driver or SKIMA Managed Fuel orders are waiting for SKIMA dispatch.</p>
+        ) : (
+          <div className="fuel-admin-list">
+            {(dispatchQueue.data ?? []).filter((order) => ["independent_driver", "skima_managed"].includes(catalogText(order, "fulfillment_mode"))).map((order) => {
+              const orderId = catalogText(order, "order_id");
+              const mode = catalogText(order, "fulfillment_mode");
+              const productKey = catalogText(order, "product_key");
+              const branchId = catalogText(order, "station_branch_id");
+              const load = catalogNumber(order, "requested_litres");
+              const eligible = (qualifications.data ?? []).filter((qualification) =>
+                catalogText(qualification, "fulfillment_mode") === mode &&
+                catalogText(qualification, "status") === "approved" &&
+                catalogText(qualification, "product_key") === productKey &&
+                catalogNumber(qualification, "maximum_load_litres") >= load &&
+                (catalogText(qualification, "branch_id") === branchId || !catalogText(qualification, "branch_id")) &&
+                (!catalogText(qualification, "valid_until") || Date.parse(catalogText(qualification, "valid_until")) > Date.now())
+              );
+              const options = eligible.map((qualification) => ({
+                label: `${catalogText(qualification, "driver_user_id").slice(0, 8)} · ${catalogText(qualification, "vehicle_id").slice(0, 8)} · ${catalogNumber(qualification, "maximum_load_litres")} L`,
+                value: catalogText(qualification, "id"),
+              }));
+              return (
+                <article className="fuel-admin-list-row" key={orderId}>
+                  <div>
+                    <strong>{productName(productKey, productRows)} · {load} L</strong>
+                    <small>{formatMode(mode)} · {branchName(branches.data ?? [], branchId)} · Order {orderId.slice(0, 8).toUpperCase()}</small>
+                  </div>
+                  <div className="fuel-admin-dispatch-actions">
+                    <SelectInput
+                      label="Qualified driver & vehicle"
+                      value={dispatchQualificationByOrder[orderId] ?? ""}
+                      onChange={(event) => setDispatchQualificationByOrder((current) => ({ ...current, [orderId]: event.currentTarget.value }))}
+                      options={[{ label: eligible.length ? "Choose approved driver and vehicle" : "No matching approved qualification", value: "" }, ...options]}
+                    />
+                    <Button
+                      icon={Truck}
+                      disabled={!dispatchQualificationByOrder[orderId] || !eligible.length}
+                      isLoading={dispatchQualifiedDriver.isPending}
+                      onClick={() => void assignDispatchDriver(order)}
+                    >Assign & dispatch</Button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="admin-notice">
