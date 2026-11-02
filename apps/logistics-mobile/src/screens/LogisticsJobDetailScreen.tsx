@@ -2,7 +2,7 @@ import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, Clock3, RefreshCw, ShieldCheck, Truck, WalletCards } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Modal, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { asNumber, asString, useLogisticsQuery } from "../api/logistics";
@@ -50,6 +50,7 @@ export function LogisticsJobDetailScreen() {
   const [showBooking, setShowBooking] = useState(false);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("online_wallet");
   const [selectedOfferId, setSelectedOfferId] = useState("");
+  const bookingAttemptRef = useRef<{ offerId: string; paymentMode: PaymentMode; idempotencyKey: string } | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const job = (jobs.data ?? []).find((item) => asString(item, "id") === jobId) ?? null;
@@ -70,12 +71,20 @@ export function LogisticsJobDetailScreen() {
   };
 
   const createBooking = useMutation({
-    mutationFn: async (offerId: string) => api.post(
-      "/runtime/logistics/offers/select",
-      { offerId, paymentMode, idempotencyKey: createClientIdempotencyKey("logistics.booking.create", offerId) },
-      z.string().uuid(),
-    ),
+    mutationFn: async (offerId: string) => {
+      const previous = bookingAttemptRef.current;
+      const idempotencyKey = previous?.offerId === offerId && previous.paymentMode === paymentMode
+        ? previous.idempotencyKey
+        : createClientIdempotencyKey("logistics.booking.create", `${offerId}:${paymentMode}`);
+      bookingAttemptRef.current = { offerId, paymentMode, idempotencyKey };
+      return api.post(
+        "/runtime/logistics/offers/select",
+        { offerId, paymentMode, idempotencyKey },
+        z.string().uuid(),
+      );
+    },
     onSuccess: (bookingId) => {
+      bookingAttemptRef.current = null;
       setShowBooking(false);
       router.push({ pathname: "/(customer)/bookings/[id]", params: { id: bookingId } } as never);
     },
