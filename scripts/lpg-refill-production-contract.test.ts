@@ -370,7 +370,8 @@ Deno.test("station, driver and customer operation queues avoid unbounded long sc
   assertIncludes(jobs, "const JOB_PAGE_SIZE = 8");
   assertIncludes(jobs, "matchingJobs.slice(0, visibleCount)");
   assertIncludes(jobs, "Show ${Math.min(JOB_PAGE_SIZE");
-  assertIncludes(orders, "const ORDER_PAGE_SIZE = 8");
+  assertIncludes(orders, "const ORDER_PAGE_SIZE = 12");
+  assertIncludes(orders, "filteredItems.slice(0, visibleCount)");
 });
 
 Deno.test("station scanner includes incoming receipt and shows visible confirmation feedback", async () => {
