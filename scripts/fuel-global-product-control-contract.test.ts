@@ -1,7 +1,7 @@
 const admin = await Deno.readTextFile(
   "apps/admin/src/features/services/FuelAdminWorkspace.tsx",
 );
-const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
+const gateway = await Deno.readTextFile("supabase/functions/fuel-runtime/index.ts");
 const migration = await Deno.readTextFile(
   "supabase/migrations/20261101203100_fuel_global_product_controls.sql",
 );
