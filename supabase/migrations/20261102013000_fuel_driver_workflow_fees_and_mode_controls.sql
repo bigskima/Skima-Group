@@ -133,6 +133,7 @@ cross join module_record;
 
 create or replace function public.configure_fuel_driver_product_qualification_mode(
   target_driver_user_id uuid,
+  target_actor_user_id uuid,
   target_driver_profile_id uuid,
   target_station_managed_driver_id uuid,
   target_fulfillment_mode text,
@@ -177,7 +178,7 @@ begin
     raise exception using errcode='42501',message='Fuel driver qualification management permission is required';
   end if;
 
-  if target_driver_user_id is null
+  if target_driver_user_id is null or target_actor_user_id is null
      or target_fulfillment_mode is null or target_fulfillment_mode not in ('station_managed','independent_driver','skima_managed')
      or (target_fulfillment_mode='station_managed' and (target_station_managed_driver_id is null or target_driver_profile_id is not null))
      or (target_fulfillment_mode in ('independent_driver','skima_managed') and (target_driver_profile_id is null or target_station_managed_driver_id is not null))
@@ -328,9 +329,11 @@ begin
   values(
     target_driver_user_id,target_driver_profile_id,target_station_managed_driver_id,target_branch_id,target_vehicle_id,
     target_product_key,target_fulfillment_mode,target_maximum_load_litres,target_status,
-    case when target_status='approved' then auth.uid() else null end,
+    case when target_status='approved' then target_actor_user_id else null end,
     case when target_status='approved' then timezone('utc',now()) else null end,
-    target_valid_until,'platform.fuel.driver_qualification',target_idempotency_key,target_metadata,auth.uid()
+    target_valid_until,'platform.fuel.driver_qualification',target_idempotency_key,
+    target_metadata||jsonb_build_object('reviewed_by_user_id',target_actor_user_id),
+    target_actor_user_id
   )
   on conflict on constraint fuel_driver_product_qualification_identity_unique do update
   set driver_profile_id=excluded.driver_profile_id,
@@ -368,8 +371,8 @@ end;
 $$;
 
 revoke all on function public.configure_fuel_driver_product_qualification(uuid,uuid,uuid,uuid,uuid,text,numeric,text,timestamptz,text,jsonb) from public,anon,authenticated;
-revoke all on function public.configure_fuel_driver_product_qualification_mode(uuid,uuid,uuid,text,uuid,uuid,text,numeric,text,timestamptz,text,jsonb) from public,anon,authenticated;
-grant execute on function public.configure_fuel_driver_product_qualification_mode(uuid,uuid,uuid,text,uuid,uuid,text,numeric,text,timestamptz,text,jsonb) to service_role;
+revoke all on function public.configure_fuel_driver_product_qualification_mode(uuid,uuid,uuid,uuid,text,uuid,uuid,text,numeric,text,timestamptz,text,jsonb) from public,anon,authenticated;
+grant execute on function public.configure_fuel_driver_product_qualification_mode(uuid,uuid,uuid,uuid,text,uuid,uuid,text,numeric,text,timestamptz,text,jsonb) to service_role;
 
 create or replace function public.require_fuel_driver_product_qualification(target_order_id uuid)
 returns void
