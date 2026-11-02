@@ -15,7 +15,6 @@ as $$
     from public.tracking_sessions session
     join public.logistics_bookings booking
       on booking.id = session.subject_id
-     and booking.id = target_tracking_session_id::uuid
      and booking.tracking_session_id = session.id
     where session.id = target_tracking_session_id
       and session.subject_type = 'logistics_booking'
@@ -277,12 +276,47 @@ begin
     return new;
   end if;
 
-  perform public.update_tracking_session_status(
+  -- The booking may be closed by the customer, not the driver who started
+  -- tracking. Update the shared tracking record as part of this trusted
+  -- SECURITY DEFINER trigger instead of invoking the actor-restricted client RPC.
+  perform tracking_session.id
+  from public.tracking_sessions tracking_session
+  where tracking_session.id = new.tracking_session_id
+  for update;
+
+  if not found then
+    return new;
+  end if;
+
+  if exists (
+    select 1 from public.tracking_sessions tracking_session
+    where tracking_session.id = new.tracking_session_id
+      and tracking_session.status in ('completed','cancelled')
+  ) then
+    return new;
+  end if;
+
+  update public.tracking_sessions
+  set status = closing_status,
+      ended_at = coalesce(ended_at,timezone('utc',now())),
+      metadata = metadata || jsonb_build_object(
+        'module_key','logistics_network',
+        'booking_id',new.id,
+        'closed_by_booking_status',new.status
+      ),
+      updated_at = timezone('utc',now())
+  where id = new.tracking_session_id;
+
+  insert into public.tracking_session_events (
+    tracking_session_id,status,idempotency_key,metadata
+  )
+  values (
     new.tracking_session_id,
     closing_status,
     'logistics-booking:' || new.id::text || ':tracking:' || closing_status || ':v1',
-    jsonb_build_object('module_key','logistics_network','booking_id',new.id)
-  );
+    jsonb_build_object('module_key','logistics_network','booking_id',new.id,'booking_status',new.status)
+  )
+  on conflict (tracking_session_id,idempotency_key) do nothing;
 
   return new;
 end;
