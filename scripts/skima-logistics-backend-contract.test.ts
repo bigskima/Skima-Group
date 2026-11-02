@@ -472,3 +472,24 @@ Deno.test("Customer may cancel an unpaid booking but cannot bypass escrow, fees 
   requireNotText(migrationCancellation, "execute_service_request_settlement", "no escrow is released");
   requireText(runtime, '"/runtime/logistics/bookings/cancel"', "unpaid booking cancellation API route");
 });
+
+
+Deno.test("Online booking payment acquires a booking lock before wallet funding and supports safe retry", () => {
+  requireText(migrationCancellation, "status = 'payment_processing'", "explicit payment-processing state");
+  requireText(migrationCancellation, "payment_attempt_wallet_id", "the original customer wallet is locked to the attempt");
+  requireText(migrationCancellation, "payment_attempt_idempotency_key", "stable server payment attempt identity");
+  requireText(migrationCancellation, "create or replace function public.begin_logistics_booking_online_payment", "payment lock acquisition RPC");
+  requireText(migrationCancellation, "for update", "payment lock serializes against booking cancellation");
+  requireText(migrationCancellation, "booking_record.payment_attempt_wallet_id is distinct from target_customer_wallet_id", "retry must use the original wallet");
+  requireText(migrationCancellation, "create or replace function public.reset_logistics_booking_payment_attempt", "safe failed-funding recovery");
+  requireText(migrationCancellation, "an escrow hold exists; preserve payment processing and retry payment confirmation", "a created hold cannot be reset or cancelled");
+  requireText(migrationCancellation, "booking_record.status <> 'payment_processing'", "escrow marking requires a started payment attempt");
+  requireText(runtime, 'serviceClient.rpc("begin_logistics_booking_online_payment"', "runtime locks booking before funding");
+  requireText(runtime, 'serviceClient.rpc("fund_order_from_wallet"', "shared wallet/escrow funding remains authoritative");
+  requireText(runtime, 'serviceClient.rpc("reset_logistics_booking_payment_attempt"', "funding failure safely releases the pre-payment lock");
+  requireText(runtime, 'serviceClient.rpc("mark_logistics_booking_payment_reserved"', "escrow hold is linked only after funding");
+  if (runtime.indexOf('serviceClient.rpc("begin_logistics_booking_online_payment"') >
+      runtime.indexOf('serviceClient.rpc("fund_order_from_wallet"')) {
+    throw new Error("online booking payment must lock the booking before wallet funding");
+  }
+});
