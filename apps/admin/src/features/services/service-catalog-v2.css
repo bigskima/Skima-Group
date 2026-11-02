@@ -212,3 +212,21 @@
   flex-wrap: wrap;
   gap: 0.7rem;
 }
+
+.fuel-admin-dispatch-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.fuel-admin-dispatch-actions > * {
+  min-width: 0;
+}
+
+@media (max-width: 620px) {
+  .fuel-admin-dispatch-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
