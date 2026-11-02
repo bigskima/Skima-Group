@@ -122,6 +122,7 @@
     "20261102013000_fuel_driver_workflow_fees_and_mode_controls.sql",
     "20261102014500_lpg_single_customer_otp_handover.sql",
     "20261102110000_logistics_marketplace_domain_foundation.sql",
-    "20261102111500_logistics_marketplace_tenant_and_matching_hardening.sql"
+    "20261102111500_logistics_marketplace_tenant_and_matching_hardening.sql",
+    "20261102113000_logistics_booking_and_payment_modes.sql"
   ]
 }
