@@ -27,6 +27,7 @@ const providerCompany = await Deno.readTextFile("apps/logistics-mobile/src/scree
 const providerTeam = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderTeamScreen.tsx");
 const providerTeamRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/team.tsx");
 const providerDriver = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsDriverScreen.tsx");
+const driverLocationShare = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsDriverLocationShare.tsx");
 const providerDriverRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/driver.tsx");
 const providerJobs = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderJobsScreen.tsx");
 const providerBookingDetail = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderBookingDetailScreen.tsx");
@@ -362,4 +363,25 @@ Deno.test("An interrupted online booking payment can only be retried with its or
   requireText(booking, "Continue payment confirmation", "customer can retry the atomic reservation");
   requireText(booking, 'status !== "payment_processing" && !enoughBalance', "retry does not incorrectly require the wallet to retain the already-debited balance");
   requireText(booking, '"/runtime/logistics/bookings/cancel"', "payment retry and cancellation remain distinct operations");
+});
+
+
+Deno.test("Foreground GPS sharing is explicit and visible only during an active Logistics driver job", () => {
+  requireText(appPackage, '"expo-location": "~57.0.18"', "Expo foreground location dependency");
+  requireText(appConfig, '"expo-location"', "Expo location config plugin");
+  requireText(appConfig, "locationWhenInUsePermission", "foreground-only location permission disclosure");
+  requireText(driverLocationShare, "Location.requestForegroundPermissionsAsync()", "driver explicitly grants foreground location access");
+  requireText(driverLocationShare, "Location.watchPositionAsync", "driver location watch");
+  requireText(driverLocationShare, "timeInterval: 15_000", "bounded 15-second foreground update cadence");
+  requireText(driverLocationShare, "distanceInterval: 25", "distance-gated foreground updates");
+  requireText(driverLocationShare, '"/runtime/logistics/driver/location"', "driver GPS write route");
+  requireText(driverLocationShare, "useFocusEffect", "sharing lifecycle follows driver screen focus");
+  requireText(driverLocationShare, "sharingEnabled.current = false", "stop and blur disable further location writes");
+  requireText(providerDriver, "LogisticsDriverLocationShare", "driver job screen owns the tracking control");
+  requireText(providerDriver, '["in_progress", "picked_up", "in_transit"]', "location sharing is available only after work starts");
+  requireText(booking, '"/runtime/logistics/bookings/tracking?bookingId="', "customer booking tracking read");
+  requireText(booking, "refetchInterval", "customer sees fresh driver location without manual reload");
+  requireText(booking, "Open location in Maps", "customer can open the latest GPS position");
+  requireText(booking, "tracking.refetch()", "customer pull-to-refresh also refreshes tracking");
+  requireNotText(appConfig, "locationAlwaysAndWhenInUsePermission", "no implicit background location permission");
 });
