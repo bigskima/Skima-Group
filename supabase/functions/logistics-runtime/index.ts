@@ -201,6 +201,56 @@ async function handleLogisticsRequest(
     return selectResponse(query, id);
   }
 
+  if (routePath === "/runtime/logistics/company/wallet/fund" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    const organizationId = requireUuid(p.organizationId, "organizationId");
+    const customerWalletId = requireUuid(p.customerWalletId, "customerWalletId");
+    const amount = requireNumber(p.amount, "amount");
+    const idempotencyKey = requireString(p.idempotencyKey, "idempotencyKey");
+    if (amount <= 0) throw new RequestValidationError("amount must be greater than zero.");
+
+    const companyPermission = await supabase.rpc("can_manage_logistics_company", {
+      target_organization_id: organizationId,
+    });
+    if (companyPermission.error) return databaseError(companyPermission.error, id);
+    if (companyPermission.data !== true) {
+      return jsonResponse({ ok: false, error: "company_wallet_access_denied", requestId: id }, 403);
+    }
+
+    const customerWallet = await supabase.from("wallet_accounts")
+      .select("id,currency_code")
+      .eq("id", customerWalletId)
+      .eq("wallet_type", "customer")
+      .eq("owner_entity_type", "user")
+      .eq("owner_entity_id", requesterUserId)
+      .eq("status", "active")
+      .maybeSingle();
+    if (customerWallet.error) return databaseError(customerWallet.error, id);
+    if (!customerWallet.data) {
+      return jsonResponse({
+        ok: false,
+        error: "customer_wallet_required",
+        message: "Choose your own active customer wallet to fund the company wallet.",
+        requestId: id,
+      }, 403);
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const result = await serviceClient.rpc("fund_logistics_provider_wallet_from_customer_wallet", {
+      target_organization_id: organizationId,
+      target_customer_user_id: requesterUserId,
+      target_customer_wallet_id: customerWalletId,
+      target_amount: amount,
+      target_idempotency_key: idempotencyKey,
+    });
+    if (result.error) return databaseError(result.error, id);
+    return jsonResponse({ ok: true, data: result.data, requestId: id });
+  }
+
   if (routePath === "/runtime/logistics/company/profile" && request.method === "POST") {
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
