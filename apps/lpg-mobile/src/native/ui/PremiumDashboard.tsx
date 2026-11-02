@@ -69,6 +69,7 @@ export function CustomerDashboard() {
     const settings = storefront.activeSettings;
     const moduleId = typeof storefront.storeModule?.id === "string" ? storefront.storeModule.id : null;
     if (!settings || !moduleId) return [];
+    const currencyCode = firstString(settings, ["currency_code", "currencyCode"]) ?? "NGN";
     const now = Date.now();
     return (storefront.items.data ?? [])
       .filter((item) =>
@@ -85,7 +86,7 @@ export function CustomerDashboard() {
         );
         const prices = (storefront.prices.data ?? []).filter((price) =>
           price.item_id === itemId &&
-          price.currency_code === settings.currency_code &&
+          price.currency_code === currencyCode &&
           price.status === "active" &&
           isEffectiveRecord(price, now)
         );
@@ -114,7 +115,7 @@ export function CustomerDashboard() {
           id: itemId,
           name: displayTitle(item),
           amount: firstNumber(basePrice ?? variantPrice, ["amount"]) ?? 0,
-          currency: settings.currency_code,
+          currency: currencyCode,
           imageAssetId: firstString(media[0], ["media_asset_id", "mediaAssetId"]),
         }];
       })
