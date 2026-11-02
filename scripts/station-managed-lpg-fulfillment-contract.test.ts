@@ -203,7 +203,7 @@ Deno.test("Station Managed driver can progress the full pickup → station → r
   requireText(jobDetailScreen, 'function stationManagedDriverScanTypeForStatus(status: string)', "station driver can scan from its accepted assignment");
   requireText(jobDetailScreen, '["driver_accepted", "pickup_en_route"].includes(status)', "pickup scan is available without a separate start-pickup action");
   requireText(jobDetailScreen, 'function stationManagedDriverActionForStatus(_status: string)', "Station Managed route transitions are automatic");
-  requireText(jobDetailScreen, "The station's verified release scan starts the return assignment", "station release automatically activates the return leg");
+  requireText(jobDetailScreen, "Once the station scans and releases the cylinder, your return assignment starts automatically.", "station release automatically activates the return leg");
   if (jobDetailScreen.includes('return "lpg.pickup.start"') || jobDetailScreen.includes('return "lpg.station.start"') || jobDetailScreen.includes('return "lpg.delivery.pending"')) {
     throw new Error("Station Managed drivers must not be asked to manually start pickup, station transit or hand-over arrival.");
   }
@@ -326,7 +326,9 @@ Deno.test("Station Managed dispatch requires a compliant station-owned LPG vehic
 Deno.test("Customer refill only exposes the separate Station Managed fallback outside coverage", () => {
   requireText(stationEligibilityApi, "useEligibleStationManagedStations", "separate station-managed eligibility hook");
   requireText(customer, "outsideCoverageLikely", "outside-coverage state detection");
-  requireText(customer, "SKIMA Managed and Independent delivery are not available for this trip", "non-Station Managed models are not enabled outside coverage");
+  requireText(customer, "Choose Independent Managed delivery or let this station deliver through its own Station Managed driver.", "customer sees the current delivery-method choices");
+  requireText(customer, "SKIMA Managed / SKIMA Fleet may also be offered when its own fleet and driver network is eligible.", "SKIMA Fleet remains separately eligibility-gated");
+  requireText(customer, "Boolean(selectedStationManagedCandidate)", "Station Managed choice requires a matching eligible station candidate");
   requireText(customer, "Station Managed delivery available", "customer sees explicitly identified Station Managed fallback");
   requireText(customer, 'selectedStation?.isStationManagedOnly && fulfillmentMode === "station_managed"', "quote is allowed only with the selected Station Managed fallback");
 });
