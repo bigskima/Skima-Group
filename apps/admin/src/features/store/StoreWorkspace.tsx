@@ -40,6 +40,18 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
   const [organizationId, setOrganizationId] = useState("");
   const [currencyCode, setCurrencyCode] = useState("NGN");
   const [fulfillmentMethod, setFulfillmentMethod] = useState("delivery");
+  const [deliveryOriginLabel, setDeliveryOriginLabel] = useState("SKIMA Store");
+  const [deliveryOriginAddress, setDeliveryOriginAddress] = useState("");
+  const [deliveryOriginLatitude, setDeliveryOriginLatitude] = useState("");
+  const [deliveryOriginLongitude, setDeliveryOriginLongitude] = useState("");
+  const [deliveryBaseFeeAmount, setDeliveryBaseFeeAmount] = useState("0");
+  const [deliveryPerKmFeeAmount, setDeliveryPerKmFeeAmount] = useState("0");
+  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState("15");
+  const [freeDeliveryMinimumAmount, setFreeDeliveryMinimumAmount] = useState("");
+  const [minimumOrderAmount, setMinimumOrderAmount] = useState("0");
+  const [pickupLocationLabel, setPickupLocationLabel] = useState("SKIMA Store pickup");
+  const [pickupFormattedAddress, setPickupFormattedAddress] = useState("");
+  const [pickupInstructions, setPickupInstructions] = useState("");
   const [productName, setProductName] = useState("");
   const [description, setDescription] = useState("");
   const [categoryName, setCategoryName] = useState("General");
@@ -130,16 +142,52 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
   };
 
   const saveSettings = useMutation({
-    mutationFn: () => api.post("/runtime/storefront/settings", {
-      organizationId,
-      branchId: null,
-      currencyCode,
-      fulfillmentMethod,
-      fulfillmentMethods: ["delivery", "pickup"],
-      status: "active",
-      idempotencyKey: createClientIdempotencyKey("admin.storefront.settings"),
-      metadata: { configuredFrom: "admin.store" },
-    }, StoreSettingsSchema),
+    mutationFn: () => {
+      const parsedBaseFee = Number(deliveryBaseFeeAmount);
+      const parsedPerKmFee = Number(deliveryPerKmFeeAmount);
+      const parsedMinimumOrder = Number(minimumOrderAmount);
+      const parsedRadius = deliveryRadiusKm.trim() ? Number(deliveryRadiusKm) : null;
+      const parsedFreeThreshold = freeDeliveryMinimumAmount.trim() ? Number(freeDeliveryMinimumAmount) : null;
+      const parsedLatitude = deliveryOriginLatitude.trim() ? Number(deliveryOriginLatitude) : null;
+      const parsedLongitude = deliveryOriginLongitude.trim() ? Number(deliveryOriginLongitude) : null;
+      if (!deliveryOriginLabel.trim() || !deliveryOriginAddress.trim()) {
+        throw new Error("Enter the Store dispatch origin and its formatted address.");
+      }
+      if (parsedLatitude === null || parsedLongitude === null ||
+        !Number.isFinite(parsedLatitude) || !Number.isFinite(parsedLongitude) ||
+        parsedLatitude < -90 || parsedLatitude > 90 || parsedLongitude < -180 || parsedLongitude > 180) {
+        throw new Error("Enter valid Store dispatch latitude and longitude coordinates.");
+      }
+      if (parsedRadius === null || !Number.isFinite(parsedRadius) || parsedRadius <= 0) {
+        throw new Error("Enter a positive delivery radius in kilometres.");
+      }
+      if (![parsedBaseFee, parsedPerKmFee, parsedMinimumOrder].every((value) => Number.isFinite(value) && value >= 0) ||
+        (parsedFreeThreshold !== null && (!Number.isFinite(parsedFreeThreshold) || parsedFreeThreshold < 0))) {
+        throw new Error("Delivery fees, free-delivery threshold and minimum order must be zero or greater.");
+      }
+      return api.post("/runtime/storefront/full-settings", {
+        organizationId,
+        branchId: null,
+        currencyCode,
+        fulfillmentMethod,
+        fulfillmentMethods: ["delivery", "pickup"],
+        deliveryOriginLabel: deliveryOriginLabel.trim(),
+        deliveryOriginFormattedAddress: deliveryOriginAddress.trim(),
+        deliveryOriginLatitude: parsedLatitude,
+        deliveryOriginLongitude: parsedLongitude,
+        deliveryBaseFeeAmount: parsedBaseFee,
+        deliveryPerKmFeeAmount: parsedPerKmFee,
+        deliveryRadiusKm: parsedRadius,
+        freeDeliveryMinimumAmount: parsedFreeThreshold,
+        minimumOrderAmount: parsedMinimumOrder,
+        pickupLocationLabel: pickupLocationLabel.trim() || deliveryOriginLabel.trim(),
+        pickupFormattedAddress: pickupFormattedAddress.trim() || deliveryOriginAddress.trim(),
+        pickupInstructions: pickupInstructions.trim(),
+        status: "active",
+        idempotencyKey: createClientIdempotencyKey("admin.storefront.full-settings"),
+        metadata: { configuredFrom: "admin.store" },
+      }, StoreSettingsSchema);
+    },
     onSuccess: async () => {
       setSettingsEditorOpen(false);
       await refresh();
@@ -276,7 +324,24 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
             <small>{savedSettings?.status === "active" ? "Storefront is active" : savedSettings ? "Storefront is paused" : "Not configured"}</small>
           </div>
         </div>
-        <Button icon={Settings2} variant="outline" onClick={() => { setOrganizationId(savedOrganizationId); setCurrencyCode(catalogText(savedSettings, "currency_code") || "NGN"); setFulfillmentMethod(catalogText(savedSettings, "fulfillment_method") || "delivery"); setSettingsEditorOpen(true); }}>{savedSettings ? "Edit setup" : "Configure Store"}</Button>
+        <Button icon={Settings2} variant="outline" onClick={() => {
+          setOrganizationId(savedOrganizationId || organizations.data?.find((entry) => catalogText(entry, "slug") === "skima-store")?.id || "");
+          setCurrencyCode(catalogText(savedSettings, "currency_code") || "NGN");
+          setFulfillmentMethod(catalogText(savedSettings, "fulfillment_method") || "delivery");
+          setDeliveryOriginLabel(catalogText(savedSettings, "delivery_origin_label") || "SKIMA Store");
+          setDeliveryOriginAddress(catalogText(savedSettings, "delivery_origin_formatted_address"));
+          setDeliveryOriginLatitude(catalogText(savedSettings, "delivery_origin_latitude"));
+          setDeliveryOriginLongitude(catalogText(savedSettings, "delivery_origin_longitude"));
+          setDeliveryBaseFeeAmount(catalogText(savedSettings, "delivery_base_fee_amount") || "0");
+          setDeliveryPerKmFeeAmount(catalogText(savedSettings, "delivery_per_km_fee_amount") || "0");
+          setDeliveryRadiusKm(catalogText(savedSettings, "delivery_radius_km") || "15");
+          setFreeDeliveryMinimumAmount(catalogText(savedSettings, "free_delivery_minimum_amount"));
+          setMinimumOrderAmount(catalogText(savedSettings, "minimum_order_amount") || "0");
+          setPickupLocationLabel(catalogText(savedSettings, "pickup_location_label") || "SKIMA Store pickup");
+          setPickupFormattedAddress(catalogText(savedSettings, "pickup_formatted_address"));
+          setPickupInstructions(catalogText(savedSettings, "pickup_instructions"));
+          setSettingsEditorOpen(true);
+        }}>{savedSettings ? "Edit setup" : "Configure Store"}</Button>
       </section>
 
       {!savedSettings ? (
@@ -301,6 +366,24 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           <SelectInput label="Operating organisation" value={organizationId} onChange={(event) => setOrganizationId(event.currentTarget.value)} options={organizationOptions(organizations.data ?? [])} />
           <SelectInput label="Store currency" value={currencyCode} onChange={(event) => setCurrencyCode(event.currentTarget.value)} options={[{ label: "Nigerian naira (NGN)", value: "NGN" }, { label: "USDC", value: "USDC" }]} />
           <SelectInput label="Default fulfillment" value={fulfillmentMethod} onChange={(event) => setFulfillmentMethod(event.currentTarget.value)} options={[{ label: "Delivery", value: "delivery" }, { label: "Customer pickup", value: "pickup" }]} />
+          <div className="admin-notice"><strong>Delivery coverage and pricing</strong><p>SKIMA calculates the customer delivery fee from this origin to the saved delivery address. An address outside the radius cannot be checked out for delivery.</p></div>
+          <TextInput label="Dispatch / warehouse name" value={deliveryOriginLabel} onChange={(event) => setDeliveryOriginLabel(event.currentTarget.value)} placeholder="SKIMA Store" />
+          <TextInput label="Dispatch address" value={deliveryOriginAddress} onChange={(event) => setDeliveryOriginAddress(event.currentTarget.value)} placeholder="Full origin address" />
+          <div className="skima-form-grid">
+            <TextInput label="Origin latitude" type="number" value={deliveryOriginLatitude} onChange={(event) => setDeliveryOriginLatitude(event.currentTarget.value)} placeholder="6.2..." />
+            <TextInput label="Origin longitude" type="number" value={deliveryOriginLongitude} onChange={(event) => setDeliveryOriginLongitude(event.currentTarget.value)} placeholder="7.0..." />
+          </div>
+          <div className="skima-form-grid">
+            <TextInput label={`Base delivery fee (${currencyCode})`} type="number" value={deliveryBaseFeeAmount} onChange={(event) => setDeliveryBaseFeeAmount(event.currentTarget.value)} />
+            <TextInput label={`Extra fee per kilometre (${currencyCode})`} type="number" value={deliveryPerKmFeeAmount} onChange={(event) => setDeliveryPerKmFeeAmount(event.currentTarget.value)} />
+            <TextInput label="Maximum delivery radius (km)" type="number" value={deliveryRadiusKm} onChange={(event) => setDeliveryRadiusKm(event.currentTarget.value)} />
+            <TextInput label={`Free delivery from (${currencyCode}, optional)`} type="number" value={freeDeliveryMinimumAmount} onChange={(event) => setFreeDeliveryMinimumAmount(event.currentTarget.value)} />
+          </div>
+          <TextInput label={`Minimum order amount (${currencyCode})`} type="number" value={minimumOrderAmount} onChange={(event) => setMinimumOrderAmount(event.currentTarget.value)} />
+          <div className="admin-notice"><strong>Customer pickup</strong><p>Customers choosing pickup will see this location instead of a delivery address.</p></div>
+          <TextInput label="Pickup point name" value={pickupLocationLabel} onChange={(event) => setPickupLocationLabel(event.currentTarget.value)} placeholder="SKIMA Store pickup" />
+          <TextInput label="Pickup address" value={pickupFormattedAddress} onChange={(event) => setPickupFormattedAddress(event.currentTarget.value)} placeholder="Defaults to the dispatch address" />
+          <TextAreaInput label="Pickup instructions (optional)" value={pickupInstructions} onChange={(event) => setPickupInstructions(event.currentTarget.value)} placeholder="Opening hours, entrance, collection instructions..." />
           {saveSettings.error ? <StatusBadge tone="danger">{catalogError(saveSettings.error)}</StatusBadge> : null}
         </div>
       </Dialog>
