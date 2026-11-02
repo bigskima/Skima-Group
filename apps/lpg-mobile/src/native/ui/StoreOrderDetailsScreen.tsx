@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { ArrowLeft, MapPin, PackageCheck, ShieldCheck, ShoppingBag } from "lucide-react-native";
+import { MapPin, PackageCheck, ShieldCheck, ShoppingBag } from "lucide-react-native";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 
 import { useGatewayQuery } from "../api/gateway";
