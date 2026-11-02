@@ -996,6 +996,7 @@ function FuelPricingControls() {
     permissions.includes("platform.revenue.read") ||
     permissions.includes("platform.revenue.manage") ||
     permissions.includes("platform.financial_policy.read") ||
+    permissions.includes("platform.financial_policy.manage") ||
     permissions.includes("platform.fuel.manage")
   );
   const canManageProducts = Boolean(isSuperAdmin || permissions.includes("platform.fuel.manage"));
