@@ -639,51 +639,50 @@ begin
     raise exception 'delivery note must not exceed 1200 characters';
   end if;
 
-  select * into booking_record from public.logistics_bookings
-  where id = target_booking_id for update;
+  select * into booking_record
+  from public.logistics_bookings
+  where id = target_booking_id
+  for update;
   if not found then raise exception 'logistics booking was not found'; end if;
+
   actor_is_company := public.can_manage_logistics_company(booking_record.provider_organization_id)
     or public.has_permission('business.logistics.jobs.manage',booking_record.provider_organization_id);
 
-    if not actor_is_company and not exists (
-      select 1 from public.logistics_booking_driver_assignments assignment
-      where assignment.id::text = existing_event.metadata->>'assignment_id'
-        and assignment.driver_user_id = actor
-    ) then
-      raise exception 'delivery submission retry is not available to this actor';
-    end if;
-    return booking_record.id;
-  end if;
-
-    if not actor_is_company and not exists (
-      select 1 from public.logistics_booking_driver_assignments assignment
-      where assignment.id::text = existing_event.metadata->>'assignment_id'
-        and assignment.driver_user_id = actor
-    ) then
-      raise exception 'delivery submission retry is not available to this actor';
-    end if;
-    return booking_record.id;
-  end if;
-
-  select * into assignment_record from public.logistics_booking_driver_assignments
+  -- Check the append-only event before requiring an in_transit assignment.
+  -- After a successful submission the assignment moves to delivery_submitted;
+  -- this ordering lets a legitimate driver retry after a lost network response.
+  select * into existing_event
+  from public.logistics_booking_events
   where booking_id = booking_record.id
-    and status = 'in_transit'
-  order by created_at desc limit 1 for update;
-
-  if assignment_record.id is null or
-    (assignment_record.driver_user_id <> actor and not actor_is_company) then
-    raise exception 'delivery can only be submitted by the assigned driver or company dispatcher';
-  end if;
-
-  select * into existing_event from public.logistics_booking_events
-  where booking_id = booking_record.id and idempotency_key = target_idempotency_key;
+    and idempotency_key = target_idempotency_key;
   if found then
     if existing_event.event_type <> 'logistics.booking.delivery_submitted' then
       raise exception 'booking idempotency key was used for a different action';
     end if;
+    if not actor_is_company and not exists (
+      select 1
+      from public.logistics_booking_driver_assignments assignment
+      where assignment.id::text = existing_event.metadata->>'assignment_id'
+        and assignment.driver_user_id = actor
+    ) then
+      raise exception 'delivery submission retry is not available to this actor';
+    end if;
     return booking_record.id;
   end if;
-  if booking_record.status = 'delivered' then return booking_record.id; end if;
+
+  select * into assignment_record
+  from public.logistics_booking_driver_assignments
+  where booking_id = booking_record.id
+    and status = 'in_transit'
+  order by created_at desc
+  limit 1
+  for update;
+
+  if assignment_record.id is null
+    or (assignment_record.driver_user_id <> actor and not actor_is_company) then
+    raise exception 'delivery can only be submitted by the assigned driver or company dispatcher';
+  end if;
+
   if booking_record.status <> 'in_progress' then
     raise exception 'only an in-progress booking can be marked delivered';
   end if;
@@ -693,41 +692,60 @@ begin
       delivery_submitted_at = timezone('utc',now()),
       delivery_submitted_by = actor,
       delivery_submission_snapshot = jsonb_strip_nulls(jsonb_build_object(
-        'recipient_name',recipient_name,'delivery_note',delivery_note,'submitted_at',timezone('utc',now()),
-        'driver_profile_id',assignment_record.driver_profile_id,'vehicle_id',assignment_record.vehicle_id
+        'recipient_name',recipient_name,
+        'delivery_note',delivery_note,
+        'submitted_at',timezone('utc',now()),
+        'driver_profile_id',assignment_record.driver_profile_id,
+        'vehicle_id',assignment_record.vehicle_id
       )),
       updated_at = timezone('utc',now())
   where id = booking_record.id;
 
   update public.logistics_booking_driver_assignments
-  set status = 'delivery_submitted',delivery_submitted_at = timezone('utc',now()),
+  set status = 'delivery_submitted',
+      delivery_submitted_at = timezone('utc',now()),
       updated_at = timezone('utc',now())
   where id = assignment_record.id;
 
-
-  update public.service_requests set status = 'fulfilled',updated_at = timezone('utc',now())
+  update public.service_requests
+  set status = 'fulfilled',updated_at = timezone('utc',now())
   where id = booking_record.service_request_id;
+
   update public.order_records
-  set status = 'fulfilled',fulfilled_at = coalesce(fulfilled_at,timezone('utc',now())),
+  set status = 'fulfilled',
+      fulfilled_at = coalesce(fulfilled_at,timezone('utc',now())),
       updated_at = timezone('utc',now())
   where id = booking_record.order_id;
-  update public.logistics_job_requests set status = 'delivered',updated_at = timezone('utc',now())
+
+  update public.logistics_job_requests
+  set status = 'delivered',updated_at = timezone('utc',now())
   where id = booking_record.job_id;
 
   perform public.record_logistics_booking_event(
-    booking_record.id,'logistics.booking.delivery_submitted',target_idempotency_key,
-    booking_record.status,'delivered',jsonb_build_object(
-      'recipient_name',recipient_name,'delivery_note',delivery_note,'assignment_id',assignment_record.id
+    booking_record.id,
+    'logistics.booking.delivery_submitted',
+    target_idempotency_key,
+    booking_record.status,
+    'delivered',
+    jsonb_build_object(
+      'recipient_name',recipient_name,
+      'delivery_note',delivery_note,
+      'assignment_id',assignment_record.id
     )
   );
+
   perform public.record_logistics_job_event(
-    booking_record.job_id,'logistics.booking.delivery_submitted',target_idempotency_key || ':job',
-    'in_progress','delivered',jsonb_build_object('booking_id',booking_record.id,'recipient_name',recipient_name)
+    booking_record.job_id,
+    'logistics.booking.delivery_submitted',
+    target_idempotency_key || ':job',
+    'in_progress',
+    'delivered',
+    jsonb_build_object('booking_id',booking_record.id,'recipient_name',recipient_name)
   );
+
   return booking_record.id;
 end;
 $$;
-
 create or replace function public.read_my_logistics_driver_profile()
 returns jsonb
 language plpgsql
