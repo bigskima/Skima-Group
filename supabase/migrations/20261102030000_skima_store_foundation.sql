@@ -291,7 +291,21 @@ create table if not exists public.storefront_settings (
   branch_id uuid references public.organization_branches(id) on delete restrict,
   currency_code text not null references public.currency_definitions(code) on delete restrict,
   fulfillment_method text not null default 'delivery'
-    check (fulfillment_method ~ '^[a-z][a-z0-9_.:-]{1,120}
+NaN$'),
+  fulfillment_methods text[] not null default array['delivery', 'pickup'],
+  status text not null default 'draft'
+NaN
+  source text not null default 'platform.storefront'
+NaN$'),
+  idempotency_key text not null,
+  metadata jsonb not null default '{}'::jsonb check (jsonb_typeof(metadata) = 'object'),
+  created_by uuid references public.profiles(id) on delete set null default auth.uid(),
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  check (cardinality(fulfillment_methods) > 0),
+  check (fulfillment_method = any(fulfillment_methods))
+);
+
 alter table public.storefront_settings enable row level security;
 
 drop policy if exists storefront_settings_read_active_or_admin on public.storefront_settings;
