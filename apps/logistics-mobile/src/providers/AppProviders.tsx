@@ -16,7 +16,10 @@ export function AppProviders({ children }: PropsWithChildren) {
       setOnline(state.isConnected !== false && state.isInternetReachable !== false),
     ));
     if (Platform.OS !== "web") {
-      return AppState.addEventListener("change", (state) => focusManager.setFocused(state === "active")).remove;
+      const subscription = AppState.addEventListener("change", (state) => {
+        focusManager.setFocused(state === "active");
+      });
+      return () => subscription.remove();
     }
   }, []);
   return (
