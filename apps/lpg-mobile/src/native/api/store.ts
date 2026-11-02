@@ -1,4 +1,4 @@
-import { RecordArraySchema, RecordObjectSchema } from "./records";
+import { RecordArraySchema } from "./records";
 import { useGatewayQuery } from "./gateway";
 
 export function useStorefrontData() {
