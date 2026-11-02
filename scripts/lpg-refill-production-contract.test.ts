@@ -959,7 +959,7 @@ Deno.test("LPG final hand-over uses customer OTP only across Station, Independen
   // The customer requests and verifies an order-specific OTP only after the
   // return leg has started and the cylinder is physically in their possession.
   assertIncludes(verification, "deliveryStageReady");
-  assertIncludes(verification, '["return_en_route", "delivery_verification_pending"].includes(currentOrderStatus)');
+  assertIncludes(verification, '["return_en_route", "returning", "delivery_verification_pending"].includes(currentOrderStatus)');
   assertIncludes(verification, "I have received the cylinder — get OTP");
   assertIncludes(verification, 'path: "/lpg/orders/delivery-challenge"');
   assertIncludes(verification, 'action: "verify"');
@@ -1060,9 +1060,9 @@ Deno.test("LPG driver stages advance from verified events and live Admin routing
   assertNotIncludes(stationManagedActions, "lpg.delivery.pending");
   assertIncludes(internalActions, "return null;");
   assertNotIncludes(internalActions, "lpg.return.start");
-  assertIncludes(driver, '["return_en_route", "delivery_verification_pending"].includes(status)');
+  assertIncludes(driver, 'if (status === "return_en_route") return "Return the filled cylinder to the customer.');
   assertIncludes(driver, "no returned-cylinder scan or extra delivery button is required.");
-  assertIncludes(internal, '["return_en_route", "delivery_verification_pending"].includes(status)');
+  assertIncludes(internal, 'if (status === "refill_confirmed" || status === "return_en_route") return "Return the filled cylinder to the customer.');
   assertIncludes(lifecycle, "delivery challenge must be requested by the LPG order customer");
   assertIncludes(lifecycle, "order_record.status not in ('return_en_route', 'delivery_verification_pending')");
   assertIncludes(lifecycle, "public.lpg_delivery_challenge_is_verified(order_record.id, target_challenge_id)");
