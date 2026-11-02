@@ -1,7 +1,7 @@
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CheckCircle2, Clock3, MapPin, PackageCheck, Phone, ShieldCheck, Truck, UserRound } from "lucide-react-native";
+import { ArrowLeft, CheckCircle2, Clock3, MapPin, Phone, ShieldCheck, Truck, UserRound } from "lucide-react-native";
 import { useMemo, useRef, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
@@ -10,7 +10,6 @@ import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
 import { AppButton } from "../ui/AppButton";
-import { AppField } from "../ui/AppField";
 import { Card } from "../ui/Card";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
@@ -72,8 +71,6 @@ export function ProviderBookingDetailScreen() {
     ? selectedDriver.vehicles.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
     : [];
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
-  const [recipientName, setRecipientName] = useState("");
-  const [deliveryNote, setDeliveryNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const actionKeysRef = useRef(new Map<string, string>());
 
@@ -105,26 +102,15 @@ export function ProviderBookingDetailScreen() {
   });
 
   const mutateAction = useMutation({
-    mutationFn: async (action: "accept" | "start" | "deliver") => {
+    mutationFn: async (action: "accept") => {
       if (!bookingId) throw new Error("Booking id is missing.");
-      if (action === "deliver" && recipientName.trim().length < 2) {
-        throw new Error("Enter the name of the person receiving the delivery.");
-      }
-      const fingerprint = action === "deliver"
-        ? `deliver:${recipientName.trim()}:${deliveryNote.trim()}`
-        : action;
+      const fingerprint = action;
       let key = actionKeysRef.current.get(fingerprint);
       if (!key) {
         key = createClientIdempotencyKey(`logistics.provider.booking.${action}`, `${bookingId}:${fingerprint}`);
         actionKeysRef.current.set(fingerprint, key);
       }
-      if (action === "accept") return api.post("/runtime/logistics/bookings/accept", { bookingId, idempotencyKey: key }, z.string().uuid());
-      if (action === "start") return api.post("/runtime/logistics/bookings/start", { bookingId, idempotencyKey: key }, z.string().uuid());
-      return api.post("/runtime/logistics/bookings/delivery/submit", {
-        bookingId,
-        idempotencyKey: key,
-        deliverySubmission: { recipientName: recipientName.trim(), deliveryNote: deliveryNote.trim() || null },
-      }, z.string().uuid());
+      return api.post("/runtime/logistics/bookings/accept", { bookingId, idempotencyKey: key }, z.string().uuid());
     },
     onSuccess: async () => {
       setError(null);
@@ -241,11 +227,9 @@ export function ProviderBookingDetailScreen() {
             </Card>
           ) : status === "in_progress" ? (
             <Card padding="lg">
-              <View style={styles.actionHeading}><Truck color={palette.brand} size={20} /><Text style={[styles.sectionTitle, { color: palette.ink }]}>Record delivery hand-off</Text></View>
-              <Text style={[styles.meta, { color: palette.muted }]}>Enter the name of the person receiving the delivery. The customer will confirm the hand-off before online escrow can be released.</Text>
-              <AppField label="Received by" value={recipientName} onChangeText={setRecipientName} placeholder="Name of recipient" />
-              <AppField label="Delivery note" value={deliveryNote} onChangeText={setDeliveryNote} placeholder="Condition, hand-off notes or reference…" optional multiline />
-              <AppButton label="Submit delivery details" fullWidth loading={mutateAction.isPending} disabled={recipientName.trim().length < 2} onPress={() => { setError(null); mutateAction.mutate("deliver"); }} trailingIcon={<PackageCheck color="#FFFFFF" size={16} />} />
+              <View style={styles.actionHeading}><Truck color={palette.brand} size={20} /><Text style={[styles.sectionTitle, { color: palette.ink }]}>Driver fulfillment in progress</Text></View>
+              <Text style={[styles.meta, { color: palette.muted }]}>The assigned driver owns pickup, transit and final delivery submission. The company workspace can monitor the current milestone here.</Text>
+              <StatusPill status={asString(activeAssignment, "status") ?? "in_progress"} />
             </Card>
           ) : status === "delivered" ? (
             <Card variant="warning" padding="lg">
