@@ -81,3 +81,6 @@ verify_jwt = false
 
 [functions.utility-provider-webhook]
 verify_jwt = false
+
+[functions.logistics-runtime]
+verify_jwt = true
