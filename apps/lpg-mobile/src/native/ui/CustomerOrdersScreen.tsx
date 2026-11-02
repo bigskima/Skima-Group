@@ -75,6 +75,7 @@ export function CustomerOrdersScreen() {
   const fuelOrders = domainQueries.fuelOrders();
   const fuelProducts = domainQueries.fuelProducts();
   const billPayments = domainQueries.utilityPayments();
+  const utilityCatalog = domainQueries.utilityCatalog();
   const storeOrders = domainQueries.storeOrders();
   const [filter, setFilter] = useState<OrderFilter>("all");
   const [visibleCount, setVisibleCount] = useState(12);
@@ -125,7 +126,7 @@ export function CustomerOrdersScreen() {
         statusTone: unifiedStatusTone(stage),
         reference: id.slice(0, 8).toUpperCase(),
         createdAt: firstString(order, ["created_at", "createdAt"]),
-        amount: firstNumber(order, ["total_amount", "totalAmount", "amount"]),
+        amount: firstNumber(nestedRecord(order, "order"), ["total_amount", "totalAmount"]) ?? firstNumber(order, ["total_amount", "totalAmount", "amount"]),
         currency,
         route: `/(customer)/fuel-order/${id}`,
       };
@@ -133,10 +134,11 @@ export function CustomerOrdersScreen() {
     ...(billPayments.data ?? []).map((payment, index): UnifiedOrderItem => {
       const id = firstString(payment, ["id", "request_id"]) ?? `bill-${index}`;
       const status = firstString(payment, ["status", "payment_status"]) ?? "pending";
+      const product = (utilityCatalog.data ?? []).find((item) => firstString(item, ["id"]) === firstString(payment, ["product_id"]));
       return {
         id,
         kind: "bills",
-        title: firstString(payment, ["product_name", "display_name", "service_name", "provider_name"]) ?? "Bill payment",
+        title: firstString(payment, ["product_name", "display_name", "service_name", "provider_name"]) ?? firstString(product, ["display_name", "name"]) ?? "Bill payment",
         subtitle: firstString(payment, ["customer_identifier", "customer_name", "recipient_phone"]) ?? "Utility payment",
         status: humanizeStatus(status),
         statusTone: unifiedStatusTone(status),
@@ -176,6 +178,7 @@ export function CustomerOrdersScreen() {
     fuelOrders.refetch(),
     fuelProducts.refetch(),
     billPayments.refetch(),
+    utilityCatalog.refetch(),
     storeOrders.refetch(),
   ]);
   const selectFilter = (next: OrderFilter) => {
