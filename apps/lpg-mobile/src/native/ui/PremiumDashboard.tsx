@@ -70,6 +70,7 @@ export function CustomerDashboard() {
     const moduleId = typeof storefront.storeModule?.id === "string" ? storefront.storeModule.id : null;
     if (!settings || !moduleId) return [];
     const currencyCode = firstString(settings, ["currency_code", "currencyCode"]) ?? "NGN";
+    const currencyCode = firstString(settings, ["currency_code", "currencyCode"]) ?? "NGN";
     const now = Date.now();
     return (storefront.items.data ?? [])
       .filter((item) =>
