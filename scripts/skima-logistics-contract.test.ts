@@ -53,7 +53,11 @@ Deno.test("missing financial policy versions fail closed", () => {
       currencyCode: "NGN",
       paymentMode: "offline_provider",
       deliveryPriceMinor: 100_000,
-      policy: { ...policy, providerReceivalFeePolicyVersionId: "" },
+      policy: {
+      ...policy,
+      providerReceivalFeeMinor: undefined,
+      providerReceivalFeePolicyVersionId: undefined,
+    },
     });
   } catch {
     rejected = true;
@@ -67,7 +71,11 @@ Deno.test("each payment mode requires only the applicable provider fee policy", 
     currencyCode: "NGN",
     paymentMode: "offline_provider",
     deliveryPriceMinor: 100_000,
-    policy: { ...policy, settlementCommissionPolicyVersionId: "" },
+    policy: {
+      ...policy,
+      settlementCommissionBasisPoints: undefined,
+      settlementCommissionPolicyVersionId: undefined,
+    },
   });
   if (offline.settlementCommissionMinor !== 0) throw new Error("Offline commission must remain zero.");
 
