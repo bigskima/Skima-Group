@@ -7,6 +7,9 @@ const progression = await Deno.readTextFile(
 const fulfillmentModes = await Deno.readTextFile(
   "supabase/migrations/20261102013000_fuel_driver_workflow_fees_and_mode_controls.sql",
 );
+const feeControls = await Deno.readTextFile(
+  "supabase/migrations/20261102013000_fuel_driver_workflow_fees_and_mode_controls.sql",
+);
 const walletGate = await Deno.readTextFile(
   "supabase/migrations/20261102162000_fuel_verified_settlement_platform_wallet_gate.sql",
 );
@@ -58,9 +61,9 @@ Deno.test("customer pricing follows the selected fulfillment model", () => {
   includes(pricing, "station_supply_amount", "the accepted quote locks the station supply amount");
   includes(pricing, "managed_product_margin_amount", "SKIMA Managed retail/supply spread is snapshotted");
   includes(pricing, "operation_record.fulfillment_mode='skima_managed'", "SKIMA Managed uses a separate platform retail price");
-  includes(pricing, "pricing.fuel.pms.platform_fee_per_litre", "PMS markup is administered per litre");
-  includes(pricing, "pricing.fuel.ago.platform_fee_per_litre", "diesel markup is administered per litre");
-  includes(pricing, "pricing.fuel.dpk.platform_fee_per_litre", "kerosene markup is administered per litre");
+  includes(feeControls, "pricing.fuel.pms.platform_fee_per_litre", "PMS markup is administered per litre");
+  includes(feeControls, "pricing.fuel.ago.platform_fee_per_litre", "diesel markup is administered per litre");
+  includes(feeControls, "pricing.fuel.dpk.platform_fee_per_litre", "kerosene markup is administered per litre");
   includes(customerOrder, "/runtime/fuel/mode-controls", "customer sees only globally enabled fulfillment modes");
   includes(customerOrder, "/runtime/fuel/managed-prices", "customer price lookup includes SKIMA Managed retail values");
   includes(customerOrder, "admin_override_price_per_litre", "customer price uses an active Admin station-price override");
@@ -92,7 +95,8 @@ Deno.test("purchased orders settle only after customer OTP; rental orders settle
   includes(pricing, "public.verify_fuel_delivery_challenge(", "OTP verification is customer-authenticated");
   includes(pricing, "create trigger fuel_delivery_otp_auto_completion", "verified OTP drives automatic delivery completion");
   includes(pricing, "operation_record.container_mode='rental' then 'return_due' else 'completed'", "purchase and rental have separate post-verification paths");
-  includes(progression, "verified customer OTP may move this order", "driver delivery cannot directly close a Fuel order");
+  includes(progression, "Customer delivery confirmation is the next gate", "driver delivery cannot directly close a Fuel order");
+  includes(progression, "customer OTP", "the verified OTP is the delivery authorization");
   includes(pricing, "can_complete_fuel_delivery_settlement", "settlement is gated by order-bound verified customer handover");
   includes(walletGate, "can_create_fuel_verified_platform_purpose_wallet", "platform revenue/liability wallets are narrowly authorized for this exact settlement");
   includes(walletGate, "'fuel-settlement:'||order_record.id::text||':revenue-wallet'", "platform wallet creation is bound to the exact Fuel order idempotency key");
