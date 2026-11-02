@@ -172,11 +172,12 @@ async function handleFuelRuntimeRequest(
     if (request.method === "GET") {
       let query = supabase
         .from("fuel_branch_product_offers")
-        .select("id,organization_id,branch_id,branch:organization_branches(id,key,display_name,address,geo_location),product_key,currency_code,catalog_item_id,catalog_variant_id,price_per_litre,minimum_litres,maximum_litres,container_purchase_amount,container_rental_amount,refundable_deposit_amount,driver_delivery_fee_amount,platform_fee_amount,tax_rate_percent,fulfillment_modes,status,effective_from,effective_until,metadata,created_at,updated_at")
+        .select("id,organization_id,branch_id,branch:organization_branches(id,key,display_name,address,geo_location),product_key,currency_code,catalog_item_id,catalog_variant_id,price_per_litre,admin_override_price_per_litre,admin_override_reason,admin_override_at,minimum_litres,maximum_litres,container_purchase_amount,container_rental_amount,refundable_deposit_amount,driver_delivery_fee_amount,platform_fee_amount,tax_rate_percent,fulfillment_modes,status,effective_from,effective_until,metadata,created_at,updated_at")
         .order("updated_at", { ascending: false });
       const branchId = optionalUuid(url.searchParams.get("branchId"), "branchId");
       const productKey = optionalString(url.searchParams.get("productKey"));
       if (branchId) query = query.eq("branch_id", branchId);
+      else query = query.eq("status", "active");
       if (productKey) query = query.eq("product_key", productKey);
       return selectRecords(query, id);
     }
@@ -186,27 +187,120 @@ async function handleFuelRuntimeRequest(
       if ("response" in body) return body.response;
       const payload = body.value;
       return rpcResponse(
-        supabase.rpc("configure_fuel_branch_product_offer", {
+        supabase.rpc("configure_fuel_station_product_offer", {
+          target_actor_user_id: authResult.user.id,
           target_branch_id: requireUuid(payload.branchId, "branchId"),
           target_product_key: requireString(payload.productKey, "productKey"),
           target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
           target_price_per_litre: requireNumber(payload.pricePerLitre, "pricePerLitre"),
-          target_minimum_litres: requireNumber(payload.minimumLitres, "minimumLitres"),
+          target_minimum_litres: optionalNumber(payload.minimumLitres, "minimumLitres") ?? 1,
           target_maximum_litres: requireNumber(payload.maximumLitres, "maximumLitres"),
-          target_container_purchase_amount: optionalNumber(payload.containerPurchaseAmount, "containerPurchaseAmount") ?? 0,
-          target_container_rental_amount: optionalNumber(payload.containerRentalAmount, "containerRentalAmount") ?? 0,
-          target_refundable_deposit_amount: optionalNumber(payload.refundableDepositAmount, "refundableDepositAmount") ?? 0,
-          target_driver_delivery_fee_amount: optionalNumber(payload.driverDeliveryFeeAmount, "driverDeliveryFeeAmount") ?? 0,
-          target_platform_fee_amount: optionalNumber(payload.platformFeeAmount, "platformFeeAmount") ?? 0,
-          target_tax_rate_percent: optionalNumber(payload.taxRatePercent, "taxRatePercent") ?? 0,
           target_fulfillment_modes: optionalStringArray(payload.fulfillmentModes) ?? ["station_managed", "independent_driver", "skima_managed"],
-          target_status: optionalString(payload.status) ?? "draft",
+          target_status: optionalString(payload.status) ?? "active",
           target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-          target_metadata: optionalRecord(payload.metadata) ?? {},
         }),
         id,
       );
     }
+  }
+
+  if (routePath === "/runtime/fuel/mode-controls" && request.method === "GET") {
+    return rpcResponse(supabase.rpc("read_fuel_fulfillment_mode_controls"), id);
+  }
+
+  if (routePath === "/runtime/fuel/managed-prices" && request.method === "GET") {
+    let query = supabase
+      .from("fuel_managed_product_prices")
+      .select("id,product_key,currency_code,price_per_litre,enabled,effective_from,effective_until,change_reason")
+      .order("product_key", { ascending: true });
+    const productKey = optionalString(url.searchParams.get("productKey"));
+    const currencyCode = optionalString(url.searchParams.get("currencyCode"));
+    if (productKey) query = query.eq("product_key", productKey);
+    if (currencyCode) query = query.eq("currency_code", currencyCode);
+    return selectRecords(query, id);
+  }
+
+  if (routePath === "/runtime/fuel/admin-pricing" && request.method === "GET") {
+    return rpcResponse(supabase.rpc("read_fuel_admin_pricing_workspace"), id);
+  }
+
+  if (routePath === "/runtime/fuel/admin-pricing/managed-price" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("configure_fuel_managed_product_price", {
+        target_product_key: requireString(payload.productKey, "productKey"),
+        target_currency_code: requireString(payload.currencyCode, "currencyCode"),
+        target_price_per_litre: requireNumber(payload.pricePerLitre, "pricePerLitre"),
+        target_enabled: payload.enabled !== false,
+        target_reason: requireString(payload.reason, "reason"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/admin-pricing/mode" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("set_fuel_fulfillment_mode_control", {
+        target_product_key: requireString(payload.productKey, "productKey"),
+        target_fulfillment_mode: requireString(payload.fulfillmentMode, "fulfillmentMode"),
+        target_enabled: payload.enabled === true,
+        target_reason: requireString(payload.reason, "reason"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/admin-pricing/offer-override" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("configure_fuel_station_price_override", {
+        target_offer_id: requireUuid(payload.offerId, "offerId"),
+        target_override_price_per_litre: payload.clear === true ? null : requireNumber(payload.overridePricePerLitre, "overridePricePerLitre"),
+        target_reason: requireString(payload.reason, "reason"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/delivery-challenge" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("request_fuel_delivery_challenge", {
+        target_order_id: requireUuid(payload.orderId, "orderId"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/verify-delivery" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("verify_fuel_delivery_challenge", {
+        target_order_id: requireUuid(payload.orderId, "orderId"),
+        target_challenge_id: requireUuid(payload.challengeId, "challengeId"),
+        target_code: requireString(payload.code, "code"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
   }
 
   if (routePath === "/runtime/fuel/storage") {
@@ -535,7 +629,7 @@ async function handleFuelRuntimeRequest(
   if (routePath === "/runtime/fuel/orders/operations" && request.method === "GET") {
     let query = supabase
       .from("fuel_order_operations")
-      .select("order_id,service_request_id,product_key,station_branch_id,customer_user_id,requested_litres,filled_litres,delivered_litres,container_mode,container_count,container_type_id,fulfillment_mode,stage_key,exception_reason,station_accepted_at,filled_at,driver_assigned_at,station_handover_at,delivered_at,return_received_at,completed_at,settlement_execution_id,settlement_transaction_id,settlement_statement_id,settled_at,deposit_refund_amount,deposit_refunded_at,metadata,created_at,updated_at,order:order_records(currency_code)")
+      .select("order_id,service_request_id,product_key,station_branch_id,customer_user_id,requested_litres,filled_litres,delivered_litres,container_mode,container_count,container_type_id,fulfillment_mode,stage_key,exception_reason,station_accepted_at,filled_at,driver_assigned_at,station_handover_at,delivered_at,delivery_challenge_id,delivery_verified_at,return_received_at,completed_at,settlement_execution_id,settlement_transaction_id,settlement_statement_id,settled_at,deposit_refund_amount,deposit_refunded_at,metadata,created_at,updated_at,order:order_records(currency_code)")
       .order("created_at", { ascending: false });
     const branchId = optionalUuid(url.searchParams.get("branchId"), "branchId");
     const orderId = optionalUuid(url.searchParams.get("orderId"), "orderId");

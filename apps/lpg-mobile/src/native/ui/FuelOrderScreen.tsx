@@ -59,6 +59,18 @@ export function FuelOrderScreen() {
     schema: RecordArraySchema,
     refetchInterval: 30000,
   });
+  const fulfillmentControls = useGatewayQuery({
+    key: ["fuel", "fulfillment-mode-controls"],
+    path: "/runtime/fuel/mode-controls",
+    schema: RecordArraySchema,
+    refetchInterval: 30000,
+  });
+  const managedPrices = useGatewayQuery({
+    key: ["fuel", "managed-prices"],
+    path: "/runtime/fuel/managed-prices",
+    schema: RecordArraySchema,
+    refetchInterval: 30000,
+  });
   const containerTypes = useGatewayQuery({
     key: ["fuel", "container-types"],
     path: "/runtime/fuel/container-types",
@@ -161,7 +173,20 @@ export function FuelOrderScreen() {
     : 0;
   const minLitres = selectedOffer ? firstNumber(selectedOffer, ["minimum_litres"]) : null;
   const maxLitres = selectedOffer ? firstNumber(selectedOffer, ["maximum_litres"]) : null;
-  const pricePerLitre = selectedOffer ? firstNumber(selectedOffer, ["price_per_litre"]) : null;
+  const stationPricePerLitre = selectedOffer
+    ? firstNumber(selectedOffer, ["admin_override_price_per_litre"]) ?? firstNumber(selectedOffer, ["price_per_litre"])
+    : null;
+  const managedRetailPrice = (managedPrices.data ?? []).find((price) =>
+    firstString(price, ["product_key"]) === selectedProductKey &&
+    firstString(price, ["currency_code"]) === currencyCode &&
+    price.enabled === true
+  );
+  const managedRetailPricePerLitre = managedRetailPrice
+    ? firstNumber(managedRetailPrice, ["price_per_litre"])
+    : null;
+  const pricePerLitre = fulfillmentMode === "skima_managed"
+    ? managedRetailPricePerLitre
+    : stationPricePerLitre;
   const containerCost = selectedOffer
     ? firstNumber(selectedOffer, [containerMode === "purchase" ? "container_purchase_amount" : "container_rental_amount"]) ?? 0
     : 0;
@@ -175,9 +200,20 @@ export function FuelOrderScreen() {
       (firstNumber(selectedOffer, ["platform_fee_amount"]) ?? 0) +
       containerCount * depositPerContainer
     : null;
+  const globallyEnabledModes = new Set(
+    (fulfillmentControls.data ?? [])
+      .filter((control) =>
+        firstString(control, ["product_key"]) === selectedProductKey &&
+        control.enabled === true
+      )
+      .map((control) => firstString(control, ["fulfillment_mode"]))
+      .filter((value): value is string => Boolean(value))
+  );
   const allowedFulfillmentModes = selectedOffer && Array.isArray(selectedOffer.fulfillment_modes)
     ? selectedOffer.fulfillment_modes.filter((value): value is FulfillmentMode =>
-        ["station_managed", "independent_driver", "skima_managed"].includes(String(value))
+        ["station_managed", "independent_driver", "skima_managed"].includes(String(value)) &&
+        globallyEnabledModes.has(String(value)) &&
+        (value !== "skima_managed" || managedRetailPricePerLitre !== null)
       )
     : [];
 
@@ -185,7 +221,7 @@ export function FuelOrderScreen() {
     if (allowedFulfillmentModes.length > 0 && !allowedFulfillmentModes.includes(fulfillmentMode)) {
       setFulfillmentMode(allowedFulfillmentModes[0]);
     }
-  }, [allowedFulfillmentModes, fulfillmentMode]);
+  }, [allowedFulfillmentModes.join("|"), fulfillmentMode]);
 
   const validationError = useMemo(() => {
     if (!selectedProductRecord) return "No fuel product is currently enabled for ordering.";
@@ -197,7 +233,11 @@ export function FuelOrderScreen() {
     const decimals = litresInput.split(".")[1]?.length ?? 0;
     if (decimals > selectedProductPrecision) return `Enter no more than ${selectedProductPrecision} decimal places.`;
     if (!selectedContainerType || !nominalCapacity) return "Choose a compatible delivery container.";
-    if (!allowedFulfillmentModes.includes(fulfillmentMode)) return "Choose a fulfilment option supported by this station.";
+    if (!allowedFulfillmentModes.includes(fulfillmentMode)) {
+      return fulfillmentMode === "skima_managed"
+        ? "SKIMA Managed is not available until SKIMA has enabled the mode and configured the retail price in your wallet currency."
+        : "This fulfilment mode is not enabled both by SKIMA and this station.";
+    }
     if (!chosenLocationId) return "Add or select a saved delivery location before placing the order.";
     if (!walletId) return `An active ${currencyCode} customer wallet is required to pay for this order.`;
     return null;
@@ -489,7 +529,7 @@ export function FuelOrderScreen() {
                     <View style={styles.flex}>
                       <Text style={[styles.liveEstimateLabel, { color: palette.muted }]}>LIVE ESTIMATE</Text>
                       <Text style={[styles.liveEstimateAmount, { color: palette.ink }]}>{money(estimatedTotal ?? 0, currencyCode)}</Text>
-                      <Text style={[styles.muted, { color: palette.muted }]}>{money(pricePerLitre ?? 0, currencyCode)} per litre · final server quote is confirmed before payment</Text>
+                      <Text style={[styles.muted, { color: palette.muted }]}>{money(pricePerLitre ?? 0, currencyCode)} per litre · {fulfillmentMode === "skima_managed" ? "SKIMA Managed retail price" : "station selling price"} · final server quote is confirmed before payment</Text>
                     </View>
                   </View>
                 ) : null}
@@ -617,7 +657,7 @@ export function FuelOrderScreen() {
                             {selected ? <CheckCircle2 color={palette.brand} size={21} /> : null}
                           </View>
                           <View style={styles.stationFacts}>
-                            <Text style={[styles.stationFact, { color: palette.ink }]}>{money(firstNumber(offer, ["price_per_litre"]) ?? 0, currencyCode)} / litre</Text>
+                            <Text style={[styles.stationFact, { color: palette.ink }]}>{money(firstNumber(offer, ["admin_override_price_per_litre"]) ?? firstNumber(offer, ["price_per_litre"]) ?? 0, currencyCode)} / litre</Text>
                             <Text style={[styles.stationFactMuted, { color: palette.muted }]}>Configured offer</Text>
                           </View>
                         </Pressable>
@@ -663,7 +703,7 @@ export function FuelOrderScreen() {
                   <View style={styles.flex}>
                     <Text style={[styles.liveEstimateLabel, { color: palette.muted }]}>ESTIMATED ORDER TOTAL</Text>
                     <Text style={[styles.liveEstimateAmount, { color: palette.ink }]}>{estimatedTotal === null ? "—" : money(estimatedTotal, currencyCode)}</Text>
-                    <Text style={[styles.muted, { color: palette.muted }]}>{selectedProductTitle} · {requestedLitres} L · {branchName}</Text>
+                    <Text style={[styles.muted, { color: palette.muted }]}>{selectedProductTitle} · {requestedLitres} L · {branchName} · {fulfillmentMode === "skima_managed" ? "SKIMA Managed retail" : "Station price"}</Text>
                   </View>
                 </View>
               ) : null}

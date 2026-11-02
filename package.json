@@ -72,7 +72,7 @@
     "utility-billing:contract": "deno test --allow-read scripts/utility-billing-production-contract.test.ts",
     "verification-runtime:contract": "deno test --allow-read scripts/verification-runtime-contract.test.ts",
     "financial-analytics:contract": "deno test --allow-read scripts/skima-financial-analytics-contract.test.ts",
-    "fuel:contract": "deno test --allow-read scripts/fuel-liquid-fulfillment-foundation-contract.test.ts scripts/fuel-order-processing-runtime-contract.test.ts scripts/fuel-stock-and-container-runtime-contract.test.ts scripts/fuel-atomic-stock-batches-contract.test.ts scripts/fuel-dispatch-and-admin-contract.test.ts scripts/fuel-global-product-control-contract.test.ts scripts/fuel-settlement-runtime-contract.test.ts scripts/fuel-product-registry-ui-contract.test.ts scripts/fuel-module-runtime-router-contract.test.ts scripts/fuel-driver-workflow-fee-mode-contract.test.ts"
+    "fuel:contract": "deno test --allow-read scripts/fuel-liquid-fulfillment-foundation-contract.test.ts scripts/fuel-order-processing-runtime-contract.test.ts scripts/fuel-stock-and-container-runtime-contract.test.ts scripts/fuel-atomic-stock-batches-contract.test.ts scripts/fuel-dispatch-and-admin-contract.test.ts scripts/fuel-global-product-control-contract.test.ts scripts/fuel-settlement-runtime-contract.test.ts scripts/fuel-product-registry-ui-contract.test.ts scripts/fuel-module-runtime-router-contract.test.ts scripts/fuel-driver-workflow-fee-mode-contract.test.ts scripts/fuel-easy-fulfillment-runtime-contract.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.110.9",

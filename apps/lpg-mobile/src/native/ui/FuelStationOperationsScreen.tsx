@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { CheckCircle2, Fuel, Package, ShieldCheck, Truck } from "lucide-react-native";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { domainQueries, useStationInventory } from "../api/domains";
 import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
@@ -18,6 +18,7 @@ import { radii, spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
 import { idempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
+import { AppField } from "./AppField";
 import { Card } from "./Card";
 import { EmptyState } from "./EmptyState";
 import { Screen } from "./Screen";
@@ -49,6 +50,13 @@ export function FuelStationOperationsScreen() {
   });
   const productNameForKey = (key: string) =>
     firstString((products.data ?? []).find((item) => firstString(item, ["key"]) === key), ["display_name"]) || key || "Fuel";
+  const currencies = domainQueries.currencies();
+  const modeControls = useGatewayQuery({
+    key: ["fuel", "station", "mode-controls"],
+    path: "/runtime/fuel/mode-controls",
+    schema: RecordArraySchema,
+    refetchInterval: 30000,
+  });
 
   const operations = useGatewayQuery({
     key: ["fuel", "station", "operations", stationBranchId],
@@ -97,6 +105,14 @@ export function FuelStationOperationsScreen() {
   const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [offerProductKey, setOfferProductKey] = useState("fuel.pms");
+  const [offerCurrencyCode, setOfferCurrencyCode] = useState("NGN");
+  const [offerPrice, setOfferPrice] = useState("");
+  const [offerMinimumLitres, setOfferMinimumLitres] = useState("1");
+  const [offerMaximumLitres, setOfferMaximumLitres] = useState("1000");
+  const [offerModes, setOfferModes] = useState<string[]>(["station_managed", "independent_driver", "skima_managed"]);
+  const [offerNotice, setOfferNotice] = useState<string | null>(null);
+  const [offerError, setOfferError] = useState<string | null>(null);
 
   const reservations = useGatewayQuery({
     key: ["fuel", "station", "reservations", focusedOrderId],
@@ -113,6 +129,11 @@ export function FuelStationOperationsScreen() {
     refetchInterval: 10000,
   });
 
+  const saveStationOffer = useGatewayMutation({
+    path: "/runtime/fuel/offers",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "offers"], ["fuel", "offers"]],
+  });
   const reserveBatch = useGatewayMutation({
     path: "/runtime/fuel/orders/stock/reserve-for-order",
     schema: ActionResponseSchema,
@@ -203,10 +224,54 @@ export function FuelStationOperationsScreen() {
   const selectedQualification = readyQualifications.find((row) =>
     firstString(row, ["id"]) === selectedDriverQualificationId
   ) ?? readyQualifications[0] ?? null;
+  const enabledFuelProducts = (products.data ?? []).filter((product) =>
+    firstString(product, ["status"]) === "enabled" &&
+    ["fuel.pms", "fuel.ago", "fuel.dpk"].includes(firstString(product, ["key"]) ?? "")
+  );
+  const enabledCurrencies = (currencies.data ?? []).filter((currency) =>
+    firstString(currency, ["status"]) === "enabled" && firstString(currency, ["code"])
+  );
+  const stationOfferForEditor = (offers.data ?? []).find((offer) =>
+    firstString(offer, ["branch_id"]) === stationBranchId &&
+    firstString(offer, ["product_key"]) === offerProductKey &&
+    firstString(offer, ["currency_code"]) === offerCurrencyCode
+  ) ?? null;
+  const globallyAllowedOfferModes = new Set((modeControls.data ?? [])
+    .filter((control) =>
+      firstString(control, ["product_key"]) === offerProductKey &&
+      control.enabled === true
+    )
+    .map((control) => firstString(control, ["fulfillment_mode"]))
+    .filter((value): value is string => Boolean(value)));
+  const globallyAllowedOfferModeKey = [...globallyAllowedOfferModes].sort().join("|");
+
+  useEffect(() => {
+    if (enabledFuelProducts.length > 0 && !enabledFuelProducts.some((product) => firstString(product, ["key"]) === offerProductKey)) {
+      setOfferProductKey(firstString(enabledFuelProducts[0], ["key"]) ?? "fuel.pms");
+    }
+  }, [enabledFuelProducts, offerProductKey]);
+
+  useEffect(() => {
+    if (enabledCurrencies.length > 0 && !enabledCurrencies.some((currency) => firstString(currency, ["code"]) === offerCurrencyCode)) {
+      setOfferCurrencyCode(firstString(enabledCurrencies[0], ["code"]) ?? "NGN");
+    }
+  }, [enabledCurrencies, offerCurrencyCode]);
+
+  useEffect(() => {
+    setOfferPrice(stationOfferForEditor ? String(firstNumber(stationOfferForEditor, ["price_per_litre"]) ?? "") : "");
+    setOfferMinimumLitres(stationOfferForEditor ? String(firstNumber(stationOfferForEditor, ["minimum_litres"]) ?? 1) : "1");
+    setOfferMaximumLitres(stationOfferForEditor ? String(firstNumber(stationOfferForEditor, ["maximum_litres"]) ?? 1000) : "1000");
+    const configured = Array.isArray(stationOfferForEditor?.fulfillment_modes)
+      ? stationOfferForEditor.fulfillment_modes.filter((value): value is string => typeof value === "string")
+      : ["station_managed", "independent_driver", "skima_managed"];
+    setOfferModes(configured.filter((mode) => globallyAllowedOfferModes.has(mode)));
+    setOfferNotice(null);
+    setOfferError(null);
+  }, [stationBranchId, offerProductKey, offerCurrencyCode, stationOfferForEditor?.id, stationOfferForEditor?.updated_at, globallyAllowedOfferModeKey]);
 
   const refreshAll = async () => {
     await Promise.allSettled([
-      stationInventory.refetch(), operations.refetch(), storage.refetch(), offers.refetch(),
+      stationInventory.refetch(), operations.refetch(), storage.refetch(), offers.refetch(), modeControls.refetch(), currencies.refetch(),
       containerTypes.refetch(), containers.refetch(), qualifications.refetch(),
       reservations.refetch(), allocations.refetch(), vehicles.refetch(),
     ]);
@@ -227,6 +292,50 @@ export function FuelStationOperationsScreen() {
     }
   };
 
+  const saveStationProductOffer = async (nextStatus: "active" | "paused") => {
+    setOfferNotice(null);
+    setOfferError(null);
+    const price = Number(offerPrice);
+    const minimum = Number(offerMinimumLitres);
+    const maximum = Number(offerMaximumLitres);
+    if (!offerProductKey || !offerCurrencyCode || !Number.isFinite(price) || price <= 0 ||
+        !Number.isFinite(minimum) || minimum <= 0 || !Number.isFinite(maximum) || maximum < minimum) {
+      setOfferError("Enter a positive station selling price and a valid minimum/maximum litre range.");
+      return;
+    }
+    const allowedSelections = offerModes.filter((mode) => globallyAllowedOfferModes.has(mode));
+    if (allowedSelections.length === 0) {
+      setOfferError("Select at least one fulfilment mode that SKIMA has globally enabled.");
+      return;
+    }
+    try {
+      await saveStationOffer.mutateAsync({
+        branchId: stationBranchId,
+        productKey: offerProductKey,
+        currencyCode: offerCurrencyCode,
+        pricePerLitre: price,
+        minimumLitres: minimum,
+        maximumLitres: maximum,
+        fulfillmentModes: allowedSelections,
+        status: nextStatus,
+        idempotencyKey: idempotencyKey("fuel-station-offer", `${stationBranchId}:${offerProductKey}:${offerCurrencyCode}:${nextStatus}`),
+      });
+      setOfferNotice(nextStatus === "active"
+        ? `${productNameForKey(offerProductKey)} is now offered by this station at ${price.toLocaleString()} ${offerCurrencyCode}/L.`
+        : `${productNameForKey(offerProductKey)} is paused for this station. SKIMA's global product switch still has final control.`);
+      await Promise.all([offers.refetch(), modeControls.refetch()]);
+    } catch (cause) {
+      setOfferError(friendlyError(cause, "SKIMA could not save this station product offer."));
+    }
+  };
+
+  const toggleOfferMode = (mode: string) => {
+    if (!globallyAllowedOfferModes.has(mode)) return;
+    setOfferModes((current) => current.includes(mode)
+      ? current.filter((item) => item !== mode)
+      : [...current, mode]);
+  };
+
   const startOrderPreparation = async (order: FuelOperation) => {
     const orderId = firstString(order, ["order_id"]) ?? "";
     const litres = firstNumber(order, ["requested_litres"]) ?? 0;
@@ -237,19 +346,10 @@ export function FuelStationOperationsScreen() {
         idempotencyKey: idempotencyKey("fuel-stock-batch", orderId),
         metadata: { branch_id: stationBranchId, product_key: firstString(order, ["product_key"]) },
       });
-      await changeStage.mutateAsync({
-        orderId,
-        stageKey: "stock_reserved",
-        idempotencyKey: idempotencyKey("fuel-stage-stock-reserved", orderId),
-        metadata: { station_branch_id: stationBranchId },
-      });
-      await changeStage.mutateAsync({
-        orderId,
-        stageKey: "station_filling",
-        idempotencyKey: idempotencyKey("fuel-stage-filling", orderId),
-      });
+      // The final stock-reservation event advances the order automatically
+      // through stock_reserved into station_filling.
       setFocusedOrderId(orderId);
-    }, "Stock has been reserved and the order is ready for station filling.");
+    }, "Full stock reserved. SKIMA has moved the order into station filling automatically.");
   };
 
   const finishStationFill = async () => {
@@ -360,12 +460,9 @@ export function FuelStationOperationsScreen() {
         throw new Error("Reserved fuel stock has not yet covered the complete measured order quantity.");
       }
 
-      await changeStage.mutateAsync({
-        orderId,
-        stageKey: "ready_for_driver",
-        idempotencyKey: idempotencyKey("fuel-stage-ready-driver", orderId),
-      });
-    }, "The measured fuel and all containers are prepared. The order is ready for a qualified driver.");
+      // The stock-consumption event writes the measured order litres. The
+      // database advances to ready_for_driver when all station checks balance.
+    }, "The measured fuel and all containers are prepared. SKIMA has advanced the order to driver assignment automatically.");
   };
 
   const assignQualifiedDriver = async () => {
@@ -407,7 +504,6 @@ export function FuelStationOperationsScreen() {
       const latest = (await allocations.refetch()).data ?? [];
       const orderRows = latest.filter((row) => firstString(row, ["order_id"]) === orderId);
       const failed = orderRows.some((row) => firstString(row, ["status"]) === "exception");
-      const inspectionPending = orderRows.some((row) => firstString(row, ["status"]) === "inspection");
       if (failed) {
         await changeStage.mutateAsync({
           orderId,
@@ -415,13 +511,9 @@ export function FuelStationOperationsScreen() {
           idempotencyKey: idempotencyKey("fuel-stage-inspection-exception", orderId),
           reason: "At least one returned rental container failed inspection.",
         });
-      } else if (!inspectionPending && orderRows.length === (firstNumber(focusedOrder, ["container_count"]) ?? 0)) {
-        await changeStage.mutateAsync({
-          orderId,
-          stageKey: "inspection_passed",
-          idempotencyKey: idempotencyKey("fuel-stage-inspection-passed", orderId),
-        });
       }
+      // Each passing inspection inserts an immutable custody event. The final
+      // passing event advances inspection_passed and completed automatically.
     }, result === "passed" ? "Container inspection recorded as passed." : "Container flagged and quarantined for review.");
   };
 
@@ -448,24 +540,12 @@ export function FuelStationOperationsScreen() {
           metadata: { station_branch_id: stationBranchId },
         });
       }
-      await changeStage.mutateAsync({
-        orderId,
-        stageKey: "station_handover",
-        idempotencyKey: idempotencyKey("fuel-stage-station-handover", orderId),
-        metadata: { handover_recorded_for_all_containers: true },
-      });
-      // The station's completed physical handover is the departure event.
-      // Drivers do not need a second "start delivery" confirmation.
-      await changeStage.mutateAsync({
-        orderId,
-        stageKey: "out_for_delivery",
-        idempotencyKey: idempotencyKey("fuel-stage-out-for-delivery", orderId),
-        metadata: { station_confirmed_departure: true },
-      });
-    }, "All filled containers have been handed to the assigned driver.");
+      // The final handed_to_driver custody event automatically records the
+      // station handover and starts the assigned driver's delivery leg.
+    }, "All filled containers have been handed to the assigned driver. Delivery has started automatically.");
   };
 
-  const loading = stationInventory.isPending || operations.isPending || storage.isPending || offers.isPending;
+  const loading = stationInventory.isPending || products.isPending || operations.isPending || storage.isPending || offers.isPending || currencies.isPending || modeControls.isPending;
   const failed = stationInventory.error || operations.error || storage.error || offers.error;
   const stageTone = (stage: string): "neutral" | "brand" | "success" | "warning" | "danger" => {
     if (["completed", "inspection_passed"].includes(stage)) return "success";
@@ -526,6 +606,117 @@ export function FuelStationOperationsScreen() {
           {notice ? <Text style={[styles.successText, { color: palette.success }]}>{notice}</Text> : null}
           {error ? <Text accessibilityRole="alert" style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
 
+          <Card
+            title="What your station sells"
+            description="Enable PMS, diesel or kerosene for this branch and set your own selling price. SKIMA's global product and fulfilment switches always take priority."
+          >
+            {enabledFuelProducts.length === 0 ? (
+              <Text style={[styles.muted, { color: palette.muted }]}>SKIMA has globally disabled all Fuel products. Your station cannot enable or sell them.</Text>
+            ) : (
+              <>
+                <View style={styles.productChipRow}>
+                  {enabledFuelProducts.map((product) => {
+                    const key = firstString(product, ["key"]) ?? "";
+                    const selected = key === offerProductKey;
+                    const existingOffer = (offers.data ?? []).find((offer) =>
+                      firstString(offer, ["branch_id"]) === stationBranchId &&
+                      firstString(offer, ["product_key"]) === key &&
+                      firstString(offer, ["currency_code"]) === offerCurrencyCode
+                    );
+                    return (
+                      <Pressable
+                        key={key}
+                        onPress={() => setOfferProductKey(key)}
+                        style={[styles.productChip, { borderColor: selected ? palette.brand : palette.border, backgroundColor: selected ? palette.brandSoft : palette.surface }]}
+                      >
+                        <Text style={[styles.productChipText, { color: selected ? palette.brand : palette.ink }]}>{productNameForKey(key)}</Text>
+                        {existingOffer ? <StatusPill label={firstString(existingOffer, ["status"]) === "active" ? "Enabled" : "Paused"} tone={firstString(existingOffer, ["status"]) === "active" ? "success" : "warning"} /> : <StatusPill label="Not offered" tone="neutral" />}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <View style={styles.productChipRow}>
+                  {enabledCurrencies.map((currency) => {
+                    const code = firstString(currency, ["code"]) ?? "";
+                    const selected = code === offerCurrencyCode;
+                    return (
+                      <Pressable key={code} onPress={() => setOfferCurrencyCode(code)} style={[styles.currencyChip, { borderColor: selected ? palette.brand : palette.border, backgroundColor: selected ? palette.brandSoft : palette.surface }]}>
+                        <Text style={[styles.productChipText, { color: selected ? palette.brand : palette.ink }]}>{code}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <View style={styles.offerFormGrid}>
+                  <AppField
+                    label={`Station price per litre (${offerCurrencyCode})`}
+                    value={offerPrice}
+                    onChangeText={setOfferPrice}
+                    placeholder="e.g. 950"
+                    keyboardType="decimal-pad"
+                  />
+                  <AppField
+                    label="Minimum litres per order"
+                    value={offerMinimumLitres}
+                    onChangeText={setOfferMinimumLitres}
+                    placeholder="1"
+                    keyboardType="decimal-pad"
+                  />
+                  <AppField
+                    label="Maximum litres per order"
+                    value={offerMaximumLitres}
+                    onChangeText={setOfferMaximumLitres}
+                    placeholder="1000"
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                <View style={styles.offerModeList}>
+                  <Text style={[styles.sectionLabel, { color: palette.ink }]}>Fulfilment modes available at this station</Text>
+                  {([
+                    ["station_managed", "Station Managed", "Your branch's own qualified driver and vehicle"],
+                    ["independent_driver", "Independent Managed", "Independent qualified driver and own vehicle"],
+                    ["skima_managed", "SKIMA Managed", "SKIMA driver programme and SKIMA fleet vehicle"],
+                  ] as const).map(([mode, title, description]) => {
+                    const globallyEnabled = globallyAllowedOfferModes.has(mode);
+                    const checked = offerModes.includes(mode);
+                    return (
+                      <Pressable
+                        key={mode}
+                        disabled={!globallyEnabled}
+                        onPress={() => toggleOfferMode(mode)}
+                        style={[styles.offerModeRow, { borderColor: checked ? palette.brand : palette.border, backgroundColor: checked ? palette.brandSoft : palette.surfaceSubtle, opacity: globallyEnabled ? 1 : 0.5 }]}
+                      >
+                        <View style={styles.offerModeCopy}>
+                          <Text style={[styles.orderTitle, { color: palette.ink }]}>{title}</Text>
+                          <Text style={[styles.muted, { color: palette.muted }]}>{globallyEnabled ? description : "Disabled by SKIMA Admin · cannot be enabled by this station"}</Text>
+                        </View>
+                        <StatusPill label={!globallyEnabled ? "Globally off" : checked ? "On" : "Off"} tone={!globallyEnabled ? "warning" : checked ? "success" : "neutral"} />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {offerNotice ? <Text style={[styles.successText, { color: palette.success }]}>{offerNotice}</Text> : null}
+                {offerError ? <Text accessibilityRole="alert" style={[styles.errorText, { color: palette.danger }]}>{offerError}</Text> : null}
+                <View style={styles.offerActionRow}>
+                  <AppButton
+                    label="Save & enable this product"
+                    fullWidth
+                    loading={saveStationOffer.isPending}
+                    onPress={() => void saveStationProductOffer("active")}
+                  />
+                  {stationOfferForEditor?.status === "active" ? (
+                    <AppButton
+                      label="Pause at this station"
+                      variant="secondary"
+                      fullWidth
+                      loading={saveStationOffer.isPending}
+                      onPress={() => void saveStationProductOffer("paused")}
+                    />
+                  ) : null}
+                </View>
+              </>
+            )}
+          </Card>
+
           <Card title="Incoming Fuel orders" description="The station queue contains orders whose payment has already been reserved in escrow.">
             {sortedRows.length === 0 ? (
               <EmptyState icon={<Fuel size={27} />} title="No Fuel orders waiting" description="New paid Fuel orders will appear here." />
@@ -575,9 +766,7 @@ export function FuelStationOperationsScreen() {
               ) : null}
 
               {focusedStage === "stock_reserved" ? (
-                <AppButton label="Start station filling" fullWidth loading={busyOrderId === focusedOrderId} onPress={() => void withBusy(focusedOrderId, async () => {
-                  await changeStage.mutateAsync({ orderId: focusedOrderId, stageKey: "station_filling", idempotencyKey: idempotencyKey("fuel-stage-filling", focusedOrderId) });
-                }, "Station filling has started.")} />
+                <Text style={[styles.muted, { color: palette.muted }]}>Full stock reservation recorded. Station filling has started automatically.</Text>
               ) : null}
 
               {focusedStage === "station_filling" ? (
@@ -709,6 +898,15 @@ const styles = StyleSheet.create({
   muted: { ...typography.caption, fontSize: 11, lineHeight: 16 },
   successText: { ...typography.caption, fontWeight: "800" },
   errorText: { ...typography.caption, fontWeight: "800", lineHeight: 18 },
+  productChipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  productChip: { flexDirection: "row", alignItems: "center", gap: spacing.xs, borderWidth: 1, borderRadius: radii.lg, paddingVertical: 9, paddingHorizontal: 11 },
+  currencyChip: { borderWidth: 1, borderRadius: radii.md, paddingVertical: 7, paddingHorizontal: 12 },
+  productChipText: { ...typography.bodyStrong, fontSize: 12 },
+  offerFormGrid: { gap: spacing.sm },
+  offerModeList: { gap: spacing.sm },
+  offerModeRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderWidth: 1, borderRadius: radii.lg, padding: 11 },
+  offerModeCopy: { flex: 1, gap: 3 },
+  offerActionRow: { gap: spacing.sm },
   stockGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   stockTile: { minWidth: 100, flexGrow: 1, gap: 5, borderWidth: 1, borderRadius: radii.lg, padding: 11 },
   stockProduct: { ...typography.bodyStrong, fontSize: 12 },

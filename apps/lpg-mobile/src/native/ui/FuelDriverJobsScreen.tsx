@@ -44,11 +44,6 @@ export function FuelDriverJobsScreen() {
     enabled: Boolean(selectedOrderId),
     refetchInterval: 10000,
   });
-  const changeStage = useGatewayMutation({
-    path: "/runtime/fuel/orders/stage",
-    schema: ActionResponseSchema,
-    invalidate: [["fuel", "driver", "orders"], ["fuel", "orders"]],
-  });
   const confirmDelivery = useGatewayMutation({
     path: "/runtime/fuel/orders/confirm-delivery",
     schema: ActionResponseSchema,
@@ -90,18 +85,6 @@ export function FuelDriverJobsScreen() {
     } finally {
       setBusyOrderId(null);
     }
-  };
-
-  const startDelivery = async () => {
-    if (!selectedOrder) return;
-    await perform(selectedOrderId, async () => {
-      await changeStage.mutateAsync({
-        orderId: selectedOrderId,
-        stageKey: "out_for_delivery",
-        idempotencyKey: idempotencyKey("fuel-driver-out-for-delivery", selectedOrderId),
-        metadata: { driver_confirmation: "started_delivery" },
-      });
-    }, "Fuel delivery has started. Keep the order's containers with you until customer handover.");
   };
 
   const completeCustomerHandover = async () => {
@@ -146,10 +129,14 @@ export function FuelDriverJobsScreen() {
 
   const actionForStage = () => {
     if (currentStage === "station_handover") {
-      return <AppButton label="Confirm departure from station" fullWidth loading={busyOrderId === selectedOrderId || changeStage.isPending} onPress={() => void startDelivery()} icon={<Truck color="#FFFFFF" size={18} />} />;
+      return (
+        <Text style={[styles.muted, { color: palette.muted }]}>
+          The station has recorded the full handover. Your delivery journey is starting automatically; wait for the order to show Out for Delivery.
+        </Text>
+      );
     }
     if (currentStage === "out_for_delivery") {
-      return <AppButton label="Confirm customer delivery" fullWidth loading={busyOrderId === selectedOrderId || confirmDelivery.isPending || changeStage.isPending} onPress={() => void completeCustomerHandover()} icon={<CheckCircle2 color="#FFFFFF" size={18} />} />;
+      return <AppButton label="Confirm customer delivery" fullWidth loading={busyOrderId === selectedOrderId || confirmDelivery.isPending} onPress={() => void completeCustomerHandover()} icon={<CheckCircle2 color="#FFFFFF" size={18} />} />;
     }
     if (currentStage === "return_due") {
       return <AppButton label="Confirm all rental containers received" fullWidth loading={busyOrderId === selectedOrderId || confirmRentalReturn.isPending} onPress={() => void confirmCustomerReturn()} icon={<RotateCcw color="#FFFFFF" size={18} />} />;
@@ -258,7 +245,7 @@ function stageTone(stage: string): "neutral" | "brand" | "success" | "warning" |
 function stageDescription(stage: string, rental: boolean): string {
   const descriptions: Record<string,string> = {
     driver_assigned: "CURRENT STEP — Meet the station team. Verify the product, ordered litres, order reference and the assigned vehicle. Wait until the station physically hands over every filled container. Do not leave before custody is recorded.",
-    station_handover: "CURRENT STEP — The station has recorded the handover. Confirm departure from the station. This is a legacy transition; new handovers start delivery automatically.",
+    station_handover: "The station recorded the complete handover. SKIMA is starting the delivery leg automatically; no second departure confirmation is needed.",
     out_for_delivery: "CURRENT STEP — Take the assigned containers to the customer's delivery address. Let the customer check the fuel and confirm the delivered quantity. Then tap Confirm customer delivery once for the entire order. No second scan per container is required.",
     delivered: rental ? "DELIVERY CONFIRMED — The customer must transfer the fuel into their own container(s), then return every empty SKIMA rental container to you." : "DELIVERY CONFIRMED — The customer owns the purchased containers. There is no further driver action.",
     return_due: "CURRENT STEP — Wait for the customer to transfer the fuel and return the full set of empty SKIMA rental containers. Count the containers, then confirm the return once for the whole order.",

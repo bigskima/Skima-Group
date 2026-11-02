@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { CheckCircle2, Fuel, Package, RotateCcw, ShieldCheck, Truck } from "lucide-react-native";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { CheckCircle2, Fuel, KeyRound, Package, RotateCcw, ShieldCheck, Truck } from "lucide-react-native";
+import { ActivityIndicator, StyleSheet, Text, TextInput, View } from "react-native";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -9,6 +9,7 @@ import { ActionResponseSchema, RecordArraySchema, firstNumber, firstString } fro
 import { useAppTheme } from "../theme/ThemeProvider";
 import { spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
+import { idempotencyKey } from "../utilities/idempotency";
 import { AppButton } from "./AppButton";
 import { Card } from "./Card";
 import { EmptyState } from "./EmptyState";
@@ -39,25 +40,101 @@ export function FuelOrderDetailsScreen() {
     enabled: Boolean(orderId),
     refetchInterval: 12000,
   });
-  const completeOrder = useGatewayMutation({
-    path: "/runtime/fuel/orders/stage",
+  const requestDeliveryChallenge = useGatewayMutation({
+    path: "/runtime/fuel/orders/delivery-challenge",
     schema: ActionResponseSchema,
-    invalidate: [["fuel", "orders"], ["fuel", "order", orderId], ["orders"]],
+    invalidate: [["fuel", "order", orderId]],
   });
-  const [completionError, setCompletionError] = useState<string | null>(null);
+  const fetchDeliveryCode = useGatewayMutation({
+    path: "/runtime/otp/delivery",
+    schema: ActionResponseSchema,
+  });
+  const verifyDelivery = useGatewayMutation({
+    path: "/runtime/fuel/orders/verify-delivery",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "orders"], ["fuel", "order", orderId], ["orders"], ["wallets"]],
+  });
+  const [deliveryChallengeId, setDeliveryChallengeId] = useState<string | null>(null);
+  const [deliveryCode, setDeliveryCode] = useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [verificationNotice, setVerificationNotice] = useState<string | null>(null);
 
-  const confirmCompletion = async () => {
-    setCompletionError(null);
+  const revealDeliveryCode = async (challengeId: string) => {
+    setVerificationError(null);
     try {
-      await completeOrder.mutateAsync({
-        orderId,
-        stageKey: "completed",
-        idempotencyKey: `fuel-customer-complete:${orderId}`,
-        metadata: { customer_confirmed_completion: true },
+      const deliveryResult = await fetchDeliveryCode.mutateAsync({
+        challengeId,
+        idempotencyKey: idempotencyKey("fuel-delivery-code", challengeId),
+        source: "skima.fuel.mobile",
       });
-      await Promise.all([operations.refetch(), events.refetch()]);
+      const deliveryEnvelope = responseRecord(deliveryResult);
+      const deliveryData = responseRecord(deliveryEnvelope?.data) ?? deliveryEnvelope;
+      const code = firstString(deliveryData, ["code"]);
+      if (!code) throw new Error("The secure in-app delivery confirmation code is unavailable. Request the code again.");
+      setDeliveryCode(code);
+      setVerificationCode(code);
+      setVerificationNotice("Your order-specific confirmation code is ready. Check the fuel and quantity, then confirm delivery below.");
     } catch (error) {
-      setCompletionError(friendlyError(error, "SKIMA could not close this Fuel order yet."));
+      setVerificationError(friendlyError(error, "The Fuel delivery code could not be retrieved."));
+    }
+  };
+
+  const requestCustomerDeliveryCode = async () => {
+    setVerificationError(null);
+    setVerificationNotice(null);
+    try {
+      const challengeResult = await requestDeliveryChallenge.mutateAsync({
+        orderId,
+        idempotencyKey: idempotencyKey("fuel-delivery-challenge", orderId),
+        metadata: { customer_requested_delivery_verification: true },
+      });
+      const challengeEnvelope = responseRecord(challengeResult);
+      const challengeData = responseRecord(challengeEnvelope?.data) ?? challengeEnvelope;
+      const challengeId = firstString(challengeData, ["challenge_id", "challengeId", "id"]);
+      if (!challengeId) throw new Error("SKIMA could not create a delivery verification challenge for this order.");
+      setDeliveryChallengeId(challengeId);
+      setDeliveryCode(null);
+      setVerificationCode("");
+      await revealDeliveryCode(challengeId);
+    } catch (error) {
+      setVerificationError(friendlyError(error, "SKIMA could not create the Fuel delivery verification code."));
+    }
+  };
+
+  const confirmReceivedDelivery = async (challengeId: string) => {
+    setVerificationError(null);
+    setVerificationNotice(null);
+    if (verificationCode.trim().length < 4) {
+      setVerificationError("Enter the confirmation code for this Fuel delivery.");
+      return;
+    }
+    try {
+      await verifyDelivery.mutateAsync({
+        orderId,
+        challengeId,
+        code: verificationCode.trim(),
+        idempotencyKey: idempotencyKey("fuel-delivery-verify", challengeId),
+        metadata: {
+          customer_confirmed_physical_handover: true,
+          verification_channel: "in_app",
+        },
+      });
+      const [refreshedOperations] = await Promise.all([operations.refetch(), events.refetch()]);
+      const refreshedOrder = refreshedOperations.data?.[0] ?? null;
+      const confirmedStage = firstString(refreshedOrder, ["stage_key"]);
+      const confirmedAt = firstString(refreshedOrder, ["delivery_verified_at"]);
+      if (!confirmedAt || !["completed", "return_due"].includes(confirmedStage ?? "")) {
+        throw new Error("The code was accepted, but SKIMA has not finished updating this order. Your funds remain protected; refresh and check again.");
+      }
+      setDeliveryCode(null);
+      setVerificationCode("");
+      setDeliveryChallengeId(null);
+      setVerificationNotice(isRental
+        ? "Your delivery is verified. The rental container return is still open; settlement and deposit release wait for station inspection."
+        : "Your delivery is verified. SKIMA has closed the purchase and released the protected settlement.");
+    } catch (error) {
+      setVerificationError(friendlyError(error, "SKIMA could not verify this Fuel delivery. Your funds remain protected; refresh and retry."));
     }
   };
 
@@ -72,7 +149,9 @@ export function FuelOrderDetailsScreen() {
   const count = firstNumber(order, ["container_count"]) ?? 0;
   const isRental = firstString(order, ["container_mode"]) === "rental";
   const fulfillment = firstString(order, ["fulfillment_mode"]) ?? "independent_driver";
-  const rentalReturnPending = isRental && ["delivered", "return_due", "returned_to_driver", "received_at_station", "inspection"].includes(stage);
+  const rentalReturnPending = isRental && ["return_due", "returned_to_driver", "received_at_station", "inspection", "inspection_passed"].includes(stage);
+  const deliveryVerified = Boolean(firstString(order, ["delivery_verified_at"]) || order?.delivery_verified_at);
+  const activeDeliveryChallengeId = deliveryChallengeId ?? firstString(order, ["delivery_challenge_id"]);
   const settlementExecutionId = firstString(order, ["settlement_execution_id"]);
   const settlementTransactionId = firstString(order, ["settlement_transaction_id"]);
   const settlementStatementId = firstString(order, ["settlement_statement_id"]);
@@ -188,15 +267,76 @@ export function FuelOrderDetailsScreen() {
               </View>
             )}
           </Card>
-          {((isRental && stage === "inspection_passed") || (!isRental && stage === "delivered")) ? (
-            <Card title="Confirm order completion" description={isRental ? "The returned rental container has passed station inspection. Confirm that this order can now be closed." : "Your purchased container and measured fuel have been delivered. Confirm that your order is complete."}>
-              {completionError ? <Text accessibilityRole="alert" style={[styles.returnText, { color: palette.danger }]}>{completionError}</Text> : null}
-              <AppButton
-                label="Confirm fuel order completed"
-                fullWidth
-                loading={completeOrder.isPending}
-                onPress={() => void confirmCompletion()}
-              />
+          {stage === "delivered" && !deliveryVerified ? (
+            <Card
+              title="Confirm your delivery"
+              description="Check that the correct fuel and quantity are physically with you. Request your order-specific code, then press Confirm delivery to complete the handover."
+            >
+              {verificationError ? <Text accessibilityRole="alert" style={[styles.returnText, { color: palette.danger }]}>{verificationError}</Text> : null}
+              {verificationNotice ? <Text style={[styles.muted, { color: palette.success }]}>{verificationNotice}</Text> : null}
+              {!activeDeliveryChallengeId ? (
+                <AppButton
+                  label="I have received the fuel — get confirmation code"
+                  fullWidth
+                  loading={requestDeliveryChallenge.isPending || fetchDeliveryCode.isPending}
+                  icon={<KeyRound color="#FFFFFF" size={18} />}
+                  onPress={() => void requestCustomerDeliveryCode()}
+                />
+              ) : (
+                <>
+                  <View style={[styles.deliveryCodeCard, { backgroundColor: palette.successSoft, borderColor: palette.success }]}>
+                    <Text style={[styles.deliveryCodeLabel, { color: palette.success }]}>Your Fuel delivery code</Text>
+                    <Text accessibilityLabel="Your Fuel delivery confirmation code" selectable style={[styles.deliveryCodeValue, { color: palette.success }]}>
+                      {deliveryCode ?? "••••••"}
+                    </Text>
+                    <Text style={[styles.muted, { color: palette.muted }]}>
+                      {deliveryCode
+                        ? "This code belongs only to this Fuel order. Confirm only after checking your fuel and container handover."
+                        : "Reveal the secure in-app code to continue."}
+                    </Text>
+                  </View>
+                  {!deliveryCode ? (
+                    <AppButton
+                      label="Show confirmation code"
+                      fullWidth
+                      variant="secondary"
+                      loading={fetchDeliveryCode.isPending}
+                      disabled={fetchDeliveryCode.isPending}
+                      onPress={() => void revealDeliveryCode(activeDeliveryChallengeId)}
+                    />
+                  ) : null}
+                  <Text style={[styles.verificationLabel, { color: palette.ink }]}>Confirm the code</Text>
+                  <TextInput
+                    accessibilityLabel="Fuel delivery confirmation code"
+                    value={verificationCode}
+                    onChangeText={setVerificationCode}
+                    keyboardType="number-pad"
+                    autoComplete="one-time-code"
+                    maxLength={8}
+                    placeholder="••••••"
+                    placeholderTextColor={palette.muted}
+                    style={[styles.verificationInput, { backgroundColor: palette.input, borderColor: palette.borderStrong, color: palette.ink }]}
+                  />
+                  <AppButton
+                    label="Confirm delivery"
+                    fullWidth
+                    loading={verifyDelivery.isPending}
+                    disabled={verificationCode.trim().length < 4}
+                    onPress={() => void confirmReceivedDelivery(activeDeliveryChallengeId)}
+                    icon={<CheckCircle2 color="#FFFFFF" size={18} />}
+                  />
+                </>
+              )}
+              <Text style={[styles.muted, { color: palette.muted }]}>
+                {isRental
+                  ? "This confirms delivery only. Return every empty SKIMA rental container to the assigned driver; station inspection completes the rental order."
+                  : "Your verified confirmation automatically closes the purchase and releases the accepted station, driver and SKIMA settlement shares."}
+              </Text>
+            </Card>
+          ) : null}
+          {stage === "delivered" && deliveryVerified && isRental ? (
+            <Card title="Delivery verified · rental return pending" description="Your fuel delivery has been confirmed. The order remains open until every rental container is received and inspected by the station.">
+              <StatusPill label="Return containers to driver" tone="warning" />
             </Card>
           ) : null}
           <AppButton label="Refresh order" variant="secondary" fullWidth onPress={() => void Promise.all([operations.refetch(), events.refetch()])} />
@@ -228,6 +368,12 @@ function DetailRow({ icon, label, value }: { icon: ReactNode; label: string; val
   );
 }
 
+function responseRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
 function humanize(value: string): string {
   return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -241,7 +387,7 @@ function stageDescription(stage: string): string {
     driver_assigned: "An approved driver and vehicle have been assigned to your delivery.",
     station_handover: "The station has handed the filled container(s) to your driver.",
     out_for_delivery: "Your fuel delivery is on the way.",
-    delivered: "The driver has confirmed delivery of the measured fuel quantity.",
+    delivered: "The driver has completed the handover. Please verify that the fuel and containers are physically with you.",
     return_due: "The rental container is due back to the driver.",
     returned_to_driver: "The driver has received your returned rental container.",
     received_at_station: "The station has received the rental container for inspection.",
@@ -275,6 +421,11 @@ const styles = StyleSheet.create({
   progressTrack: { height: 7, borderRadius: 4, overflow: "hidden" },
   progressFill: { height: 7, borderRadius: 4 },
   returnNotice: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  deliveryCodeCard: { alignItems: "center", justifyContent: "center", gap: spacing.xs, borderWidth: 1, borderRadius: 14, padding: spacing.md },
+  deliveryCodeLabel: { ...typography.caption, fontWeight: "800" },
+  deliveryCodeValue: { fontSize: 30, fontWeight: "900", letterSpacing: 7, paddingVertical: spacing.xs },
+  verificationLabel: { ...typography.caption, fontSize: 13, fontWeight: "900" },
+  verificationInput: { minHeight: 58, borderWidth: 1, borderRadius: 12, paddingHorizontal: spacing.md, textAlign: "center", fontSize: 23, fontWeight: "900", letterSpacing: 7 },
   returnText: { flex: 1, ...typography.bodyStrong, fontSize: 13 },
   detailRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingVertical: 3 },
   detailValue: { marginLeft: "auto", maxWidth: "54%", textAlign: "right", ...typography.bodyStrong, fontSize: 12 },
