@@ -114,6 +114,37 @@ async function handleLogisticsRequest(
   routePath: string,
   url: URL,
 ): Promise<Response> {
+  if (routePath === "/runtime/logistics/providers/search" && request.method === "GET") {
+    const pickupGeographyId = requireUuid(url.searchParams.get("pickupGeographyId"), "pickupGeographyId");
+    const destinationGeographyId = requireUuid(url.searchParams.get("destinationGeographyId"), "destinationGeographyId");
+    const weightKg = optionalNumber(url.searchParams.get("weightKg") === null ? undefined : Number(url.searchParams.get("weightKg")), "weightKg");
+    const volumeM3 = optionalNumber(url.searchParams.get("volumeM3") === null ? undefined : Number(url.searchParams.get("volumeM3")), "volumeM3");
+    const rawLimit = url.searchParams.get("limit");
+    const limit = rawLimit === null ? 30 : requireInteger(Number(rawLimit), "limit");
+    if (weightKg !== undefined && weightKg < 0) {
+      throw new RequestValidationError("weightKg must not be negative.");
+    }
+    if (volumeM3 !== undefined && volumeM3 < 0) {
+      throw new RequestValidationError("volumeM3 must not be negative.");
+    }
+    if (limit < 1 || limit > 100) {
+      throw new RequestValidationError("limit must be between 1 and 100.");
+    }
+    return rpcResponse(supabase.rpc("search_logistics_providers", {
+      target_pickup_geography_id: pickupGeographyId,
+      target_destination_geography_id: destinationGeographyId,
+      target_category_key: optionalString(url.searchParams.get("categoryKey")),
+      target_service_key: optionalString(url.searchParams.get("serviceKey")),
+      target_cargo_type_keys: [],
+      target_vehicle_type_keys: [],
+      target_capability_keys: [],
+      target_weight_kg: weightKg ?? null,
+      target_volume_m3: volumeM3 ?? null,
+      target_search: optionalString(url.searchParams.get("search")) ?? null,
+      target_limit: limit,
+    }), id);
+  }
+
   if (routePath === "/runtime/logistics/categories" && request.method === "GET") {
     return selectResponse(
       supabase.from("logistics_service_categories")
