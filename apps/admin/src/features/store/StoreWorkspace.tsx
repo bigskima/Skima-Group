@@ -325,7 +325,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           </div>
         </div>
         <Button icon={Settings2} variant="outline" onClick={() => {
-          setOrganizationId(savedOrganizationId || organizations.data?.find((entry) => catalogText(entry, "slug") === "skima-store")?.id || "");
+          setOrganizationId(savedOrganizationId || catalogText(organizations.data?.find((entry) => catalogText(entry, "slug") === "skima-store") ?? null, "id") || "");
           setCurrencyCode(catalogText(savedSettings, "currency_code") || "NGN");
           setFulfillmentMethod(catalogText(savedSettings, "fulfillment_method") || "delivery");
           setDeliveryOriginLabel(catalogText(savedSettings, "delivery_origin_label") || "SKIMA Store");
