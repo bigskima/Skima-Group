@@ -623,7 +623,7 @@ export function FuelStationOperationsScreen() {
               ) : null}
               {focusedStage === "ready_for_driver" && focusedFulfillmentMode === "independent_driver" ? (
                 <View style={styles.operationInfo}>
-                  <StatusPill label="Independent Driver · SKIMA dispatch" tone="info" />
+                  <StatusPill label="Independent Driver · SKIMA dispatch" tone="brand" />
                   <Text style={[styles.muted, { color: palette.ink }]}>This provider is not a station employee and does not use a SKIMA fleet vehicle. SKIMA Dispatch must assign an approved Independent Driver and their own qualified vehicle. You can hand over the containers after the driver has been assigned.</Text>
                 </View>
               ) : null}
