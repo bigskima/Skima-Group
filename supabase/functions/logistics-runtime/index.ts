@@ -486,6 +486,40 @@ async function handleLogisticsRequest(
     }), id);
   }
 
+  if (routePath === "/runtime/logistics/driver/location" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    const latitude = optionalNumber(p.latitude, "latitude");
+    const longitude = optionalNumber(p.longitude, "longitude");
+    if (latitude === undefined || longitude === undefined) {
+      throw new RequestValidationError("latitude and longitude are required.");
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    }
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(serviceClient.rpc("record_logistics_driver_location", {
+      target_booking_id: requireUuid(p.bookingId, "bookingId"),
+      target_driver_user_id: requesterUserId,
+      target_latitude: latitude,
+      target_longitude: longitude,
+      target_accuracy_meters: optionalNumber(p.accuracyMeters, "accuracyMeters") ?? null,
+      target_speed_meters_per_second: optionalNumber(p.speedMetersPerSecond, "speedMetersPerSecond") ?? null,
+      target_heading_degrees: optionalNumber(p.headingDegrees, "headingDegrees") ?? null,
+      target_recorded_at: optionalString(p.recordedAt) ?? null,
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/tracking" && request.method === "GET") {
+    return rpcResponse(supabase.rpc("read_logistics_booking_tracking", {
+      target_booking_id: requireUuid(url.searchParams.get("bookingId"), "bookingId"),
+    }), id);
+  }
+
   if (routePath === "/runtime/logistics/driver/milestone" && request.method === "POST") {
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
