@@ -257,7 +257,7 @@ export function DeliveryVerificationScreen() {
         </View>
       </View>
 
-      {!deliveryStageReady ? (
+      {!deliveryStageReady && !canFinalizeVerifiedChallenge ? (
         <View style={[styles.codeCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <View style={[styles.deliveryCodeDisplay, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <Clock3 color={palette.mutedStrong} size={22} />
