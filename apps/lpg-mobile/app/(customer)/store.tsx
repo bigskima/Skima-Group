@@ -30,8 +30,6 @@ import {
 import { z } from "zod";
 import { useStorefrontData } from "../../src/native/api/store";
 import {
-  firstNumber,
-  firstString,
   type PlatformRecord,
 } from "../../src/native/api/records";
 import { RuntimeMediaImage } from "../../src/native/ui/RuntimeMediaImage";
@@ -60,6 +58,7 @@ export default function StoreScreen() {
   const data = useStorefrontData();
   const userId = session.context?.user.id ?? session.session?.user.id ?? "anonymous";
   const cartStorageKey = `skima:store:cart:v1:${userId}`;
+  const [checkoutAttemptKey, setCheckoutAttemptKey] = useState(() => idempotencyKey("store-order", userId));
   const [cart, setCart] = useState<StoreCartLine[]>([]);
   const [cartReady, setCartReady] = useState(false);
   const [search, setSearch] = useState("");
@@ -224,7 +223,7 @@ export default function StoreScreen() {
   const selectedMax = Math.min(
     99,
     selectedStock ?? 99,
-    positiveNumber(selectedVariant?.max_quantity) ?? positiveNumber(selectedItem?.max_quantity) ?? 99,
+    positiveNumber(chosenVariant?.max_quantity) ?? positiveNumber(selectedItem?.max_quantity) ?? 99,
   );
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const cartTotal = cart.reduce((sum, line) => sum + line.quantity * line.unitAmount, 0);
@@ -258,7 +257,7 @@ export default function StoreScreen() {
             storefront_module: "store",
           },
           source: "skima.store.customer",
-          idempotencyKey: idempotencyKey("store-order", userId),
+          idempotencyKey: checkoutAttemptKey,
         },
         ORDER_RESULT_SCHEMA,
       );
@@ -272,6 +271,7 @@ export default function StoreScreen() {
             ? result.orderId
             : "received";
       setCart([]);
+      setCheckoutAttemptKey(idempotencyKey("store-order", userId));
       setCartOpen(false);
       Alert.alert(
         "Order request received",
