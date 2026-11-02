@@ -182,7 +182,7 @@ Deno.test("Provider delivery payload is normalized to the database contract", ()
 Deno.test("Customer confirmation triggers online settlement but never double-charges offline completion", () => {
   requireText(booking, "/runtime/logistics/bookings/delivery/confirm", "customer completion action");
   requireText(booking, "Confirm delivery received", "customer delivery confirmation");
-  requireText(booking, "execute_service_request_settlement", "online settlement is customer-confirmed");
+  requireText(bookingFulfillmentMigration, "execute_service_request_settlement", "online settlement is customer-confirmed");
   requireText(bookingFulfillmentMigration, "current_status := 'completed_offline'", "offline completion state");
   requireText(bookingFulfillmentMigration, "booking_record.customer_booking_fee_amount + booking_record.provider_receival_fee_amount", "offline fees are checked only when configured");
   requireText(bookingFulfillmentMigration, "configured offline booking fees must be confirmed", "zero-fee offline booking can complete");
