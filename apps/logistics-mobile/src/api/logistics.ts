@@ -2,13 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { useSession } from "../session/SessionProvider";
 
+export type LogisticsRecord = Record<string, unknown>;
 export const RecordSchema = z.record(z.string(), z.unknown());
 export const RecordArraySchema = z.array(RecordSchema);
 export const IdSchema = z.string().uuid();
 
 export function useLogisticsQuery(key: readonly unknown[], path: string, enabled = true, refetchInterval?: number) {
   const { api, session, status } = useSession();
-  return useQuery({
+  return useQuery<LogisticsRecord[]>({
     queryKey: ["skima-logistics", ...key, session?.user.id ?? "anonymous"],
     enabled: status === "authenticated" && enabled,
     queryFn: ({ signal }) => api.get(path, RecordArraySchema, { signal }),
@@ -19,7 +20,7 @@ export function useLogisticsQuery(key: readonly unknown[], path: string, enabled
 
 export function useLogisticsRecordQuery(key: readonly unknown[], path: string, enabled = true) {
   const { api, session, status } = useSession();
-  return useQuery({
+  return useQuery<LogisticsRecord>({
     queryKey: ["skima-logistics", ...key, session?.user.id ?? "anonymous"],
     enabled: status === "authenticated" && enabled,
     queryFn: ({ signal }) => api.get(path, RecordSchema, { signal }),
