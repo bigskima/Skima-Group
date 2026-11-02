@@ -51,38 +51,24 @@ begin
     'public.ensure_platform_purpose_wallet(text,text,text,text,text)'::regprocedure
   ) into function_sql;
 
-  old_guard:=$old$  if auth.role() <> 'service_role'
-    and current_user not in ('postgres', 'supabase_admin') then
-    if target_wallet_type = 'platform_revenue' then
-      if not public.has_permission('platform.revenue.manage', null) then
-        raise exception 'platform revenue management permission is required';
-      end if;
-    elsif not public.has_permission('platform.financial.manage', null)
-      and not public.has_permission('platform.wallets.manage', null) then
-      raise exception 'platform financial management permission is required';
-    end if;
-  end if;$old$;
-
-  new_guard:=$new$  if auth.role() <> 'service_role'
-    and current_user not in ('postgres', 'supabase_admin') then
-    if target_wallet_type = 'platform_revenue' then
-      if not public.has_permission('platform.revenue.manage', null)
+  old_guard:=$old$if not public.has_permission('platform.revenue.manage',null) then raise exception 'platform revenue management permission is required'; end if;$old$;
+  new_guard:=$new$if not public.has_permission('platform.revenue.manage',null)
         and not public.can_create_fuel_verified_platform_purpose_wallet(
           target_wallet_type,target_currency_code,target_source,target_idempotency_key
-        ) then
-        raise exception 'platform revenue management permission is required';
-      end if;
-    elsif not public.has_permission('platform.financial.manage', null)
-      and not public.has_permission('platform.wallets.manage', null)
+        ) then raise exception 'platform revenue management permission is required'; end if;$new$;
+  if position(old_guard in function_sql)=0 then
+    raise exception 'ensure_platform_purpose_wallet revenue authorization anchor changed; refusing an unsafe Fuel exception';
+  end if;
+  function_sql:=replace(function_sql,old_guard,new_guard);
+
+  old_guard:=$old$elsif not public.has_permission('platform.financial.manage',null) and not public.has_permission('platform.wallets.manage',null) then raise exception 'platform financial management permission is required';$old$;
+  new_guard:=$new$elsif not public.has_permission('platform.financial.manage',null)
+      and not public.has_permission('platform.wallets.manage',null)
       and not public.can_create_fuel_verified_platform_purpose_wallet(
         target_wallet_type,target_currency_code,target_source,target_idempotency_key
-      ) then
-      raise exception 'platform financial management permission is required';
-    end if;
-  end if;$new$;
-
+      ) then raise exception 'platform financial management permission is required';$new$;
   if position(old_guard in function_sql)=0 then
-    raise exception 'ensure_platform_purpose_wallet authorization changed; refusing an unsafe Fuel exception';
+    raise exception 'ensure_platform_purpose_wallet financial authorization anchor changed; refusing an unsafe Fuel exception';
   end if;
   execute replace(function_sql,old_guard,new_guard);
 end;
