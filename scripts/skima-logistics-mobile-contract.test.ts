@@ -242,3 +242,17 @@ Deno.test("Logistics company team uses existing tenant-scoped staff governance w
   requireText(providerTeam, "expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)", "bounded seven-day invitation expiry");
   requireNotText(providerTeam, 'membershipType: "owner"', "no owner privilege is granted through staff invitations");
 });
+
+
+Deno.test("Logistics invitees can discover, accept and decline only their own Logistics invitations", () => {
+  requireText(account, '"/runtime/organization-invitations"', "invitee-visible invitation inbox");
+  requireText(account, '"/runtime/organization-invitations/" + input.action', "shared accept and decline actions");
+  requireText(account, 'metadata.module === "logistics_network"', "isolate Logistics invitations from other SKIMA modules");
+  requireText(account, 'asString(item, "invited_email")', "match invitation to signed-in email");
+  requireText(account, 'asString(item, "invited_user_id")', "match invitation to signed-in profile");
+  requireText(account, 'asString(item, "status") === "pending"', "only pending invitations may be actioned");
+  requireText(account, 'input.action === "accept"', "acceptance confirmation");
+  requireText(account, 'input.action === "decline"', "decline confirmation");
+  requireText(account, "Company invitation accepted", "post-accept company workspace guidance");
+  requireText(account, "You can now open the company workspace", "accepted company access next step");
+});
