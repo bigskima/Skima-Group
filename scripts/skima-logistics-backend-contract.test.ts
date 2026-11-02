@@ -383,6 +383,7 @@ Deno.test("Logistics driver dispatch resources include only verified company dri
   requireText(migrationDriver, "public.has_permission('business.logistics.jobs.manage', target_organization_id)", "company dispatch permission");
   requireText(migrationDriver, "driver.verification_status = 'approved'", "approved driver gate");
   requireText(migrationDriver, "driver.operational_status = 'available'", "available driver gate");
+  requireText(migrationDriver, "active_assignment.status in ('offered','accepted','in_progress','picked_up','in_transit')", "exclude drivers with active Logistics work");
   requireText(migrationDriver, "membership.status = 'active'", "active company staff membership gate");
   requireText(migrationDriver, "compliance.driver_approved = true", "driver compliance gate");
   requireText(migrationDriver, "compliance.vehicle_approved = true", "vehicle approval gate");
@@ -406,6 +407,13 @@ Deno.test("Logistics driver assignment is tenant-scoped, capacity-checked and si
   requireText(migrationDriver, "vehicle_record.cargo_volume_m3 < cargo_volume", "vehicle volume capacity gate");
   requireText(migrationDriver, "vehicle_type_key = any(service_record.vehicle_type_keys)", "service vehicle type gate");
   requireText(runtime, '"/runtime/logistics/bookings/assign-driver"', "company driver assignment API route");
+});
+
+Deno.test("Logistics never writes the shared driver availability field used by other SKIMA products", () => {
+  requireNotText(migrationDriver, "update public.driver_profiles", "no cross-module driver profile status mutation");
+  requireText(migrationDriver, "active_assignment.driver_profile_id = driver.id", "Logistics-specific active assignment exclusion");
+  requireText(migrationDriver, "driver response idempotency key was used for a different action", "driver response retry protection");
+  requireText(migrationDriver, "driver milestone idempotency key was used for a different action", "milestone retry protection");
 });
 
 Deno.test("Driver self-service lifecycle controls acceptance, start, pickup, transit and delivery", () => {
