@@ -164,7 +164,7 @@ export function CustomerOrdersScreen() {
         createdAt: firstString(order, ["created_at", "createdAt"]),
         amount: firstNumber(order, ["total_amount", "totalAmount"]),
         currency: firstString(order, ["currency_code", "currencyCode"]) ?? "NGN",
-        route: "/(customer)/store",
+        route: `/(customer)/store-order/${id}`,
       };
     }),
   ].sort((left, right) => timestamp(right.createdAt) - timestamp(left.createdAt));
