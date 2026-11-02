@@ -359,6 +359,17 @@ async function handleLogisticsRequest(
     }), id);
   }
 
+  if (routePath === "/runtime/logistics/jobs/cancel" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("cancel_logistics_job", {
+      target_job_id: requireUuid(p.jobId, "jobId"),
+      target_reason: requireString(p.reason, "reason"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
   if (routePath === "/runtime/logistics/jobs/match" && request.method === "POST") {
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
