@@ -694,7 +694,7 @@ export function FuelStationOperationsScreen() {
                     );
                   })}
                 </View>
-                {offerNotice ? <Text accessibilityRole="status" style={[styles.successText, { color: palette.success }]}>{offerNotice}</Text> : null}
+                {offerNotice ? <Text style={[styles.successText, { color: palette.success }]}>{offerNotice}</Text> : null}
                 {offerError ? <Text accessibilityRole="alert" style={[styles.errorText, { color: palette.danger }]}>{offerError}</Text> : null}
                 <View style={styles.offerActionRow}>
                   <AppButton
