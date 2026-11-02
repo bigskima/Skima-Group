@@ -16,6 +16,7 @@ const jobs = await Deno.readTextFile("apps/logistics-mobile/src/screens/Customer
 const detail = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsJobDetailScreen.tsx");
 const booking = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsBookingScreen.tsx");
 const geography = await Deno.readTextFile("apps/logistics-mobile/src/ui/GeographyPicker.tsx");
+const logisticsApi = await Deno.readTextFile("apps/logistics-mobile/src/api/logistics.ts");
 const session = await Deno.readTextFile("apps/logistics-mobile/src/session/SessionProvider.tsx");
 const providers = await Deno.readTextFile("apps/logistics-mobile/src/providers/AppProviders.tsx");
 const routes = await Deno.readTextFile("apps/logistics-mobile/app/(customer)/_layout.tsx");
@@ -89,7 +90,8 @@ Deno.test("Customer home, activity and request screens read live Logistics servi
   requireText(jobs, '"/runtime/logistics/jobs"', "customer request list API");
   requireText(jobs, "StatusPill", "consistent request status treatment");
   requireText(geography, "/runtime/logistics/geographies?countryCode=NG&search=", "Nigeria geography catalogue");
-  requireText(request, '"/runtime/logistics/jobs"', "customer job publish route");
+  requireText(request, "useCreateLogisticsJob", "customer job publish mutation");
+  requireText(logisticsApi, 'api.post("/runtime/logistics/jobs"', "customer job publish API route");
   requireText(request, "createClientIdempotencyKey", "request submission idempotency");
   requireText(request, "step === 3", "three-stage review before publish");
   requireText(request, "customer_contact", "provider coordination contact");
