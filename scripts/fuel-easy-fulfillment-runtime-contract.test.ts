@@ -4,6 +4,9 @@ const pricing = await Deno.readTextFile(
 const progression = await Deno.readTextFile(
   "supabase/migrations/20261102161000_fuel_auto_progression_verified_delivery_completion.sql",
 );
+const fulfillmentModes = await Deno.readTextFile(
+  "supabase/migrations/20261102013000_fuel_driver_workflow_fees_and_mode_controls.sql",
+);
 const walletGate = await Deno.readTextFile(
   "supabase/migrations/20261102162000_fuel_verified_settlement_platform_wallet_gate.sql",
 );
@@ -28,8 +31,8 @@ Deno.test("Fuel has three separately controlled fulfillment models", () => {
     includes(customerOrder, `"${mode}"`, `${mode} is available to customer ordering`);
     includes(station, `"${mode}"`, `${mode} has distinct station instructions`);
   }
-  includes(pricing, "configure_fuel_driver_product_qualification_mode", "the existing mode-specific qualification system remains the dispatch authority");
-  includes(pricing, "fulfillment_mode=operation_record.fulfillment_mode", "driver assignment rechecks the order's selected mode");
+  includes(fulfillmentModes, "configure_fuel_driver_product_qualification_mode", "the existing mode-specific qualification system remains the dispatch authority");
+  includes(fulfillmentModes, "fulfillment_mode=operation_record.fulfillment_mode", "driver assignment rechecks the order's selected mode");
   includes(driver, "Only the assigned Fuel driver can confirm", "delivery is tied to the assigned driver identity");
   includes(driver, "The station has recorded the full handover", "the driver does not need a second departure action");
 });
@@ -51,10 +54,10 @@ Deno.test("station offers, platform product switches and Admin price overrides a
 });
 
 Deno.test("customer pricing follows the selected fulfillment model", () => {
-  includes(progression, "pricing_owner", "accepted quote records who owns the customer-facing price");
-  includes(progression, "station_supply_amount", "the accepted quote locks the station supply amount");
-  includes(progression, "managed_product_margin_amount", "SKIMA Managed retail/supply spread is snapshotted");
-  includes(progression, "operation_record.fulfillment_mode='skima_managed'", "SKIMA Managed uses a separate platform retail price");
+  includes(pricing, "pricing_owner", "accepted quote records who owns the customer-facing price");
+  includes(pricing, "station_supply_amount", "the accepted quote locks the station supply amount");
+  includes(pricing, "managed_product_margin_amount", "SKIMA Managed retail/supply spread is snapshotted");
+  includes(pricing, "operation_record.fulfillment_mode='skima_managed'", "SKIMA Managed uses a separate platform retail price");
   includes(pricing, "pricing.fuel.pms.platform_fee_per_litre", "PMS markup is administered per litre");
   includes(pricing, "pricing.fuel.ago.platform_fee_per_litre", "diesel markup is administered per litre");
   includes(pricing, "pricing.fuel.dpk.platform_fee_per_litre", "kerosene markup is administered per litre");
@@ -62,8 +65,8 @@ Deno.test("customer pricing follows the selected fulfillment model", () => {
   includes(customerOrder, "/runtime/fuel/managed-prices", "customer price lookup includes SKIMA Managed retail values");
   includes(customerOrder, "admin_override_price_per_litre", "customer price uses an active Admin station-price override");
   includes(customerOrder, "managedRetailPricePerLitre", "customer price changes to SKIMA retail under SKIMA Managed");
-  includes(progression, "station_payout_amount := station_supply_amount", "the station receives its own supply amount, not SKIMA retail");
-  includes(progression, "platform_revenue_amount := quote_record.container_amount+quote_record.platform_fee_amount+managed_product_margin_amount", "the managed retail/supply spread is classified as SKIMA revenue");
+  includes(pricing, "station_payout_amount := station_supply_amount", "the station receives its own supply amount, not SKIMA retail");
+  includes(pricing, "platform_revenue_amount := quote_record.container_amount+quote_record.platform_fee_amount+managed_product_margin_amount", "the managed retail/supply spread is classified as SKIMA revenue");
 });
 
 Deno.test("Fuel progression follows verified operational events without duplicate advance buttons", () => {
@@ -89,7 +92,7 @@ Deno.test("purchased orders settle only after customer OTP; rental orders settle
   includes(pricing, "public.verify_fuel_delivery_challenge(", "OTP verification is customer-authenticated");
   includes(pricing, "create trigger fuel_delivery_otp_auto_completion", "verified OTP drives automatic delivery completion");
   includes(pricing, "operation_record.container_mode='rental' then 'return_due' else 'completed'", "purchase and rental have separate post-verification paths");
-  includes(progression, "only a verified customer OTP may move this order to return_due/completed", "driver delivery cannot directly close a Fuel order");
+  includes(progression, "verified customer OTP may move this order", "driver delivery cannot directly close a Fuel order");
   includes(pricing, "can_complete_fuel_delivery_settlement", "settlement is gated by order-bound verified customer handover");
   includes(walletGate, "can_create_fuel_verified_platform_purpose_wallet", "platform revenue/liability wallets are narrowly authorized for this exact settlement");
   includes(walletGate, "'fuel-settlement:'||order_record.id::text||':revenue-wallet'", "platform wallet creation is bound to the exact Fuel order idempotency key");
