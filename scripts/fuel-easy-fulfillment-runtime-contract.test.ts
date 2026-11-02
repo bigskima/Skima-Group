@@ -117,6 +117,7 @@ Deno.test("purchased orders settle only after customer OTP; rental orders settle
 Deno.test("Fuel controls are consolidated into the existing Money & Revenue dashboard", () => {
   includes(adminRevenue, "<FuelPricingControls />", "Fuel pricing is rendered inside Money & Revenue");
   includes(adminRevenue, "Fuel products, SKIMA pricing & station overrides", "the central dashboard has a single Fuel commercial control section");
+  includes(adminRevenue, 'permissions.includes("platform.financial_policy.manage")', "financial policy managers can open the controls they are authorized to manage");
   includes(adminRevenue, "set_fuel_product_status", "Admin can globally disable or enable PMS, AGO and DPK");
   includes(adminRevenue, "set_fuel_products_status", "Admin can enable all or disable all three Fuel products together");
   includes(adminRevenue, "Enable all products", "Money & Revenue exposes the global enable-all action");
