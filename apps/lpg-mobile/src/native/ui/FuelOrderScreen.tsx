@@ -29,6 +29,8 @@ type ProductKey = "fuel.pms" | "fuel.ago" | "fuel.dpk";
 type ContainerMode = "purchase" | "rental";
 type FulfillmentMode = "station_managed" | "independent_driver" | "skima_managed";
 
+const STATION_PREVIEW_LIMIT = 4;
+
 type CreatedQuote = {
   orderId: string;
   serviceRequestId: string;
@@ -95,6 +97,7 @@ export function FuelOrderScreen() {
   const [localError, setLocalError] = useState<string | null>(null);
   const [orderStep, setOrderStep] = useState(1);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [showAllOffers, setShowAllOffers] = useState(false);
 
   const activeProducts = (products.data ?? []).filter((item) =>
     firstString(item, ["status"]) === "enabled" &&
@@ -122,7 +125,13 @@ export function FuelOrderScreen() {
     firstString(item, ["product_key"]) === selectedProductKey &&
     firstString(item, ["currency_code"]) === currencyCode
   );
-  const selectedOffer = activeOffers.find((item) => firstString(item, ["branch_id"]) === selectedBranchId) ?? activeOffers[0] ?? null;
+  const selectedOffer = activeOffers.find((item) => firstString(item, ["branch_id"]) === selectedBranchId) ?? null;
+  const firstOfferPreview = activeOffers.slice(0, STATION_PREVIEW_LIMIT);
+  const selectedOfferAlreadyVisible = firstOfferPreview.some((item) => firstString(item, ["branch_id"]) === selectedBranchId);
+  const previewOffers = selectedOffer && !selectedOfferAlreadyVisible
+    ? [...firstOfferPreview.slice(0, STATION_PREVIEW_LIMIT - 1), selectedOffer]
+    : firstOfferPreview;
+  const visibleOffers = showAllOffers ? activeOffers : previewOffers;
   const branchId = selectedOffer ? firstString(selectedOffer, ["branch_id"]) : null;
   const branchInfo = selectedOffer ? nestedRecord(selectedOffer, "branch") : null;
   const branchName = firstString(branchInfo, ["display_name", "key"]) ??
@@ -452,7 +461,7 @@ export function FuelOrderScreen() {
                   onChangeText={(value) => { setLitresInput(value.replace(/[^0-9.]/g, "")); setCreatedQuote(null); setLocalError(null); }}
                   placeholder="e.g. 20"
                   keyboardType="decimal-pad"
-                  hint={minLitres !== null && maxLitres !== null ? `This station accepts ${minLitres}–${maxLitres} litres.` : "The selected station's configured limits are applied."}
+                  hint={minLitres !== null && maxLitres !== null ? `This station accepts ${minLitres}–${maxLitres} litres.` : "Choose a station in the next step to see its configured limits."}
                 />
                 <View style={styles.quickQuantityRow}>
                   {[5, 10, 20, 25, 50, 100].map((value) => (
@@ -474,7 +483,7 @@ export function FuelOrderScreen() {
                     </Pressable>
                   ))}
                 </View>
-                {requestedLitres !== null && requestedLitres > 0 ? (
+                {selectedOffer && requestedLitres !== null && requestedLitres > 0 ? (
                   <View style={[styles.liveEstimate, { backgroundColor: palette.brandSoft, borderColor: palette.brand }]}>
                     <View style={[styles.estimateIcon, { backgroundColor: palette.surface }]}><WalletCards color={palette.brand} size={21} /></View>
                     <View style={styles.flex}>
@@ -576,11 +585,11 @@ export function FuelOrderScreen() {
                   </View>
                 ) : (
                   <View style={styles.stationOptions}>
-                    {activeOffers.map((offer, index) => {
+                    {visibleOffers.map((offer, index) => {
                       const id = firstString(offer, ["branch_id"]) ?? "";
                       const branch = nestedRecord(offer, "branch");
                       const name = firstString(branch, ["display_name", "key"]) ?? "SKIMA station";
-                      const selected = id === (selectedBranchId || firstString(selectedOffer, ["branch_id"]));
+                      const selected = id === selectedBranchId;
                       const address = addressText(branch?.address) || "Station branch";
                       return (
                         <Pressable
@@ -616,6 +625,14 @@ export function FuelOrderScreen() {
                     })}
                   </View>
                 )}
+                {activeOffers.length > STATION_PREVIEW_LIMIT ? (
+                  <AppButton
+                    label={showAllOffers ? "Show fewer stations" : `View all ${activeOffers.length} stations`}
+                    size="sm"
+                    variant="secondary"
+                    onPress={() => setShowAllOffers((value) => !value)}
+                  />
+                ) : null}
               </View>
 
               {selectedOffer ? (
@@ -823,9 +840,16 @@ function addressText(value: unknown): string {
   if (typeof value === "string") return value;
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const record = value as PlatformRecord;
-    return [record.street, record.city, record.area, record.state, record.formatted_address]
-      .filter((part): part is string => typeof part === "string" && Boolean(part.trim()))
-      .join(", ");
+    const direct = [record.street, record.city, record.area, record.state, record.formatted_address]
+      .filter((part): part is string => typeof part === "string" && Boolean(part.trim()));
+    if (direct.length > 0) return direct.join(", ");
+    if (typeof record.address === "string") return record.address;
+    if (record.address && typeof record.address === "object" && !Array.isArray(record.address)) {
+      const nested = record.address as PlatformRecord;
+      return [nested.street, nested.city, nested.area, nested.state, nested.formatted_address]
+        .filter((part): part is string => typeof part === "string" && Boolean(part.trim()))
+        .join(", ");
+    }
   }
   return "";
 }
