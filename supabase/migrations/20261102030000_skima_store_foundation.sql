@@ -325,6 +325,19 @@ as $$
     or public.has_permission('platform.configuration.read', null)
     or public.has_permission('platform.catalog.read', null)
     or public.has_permission('platform.catalog.manage', null)
+    or (
+      (
+        public.has_permission('platform.store.read', null)
+        or public.has_permission('platform.store.manage', null)
+      )
+      and exists (
+        select 1
+        from public.storefront_settings storefront
+        join public.business_modules module on module.id = storefront.module_id
+        where module.key = 'store'
+          and storefront.organization_id = target_organization_id
+      )
+    )
     or public.is_organization_member(target_organization_id);
 $$;
 
@@ -341,6 +354,21 @@ as $$
   select auth.role() = 'service_role'
     or public.is_platform_super_admin()
     or public.has_permission('platform.catalog.manage', null)
+    or (
+      public.has_permission('platform.store.manage', null)
+      and exists (
+        select 1
+        from public.storefront_settings storefront
+        join public.business_modules module on module.id = storefront.module_id
+        where module.key = 'store'
+          and storefront.organization_id = target_organization_id
+          and (
+            target_branch_id is null
+            or storefront.branch_id is null
+            or storefront.branch_id = target_branch_id
+          )
+      )
+    )
     or exists (
       select 1
       from public.user_roles assigned_role
