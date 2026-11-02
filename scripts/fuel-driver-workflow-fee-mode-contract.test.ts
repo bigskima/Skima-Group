@@ -44,6 +44,12 @@ Deno.test("station, Independent Driver and SKIMA Managed qualifications are mutu
   includes(migration, "membership.program_key='driver.independent'", "Independent Driver requires an active independent membership");
   includes(migration, "vehicle.platform_owned is true", "Independent Driver cannot receive a SKIMA fleet vehicle");
   includes(migration, "link.relationship_type='fleet_owned'", "SKIMA Managed requires a fleet-owned vehicle relationship");
+  includes(migration, "link.relationship_type='driver_owned'", "Independent Driver requires the driver's own vehicle relationship");
+  includes(migration, "linked_vehicle.owner_user_id=target_driver_user_id", "Independent Driver vehicle must belong to the qualified driver");
+  includes(migration, "vehicle.organization_id is distinct from branch_record.organization_id", "Station Managed vehicle ownership is scoped to its station organization");
+  includes(migration, "target_actor_user_id uuid", "Qualification approval records the actual authenticated administrator");
+  includes(runtime, "target_actor_user_id: authResult.user.id", "the runtime forwards the verified administrator identity");
+
   includes(migration, "vehicle.platform_owned is true", "SKIMA Managed requires a platform-owned vehicle");
   includes(migration, "fulfillment_mode=operation_record.fulfillment_mode", "order assignment rechecks the exact selected mode");
   includes(migration, "Driver profile, participation type and vehicle ownership must match the ordered Fuel fulfilment mode", "driver dispatch rejects a mode/vehicle mismatch");
