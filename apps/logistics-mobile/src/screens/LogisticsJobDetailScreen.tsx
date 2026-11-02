@@ -54,7 +54,15 @@ export function LogisticsJobDetailScreen() {
 
   const job = (jobs.data ?? []).find((item) => asString(item, "id") === jobId) ?? null;
   const opportunities = useMemo(() => (opportunitiesQuery.data ?? []).filter((item) => asString(item, "job_id") === jobId), [opportunitiesQuery.data, jobId]);
-  const offers = useMemo(() => (offersQuery.data ?? []).filter((item) => asString(item, "job_id") === jobId), [offersQuery.data, jobId]);
+  const offers = useMemo(() => (offersQuery.data ?? []).filter((item) => {
+    const type = asString(item, "offer_type");
+    const status = asString(item, "status");
+    const expiry = asString(item, "expires_at");
+    return asString(item, "job_id") === jobId
+      && (type === "provider_quote" || type === "provider_counter")
+      && status === "submitted"
+      && (!expiry || new Date(expiry).getTime() > Date.now());
+  }), [offersQuery.data, jobId]);
   const activeBookings = (bookings.data ?? []).filter((item) => asString(item, "job_id") === jobId);
   const existingBooking = activeBookings[0] ?? null;
   const refresh = async () => {
