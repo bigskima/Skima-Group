@@ -243,6 +243,7 @@ export function FuelStationOperationsScreen() {
     )
     .map((control) => firstString(control, ["fulfillment_mode"]))
     .filter((value): value is string => Boolean(value)));
+  const globallyAllowedOfferModeKey = [...globallyAllowedOfferModes].sort().join("|");
 
   useEffect(() => {
     if (enabledFuelProducts.length > 0 && !enabledFuelProducts.some((product) => firstString(product, ["key"]) === offerProductKey)) {
@@ -266,7 +267,7 @@ export function FuelStationOperationsScreen() {
     setOfferModes(configured.filter((mode) => globallyAllowedOfferModes.has(mode)));
     setOfferNotice(null);
     setOfferError(null);
-  }, [stationBranchId, offerProductKey, offerCurrencyCode, stationOfferForEditor?.id, modeControls.data]);
+  }, [stationBranchId, offerProductKey, offerCurrencyCode, stationOfferForEditor?.id, stationOfferForEditor?.updated_at, globallyAllowedOfferModeKey]);
 
   const refreshAll = async () => {
     await Promise.allSettled([
