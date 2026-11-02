@@ -240,6 +240,10 @@ Deno.test("Logistics company team uses existing tenant-scoped staff governance w
   requireText(providerTeam, '"business.logistics.jobs.manage"', "operational role permissions");
   requireText(providerTeam, '"business.logistics.offers.manage"', "quote management role permissions");
   requireText(providerTeam, '"business.logistics.finance.read"', "finance is read-only");
+  requireText(providerTeam, '"logistics.company.driver"', "least-privilege driver invitation role");
+  requireText(providerTeam, "SKIMA-approved driver profile", "driver role requires existing SKIMA driver approval");
+  requireText(providerTeam, "active, compliant vehicle", "driver role explains vehicle eligibility");
+
   requireText(providerTeam, "canManage", "company-owner/staff-administrator gate");
   requireText(providerTeam, "expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)", "bounded seven-day invitation expiry");
   requireNotText(providerTeam, 'membershipType: "owner"', "no owner privilege is granted through staff invitations");
