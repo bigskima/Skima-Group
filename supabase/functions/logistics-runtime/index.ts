@@ -1,4 +1,4 @@
-import { type SupabaseClient } from "npm:@supabase/supabase-js@2.110.9";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.110.9";
 import { createRequestSupabaseClient, requireAuthenticatedUser } from "../_shared/supabase-auth.ts";
 import { jsonResponse, optionsResponse, requestId } from "../_shared/http.ts";
 
@@ -87,7 +87,15 @@ Deno.serve(async (request: Request) => {
       return jsonResponse({ ok: false, error: "route_not_found", requestId: id }, 404);
     }
 
-    return await handleLogisticsRequest(moduleRequest, id, supabase, routePath, url);
+    return await handleLogisticsRequest(
+      moduleRequest,
+      id,
+      supabase,
+      routePath,
+      url,
+      supabaseUrl,
+      authResult.user.id,
+    );
   } catch (error) {
     if (error instanceof RequestValidationError) {
       return jsonResponse({
@@ -113,6 +121,8 @@ async function handleLogisticsRequest(
   supabase: SupabaseClient,
   routePath: string,
   url: URL,
+  supabaseUrl: string,
+  requesterUserId: string,
 ): Promise<Response> {
   if (routePath === "/runtime/logistics/providers/search" && request.method === "GET") {
     const pickupGeographyId = requireUuid(url.searchParams.get("pickupGeographyId"), "pickupGeographyId");
@@ -359,10 +369,174 @@ async function handleLogisticsRequest(
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
     const p = body.value;
-    return rpcResponse(supabase.rpc("select_logistics_offer", {
+    return rpcResponse(supabase.rpc("create_logistics_booking_for_offer", {
       target_offer_id: requireUuid(p.offerId, "offerId"),
+      target_payment_mode: requireString(p.paymentMode, "paymentMode"),
       target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
     }), id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings" && request.method === "GET") {
+    let query = supabase.from("logistics_bookings")
+      .select("id,job_id,offer_id,requester_user_id,provider_organization_id,payment_mode,status,currency_code,delivery_amount,customer_booking_fee_amount,provider_receival_fee_amount,provider_commission_amount,provider_net_amount,total_customer_charge,policy_snapshots,service_request_id,order_id,escrow_hold_id,payment_transaction_id,offline_fee_transaction_id,settlement_execution_id,created_at,updated_at,job:logistics_job_requests(title,pickup_location,destination_location),offer:logistics_offers(delivery_price_minor,estimated_duration_minutes,terms)")
+      .order("created_at", { ascending: false });
+    const status = optionalString(url.searchParams.get("status"));
+    const providerOrganizationId = optionalUuid(url.searchParams.get("providerOrganizationId"), "providerOrganizationId");
+    if (status) query = query.eq("status", status);
+    if (providerOrganizationId) query = query.eq("provider_organization_id", providerOrganizationId);
+    return selectResponse(query, id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/pay" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    const bookingId = requireUuid(p.bookingId, "bookingId");
+    const walletId = requireUuid(p.walletId, "walletId");
+    const paymentIdempotencyKey = requireString(p.idempotencyKey, "idempotencyKey");
+
+    const bookingResult = await supabase.from("logistics_bookings")
+      .select("id,order_id,service_request_id,requester_user_id,payment_mode,status,currency_code,total_customer_charge,escrow_hold_id")
+      .eq("id", bookingId)
+      .eq("requester_user_id", requesterUserId)
+      .maybeSingle();
+    if (bookingResult.error) return databaseError(bookingResult.error, id);
+    if (!bookingResult.data) return jsonResponse({ ok: false, error: "logistics_booking_not_found", requestId: id }, 404);
+    const booking = bookingResult.data;
+
+    if (booking.payment_mode !== "online_wallet") {
+      return jsonResponse({ ok: false, error: "wrong_payment_mode", message: "This booking was created for offline payment.", requestId: id }, 409);
+    }
+    if (booking.status === "payment_reserved" && booking.escrow_hold_id) {
+      return jsonResponse({
+        ok: true,
+        data: {
+          bookingId,
+          serviceRequestId: booking.service_request_id,
+          escrowHoldId: booking.escrow_hold_id,
+          status: "payment_reserved",
+          currencyCode: booking.currency_code,
+          totalAmount: booking.total_customer_charge,
+        },
+        requestId: id,
+      });
+    }
+    if (booking.status !== "awaiting_payment") {
+      return jsonResponse({ ok: false, error: "booking_not_payable", message: "This booking is not awaiting online payment.", requestId: id }, 409);
+    }
+    if (!booking.order_id) {
+      return jsonResponse({ ok: false, error: "booking_order_missing", message: "The booking is missing its payment order.", requestId: id }, 409);
+    }
+
+    const walletResult = await supabase.from("wallet_accounts")
+      .select("id,wallet_type,owner_entity_type,owner_entity_id,currency_code,status")
+      .eq("id", walletId)
+      .eq("wallet_type", "customer")
+      .eq("owner_entity_type", "user")
+      .eq("owner_entity_id", requesterUserId)
+      .eq("currency_code", booking.currency_code)
+      .eq("status", "active")
+      .maybeSingle();
+    if (walletResult.error) return databaseError(walletResult.error, id);
+    if (!walletResult.data) {
+      return jsonResponse({ ok: false, error: "customer_wallet_required", message: "Choose your own active customer wallet in the booking currency.", requestId: id }, 403);
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const fundingResult = await serviceClient.rpc("fund_order_from_wallet", {
+      target_order_id: booking.order_id,
+      target_customer_wallet_id: walletId,
+      target_escrow_wallet_id: null,
+      target_source: "platform.logistics.bookings",
+      target_idempotency_key: paymentIdempotencyKey,
+      target_metadata: {
+        module_key: "logistics_network",
+        logistics_booking_id: booking.id,
+        service_request_id: booking.service_request_id,
+        payment_channel: "customer_wallet",
+        policy_snapshots: "booking_policy_snapshot",
+      },
+    });
+    if (fundingResult.error) return databaseError(fundingResult.error, id);
+
+    const holdId = requireUuid(fundingResult.data, "escrowHoldId");
+    const marked = await serviceClient.rpc("mark_logistics_booking_payment_reserved", {
+      target_booking_id: booking.id,
+      target_requester_user_id: requesterUserId,
+      target_escrow_hold_id: holdId,
+    });
+    if (marked.error) return databaseError(marked.error, id);
+
+    return jsonResponse({
+      ok: true,
+      data: {
+        bookingId,
+        serviceRequestId: booking.service_request_id,
+        escrowHoldId: holdId,
+        status: "payment_reserved",
+        currencyCode: booking.currency_code,
+        totalAmount: booking.total_customer_charge,
+      },
+      requestId: id,
+    });
+  }
+
+  if (routePath === "/runtime/logistics/bookings/offline/confirm" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    const bookingId = requireUuid(p.bookingId, "bookingId");
+    const walletId = requireUuid(p.walletId, "walletId");
+    const paymentIdempotencyKey = requireString(p.idempotencyKey, "idempotencyKey");
+
+    const bookingResult = await supabase.from("logistics_bookings")
+      .select("id,requester_user_id,payment_mode,status,currency_code,customer_booking_fee_amount,provider_receival_fee_amount")
+      .eq("id", bookingId)
+      .eq("requester_user_id", requesterUserId)
+      .maybeSingle();
+    if (bookingResult.error) return databaseError(bookingResult.error, id);
+    if (!bookingResult.data) return jsonResponse({ ok: false, error: "logistics_booking_not_found", requestId: id }, 404);
+    if (bookingResult.data.payment_mode !== "offline") {
+      return jsonResponse({ ok: false, error: "wrong_payment_mode", message: "This booking requires online wallet payment.", requestId: id }, 409);
+    }
+
+    const walletResult = await supabase.from("wallet_accounts")
+      .select("id,wallet_type,owner_entity_type,owner_entity_id,currency_code,status")
+      .eq("id", walletId)
+      .eq("wallet_type", "customer")
+      .eq("owner_entity_type", "user")
+      .eq("owner_entity_id", requesterUserId)
+      .eq("currency_code", bookingResult.data.currency_code)
+      .eq("status", "active")
+      .maybeSingle();
+    if (walletResult.error) return databaseError(walletResult.error, id);
+    if (!walletResult.data) {
+      return jsonResponse({ ok: false, error: "customer_wallet_required", message: "Choose your own active customer wallet in the booking currency.", requestId: id }, 403);
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const confirmation = await serviceClient.rpc("confirm_logistics_offline_booking_payment", {
+      target_booking_id: bookingId,
+      target_requester_user_id: requesterUserId,
+      target_customer_wallet_id: walletId,
+      target_idempotency_key: paymentIdempotencyKey,
+    });
+    if (confirmation.error) return databaseError(confirmation.error, id);
+
+    return jsonResponse({
+      ok: true,
+      data: {
+        bookingId,
+        status: "offline_payment_confirmed",
+        feeTransactionId: confirmation.data,
+        paymentMode: "offline",
+      },
+      requestId: id,
+    });
   }
 
   if (routePath === "/runtime/logistics/messages" && request.method === "GET") {
@@ -414,6 +588,16 @@ async function handleLogisticsRequest(
   }
 
   return jsonResponse({ ok: false, error: "route_not_found", requestId: id }, 404);
+}
+
+function createServiceClient(supabaseUrl: string, serviceRoleKey: string): SupabaseClient {
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  });
 }
 
 async function readJsonBody(request: Request, id: string): Promise<BodyResult> {
