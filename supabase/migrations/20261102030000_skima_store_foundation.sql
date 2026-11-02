@@ -282,7 +282,7 @@ begin
     )
   on conflict do nothing;
 end;
-$;
+$$;
 
 create table if not exists public.storefront_settings (
   id uuid primary key default gen_random_uuid(),
