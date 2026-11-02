@@ -114,6 +114,7 @@ export default function StoreScreen() {
         item.module_id === storeModuleId &&
         item.organization_id === settings.organization_id &&
         item.status === "active" &&
+        metadataValue(item, "sales_channel") === "skima_store" &&
         (configuredMethods.length === 0 ||
           !Array.isArray(item.fulfillment_methods) ||
           configuredMethods.some((method) => item.fulfillment_methods?.includes(method)))
@@ -139,9 +140,18 @@ export default function StoreScreen() {
         ).sort((left, right) => numberValue(left.display_order) - numberValue(right.display_order));
         const basePrice = chooseRecord(itemPrices, null);
         const stockRule = chooseRecord(itemAvailability, null);
-        const available = item.status === "active" &&
-          Boolean(basePrice || variants.some((variant) => chooseRecord(itemPrices, recordString(variant, "id")))) &&
-          (stockRule === null || isInStock(stockRule));
+        const hasValidPrice = variants.length
+          ? variants.some((variant) =>
+              Boolean(chooseRecord(itemPrices, recordString(variant, "id")) ?? basePrice)
+            )
+          : Boolean(basePrice);
+        const hasAvailableStock = variants.length
+          ? variants.some((variant) => {
+              const variantRule = chooseRecord(itemAvailability, recordString(variant, "id")) ?? stockRule;
+              return Boolean(variantRule && isInStock(variantRule));
+            })
+          : Boolean(stockRule && isInStock(stockRule));
+        const available = item.status === "active" && hasValidPrice && hasAvailableStock;
         return {
           ...item,
           _id: itemId,
@@ -629,6 +639,12 @@ function remainingStock(record: PlatformRecord | null) {
   if (!record) return null;
   const stock = optionalNumber(record.stock_quantity);
   return stock === null ? null : Math.max(0, stock - numberValue(record.reserved_quantity));
+}
+
+function metadataValue(record: PlatformRecord, key: string): unknown {
+  const metadata = record.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  return (metadata as Record<string, unknown>)[key] ?? null;
 }
 
 function recordString(record: PlatformRecord | null | undefined, field: string) {
