@@ -911,6 +911,7 @@ const styles = StyleSheet.create({
   optionList: { gap: spacing.sm },
   stationOptions: { gap: spacing.sm },
   stationOption: { gap: spacing.sm, borderWidth: 1, borderRadius: radii.lg, padding: spacing.md },
+  typeOption: { flexDirection: "row", alignItems: "center", gap: spacing.md, borderWidth: 1, borderRadius: radii.lg, padding: spacing.md },
   stationOptionTop: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
   stationOptionCopy: { flex: 1, minWidth: 0, gap: 3 },
   stationNameRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing.sm },
