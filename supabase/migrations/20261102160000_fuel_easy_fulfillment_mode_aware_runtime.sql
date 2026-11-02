@@ -1284,12 +1284,14 @@ begin
   select pg_get_functiondef('public.ensure_wallet_account(text,text,uuid,text,text,jsonb,text)'::regprocedure) into function_sql;
   old_guard:=$old$  if auth.role() <> 'service_role'
     and not public.has_permission('platform.wallets.manage', null)
-    and not can_create_self_wallet then
+    and not can_create_self_wallet
+    and not can_create_driver_wallet then
     raise exception 'platform wallet management permission is required';
   end if;$old$;
   new_guard:=$new$  if auth.role() <> 'service_role'
     and not public.has_permission('platform.wallets.manage', null)
     and not can_create_self_wallet
+    and not can_create_driver_wallet
     and not public.can_create_fuel_verified_settlement_wallet(
       target_wallet_type,target_owner_entity_type,target_owner_entity_id,
       target_currency_code,target_source,target_metadata
