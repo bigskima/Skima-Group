@@ -47,8 +47,6 @@ const DELIVERY_CONFIRMATION_STATES = new Set([
   "return_en_route",
   "returning",
   "delivery_verification_pending",
-  "delivery_arrived",
-  "customer_confirmation_pending",
 ]);
 
 const FINAL_ORDER_STATES = new Set(["delivered", "completed"]);
