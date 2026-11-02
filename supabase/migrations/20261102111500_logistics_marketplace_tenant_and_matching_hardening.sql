@@ -168,6 +168,7 @@ declare
   existing_job public.logistics_job_requests%rowtype;
   request_title text;
   request_service_key text;
+  customer_phone text;
   match_count integer;
   event_status text;
 begin
@@ -212,8 +213,14 @@ begin
     or jsonb_typeof(coalesce(target_payload->'metadata', '{}'::jsonb)) is distinct from 'object' then
     raise exception 'pickup, destination, cargo, contact and metadata must be JSON objects';
   end if;
+
+  customer_phone := btrim(coalesce(target_payload #>> '{customer_contact,phone}', ''));
   if length(btrim(coalesce(target_payload #>> '{customer_contact,name}', ''))) < 2
-    or coalesce(btrim(target_payload #>> '{customer_contact,phone}'), '') !~ '^[+]?[0-9][0-9 ()-]{6,22}$' then
+    or customer_phone !~ '^[+]?[0-9]'
+    or regexp_replace(customer_phone, '^[+]?[0-9][0-9 ()-]*', '') <> ''
+    or length(regexp_replace(customer_phone, '[^0-9]', '', 'g')) not between 7 and 15 then
+    raise exception 'customer contact name and a valid phone number are required';
+  end if;
 
   select * into existing_job
   from public.logistics_job_requests
@@ -227,10 +234,11 @@ begin
       or existing_job.pickup_location <> target_payload->'pickup'
       or existing_job.destination_location <> target_payload->'destination'
       or existing_job.cargo_snapshot <> coalesce(target_payload->'cargo', '{}'::jsonb)
-      or existing_job.customer_contact_snapshot->>'name' <> btrim(target_payload #>> '{customer_contact,name}')
-      or existing_job.customer_contact_snapshot->>'phone' <> btrim(target_payload #>> '{customer_contact,phone}')
+      or existing_job.customer_contact_snapshot->>'name' is distinct from btrim(target_payload #>> '{customer_contact,name}')
+      or existing_job.customer_contact_snapshot->>'phone' is distinct from customer_phone
       or existing_job.instructions is distinct from nullif(btrim(target_payload->>'instructions'), '')
-      or existing_job.requested_pickup_at is distinct from nullif(target_payload->>'requested_pickup_at', '')::timestamptz then
+      or existing_job.requested_pickup_at is distinct from nullif(target_payload->>'requested_pickup_at', '')::timestamptz
+      or existing_job.metadata <> coalesce(target_payload->'metadata', '{}'::jsonb) then
       raise exception 'idempotency key was already used for a different logistics job';
     end if;
     return existing_job.id;
@@ -250,7 +258,7 @@ begin
     coalesce(target_payload->'cargo', '{}'::jsonb),
     jsonb_strip_nulls(jsonb_build_object(
       'name', btrim(target_payload #>> '{customer_contact,name}'),
-      'phone', btrim(target_payload #>> '{customer_contact,phone}'),
+      'phone', customer_phone,
       'email', nullif(lower(btrim(target_payload #>> '{customer_contact,email}')), ''),
       'contact_instructions', nullif(btrim(target_payload #>> '{customer_contact,contact_instructions}'), '')
     )),
@@ -287,7 +295,7 @@ begin
     ),
     jsonb_strip_nulls(jsonb_build_object(
       'name', btrim(target_payload #>> '{customer_contact,name}'),
-      'phone', btrim(target_payload #>> '{customer_contact,phone}'),
+      'phone', customer_phone,
       'email', nullif(lower(btrim(target_payload #>> '{customer_contact,email}')), ''),
       'contact_instructions', nullif(btrim(target_payload #>> '{customer_contact,contact_instructions}'), '')
     ))
@@ -310,7 +318,6 @@ begin
           or (origin.coverage_mode = 'route'
             and public.logistics_geography_is_covered(origin.geography_id, pickup_geo_id)
             and public.logistics_geography_is_covered(origin.destination_geography_id, destination_geo_id))
-          or (origin.coverage_mode = 'both' and public.logistics_geography_is_covered(origin.geography_id, pickup_geo_id))
         )
     )
     and exists (
@@ -321,7 +328,7 @@ begin
         and (
           (destination.coverage_mode in ('destination', 'both') and public.logistics_geography_is_covered(destination.geography_id, destination_geo_id))
           or (destination.coverage_mode = 'route'
-            and destination.geography_id = pickup_geo_id
+            and public.logistics_geography_is_covered(destination.geography_id, pickup_geo_id)
             and public.logistics_geography_is_covered(destination.destination_geography_id, destination_geo_id))
         )
     )
@@ -345,140 +352,6 @@ begin
       cardinality(service.vehicle_type_keys) = 0
       or service.vehicle_type_keys && array(
         select jsonb_array_elements_text(coalesce(target_payload #> '{cargo,vehicle_type_keys}', '[]'::jsonb))
-      )
-    )
-  on conflict (job_id, organization_id) do nothing;
-
-  get diagnostics match_count = row_count;
-  event_status := case when match_count > 0 then 'matching' else 'open' end;
-
-  update public.logistics_job_requests
-  set status = event_status, updated_at = timezone('utc', now())
-  where id = job_id;
-
-  perform public.record_logistics_job_event(
-    job_id,
-    case when match_count > 0 then 'logistics.job.distributed' else 'logistics.job.no_provider_match' end,
-    target_idempotency_key || ':published',
-    'draft',
-    event_status,
-    jsonb_build_object('matched_provider_count', match_count)
-  );
-
-  return job_id;
-end;
-$$; then
-    raise exception 'customer contact name and a valid phone number are required';
-  end if;
-
-  select * into existing_job
-  from public.logistics_job_requests
-  where requester_user_id = actor and idempotency_key = target_idempotency_key;
-
-  if found then
-    if existing_job.category_id <> category_id
-      or existing_job.service_key <> request_service_key
-      or existing_job.title <> request_title
-      or existing_job.pickup_location <> target_payload->'pickup'
-      or existing_job.destination_location <> target_payload->'destination'
-      or existing_job.cargo_snapshot <> coalesce(target_payload->'cargo', '{}'::jsonb) then
-      raise exception 'idempotency key was already used for a different logistics job';
-    end if;
-    return existing_job.id;
-  end if;
-
-  insert into public.logistics_job_requests (
-    requester_user_id, category_id, service_key, title, description,
-    pickup_geography_id, destination_geography_id, pickup_location, destination_location,
-    cargo_snapshot, customer_contact_snapshot, instructions, requested_pickup_at,
-    status, published_at, expires_at, metadata, idempotency_key
-  )
-  values (
-    actor, category_id, request_service_key, request_title,
-    nullif(btrim(target_payload->>'description'), ''),
-    pickup_geo_id, destination_geo_id,
-    target_payload->'pickup', target_payload->'destination',
-    coalesce(target_payload->'cargo', '{}'::jsonb), target_payload->'customer_contact',
-    nullif(btrim(target_payload->>'instructions'), ''),
-    nullif(target_payload->>'requested_pickup_at', '')::timestamptz,
-    'open', timezone('utc', now()),
-    timezone('utc', now()) + interval '7 days',
-    coalesce(target_payload->'metadata', '{}'::jsonb),
-    target_idempotency_key
-  )
-  returning id into job_id;
-
-  insert into public.logistics_job_opportunities (
-    job_id, organization_id, provider_service_id, status, match_reasons,
-    job_snapshot, customer_contact_snapshot
-  )
-  select
-    job_id,
-    service.organization_id,
-    service.id,
-    'matched',
-    jsonb_build_array('service_capability', 'pickup_coverage', 'destination_coverage', 'provider_verified'),
-    jsonb_build_object(
-      'job_id', job_id,
-      'title', request_title,
-      'description', nullif(btrim(target_payload->>'description'), ''),
-      'service_key', request_service_key,
-      'category_key', target_payload->>'category_key',
-      'pickup', target_payload->'pickup',
-      'destination', target_payload->'destination',
-      'cargo', coalesce(target_payload->'cargo', '{}'::jsonb),
-      'instructions', nullif(btrim(target_payload->>'instructions'), ''),
-      'requested_pickup_at', nullif(target_payload->>'requested_pickup_at', '') 
-    ),
-    target_payload->'customer_contact'
-  from public.logistics_provider_services service
-  join public.logistics_provider_profiles provider
-    on provider.organization_id = service.organization_id
-  where service.category_id = category_id
-    and service.service_key = request_service_key
-    and service.status = 'active'
-    and service.availability_enabled = true
-    and provider.verification_status = 'verified'
-    and provider.operational_status = 'active'
-    and exists (
-      select 1
-      from public.logistics_provider_coverage origin
-      where origin.provider_service_id = service.id
-        and origin.status = 'active'
-        and (
-          (origin.coverage_mode in ('origin', 'both') and public.logistics_geography_is_covered(origin.geography_id, pickup_geo_id))
-          or (origin.coverage_mode = 'route'
-            and public.logistics_geography_is_covered(origin.geography_id, pickup_geo_id)
-            and public.logistics_geography_is_covered(origin.destination_geography_id, destination_geo_id))
-          or (origin.coverage_mode = 'both' and public.logistics_geography_is_covered(origin.geography_id, pickup_geo_id))
-        )
-    )
-    and exists (
-      select 1
-      from public.logistics_provider_coverage destination
-      where destination.provider_service_id = service.id
-        and destination.status = 'active'
-        and (
-          (destination.coverage_mode in ('destination', 'both') and public.logistics_geography_is_covered(destination.geography_id, destination_geo_id))
-          or (destination.coverage_mode = 'route'
-            and destination.geography_id = pickup_geo_id
-            and public.logistics_geography_is_covered(destination.destination_geography_id, destination_geo_id))
-        )
-    )
-    and (
-      service.maximum_weight_kg is null
-      or nullif(target_payload #>> '{cargo,weight_kg}', '') is null
-      or service.maximum_weight_kg >= (target_payload #>> '{cargo,weight_kg}')::numeric
-    )
-    and (
-      service.maximum_volume_m3 is null
-      or nullif(target_payload #>> '{cargo,volume_m3}', '') is null
-      or service.maximum_volume_m3 >= (target_payload #>> '{cargo,volume_m3}')::numeric
-    )
-    and (
-      cardinality(service.cargo_type_keys) = 0
-      or service.cargo_type_keys && array(
-        select jsonb_array_elements_text(coalesce(target_payload #> '{cargo,cargo_type_keys}', '[]'::jsonb))
       )
     )
   on conflict (job_id, organization_id) do nothing;
