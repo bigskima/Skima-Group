@@ -365,7 +365,7 @@ function ProviderWalletFundingPanel({ organizationId }: { organizationId: string
               })}
             </View>
             <AppField
-              label={\`Transfer amount (\${currency})\`}
+              label={`Transfer amount (${currency})`}
               value={amount}
               onChangeText={(value) => { setAmount(value); setIdempotencyKey(null); }}
               keyboardType="decimal-pad"
