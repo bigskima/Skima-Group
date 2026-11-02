@@ -262,6 +262,16 @@ async function handleLogisticsRequest(
     }), id);
   }
 
+  if (routePath === "/runtime/logistics/jobs/match" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("refresh_logistics_job_matches", {
+      target_job_id: requireUuid(p.jobId, "jobId"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
   if (routePath === "/runtime/logistics/opportunities" && request.method === "GET") {
     let query = supabase.from("logistics_job_opportunities")
       .select("id,job_id,organization_id,provider_service_id,status,match_reasons,job_snapshot,customer_contact_snapshot,viewed_at,created_at,updated_at")
