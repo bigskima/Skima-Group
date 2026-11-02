@@ -59,6 +59,15 @@ const ROLE_PRESETS = [
     ],
   },
   {
+    key: "logistics.company.driver",
+    name: "Delivery driver",
+    description: "Use the driver workspace for assigned deliveries. The person must already have a SKIMA-approved driver profile and an active, compliant vehicle.",
+    permissions: [
+      "business.logistics.company.read",
+      "business.logistics.jobs.read",
+    ],
+  },
+  {
     key: "logistics.company.viewer",
     name: "Read-only staff",
     description: "View the company profile and job information without changing it.",
