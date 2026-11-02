@@ -943,7 +943,7 @@ export function NewRefillScreen() {
                 eyebrow="DELIVERY METHOD"
                 icon={<Store color={palette.brand} size={20} />}
                 title="Who delivers your cylinder?"
-                description="Choose the independent driver route or let this station deliver with its own driver."
+                description="Choose Independent Managed delivery or let this station deliver through its own Station Managed driver."
               />
               <View style={styles.choices}>
                 <Pressable
@@ -953,8 +953,8 @@ export function NewRefillScreen() {
                   style={[styles.recordChoice, { backgroundColor: fulfillmentMode === "independent_driver" ? palette.brandSoft : palette.surfaceSubtle, borderColor: fulfillmentMode === "independent_driver" ? palette.brand : palette.border }]}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.recordChoiceText, { color: palette.ink }]}>Independent driver</Text>
-                    <Text style={[styles.capacityBody, { color: palette.muted }]}>A driver from SKIMA’s independent partner network handles delivery.</Text>
+                    <Text style={[styles.recordChoiceText, { color: palette.ink }]]}>Independent Managed</Text>
+                    <Text style={[styles.capacityBody, { color: palette.muted }]}>An approved Independent Managed provider uses their own approved vehicle for delivery.</Text>
                   </View>
                   {fulfillmentMode === "independent_driver" ? <CheckCircle2 color={palette.brand} size={20} /> : null}
                 </Pressable>
