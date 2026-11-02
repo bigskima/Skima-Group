@@ -301,11 +301,11 @@ begin
       where origin.provider_service_id = service.id
         and origin.status = 'active'
         and (
-          (origin.coverage_mode in ('origin', 'both') and origin.geography_id = pickup_geo_id)
+          (origin.coverage_mode in ('origin', 'both') and public.logistics_geography_is_covered(origin.geography_id, pickup_geo_id))
           or (origin.coverage_mode = 'route'
-            and origin.geography_id = pickup_geo_id
-            and origin.destination_geography_id = destination_geo_id)
-          or (origin.coverage_mode = 'both' and origin.geography_id = pickup_geo_id)
+            and public.logistics_geography_is_covered(origin.geography_id, pickup_geo_id)
+            and public.logistics_geography_is_covered(origin.destination_geography_id, destination_geo_id))
+          or (origin.coverage_mode = 'both' and public.logistics_geography_is_covered(origin.geography_id, pickup_geo_id))
         )
     )
     and exists (
@@ -314,10 +314,10 @@ begin
       where destination.provider_service_id = service.id
         and destination.status = 'active'
         and (
-          (destination.coverage_mode in ('destination', 'both') and destination.geography_id = destination_geo_id)
+          (destination.coverage_mode in ('destination', 'both') and public.logistics_geography_is_covered(destination.geography_id, destination_geo_id))
           or (destination.coverage_mode = 'route'
             and destination.geography_id = pickup_geo_id
-            and destination.destination_geography_id = destination_geo_id)
+            and public.logistics_geography_is_covered(destination.destination_geography_id, destination_geo_id))
         )
     )
     and (
@@ -441,11 +441,11 @@ $$; then
       where origin.provider_service_id = service.id
         and origin.status = 'active'
         and (
-          (origin.coverage_mode in ('origin', 'both') and origin.geography_id = pickup_geo_id)
+          (origin.coverage_mode in ('origin', 'both') and public.logistics_geography_is_covered(origin.geography_id, pickup_geo_id))
           or (origin.coverage_mode = 'route'
-            and origin.geography_id = pickup_geo_id
-            and origin.destination_geography_id = destination_geo_id)
-          or (origin.coverage_mode = 'both' and origin.geography_id = pickup_geo_id)
+            and public.logistics_geography_is_covered(origin.geography_id, pickup_geo_id)
+            and public.logistics_geography_is_covered(origin.destination_geography_id, destination_geo_id))
+          or (origin.coverage_mode = 'both' and public.logistics_geography_is_covered(origin.geography_id, pickup_geo_id))
         )
     )
     and exists (
@@ -454,10 +454,10 @@ $$; then
       where destination.provider_service_id = service.id
         and destination.status = 'active'
         and (
-          (destination.coverage_mode in ('destination', 'both') and destination.geography_id = destination_geo_id)
+          (destination.coverage_mode in ('destination', 'both') and public.logistics_geography_is_covered(destination.geography_id, destination_geo_id))
           or (destination.coverage_mode = 'route'
             and destination.geography_id = pickup_geo_id
-            and destination.destination_geography_id = destination_geo_id)
+            and public.logistics_geography_is_covered(destination.destination_geography_id, destination_geo_id))
         )
     )
     and (
@@ -948,6 +948,35 @@ begin
 end;
 $$;
 
+create or replace function public.logistics_geography_is_covered(
+  target_coverage_geography_id uuid,
+  target_requested_geography_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $
+  with recursive requested_ancestors(id, parent_id) as (
+    select geography.id, geography.parent_id
+    from public.geographies geography
+    where geography.id = target_requested_geography_id
+      and geography.status = 'active'
+    union all
+    select parent.id, parent.parent_id
+    from public.geographies parent
+    join requested_ancestors child on parent.id = child.parent_id
+    where parent.status = 'active'
+  )
+  select target_coverage_geography_id is not null
+    and target_requested_geography_id is not null
+    and exists (
+      select 1 from requested_ancestors
+      where requested_ancestors.id = target_coverage_geography_id
+    );
+$;
+
 create or replace function public.update_logistics_provider_profile(
   target_organization_id uuid,
   target_about text,
@@ -1110,14 +1139,14 @@ as $$
     and exists (
       select 1 from public.logistics_provider_coverage origin
       where origin.provider_service_id=service.id and origin.status='active'
-        and ((origin.coverage_mode in ('origin','both') and origin.geography_id=target_pickup_geography_id)
-          or (origin.coverage_mode='route' and origin.geography_id=target_pickup_geography_id and origin.destination_geography_id=target_destination_geography_id))
+        and ((origin.coverage_mode in ('origin','both') and public.logistics_geography_is_covered(origin.geography_id,target_pickup_geography_id))
+          or (origin.coverage_mode='route' and public.logistics_geography_is_covered(origin.geography_id,target_pickup_geography_id) and public.logistics_geography_is_covered(origin.destination_geography_id,target_destination_geography_id)))
     )
     and exists (
       select 1 from public.logistics_provider_coverage destination
       where destination.provider_service_id=service.id and destination.status='active'
-        and ((destination.coverage_mode in ('destination','both') and destination.geography_id=target_destination_geography_id)
-          or (destination.coverage_mode='route' and destination.geography_id=target_pickup_geography_id and destination.destination_geography_id=target_destination_geography_id))
+        and ((destination.coverage_mode in ('destination','both') and public.logistics_geography_is_covered(destination.geography_id,target_destination_geography_id))
+          or (destination.coverage_mode='route' and destination.geography_id=target_pickup_geography_id and public.logistics_geography_is_covered(destination.destination_geography_id,target_destination_geography_id)))
     )
   order by provider.public_name,service.display_name
   limit greatest(1,least(coalesce(target_limit,30),100));
@@ -1136,6 +1165,9 @@ using (
 revoke all on function public.record_logistics_job_event(uuid,text,text,text,text,jsonb) from public,anon,authenticated;
 grant execute on function public.record_logistics_job_event(uuid,text,text,text,text,jsonb) to service_role;
 
+
+revoke all on function public.logistics_geography_is_covered(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.logistics_geography_is_covered(uuid,uuid) to service_role;
 revoke all on function public.update_logistics_provider_profile(uuid,text,jsonb,jsonb) from public,anon;
 revoke all on function public.set_logistics_provider_operational_status(uuid,text,text,text) from public,anon;
 revoke all on function public.refresh_logistics_job_matches(uuid,text) from public,anon;
