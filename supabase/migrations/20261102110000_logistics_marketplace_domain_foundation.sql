@@ -545,6 +545,12 @@ begin
       updated_at = timezone('utc', now())
   where id = target_organization_id;
 
+  if target_decision = 'verified' then
+    update public.logistics_provider_services
+    set status = 'active', updated_at = timezone('utc', now())
+    where organization_id = target_organization_id and status = 'draft';
+  end if;
+
   return provider_id;
 end;
 $$;
@@ -715,9 +721,9 @@ begin
   if coverage_id is null then
     select id into coverage_id
     from public.logistics_provider_coverage
-    where organization_id = target_organization_id
-      and logistics_provider_coverage.provider_service_id = configure_logistics_provider_coverage.provider_service_id
-      and coverage_mode = target_coverage_mode
+    where logistics_provider_coverage.organization_id = target_organization_id
+      and logistics_provider_coverage.provider_service_id = provider_service_id
+      and logistics_provider_coverage.coverage_mode = target_coverage_mode
       and geography_id = target_geography_id
       and destination_geography_id is not distinct from target_destination_geography_id
       and status = 'active'
@@ -906,6 +912,12 @@ begin
       cardinality(service.cargo_type_keys) = 0
       or service.cargo_type_keys && array(
         select jsonb_array_elements_text(coalesce(target_payload #> '{cargo,cargo_type_keys}', '[]'::jsonb))
+      )
+    )
+    and (
+      cardinality(service.vehicle_type_keys) = 0
+      or service.vehicle_type_keys && array(
+        select jsonb_array_elements_text(coalesce(target_payload #> '{cargo,vehicle_type_keys}', '[]'::jsonb))
       )
     )
   on conflict (job_id, organization_id) do nothing;
@@ -1197,6 +1209,16 @@ declare
 begin
   if target_idempotency_key is null or char_length(btrim(target_idempotency_key)) < 8 then
     raise exception 'valid idempotency key is required';
+  end if;
+
+  if exists (
+    select 1
+    from public.logistics_job_events event_record
+    where event_record.idempotency_key = target_idempotency_key || ':event'
+      and event_record.metadata->>'offer_id' = target_offer_id::text
+      and event_record.event_type = 'logistics.offer.selected'
+  ) then
+    return target_offer_id;
   end if;
 
   select * into selected_offer
