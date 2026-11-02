@@ -1,8 +1,8 @@
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building2, CheckCircle2, MapPin, Package, Plus, ShieldCheck, Truck, XCircle } from "lucide-react-native";
+import { ArrowDownUp, Building2, CheckCircle2, MapPin, Plus, ShieldCheck, Truck, WalletCards, XCircle } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { asNumber, asString, useLogisticsQuery } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
@@ -165,6 +165,8 @@ export function ProviderCompanyScreen() {
                 </View>
               </Card>
 
+              <ProviderWalletFundingPanel organizationId={organizationId ?? ""} />
+
               <View style={styles.section}>
                 <SectionHeader title="Your services" description="Choose service categories you can fulfil and state your capacity." />
                 {services.isPending ? <ScreenSkeleton cards={1} /> : services.error ? <StatePanel title="Services unavailable" description="Your service list could not be loaded." retry={() => void services.refetch()} /> : availableServices.length ? (
@@ -247,6 +249,153 @@ export function ProviderCompanyScreen() {
     </Screen>
   );
 }
+
+function ProviderWalletFundingPanel({ organizationId }: { organizationId: string }) {
+  const { palette } = useAppTheme();
+  const { api, session } = useSession();
+  const queryClient = useQueryClient();
+  const wallets = useLogisticsQuery(["wallets"], "/runtime/wallets", Boolean(organizationId), 30_000);
+  const balances = useLogisticsQuery(["wallet-balances"], "/runtime/wallet-balances", Boolean(organizationId), 30_000);
+  const personalWallets = useMemo(() => (wallets.data ?? []).filter((wallet) =>
+    asString(wallet, "wallet_type") === "customer" &&
+    asString(wallet, "owner_entity_type") === "user" &&
+    asString(wallet, "owner_entity_id") === session?.user.id &&
+    asString(wallet, "status") === "active"
+  ), [wallets.data, session?.user.id]);
+  const providerWallets = useMemo(() => (wallets.data ?? []).filter((wallet) =>
+    asString(wallet, "wallet_type") === "partner" &&
+    asString(wallet, "owner_entity_type") === "organization" &&
+    asString(wallet, "owner_entity_id") === organizationId &&
+    asString(wallet, "status") === "active"
+  ), [wallets.data, organizationId]);
+  const [sourceWalletId, setSourceWalletId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
+  const [fundError, setFundError] = useState<string | null>(null);
+  const selectedWallet = personalWallets.find((wallet) => asString(wallet, "id") === sourceWalletId)
+    ?? personalWallets.find((wallet) => asString(wallet, "currency_code") === "NGN")
+    ?? personalWallets[0]
+    ?? null;
+  const currency = asString(selectedWallet, "currency_code") ?? "NGN";
+  const providerWallet = providerWallets.find((wallet) => asString(wallet, "currency_code") === currency) ?? null;
+  const readBalance = (walletId: string | null) => {
+    if (!walletId) return 0;
+    const row = (balances.data ?? []).find((item) => asString(item, "wallet_id") === walletId);
+    return asNumber(row, "balance") ?? 0;
+  };
+  const sourceBalance = readBalance(asString(selectedWallet, "id"));
+  const providerBalance = readBalance(asString(providerWallet, "id"));
+  const requestedAmount = Number(amount);
+  const enoughBalance = Number.isFinite(requestedAmount) && requestedAmount > 0 && sourceBalance >= requestedAmount;
+
+  const funding = useMutation({
+    mutationFn: async (payload: { walletId: string; amount: number; key: string }) => api.post(
+      "/runtime/logistics/company/wallet/fund",
+      {
+        organizationId,
+        customerWalletId: payload.walletId,
+        amount: payload.amount,
+        idempotencyKey: payload.key,
+      },
+      z.record(z.string(), z.unknown()),
+    ),
+    onSuccess: async () => {
+      setAmount("");
+      setIdempotencyKey(null);
+      setFundError(null);
+      await Promise.all([
+        wallets.refetch(),
+        balances.refetch(),
+        queryClient.invalidateQueries({ queryKey: ["skima-logistics", "wallets"] }),
+        queryClient.invalidateQueries({ queryKey: ["skima-logistics", "wallet-balances"] }),
+      ]);
+    },
+    onError: (cause) => setFundError(cause instanceof Error ? cause.message : "The company wallet could not be funded."),
+  });
+
+  return (
+    <Card padding="lg">
+      <View style={fundingStyles.heading}>
+        <View style={[fundingStyles.headingIcon, { backgroundColor: palette.brandSoft }]}><WalletCards color={palette.brand} size={20} /></View>
+        <View style={fundingStyles.headingCopy}>
+          <Text style={[fundingStyles.title, { color: palette.ink }]}>Company wallet</Text>
+          <Text style={[fundingStyles.description, { color: palette.muted }]}>Funds your organisation’s offline provider receival fees.</Text>
+        </View>
+      </View>
+      <View style={[fundingStyles.balancePanel, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+        <Text style={[fundingStyles.balanceLabel, { color: palette.muted }]}>Company balance · {currency}</Text>
+        <Text style={[fundingStyles.balanceValue, { color: palette.ink }]}>{formatCurrency(providerBalance, currency, 2)}</Text>
+        <Text style={[fundingStyles.balanceHint, { color: palette.muted }]}>Online bookings do not debit this wallet for commission. That is deducted from escrow at settlement.</Text>
+      </View>
+      <View style={fundingStyles.form}>
+        <Text style={[fundingStyles.label, { color: palette.ink }]}>Fund from your personal customer wallet</Text>
+        {wallets.isPending || balances.isPending ? (
+          <ScreenSkeleton cards={1} />
+        ) : personalWallets.length === 0 ? (
+          <StatePanel title="Personal wallet required" description="Create or top up your own customer wallet in SKIMA first. You can then move funds into the company wallet." retry={() => void Promise.all([wallets.refetch(), balances.refetch()])} />
+        ) : (
+          <>
+            <View style={fundingStyles.walletChoices}>
+              {personalWallets.map((wallet) => {
+                const id = asString(wallet, "id") ?? "";
+                const code = asString(wallet, "currency_code") ?? "";
+                const selected = asString(selectedWallet, "id") === id;
+                const walletBalance = readBalance(id);
+                return (
+                  <Pressable key={id} accessibilityRole="button" onPress={() => { setSourceWalletId(id); setIdempotencyKey(null); }}
+                    style={[fundingStyles.walletChoice, { backgroundColor: selected ? palette.brandSofter : palette.surface, borderColor: selected ? palette.brand : palette.border }]}>
+                    <Text style={[fundingStyles.walletCode, { color: selected ? palette.brand : palette.ink }]}>{code}</Text>
+                    <Text style={[fundingStyles.walletAvailable, { color: palette.muted }]}>{formatCurrency(walletBalance, code, 2)}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <AppField
+              label={\`Transfer amount (\${currency})\`}
+              value={amount}
+              onChangeText={(value) => { setAmount(value); setIdempotencyKey(null); }}
+              keyboardType="decimal-pad"
+              placeholder="Enter amount to move"
+              hint="An internal transfer: your personal wallet is debited and the company wallet is credited."
+            />
+            <AppButton
+              label="Move funds to company wallet"
+              fullWidth
+              loading={funding.isPending}
+              disabled={!selectedWallet || !enoughBalance}
+              onPress={() => {
+                if (!selectedWallet) return;
+                const key = idempotencyKey ?? createClientIdempotencyKey("logistics.provider.wallet.fund", organizationId);
+                setIdempotencyKey(key);
+                setFundError(null);
+                funding.mutate({ walletId: asString(selectedWallet, "id") ?? "", amount: requestedAmount, key });
+              }}
+              icon={<ArrowDownUp color="#FFFFFF" size={16} />}
+            />
+            {amount.trim() && !enoughBalance ? <Text style={[fundingStyles.errorText, { color: palette.danger }]}>Enter an amount within your personal wallet’s available balance.</Text> : null}
+          </>
+        )}
+        {fundError ? <View style={[fundingStyles.errorPanel, { backgroundColor: palette.dangerSoft }]}><XCircle color={palette.danger} size={15} /><Text style={[fundingStyles.errorText, { color: palette.danger }]}>{fundError}</Text></View> : null}
+      </View>
+      <View style={[fundingStyles.footnote, { backgroundColor: palette.successSoft }]}>
+        <ShieldCheck color={palette.success} size={14} />
+        <Text style={[fundingStyles.footnoteText, { color: palette.ink }]}>The transfer uses SKIMA’s shared ledger. No customer booking fee or online commission is taken during funding.</Text>
+      </View>
+    </Card>
+  );
+}
+
+
+function formatCurrency(value: number, currency: string, decimals: number) {
+  try {
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency", currency,
+      minimumFractionDigits: decimals, maximumFractionDigits: decimals,
+    }).format(value);
+  } catch {
+    return `${currency} ${value.toLocaleString("en-NG")}`;
+  }
+}
 function nested(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -254,6 +403,27 @@ function nested(record: Record<string, unknown> | null | undefined, key: string)
 function TextButton({ label, active, onPress }: { label: string; active: boolean; onPress(): void }) {
   return <AppButton size="sm" variant={active ? "primary" : "secondary"} label={label} onPress={onPress} />;
 }
+const fundingStyles = StyleSheet.create({
+  heading: { flexDirection: "row", alignItems: "center", gap: 10 },
+  headingIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  headingCopy: { flex: 1, gap: 3 },
+  title: { ...typography.bodyStrong, fontSize: 14 },
+  description: { ...typography.caption, fontSize: 9, lineHeight: 15 },
+  balancePanel: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 13, gap: 4 },
+  balanceLabel: { ...typography.caption, fontSize: 9 },
+  balanceValue: { ...typography.heading, fontSize: 25 },
+  balanceHint: { ...typography.caption, fontSize: 9, lineHeight: 15 },
+  form: { gap: 10 },
+  label: { ...typography.caption, fontSize: 11, fontWeight: "900" },
+  walletChoices: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  walletChoice: { minWidth: 105, borderWidth: 1, borderRadius: radii.md, paddingHorizontal: 11, paddingVertical: 9, gap: 3 },
+  walletCode: { ...typography.bodyStrong, fontSize: 11 },
+  walletAvailable: { ...typography.caption, fontSize: 9 },
+  footnote: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 10, borderRadius: radii.md },
+  footnoteText: { flex: 1, ...typography.caption, fontSize: 9, lineHeight: 15 },
+  errorPanel: { flexDirection: "row", alignItems: "flex-start", gap: 7, padding: 10, borderRadius: radii.md },
+  errorText: { flex: 1, ...typography.caption, fontSize: 9, lineHeight: 15 },
+});
 const styles = StyleSheet.create({
   content: { gap: spacing.lg },
   section: { gap: 12 },
