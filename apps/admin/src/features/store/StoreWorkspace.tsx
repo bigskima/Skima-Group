@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BadgeDollarSign, Boxes, PackagePlus, RefreshCcw, ShoppingBag, Tag, Truck } from "lucide-react";
+import { BadgeDollarSign, Boxes, PackagePlus, RefreshCcw, Settings2, ShoppingBag, Tag, Truck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { z } from "zod";
 
@@ -19,7 +19,7 @@ import {
 } from "@skima/ui";
 
 import { useSessionState } from "../../session";
-import { AdminFormSection, AdminV2PageHeader } from "../../shared/patterns/AdminV2Patterns";
+import { AdminV2PageHeader } from "../../shared/patterns/AdminV2Patterns";
 import {
   catalogError,
   catalogLabel,
