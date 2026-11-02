@@ -24,6 +24,8 @@ const providerNavigation = await Deno.readTextFile("apps/logistics-mobile/src/na
 const providerDashboard = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderDashboardScreen.tsx");
 const providerOpportunities = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderOpportunitiesScreen.tsx");
 const providerCompany = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderCompanyScreen.tsx");
+const providerTeam = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderTeamScreen.tsx");
+const providerTeamRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/team.tsx");
 const providerJobs = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderJobsScreen.tsx");
 const providerBookingDetail = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderBookingDetailScreen.tsx");
 const providerRoutes = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/_layout.tsx");
@@ -222,4 +224,21 @@ Deno.test("Customer confirmation triggers online settlement but never double-cha
   requireText(bookingFulfillmentMigration, "current_status := 'completed_offline'", "offline completion state");
   requireText(bookingFulfillmentMigration, "booking_record.customer_booking_fee_amount + booking_record.provider_receival_fee_amount", "offline fees are checked only when configured");
   requireText(bookingFulfillmentMigration, "configured offline booking fees must be confirmed", "zero-fee offline booking can complete");
+});
+
+
+Deno.test("Logistics company team uses existing tenant-scoped staff governance with limited roles", () => {
+  requireText(providerNavigation, 'name="team"', "provider team tab");
+  requireText(providerTeamRoute, "ProviderTeamScreen", "dedicated team route");
+  requireText(providerTeam, '"/runtime/organization-staff/directory?organizationId="', "tenant-scoped staff directory");
+  requireText(providerTeam, '"/runtime/organization-invitations"', "company invitation list");
+  requireText(providerTeam, '"/runtime/organization-roles"', "governed company role creation");
+  requireText(providerTeam, '"/runtime/organization-staff/status"', "staff access suspension and restoration");
+  requireText(providerTeam, 'membershipType: "member"', "invitees never receive company-owner membership");
+  requireText(providerTeam, '"business.logistics.jobs.manage"', "operational role permissions");
+  requireText(providerTeam, '"business.logistics.offers.manage"', "quote management role permissions");
+  requireText(providerTeam, '"business.logistics.finance.read"', "finance is read-only");
+  requireText(providerTeam, "canManage", "company-owner/staff-administrator gate");
+  requireText(providerTeam, "expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)", "bounded seven-day invitation expiry");
+  requireNotText(providerTeam, 'membershipType: "owner"', "no owner privilege is granted through staff invitations");
 });
