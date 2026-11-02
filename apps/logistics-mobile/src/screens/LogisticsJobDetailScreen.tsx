@@ -57,7 +57,6 @@ export function LogisticsJobDetailScreen() {
   const offers = useMemo(() => (offersQuery.data ?? []).filter((item) => asString(item, "job_id") === jobId), [offersQuery.data, jobId]);
   const activeBookings = (bookings.data ?? []).filter((item) => asString(item, "job_id") === jobId);
   const existingBooking = activeBookings[0] ?? null;
-  const pendingOffers = offers.filter((item) => ["submitted"].includes((asString(item, "status") ?? "").toLowerCase()));
   const refresh = async () => {
     await Promise.all([jobs.refetch(), opportunitiesQuery.refetch(), offersQuery.refetch(), bookings.refetch()]);
   };
@@ -155,6 +154,10 @@ export function LogisticsJobDetailScreen() {
                     const companyName = asString(snapshot, "provider_name") ?? "Verified logistics company";
                     const serviceName = asString(snapshot, "provider_service_name") ?? asString(snapshot, "service_name") ?? "Qualified for this route";
                     const companyOffers = offers.filter((offer) => asString(offer, "organization_id") === organizationId);
+                    const latestProviderOffer = companyOffers
+                      .filter((offer) => asString(offer, "status") === "submitted" &&
+                        ["provider_quote", "provider_counter"].includes(asString(offer, "offer_type") ?? ""))
+                      .sort((left, right) => String(right.created_at ?? "").localeCompare(String(left.created_at ?? "")))[0] ?? null;
                     return (
                       <View key={String(opportunity.id)} style={[styles.companyCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
                         <View style={styles.companyHead}>
@@ -168,7 +171,8 @@ export function LogisticsJobDetailScreen() {
                         <Text style={[styles.companyStatus, { color: palette.muted }]}>
                           {companyOffers.length ? `${companyOffers.length} offer ${companyOffers.length === 1 ? "submitted" : "updates"}` : "Opportunity delivered · awaiting company response"}
                         </Text>
-                        {companyOffers.map((offer) => {
+                        {latestProviderOffer ? (() => {
+                          const offer = latestProviderOffer;
                           const amountMinor = asNumber(offer, "delivery_price_minor");
                           const currency = asString(offer, "currency_code") ?? "";
                           const decimals = currencyDecimals(currency);
@@ -182,7 +186,13 @@ export function LogisticsJobDetailScreen() {
                               <AppButton label="Choose" size="sm" onPress={() => { setLocalError(null); setShowBooking(true); setSelectedOfferId(offerId ?? ""); }} />
                             </View>
                           );
-                        })}
+                        })() : (
+                          <Text style={[styles.companyStatus, { color: palette.muted }]}>
+                            {companyOffers.some((offer) => asString(offer, "offer_type") === "customer_counter" && asString(offer, "status") === "submitted")
+                              ? "Your counteroffer is with the company."
+                              : companyOffers.length ? "The company is preparing its next offer." : "Opportunity delivered · awaiting company response"}
+                          </Text>
+                        )}
                       </View>
                     );
                   })}
