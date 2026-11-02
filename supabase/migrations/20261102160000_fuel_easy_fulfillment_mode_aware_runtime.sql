@@ -560,7 +560,6 @@ as $$
     select 1 from public.fuel_order_operations operation
     where operation.order_id=target_order_id
       and operation.stage_key='delivered'
-      and operation.delivery_verified_at is null
       and operation.delivery_challenge_id is not null
       and public.fuel_delivery_challenge_is_verified(target_order_id,operation.delivery_challenge_id)
   );
@@ -680,91 +679,7 @@ $$;
 
 -- Replace only the authorization clauses in shared financial functions, with
 -- a narrowly scoped exception for the signed-in customer's verified Fuel OTP.
-do $patch$
-declare function_sql text;
-declare old_guard text;
-declare new_guard text;
-begin
-  select pg_get_functiondef('public.record_fuel_order_stage(uuid,text,text,text,jsonb)'::regprocedure) into function_sql;
-  old_guard:=$old$  if auth.role() <> 'service_role' then
-    raise exception using errcode='42501',message='Fuel operational stage changes must be performed through the authorized SKIMA service runtime';
-  end if;$old$;
-  new_guard:=$new$  if auth.role() <> 'service_role'
-     and not public.can_advance_fuel_order_from_verified_otp(target_order_id) then
-    raise exception using errcode='42501',message='Fuel operational stage changes must be performed through the authorized SKIMA service runtime or a verified customer delivery trigger';
-  end if;$new$;
-  if position(old_guard in function_sql)=0 then raise exception 'record_fuel_order_stage authorization changed; refusing an unsafe patch'; end if;
-  execute replace(function_sql,old_guard,new_guard);
 
-  select pg_get_functiondef('public.settle_fuel_order(uuid,text,jsonb)'::regprocedure) into function_sql;
-  old_guard:=$old$  if auth.role() <> 'service_role' then
-    raise exception using errcode='42501',message='Fuel settlement must run through the trusted SKIMA service runtime';
-  end if;$old$;
-  new_guard:=$new$  if auth.role() <> 'service_role'
-     and not public.can_complete_fuel_delivery_settlement(target_order_id) then
-    raise exception using errcode='42501',message='Fuel settlement must run through the trusted SKIMA service runtime or the verified customer delivery trigger';
-  end if;$new$;
-  if position(old_guard in function_sql)=0 then raise exception 'settle_fuel_order authorization changed; refusing an unsafe patch'; end if;
-  execute replace(function_sql,old_guard,new_guard);
-
-  select pg_get_functiondef('public.trigger_settle_fuel_order_on_completion()'::regprocedure) into function_sql;
-  old_guard:=$old$  if auth.role()<>'service_role' then
-    raise exception using errcode='42501',message='Fuel settlement completion must be triggered by the trusted SKIMA service runtime';
-  end if;$old$;
-  new_guard:=$new$  if auth.role()<>'service_role'
-     and not public.can_complete_fuel_delivery_settlement(new.order_id) then
-    raise exception using errcode='42501',message='Fuel settlement completion must be triggered by trusted operations or verified customer delivery';
-  end if;$new$;
-  if position(old_guard in function_sql)=0 then raise exception 'Fuel settlement trigger authorization changed; refusing an unsafe patch'; end if;
-  execute replace(function_sql,old_guard,new_guard);
-
-  select pg_get_functiondef('public.execute_service_request_settlement(uuid,uuid,jsonb,text,text,jsonb)'::regprocedure) into function_sql;
-  old_guard:=$old$  if auth.role() <> 'service_role'
-    and not public.has_permission('platform.settlement.execute', null)
-    and not public.can_execute_platform_runtime() then
-    raise exception 'settlement execution permission is required';
-  end if;$old$;
-  new_guard:=$new$  if auth.role() <> 'service_role'
-    and not public.has_permission('platform.settlement.execute', null)
-    and not public.can_execute_platform_runtime()
-    and not public.can_settle_verified_fuel_service_request(target_service_request_id) then
-    raise exception 'settlement execution permission is required';
-  end if;$new$;
-  if position(old_guard in function_sql)=0 then raise exception 'execute_service_request_settlement authorization changed; refusing an unsafe patch'; end if;
-  execute replace(function_sql,old_guard,new_guard);
-
-  select pg_get_functiondef('public.post_financial_transaction(text,text,text,text,uuid,jsonb,text,uuid,text,jsonb,jsonb)'::regprocedure) into function_sql;
-  old_guard:=$old$  if auth.role() <> 'service_role'
-    and not public.has_permission('platform.financial.manage', null) then
-    raise exception 'platform financial management permission is required';
-  end if;$old$;
-  new_guard:=$new$  if auth.role() <> 'service_role'
-    and not public.has_permission('platform.financial.manage', null)
-    and not public.can_post_verified_fuel_financial_transaction(target_subject_type,target_subject_id,target_source,target_metadata) then
-    raise exception 'platform financial management permission is required';
-  end if;$new$;
-  if position(old_guard in function_sql)=0 then raise exception 'post_financial_transaction authorization changed; refusing an unsafe patch'; end if;
-  execute replace(function_sql,old_guard,new_guard);
-
-  select pg_get_functiondef('public.ensure_wallet_account(text,text,uuid,text,text,jsonb,text)'::regprocedure) into function_sql;
-  old_guard:=$old$  if auth.role() <> 'service_role'
-    and not public.has_permission('platform.wallets.manage', null)
-    and not can_create_self_wallet then
-    raise exception 'platform wallet management permission is required';
-  end if;$old$;
-  new_guard:=$new$  if auth.role() <> 'service_role'
-    and not public.has_permission('platform.wallets.manage', null)
-    and not can_create_self_wallet
-    and not public.can_create_fuel_verified_settlement_wallet(
-      target_wallet_type,target_owner_entity_type,target_owner_entity_id,
-      target_currency_code,target_source,target_metadata
-    ) then
-    raise exception 'platform wallet management permission is required';
-  end if;$new$;
-  if position(old_guard in function_sql)=0 then raise exception 'ensure_wallet_account authorization changed; refusing an unsafe patch'; end if;
-  execute replace(function_sql,old_guard,new_guard);
-end;
-$patch$;
 
 create or replace function public.request_fuel_delivery_challenge(
   target_order_id uuid,
@@ -999,7 +914,7 @@ declare
 begin
   order_id_value:=coalesce(new.order_id,old.order_id);
   select * into operation_record from public.fuel_order_operations where order_id=order_id_value for update;
-  if not found or operation_record.stage_key<>'awaiting_station_acceptance' then return coalesce(new,old); end if;
+  if not found or operation_record.stage_key<>'awaiting_station_acceptance' then return new; end if;
 
   select coalesce(sum(greatest(reservation.reserved_litres-reservation.consumed_litres,0)),0)
   into reserved_total
@@ -1019,7 +934,7 @@ begin
       jsonb_build_object('progression','stock_reservation_complete','automatic',true)
     );
   end if;
-  return coalesce(new,old);
+  return new;
 end;
 $$;
 
@@ -1041,7 +956,7 @@ declare
 begin
   order_id_value:=coalesce(new.order_id,old.order_id);
   select * into operation_record from public.fuel_order_operations where order_id=order_id_value for update;
-  if not found or operation_record.stage_key<>'station_filling' then return coalesce(new,old); end if;
+  if not found or operation_record.stage_key<>'station_filling' then return new; end if;
 
   select count(*),coalesce(sum(allocation.allocated_litres),0),
          coalesce(sum(case when allocation.allocation_mode='purchase' then allocation.purchase_amount else allocation.rental_amount end),0),
@@ -1060,7 +975,7 @@ begin
      or prepared_litres<operation_record.requested_litres-0.001
      or abs(coalesce(operation_record.filled_litres,0)-operation_record.requested_litres)>0.001
      or consumed_litres<operation_record.requested_litres-0.001 then
-    return coalesce(new,old);
+    return new;
   end if;
 
   select * into quote_record
@@ -1069,7 +984,7 @@ begin
   if not found
      or abs(allocated_container_amount-quote_record.container_amount)>0.001
      or abs(allocated_deposit_amount-quote_record.refundable_deposit_amount)>0.001 then
-    return coalesce(new,old);
+    return new;
   end if;
 
   perform public.record_fuel_order_stage(
@@ -1077,7 +992,7 @@ begin
     'All ordered litres and containers are filled, measured and reconciled',
     jsonb_build_object('progression','station_preparation_complete','automatic',true)
   );
-  return coalesce(new,old);
+  return new;
 end;
 $$;
 
@@ -1094,13 +1009,13 @@ declare
 begin
   order_id_value:=coalesce(new.order_id,old.order_id);
   select * into operation_record from public.fuel_order_operations where order_id=order_id_value for update;
-  if not found or operation_record.stage_key<>'driver_assigned' then return coalesce(new,old); end if;
+  if not found or operation_record.stage_key<>'driver_assigned' then return new; end if;
 
   select count(*) into with_driver_count
   from public.fuel_container_allocations allocation
   where allocation.order_id=order_id_value and allocation.status='with_driver';
 
-  if with_driver_count<>operation_record.container_count then return coalesce(new,old); end if;
+  if with_driver_count<>operation_record.container_count then return new; end if;
 
   if not exists(
     select 1 from public.order_assignments assignment
@@ -1108,7 +1023,7 @@ begin
       and assignment.participant_role='driver'
       and assignment.entity_type='driver'
       and assignment.status='active'
-  ) then return coalesce(new,old); end if;
+  ) then return new; end if;
 
   perform public.record_fuel_order_stage(
     order_id_value,'station_handover','fuel-auto-station-handover:'||order_id_value::text,
@@ -1120,7 +1035,7 @@ begin
     'The full filled order is with the assigned driver and is out for delivery',
     jsonb_build_object('progression','station_driver_handover_complete','automatic',true)
   );
-  return coalesce(new,old);
+  return new;
 end;
 $$;
 
@@ -1153,6 +1068,11 @@ for each row execute function public.advance_fuel_order_after_stock_reservation(
 drop trigger if exists fuel_auto_progress_after_station_fill on public.fuel_container_allocations;
 create trigger fuel_auto_progress_after_station_fill
 after insert or update of status,filled_litres on public.fuel_container_allocations
+for each row execute function public.advance_fuel_order_after_station_preparation();
+
+drop trigger if exists fuel_auto_progress_after_stock_consumption on public.fuel_order_stock_reservations;
+create trigger fuel_auto_progress_after_stock_consumption
+after update of consumed_litres,status on public.fuel_order_stock_reservations
 for each row execute function public.advance_fuel_order_after_station_preparation();
 
 drop trigger if exists fuel_auto_progress_after_driver_handover on public.fuel_container_allocations;
@@ -1383,34 +1303,7 @@ $patch$;
 
 -- No second status click after the station has measured and handed over fuel.
 -- The existing service-side stage calls are removed; triggers now own them.
-do $patch$
-declare function_sql text; old_block text; new_block text;
-begin
-  select pg_get_functiondef('public.confirm_fuel_customer_delivery(uuid,uuid,numeric,text,jsonb)'::regprocedure) into function_sql;
-  old_block:=$old$  if operation_record.container_mode='rental' then
-    perform public.record_fuel_order_stage(
-      target_order_id,
-      'return_due',
-      target_idempotency_key||':stage-return-due',
-      'Rental containers must be returned by the customer to the assigned driver',
-      target_metadata||jsonb_build_object('rental_container_return_required',true)
-    );
-  else
-    perform public.record_fuel_order_stage(
-      target_order_id,
-      'completed',
-      target_idempotency_key||':stage-completed',
-      'Purchased containers delivered and ownership transferred',
-      target_metadata||jsonb_build_object('driver_delivery_completed',true)
-    );
-  end if;$old$;
-  new_block:=$new$  -- Customer delivery confirmation is the next gate. Only a
-  -- verified customer OTP may move this order to return_due/completed.
-  null;$new$;
-  if position(old_block in function_sql)=0 then raise exception 'Fuel delivery close-out block changed; refusing an unsafe patch'; end if;
-  execute replace(function_sql,old_block,new_block);
-end;
-$patch$;
+
 
 create or replace function public.advance_fuel_order_after_stock_reservation()
 returns trigger
@@ -1425,7 +1318,7 @@ declare
 begin
   order_id_value:=coalesce(new.order_id,old.order_id);
   select * into operation_record from public.fuel_order_operations where order_id=order_id_value for update;
-  if not found or operation_record.stage_key<>'awaiting_station_acceptance' then return coalesce(new,old); end if;
+  if not found or operation_record.stage_key<>'awaiting_station_acceptance' then return new; end if;
   select coalesce(sum(greatest(reservation.reserved_litres-reservation.consumed_litres,0)),0)
   into reserved_total
   from public.fuel_order_stock_reservations reservation
@@ -1437,7 +1330,7 @@ begin
     perform public.record_fuel_order_stage(order_id_value,'station_filling','fuel-auto-station-filling:'||order_id_value::text,
       'Station stock is reserved; station filling can begin',jsonb_build_object('progression','stock_reservation_complete','automatic',true));
   end if;
-  return coalesce(new,old);
+  return new;
 end;
 $$;
 
@@ -1459,7 +1352,7 @@ declare
 begin
   order_id_value:=coalesce(new.order_id,old.order_id);
   select * into operation_record from public.fuel_order_operations where order_id=order_id_value for update;
-  if not found or operation_record.stage_key<>'station_filling' then return coalesce(new,old); end if;
+  if not found or operation_record.stage_key<>'station_filling' then return new; end if;
   select count(*),coalesce(sum(allocation.allocated_litres),0),
          coalesce(sum(case when allocation.allocation_mode='purchase' then allocation.purchase_amount else allocation.rental_amount end),0),
          coalesce(sum(allocation.refundable_deposit_amount),0)
@@ -1473,19 +1366,19 @@ begin
      or prepared_litres<operation_record.requested_litres-0.001
      or abs(coalesce(operation_record.filled_litres,0)-operation_record.requested_litres)>0.001
      or consumed_litres<operation_record.requested_litres-0.001 then
-    return coalesce(new,old);
+    return new;
   end if;
   select * into quote_record from public.fuel_order_commercial_snapshots
   where order_id=order_id_value and status='accepted';
   if not found
      or abs(allocated_container_amount-quote_record.container_amount)>0.001
      or abs(allocated_deposit_amount-quote_record.refundable_deposit_amount)>0.001 then
-    return coalesce(new,old);
+    return new;
   end if;
   perform public.record_fuel_order_stage(order_id_value,'ready_for_driver','fuel-auto-ready-for-driver:'||order_id_value::text,
     'All ordered litres and containers are filled, measured and reconciled',
     jsonb_build_object('progression','station_preparation_complete','automatic',true));
-  return coalesce(new,old);
+  return new;
 end;
 $$;
 
@@ -1502,13 +1395,13 @@ declare
 begin
   order_id_value:=coalesce(new.order_id,old.order_id);
   select * into operation_record from public.fuel_order_operations where order_id=order_id_value for update;
-  if not found or operation_record.stage_key<>'driver_assigned' then return coalesce(new,old); end if;
+  if not found or operation_record.stage_key<>'driver_assigned' then return new; end if;
   select count(*) into with_driver_count from public.fuel_container_allocations allocation
   where allocation.order_id=order_id_value and allocation.status='with_driver';
-  if with_driver_count<>operation_record.container_count then return coalesce(new,old); end if;
+  if with_driver_count<>operation_record.container_count then return new; end if;
   if not exists(select 1 from public.order_assignments assignment where assignment.order_id=order_id_value
       and assignment.participant_role='driver' and assignment.entity_type='driver' and assignment.status='active') then
-    return coalesce(new,old);
+    return new;
   end if;
   perform public.record_fuel_order_stage(order_id_value,'station_handover','fuel-auto-station-handover:'||order_id_value::text,
     'The station recorded custody transfer of every filled container to the assigned driver',
@@ -1516,7 +1409,7 @@ begin
   perform public.record_fuel_order_stage(order_id_value,'out_for_delivery','fuel-auto-out-for-delivery:'||order_id_value::text,
     'The full filled order is with the assigned driver and is out for delivery',
     jsonb_build_object('progression','station_driver_handover_complete','automatic',true));
-  return coalesce(new,old);
+  return new;
 end;
 $$;
 
