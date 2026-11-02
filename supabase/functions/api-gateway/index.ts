@@ -169,6 +169,8 @@ const ROUTES = new Set([
   "/lpg/maps/route-estimate",
   "/lpg/maps/providers/status",
   "/runtime/catalog",
+  "/runtime/storefront/settings",
+  "/runtime/storefront/products",
   "/runtime/session-context",
   "/runtime/profile/avatar",
   "/runtime/catalog/units",
@@ -3446,6 +3448,70 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       },
       requestId: id,
     });
+  }
+
+  if (routePath === "/runtime/storefront/settings") {
+    if (request.method === "GET") {
+      return selectRecords(
+        supabase
+          .from("storefront_settings")
+          .select(
+            "id,module_id,organization_id,branch_id,currency_code,fulfillment_method,fulfillment_methods,status,metadata,created_at,updated_at",
+          )
+          .order("updated_at", { ascending: false }),
+        id,
+      );
+    }
+
+    if (request.method === "POST") {
+      const body = await readJsonBody(request, id);
+
+      if ("response" in body) {
+        return body.response;
+      }
+
+      const payload = body.value;
+      return rpcResponse(
+        supabase.rpc("configure_storefront_settings", {
+          target_branch_id: optionalUuid(payload.branchId, "branchId"),
+          target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
+          target_fulfillment_method: optionalString(payload.fulfillmentMethod) ?? "delivery",
+          target_fulfillment_methods: optionalStringArray(payload.fulfillmentMethods) ??
+            ["delivery", "pickup"],
+          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+          target_metadata: optionalRecord(payload.metadata) ?? {},
+          target_organization_id: requireUuid(payload.organizationId, "organizationId"),
+          target_status: optionalString(payload.status) ?? "active",
+        }),
+        id,
+      );
+    }
+  }
+
+  if (routePath === "/runtime/storefront/products" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+
+    if ("response" in body) {
+      return body.response;
+    }
+
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("create_storefront_product", {
+        target_amount: requireNumber(payload.amount, "amount"),
+        target_category_key: optionalString(payload.categoryKey),
+        target_category_name: optionalString(payload.categoryName),
+        target_compare_at_amount: optionalNumber(payload.compareAtAmount, "compareAtAmount"),
+        target_description: optionalString(payload.description),
+        target_display_name: requireString(payload.displayName, "displayName"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_item_key: requireString(payload.itemKey, "itemKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_status: optionalString(payload.status) ?? "active",
+        target_stock_quantity: requireNumber(payload.stockQuantity, "stockQuantity"),
+      }),
+      id,
+    );
   }
 
   if (routePath === "/runtime/catalog/units") {
