@@ -445,7 +445,7 @@ async function handleLogisticsRequest(
 
   if (routePath === "/runtime/logistics/bookings" && request.method === "GET") {
     let query = supabase.from("logistics_bookings")
-      .select("id,job_id,offer_id,requester_user_id,provider_organization_id,assigned_driver_profile_id,assigned_driver_user_id,assigned_vehicle_id,driver_assigned_at,payment_mode,status,currency_code,delivery_amount,customer_booking_fee_amount,provider_receival_fee_amount,provider_commission_amount,provider_net_amount,total_customer_charge,policy_snapshots,service_request_id,order_id,escrow_hold_id,payment_transaction_id,offline_fee_transaction_id,payment_attempt_wallet_id,payment_attempt_idempotency_key,settlement_execution_id,provider_accepted_at,service_started_at,delivery_submitted_at,delivery_submitted_by,delivery_submission_snapshot,delivery_verified_at,delivery_verified_by,delivery_verification_snapshot,created_at,updated_at,job:logistics_job_requests(title,pickup_location,destination_location),assignments:logistics_booking_driver_assignments(id,status,driver_profile_id,driver_user_id,vehicle_id,offered_at,responded_at,started_at,picked_up_at,in_transit_at,delivery_submitted_at,driver:driver_profiles(driver_display_name,public_driver_id),vehicle:vehicles(registration_number,manufacturer,model)),offer:logistics_offers(delivery_price_minor,estimated_duration_minutes,terms,opportunity:logistics_job_opportunities(customer_contact_snapshot,job_snapshot))")
+      .select("id,job_id,offer_id,requester_user_id,provider_organization_id,assigned_driver_profile_id,assigned_driver_user_id,assigned_vehicle_id,driver_assigned_at,payment_mode,status,currency_code,delivery_amount,customer_booking_fee_amount,provider_receival_fee_amount,provider_commission_amount,provider_net_amount,total_customer_charge,policy_snapshots,service_request_id,order_id,escrow_hold_id,payment_transaction_id,offline_fee_transaction_id,settlement_execution_id,provider_accepted_at,service_started_at,delivery_submitted_at,delivery_submitted_by,delivery_submission_snapshot,delivery_verified_at,delivery_verified_by,delivery_verification_snapshot,created_at,updated_at,job:logistics_job_requests(title,pickup_location,destination_location),assignments:logistics_booking_driver_assignments(id,status,driver_profile_id,driver_user_id,vehicle_id,offered_at,responded_at,started_at,picked_up_at,in_transit_at,delivery_submitted_at,driver:driver_profiles(driver_display_name,public_driver_id),vehicle:vehicles(registration_number,manufacturer,model)),offer:logistics_offers(delivery_price_minor,estimated_duration_minutes,terms,opportunity:logistics_job_opportunities(customer_contact_snapshot,job_snapshot))")
       .order("created_at", { ascending: false });
     const status = optionalString(url.searchParams.get("status"));
     const providerOrganizationId = optionalUuid(url.searchParams.get("providerOrganizationId"), "providerOrganizationId");
@@ -605,7 +605,7 @@ async function handleLogisticsRequest(
     const paymentIdempotencyKey = requireString(p.idempotencyKey, "idempotencyKey");
 
     const bookingResult = await supabase.from("logistics_bookings")
-      .select("id,order_id,service_request_id,requester_user_id,payment_mode,status,currency_code,total_customer_charge,escrow_hold_id,payment_attempt_wallet_id,policy_snapshots")
+      .select("id,order_id,service_request_id,requester_user_id,payment_mode,status,currency_code,total_customer_charge,escrow_hold_id,policy_snapshots")
       .eq("id", bookingId)
       .eq("requester_user_id", requesterUserId)
       .maybeSingle();
@@ -630,7 +630,7 @@ async function handleLogisticsRequest(
         requestId: id,
       });
     }
-    if (!["awaiting_payment", "payment_processing"].includes(booking.status)) {
+    if (booking.status !== "awaiting_payment") {
       return jsonResponse({ ok: false, error: "booking_not_payable", message: "This booking is not awaiting online payment.", requestId: id }, 409);
     }
     if (!booking.order_id) {
@@ -654,86 +654,29 @@ async function handleLogisticsRequest(
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
     const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
-    const fundingIdempotencyKey = `logistics-booking:${booking.id}:online-wallet:v1`;
 
-    // Acquire the booking row's payment-processing state before touching the
-    // wallet. Customer cancellation locks the same row and is therefore unable
-    // to race the wallet debit/escrow confirmation pair.
-    const begun = await serviceClient.rpc("begin_logistics_booking_online_payment", {
+    // This database function locks the booking row for the whole wallet debit
+    // and escrow-link transaction. Cancellation locks the same row, so neither
+    // action can slip between funding and booking status confirmation.
+    const reservation = await serviceClient.rpc("reserve_logistics_booking_online_payment", {
       target_booking_id: booking.id,
       target_requester_user_id: requesterUserId,
       target_customer_wallet_id: walletId,
-      target_idempotency_key: fundingIdempotencyKey,
+      target_client_idempotency_key: paymentIdempotencyKey,
     });
-    if (begun.error) return databaseError(begun.error, id);
-    const begunData = isRecord(begun.data) ? begun.data : {};
-    if (begunData.status === "payment_reserved" && typeof begunData.escrow_hold_id === "string") {
-      return jsonResponse({
-        ok: true,
-        data: {
-          bookingId,
-          serviceRequestId: booking.service_request_id,
-          escrowHoldId: begunData.escrow_hold_id,
-          status: "payment_reserved",
-          currencyCode: booking.currency_code,
-          totalAmount: booking.total_customer_charge,
-        },
-        requestId: id,
-      });
-    }
-
-    const fundingResult = await serviceClient.rpc("fund_order_from_wallet", {
-      target_order_id: booking.order_id,
-      target_customer_wallet_id: walletId,
-      target_escrow_wallet_id: null,
-      target_source: "platform.logistics.bookings",
-      // This server-derived key is shared by retries so a successful wallet
-      // transfer is never repeated when booking projection marking is retried.
-      target_idempotency_key: fundingIdempotencyKey,
-      target_metadata: {
-        module_key: "logistics_network",
-        logistics_booking_id: booking.id,
-        service_request_id: booking.service_request_id,
-        payment_channel: "customer_wallet",
-        client_idempotency_key: paymentIdempotencyKey,
-        policy_snapshots: booking.policy_snapshots,
-      },
-    });
-    if (fundingResult.error) {
-      const reset = await serviceClient.rpc("reset_logistics_booking_payment_attempt", {
-        target_booking_id: booking.id,
-        target_requester_user_id: requesterUserId,
-        target_idempotency_key: fundingIdempotencyKey,
-        target_failure_reason: "Wallet funding failed before an escrow hold was created.",
-      });
-      if (reset.error) {
-        return jsonResponse({
-          ok: false,
-          error: "payment_reconciliation_required",
-          message: "The payment attempt is being reconciled. Retry with the same wallet to safely complete it.",
-          requestId: id,
-        }, 503);
-      }
-      return databaseError(fundingResult.error, id);
-    }
-
-    const holdId = requireUuid(fundingResult.data, "escrowHoldId");
-    const marked = await serviceClient.rpc("mark_logistics_booking_payment_reserved", {
-      target_booking_id: booking.id,
-      target_requester_user_id: requesterUserId,
-      target_escrow_hold_id: holdId,
-    });
-    if (marked.error) return databaseError(marked.error, id);
-
+    if (reservation.error) return databaseError(reservation.error, id);
+    const reservationData = isRecord(reservation.data) ? reservation.data : {};
+    const holdId = requireUuid(reservationData.escrow_hold_id, "escrowHoldId");
     return jsonResponse({
       ok: true,
       data: {
         bookingId,
         serviceRequestId: booking.service_request_id,
         escrowHoldId: holdId,
-        status: "payment_reserved",
+        status: reservationData.status === "payment_reserved" ? "payment_reserved" : "payment_reserved",
         currencyCode: booking.currency_code,
         totalAmount: booking.total_customer_charge,
+        idempotentReplay: reservationData.idempotent_replay === true,
       },
       requestId: id,
     });
