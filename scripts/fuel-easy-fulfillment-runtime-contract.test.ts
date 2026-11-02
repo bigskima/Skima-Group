@@ -106,7 +106,10 @@ Deno.test("purchased orders settle only after customer OTP; rental orders settle
   includes(customerDetails, "/runtime/fuel/orders/delivery-challenge", "customer screen requests delivery verification");
   includes(customerDetails, "/runtime/otp/delivery", "customer screen retrieves the in-app OTP challenge");
   includes(customerDetails, "/runtime/fuel/orders/verify-delivery", "customer screen verifies the order-specific OTP");
-  includes(customerDetails, "Confirm I received this fuel order", "customer must confirm the physical handover explicitly");
+  includes(customerDetails, "I have received the fuel — get confirmation code", "customer must explicitly request the order-specific verification code");
+  includes(customerDetails, "Confirm delivery", "customer must submit a distinct confirmation action after viewing the code");
+  includes(customerDetails, "TextInput", "customer can review and enter the delivery OTP");
+  includes(customerDetails, "Check that the correct fuel and quantity are physically with you", "customer is instructed to inspect the delivered order before confirming");
   excludes(customerDetails, 'stageKey: "completed"', "customer cannot directly close or settle their own order");
   includes(customerDetails, "rental container return is still open", "rental handover verification does not prematurely settle the rental");
 });
