@@ -21,7 +21,7 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
     const handle = setTimeout(() => setDebouncedSearch(search), 260);
     return () => clearTimeout(handle);
   }, [search]);
-  const query = useQuery({
+  const query = useQuery<Place[]>({
     queryKey: ["skima-logistics", "geography-search", debouncedSearch.toLowerCase()],
     enabled: status === "authenticated" && !selected && debouncedSearch.length >= 2,
     queryFn: ({ signal }) => api.get(
