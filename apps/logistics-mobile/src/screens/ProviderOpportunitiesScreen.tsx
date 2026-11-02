@@ -83,7 +83,7 @@ export function ProviderOpportunitiesScreen() {
       locationName(snapshot?.destination),
     ].some((part) => part.toLowerCase().includes(query));
   }), [opportunitiesQuery.data, filter, search]);
-  const pending = companies.isPending || (Boolean(organizationId) && opportunitiesQuery.isPending);
+  const pending = companies.isPending || (Boolean(organizationId) && (opportunitiesQuery.isPending || offersQuery.isPending || currencies.isPending));
   const refresh = () => Promise.all([companies.refetch(), opportunitiesQuery.refetch(), offersQuery.refetch(), currencies.refetch()]);
 
   const submitOffer = useMutation({
@@ -150,6 +150,8 @@ export function ProviderOpportunitiesScreen() {
           <StatePanel title="Opportunities unavailable" description="We could not load your company’s matched requests." retry={() => void refresh()} />
         ) : !company ? (
           <StatePanel title="Register your company first" description="Complete company registration, service configuration and geographic coverage before viewing the provider inbox." />
+        ) : offersQuery.error || currencies.error ? (
+          <StatePanel title="Quote tools unavailable" description="The company quote and currency data could not be loaded. Refresh before responding to a customer." retry={() => void refresh()} />
         ) : !verified ? (
           <Card variant="warning" padding="lg">
             <View style={[styles.iconBadge, { backgroundColor: palette.warningSoft }]}><ShieldCheck color={palette.warning} size={23} /></View>
@@ -269,11 +271,6 @@ export function ProviderOpportunitiesScreen() {
 function RouteLine({ color, label }: { color: string; label: string }) {
   const { palette } = useAppTheme();
   return <View style={styles.routeLine}><View style={[styles.routeDot, { backgroundColor: color }]} /><Text style={[styles.routeLabel, { color: palette.ink }]} numberOfLines={1}>{label}</Text></View>;
-}
-function dateLabel(value: string | null) {
-  if (!value) return "Recently matched";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "Recently matched" : new Intl.DateTimeFormat("en-NG", { day: "numeric", month: "short" }).format(parsed);
 }
 const styles = StyleSheet.create({
   content: { gap: spacing.md },
