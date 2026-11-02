@@ -66,7 +66,8 @@ export function FuelOrderDetailsScreen() {
         idempotencyKey: idempotencyKey("fuel-delivery-challenge", orderId),
         metadata: { customer_confirmed_physical_handover: true },
       });
-      const challengeData = nestedRecord(challengeResult, "data") ?? challengeResult;
+      const challengeEnvelope = responseRecord(challengeResult);
+      const challengeData = responseRecord(challengeEnvelope?.data) ?? challengeEnvelope;
       const challengeId = firstString(challengeData, ["challenge_id", "challengeId", "id"]);
       if (!challengeId) throw new Error("SKIMA could not create a delivery verification challenge for this order.");
 
@@ -75,7 +76,8 @@ export function FuelOrderDetailsScreen() {
         idempotencyKey: idempotencyKey("fuel-delivery-code", challengeId),
         source: "skima.fuel.mobile",
       });
-      const deliveryData = nestedRecord(deliveryResult, "data") ?? deliveryResult;
+      const deliveryEnvelope = responseRecord(deliveryResult);
+      const deliveryData = responseRecord(deliveryEnvelope?.data) ?? deliveryEnvelope;
       const code = firstString(deliveryData, ["code"]);
       if (!code) throw new Error("The secure in-app delivery confirmation code is unavailable. Refresh and try again.");
 
@@ -278,6 +280,12 @@ function DetailRow({ icon, label, value }: { icon: ReactNode; label: string; val
       <Text style={[styles.detailValue, { color: palette.ink }]}>{value}</Text>
     </View>
   );
+}
+
+function responseRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 function humanize(value: string): string {
