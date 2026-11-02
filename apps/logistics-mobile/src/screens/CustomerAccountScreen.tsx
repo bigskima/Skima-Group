@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { ChevronRight, CircleHelp, LogOut, Moon, ShieldCheck, Sun, UserRound } from "lucide-react-native";
-import { Alert, StyleSheet, Text, View, type ReactNode } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View, type ReactNode } from "react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -54,12 +54,13 @@ function PressableRow({ icon, title, subtitle, action, disabled, onPress }: {
 }) {
   const { palette } = useAppTheme();
   return (
-    <View style={[styles.preferenceRow, { backgroundColor: palette.surface, borderColor: palette.border, opacity: disabled ? 0.55 : 1 }]}>
+    <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress}
+      style={({ pressed }) => [styles.preferenceRow, { backgroundColor: palette.surface, borderColor: palette.border, opacity: disabled ? 0.55 : pressed ? 0.78 : 1 }]}>
       <View style={[styles.preferenceIcon, { backgroundColor: palette.brandSoft }]}>{icon}</View>
       <View style={styles.preferenceCopy}><Text style={[styles.preferenceTitle, { color: palette.ink }]}>{title}</Text><Text style={[styles.preferenceSubtitle, { color: palette.muted }]}>{subtitle}</Text></View>
       {disabled ? <Text style={[styles.coming, { color: palette.muted }]}>{action}</Text> : <Text style={[styles.action, { color: palette.brand }]}>{action}</Text>}
       {!disabled ? <ChevronRight color={palette.muted} size={16} /> : null}
-    </View>
+    </Pressable>
   );
 }
 const styles = StyleSheet.create({
