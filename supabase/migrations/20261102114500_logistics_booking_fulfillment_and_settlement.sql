@@ -399,8 +399,9 @@ begin
         updated_at = timezone('utc', now())
     where id = booking_record.order_id;
   elsif booking_record.payment_mode = 'offline' then
-    if booking_record.offline_fee_transaction_id is null then
-      raise exception 'offline booking fees must be confirmed before delivery completion';
+    if (booking_record.customer_booking_fee_amount + booking_record.provider_receival_fee_amount) > 0
+      and booking_record.offline_fee_transaction_id is null then
+      raise exception 'configured offline booking fees must be confirmed before delivery completion';
     end if;
     -- The provider receives the delivery price offline. The platform already
     -- collected the customer booking fee and provider receival fee at confirmation.
