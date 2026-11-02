@@ -1075,8 +1075,8 @@ begin
   where id = target_parent_offer_id
   for update;
   if not found then raise exception 'offer to counter was not found'; end if;
-  if parent_offer.status not in ('submitted', 'countered') then
-    raise exception 'this offer is no longer open for negotiation';
+  if parent_offer.status <> 'submitted' then
+    raise exception 'only the latest open offer can be negotiated';
   end if;
   if target_delivery_price_minor is null or target_delivery_price_minor <= 0 then
     raise exception 'counteroffer must be a positive minor-unit amount';
@@ -1098,17 +1098,33 @@ begin
   end if;
 
   if auth.uid() = (select requester_user_id from public.logistics_job_requests where id = parent_offer.job_id) then
+    if parent_offer.offer_type = 'customer_counter' then
+      raise exception 'the customer cannot counter their own latest offer';
+    end if;
     offer_type_value := 'customer_counter';
   elsif public.can_manage_logistics_company(parent_offer.organization_id)
     or public.has_permission('business.logistics.offers.manage', parent_offer.organization_id) then
+    if parent_offer.offer_type in ('provider_quote', 'provider_counter') then
+      raise exception 'the provider cannot counter their own latest offer';
+    end if;
     offer_type_value := 'provider_counter';
   else
     raise exception 'only the customer or matched provider may negotiate this offer';
   end if;
 
   if exists (select 1 from public.logistics_offers where created_by = auth.uid() and idempotency_key = target_idempotency_key) then
-    select id into new_offer_id from public.logistics_offers
-    where created_by = auth.uid() and idempotency_key = target_idempotency_key;
+    select existing.id into new_offer_id
+    from public.logistics_offers existing
+    where existing.created_by = auth.uid()
+      and existing.idempotency_key = target_idempotency_key
+      and existing.parent_offer_id = parent_offer.id
+      and existing.offer_type = offer_type_value
+      and existing.currency_code = target_currency_code
+      and existing.delivery_price_minor = target_delivery_price_minor
+      and existing.terms = target_terms;
+    if new_offer_id is null then
+      raise exception 'idempotency key was reused with different counteroffer details';
+    end if;
     return new_offer_id;
   end if;
 
@@ -1185,9 +1201,16 @@ begin
   returning id into message_id;
 
   if message_id is null then
-    select id into message_id
-    from public.logistics_negotiation_messages
-    where sender_user_id = auth.uid() and idempotency_key = target_idempotency_key;
+    select existing.id into message_id
+    from public.logistics_negotiation_messages existing
+    where existing.sender_user_id = auth.uid()
+      and existing.idempotency_key = target_idempotency_key
+      and existing.opportunity_id = opportunity.id
+      and existing.offer_id is not distinct from target_offer_id
+      and existing.message = btrim(target_message);
+    if message_id is null then
+      raise exception 'idempotency key was reused with different negotiation message details';
+    end if;
   end if;
 
   return message_id;
@@ -1211,16 +1234,6 @@ begin
     raise exception 'valid idempotency key is required';
   end if;
 
-  if exists (
-    select 1
-    from public.logistics_job_events event_record
-    where event_record.idempotency_key = target_idempotency_key || ':event'
-      and event_record.metadata->>'offer_id' = target_offer_id::text
-      and event_record.event_type = 'logistics.offer.selected'
-  ) then
-    return target_offer_id;
-  end if;
-
   select * into selected_offer
   from public.logistics_offers
   where id = target_offer_id
@@ -1232,14 +1245,32 @@ begin
   where id = selected_offer.job_id
   for update;
 
+  if exists (
+    select 1
+    from public.logistics_job_events event_record
+    where event_record.job_id = job.id
+      and event_record.idempotency_key = target_idempotency_key || ':event'
+      and event_record.event_type = 'logistics.offer.selected'
+  ) then
+    if exists (
+      select 1 from public.logistics_job_events event_record
+      where event_record.job_id = job.id
+        and event_record.idempotency_key = target_idempotency_key || ':event'
+        and event_record.metadata->>'offer_id' = target_offer_id::text
+    ) then
+      return target_offer_id;
+    end if;
+    raise exception 'idempotency key was reused to select a different offer';
+  end if;
+
   if job.requester_user_id <> auth.uid() then
     raise exception 'only the job customer may select a provider offer';
   end if;
   if job.status not in ('matching', 'offers_received') then
     raise exception 'job is not accepting offer selection';
   end if;
-  if selected_offer.status not in ('submitted', 'countered') then
-    raise exception 'selected offer is no longer available';
+  if selected_offer.status <> 'submitted' then
+    raise exception 'only the latest open offer may be selected';
   end if;
   if selected_offer.expires_at is not null and selected_offer.expires_at <= timezone('utc', now()) then
     raise exception 'selected offer has expired';
