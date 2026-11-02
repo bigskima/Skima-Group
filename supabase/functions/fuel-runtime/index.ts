@@ -44,14 +44,51 @@ Deno.serve(async (request: Request): Promise<Response> => {
       return jsonResponse({ ok: false, error: "rate_limited", requestId: id }, 429);
     }
 
-    const url = new URL(request.url);
-    const routePath = request.headers.get("x-skima-runtime-path");
-    if (!routePath || !routePath.startsWith("/runtime/fuel/") || routePath.includes("..")) {
+    let moduleRequest = request;
+    let url = new URL(request.url);
+    let routePath: string | null = null;
+
+    if (request.headers.get("x-skima-runtime-envelope") === "true") {
+      let envelope: Record<string, unknown>;
+      try {
+        const parsed = await request.json();
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return jsonResponse({ ok: false, error: "invalid_module_runtime_request", requestId: id }, 400);
+        }
+        envelope = parsed as Record<string, unknown>;
+      } catch {
+        return jsonResponse({ ok: false, error: "invalid_module_runtime_request", requestId: id }, 400);
+      }
+
+      const method = envelope.method;
+      const search = envelope.search;
+      const rawBody = envelope.rawBody;
+      routePath = typeof envelope.routePath === "string" ? envelope.routePath : null;
+      if (
+        (method !== "GET" && method !== "POST")
+        || typeof search !== "string"
+        || search.length > 4096
+        || (rawBody !== null && typeof rawBody !== "string")
+      ) {
+        return jsonResponse({ ok: false, error: "invalid_module_runtime_request", requestId: id }, 400);
+      }
+
+      url.search = search;
+      const forwardedHeaders = new Headers(request.headers);
+      forwardedHeaders.delete("x-skima-runtime-envelope");
+      moduleRequest = new Request(url, {
+        method,
+        headers: forwardedHeaders,
+        body: method === "GET" ? undefined : rawBody as string | null,
+      });
+    }
+
+    if (!routePath || !/^\/runtime\/fuel\/[a-zA-Z0-9/_-]+$/.test(routePath) || routePath.includes("..")) {
       return jsonResponse({ ok: false, error: "route_not_found", requestId: id }, 404);
     }
 
     return await handleFuelRuntimeRequest(
-      request,
+      moduleRequest,
       id,
       supabase,
       supabaseUrl,
