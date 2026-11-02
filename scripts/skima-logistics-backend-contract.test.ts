@@ -6,15 +6,15 @@ const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
 const moduleRouter = await Deno.readTextFile("supabase/migrations/20261102005600_fuel_module_runtime_router_and_security.sql");
 
 function requireText(source: string, fragment: string, label: string): void {
-  const normalizedSource = source.replace(/\\s+/g, " ");
-  const normalizedFragment = fragment.replace(/\\s+/g, " ");
+  const normalizedSource = source.replace(/\s+/g, " ");
+  const normalizedFragment = fragment.replace(/\s+/g, " ");
   if (!normalizedSource.includes(normalizedFragment)) {
     throw new Error(`${label}: missing required fragment: ${fragment}`);
   }
 }
 function requireNotText(source: string, fragment: string, label: string): void {
-  const normalizedSource = source.replace(/\\s+/g, " ");
-  const normalizedFragment = fragment.replace(/\\s+/g, " ");
+  const normalizedSource = source.replace(/\s+/g, " ");
+  const normalizedFragment = fragment.replace(/\s+/g, " ");
   if (normalizedSource.includes(normalizedFragment)) {
     throw new Error(`${label}: prohibited fragment found: ${fragment}`);
   }
