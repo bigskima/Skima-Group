@@ -82,7 +82,7 @@ export function ProviderOpportunitiesScreen() {
       asString(snapshot, "category_key"),
       locationName(snapshot?.pickup),
       locationName(snapshot?.destination),
-    ].some((part) => part.toLowerCase().includes(query));
+    ].filter((part): part is string => typeof part === "string").some((part) => part.toLowerCase().includes(query));
   }), [opportunitiesQuery.data, filter, search]);
   const pending = companies.isPending || (Boolean(organizationId) && (opportunitiesQuery.isPending || offersQuery.isPending || currencies.isPending));
   const refresh = () => Promise.all([companies.refetch(), opportunitiesQuery.refetch(), offersQuery.refetch(), currencies.refetch()]);
