@@ -146,7 +146,7 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
             label="Open driver workspace"
             fullWidth
             variant="secondary"
-            onPress={() => router.replace("/(driver)" as never)}
+            onPress={() => router.replace("/(provider)/driver" as never)}
           />
         ) : null}
       </View>
