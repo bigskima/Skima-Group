@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CheckCircle2, Clock3, MapPin, PackageCheck, Phone, ShieldCheck, Truck, UserRound } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Alert, Linking, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { asNumber, asString, useLogisticsQuery } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
