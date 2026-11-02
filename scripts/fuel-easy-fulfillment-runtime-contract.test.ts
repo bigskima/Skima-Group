@@ -70,12 +70,12 @@ Deno.test("customer pricing follows the selected fulfillment model", () => {
 });
 
 Deno.test("Fuel progression follows verified operational events without duplicate advance buttons", () => {
-  includes(progression, "advance_fuel_order_after_stock_reservation", "complete stock reservation auto-advances station preparation");
-  includes(progression, "advance_fuel_order_after_station_preparation", "measured fill and consumed litres auto-advance to driver readiness");
+  includes(pricing, "advance_fuel_order_after_stock_reservation", "complete stock reservation auto-advances station preparation");
+  includes(pricing, "advance_fuel_order_after_station_preparation", "measured fill and consumed litres auto-advance to driver readiness");
   includes(progression, "fuel_auto_progress_after_measured_fill", "filled-litre aggregate changes are rechecked automatically");
   includes(progression, "fuel_auto_progress_after_driver_handover_event", "the final recorded handover event auto-starts delivery");
   includes(progression, "advance_fuel_rental_after_final_inspection_event", "the final passing rental inspection auto-completes the rental lifecycle");
-  includes(progression, "drop trigger if exists fuel_auto_progress_after_driver_handover on public.fuel_container_allocations", "the earlier pre-custody-event handover trigger is removed");
+  includes(walletGate, "drop trigger if exists fuel_auto_progress_after_driver_handover on public.fuel_container_allocations", "the earlier pre-custody-event handover trigger is removed");
   excludes(station, 'stageKey: "stock_reserved"', "station does not manually advance stock reservation");
   excludes(station, 'stageKey: "station_filling"', "station does not manually start a derived filling stage");
   excludes(station, 'stageKey: "ready_for_driver"', "station does not manually advance a completed measured fill");
@@ -111,6 +111,9 @@ Deno.test("Fuel controls are consolidated into the existing Money & Revenue dash
   includes(adminRevenue, "<FuelPricingControls />", "Fuel pricing is rendered inside Money & Revenue");
   includes(adminRevenue, "Fuel products, SKIMA pricing & station overrides", "the central dashboard has a single Fuel commercial control section");
   includes(adminRevenue, "set_fuel_product_status", "Admin can globally disable or enable PMS, AGO and DPK");
+  includes(adminRevenue, "set_fuel_products_status", "Admin can enable all or disable all three Fuel products together");
+  includes(adminRevenue, "Enable all products", "Money & Revenue exposes the global enable-all action");
+  includes(adminRevenue, "Disable all products", "Money & Revenue exposes the global disable-all action");
   includes(adminRevenue, "set_fuel_fulfillment_mode_control", "Admin controls the three fulfillment modes centrally");
   includes(adminRevenue, "configure_fuel_managed_product_price", "SKIMA Managed retail pricing is configured centrally");
   includes(adminRevenue, "configure_fuel_station_price_override", "Admin overrides station prices from the same dashboard");
