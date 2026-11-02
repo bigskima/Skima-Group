@@ -185,7 +185,7 @@ Deno.test("Booking creates locked customer/provider fee snapshots from approved 
   requireText(migrationBooking, "public.resolve_financial_policy(", "universal financial policy resolver");
   requireText(migrationBooking, "policy_snapshots", "immutable booking policy snapshots");
   requireText(migrationBooking, "target_payment_mode", "payment-mode-specific policy resolution");
-  requireText(migrationBooking, "target_module_key", "policy module scoping");
+  requireText(migrationBooking, "'logistics_network'", "policy module scoping");
   requireText(migrationBooking, "offer_record.organization_id", "policy provider-tenant scoping");
   requireNotText(migrationBooking, "insert into public.financial_policy_versions", "no guessed/active fee amounts are seeded");
 });
