@@ -17,7 +17,7 @@ const migrationDriver = await Deno.readTextFile(
   "supabase/migrations/20261102120000_logistics_company_driver_fulfillment.sql",
 );
 const migrationPrePayment = await Deno.readTextFile(
-  "supabase/migrations/20261102121000_logistics_pre_payment_cancellation.sql",
+  "supabase/migrations/20261102130000_logistics_customer_prebooking_cancellation.sql",
 );
 const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationPrePayment;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
@@ -446,11 +446,11 @@ Deno.test("Customer may cancel a Logistics request only before a provider bookin
   requireText(migrationPrePayment, "perform offer.id", "cancellation locks provider offers before the request");
   requireText(migrationPrePayment, "where offer.job_id = target_job_id", "offer lock is scoped to the request");
   requireText(migrationPrePayment, "job_record.requester_user_id <> actor", "only the request owner may cancel");
-  requireText(migrationPrePayment, "job_record.status not in ('open','matching','offers_received')", "cancellation is restricted to pre-booking requests");
+  requireText(migrationPrePayment, "job_record.status not in ('open', 'matching', 'offers_received')", "cancellation is restricted to pre-booking requests");
   requireText(migrationPrePayment, "where booking.job_id = job_record.id", "any provider booking blocks request-only cancellation");
   requireText(migrationPrePayment, "update public.logistics_job_opportunities", "matched provider opportunities are withdrawn");
   requireText(migrationPrePayment, "update public.logistics_offers", "open provider offers are withdrawn");
-  requireText(migrationPrePayment, "logistics.job.cancelled", "append-only request cancellation event");
+  requireText(migrationPrePayment, "logistics.job.customer_cancelled", "append-only request cancellation event");
   requireText(migrationPrePayment, "existing_event.actor_user_id is distinct from actor", "cancellation idempotency is actor-bound");
   const jobCancellation = migrationPrePayment.slice(
     migrationPrePayment.indexOf("create or replace function public.cancel_logistics_job"),
@@ -464,7 +464,7 @@ Deno.test("Customer may cancel a Logistics request only before a provider bookin
 Deno.test("Customer may cancel an unpaid booking but not a paid or funded booking", () => {
   requireText(migrationPrePayment, "public.cancel_logistics_booking_before_payment", "unpaid booking cancellation RPC");
   requireText(migrationPrePayment, "booking_record.requester_user_id <> actor", "booking owner check");
-  requireText(migrationPrePayment, "booking_record.status not in ('awaiting_payment','awaiting_offline_confirmation')", "only unpaid booking statuses are cancellable");
+  requireText(migrationPrePayment, "booking_record.status not in ('awaiting_payment', 'awaiting_offline_confirmation')", "only unpaid booking statuses are cancellable");
   requireText(migrationPrePayment, "booking_record.escrow_hold_id is not null", "escrow hold blocks cancellation");
   requireText(migrationPrePayment, "booking_record.payment_transaction_id is not null", "online payment blocks cancellation");
   requireText(migrationPrePayment, "booking_record.offline_fee_transaction_id is not null", "offline fee transaction blocks cancellation");
