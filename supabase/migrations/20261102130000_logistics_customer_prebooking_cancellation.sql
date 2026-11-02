@@ -28,6 +28,14 @@ begin
     raise exception 'job, cancellation reason and valid idempotency key are required';
   end if;
 
+  -- Use the same offer -> job lock order as provider booking creation.
+  -- This avoids racing a selected offer into a booking while the customer withdraws.
+  perform offer.id
+  from public.logistics_offers offer
+  where offer.job_id = target_job_id
+  order by offer.id
+  for update;
+
   select * into job_record
   from public.logistics_job_requests
   where id = target_job_id
@@ -47,6 +55,10 @@ begin
   if found then
     if existing_event.event_type <> 'logistics.job.customer_cancelled' then
       raise exception 'cancellation idempotency key was used for a different action';
+    end if;
+    if existing_event.actor_user_id is distinct from actor
+      or existing_event.metadata->>'reason' is distinct from btrim(target_reason) then
+      raise exception 'job cancellation idempotency key was reused with different details';
     end if;
     return job_record.id;
   end if;
@@ -116,7 +128,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   actor uuid := auth.uid();
   booking_record public.logistics_bookings%rowtype;
@@ -232,7 +244,7 @@ begin
 
   return booking_record.id;
 end;
-$;
+$$;
 
 revoke all on function public.cancel_logistics_booking_before_payment(uuid,text,text) from public, anon;
 grant execute on function public.cancel_logistics_booking_before_payment(uuid,text,text) to authenticated, service_role;
@@ -277,7 +289,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   booking_record public.logistics_bookings%rowtype;
   wallet_record public.wallet_accounts%rowtype;
@@ -371,7 +383,7 @@ begin
     'idempotent_replay', false
   );
 end;
-$;
+$$;
 
 create or replace function public.reset_logistics_booking_payment_attempt(
   target_booking_id uuid,
@@ -383,7 +395,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   booking_record public.logistics_bookings%rowtype;
 begin
@@ -444,7 +456,7 @@ begin
 
   return booking_record.id;
 end;
-$;
+$$;
 
 create or replace function public.mark_logistics_booking_payment_reserved(
   target_booking_id uuid,
@@ -455,7 +467,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   booking_record public.logistics_bookings%rowtype;
   hold_record public.escrow_holds%rowtype;
@@ -516,7 +528,7 @@ begin
 
   return booking_record.id;
 end;
-$;
+$$;
 
 revoke all on function public.begin_logistics_booking_online_payment(uuid,uuid,uuid,text) from public, anon, authenticated;
 revoke all on function public.reset_logistics_booking_payment_attempt(uuid,uuid,text,text) from public, anon, authenticated;
