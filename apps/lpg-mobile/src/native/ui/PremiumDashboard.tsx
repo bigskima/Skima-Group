@@ -19,7 +19,7 @@ import {
   WalletCards,
   Zap,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import {
   Pressable,
@@ -32,6 +32,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { domainQueries, useEntityMediaLinks } from "../api/domains";
+import { useStorefrontData } from "../api/store";
 import {
   displayStatus,
   displaySubtitle,
@@ -62,6 +63,70 @@ export function CustomerDashboard() {
   const active = domainQueries.activeOrders();
   const locations = domainQueries.locations();
   const wallets = domainQueries.wallets();
+  const storefront = useStorefrontData();
+  const marketplacePreview = useMemo(() => {
+    const settings = storefront.activeSettings;
+    const moduleId = typeof storefront.storeModule?.id === "string" ? storefront.storeModule.id : null;
+    if (!settings || !moduleId) return [];
+    const now = Date.now();
+    return (storefront.items.data ?? [])
+      .filter((item) =>
+        item.module_id === moduleId &&
+        item.organization_id === settings.organization_id &&
+        item.status === "active" &&
+        metadataString(item, "sales_channel") === "skima_store"
+      )
+      .flatMap((item) => {
+        const itemId = recordId(item);
+        if (!itemId) return [];
+        const variants = (storefront.variants.data ?? []).filter((variant) =>
+          variant.item_id === itemId && variant.status === "active"
+        );
+        const prices = (storefront.prices.data ?? []).filter((price) =>
+          price.item_id === itemId &&
+          price.currency_code === settings.currency_code &&
+          price.status === "active" &&
+          isEffectiveRecord(price, now)
+        );
+        const availability = (storefront.availability.data ?? []).filter((rule) =>
+          rule.item_id === itemId && rule.status === "active" && isEffectiveRecord(rule, now)
+        );
+        const basePrice = prices.find((price) => !price.variant_id) ?? null;
+        const variantPrice = variants
+          .map((variant) => prices.find((price) => price.variant_id === variant.id) ?? basePrice)
+          .find(Boolean) ?? null;
+        const hasPrice = variants.length
+          ? variants.some((variant) => Boolean(prices.find((price) => price.variant_id === variant.id) ?? basePrice))
+          : Boolean(basePrice);
+        const baseStock = availability.find((rule) => !rule.variant_id) ?? null;
+        const hasStock = variants.length
+          ? variants.some((variant) => {
+              const rule = availability.find((candidate) => candidate.variant_id === variant.id) ?? baseStock;
+              return Boolean(rule && isAvailableStockRecord(rule));
+            })
+          : Boolean(baseStock && isAvailableStockRecord(baseStock));
+        if (!hasPrice || !hasStock) return [];
+        const media = (storefront.media.data ?? [])
+          .filter((record) => record.item_id === itemId && record.status === "active")
+          .sort((left, right) => firstNumber(left, ["display_order"]) - firstNumber(right, ["display_order"]));
+        return [{
+          id: itemId,
+          name: displayTitle(item),
+          amount: firstNumber(basePrice ?? variantPrice, ["amount"]) ?? 0,
+          currency: settings.currency_code,
+          imageAssetId: firstString(media[0], ["media_asset_id", "mediaAssetId"]),
+        }];
+      })
+      .slice(0, 2);
+  }, [
+    storefront.activeSettings,
+    storefront.storeModule?.id,
+    storefront.items.data,
+    storefront.variants.data,
+    storefront.prices.data,
+    storefront.availability.data,
+    storefront.media.data,
+  ]);
   const location = locations.data?.[0];
   const locationLatitude = firstNumber(location, ["latitude"]);
   const locationLongitude = firstNumber(location, ["longitude"]);
@@ -107,7 +172,7 @@ export function CustomerDashboard() {
         };
 
   return (
-    <MobileHome workspace="customer" context="Refill and delivery">
+    <MobileHome workspace="customer" context="Everyday services">
       <GuideTarget targetKey="customer.location">
         <CustomerLocation location={location} />
       </GuideTarget>
@@ -407,7 +472,7 @@ function MobileHome({ workspace, context, children }: {
                 </Pressable>
               </View>
               <Text style={[styles.aiModalBody, { color: palette.muted }]}>
-                Get help with your LPG refill, cylinder, delivery status or your latest SKIMA order.
+                Get help with your SKIMA orders, bills, marketplace purchases, refills or deliveries.
               </Text>
               <AiAssistantLauncher workspace="customer" onOpen={() => setShowAi(false)} />
             </View>
@@ -506,18 +571,21 @@ function CustomerServiceCards({
         accessibilityRole="button"
         accessibilityLabel={primary.label}
         onPress={() => router.push(primary.href as never)}
-        style={[styles.customerServiceCard, { borderColor: colors.brand }]}
+        style={[styles.customerServiceCard, { backgroundColor: palette.surface, borderColor: palette.border }]}
       >
-        <LinearGradient colors={live ? ["#E7283A", "#A90A19"] : ["#F3283A", "#B40B1B"]} style={StyleSheet.absoluteFill} />
-        <View style={styles.customerServiceIcon}><Icon color="#FFFFFF" size={23} /></View>
+        <View style={[styles.customerServiceIcon, { backgroundColor: palette.brandSoft }]}>
+          <Icon color={colors.brand} size={23} />
+        </View>
         <View style={styles.customerServiceCopy}>
-          <Text style={styles.customerServiceEyebrow}>{primary.eyebrow.toUpperCase()}</Text>
-          <Text numberOfLines={2} style={styles.customerServiceTitle}>{live ? "Track refill" : primary.title}</Text>
-          <Text numberOfLines={2} style={styles.customerServiceBody}>
+          <Text style={[styles.customerServiceEyebrow, { color: colors.brand }]}>{primary.eyebrow.toUpperCase()}</Text>
+          <Text numberOfLines={2} style={[styles.customerServiceTitle, { color: palette.ink }]}>{live ? "Track refill" : primary.title}</Text>
+          <Text numberOfLines={2} style={[styles.customerServiceBody, { color: palette.muted }]}>
             {live ? "Follow pickup, refill and return." : primary.body}
           </Text>
         </View>
-        <View style={styles.customerServiceArrow}><ChevronRight color={colors.brandDark} size={17} /></View>
+        <View style={[styles.customerServiceArrow, { backgroundColor: palette.soft }]}>
+          <ChevronRight color={palette.ink} size={17} />
+        </View>
       </Pressable>
       <CustomerBillsCard />
       <Pressable
@@ -545,15 +613,16 @@ function CustomerBillsCard() {
       accessibilityRole="button"
       accessibilityLabel="Pay electricity, airtime and data bills"
       onPress={() => router.push("/(customer)/bills")}
-      style={[styles.customerServiceCard, { backgroundColor: palette.surface, borderColor: palette.border }]}
+      style={[styles.customerServiceCard, { backgroundColor: colors.brand, borderColor: colors.brand }]}
     >
-      <View style={[styles.customerServiceIcon, { backgroundColor: palette.brandSoft }]}><Zap color={colors.brand} size={25} /></View>
+      <LinearGradient colors={["#E7283A", "#A90A19"]} style={StyleSheet.absoluteFill} />
+      <View style={[styles.customerServiceIcon, { backgroundColor: "rgba(255,255,255,.16)" }]}><Zap color="#FFFFFF" size={25} /></View>
       <View style={styles.customerServiceCopy}>
-        <Text style={[styles.customerServiceEyebrow, { color: colors.brand }]}>EVERYDAY BILLS</Text>
-        <Text style={[styles.customerServiceTitle, { color: palette.ink }]}>Pay bills</Text>
-        <Text style={[styles.customerServiceBody, { color: palette.muted }]}>Electricity, airtime, data and more.</Text>
+        <Text style={styles.customerServiceEyebrow}>EVERYDAY BILLS</Text>
+        <Text style={styles.customerServiceTitle}>Pay bills</Text>
+        <Text style={styles.customerServiceBody}>Electricity, airtime, data and more.</Text>
       </View>
-      <View style={[styles.customerServiceArrow, { backgroundColor: palette.soft }]}><ChevronRight color={palette.ink} size={17} /></View>
+      <View style={styles.customerServiceArrow}><ChevronRight color={colors.brandDark} size={17} /></View>
     </Pressable>
   );
 }
@@ -1076,6 +1145,28 @@ function humanStatus(value: string) {
   return labels[key] ?? key.replace(/_/g, " ").replace(/^./, (char) => char.toUpperCase());
 }
 
+function metadataString(record: PlatformRecord, key: string) {
+  const metadata = record.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : null;
+}
+
+function isEffectiveRecord(record: PlatformRecord, now: number) {
+  const from = typeof record.effective_from === "string" ? Date.parse(record.effective_from) : null;
+  const until = typeof record.effective_until === "string" ? Date.parse(record.effective_until) : null;
+  return (from === null || !Number.isFinite(from) || from <= now) &&
+    (until === null || !Number.isFinite(until) || until > now);
+}
+
+function isAvailableStockRecord(record: PlatformRecord) {
+  if (record.availability_status !== "available" || record.status !== "active") return false;
+  const stock = firstNumber(record, ["stock_quantity"]);
+  const reserved = firstNumber(record, ["reserved_quantity"]);
+  return record.stock_quantity === null || record.stock_quantity === undefined ||
+    stock - reserved > 0;
+}
+
 const styles = StyleSheet.create({
   page: { flexGrow: 1, paddingBottom: 112 },
   mobileFrame: { width: "100%", alignSelf: "center", paddingHorizontal: 18 },
@@ -1115,10 +1206,16 @@ const styles = StyleSheet.create({
   customerActionIcon: { width: 64, height: 64, alignItems: "center", justifyContent: "center", marginLeft: 8, borderRadius: 32, backgroundColor: "rgba(255,255,255,.14)" },
   customerPrimaryStack: { gap: 10 },
   customerServiceGrid: { flexDirection: "row", gap: 10 },
+  marketplacePreview: { gap: 0 },
+  marketplacePreviewRow: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 7 },
+  marketplaceThumb: { width: 48, height: 48, borderRadius: 16, overflow: "hidden" },
+  marketplaceCopy: { flex: 1, minWidth: 0, gap: 3 },
+  marketplaceName: { fontSize: 12, fontWeight: "900" },
+  marketplacePrice: { fontSize: 11, fontWeight: "800" },
   customerServiceCard: { flex: 1, minHeight: 154, overflow: "hidden", padding: 14, borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, justifyContent: "space-between" },
   customerServiceIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,.16)" },
   customerServiceCopy: { gap: 4, marginTop: 10 },
-  customerServiceEyebrow: { color: "rgba(255,255,255,.68)", fontSize: 7.5, fontWeight: "900", letterSpacing: 1 },
+  customerServiceEyebrow: { color: "rgba(255,255,255,.72)", fontSize: 7.5, fontWeight: "900", letterSpacing: 1 },
   customerServiceTitle: { color: "#FFFFFF", fontSize: 17, lineHeight: 20, fontWeight: "900", letterSpacing: -0.3 },
   customerServiceBody: { color: "rgba(255,255,255,.76)", fontSize: 10, lineHeight: 14 },
   customerServiceArrow: { position: "absolute", right: 12, top: 12, width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF" },
