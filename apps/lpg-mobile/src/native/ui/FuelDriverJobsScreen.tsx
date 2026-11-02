@@ -141,7 +141,7 @@ export function FuelDriverJobsScreen() {
       );
     }
     if (currentStage === "out_for_delivery") {
-      return <AppButton label="Confirm customer delivery" fullWidth loading={busyOrderId === selectedOrderId || confirmDelivery.isPending || changeStage.isPending} onPress={() => void completeCustomerHandover()} icon={<CheckCircle2 color="#FFFFFF" size={18} />} />;
+      return <AppButton label="Confirm customer delivery" fullWidth loading={busyOrderId === selectedOrderId || confirmDelivery.isPending} onPress={() => void completeCustomerHandover()} icon={<CheckCircle2 color="#FFFFFF" size={18} />} />;
     }
     if (currentStage === "return_due") {
       return <AppButton label="Confirm all rental containers received" fullWidth loading={busyOrderId === selectedOrderId || confirmRentalReturn.isPending} onPress={() => void confirmCustomerReturn()} icon={<RotateCcw color="#FFFFFF" size={18} />} />;
