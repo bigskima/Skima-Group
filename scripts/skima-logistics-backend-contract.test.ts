@@ -10,7 +10,10 @@ const migrationBooking = await Deno.readTextFile(
 const migrationFulfillment = await Deno.readTextFile(
   "supabase/migrations/20261102114500_logistics_booking_fulfillment_and_settlement.sql",
 );
-const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment;
+const migrationWalletFunding = await Deno.readTextFile(
+  "supabase/migrations/20261102115000_logistics_provider_wallet_funding.sql",
+);
+const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
 const moduleRouter = await Deno.readTextFile("supabase/migrations/20261102005600_fuel_module_runtime_router_and_security.sql");
@@ -273,6 +276,32 @@ Deno.test("Offline delivery completion never runs online commission or escrow se
   );
 });
 
+Deno.test("Company-owner funding transfers into the shared partner wallet through the immutable ledger", () => {
+  requireText(migrationWalletFunding, "auth.role() <> 'service_role'", "wallet funding is service-role only");
+  requireText(migrationWalletFunding, "membership.membership_type = 'owner'", "only an active company owner can fund the company wallet");
+  requireText(migrationWalletFunding, "wallet_type = 'customer'", "funding source is a customer wallet");
+  requireText(migrationWalletFunding, "owner_entity_type = 'user'", "funding source must be user-owned");
+  requireText(migrationWalletFunding, "owner_entity_id = target_customer_user_id", "funding source must belong to the acting owner");
+  requireText(migrationWalletFunding, "target_amount <> trunc(target_amount, currency_decimals)", "wallet funding follows currency decimal precision");
+  requireText(migrationWalletFunding, "public.ensure_wallet_account(", "company uses the shared wallet-account engine");
+  requireText(migrationWalletFunding, "public.post_financial_transaction(", "funding uses the immutable double-entry ledger");
+  requireText(migrationWalletFunding, "'platform.logistics.provider_wallet_funding'", "dedicated funding idempotency scope");
+  requireText(migrationWalletFunding, "'direction', 'debit'", "owner wallet debit");
+  requireText(migrationWalletFunding, "'direction', 'credit'", "company wallet credit");
+  requireText(migrationWalletFunding, "from public, anon, authenticated", "no direct client execution of provider funding RPC");
+  requireText(migrationWalletFunding, "to service_role", "server-only execution grant");
+  requireText(runtime, '"/runtime/logistics/company/wallet/fund"', "provider wallet funding API route");
+  requireText(runtime, 'supabase.rpc("can_manage_logistics_company"', "caller tenant-management permission check");
+  requireText(runtime, 'serviceClient.rpc("fund_logistics_provider_wallet_from_customer_wallet"', "service-side balanced transfer");
+  requireText(runtime, '.eq("owner_entity_id", requesterUserId)', "funding source wallet belongs to authenticated user");
+});
+
+Deno.test("Offline receival fee collection and company-wallet funding serialize wallet balance changes", () => {
+  requireText(migrationFulfillment, "order by wallet.id", "stable wallet lock ordering for offline fee collection");
+  requireText(migrationFulfillment, "for update", "wallet row locks during offline fee collection");
+  requireText(migrationWalletFunding, "order by wallet.id", "stable wallet lock ordering for funding");
+  requireText(migrationWalletFunding, "for update", "wallet row locks during provider funding");
+});
 Deno.test("Free provider opportunity access has no lead unlock charge", () => {
   requireText(migration, "logistics_job_opportunities", "provider opportunities are materialized");
   requireNotText(migration.toLowerCase(), "lead_unlock_fee", "no lead unlock fee");
