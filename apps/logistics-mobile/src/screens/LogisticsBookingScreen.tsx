@@ -2,7 +2,7 @@ import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, ArrowLeft, CheckCircle2, LockKeyhole, ShieldCheck, WalletCards } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Alert, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { asNumber, asString, useLogisticsQuery } from "../api/logistics";
@@ -38,6 +38,7 @@ export function LogisticsBookingScreen() {
   ), [walletsQuery.data, customerId, currency]);
   const [selectedWalletId, setSelectedWalletId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const cancelAttemptRef = useRef<string | null>(null);
 
   const walletBalances = balancesQuery.data ?? [];
   const walletWithBalance = customerWallets.map((wallet) => ({
@@ -73,6 +74,29 @@ export function LogisticsBookingScreen() {
     onSuccess: async () => { setError(null); await bookings.refetch(); },
     onError: (cause) => setError(cause instanceof Error ? cause.message : "Offline fee confirmation could not be completed."),
   });
+  const cancelBooking = useMutation({
+    mutationFn: async () => {
+      if (!bookingId) throw new Error("The booking identifier is missing.");
+      const idempotencyKey = cancelAttemptRef.current ?? createClientIdempotencyKey("logistics.booking.cancel", bookingId);
+      cancelAttemptRef.current = idempotencyKey;
+      return api.post("/runtime/logistics/bookings/cancel", {
+        bookingId,
+        reason: "Cancelled by the customer before payment or offline fees were collected.",
+        idempotencyKey,
+      }, z.string().uuid());
+    },
+    onSuccess: async () => {
+      setError(null);
+      cancelAttemptRef.current = null;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["skima-logistics", "bookings"] }),
+        queryClient.invalidateQueries({ queryKey: ["skima-logistics", "jobs"] }),
+        bookings.refetch(),
+      ]);
+    },
+    onError: (cause) => setError(cause instanceof Error ? cause.message : "The booking could not be cancelled."),
+  });
+
   const confirmDelivery = useMutation({
     mutationFn: async () => api.post("/runtime/logistics/bookings/delivery/confirm", {
       bookingId,
@@ -88,7 +112,7 @@ export function LogisticsBookingScreen() {
     onError: (cause) => setError(cause instanceof Error ? cause.message : "Delivery confirmation could not be completed."),
   });
   const refresh = async () => { await Promise.all([bookings.refetch(), walletsQuery.refetch(), balancesQuery.refetch()]); };
-  const isWorking = payOnline.isPending || confirmOffline.isPending || confirmDelivery.isPending;
+  const isWorking = payOnline.isPending || confirmOffline.isPending || confirmDelivery.isPending || cancelBooking.isPending;
 
   return (
     <Screen eyebrow="BOOKING" title="Booking & payment" subtitle="Review the total and complete the payment step securely."
@@ -118,6 +142,42 @@ export function LogisticsBookingScreen() {
             {paymentMode === "offline" ? <AmountLine label="Provider receival fee" value="Paid by the company" subtle /> : null}
             {paymentMode === "online_wallet" && (asNumber(booking, "provider_commission_amount") ?? 0) > 0 ? <AmountLine label="Provider commission" value="Deducted from provider proceeds" subtle /> : null}
           </Card>
+
+          {status === "awaiting_payment" || status === "awaiting_offline_confirmation" ? (
+            <Card variant="warning" padding="lg">
+              <View style={styles.sectionHeading}>
+                <AlertCircle color={palette.warning} size={19} />
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Booking not paid yet</Text>
+              </View>
+              <Text style={[styles.sectionDescription, { color: palette.muted }]}>
+                You can cancel before online escrow is funded or before the offline booking fees are collected. Once a payment record exists, this cancellation option is no longer available.
+              </Text>
+              <AppButton
+                label="Cancel booking"
+                fullWidth
+                variant="secondary"
+                loading={cancelBooking.isPending}
+                disabled={isWorking}
+                onPress={() => Alert.alert(
+                  "Cancel this booking?",
+                  "The booking, selected offer and customer request will be closed. No wallet debit, refund or provider payout will be created.",
+                  [
+                    { text: "Keep booking", style: "cancel" },
+                    { text: "Cancel booking", style: "destructive", onPress: () => { setError(null); cancelBooking.mutate(); } },
+                  ],
+                )}
+              />
+            </Card>
+          ) : status === "cancelled" ? (
+            <Card variant="subtle" padding="lg">
+              <View style={styles.sectionHeading}>
+                <CheckCircle2 color={palette.success} size={19} />
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Booking cancelled</Text>
+              </View>
+              <Text style={[styles.sectionDescription, { color: palette.muted }]}>This booking was cancelled before payment. No refund or settlement was needed.</Text>
+              <AppButton label="Back to requests" fullWidth variant="secondary" onPress={() => router.replace("/(customer)/jobs" as never)} />
+            </Card>
+          ) : null}
 
           {paymentMode === "online_wallet" ? (
             <Card padding="lg">
