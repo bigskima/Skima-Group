@@ -950,7 +950,7 @@ returns integer
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   job public.logistics_job_requests%rowtype;
   added_count integer := 0;
@@ -1070,7 +1070,7 @@ begin
 
   return added_count;
 end;
-$;
+$$;
 
 create or replace function public.create_logistics_offer(
   target_opportunity_id uuid,
@@ -1452,7 +1452,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   provider_id uuid;
 begin
@@ -1478,7 +1478,7 @@ begin
   if provider_id is null then raise exception 'logistics provider profile was not found'; end if;
   return provider_id;
 end;
-$;
+$$;
 
 create or replace function public.set_logistics_provider_operational_status(
   target_organization_id uuid,
@@ -1490,7 +1490,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   provider_id uuid;
 begin
@@ -1518,7 +1518,7 @@ begin
   if provider_id is null then raise exception 'logistics provider profile was not found'; end if;
   return provider_id;
 end;
-$;
+$$;
 
 create or replace function public.upsert_logistics_service_category(
   target_key text,
