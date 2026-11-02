@@ -659,6 +659,10 @@ begin
     if existing_event.event_type <> 'logistics.booking.delivery_submitted' then
       raise exception 'booking idempotency key was used for a different action';
     end if;
+    if existing_event.metadata->>'recipient_name' is distinct from recipient_name
+      or existing_event.metadata->>'delivery_note' is distinct from delivery_note then
+      raise exception 'delivery submission idempotency key was reused with different hand-off details';
+    end if;
     if not actor_is_company and not exists (
       select 1
       from public.logistics_booking_driver_assignments assignment
