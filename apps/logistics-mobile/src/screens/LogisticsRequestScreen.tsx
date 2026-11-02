@@ -19,6 +19,7 @@ import { StatePanel } from "../ui/StatePanel";
 type Place = Record<string, unknown>;
 type Category = Record<string, unknown>;
 const CARGO_TYPES = [
+  { key: "", label: "Not specified" },
   { key: "general", label: "General goods" },
   { key: "documents", label: "Documents" },
   { key: "fragile", label: "Fragile items" },
@@ -41,13 +42,13 @@ export function LogisticsRequestScreen() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [weight, setWeight] = useState("");
-  const [cargoType, setCargoType] = useState<string>("general");
+  const [cargoType, setCargoType] = useState<string>("");
   const [customerName, setCustomerName] = useState(context?.profile?.display_name ?? "");
   const [customerPhone, setCustomerPhone] = useState("");
   const [instructions, setInstructions] = useState("");
   const [fieldError, setFieldError] = useState<string | null>(null);
 
-  const categories = (categoriesQuery.data ?? []).filter((item) => asString(item, "status") === "active");
+  const categories = useMemo(() => (categoriesQuery.data ?? []).filter((item) => asString(item, "status") === "active"), [categoriesQuery.data]);
   const selectedCategory = categories.find((item) => asString(item, "key") === categoryKey) ?? null;
 
   useEffect(() => {
@@ -83,7 +84,7 @@ export function LogisticsRequestScreen() {
     const category = asString(selectedCategory, "key");
     if (!pickupId || !destinationId || !category) { setFieldError("The selected location or service is missing an identifier. Please choose it again."); return; }
 
-    const cargo: Record<string, unknown> = { cargo_type_keys: [cargoType] };
+    const cargo: Record<string, unknown> = { cargo_type_keys: cargoType ? [cargoType] : [] };
     if (weight.trim()) cargo.weight_kg = Number(weight);
 
     try {
@@ -224,7 +225,7 @@ export function LogisticsRequestScreen() {
                 <Text style={[styles.summaryTitle, { color: palette.ink }]}>{title}</Text>
                 {description ? <Text style={[styles.summaryBody, { color: palette.muted }]}>{description}</Text> : null}
                 <View style={[styles.summaryDivider, { backgroundColor: palette.border }]} />
-                <SummaryLine label="Cargo type" value={CARGO_TYPES.find((item) => item.key === cargoType)?.label ?? "General goods"} />
+                <SummaryLine label="Cargo type" value={CARGO_TYPES.find((item) => item.key === cargoType)?.label ?? "Not specified"} />
                 {weight.trim() ? <SummaryLine label="Estimated weight" value={`${weight} kg`} /> : null}
                 <SummaryLine label="Contact" value={customerName} />
                 <SummaryLine label="Phone" value={customerPhone} />
