@@ -373,10 +373,10 @@ begin
   end;
 
   insert into public.fuel_driver_qualification_events(
-    qualification_id,event_key,before_snapshot,after_snapshot,idempotency_key
+    qualification_id,event_key,before_snapshot,after_snapshot,actor_user_id,idempotency_key
   )
   values(
-    qualification_id,event_key,before_value,to_jsonb(qualification_record),target_idempotency_key||':event'
+    qualification_id,event_key,before_value,to_jsonb(qualification_record),target_actor_user_id,target_idempotency_key||':event'
   );
 
   return qualification_id;
