@@ -5,8 +5,21 @@
     "baseUrl": ".",
     "ignoreDeprecations": "6.0",
     "paths": {
-      "@skima/frontend-core": ["../../packages/frontend-core/src/index.ts"]
+      "@skima/frontend-core": [
+        "../../packages/frontend-core/src/index.ts"
+      ],
+      "@supabase/supabase-js": [
+        "./node_modules/@supabase/supabase-js"
+      ],
+      "zod": [
+        "./node_modules/zod"
+      ]
     }
   },
-  "include": ["app", "src", "expo-env.d.ts", ".expo/types/**/*.ts"]
+  "include": [
+    "app",
+    "src",
+    "expo-env.d.ts",
+    ".expo/types/**/*.ts"
+  ]
 }
