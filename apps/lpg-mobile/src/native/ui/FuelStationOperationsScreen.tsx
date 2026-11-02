@@ -188,15 +188,17 @@ export function FuelStationOperationsScreen() {
     firstString(row, ["status"]) !== "cancelled"
   );
   const filledAllocations = existingAllocations.filter((row) => firstString(row, ["status"]) === "station_prepared");
+  const focusedFulfillmentMode = firstString(focusedOrder, ["fulfillment_mode"]) ?? "";
   const readyQualifications = (qualifications.data ?? []).filter((row) =>
+    focusedFulfillmentMode === "station_managed" &&
+    firstString(row, ["fulfillment_mode"]) === "station_managed" &&
     firstString(row, ["status"]) === "approved" &&
     firstString(row, ["product_key"]) === focusedProduct &&
     (firstNumber(row, ["maximum_load_litres"]) ?? 0) >= focusedLitres &&
     (!firstString(row, ["valid_until"]) || Date.parse(firstString(row, ["valid_until"]) ?? "") > Date.now()) &&
-    (firstString(row, ["branch_id"]) === null || firstString(row, ["branch_id"]) === stationBranchId) &&
-    (firstString(focusedOrder, ["fulfillment_mode"]) === "station_managed"
-      ? Boolean(firstString(row, ["station_managed_driver_id"]))
-      : Boolean(firstString(row, ["driver_profile_id"])))
+    firstString(row, ["branch_id"]) === stationBranchId &&
+    Boolean(firstString(row, ["station_managed_driver_id"])) &&
+    !firstString(row, ["driver_profile_id"])
   );
   const selectedQualification = readyQualifications.find((row) =>
     firstString(row, ["id"]) === selectedDriverQualificationId
@@ -450,6 +452,15 @@ export function FuelStationOperationsScreen() {
         orderId,
         stageKey: "station_handover",
         idempotencyKey: idempotencyKey("fuel-stage-station-handover", orderId),
+        metadata: { handover_recorded_for_all_containers: true },
+      });
+      // The station's completed physical handover is the departure event.
+      // Drivers do not need a second "start delivery" confirmation.
+      await changeStage.mutateAsync({
+        orderId,
+        stageKey: "out_for_delivery",
+        idempotencyKey: idempotencyKey("fuel-stage-out-for-delivery", orderId),
+        metadata: { station_confirmed_departure: true },
       });
     }, "All filled containers have been handed to the assigned driver.");
   };
@@ -548,6 +559,7 @@ export function FuelStationOperationsScreen() {
                   <Text style={[styles.muted, { color: palette.muted }]}>{focusedMode === "rental" ? "SKIMA rental containers" : "Purchased containers"} · {firstNumber(focusedOrder, ["container_count"]) ?? 0} total</Text>
                 </View>
                 <StatusPill label={humanize(focusedStage)} tone={stageTone(focusedStage)} />
+                <Text style={[styles.muted, { color: palette.muted }]}>{fulfillmentModeLabel(focusedFulfillmentMode)}</Text>
               </View>
 
               {focusedSettlementExecutionId ? (
@@ -578,17 +590,18 @@ export function FuelStationOperationsScreen() {
                 </>
               ) : null}
 
-              {focusedStage === "ready_for_driver" ? (
+              {focusedStage === "ready_for_driver" && focusedFulfillmentMode === "station_managed" ? (
                 <>
-                  <Text style={[styles.sectionLabel, { color: palette.ink }]}>Choose a qualified driver and vehicle</Text>
+                  <Text style={[styles.sectionLabel, { color: palette.ink }]}>Station Managed driver and vehicle</Text>
+                  <Text style={[styles.muted, { color: palette.muted }]}>This is your station's own driver. Select only a Station Managed driver registered to this branch and a vehicle qualified for this fuel product and load.</Text>
                   {readyQualifications.length === 0 ? (
-                    <EmptyState title="No approved Fuel driver and vehicle" description="A station or platform administrator must approve a driver and vehicle for this exact fuel product and load before dispatch." />
+                    <EmptyState title="No approved Station Managed driver" description="Approve a Station Managed driver identity, this branch's vehicle and the product/load qualification before assigning the order." />
                   ) : (
                     <View style={styles.orderList}>
                       {readyQualifications.map((qualification) => {
                         const id = firstString(qualification, ["id"]) ?? "";
                         const selected = selectedQualification?.id === id;
-                        const driverId = firstString(qualification, ["station_managed_driver_id", "driver_profile_id"]) ?? "";
+                        const driverId = firstString(qualification, ["station_managed_driver_id"]) ?? "";
                         const vehicleId = firstString(qualification, ["vehicle_id"]) ?? "";
                         const vehicle = (vehicles.data ?? []).find((row) => firstString(row, ["id"]) === vehicleId);
                         const vehicleLabel = firstString(vehicle, ["registration_number", "registrationNumber", "plate_number", "plateNumber"]) ?? vehicleId.slice(0, 8).toUpperCase();
@@ -596,7 +609,7 @@ export function FuelStationOperationsScreen() {
                           <Pressable key={id} onPress={() => setSelectedDriverQualificationId(id)} style={[styles.driverRow, { borderColor: selected ? palette.brand : palette.border, backgroundColor: selected ? palette.brandSoft : palette.surface }]}>
                             <Truck size={19} />
                             <View style={styles.orderCopy}>
-                              <Text style={[styles.orderTitle, { color: palette.ink }]}>Driver {driverId.slice(0, 8).toUpperCase()}</Text>
+                              <Text style={[styles.orderTitle, { color: palette.ink }]}>Station driver {driverId.slice(0, 8).toUpperCase()}</Text>
                               <Text style={[styles.muted, { color: palette.muted }]}>{vehicleLabel} · up to {firstNumber(qualification, ["maximum_load_litres"])} L</Text>
                             </View>
                             {selected ? <CheckCircle2 size={19} /> : null}
@@ -605,12 +618,27 @@ export function FuelStationOperationsScreen() {
                       })}
                     </View>
                   )}
-                  <AppButton label="Assign selected qualified driver" fullWidth disabled={!selectedQualification} loading={busyOrderId === focusedOrderId || assignDriver.isPending} onPress={() => void assignQualifiedDriver()} />
+                  <AppButton label="Assign station driver" fullWidth disabled={!selectedQualification} loading={busyOrderId === focusedOrderId || assignDriver.isPending} onPress={() => void assignQualifiedDriver()} />
                 </>
+              ) : null}
+              {focusedStage === "ready_for_driver" && focusedFulfillmentMode === "independent_driver" ? (
+                <View style={styles.operationInfo}>
+                  <StatusPill label="Independent Driver · SKIMA dispatch" tone="info" />
+                  <Text style={[styles.muted, { color: palette.ink }]}>This provider is not a station employee and does not use a SKIMA fleet vehicle. SKIMA Dispatch must assign an approved Independent Driver and their own qualified vehicle. You can hand over the containers after the driver has been assigned.</Text>
+                </View>
+              ) : null}
+              {focusedStage === "ready_for_driver" && focusedFulfillmentMode === "skima_managed" ? (
+                <View style={styles.operationInfo}>
+                  <StatusPill label="SKIMA Managed · SKIMA dispatch" tone="info" />
+                  <Text style={[styles.muted, { color: palette.ink }]}>This is a SKIMA internal driver using an assigned SKIMA-owned fleet vehicle. It is not a station employee or an Independent Driver. SKIMA Dispatch assigns this driver and vehicle before you hand over the containers.</Text>
+                </View>
               ) : null}
 
               {focusedStage === "driver_assigned" ? (
-                <AppButton label="Hand filled containers to assigned driver" fullWidth loading={busyOrderId === focusedOrderId || recordHandover.isPending} onPress={() => void handContainersToDriver()} />
+                <View style={{ gap: spacing.sm }}>
+                  <Text style={[styles.muted, { color: palette.ink }]}>Check the driver and vehicle identity, then hand over all filled containers. This confirmation records the container custody handoff and starts the delivery for the driver.</Text>
+                  <AppButton label="Hand over containers & start delivery" fullWidth loading={busyOrderId === focusedOrderId || recordHandover.isPending || changeStage.isPending} onPress={() => void handContainersToDriver()} />
+                </View>
               ) : null}
 
               {focusedStage === "received_at_station" ? (
@@ -642,6 +670,15 @@ export function FuelStationOperationsScreen() {
       )}
     </Screen>
   );
+}
+
+function fulfillmentModeLabel(value: string): string {
+  switch (value) {
+    case "station_managed": return "Station Managed · station driver and branch-controlled vehicle";
+    case "independent_driver": return "Independent Driver · third-party provider and own vehicle";
+    case "skima_managed": return "SKIMA Managed · internal SKIMA driver and SKIMA fleet vehicle";
+    default: return "Fuel fulfilment mode not resolved";
+  }
 }
 
 function stagePriority(stage: string): number {
