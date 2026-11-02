@@ -124,6 +124,7 @@
     "20261102110000_logistics_marketplace_domain_foundation.sql",
     "20261102111500_logistics_marketplace_tenant_and_matching_hardening.sql",
     "20261102113000_logistics_booking_and_payment_modes.sql",
-    "20261102114500_logistics_booking_fulfillment_and_settlement.sql"
+    "20261102114500_logistics_booking_fulfillment_and_settlement.sql",
+    "20261102115000_logistics_provider_wallet_funding.sql"
   ]
 }
