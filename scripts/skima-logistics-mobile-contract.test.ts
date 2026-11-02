@@ -301,3 +301,16 @@ Deno.test("Logistics marketplace administration is permission-gated and uses the
   requireText(logisticsAdmin, "sortOrder", "category ordering");
   requireNotText(logisticsAdmin, "SUPABASE_SERVICE_ROLE_KEY", "no privileged database credential in admin app");
 });
+
+
+Deno.test("Customers can withdraw a Logistics request only before booking", () => {
+  requireText(detail, '"/runtime/logistics/jobs/cancel"', "pre-booking customer cancellation endpoint");
+  requireText(detail, '["open", "matching", "offers_received"].includes(status)', "customer cancellation eligibility states");
+  requireText(detail, "Cancel this request", "customer cancellation control");
+  requireText(detail, "No provider booking has been created", "pre-booking cancellation explanation");
+  requireText(detail, "cancelJob.isPending", "cancellation action is protected while pending");
+  requireText(detail, "Alert.alert", "cancellation requires customer confirmation");
+  requireText(detail, "createClientIdempotencyKey(\"logistics.job.cancel\"", "retry-safe cancellation key");
+  requireText(detail, "router.replace(\"/(customer)/jobs\"", "return to customer request activity after cancellation");
+  requireNotText(detail, "Cancel paid booking", "no unsupported paid booking cancellation control");
+});
