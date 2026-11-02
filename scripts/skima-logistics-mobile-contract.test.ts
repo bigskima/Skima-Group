@@ -177,6 +177,15 @@ Deno.test("Provider matched opportunities are free and enable customer contact a
   requireText(providerOpportunities, "There is no lead unlock fee", "free opportunity access");
 });
 
+Deno.test("Provider booking actions preserve idempotency on retries and changed delivery evidence", () => {
+  requireText(providerBookingDetail, "actionKeysRef", "provider action idempotency cache");
+  requireText(providerBookingDetail, "const fingerprint = action === \"deliver\"", "delivery payload fingerprint");
+  requireText(providerBookingDetail, "recipientName.trim()", "delivery recipient part of retry identity");
+  requireText(providerBookingDetail, "deliveryNote.trim()", "delivery note part of retry identity");
+  requireText(providerBookingDetail, "actionKeysRef.current.get(fingerprint)", "same action retry reuses its key");
+  requireText(providerBookingDetail, "actionKeysRef.current.set(fingerprint, key)", "new delivery evidence receives a new key");
+});
+
 Deno.test("Customer can counter a matched provider quote before booking", () => {
   requireText(detail, '"/runtime/logistics/offers/counter"', "customer counteroffer API");
   requireText(detail, "Make a counteroffer", "customer negotiation sheet");
