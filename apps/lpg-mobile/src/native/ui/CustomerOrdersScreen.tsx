@@ -52,7 +52,7 @@ const DELIVERY_CONFIRMATION_STATES = new Set([
 
 const FINAL_ORDER_STATES = new Set(["delivered", "completed"]);
 
-const ORDER_PAGE_SIZE = 8;
+const ORDER_PAGE_SIZE = 12;
 type OrderFilter = "all" | "refills" | "fuel" | "bills" | "marketplace";
 type UnifiedOrderKind = Exclude<OrderFilter, "all">;
 type UnifiedOrderItem = {
@@ -78,7 +78,7 @@ export function CustomerOrdersScreen() {
   const utilityCatalog = domainQueries.utilityCatalog();
   const storeOrders = domainQueries.storeOrders();
   const [filter, setFilter] = useState<OrderFilter>("all");
-  const [visibleCount, setVisibleCount] = useState(12);
+  const [visibleCount, setVisibleCount] = useState(ORDER_PAGE_SIZE);
 
   const allItems: UnifiedOrderItem[] = [
     ...(refills.data ?? []).map((order, index): UnifiedOrderItem => {
@@ -183,7 +183,7 @@ export function CustomerOrdersScreen() {
   ]);
   const selectFilter = (next: OrderFilter) => {
     setFilter(next);
-    setVisibleCount(12);
+    setVisibleCount(ORDER_PAGE_SIZE);
   };
 
   return (
@@ -272,9 +272,9 @@ export function CustomerOrdersScreen() {
           })}
           {visibleCount < filteredItems.length ? (
             <AppButton
-              label={`Show ${Math.min(12, filteredItems.length - visibleCount)} older items`}
+              label={`Show ${Math.min(ORDER_PAGE_SIZE, filteredItems.length - visibleCount)} older items`}
               variant="secondary"
-              onPress={() => setVisibleCount((count) => count + 12)}
+              onPress={() => setVisibleCount((count) => count + ORDER_PAGE_SIZE)}
             />
           ) : null}
         </View>
@@ -537,16 +537,6 @@ function OrderFilterChip({
       </Text>
     </Pressable>
   );
-}
-
-function orderMatchesFilter(order: PlatformRecord, filter: OrderFilter) {
-  if (filter === "all") return true;
-  const status = displayStatus(order) ?? "created";
-  const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? status;
-  const normalized = normalizeStatus(status);
-  if (filter === "payment") return isPaymentActionRequired(status, paymentStatus);
-  if (filter === "completed") return FINAL_ORDER_STATES.has(normalized);
-  return !FINAL_ORDER_STATES.has(normalized) && !isPaymentActionRequired(status, paymentStatus);
 }
 
 function isPaymentActionRequired(orderStatus: string, paymentStatus: string) {
