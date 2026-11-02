@@ -675,7 +675,10 @@ begin
     target_status,
     'platform.storefront',
     target_idempotency_key || ':item',
-    target_metadata || jsonb_build_object('storefront', true)
+    target_metadata || jsonb_build_object(
+      'storefront', true,
+      'sales_channel', 'skima_store'
+    )
   );
 
   price_id := public.configure_catalog_price(
