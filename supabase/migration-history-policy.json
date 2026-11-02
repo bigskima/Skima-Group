@@ -120,6 +120,7 @@
     "20261102002000_fuel_order_settlement_runtime.sql",
     "20261102005600_fuel_module_runtime_router_and_security.sql",
     "20261102013000_fuel_driver_workflow_fees_and_mode_controls.sql",
-    "20261102014500_lpg_single_customer_otp_handover.sql"
+    "20261102014500_lpg_single_customer_otp_handover.sql",
+    "20261102110000_logistics_marketplace_domain_foundation.sql"
   ]
 }
