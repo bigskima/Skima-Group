@@ -211,15 +211,6 @@ export function CustomerHomeScreen() {
   );
 }
 
-function locationName(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "Location pending";
-  return asString(value as Record<string, unknown>, "display_name", "canonical_name", "formatted_address", "address") ?? "Location pending";
-}
-function displayDate(value: string | null) {
-  if (!value) return "Just now";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "Recently posted" : new Intl.DateTimeFormat("en-NG", { day: "numeric", month: "short" }).format(parsed);
-}
 const styles = StyleSheet.create({
   topBrandRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: -8, marginBottom: -4 },
   topRight: { flexDirection: "row", alignItems: "center", gap: 9 },
