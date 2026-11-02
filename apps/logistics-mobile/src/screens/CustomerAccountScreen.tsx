@@ -17,9 +17,10 @@ import { Screen } from "../ui/Screen";
 
 export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: "customer" | "provider" }) {
   const { palette, scheme, toggle } = useAppTheme();
-  const { api, session, signOut } = useSession();
+  const { api, context, session, signOut } = useSession();
   const client = useQueryClient();
   const [invitationNotice, setInvitationNotice] = useState<string | null>(null);
+  const [invitationError, setInvitationError] = useState<string | null>(null);
   const invitations = useLogisticsQuery(["my-logistics-invitations"], "/runtime/organization-invitations", true, 60_000);
   const pendingInvitations = useMemo(() => {
     const emailAddress = session?.user.email?.trim().toLowerCase();
@@ -44,17 +45,19 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
         invitationId: input.invitationId,
         idempotencyKey: createClientIdempotencyKey(
           "logistics.invitation." + input.action,
-          input.invitationId + ":" + String(Date.now()),
+          input.invitationId,
         ),
         metadata: { module: "logistics_network", client: "skima-logistics-mobile" },
       }, z.string().uuid()),
     onSuccess: async (_result, input) => {
+      setInvitationError(null);
       setInvitationNotice(input.action === "accept"
         ? "Company invitation accepted. You can now open the company workspace."
         : "Company invitation declined.");
       await client.invalidateQueries({ queryKey: ["skima-logistics", "my-logistics-invitations"] });
       await invitations.refetch();
     },
+    onError: (cause) => setInvitationError(cause instanceof Error ? cause.message : "The invitation response could not be completed."),
   });
   const name = context?.profile?.display_name ?? (typeof session?.user.user_metadata?.display_name === "string" ? session.user.user_metadata.display_name : "SKIMA customer");
   const email = session?.user.email ?? "Signed-in account";
@@ -71,6 +74,63 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
           </View>
         </View>
       </Card>
+
+      {pendingInvitations.length > 0 || invitations.error || invitationNotice ? (
+        <View style={styles.section}>
+          <View style={styles.invitationHeading}>
+            <MailCheck color={palette.brand} size={19} />
+            <Text style={[styles.sectionTitle, { color: palette.ink }]}>Company invitations</Text>
+          </View>
+          {invitations.error ? (
+            <Card variant="warning" padding="md">
+              <Text style={[styles.error, { color: palette.ink }]}>Your invitations could not be loaded.</Text>
+              <AppButton size="sm" variant="secondary" label="Retry" onPress={() => void invitations.refetch()} />
+            </Card>
+          ) : null}
+          {pendingInvitations.map((invitation) => {
+            const invitationId = asString(invitation, "id") ?? "";
+            const organizationId = asString(invitation, "organization_id") ?? "";
+            const organization = context?.organizations.find((item) => item.organizationId === organizationId);
+            const busy = respondToInvitation.isPending && respondToInvitation.variables?.invitationId === invitationId;
+            return (
+              <Card key={invitationId} padding="lg">
+                <Text style={[styles.profileName, { color: palette.ink }]}>You’re invited to join a SKIMA Logistics company</Text>
+                <Text style={[styles.securityCopy, { color: palette.muted }]}>
+                  Invitation for {email}. Accepting adds your account to the company workspace with the role selected by its owner.
+                </Text>
+                <Text style={[styles.preferenceSubtitle, { color: palette.muted }]}>
+                  {organization?.displayName ?? ("Company reference " + organizationId.slice(0, 8).toUpperCase())}
+                  {" · "}Expires {dateLabel(asString(invitation, "expires_at"))}
+                </Text>
+                <View style={styles.invitationActions}>
+                  <View style={styles.invitationButton}>
+                    <AppButton size="sm" fullWidth label="Decline" variant="secondary" disabled={respondToInvitation.isPending}
+                      loading={busy && respondToInvitation.variables?.action === "decline"}
+                      onPress={() => Alert.alert("Decline invitation?", "You will not be added to this company workspace.", [
+                        { text: "Keep invitation", style: "cancel" },
+                        { text: "Decline", style: "destructive", onPress: () => respondToInvitation.mutate({ invitationId, action: "decline" }) },
+                      ])} />
+                  </View>
+                  <View style={styles.invitationButton}>
+                    <AppButton size="sm" fullWidth label="Accept invitation" disabled={respondToInvitation.isPending}
+                      loading={busy && respondToInvitation.variables?.action === "accept"}
+                      onPress={() => respondToInvitation.mutate({ invitationId, action: "accept" })} />
+                  </View>
+                </View>
+              </Card>
+            );
+          })}
+          {invitationError ? <Text accessibilityRole="alert" style={[styles.error, { color: palette.danger }]}>{invitationError}</Text> : null}
+          {invitationNotice ? (
+            <Card variant="success" padding="md">
+              <Text style={[styles.notice, { color: palette.success }]}>{invitationNotice}</Text>
+              {invitationNotice.startsWith("Company invitation accepted") ? (
+                <AppButton size="sm" fullWidth label="Open company workspace" onPress={() => router.replace("/(provider)" as never)} />
+              ) : null}
+            </Card>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: palette.ink }]}>Workspaces</Text>
