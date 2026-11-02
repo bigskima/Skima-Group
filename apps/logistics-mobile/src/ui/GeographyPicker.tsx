@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Check, MapPin, Search } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { RecordArraySchema, asString } from "../api/logistics";
@@ -15,11 +16,16 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
   const { palette } = useAppTheme();
   const { api, status } = useSession();
   const search = value.trim();
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(search), 260);
+    return () => clearTimeout(handle);
+  }, [search]);
   const query = useQuery({
-    queryKey: ["skima-logistics", "geography-search", search.toLowerCase()],
-    enabled: status === "authenticated" && !selected && search.length >= 2,
+    queryKey: ["skima-logistics", "geography-search", debouncedSearch.toLowerCase()],
+    enabled: status === "authenticated" && !selected && debouncedSearch.length >= 2,
     queryFn: ({ signal }) => api.get(
-      `/runtime/logistics/geographies?countryCode=NG&search=${encodeURIComponent(search)}`,
+      `/runtime/logistics/geographies?countryCode=NG&search=${encodeURIComponent(debouncedSearch)}`,
       RecordArraySchema,
       { signal },
     ),
