@@ -1,8 +1,12 @@
 import { router } from "expo-router";
-import { ChevronRight, CircleHelp, LogOut, Moon, ShieldCheck, Sun, UserRound } from "lucide-react-native";
-import { useMemo } from "react";
+import { ChevronRight, CircleHelp, LogOut, MailCheck, Moon, ShieldCheck, Sun, UserRound } from "lucide-react-native";
+import { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import type { ReactNode } from "react";
+import { createClientIdempotencyKey } from "@skima/frontend-core";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
+import { asString, useLogisticsQuery } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -13,7 +17,45 @@ import { Screen } from "../ui/Screen";
 
 export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: "customer" | "provider" }) {
   const { palette, scheme, toggle } = useAppTheme();
-  const { session, context, signOut } = useSession();
+  const { api, session, signOut } = useSession();
+  const client = useQueryClient();
+  const [invitationNotice, setInvitationNotice] = useState<string | null>(null);
+  const invitations = useLogisticsQuery(["my-logistics-invitations"], "/runtime/organization-invitations", true, 60_000);
+  const pendingInvitations = useMemo(() => {
+    const emailAddress = session?.user.email?.trim().toLowerCase();
+    const currentUserId = session?.user.id;
+    const now = Date.now();
+    return (invitations.data ?? []).filter((item) => {
+      const metadata = item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata)
+        ? item.metadata as Record<string, unknown>
+        : {};
+      const invitedEmail = asString(item, "invited_email")?.toLowerCase();
+      const invitedUserId = asString(item, "invited_user_id");
+      const expiry = Date.parse(asString(item, "expires_at") ?? "");
+      return metadata.module === "logistics_network" &&
+        asString(item, "status") === "pending" &&
+        Boolean((emailAddress && invitedEmail === emailAddress) || (currentUserId && invitedUserId === currentUserId)) &&
+        (!Number.isFinite(expiry) || expiry > now);
+    });
+  }, [invitations.data, session?.user.email, session?.user.id]);
+  const respondToInvitation = useMutation({
+    mutationFn: async (input: { invitationId: string; action: "accept" | "decline" }) =>
+      api.post("/runtime/organization-invitations/" + input.action, {
+        invitationId: input.invitationId,
+        idempotencyKey: createClientIdempotencyKey(
+          "logistics.invitation." + input.action,
+          input.invitationId + ":" + String(Date.now()),
+        ),
+        metadata: { module: "logistics_network", client: "skima-logistics-mobile" },
+      }, z.string().uuid()),
+    onSuccess: async (_result, input) => {
+      setInvitationNotice(input.action === "accept"
+        ? "Company invitation accepted. You can now open the company workspace."
+        : "Company invitation declined.");
+      await client.invalidateQueries({ queryKey: ["skima-logistics", "my-logistics-invitations"] });
+      await invitations.refetch();
+    },
+  });
   const name = context?.profile?.display_name ?? (typeof session?.user.user_metadata?.display_name === "string" ? session.user.user_metadata.display_name : "SKIMA customer");
   const email = session?.user.email ?? "Signed-in account";
   return (
@@ -61,6 +103,13 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
   );
 }
 
+function dateLabel(value: string | null) {
+  if (!value) return "the stated expiry date";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "the stated expiry date" :
+    new Intl.DateTimeFormat("en-NG", { day: "numeric", month: "short", year: "numeric" }).format(parsed);
+}
+
 function PressableRow({ icon, title, subtitle, action, disabled, onPress }: {
   icon: ReactNode; title: string; subtitle: string; action: string; disabled?: boolean; onPress?: () => void;
 }) {
@@ -86,6 +135,11 @@ const styles = StyleSheet.create({
   secureText: { ...typography.caption, fontSize: 9, fontWeight: "900" },
   section: { gap: 9 },
   sectionTitle: { ...typography.sectionTitle, paddingHorizontal: 2 },
+  invitationHeading: { flexDirection: "row", alignItems: "center", gap: 10 },
+  invitationActions: { flexDirection: "row", gap: 8 },
+  invitationButton: { flex: 1 },
+  error: { ...typography.caption, fontSize: 10, lineHeight: 16 },
+  notice: { ...typography.caption, fontSize: 10, lineHeight: 16 },
   preferenceRow: { minHeight: 70, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg },
   preferenceIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   preferenceCopy: { flex: 1, gap: 2 },
