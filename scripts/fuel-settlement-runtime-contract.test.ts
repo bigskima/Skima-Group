@@ -7,7 +7,7 @@ const quote = await Deno.readTextFile(
 const quotePatch = await Deno.readTextFile(
   "supabase/migrations/20261102001000_fuel_quote_arithmetic_correction.sql",
 );
-const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
+const gateway = await Deno.readTextFile("supabase/functions/fuel-runtime/index.ts");
 const customerScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelOrderDetailsScreen.tsx");
 const stationScreen = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelStationOperationsScreen.tsx");
 
