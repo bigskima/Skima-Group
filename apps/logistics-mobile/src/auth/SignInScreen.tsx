@@ -57,7 +57,7 @@ export function SignInScreen() {
 const styles = StyleSheet.create({
   page: { flex: 1 },
   outer: { flexGrow: 1, alignItems: "center", justifyContent: "center", paddingVertical: 36, paddingHorizontal: 20 },
-  ambient: { ...StyleSheet.absoluteFillObject, overflow: "hidden" },
+  ambient: { ...StyleSheet.absoluteFill, overflow: "hidden" },
   orb: { position: "absolute", borderRadius: 200, opacity: 0.7 },
   orbTop: { width: 310, height: 310, top: -170, right: -120 },
   orbBottom: { width: 220, height: 220, bottom: 70, left: -160 },
