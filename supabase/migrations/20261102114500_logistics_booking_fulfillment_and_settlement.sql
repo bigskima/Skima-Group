@@ -537,6 +537,14 @@ begin
     'logistics-revenue:' || booking_record.currency_code
   );
 
+  -- Serialize all offline receival fee debits against the company account.
+  -- The same wallet-row lock is also used by company-owner wallet funding.
+  perform wallet.id
+  from public.wallet_accounts wallet
+  where wallet.id in (customer_wallet.id, provider_wallet_id)
+  order by wallet.id
+  for update;
+
   select coalesce((
     select balance.balance
     from public.wallet_balances balance
