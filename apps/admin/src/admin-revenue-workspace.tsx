@@ -1052,7 +1052,7 @@ function FuelPricingControls() {
   const branchNames = new Map((workspace.data?.branches ?? []).map((branch) => [
     recordString(branch, "id") ?? "",
     recordString(branch, "display_name") ?? recordString(branch, "key") ?? "Station branch",
-  ]));
+  ] as const));
 
   useEffect(() => {
     if (!currencyOptions.includes(currencyCode)) setCurrencyCode(currencyOptions[0] ?? "NGN");
