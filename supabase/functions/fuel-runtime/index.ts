@@ -821,9 +821,11 @@ async function handleFuelRuntimeRequest(
     if (!assignedDriver.assignment || assignedDriver.userId !== authResult.user.id) {
       return jsonResponse({ ok: false, error: "forbidden", message: "Only the assigned Fuel driver can confirm this delivery.", requestId: id }, 403);
     }
-    const measuredLitres = Number(operationResult.data.filled_litres ?? 0);
+    // The RPC independently sums the locked with-driver allocation rows and
+    // checks each station fill against this accepted order quantity.
+    const measuredLitres = Number(operationResult.data.requested_litres ?? 0);
     if (!Number.isFinite(measuredLitres) || measuredLitres <= 0) {
-      return jsonResponse({ ok: false, error: "fuel_quantity_not_verified", message: "Station fill measurements are not complete yet.", requestId: id }, 409);
+      return jsonResponse({ ok: false, error: "fuel_quantity_not_verified", message: "The accepted order quantity is not available for delivery validation.", requestId: id }, 409);
     }
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
