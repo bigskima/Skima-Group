@@ -347,12 +347,14 @@ begin
     )
     and (
       cardinality(service.cargo_type_keys) = 0
+      or jsonb_array_length(coalesce(target_payload #> '{cargo,cargo_type_keys}', '[]'::jsonb)) = 0
       or service.cargo_type_keys && array(
         select jsonb_array_elements_text(coalesce(target_payload #> '{cargo,cargo_type_keys}', '[]'::jsonb))
       )
     )
     and (
       cardinality(service.vehicle_type_keys) = 0
+      or jsonb_array_length(coalesce(target_payload #> '{cargo,vehicle_type_keys}', '[]'::jsonb)) = 0
       or service.vehicle_type_keys && array(
         select jsonb_array_elements_text(coalesce(target_payload #> '{cargo,vehicle_type_keys}', '[]'::jsonb))
       )
@@ -706,6 +708,9 @@ begin
   if job.requester_user_id <> auth.uid() then
     raise exception 'only the job customer may select a provider offer';
   end if;
+  if selected_offer.offer_type not in ('provider_quote', 'provider_counter') then
+    raise exception 'only an active provider offer may be selected';
+  end if;
 
   if exists (
     select 1 from public.logistics_job_events event_record
@@ -964,8 +969,8 @@ begin
     )
     and (service.maximum_weight_kg is null or nullif(job.cargo_snapshot->>'weight_kg','') is null or service.maximum_weight_kg >= (job.cargo_snapshot->>'weight_kg')::numeric)
     and (service.maximum_volume_m3 is null or nullif(job.cargo_snapshot->>'volume_m3','') is null or service.maximum_volume_m3 >= (job.cargo_snapshot->>'volume_m3')::numeric)
-    and (cardinality(service.cargo_type_keys)=0 or service.cargo_type_keys && array(select jsonb_array_elements_text(coalesce(job.cargo_snapshot->'cargo_type_keys','[]'::jsonb))))
-    and (cardinality(service.vehicle_type_keys)=0 or service.vehicle_type_keys && array(select jsonb_array_elements_text(coalesce(job.cargo_snapshot->'vehicle_type_keys','[]'::jsonb))))
+    and (cardinality(service.cargo_type_keys)=0 or jsonb_array_length(coalesce(job.cargo_snapshot->'cargo_type_keys','[]'::jsonb))=0 or service.cargo_type_keys && array(select jsonb_array_elements_text(coalesce(job.cargo_snapshot->'cargo_type_keys','[]'::jsonb))))
+    and (cardinality(service.vehicle_type_keys)=0 or jsonb_array_length(coalesce(job.cargo_snapshot->'vehicle_type_keys','[]'::jsonb))=0 or service.vehicle_type_keys && array(select jsonb_array_elements_text(coalesce(job.cargo_snapshot->'vehicle_type_keys','[]'::jsonb))))
   on conflict (job_id, organization_id) do nothing;
   get diagnostics added_count = row_count;
   if added_count > 0 and job.status in ('open','matching') then
