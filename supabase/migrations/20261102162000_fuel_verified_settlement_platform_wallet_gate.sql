@@ -51,15 +51,31 @@ begin
     'public.ensure_platform_purpose_wallet(text,text,text,text,text)'::regprocedure
   ) into function_sql;
 
+  -- The live project and the clean-install baseline format this function
+  -- differently. Support both without replacing the surrounding LPG and
+  -- platform-admin authorization branches.
   old_guard:=$old$if not public.has_permission('platform.revenue.manage',null) then raise exception 'platform revenue management permission is required'; end if;$old$;
   new_guard:=$new$if not public.has_permission('platform.revenue.manage',null)
+      and not public.can_create_fuel_verified_platform_purpose_wallet(
+        target_wallet_type,target_currency_code,target_source,target_idempotency_key
+      ) then raise exception 'platform revenue management permission is required'; end if;$new$;
+  if position(old_guard in function_sql)>0 then
+    function_sql:=replace(function_sql,old_guard,new_guard);
+  else
+    old_guard:=$old$      if not public.has_permission('platform.revenue.manage', null) then
+        raise exception 'platform revenue management permission is required';
+      end if;$old$;
+    new_guard:=$new$      if not public.has_permission('platform.revenue.manage', null)
         and not public.can_create_fuel_verified_platform_purpose_wallet(
           target_wallet_type,target_currency_code,target_source,target_idempotency_key
-        ) then raise exception 'platform revenue management permission is required'; end if;$new$;
-  if position(old_guard in function_sql)=0 then
-    raise exception 'ensure_platform_purpose_wallet revenue authorization anchor changed; refusing an unsafe Fuel exception';
+        ) then
+        raise exception 'platform revenue management permission is required';
+      end if;$new$;
+    if position(old_guard in function_sql)=0 then
+      raise exception 'ensure_platform_purpose_wallet revenue authorization anchor changed; refusing an unsafe Fuel exception';
+    end if;
+    function_sql:=replace(function_sql,old_guard,new_guard);
   end if;
-  function_sql:=replace(function_sql,old_guard,new_guard);
 
   old_guard:=$old$elsif not public.has_permission('platform.financial.manage',null) and not public.has_permission('platform.wallets.manage',null) then raise exception 'platform financial management permission is required';$old$;
   new_guard:=$new$elsif not public.has_permission('platform.financial.manage',null)
@@ -67,10 +83,25 @@ begin
       and not public.can_create_fuel_verified_platform_purpose_wallet(
         target_wallet_type,target_currency_code,target_source,target_idempotency_key
       ) then raise exception 'platform financial management permission is required';$new$;
-  if position(old_guard in function_sql)=0 then
-    raise exception 'ensure_platform_purpose_wallet financial authorization anchor changed; refusing an unsafe Fuel exception';
+  if position(old_guard in function_sql)>0 then
+    function_sql:=replace(function_sql,old_guard,new_guard);
+  else
+    old_guard:=$old$    elsif not public.has_permission('platform.financial.manage', null)
+      and not public.has_permission('platform.wallets.manage', null) then
+      raise exception 'platform financial management permission is required';$old$;
+    new_guard:=$new$    elsif not public.has_permission('platform.financial.manage', null)
+      and not public.has_permission('platform.wallets.manage', null)
+      and not public.can_create_fuel_verified_platform_purpose_wallet(
+        target_wallet_type,target_currency_code,target_source,target_idempotency_key
+      ) then
+      raise exception 'platform financial management permission is required';$new$;
+    if position(old_guard in function_sql)=0 then
+      raise exception 'ensure_platform_purpose_wallet financial authorization anchor changed; refusing an unsafe Fuel exception';
+    end if;
+    function_sql:=replace(function_sql,old_guard,new_guard);
   end if;
-  execute replace(function_sql,old_guard,new_guard);
+
+  execute function_sql;
 end;
 $patch$;
 
