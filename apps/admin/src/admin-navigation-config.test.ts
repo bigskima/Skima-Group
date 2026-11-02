@@ -41,6 +41,12 @@ describe("admin navigation access rules", () => {
     expect(canAccessAdminNavigationKey("support", () => false)).toBe(false);
   });
 
+
+  it("restricts the Store workspace to Store readers", () => {
+    expect(canAccessAdminNavigationKey("store", (permission) => permission === "platform.store.read")).toBe(true);
+    expect(canAccessAdminNavigationKey("store", () => false)).toBe(false);
+  });
+
   it("fails closed for unknown navigation keys", () => {
     expect(getAdminNavigationPermissionRule("unknown").known).toBe(false);
     expect(canAccessAdminNavigationKey("unknown", () => true)).toBe(false);
