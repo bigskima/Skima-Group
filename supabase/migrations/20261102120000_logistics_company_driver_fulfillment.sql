@@ -690,6 +690,37 @@ begin
 end;
 $$;
 
+create or replace function public.read_my_logistics_driver_profile()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $
+declare
+  actor uuid := auth.uid();
+  driver_record public.driver_profiles%rowtype;
+begin
+  if actor is null then raise exception 'authentication is required'; end if;
+  select * into driver_record
+  from public.driver_profiles
+  where user_id = actor;
+  if not found then
+    return jsonb_build_object('driver_profile_id',null,'registered',false,'eligible',false);
+  end if;
+  return jsonb_build_object(
+    'driver_profile_id',driver_record.id,
+    'registered',true,
+    'verification_status',driver_record.verification_status,
+    'operational_status',driver_record.operational_status,
+    'driver_display_name',driver_record.driver_display_name,
+    'public_driver_id',driver_record.public_driver_id,
+    'organization_id',driver_record.organization_id,
+    'eligible',driver_record.verification_status = 'approved'
+  );
+end;
+$;
+
 create or replace function public.read_my_logistics_driver_bookings()
 returns jsonb
 language plpgsql
@@ -774,7 +805,7 @@ revoke all on function public.respond_logistics_driver_assignment(uuid,text,text
 revoke all on function public.update_logistics_driver_milestone(uuid,text,text,jsonb) from public,anon;
 revoke all on function public.start_logistics_booking(uuid,text) from public,anon;
 revoke all on function public.submit_logistics_booking_delivery(uuid,jsonb,text) from public,anon;
-revoke all on function public.read_my_logistics_driver_bookings() from public,anon;
+revoke all on function public.read_my_logistics_driver_profile() from public,anon;\nrevoke all on function public.read_my_logistics_driver_bookings() from public,anon;
 
 grant execute on function public.read_logistics_company_dispatch_resources(uuid) to authenticated,service_role;
 grant execute on function public.assign_logistics_booking_driver(uuid,uuid,uuid,text) to authenticated,service_role;
@@ -782,7 +813,7 @@ grant execute on function public.respond_logistics_driver_assignment(uuid,text,t
 grant execute on function public.update_logistics_driver_milestone(uuid,text,text,jsonb) to authenticated,service_role;
 grant execute on function public.start_logistics_booking(uuid,text) to authenticated,service_role;
 grant execute on function public.submit_logistics_booking_delivery(uuid,jsonb,text) to authenticated,service_role;
-grant execute on function public.read_my_logistics_driver_bookings() to authenticated,service_role;
+grant execute on function public.read_my_logistics_driver_profile() to authenticated,service_role;\ngrant execute on function public.read_my_logistics_driver_bookings() to authenticated,service_role;
 
 grant select on public.logistics_booking_driver_assignments to authenticated,service_role;
 notify pgrst,'reload schema';
