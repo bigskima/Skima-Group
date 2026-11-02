@@ -135,6 +135,11 @@ Deno.test("Offers, counteroffers and messages are limited to the customer or mat
   requireText(migration, "unique (sender_user_id, idempotency_key)", "message idempotency constraint");
 });
 
+Deno.test("Only a provider quote or provider counteroffer can be selected by a customer", () => {
+  requireText(migration, "only an active provider offer may be selected", "provider-only selectable offer types");
+  requireText(migration, "selected_offer.offer_type not in ('provider_quote', 'provider_counter')", "customer counteroffers cannot be selected as provider offers");
+});
+
 Deno.test("Selecting an offer is not treated as paid booking confirmation", () => {
   requireText(migration, "set status = 'booking_pending'", "selection enters booking pending");
   requireText(migration, "'next_step', 'complete_booking_terms_and_payment'", "payment is a separate next step");
