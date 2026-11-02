@@ -514,6 +514,7 @@ async function handleFuelRuntimeRequest(
       return rpcResponse(
         serviceClient.rpc("configure_fuel_driver_product_qualification_mode", {
           target_driver_user_id: requireUuid(payload.driverUserId, "driverUserId"),
+          target_actor_user_id: authResult.user.id,
           target_driver_profile_id: driverProfileId,
           target_station_managed_driver_id: stationManagedDriverId,
           target_fulfillment_mode: fulfillmentMode,
