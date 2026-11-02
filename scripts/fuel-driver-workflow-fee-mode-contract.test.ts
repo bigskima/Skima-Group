@@ -24,8 +24,9 @@ Deno.test("PMS, AGO and DPK have independent global fee controls in the shared r
     includes(migration, control, `${control} is exposed in platform fee controls`);
   }
   includes(migration, "'amount_per_litre'", "Fuel fee is configured per litre");
-  includes(migration, "'NGN'::text", "NGN has an initial fee baseline");
-  includes(migration, "'USDC'::text", "USDC has an initial fee baseline");
+  includes(migration, "from public.currency_definitions", "fee baselines are seeded from the registered currency catalogue");
+  includes(migration, "and status='enabled'", "disabled currencies are not given fee versions");
+  includes(migration, "'NGN'", "the Nigeria launch fee configuration is supported");
   includes(migration, "row_number() over(partition by policy_definition_id order by currency_code)", "currency versions have unique sequential numbers per policy");
   includes(migration, "admin_product_fee_amount:=round(operation_record.requested_litres*admin_fee_per_litre,currency_decimals)", "the product fee is calculated from ordered litres");
   includes(migration, "admin_product_fee_policy_version_id", "the accepted quote locks its financial policy version");
