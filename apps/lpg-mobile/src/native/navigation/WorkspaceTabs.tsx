@@ -6,6 +6,7 @@ import {
   ClipboardList,
   Home,
   QrCode,
+  ShoppingBag,
   WalletCards,
 } from "lucide-react-native";
 import type { ComponentType } from "react";
@@ -115,6 +116,7 @@ const styles = StyleSheet.create({
 
 export const customerTabs = [
   { name: "index", title: "Home", icon: Home },
+  { name: "store", title: "Store", icon: ShoppingBag },
   { name: "cylinders", title: "Cylinders", icon: QrCode },
   { name: "orders", title: "Orders", icon: ClipboardList },
   { name: "wallet", title: "Wallet", icon: WalletCards },
