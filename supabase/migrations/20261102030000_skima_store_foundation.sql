@@ -394,6 +394,8 @@ as $$
 declare
   store_module_id uuid;
   setting_id uuid;
+  store_role_id uuid;
+  order_permission_id uuid;
 begin
   if auth.uid() is null
     or not public.is_platform_super_admin()
@@ -450,6 +452,63 @@ begin
   if target_metadata is null or jsonb_typeof(target_metadata) <> 'object' then
     raise exception 'Store metadata must be a JSON object';
   end if;
+
+  -- The user configuring first-party Store operations becomes an organisation-
+  -- scoped Store operator. This grants order processing only inside the Store
+  -- merchant organisation, not platform-wide runtime execution.
+  insert into public.organization_memberships (
+    organization_id, user_id, membership_type, status, metadata
+  )
+  values (
+    target_organization_id,
+    auth.uid(),
+    'admin',
+    'active',
+    '{"source":"platform.storefront","membership":"store_operations_manager"}'::jsonb
+  )
+  on conflict (organization_id, user_id) do update
+  set membership_type = 'admin',
+      status = 'active',
+      metadata = public.organization_memberships.metadata || excluded.metadata,
+      updated_at = timezone('utc', now());
+
+  insert into public.roles (
+    organization_id, key, display_name, description, status, metadata
+  )
+  values (
+    target_organization_id,
+    'store.operations.manager',
+    'Store Operations Manager',
+    'Manage first-party SKIMA Store orders and fulfilment.',
+    'active',
+    '{"module_key":"store","scope":"organisation"}'::jsonb
+  )
+  on conflict do nothing;
+
+  select id into store_role_id
+  from public.roles
+  where organization_id = target_organization_id
+    and key = 'store.operations.manager'
+    and status = 'active';
+
+  select id into order_permission_id
+  from public.permissions
+  where key = 'business.orders.process';
+
+  if store_role_id is null or order_permission_id is null then
+    raise exception 'Store order-processing permission is not configured';
+  end if;
+
+  insert into public.role_permissions (role_id, permission_id)
+  values (store_role_id, order_permission_id)
+  on conflict (role_id, permission_id) do nothing;
+
+  insert into public.user_roles (organization_id, user_id, role_id, status)
+  values (target_organization_id, auth.uid(), store_role_id, 'active')
+  on conflict (organization_id, user_id, role_id) do update
+  set status = 'active',
+      ends_at = null,
+      updated_at = timezone('utc', now());
 
   insert into public.storefront_settings (
     module_id, organization_id, branch_id, currency_code,
