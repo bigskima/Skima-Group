@@ -1,2 +1,2 @@
-import { ProviderAccountScreen } from "../../src/screens/ProviderAccountScreen";
-export default function ProviderAccountRoute() { return <ProviderAccountScreen />; }
+import { CustomerAccountScreen } from "../../src/screens/CustomerAccountScreen";
+export default function ProviderAccountRoute() { return <CustomerAccountScreen workspace="provider" />; }
