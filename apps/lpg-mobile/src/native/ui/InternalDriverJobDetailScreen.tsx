@@ -412,26 +412,7 @@ export function InternalDriverJobDetailScreen() {
                 </View>
               ) : null}
 
-              {["return_en_route", "delivery_verification_pending"].includes(status) && customerDeliveryScanVerified ? (
-                <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                  <View style={styles.sectionLead}>
-                    <ShieldCheck color={palette.success} size={22} />
-                    <View style={styles.sectionCopy}>
-                      <Text style={[styles.sectionTitle, { color: palette.ink }]}>Returned cylinder verified</Text>
-                      <Text style={[styles.helper, { color: palette.muted }]}>
-                        The physical cylinder scan is complete. Ask the customer to open this order in SKIMA and complete the order-specific OTP. The order remains pending until that confirmation.
-                      </Text>
-                    </View>
-                  </View>
-                  <AppButton
-                    label="Refresh hand-over status"
-                    fullWidth
-                    variant="secondary"
-                    loading={detail.isRefetching}
-                    onPress={() => void detail.refetch()}
-                  />
-                </View>
-              ) : null}
+
 
               {!actionKey && !scanType ? (
                 <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
