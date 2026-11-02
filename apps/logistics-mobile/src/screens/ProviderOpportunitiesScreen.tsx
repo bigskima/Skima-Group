@@ -24,6 +24,7 @@ type OfferDraft = {
   decimals: number;
   action: "quote" | "counter";
   parentOfferId: string | null;
+  idempotencyKey: string;
 };
 function nested(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
@@ -104,10 +105,7 @@ export function ProviderOpportunitiesScreen() {
         deliveryPriceMinor: Math.round(minor),
         estimatedDurationMinutes: durationMinutes,
         terms: terms.trim() ? { message: terms.trim() } : {},
-        idempotencyKey: createClientIdempotencyKey(
-          selected.action === "counter" ? "logistics.provider.counter" : "logistics.provider.offer",
-          selected.opportunityId,
-        ),
+        idempotencyKey: selected.idempotencyKey,
       };
       if (selected.action === "counter" && selected.parentOfferId) {
         return api.post("/runtime/logistics/offers/counter", {
@@ -138,6 +136,10 @@ export function ProviderOpportunitiesScreen() {
       opportunityId, jobTitle: title, action, parentOfferId,
       currency: asString(preferred, "code") ?? "NGN",
       decimals: asNumber(preferred, "decimal_places") ?? 2,
+      idempotencyKey: createClientIdempotencyKey(
+        action === "counter" ? "logistics.provider.counter" : "logistics.provider.offer",
+        `${opportunityId}:${parentOfferId ?? "root"}`,
+      ),
     });
     setPrice(""); setDuration(""); setTerms("");
   };
