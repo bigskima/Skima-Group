@@ -544,7 +544,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   booking_record public.logistics_bookings%rowtype;
   attempt_result jsonb;
@@ -649,7 +649,7 @@ begin
     'idempotent_replay', false
   );
 end;
-$;
+$$;
 
 revoke all on function public.begin_logistics_booking_online_payment(uuid,uuid,uuid,text) from public, anon, authenticated;
 revoke all on function public.reset_logistics_booking_payment_attempt(uuid,uuid,text,text) from public, anon, authenticated;
