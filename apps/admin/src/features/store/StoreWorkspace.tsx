@@ -183,6 +183,20 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
     },
   });
 
+  const processOrderAction = useMutation({
+    mutationFn: (input: { orderId: string; actionKey: string; reason?: string }) =>
+      api.post("/runtime/orders/actions", {
+        orderId: input.orderId,
+        actionKey: input.actionKey,
+        reason: input.reason,
+        payload: { channel: "skima_store_admin" },
+        metadata: { moduleKey: "store" },
+        source: "platform.storefront",
+        idempotencyKey: createClientIdempotencyKey("admin.store.order-action", input.orderId),
+      }, StoreSettingsSchema),
+    onSuccess: refresh,
+  });
+
   const productColumns: TableColumn<CatalogRecord>[] = [
     { key: "product", header: "Product", render: (item) => <><strong>{catalogLabel(item)}</strong><br /><small>{catalogText(item, "key")}</small></> },
     { key: "category", header: "Category", render: (item) => storeCategories.find((entry) => catalogText(entry, "id") === catalogText(item, "category_id")) ? catalogLabel(storeCategories.find((entry) => catalogText(entry, "id") === catalogText(item, "category_id"))) : "Uncategorised" },
@@ -201,7 +215,33 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
     { key: "order", header: "Order", render: (order) => <><strong>{catalogText(order, "id").slice(0, 8).toUpperCase()}</strong><br /><small>{new Date(String(order.created_at ?? "")).toLocaleString()}</small></> },
     { key: "customer", header: "Customer", render: (order) => catalogText(order, "requester_user_id") || "Customer" },
     { key: "total", header: "Total", render: (order) => formatMoney(numberValue(order.total_amount), catalogText(order, "currency_code") || "NGN") },
-    { key: "status", header: "Status", render: (order) => <StatusBadge tone={catalogText(order, "status") === "completed" ? "success" : "warning"}>{normalizeStatusLabel(catalogText(order, "status") || "received")}</StatusBadge> },
+    { key: "status", header: "Status", render: (order) => <StatusBadge tone={["completed", "fulfilled"].includes(catalogText(order, "status")) ? "success" : "warning"}>{normalizeStatusLabel(catalogText(order, "status") || "received")}</StatusBadge> },
+    { key: "action", header: "Next action", render: (order) => {
+      const nextAction = storeOrderNextAction(catalogText(order, "status"));
+      const orderId = catalogText(order, "id");
+      return nextAction ? (
+        <div className="store-workspace__order-actions">
+          <Button
+            size="sm"
+            isLoading={processOrderAction.isPending}
+            disabled={!orderId}
+            onClick={() => processOrderAction.mutate({ orderId, actionKey: nextAction.key })}
+          >{nextAction.label}</Button>
+          {nextAction.canCancel ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={processOrderAction.isPending || !orderId}
+              onClick={() => processOrderAction.mutate({
+                orderId,
+                actionKey: "store.order.cancel",
+                reason: "Cancelled by Store operations",
+              })}
+            >Cancel</Button>
+          ) : null}
+        </div>
+      ) : "—";
+    } },
   ];
 
   const queries = [organizations, modules, settings, items, categories, prices, availability, orders];
@@ -279,6 +319,18 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
       </Dialog>
     </div>
   );
+}
+
+
+function storeOrderNextAction(status: string): { key: string; label: string; canCancel: boolean } | null {
+  switch (status) {
+    case "received": return { key: "store.order.accept", label: "Accept order", canCancel: true };
+    case "accepted": return { key: "store.order.prepare", label: "Start preparation", canCancel: true };
+    case "preparing": return { key: "store.order.ready", label: "Mark ready", canCancel: true };
+    case "ready_for_pickup": return { key: "store.order.fulfill", label: "Confirm fulfilment", canCancel: true };
+    case "fulfilled": return { key: "store.order.complete", label: "Complete order", canCancel: false };
+    default: return null;
+  }
 }
 
 function organizationOptions(records: readonly CatalogRecord[]) {
