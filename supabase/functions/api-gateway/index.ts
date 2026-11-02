@@ -3667,6 +3667,15 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       String((existingOrder.order_payload as Record<string, unknown>)?.channel ?? "") !== "skima_store") {
       return jsonResponse({ ok: false, error: "idempotency_conflict", message: "This checkout key is already in use.", requestId: id }, 409);
     }
+    if (existingOrder) {
+      const previousPayload = existingOrder.order_payload as Record<string, unknown>;
+      const previousLocation = optionalRecord(previousPayload.delivery_location);
+      const previousLocationId = optionalString(previousLocation?.id);
+      if (String(previousPayload.fulfillment_method ?? "") !== fulfillmentMethod ||
+        (fulfillmentMethod === "delivery" && previousLocationId !== requestedLocationId)) {
+        return jsonResponse({ ok: false, error: "idempotency_conflict", message: "This checkout attempt already contains different fulfillment details. Start checkout again.", requestId: id }, 409);
+      }
+    }
 
     let orderId: string;
     if (existingOrder) {
@@ -3811,7 +3820,20 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       target_metadata: { storefront_module: "store", channel: "skima_store", delivery_fee_amount: deliveryFeeAmount },
     });
     if (fundingResult.error) {
-      await cancelUnfundedStoreOrder(serviceClient, orderId, checkoutKey, "wallet_funding_failed").catch(() => undefined);
+      let cancellationSucceeded = true;
+      try {
+        await cancelUnfundedStoreOrder(serviceClient, orderId, checkoutKey, "wallet_funding_failed");
+      } catch {
+        cancellationSucceeded = false;
+      }
+      if (!cancellationSucceeded) {
+        return jsonResponse({
+          ok: false,
+          error: "store_order_requires_review",
+          message: "Payment could not be reserved and the order needs Store operations review before another checkout attempt.",
+          requestId: id,
+        }, 503);
+      }
       const insufficient = /insufficient available wallet balance/i.test(fundingResult.error.message);
       return jsonResponse({
         ok: false,
@@ -13396,7 +13418,7 @@ async function cancelUnfundedStoreOrder(
   idempotencyKey: string,
   reason: string,
 ): Promise<void> {
-  await serviceClient.rpc("process_order_action", {
+  const result = await serviceClient.rpc("process_order_action", {
     target_action_key: "store.order.cancel",
     target_idempotency_key: idempotencyKey + ":cancel:" + reason,
     target_metadata: { channel: "skima_store", cancellation_reason: reason },
@@ -13405,6 +13427,7 @@ async function cancelUnfundedStoreOrder(
     target_reason: reason,
     target_source: "skima.store.checkout",
   });
+  if (result.error) throw result.error;
 }
 
 function haversineDistanceKm(
