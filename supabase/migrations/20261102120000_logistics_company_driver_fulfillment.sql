@@ -693,7 +693,7 @@ language plpgsql
 stable
 security definer
 set search_path = public
-as $
+as $$
 declare
   actor uuid := auth.uid();
   driver_record public.driver_profiles%rowtype;
@@ -716,7 +716,7 @@ begin
     'eligible',driver_record.verification_status = 'approved'
   );
 end;
-$;
+$$;
 
 create or replace function public.read_my_logistics_driver_bookings()
 returns jsonb
