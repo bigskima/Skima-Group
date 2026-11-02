@@ -15,6 +15,7 @@ const migrationWalletFunding = await Deno.readTextFile(
 );
 const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
+const apiGateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
 const moduleRouter = await Deno.readTextFile("supabase/migrations/20261102005600_fuel_module_runtime_router_and_security.sql");
 
@@ -302,6 +303,14 @@ Deno.test("Offline receival fee collection and company-wallet funding serialize 
   requireText(migrationWalletFunding, "order by wallet.id", "stable wallet lock ordering for funding");
   requireText(migrationWalletFunding, "for update", "wallet row locks during provider funding");
 });
+Deno.test("Wallet balance runtime never returns balances for wallet accounts hidden by RLS", () => {
+  requireText(apiGateway, "const walletsById = new Map<string, unknown>()", "RLS-visible wallet account index");
+  requireText(apiGateway, "const visibleBalances = balances.filter", "aggregate balance filtering");
+  requireText(apiGateway, "walletId !== null && walletsById.has(walletId)", "only RLS-visible account balances");
+  requireText(apiGateway, "const data = visibleBalances.map", "serialize only authorised wallet balances");
+  requireNotText(apiGateway, "const data = balances.map", "no unfiltered balance serialization");
+});
+
 Deno.test("Free provider opportunity access has no lead unlock charge", () => {
   requireText(migration, "logistics_job_opportunities", "provider opportunities are materialized");
   requireNotText(migration.toLowerCase(), "lead_unlock_fee", "no lead unlock fee");
