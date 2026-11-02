@@ -953,7 +953,7 @@ export function NewRefillScreen() {
                   style={[styles.recordChoice, { backgroundColor: fulfillmentMode === "independent_driver" ? palette.brandSoft : palette.surfaceSubtle, borderColor: fulfillmentMode === "independent_driver" ? palette.brand : palette.border }]}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.recordChoiceText, { color: palette.ink }]]}>Independent Managed</Text>
+                    <Text style={[styles.recordChoiceText, { color: palette.ink }]}>Independent Managed</Text>
                     <Text style={[styles.capacityBody, { color: palette.muted }]}>An approved Independent Managed provider uses their own approved vehicle for delivery.</Text>
                   </View>
                   {fulfillmentMode === "independent_driver" ? <CheckCircle2 color={palette.brand} size={20} /> : null}
