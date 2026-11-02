@@ -26,6 +26,8 @@ const providerOpportunities = await Deno.readTextFile("apps/logistics-mobile/src
 const providerCompany = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderCompanyScreen.tsx");
 const providerTeam = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderTeamScreen.tsx");
 const providerTeamRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/team.tsx");
+const providerDriver = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsDriverScreen.tsx");
+const providerDriverRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/driver.tsx");
 const providerJobs = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderJobsScreen.tsx");
 const providerBookingDetail = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderBookingDetailScreen.tsx");
 const providerRoutes = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/_layout.tsx");
@@ -326,4 +328,23 @@ Deno.test("Customers can cancel only an unpaid Logistics booking from checkout",
   requireText(booking, "createClientIdempotencyKey(\"logistics.booking.cancel\"", "retry-safe booking cancellation key");
   requireText(booking, 'status === "cancelled"', "cancelled booking confirmation state");
   requireText(booking, 'Alert.alert( "Cancel this booking?"', "cancellation requires explicit confirmation");
+});
+
+
+Deno.test("Driver workspace is reachable only for a registered driver and shows assigned work", () => {
+  requireText(providerNavigation, 'name="driver"', "dedicated driver navigation tab");
+  requireText(providerNavigation, 'driverProfile.data?.registered === true', "driver tab requires a registered driver profile");
+  requireText(providerNavigation, '"/runtime/logistics/driver/profile"', "navigation resolves driver registration");
+  requireText(providerDriverRoute, "LogisticsDriverScreen", "dedicated authenticated provider driver route");
+  requireText(providerDriver, '"/runtime/logistics/driver/profile"', "driver profile and verification check");
+  requireText(providerDriver, '"/runtime/logistics/driver/bookings"', "driver-owned assigned booking inbox");
+  requireText(providerDriver, '"/runtime/logistics/driver/assignment/respond"', "driver accepts or rejects a company assignment");
+  requireText(providerDriver, '"/runtime/logistics/bookings/start"', "assigned driver starts the job");
+  requireText(providerDriver, '"/runtime/logistics/driver/milestone"', "driver pickup and transit milestone API");
+  requireText(providerDriver, '"/runtime/logistics/bookings/delivery/submit"', "driver submits final delivery details");
+  requireText(providerDriver, "Confirm pickup", "pickup stage action");
+  requireText(providerDriver, "Mark in transit", "transit stage action");
+  requireText(providerDriver, "Received by", "named delivery recipient proof");
+  requireText(providerDriver, "Awaiting customer confirmation", "customer remains final delivery confirmer");
+  requireText(account, 'router.replace("/(provider)/driver" as never)', "customer/provider account opens the authenticated driver workspace");
 });
