@@ -414,7 +414,9 @@ begin
   if auth.role()<>'service_role'
      and not public.can_manage_fuel_platform()
      and not public.has_permission('platform.financial_policy.read',null)
-     and not public.has_permission('platform.revenue.read',null) then
+     and not public.has_permission('platform.financial_policy.manage',null)
+     and not public.has_permission('platform.revenue.read',null)
+     and not public.has_permission('platform.revenue.manage',null) then
     raise exception using errcode='42501',message='Platform Fuel pricing read permission is required';
   end if;
   select jsonb_build_object(
