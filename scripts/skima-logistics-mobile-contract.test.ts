@@ -19,6 +19,17 @@ const geography = await Deno.readTextFile("apps/logistics-mobile/src/ui/Geograph
 const session = await Deno.readTextFile("apps/logistics-mobile/src/session/SessionProvider.tsx");
 const providers = await Deno.readTextFile("apps/logistics-mobile/src/providers/AppProviders.tsx");
 const routes = await Deno.readTextFile("apps/logistics-mobile/app/(customer)/_layout.tsx");
+const providerNavigation = await Deno.readTextFile("apps/logistics-mobile/src/navigation/ProviderTabs.tsx");
+const providerDashboard = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderDashboardScreen.tsx");
+const providerOpportunities = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderOpportunitiesScreen.tsx");
+const providerCompany = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderCompanyScreen.tsx");
+const providerJobs = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderJobsScreen.tsx");
+const providerBookingDetail = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderBookingDetailScreen.tsx");
+const providerRoutes = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/_layout.tsx");
+const providerWorkRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/work/[id].tsx");
+const providerJobRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/work.tsx");
+const bookingFulfillmentMigration = await Deno.readTextFile("supabase/migrations/20261102114500_logistics_booking_fulfillment_and_settlement.sql");
+const logisticsRuntime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 
 function requireText(source: string, fragment: string, label: string): void {
   const normalizedSource = source.replace(/\s+/g, " ");
@@ -132,4 +143,47 @@ Deno.test("Customer account keeps its preferences and sign-out controls interact
   requireText(account, "<Pressable", "interactive preference rows");
   requireText(account, "void toggle()", "working appearance toggle");
   requireText(account, "void signOut()", "working secure sign-out");
+});
+
+Deno.test("Provider workspace has separate company, opportunities and jobs routes", () => {
+  requireText(providerNavigation, 'name="opportunities"', "provider opportunity tab");
+  requireText(providerNavigation, 'name="work"', "provider job management tab");
+  requireText(providerNavigation, 'name="services"', "provider company and service setup tab");
+  requireText(providerDashboard, "ProviderDashboardScreen", "provider company overview");
+  requireText(providerOpportunities, "/runtime/logistics/opportunities", "matched provider inbox");
+  requireText(providerCompany, "/runtime/logistics/company/services", "service configuration route");
+  requireText(providerCompany, "/runtime/logistics/company/coverage", "coverage configuration route");
+  requireText(providerCompany, 'coverageMode === "route"', "route corridor coverage mode");
+  requireText(providerJobs, "/runtime/logistics/bookings?providerOrganizationId=", "provider-owned booking list");
+  requireText(providerBookingDetail, "/runtime/logistics/bookings/accept", "provider accept lifecycle");
+  requireText(providerBookingDetail, "/runtime/logistics/bookings/start", "provider start lifecycle");
+  requireText(providerBookingDetail, "/runtime/logistics/bookings/delivery/submit", "provider delivery submission lifecycle");
+  requireText(providerRoutes, "ProviderTabs", "provider tab route layout");
+  requireText(providerWorkRoute, "ProviderJobsScreen", "provider jobs route");
+  requireText(providerJobRoute, "ProviderBookingDetailScreen", "provider booking detail route");
+});
+
+Deno.test("Provider matched opportunities are free and enable customer contact and quote negotiation", () => {
+  requireText(providerOpportunities, "customer_contact_snapshot", "matched provider customer contact");
+  requireText(providerOpportunities, "Linking.openURL", "call/email customer actions");
+  requireText(providerOpportunities, "createClientIdempotencyKey", "retry-safe provider offer submission");
+  requireText(providerOpportunities, '"/runtime/logistics/offers"', "provider quote submission");
+  requireText(providerOpportunities, '"/runtime/logistics/offers/counter"', "provider counteroffer response");
+  requireText(providerOpportunities, "No lead unlock fee", "free opportunity access");
+});
+
+Deno.test("Provider delivery payload is normalized to the database contract", () => {
+  requireText(logisticsRuntime, "deliverySubmission.recipientName ?? deliverySubmission.recipient_name", "camelCase recipient compatibility");
+  requireText(logisticsRuntime, "recipient_name: recipientName", "database recipient payload key");
+  requireText(logisticsRuntime, "delivery_note: deliveryNote ?? null", "database delivery note payload key");
+  requireText(bookingFulfillmentMigration, "recipient_name text", "required delivery recipient");
+});
+
+Deno.test("Customer confirmation triggers online settlement but never double-charges offline completion", () => {
+  requireText(booking, "/runtime/logistics/bookings/delivery/confirm", "customer completion action");
+  requireText(booking, "Confirm delivery received", "customer delivery confirmation");
+  requireText(booking, "execute_service_request_settlement", "online settlement is customer-confirmed");
+  requireText(bookingFulfillmentMigration, "current_status := 'completed_offline'", "offline completion state");
+  requireText(bookingFulfillmentMigration, "booking_record.customer_booking_fee_amount + booking_record.provider_receival_fee_amount", "offline fees are checked only when configured");
+  requireText(bookingFulfillmentMigration, "configured offline booking fees must be confirmed", "zero-fee offline booking can complete");
 });
