@@ -61,6 +61,25 @@ Deno.test("missing financial policy versions fail closed", () => {
   if (!rejected) throw new Error("Missing approved policy version must be rejected.");
 });
 
+
+Deno.test("each payment mode requires only the applicable provider fee policy", () => {
+  const offline = calculateLogisticsFinancialBreakdown({
+    currencyCode: "NGN",
+    paymentMode: "offline_provider",
+    deliveryPriceMinor: 100_000,
+    policy: { ...policy, settlementCommissionPolicyVersionId: "" },
+  });
+  if (offline.settlementCommissionMinor !== 0) throw new Error("Offline commission must remain zero.");
+
+  const online = calculateLogisticsFinancialBreakdown({
+    currencyCode: "NGN",
+    paymentMode: "skima_settlement",
+    deliveryPriceMinor: 100_000,
+    policy: { ...policy, providerReceivalFeePolicyVersionId: "" },
+  });
+  if (online.providerReceivalFeeMinor !== 0) throw new Error("Online provider receival fee must remain zero.");
+});
+
 Deno.test("fee calculation rejects floating amounts and invalid commission rates", () => {
   for (const input of [
     { deliveryPriceMinor: 10_000.5, policy },
