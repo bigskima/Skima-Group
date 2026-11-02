@@ -13,6 +13,9 @@ const migrationFulfillment = await Deno.readTextFile(
 const migrationWalletFunding = await Deno.readTextFile(
   "supabase/migrations/20261102115000_logistics_provider_wallet_funding.sql",
 );
+const migrationDriver = await Deno.readTextFile(
+  "supabase/migrations/20261102120000_logistics_company_driver_fulfillment.sql",
+);
 const migrationDriverFulfillment = await Deno.readTextFile(
   "supabase/migrations/20261102120000_logistics_company_driver_fulfillment.sql",
 );
@@ -374,4 +377,57 @@ Deno.test("Driver completion remains subject to customer confirmation and the ex
   requireText(migrationDriverFulfillment, "new.status in ('settled','completed_offline')", "customer-confirmed terminal booking states");
   requireText(migrationDriverFulfillment, "status='completed'", "driver assignment only completes after booking settlement");
   requireText(migrationDriverFulfillment, "delivery_submission_snapshot", "existing customer delivery proof is preserved");
+});
+
+
+Deno.test("Logistics driver dispatch resources include only verified company drivers with compliant active vehicles", () => {
+  requireText(migrationDriver, "public.read_logistics_company_dispatch_resources", "company dispatch resource projection");
+  requireText(migrationDriver, "public.can_manage_logistics_company(target_organization_id)", "company tenant management guard");
+  requireText(migrationDriver, "public.has_permission('business.logistics.jobs.manage', target_organization_id)", "company dispatch permission");
+  requireText(migrationDriver, "driver.verification_status = 'approved'", "approved driver gate");
+  requireText(migrationDriver, "driver.operational_status = 'available'", "available driver gate");
+  requireText(migrationDriver, "membership.status = 'active'", "active company staff membership gate");
+  requireText(migrationDriver, "compliance.driver_approved = true", "driver compliance gate");
+  requireText(migrationDriver, "compliance.vehicle_approved = true", "vehicle approval gate");
+  requireText(migrationDriver, "compliance.vehicle_documents_valid = true", "valid vehicle document gate");
+  requireText(runtime, '"/runtime/logistics/company/dispatch-resources"', "company dispatch resource API route");
+});
+
+Deno.test("Logistics driver assignment is tenant-scoped, capacity-checked and single-active", () => {
+  requireText(migrationDriver, "create table if not exists public.logistics_booking_driver_assignments", "separate Logistics driver assignment ledger");
+  requireText(migrationDriver, "logistics_booking_one_active_driver_assignment_idx", "one active driver per booking");
+  requireText(migrationDriver, "logistics_driver_one_active_booking_idx", "one active booking per driver");
+  requireText(migrationDriver, "alter table public.logistics_booking_driver_assignments enable row level security", "assignment table RLS");
+  requireText(migrationDriver, "driver_user_id = auth.uid()", "driver sees their own assignments");
+  requireText(migrationDriver, "public.can_read_logistics_company(provider_organization_id)", "company sees only its assignments");
+  requireText(migrationDriver, "with check (false)", "no direct authenticated assignment writes");
+  requireText(migrationDriver, "booking_record.status <> 'provider_accepted'", "company must accept booking first");
+  requireText(migrationDriver, "driver_record.verification_status <> 'approved'", "unapproved drivers cannot be assigned");
+  requireText(migrationDriver, "driver_record.operational_status <> 'available'", "busy/offline drivers cannot be assigned");
+  requireText(migrationDriver, "driver must be an active member of this provider company", "driver must belong to provider tenant");
+  requireText(migrationDriver, "vehicle_record.max_load_kg < cargo_weight", "vehicle weight capacity gate");
+  requireText(migrationDriver, "vehicle_record.cargo_volume_m3 < cargo_volume", "vehicle volume capacity gate");
+  requireText(migrationDriver, "vehicle_type_key = any(service_record.vehicle_type_keys)", "service vehicle type gate");
+  requireText(runtime, '"/runtime/logistics/bookings/assign-driver"', "company driver assignment API route");
+});
+
+Deno.test("Driver self-service lifecycle controls acceptance, start, pickup, transit and delivery", () => {
+  requireText(migrationDriver, "public.read_my_logistics_driver_profile()", "driver self profile");
+  requireText(migrationDriver, "public.read_my_logistics_driver_bookings()", "driver self assignment inbox");
+  requireText(migrationDriver, "assignment_record.driver_user_id <> actor", "only assigned driver can accept/reject");
+  requireText(migrationDriver, "target_decision not in ('accept','reject')", "driver accept/reject decisions");
+  requireText(migrationDriver, "target_milestone not in ('picked_up','in_transit')", "supported driver milestones");
+  requireText(migrationDriver, "driver must start the booking before updating pickup or transit", "milestones follow service start");
+  requireText(migrationDriver, "cargo must be picked up before the driver marks it in transit", "transit follows pickup");
+  requireText(migrationDriver, "assignment_record.status = 'in_transit'", "delivery can only be submitted from transit");
+  requireText(migrationDriver, "the name of the person receiving the delivery is required", "recipient evidence is mandatory");
+  requireText(migrationDriver, "public.complete_logistics_driver_assignment_after_settlement()", "assignment follows booking settlement");
+  requireText(migrationDriver, "set status='completed'", "completed settlement closes driver assignment");
+  requireText(runtime, '"/runtime/logistics/driver/profile"', "driver profile endpoint");
+  requireText(runtime, '"/runtime/logistics/driver/bookings"', "driver bookings endpoint");
+  requireText(runtime, '"/runtime/logistics/driver/assignment/respond"', "driver decision endpoint");
+  requireText(runtime, '"/runtime/logistics/driver/milestone"', "driver milestone endpoint");
+  if (migrationDriver.includes("\nas $\ndeclare")) {
+    throw new Error("driver profile migration: invalid standalone SQL dollar delimiter");
+  }
 });
