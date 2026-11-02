@@ -45,7 +45,8 @@ export function LogisticsBookingScreen() {
     ...wallet,
     balance: walletBalances.find((item) => asString(item, "wallet_id") === asString(wallet, "id"))?.balance ?? 0,
   }));
-  const selectedWallet = walletWithBalance.find((wallet) => asString(wallet, "id") === selectedWalletId) ?? walletWithBalance[0] ?? null;
+  const preferredWalletId = selectedWalletId || asString(booking, "payment_attempt_wallet_id") || "";
+  const selectedWallet = walletWithBalance.find((wallet) => asString(wallet, "id") === preferredWalletId) ?? walletWithBalance[0] ?? null;
   const total = asNumber(booking, "total_customer_charge") ?? 0;
   const bookingFee = asNumber(booking, "customer_booking_fee_amount") ?? 0;
   const delivery = asNumber(booking, "delivery_amount") ?? 0;
@@ -191,15 +192,23 @@ export function LogisticsBookingScreen() {
                   <Text style={[styles.sectionDescription, { color: palette.muted }]}>The full delivery amount and booking fee are reserved securely in escrow.</Text>
                 </View>
               </View>
-              <WalletPicker wallets={walletWithBalance} selectedId={selectedWalletId || asString(selectedWallet, "id") || ""} onSelect={setSelectedWalletId} />
+              {status === "payment_processing" ? (
+                <View style={[styles.balanceRow, { backgroundColor: palette.warningSoft }]}>
+                  <Text style={[styles.balanceLabel, { color: palette.ink }]}>Payment attempt in progress</Text>
+                  <Text style={[styles.balanceValue, { color: palette.ink }]}>{asString(selectedWallet, "currency_code") ?? currency} wallet</Text>
+                  <Text style={[styles.sectionDescription, { color: palette.muted }]}>The original wallet is locked to this attempt. Continue with the same wallet so an existing debit or escrow hold is not duplicated.</Text>
+                </View>
+              ) : (
+                <WalletPicker wallets={walletWithBalance} selectedId={preferredWalletId || asString(selectedWallet, "id") || ""} onSelect={setSelectedWalletId} />
+              )}
               {walletWithBalance.length === 0 ? <StatePanel title="No active wallet found" description={`An active customer wallet in ${currency} is required for this booking.`} /> : (
                 <View style={[styles.balanceRow, { backgroundColor: palette.surfaceSubtle }]}>
                   <Text style={[styles.balanceLabel, { color: palette.muted }]}>Available balance</Text>
                   <Text style={[styles.balanceValue, { color: palette.ink }]}>{formatMoney(balance, currency)}</Text>
                 </View>
               )}
-              <AppButton label="Pay securely" fullWidth loading={payOnline.isPending} disabled={!selectedWallet || !enoughBalance || status !== "awaiting_payment" || isWorking} onPress={() => { setError(null); payOnline.mutate(); }} icon={<LockKeyhole color="#FFFFFF" size={16} />} />
-              {selectedWallet && !enoughBalance ? <Text style={[styles.inlineError, { color: palette.danger }]}>Your selected wallet does not have enough balance for this booking.</Text> : null}
+              <AppButton label={status === "payment_processing" ? "Continue payment confirmation" : "Pay securely"} fullWidth loading={payOnline.isPending} disabled={!selectedWallet || (status !== "payment_processing" && !enoughBalance) || !["awaiting_payment", "payment_processing"].includes(status) || isWorking} onPress={() => { setError(null); payOnline.mutate(); }} icon={<LockKeyhole color="#FFFFFF" size={16} />} />
+              {selectedWallet && !enoughBalance && status !== "payment_processing" ? <Text style={[styles.inlineError, { color: palette.danger }]}>Your selected wallet does not have enough balance for this booking.</Text> : null}
             </Card>
           ) : (
             <Card padding="lg">
