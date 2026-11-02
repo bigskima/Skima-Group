@@ -34,8 +34,8 @@ export const domainQueries = {
     }),
   storeOrders: () =>
     useGatewayQuery({
-      key: ["orders", "shared", "customer"],
-      path: "/runtime/orders",
+      key: ["orders", "store", "customer"],
+      path: "/runtime/storefront/orders",
       schema: RecordArraySchema,
       refetchInterval: 15000,
     }),
