@@ -79,12 +79,6 @@ begin
       updated_at = timezone('utc', now())
   returning id into workflow_id;
 
-  if workflow_id is null then
-    select id into workflow_id
-    from public.workflow_definitions
-    where key = 'workflow.skima-store.order-processing';
-  end if;
-
   insert into public.workflow_versions (workflow_id, version, status, definition, activated_at)
   values (
     workflow_id,
@@ -99,12 +93,6 @@ begin
       activated_at = coalesce(public.workflow_versions.activated_at, excluded.activated_at),
       updated_at = timezone('utc', now())
   returning id into workflow_version_id;
-
-  if workflow_version_id is null then
-    select id into workflow_version_id
-    from public.workflow_versions
-    where workflow_id = workflow_id and version = 1;
-  end if;
 
   insert into public.workflow_states (workflow_version_id, key, display_name, state_type, metadata)
   values
@@ -155,12 +143,6 @@ begin
       retired_at = null,
       updated_at = timezone('utc', now())
   returning id into store_module_version_id;
-
-  if store_module_version_id is null then
-    select id into store_module_version_id
-    from public.business_module_versions
-    where module_id = store_module_id and version = 1;
-  end if;
 
   insert into public.business_module_components (
     module_version_id, component_type, component_key, reference_key, is_required, config, status
