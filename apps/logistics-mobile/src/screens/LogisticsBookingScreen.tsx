@@ -1,9 +1,9 @@
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { router, useLocalSearchParams } from "expo-router";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, ArrowLeft, CheckCircle2, LockKeyhole, ShieldCheck, WalletCards } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { asNumber, asString, useLogisticsQuery } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
@@ -22,6 +22,7 @@ export function LogisticsBookingScreen() {
   const bookingId = Array.isArray(routeId) ? routeId[0] : routeId;
   const { palette } = useAppTheme();
   const { api, session } = useSession();
+  const queryClient = useQueryClient();
   const bookings = useLogisticsQuery(["bookings"], "/runtime/logistics/bookings", Boolean(bookingId));
   const walletsQuery = useLogisticsQuery(["wallets"], "/runtime/wallets");
   const balancesQuery = useLogisticsQuery(["wallet-balances"], "/runtime/wallet-balances");
@@ -72,8 +73,22 @@ export function LogisticsBookingScreen() {
     onSuccess: async () => { setError(null); await bookings.refetch(); },
     onError: (cause) => setError(cause instanceof Error ? cause.message : "Offline fee confirmation could not be completed."),
   });
+  const confirmDelivery = useMutation({
+    mutationFn: async () => api.post("/runtime/logistics/bookings/delivery/confirm", {
+      bookingId,
+      idempotencyKey: createClientIdempotencyKey("logistics.booking.delivery-confirm", bookingId),
+    }, z.record(z.string(), z.unknown())),
+    onSuccess: async () => {
+      setError(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["skima-logistics", "bookings"] }),
+        bookings.refetch(),
+      ]);
+    },
+    onError: (cause) => setError(cause instanceof Error ? cause.message : "Delivery confirmation could not be completed."),
+  });
   const refresh = async () => { await Promise.all([bookings.refetch(), walletsQuery.refetch(), balancesQuery.refetch()]); };
-  const isWorking = payOnline.isPending || confirmOffline.isPending;
+  const isWorking = payOnline.isPending || confirmOffline.isPending || confirmDelivery.isPending;
 
   return (
     <Screen eyebrow="BOOKING" title="Booking & payment" subtitle="Review the total and complete the payment step securely."
@@ -94,9 +109,9 @@ export function LogisticsBookingScreen() {
               </View>
               <StatusPill status={status} />
             </View>
-            <Text style={[styles.totalEyebrow, { color: palette.muted }]}>TOTAL CUSTOMER CHARGE</Text>
+            <Text style={[styles.totalEyebrow, { color: palette.muted }]}>{paymentMode === "offline" ? "TOTAL BOOKING VALUE" : "TOTAL CUSTOMER CHARGE"}</Text>
             <Text style={[styles.total, { color: palette.ink }]}>{formatMoney(total, currency)}</Text>
-            <Text style={[styles.totalHint, { color: palette.muted }]}>Includes the provider delivery price and your configured customer booking fee.</Text>
+            <Text style={[styles.totalHint, { color: palette.muted }]}>{paymentMode === "offline" ? "The delivery price is paid offline to the provider. Only the configured customer booking fee is collected from your wallet." : "Includes the provider delivery price and your configured customer booking fee, reserved together in escrow."}</Text>
             <View style={[styles.amountDivider, { backgroundColor: palette.border }]} />
             <AmountLine label="Provider delivery price" value={formatMoney(delivery, currency)} />
             <AmountLine label="Customer booking fee" value={formatMoney(bookingFee, currency)} />
@@ -144,6 +159,42 @@ export function LogisticsBookingScreen() {
             </Card>
           )}
 
+          {status === "delivered" ? (
+            <Card variant="warning" padding="lg">
+              <View style={styles.sectionHeading}>
+                <ShieldCheck color={palette.warning} size={21} />
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Confirm the delivery</Text>
+              </View>
+              <Text style={[styles.sectionDescription, { color: palette.muted }]}>
+                The provider has submitted the hand-off. Please confirm that you received the delivery. {paymentMode === "online_wallet" ? "Your escrowed payment will then be split between the provider’s net proceeds and the configured SKIMA fees." : "Your offline delivery is already paid directly to the provider; this confirmation will not charge another provider fee."}
+              </Text>
+              <AppButton label="Confirm delivery received" fullWidth loading={confirmDelivery.isPending}
+                onPress={() => Alert.alert(
+                  "Confirm delivery?",
+                  paymentMode === "online_wallet"
+                    ? "This confirms receipt and releases the protected escrow according to the booking's locked fee breakdown."
+                    : "This records completion. No online commission or additional provider receival fee will be charged.",
+                  [
+                    { text: "Not yet", style: "cancel" },
+                    { text: "Confirm delivery", onPress: () => { setError(null); confirmDelivery.mutate(); } },
+                  ],
+                )}
+                icon={<CheckCircle2 color="#FFFFFF" size={16} />}
+              />
+            </Card>
+          ) : null}
+          {status === "settled" ? (
+            <Card variant="success" padding="lg">
+              <View style={styles.sectionHeading}><CheckCircle2 color={palette.success} size={21} /><Text style={[styles.sectionTitle, { color: palette.ink }]}>Delivery confirmed · payment settled</Text></View>
+              <Text style={[styles.sectionDescription, { color: palette.muted }]}>The shared escrow settlement has been recorded. The provider receives the locked net amount and SKIMA receives the configured booking fee and online commission.</Text>
+            </Card>
+          ) : null}
+          {status === "completed_offline" ? (
+            <Card variant="success" padding="lg">
+              <View style={styles.sectionHeading}><CheckCircle2 color={palette.success} size={21} /><Text style={[styles.sectionTitle, { color: palette.ink }]}>Offline delivery completed</Text></View>
+              <Text style={[styles.sectionDescription, { color: palette.muted }]}>Your delivery confirmation is recorded. The customer booking fee and provider receival fee were collected earlier; no online commission or second provider fee was charged.</Text>
+            </Card>
+          ) : null}
           {status === "payment_reserved" ? (
             <Card variant="success" padding="lg">
               <View style={styles.sectionHeading}><ShieldCheck color={palette.success} size={21} /><Text style={[styles.sectionTitle, { color: palette.ink }]}>Payment protected in escrow</Text></View>
