@@ -1,7 +1,7 @@
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, Clock3, MapPin, Navigation, PackageCheck, Phone, ShieldCheck, Truck, UserRound } from "lucide-react-native";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Linking, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { asNumber, asString, useLogisticsQuery, useLogisticsRecordQuery } from "../api/logistics";
@@ -386,7 +386,7 @@ function VehicleSummary({ assignment, palette }: { assignment: Record<string, un
   );
 }
 
-function Stat({ value, label, icon }: { value: string; label: string; icon: React.ReactNode }) {
+function Stat({ value, label, icon }: { value: string; label: string; icon: ReactNode }) {
   const { palette } = useAppTheme();
   return <View style={[styles.stat, { borderColor: palette.border, backgroundColor: palette.surface }]}>
     <View style={[styles.statIcon, { backgroundColor: palette.brandSoft }]}>{icon}</View>
