@@ -52,9 +52,13 @@ export function ProviderCompanyScreen() {
   const [coverageServiceKey, setCoverageServiceKey] = useState("");
   const [coverageSearch, setCoverageSearch] = useState("");
   const [coveragePlace, setCoveragePlace] = useState<Place | null>(null);
+  const [coverageMode, setCoverageMode] = useState<"both" | "route">("both");
+  const [destinationSearch, setDestinationSearch] = useState("");
+  const [destinationPlace, setDestinationPlace] = useState<Place | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const activeCategories = (categoriesQuery.data ?? []).filter((item) => asString(item, "status") === "active");
+  const organization = nested(company, "organization");
   const availableServices = services.data ?? [];
   const serviceKey = useMemo(() => serviceCategory && serviceName ? serviceSlug(serviceCategory, serviceName) : "", [serviceCategory, serviceName]);
   const refresh = () => Promise.all([companies.refetch(), categoriesQuery.refetch(), services.refetch(), coverage.refetch()]);
@@ -105,21 +109,23 @@ export function ProviderCompanyScreen() {
 
   const addCoverage = useMutation({
     mutationFn: () => {
-      if (!organizationId || !coverageServiceKey || !coveragePlace) throw new Error("Choose a service and a coverage location.");
+      if (!organizationId || !coverageServiceKey || !coveragePlace) throw new Error("Choose a service and an origin coverage location.");
       const geographyId = asString(coveragePlace, "id");
-      if (!geographyId) throw new Error("The selected coverage location is missing its identifier.");
+      const destinationGeographyId = coverageMode === "route" ? asString(destinationPlace, "id") : null;
+      if (!geographyId) throw new Error("The selected origin location is missing its identifier.");
+      if (coverageMode === "route" && !destinationGeographyId) throw new Error("Choose a destination for this route coverage.");
       return api.post("/runtime/logistics/company/coverage", {
         organizationId,
         serviceKey: coverageServiceKey,
-        coverageMode: "both",
+        coverageMode: coverageMode === "route" ? "route" : "both",
         geographyId,
-        destinationGeographyId: null,
-        idempotencyKey: createClientIdempotencyKey("logistics.provider.coverage", `${coverageServiceKey}:${geographyId}`),
+        destinationGeographyId: coverageMode === "route" ? asString(destinationPlace, "id") : null,
+        idempotencyKey: createClientIdempotencyKey("logistics.provider.coverage", `${coverageServiceKey}:${coverageMode}:${geographyId}:${destinationGeographyId ?? "all"}`),
         metadata: { source: "skima.logistics.provider.workspace" },
       }, z.string().uuid());
     },
     onSuccess: async () => {
-      setCoverageSearch(""); setCoveragePlace(null);
+      setCoverageSearch(""); setCoveragePlace(null); setDestinationSearch(""); setDestinationPlace(null);
       await coverage.refetch();
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : "Coverage could not be saved."),
@@ -149,7 +155,7 @@ export function ProviderCompanyScreen() {
                   <View style={styles.companyCopy}>
                     <Text style={[styles.companyEyebrow, { color: palette.brand }]}>REGISTERED ORGANISATION</Text>
                     <Text style={[styles.companyName, { color: palette.ink }]}>{asString(company, "public_name") ?? "Logistics provider"}</Text>
-                    <Text style={[styles.companyMeta, { color: palette.muted }]}>{asString(company, "legal_name") ?? "Legal name not supplied"}</Text>
+                    <Text style={[styles.companyMeta, { color: palette.muted }]}>{asString(organization, "legal_name") ?? "Legal name not supplied"}</Text>
                   </View>
                   <StatusPill status={asString(company, "verification_status") ?? "pending"} />
                 </View>
@@ -202,7 +208,9 @@ export function ProviderCompanyScreen() {
                         <View style={[styles.smallIcon, { backgroundColor: palette.successSoft }]}><MapPin color={palette.success} size={17} /></View>
                         <View style={styles.serviceCopy}>
                           <Text style={[styles.serviceTitle, { color: palette.ink }]}>{asString(nested(item, "service"), "display_name") ?? "Service coverage"}</Text>
-                          <Text style={[styles.serviceMeta, { color: palette.muted }]}>{asString(item, "coverage_mode") ?? "both"} · {asString(item, "geography_name", "canonical_name") ?? "Selected operating area"}</Text>
+                          <Text style={[styles.serviceMeta, { color: palette.muted }]}>{asString(item, "coverage_mode") === "route"
+                            ? `${asString(nested(item, "geography"), "canonical_name") ?? "Origin"} → ${asString(nested(item, "destination"), "canonical_name") ?? "Destination"}`
+                            : `${asString(nested(item, "geography"), "canonical_name") ?? "Selected area"} · pickup & delivery`}</Text>
                         </View>
                         <StatusPill status={asString(item, "status") ?? "active"} />
                       </View>
@@ -220,9 +228,14 @@ export function ProviderCompanyScreen() {
                         return <TextButton key={key} label={asString(service, "display_name") ?? key} active={active} onPress={() => setCoverageServiceKey(key)} />;
                       })}
                     </View>
-                    <GeographyPicker label="Operating location" value={coverageSearch} selected={coveragePlace} onChange={(value) => { setCoverageSearch(value); setCoveragePlace(null); }} onSelect={(place) => { setCoveragePlace(place); setCoverageSearch(asString(place, "canonical_name") ?? ""); }} />
-                    <Text style={[styles.coverageHint, { color: palette.muted }]}>This setting covers both pickup and delivery within the selected geographic area. Add route coverage for specific origin-to-destination corridors when required.</Text>
-                    <AppButton label="Save operating area" fullWidth loading={addCoverage.isPending} disabled={!coverageServiceKey || !coveragePlace} onPress={() => { setError(null); addCoverage.mutate(); }} />
+                    <View style={styles.choiceGrid}>
+                      <AppButton size="sm" variant={coverageMode === "both" ? "primary" : "secondary"} label="Pickup & delivery area" onPress={() => { setCoverageMode("both"); setDestinationPlace(null); }} />
+                      <AppButton size="sm" variant={coverageMode === "route" ? "primary" : "secondary"} label="Specific route" onPress={() => setCoverageMode("route")} />
+                    </View>
+                    <GeographyPicker label={coverageMode === "route" ? "Route origin" : "Operating location"} value={coverageSearch} selected={coveragePlace} onChange={(value) => { setCoverageSearch(value); setCoveragePlace(null); }} onSelect={(place) => { setCoveragePlace(place); setCoverageSearch(asString(place, "canonical_name") ?? ""); }} />
+                    {coverageMode === "route" ? <GeographyPicker label="Route destination" value={destinationSearch} selected={destinationPlace} onChange={(value) => { setDestinationSearch(value); setDestinationPlace(null); }} onSelect={(place) => { setDestinationPlace(place); setDestinationSearch(asString(place, "canonical_name") ?? ""); }} /> : null}
+                    <Text style={[styles.coverageHint, { color: palette.muted }]}>{coverageMode === "route" ? "Only matching requests on this origin-to-destination corridor will be routed to the service." : "This setting covers both pickup and delivery within the selected geographic area."}</Text>
+                    <AppButton label="Save operating coverage" fullWidth loading={addCoverage.isPending} disabled={!coverageServiceKey || !coveragePlace || (coverageMode === "route" && !destinationPlace)} onPress={() => { setError(null); addCoverage.mutate(); }} />
                   </Card>
                 ) : null}
               </View>
@@ -239,11 +252,6 @@ function nested(record: Record<string, unknown> | null | undefined, key: string)
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 function TextButton({ label, active, onPress }: { label: string; active: boolean; onPress(): void }) {
-  const { palette } = useAppTheme();
-  return <TextButtonInner label={label} active={active} onPress={onPress} />;
-}
-function TextButtonInner({ label, active, onPress }: { label: string; active: boolean; onPress(): void }) {
-  const { palette } = useAppTheme();
   return <AppButton size="sm" variant={active ? "primary" : "secondary"} label={label} onPress={onPress} />;
 }
 const styles = StyleSheet.create({
