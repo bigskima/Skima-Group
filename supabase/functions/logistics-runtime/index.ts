@@ -498,6 +498,17 @@ async function handleLogisticsRequest(
     }), id);
   }
 
+  if (routePath === "/runtime/logistics/bookings/cancel" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("cancel_logistics_booking_before_payment", {
+      target_booking_id: requireUuid(p.bookingId, "bookingId"),
+      target_reason: requireString(p.reason, "reason"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
   if (routePath === "/runtime/logistics/bookings/accept" && request.method === "POST") {
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
