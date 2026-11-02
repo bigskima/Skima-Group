@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { ChevronRight, CircleHelp, LogOut, Moon, ShieldCheck, Sun, UserRound } from "lucide-react-native";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View, type ReactNode } from "react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -50,7 +50,7 @@ export function CustomerAccountScreen() {
 }
 
 function PressableRow({ icon, title, subtitle, action, disabled, onPress }: {
-  icon: React.ReactNode; title: string; subtitle: string; action: string; disabled?: boolean; onPress?: () => void;
+  icon: ReactNode; title: string; subtitle: string; action: string; disabled?: boolean; onPress?: () => void;
 }) {
   const { palette } = useAppTheme();
   return (
