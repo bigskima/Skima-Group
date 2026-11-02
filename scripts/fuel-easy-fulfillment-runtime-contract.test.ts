@@ -95,8 +95,8 @@ Deno.test("purchased orders settle only after customer OTP; rental orders settle
   includes(pricing, "public.verify_fuel_delivery_challenge(", "OTP verification is customer-authenticated");
   includes(pricing, "create trigger fuel_delivery_otp_auto_completion", "verified OTP drives automatic delivery completion");
   includes(pricing, "operation_record.container_mode='rental' then 'return_due' else 'completed'", "purchase and rental have separate post-verification paths");
-  includes(progression, "Customer delivery confirmation is the next gate", "driver delivery cannot directly close a Fuel order");
-  includes(progression, "customer OTP", "the verified OTP is the delivery authorization");
+  includes(pricing, "Do not close or settle here. The customer OTP trigger moves", "driver delivery cannot directly close a Fuel order");
+  includes(pricing, "customer OTP trigger moves", "the verified OTP is the delivery authorization");
   includes(pricing, "can_complete_fuel_delivery_settlement", "settlement is gated by order-bound verified customer handover");
   includes(walletGate, "can_create_fuel_verified_platform_purpose_wallet", "platform revenue/liability wallets are narrowly authorized for this exact settlement");
   includes(walletGate, "'fuel-settlement:'||order_record.id::text||':revenue-wallet'", "platform wallet creation is bound to the exact Fuel order idempotency key");
