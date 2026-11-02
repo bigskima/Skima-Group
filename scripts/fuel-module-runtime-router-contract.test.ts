@@ -14,7 +14,7 @@ function requireNotIncludes(source: string, fragment: string, message: string): 
 Deno.test("shared gateway dispatches active module routes without business-specific branches", () => {
   requireIncludes(gateway, "dispatchBusinessModuleRuntimeRoute(", "generic module dispatcher is installed");
   requireIncludes(gateway, 'supabase.rpc("resolve_business_module_runtime_route"', "route lookup is database driven");
-  requireIncludes(gateway, 'new URL(`/functions/v1/${edgeFunction}`, supabaseUrl)', "handler destination is selected from the route registry");
+  requireIncludes(gateway, "supabase.functions.invoke(edgeFunction", "configured handler is invoked through Supabase with the caller context");
   requireIncludes(gateway, 'supabase.rpc("list_active_business_module_runtime_routes")', "runtime catalog includes configured modules");
   requireNotIncludes(gateway, "/runtime/fuel/", "the platform gateway must not define Fuel routes");
   requireNotIncludes(gateway, "resolveFuelOrderBranchAccess", "Fuel authorization helpers must live with the Fuel module");
@@ -27,7 +27,9 @@ Deno.test("Fuel handler owns Fuel route logic and reuses authenticated platform 
   requireIncludes(moduleRuntime, "requireAuthenticatedUser(request, id)", "module endpoint validates the user JWT");
   requireIncludes(moduleRuntime, 'target_policy_key: "api.gateway.authenticated.default"', "module endpoint applies the authenticated request rate limit");
   requireIncludes(moduleRuntime, "SUPABASE_SERVICE_ROLE_KEY", "trusted mutations use the server-side service credential");
-  requireNotIncludes(moduleRuntime, "x-skima-runtime-path ??", "module route path cannot be inferred from an untrusted fallback");
+  requireIncludes(moduleRuntime, 'request.headers.get("x-skima-runtime-envelope") === "true"', "module runtime only accepts the gateway invocation envelope");
+  requireIncludes(moduleRuntime, "routePath = typeof envelope.routePath === \"string\" ? envelope.routePath : null", "the module route is read from the validated invocation envelope");
+  requireNotIncludes(moduleRuntime, "x-skima-runtime-path", "module routing does not trust a caller-supplied route header");
 });
 
 Deno.test("module runtime registration is active-module scoped and validates handler slugs", () => {
