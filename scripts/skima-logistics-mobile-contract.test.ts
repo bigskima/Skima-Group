@@ -314,3 +314,16 @@ Deno.test("Customers can withdraw a Logistics request only before booking", () =
   requireText(detail, "router.replace(\"/(customer)/jobs\"", "return to customer request activity after cancellation");
   requireNotText(detail, "Cancel paid booking", "no unsupported paid booking cancellation control");
 });
+
+
+Deno.test("Customers can cancel only an unpaid Logistics booking from checkout", () => {
+  requireText(booking, '"/runtime/logistics/bookings/cancel"', "pre-payment booking cancellation endpoint");
+  requireText(booking, 'status === "awaiting_payment"', "online unpaid booking eligibility");
+  requireText(booking, 'status === "awaiting_offline_confirmation"', "offline unpaid booking eligibility");
+  requireText(booking, "Cancel booking", "customer cancellation control");
+  requireText(booking, "No wallet debit, refund or provider payout will be created", "no misleading financial outcome");
+  requireText(booking, "cancelBooking.isPending", "cancel button pending state");
+  requireText(booking, "createClientIdempotencyKey(\"logistics.booking.cancel\"", "retry-safe booking cancellation key");
+  requireText(booking, 'status === "cancelled"', "cancelled booking confirmation state");
+  requireNotText(booking, "cancelBooking.mutate()" , "cancellation is confirmation-gated");
+});
