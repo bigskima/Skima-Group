@@ -455,3 +455,20 @@ Deno.test("Customer cancellation only withdraws requests before a provider booki
   requireNotText(migrationCancellation, "fund_order_from_wallet", "pre-booking withdrawal does not touch wallets");
   requireText(runtime, '"/runtime/logistics/jobs/cancel"', "customer cancellation runtime route");
 });
+
+
+Deno.test("Customer may cancel an unpaid booking but cannot bypass escrow, fees or provider fulfilment", () => {
+  requireText(migrationCancellation, "public.cancel_logistics_booking_before_payment", "unpaid booking cancellation RPC");
+  requireText(migrationCancellation, "booking_record.requester_user_id <> actor", "booking owner check");
+  requireText(migrationCancellation, "booking_record.status not in ('awaiting_payment', 'awaiting_offline_confirmation')", "only unpaid booking statuses are cancellable");
+  requireText(migrationCancellation, "booking_record.escrow_hold_id is not null", "escrow hold blocks cancellation");
+  requireText(migrationCancellation, "booking_record.payment_transaction_id is not null", "online payment blocks cancellation");
+  requireText(migrationCancellation, "booking_record.offline_fee_transaction_id is not null", "offline fee transaction blocks cancellation");
+  requireText(migrationCancellation, "set status = 'cancelled'", "booking is closed");
+  requireText(migrationCancellation, "update public.service_requests", "shared service request is closed");
+  requireText(migrationCancellation, "update public.order_records", "shared order record is closed");
+  requireText(migrationCancellation, "financial_effect', 'none'", "cancellation never implies refund or settlement");
+  requireNotText(migrationCancellation, "post_financial_transaction", "no ledger entry is posted");
+  requireNotText(migrationCancellation, "execute_service_request_settlement", "no escrow is released");
+  requireText(runtime, '"/runtime/logistics/bookings/cancel"', "unpaid booking cancellation API route");
+});
