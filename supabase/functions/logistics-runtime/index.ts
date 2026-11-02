@@ -393,9 +393,9 @@ async function handleLogisticsRequest(
       target_opportunity_id: requireUuid(p.opportunityId, "opportunityId"),
       target_currency_code: requireString(p.currencyCode, "currencyCode"),
       target_delivery_price_minor: requireInteger(p.deliveryPriceMinor, "deliveryPriceMinor"),
-      target_estimated_duration_minutes: optionalInteger(p.estimatedDurationMinutes, "estimatedDurationMinutes"),
+      target_estimated_duration_minutes: optionalInteger(p.estimatedDurationMinutes, "estimatedDurationMinutes") ?? null,
       target_terms: optionalRecord(p.terms) ?? {},
-      target_expires_at: optionalString(p.expiresAt),
+      target_expires_at: optionalString(p.expiresAt) ?? null,
       target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
     }), id);
   }
@@ -408,9 +408,9 @@ async function handleLogisticsRequest(
       target_parent_offer_id: requireUuid(p.parentOfferId, "parentOfferId"),
       target_currency_code: requireString(p.currencyCode, "currencyCode"),
       target_delivery_price_minor: requireInteger(p.deliveryPriceMinor, "deliveryPriceMinor"),
-      target_estimated_duration_minutes: optionalInteger(p.estimatedDurationMinutes, "estimatedDurationMinutes"),
+      target_estimated_duration_minutes: optionalInteger(p.estimatedDurationMinutes, "estimatedDurationMinutes") ?? null,
       target_terms: optionalRecord(p.terms) ?? {},
-      target_expires_at: optionalString(p.expiresAt),
+      target_expires_at: optionalString(p.expiresAt) ?? null,
       target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
     }), id);
   }
