@@ -640,10 +640,6 @@ begin
   where id = target_parent_offer_id
   for update;
   if not found then raise exception 'offer to counter was not found'; end if;
-  if parent_offer.status <> 'submitted' then
-    raise exception 'only the latest open offer can be negotiated';
-  end if;
-
   select * into job
   from public.logistics_job_requests
   where id = parent_offer.job_id
@@ -705,6 +701,10 @@ begin
       raise exception 'idempotency key was reused with different counteroffer details';
     end if;
     return new_offer_id;
+  end if;
+
+  if parent_offer.status <> 'submitted' then
+    raise exception 'only the latest open offer can be negotiated';
   end if;
 
   insert into public.logistics_offers (
@@ -1049,8 +1049,8 @@ begin
   if job.requester_user_id <> auth.uid() and not public.has_permission('logistics.marketplace.manage', null) then
     raise exception 'only the job customer or marketplace administrator may refresh matching';
   end if;
-  if job.status not in ('open', 'matching', 'offers_received') then raise exception 'this logistics job is no longer accepting provider matches'; end if;
   if exists (select 1 from public.logistics_job_events e where e.job_id = job.id and e.idempotency_key = target_idempotency_key || ':event') then return 0; end if;
+  if job.status not in ('open', 'matching', 'offers_received') then raise exception 'this logistics job is no longer accepting provider matches'; end if;
 
   insert into public.logistics_job_opportunities (
     job_id, organization_id, provider_service_id, status, match_reasons, job_snapshot, customer_contact_snapshot
