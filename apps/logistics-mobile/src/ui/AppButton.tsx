@@ -16,12 +16,12 @@ export function AppButton({ label, icon, trailingIcon, variant = "primary", size
   const textColor = variant === "primary" || variant === "danger" ? "#FFFFFF" : variant === "ghost" ? palette.brand : palette.ink;
   return (
     <Pressable
+      {...props}
       accessibilityRole="button"
       accessibilityLabel={props.accessibilityLabel ?? label}
       accessibilityState={{ disabled: inactive, busy: loading }}
       disabled={inactive}
       hitSlop={size === "sm" ? 4 : 2}
-      {...props}
       style={({ pressed }) => [
         styles.base, size === "sm" && styles.sm, size === "md" && styles.md, size === "lg" && styles.lg,
         fullWidth && styles.fullWidth, variant !== "ghost" && shadows.soft,
