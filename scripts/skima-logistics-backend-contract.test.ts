@@ -342,7 +342,7 @@ Deno.test("Logistics dispatch assigns only an approved, available company member
   requireText(migrationDriverFulfillment, "public.vehicle_assignment_compliance", "shared vehicle compliance gate");
   requireText(migrationDriverFulfillment, "compliance.vehicle_documents_valid = true", "vehicle document validity gate");
   requireText(migrationDriverFulfillment, "public.assign_logistics_booking_driver", "company dispatch assignment RPC");
-  requireText(migrationDriverFulfillment, "vehicle must have enough weight capacity", "vehicle cargo weight limit");
+  requireText(migrationDriverFulfillment, "selected vehicle does not have enough weight capacity", "vehicle cargo weight limit");
   requireText(migrationDriverFulfillment, "vehicle does not have enough cargo volume", "vehicle cargo volume limit");
   requireText(migrationDriverFulfillment, "selected vehicle type is not allowed", "service-specific vehicle type gate");
   requireText(migrationDriverFulfillment, "logistics_driver_one_active_booking_idx", "no concurrent active booking for one driver");
@@ -419,7 +419,7 @@ Deno.test("Driver self-service lifecycle controls acceptance, start, pickup, tra
   requireText(migrationDriver, "target_milestone not in ('picked_up','in_transit')", "supported driver milestones");
   requireText(migrationDriver, "driver must start the booking before updating pickup or transit", "milestones follow service start");
   requireText(migrationDriver, "cargo must be picked up before the driver marks it in transit", "transit follows pickup");
-  requireText(migrationDriver, "assignment_record.status = 'in_transit'", "delivery can only be submitted from transit");
+  requireText(migrationDriver, "where booking_id = booking_record.id and driver_user_id = actor and status = 'in_transit'", "delivery can only be submitted from transit");
   requireText(migrationDriver, "the name of the person receiving the delivery is required", "recipient evidence is mandatory");
   requireText(migrationDriver, "public.complete_logistics_driver_assignment_after_settlement()", "assignment follows booking settlement");
   requireText(migrationDriver, "set status='completed'", "completed settlement closes driver assignment");
