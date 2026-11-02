@@ -580,9 +580,31 @@ async function handleFuelRuntimeRequest(
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
     const payload = body.value;
+    const orderId = requireUuid(payload.orderId, "orderId");
+    const orderResult = await supabase
+      .from("order_records")
+      .select("id,requester_user_id,module_id")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (orderResult.error) return databaseError(orderResult.error, id);
+    if (!orderResult.data || orderResult.data.requester_user_id !== authResult.user.id) {
+      return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+    }
+    const moduleResult = await supabase
+      .from("business_modules")
+      .select("key")
+      .eq("id", orderResult.data.module_id)
+      .maybeSingle();
+    if (moduleResult.error) return databaseError(moduleResult.error, id);
+    if (moduleResult.data?.key !== "fuel") {
+      return jsonResponse({ ok: false, error: "fuel_order_not_found", requestId: id }, 404);
+    }
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
     return rpcResponse(
-      supabase.rpc("create_fuel_commercial_quote", {
-        target_order_id: requireUuid(payload.orderId, "orderId"),
+      serviceClient.rpc("create_fuel_commercial_quote", {
+        target_order_id: orderId,
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_metadata: optionalRecord(payload.metadata) ?? {},
       }),
