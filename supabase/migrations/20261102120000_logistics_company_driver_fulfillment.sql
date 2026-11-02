@@ -865,7 +865,8 @@ revoke all on function public.respond_logistics_driver_assignment(uuid,text,text
 revoke all on function public.update_logistics_driver_milestone(uuid,text,text,jsonb) from public,anon;
 revoke all on function public.start_logistics_booking(uuid,text) from public,anon;
 revoke all on function public.submit_logistics_booking_delivery(uuid,jsonb,text) from public,anon;
-revoke all on function public.read_my_logistics_driver_profile() from public,anon;\nrevoke all on function public.read_my_logistics_driver_bookings() from public,anon;
+revoke all on function public.read_my_logistics_driver_profile() from public,anon;
+revoke all on function public.read_my_logistics_driver_bookings() from public,anon;
 
 grant execute on function public.read_logistics_company_dispatch_resources(uuid) to authenticated,service_role;
 grant execute on function public.assign_logistics_booking_driver(uuid,uuid,uuid,text) to authenticated,service_role;
@@ -873,7 +874,8 @@ grant execute on function public.respond_logistics_driver_assignment(uuid,text,t
 grant execute on function public.update_logistics_driver_milestone(uuid,text,text,jsonb) to authenticated,service_role;
 grant execute on function public.start_logistics_booking(uuid,text) to authenticated,service_role;
 grant execute on function public.submit_logistics_booking_delivery(uuid,jsonb,text) to authenticated,service_role;
-grant execute on function public.read_my_logistics_driver_profile() to authenticated,service_role;\ngrant execute on function public.read_my_logistics_driver_bookings() to authenticated,service_role;
+grant execute on function public.read_my_logistics_driver_profile() to authenticated,service_role;
+grant execute on function public.read_my_logistics_driver_bookings() to authenticated,service_role;
 
 grant select on public.logistics_booking_driver_assignments to authenticated,service_role;
 notify pgrst,'reload schema';
