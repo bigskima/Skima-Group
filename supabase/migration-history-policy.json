@@ -123,6 +123,7 @@
     "20261102014500_lpg_single_customer_otp_handover.sql",
     "20261102160000_fuel_easy_fulfillment_mode_aware_runtime.sql",
     "20261102161000_fuel_auto_progression_verified_delivery_completion.sql",
-    "20261102162000_fuel_verified_settlement_platform_wallet_gate.sql"
+    "20261102162000_fuel_verified_settlement_platform_wallet_gate.sql",
+    "20261102162500_fuel_internal_helper_rpc_acl.sql"
   ]
 }
