@@ -545,7 +545,7 @@ create or replace function public.confirm_logistics_offline_booking_payment(
   target_customer_wallet_id uuid,
   target_idempotency_key text
 )
-returns uuid
+returns jsonb
 language plpgsql
 security definer
 set search_path = public
@@ -578,10 +578,11 @@ begin
     raise exception 'offline fee collection is not allowed for an online-wallet booking';
   end if;
   if booking_record.status = 'offline_payment_confirmed' then
-    if booking_record.offline_fee_transaction_id is not null then
-      return booking_record.offline_fee_transaction_id;
-    end if;
-    return booking_record.id;
+    return jsonb_build_object(
+      'booking_id', booking_record.id,
+      'status', booking_record.status,
+      'fee_transaction_id', booking_record.offline_fee_transaction_id
+    );
   end if;
   if booking_record.status <> 'awaiting_offline_confirmation' then
     raise exception 'logistics booking is not awaiting offline payment confirmation';
@@ -708,7 +709,11 @@ begin
     )
   );
 
-  return coalesce(fee_transaction_id, booking_record.id);
+  return jsonb_build_object(
+    'booking_id', booking_record.id,
+    'status', 'offline_payment_confirmed',
+    'fee_transaction_id', fee_transaction_id
+  );
 end;
 $$;
 
