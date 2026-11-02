@@ -50,18 +50,6 @@ begin
      and membership.status = 'active'
      and membership.membership_type = 'owner'
     where provider.organization_id = target_organization_id
-  ) and not exists (
-    select 1
-    from public.logistics_provider_profiles provider
-    join public.organization_memberships membership
-      on membership.organization_id = provider.organization_id
-     and membership.user_id = target_customer_user_id
-     and membership.status = 'active'
-    where provider.organization_id = target_organization_id
-      and public.has_permission(
-        'business.logistics.company.manage',
-        target_organization_id
-      )
   ) then
     raise exception 'active logistics company owner permission is required to fund this wallet';
   end if;
