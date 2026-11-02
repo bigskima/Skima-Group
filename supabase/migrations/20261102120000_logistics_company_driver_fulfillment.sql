@@ -12,6 +12,7 @@ create table if not exists public.logistics_booking_driver_assignments (
   id uuid primary key default gen_random_uuid(),
   booking_id uuid not null references public.logistics_bookings(id) on delete restrict,
   provider_organization_id uuid not null references public.organizations(id) on delete restrict,
+  requester_user_id uuid not null references public.profiles(id) on delete restrict,
   driver_profile_id uuid not null references public.driver_profiles(id) on delete restrict,
   driver_user_id uuid not null references public.profiles(id) on delete restrict,
   vehicle_id uuid not null references public.vehicles(id) on delete restrict,
@@ -51,11 +52,7 @@ on public.logistics_booking_driver_assignments for select to authenticated
 using (
   driver_user_id = auth.uid()
   or public.can_read_logistics_company(provider_organization_id)
-  or exists (
-    select 1 from public.logistics_bookings booking
-    where booking.id = logistics_booking_driver_assignments.booking_id
-      and booking.requester_user_id = auth.uid()
-  )
+  or requester_user_id = auth.uid()
 );
 create policy logistics_driver_assignments_no_direct_insert
 on public.logistics_booking_driver_assignments for insert to authenticated with check (false);
@@ -325,11 +322,11 @@ begin
     and status in ('offered','accepted','in_progress','picked_up','in_transit');
 
   insert into public.logistics_booking_driver_assignments (
-    booking_id,provider_organization_id,driver_profile_id,driver_user_id,vehicle_id,
+    booking_id,provider_organization_id,requester_user_id,driver_profile_id,driver_user_id,vehicle_id,
     status,assigned_by,idempotency_key,metadata
   )
   values (
-    booking_record.id,booking_record.provider_organization_id,driver_record.id,
+    booking_record.id,booking_record.provider_organization_id,booking_record.requester_user_id,driver_record.id,
     assigned_user_id,vehicle_record.id,'offered',actor,target_idempotency_key,
     jsonb_build_object('source','logistics.company.dispatch')
   )
