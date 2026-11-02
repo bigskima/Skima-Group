@@ -605,16 +605,23 @@ async function handleLogisticsRequest(
     const paymentIdempotencyKey = requireString(p.idempotencyKey, "idempotencyKey");
 
     const bookingResult = await supabase.from("logistics_bookings")
-      .select("id,order_id,service_request_id,requester_user_id,payment_mode,status,currency_code,total_customer_charge,escrow_hold_id,policy_snapshots")
+      .select("id,service_request_id,requester_user_id,payment_mode,status,currency_code,total_customer_charge,escrow_hold_id")
       .eq("id", bookingId)
       .eq("requester_user_id", requesterUserId)
       .maybeSingle();
     if (bookingResult.error) return databaseError(bookingResult.error, id);
-    if (!bookingResult.data) return jsonResponse({ ok: false, error: "logistics_booking_not_found", requestId: id }, 404);
+    if (!bookingResult.data) {
+      return jsonResponse({ ok: false, error: "logistics_booking_not_found", requestId: id }, 404);
+    }
     const booking = bookingResult.data;
 
     if (booking.payment_mode !== "online_wallet") {
-      return jsonResponse({ ok: false, error: "wrong_payment_mode", message: "This booking was created for offline payment.", requestId: id }, 409);
+      return jsonResponse({
+        ok: false,
+        error: "wrong_payment_mode",
+        message: "This booking was created for offline payment.",
+        requestId: id,
+      }, 409);
     }
     if (booking.status === "payment_reserved" && booking.escrow_hold_id) {
       return jsonResponse({
@@ -630,11 +637,13 @@ async function handleLogisticsRequest(
         requestId: id,
       });
     }
-    if (booking.status !== "awaiting_payment") {
-      return jsonResponse({ ok: false, error: "booking_not_payable", message: "This booking is not awaiting online payment.", requestId: id }, 409);
-    }
-    if (!booking.order_id) {
-      return jsonResponse({ ok: false, error: "booking_order_missing", message: "The booking is missing its payment order.", requestId: id }, 409);
+    if (!["awaiting_payment", "payment_processing"].includes(booking.status)) {
+      return jsonResponse({
+        ok: false,
+        error: "booking_not_payable",
+        message: "This booking is not awaiting online payment.",
+        requestId: id,
+      }, 409);
     }
 
     const walletResult = await supabase.from("wallet_accounts")
@@ -648,16 +657,23 @@ async function handleLogisticsRequest(
       .maybeSingle();
     if (walletResult.error) return databaseError(walletResult.error, id);
     if (!walletResult.data) {
-      return jsonResponse({ ok: false, error: "customer_wallet_required", message: "Choose your own active customer wallet in the booking currency.", requestId: id }, 403);
+      return jsonResponse({
+        ok: false,
+        error: "customer_wallet_required",
+        message: "Choose your own active customer wallet in the booking currency.",
+        requestId: id,
+      }, 403);
     }
 
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    }
     const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
 
-    // This database function locks the booking row for the whole wallet debit
-    // and escrow-link transaction. Cancellation locks the same row, so neither
-    // action can slip between funding and booking status confirmation.
+    // The database transaction locks the booking, starts/reuses its stable
+    // payment attempt, funds escrow and marks the booking funded in one call.
+    // Pre-payment cancellation locks the same row and cannot race this debit.
     const reservation = await serviceClient.rpc("reserve_logistics_booking_online_payment", {
       target_booking_id: booking.id,
       target_requester_user_id: requesterUserId,
@@ -665,23 +681,30 @@ async function handleLogisticsRequest(
       target_client_idempotency_key: paymentIdempotencyKey,
     });
     if (reservation.error) return databaseError(reservation.error, id);
-    const reservationData = isRecord(reservation.data) ? reservation.data : {};
-    const holdId = requireUuid(reservationData.escrow_hold_id, "escrowHoldId");
+    const result = isRecord(reservation.data) ? reservation.data : {};
+    const escrowHoldId = requireUuid(result.escrow_hold_id, "escrowHoldId");
+    if (result.status !== "payment_reserved") {
+      return jsonResponse({
+        ok: false,
+        error: "payment_not_reserved",
+        message: "The escrow reservation did not reach its confirmed state. Retry with the same customer wallet.",
+        requestId: id,
+      }, 409);
+    }
+
     return jsonResponse({
       ok: true,
       data: {
         bookingId,
         serviceRequestId: booking.service_request_id,
-        escrowHoldId: holdId,
-        status: reservationData.status === "payment_reserved" ? "payment_reserved" : "payment_reserved",
+        escrowHoldId,
+        status: "payment_reserved",
         currencyCode: booking.currency_code,
         totalAmount: booking.total_customer_charge,
-        idempotentReplay: reservationData.idempotent_replay === true,
       },
       requestId: id,
     });
   }
-
   if (routePath === "/runtime/logistics/bookings/offline/confirm" && request.method === "POST") {
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
