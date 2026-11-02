@@ -260,7 +260,7 @@ async function handleLogisticsRequest(
 
   if (routePath === "/runtime/logistics/company/coverage" && request.method === "GET") {
     let query = supabase.from("logistics_provider_coverage")
-      .select("id,organization_id,provider_service_id,coverage_mode,geography_id,destination_geography_id,status,metadata,created_at,updated_at,service:logistics_provider_services(service_key,display_name)")
+      .select("id,organization_id,provider_service_id,coverage_mode,geography_id,destination_geography_id,status,metadata,created_at,updated_at,service:logistics_provider_services(service_key,display_name),geography:geographies(id,canonical_name,country_code),destination:geographies(id,canonical_name,country_code)")
       .order("created_at", { ascending: false });
     const organizationId = optionalUuid(url.searchParams.get("organizationId"), "organizationId");
     const serviceId = optionalUuid(url.searchParams.get("providerServiceId"), "providerServiceId");
