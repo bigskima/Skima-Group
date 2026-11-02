@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { ArrowRight, Bell, BriefcaseBusiness, Building2, CheckCircle2, ClipboardList, ShieldCheck, Truck } from "lucide-react-native";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { asString, useLogisticsQuery } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
@@ -43,7 +43,7 @@ export function ProviderDashboardScreen() {
   const refresh = () => Promise.all([companies.refetch(), opportunities.refetch(), jobs.refetch()]);
   return (
     <Screen eyebrow="PROVIDER WORKSPACE" title={`Welcome, ${ownerName}`} subtitle="Run your logistics company and respond to qualified customer requests."
-      action={<Pressable accessibilityRole="button" accessibilityLabel="Open company settings" onPress={() => router.push("/(provider)/company" as never)}
+      action={<Pressable accessibilityRole="button" accessibilityLabel="Open company settings" onPress={() => router.push("/(provider)/services" as never)}
         style={[styles.avatar, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}><Building2 color={palette.brand} size={19} /></Pressable>}
       refreshControl={<RefreshControl refreshing={companies.isRefetching || opportunities.isRefetching || jobs.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}>
       <View style={styles.brandRow}><BrandMark /><View style={[styles.trustBadge, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={13} /><Text style={[styles.trustText, { color: palette.success }]}>Company portal</Text></View></View>
@@ -54,7 +54,7 @@ export function ProviderDashboardScreen() {
           <View style={[styles.setupIcon, { backgroundColor: palette.brandSoft }]}><Building2 color={palette.brand} size={25} /></View>
           <Text style={[styles.setupTitle, { color: palette.ink }]}>Set up your logistics company</Text>
           <Text style={[styles.setupBody, { color: palette.muted }]}>Register your organisation, configure the services you provide and define the areas your team can cover.</Text>
-          <AppButton label="Set up company" fullWidth onPress={() => router.push("/(provider)/company" as never)} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />
+          <AppButton label="Set up company" fullWidth onPress={() => router.push("/(provider)/services" as never)} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />
         </Card>
       ) : (
         <>
@@ -88,7 +88,7 @@ export function ProviderDashboardScreen() {
                   <View style={[styles.emptyIcon, { backgroundColor: palette.brandSoft }]}><BriefcaseBusiness color={palette.brand} size={22} /></View>
                   <Text style={[styles.emptyTitle, { color: palette.ink }]}>Your next job is out there</Text>
                   <Text style={[styles.emptyBody, { color: palette.muted }]}>When a customer posts a request that matches your services and coverage, it will appear in Opportunities.</Text>
-                  <AppButton label="Review services & coverage" fullWidth variant="secondary" onPress={() => router.push("/(provider)/company" as never)} />
+                  <AppButton label="Review services & coverage" fullWidth variant="secondary" onPress={() => router.push("/(provider)/services" as never)} />
                 </View>
               </Card>
             ) : (
@@ -106,7 +106,7 @@ export function ProviderDashboardScreen() {
           </View>
           <View style={styles.quickRow}>
             <AppButton label="Open opportunities" fullWidth onPress={() => router.push("/(provider)/opportunities" as never)} trailingIcon={<ArrowRight color="#FFFFFF" size={15} />} />
-            <AppButton label="Company settings" fullWidth variant="secondary" onPress={() => router.push("/(provider)/company" as never)} />
+            <AppButton label="Company settings" fullWidth variant="secondary" onPress={() => router.push("/(provider)/services" as never)} />
           </View>
         </>
       )}
@@ -117,7 +117,7 @@ function nested(record: Record<string, unknown> | null | undefined, key: string)
   const value = record?.[key];
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
-function Stat({ value, label, icon }: { value: string; label: string; icon: React.ReactNode }) {
+function Stat({ value, label, icon }: { value: string; label: string; icon: ReactNode }) {
   const { palette } = useAppTheme();
   return <View style={[styles.stat, { backgroundColor: palette.surface, borderColor: palette.border }]}><View style={[styles.statIcon, { backgroundColor: palette.brandSofter }]}>{icon}</View><Text style={[styles.statValue, { color: palette.ink }]}>{value}</Text><Text style={[styles.statLabel, { color: palette.muted }]}>{label}</Text></View>;
 }
