@@ -100,3 +100,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.store-workspace__order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
