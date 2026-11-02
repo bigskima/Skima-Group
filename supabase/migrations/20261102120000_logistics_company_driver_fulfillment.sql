@@ -163,6 +163,11 @@ begin
     left join public.profiles profile on profile.id = driver.user_id
     where driver.verification_status = 'approved'
       and driver.operational_status = 'available'
+      and not exists (
+        select 1 from public.logistics_booking_driver_assignments active_assignment
+        where active_assignment.driver_profile_id = driver.id
+          and active_assignment.status in ('offered','accepted','in_progress','picked_up','in_transit')
+      )
       and exists (
         select 1
         from public.driver_vehicle_links link
@@ -287,12 +292,15 @@ begin
   select offer.* into offer_record
   from public.logistics_offers offer
   where offer.id = booking_record.offer_id;
+  if not found then raise exception 'selected provider offer was not found'; end if;
   select service.* into service_record
   from public.logistics_provider_services service
   join public.logistics_job_opportunities opportunity
     on opportunity.provider_service_id = service.id
   where opportunity.id = offer_record.opportunity_id;
+  if not found then raise exception 'provider service configuration for this booking was not found'; end if;
   select * into job_record from public.logistics_job_requests where id = booking_record.job_id;
+  if not found then raise exception 'logistics job request for this booking was not found'; end if;
 
   select nullif(job_record.cargo_snapshot->>'weight_kg','')::numeric,
          nullif(job_record.cargo_snapshot->>'volume_m3','')::numeric
@@ -364,6 +372,8 @@ declare
   actor uuid := auth.uid();
   assignment_record public.logistics_booking_driver_assignments%rowtype;
   booking_record public.logistics_bookings%rowtype;
+  existing_event public.logistics_booking_events%rowtype;
+  expected_event_type text;
 begin
   if actor is null then raise exception 'authentication is required'; end if;
   if target_assignment_id is null or target_decision not in ('accept','reject')
@@ -378,7 +388,19 @@ begin
   end if;
 
   select * into booking_record from public.logistics_bookings where id = assignment_record.booking_id for update;
-  if not found or booking_record.status <> 'provider_accepted' then
+  if not found then raise exception 'booking was not found for this driver assignment'; end if;
+  expected_event_type := case when target_decision = 'accept'
+    then 'logistics.booking.driver_accepted' else 'logistics.booking.driver_rejected' end;
+  select * into existing_event from public.logistics_booking_events
+  where booking_id = booking_record.id and idempotency_key = target_idempotency_key;
+  if found then
+    if existing_event.event_type <> expected_event_type
+      or existing_event.metadata->>'assignment_id' <> assignment_record.id::text then
+      raise exception 'driver response idempotency key was used for a different action';
+    end if;
+    return assignment_record.id;
+  end if;
+  if booking_record.status <> 'provider_accepted' then
     raise exception 'booking is no longer waiting for driver acceptance';
   end if;
 
@@ -453,7 +475,12 @@ begin
 
   select * into existing_event from public.logistics_booking_events
   where booking_id = booking_record.id and idempotency_key = target_idempotency_key;
-  if found then return assignment_record.id; end if;
+  if found then
+    if existing_event.event_type <> ('logistics.booking.driver_' || target_milestone) then
+      raise exception 'driver milestone idempotency key was used for a different action';
+    end if;
+    return assignment_record.id;
+  end if;
 
   if booking_record.status <> 'in_progress' then
     raise exception 'driver must start the booking before updating pickup or transit';
@@ -553,9 +580,6 @@ begin
       updated_at = timezone('utc',now())
   where id = assignment_record.id;
 
-  update public.driver_profiles
-  set operational_status = 'busy',updated_at = timezone('utc',now())
-  where id = assignment_record.driver_profile_id and operational_status = 'available';
 
   update public.service_requests set status = 'in_progress',updated_at = timezone('utc',now())
   where id = booking_record.service_request_id;
@@ -660,9 +684,6 @@ begin
       updated_at = timezone('utc',now())
   where id = assignment_record.id;
 
-  update public.driver_profiles
-  set operational_status = 'available',updated_at = timezone('utc',now())
-  where id = assignment_record.driver_profile_id and operational_status = 'busy';
 
   update public.service_requests set status = 'fulfilled',updated_at = timezone('utc',now())
   where id = booking_record.service_request_id;
