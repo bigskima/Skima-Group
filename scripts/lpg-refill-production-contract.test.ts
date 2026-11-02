@@ -939,7 +939,7 @@ Deno.test("LPG final hand-over uses customer OTP only across Station, Independen
   // evidence on the job. No separate supplier or final return scan is needed.
   assertIncludes(internal, 'return ["driver_accepted", "pickup_en_route"].includes(status) ? "customer_pickup" : null;');
   assertIncludes(internal, '["station_en_route", "station_verified", "refill_in_progress"].includes(status)');
-  assertIncludes(internal, "record supplier details, actual refill and safety evidence");
+  assertIncludes(internal, "record supplier, actual price and kilograms, confirm the safety check, then submit");
   assertIncludes(internal, "No second return scan is required.");
   assertNotIncludes(internal, 'return "station_receipt"');
   assertNotIncludes(internal, 'return "customer_delivery"');
