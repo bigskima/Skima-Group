@@ -161,7 +161,7 @@ export function CustomerDashboard() {
     : cylinder
       ? {
           eyebrow: "Ready when you are",
-          title: "Refill a cylinder",
+          title: "Refill gas",
           body: "Choose a cylinder and arrange pickup in a few taps.",
           label: "Start refill",
           href: "/(customer)/orders/new",
