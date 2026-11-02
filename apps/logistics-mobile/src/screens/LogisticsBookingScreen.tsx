@@ -45,13 +45,14 @@ export function LogisticsBookingScreen() {
     ...wallet,
     balance: walletBalances.find((item) => asString(item, "wallet_id") === asString(wallet, "id"))?.balance ?? 0,
   }));
+  const status = asString(booking, "status") ?? "awaiting_payment";
   const preferredWalletId = selectedWalletId || asString(booking, "payment_attempt_wallet_id") || "";
-  const selectedWallet = walletWithBalance.find((wallet) => asString(wallet, "id") === preferredWalletId) ?? walletWithBalance[0] ?? null;
+  const selectedWallet = walletWithBalance.find((wallet) => asString(wallet, "id") === preferredWalletId)
+    ?? (status === "payment_processing" ? null : walletWithBalance[0] ?? null);
   const total = asNumber(booking, "total_customer_charge") ?? 0;
   const bookingFee = asNumber(booking, "customer_booking_fee_amount") ?? 0;
   const delivery = asNumber(booking, "delivery_amount") ?? 0;
   const providerReceival = asNumber(booking, "provider_receival_fee_amount") ?? 0;
-  const status = asString(booking, "status") ?? "awaiting_payment";
   const paymentMode = asString(booking, "payment_mode") ?? "online_wallet";
   const balance = Number(selectedWallet?.balance ?? 0);
   const requiredFromCustomer = paymentMode === "offline" ? bookingFee : total;
