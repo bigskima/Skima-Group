@@ -93,7 +93,10 @@ Deno.test("Customer home, activity and request screens read live Logistics servi
   requireText(request, "useCreateLogisticsJob", "customer job publish mutation");
   requireText(logisticsApi, 'api.post("/runtime/logistics/jobs"', "customer job publish API route");
   requireText(request, "createClientIdempotencyKey", "request submission idempotency");
-  requireText(request, "step === 3", "three-stage review before publish");
+  requireText(request, "[1, 2, 3].map", "three-stage progress indicator");
+  requireText(request, "STEP {step} OF 3", "three-stage request progress");
+  requireText(request, "Review your request", "customer review step before publishing");
+  requireText(request, "step < 3", "two information stages before the final publish stage");
   requireText(request, "customer_contact", "provider coordination contact");
   requireNotText(request.toLowerCase(), "fixed booking fee", "no hardcoded customer booking rate");
   requireNotText(request.toLowerCase(), "sample provider", "no mock service-provider names");
