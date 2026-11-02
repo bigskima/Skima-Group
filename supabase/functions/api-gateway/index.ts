@@ -3722,7 +3722,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
     const lineItemsResult = await serviceClient
       .from("order_line_items")
-      .select("line_amount,currency_code")
+      .select("item_id,variant_id,quantity,line_amount,currency_code")
       .eq("order_id", orderId);
     if (lineItemsResult.error) return databaseError(lineItemsResult.error, id);
     const persistedLines = lineItemsResult.data ?? [];
