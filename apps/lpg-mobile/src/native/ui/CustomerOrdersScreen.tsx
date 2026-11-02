@@ -13,7 +13,6 @@ import {
   firstString,
   nestedRecord,
   recordId,
-  type PlatformRecord,
 } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
@@ -41,9 +40,12 @@ const TRACKABLE_ORDER_STATES = new Set([
   "delivery_verification_pending",
 ]);
 
-// Delivery confirmation is deliberately narrow. A customer must never be offered
-// the final hand-over action merely because the driver has started the return trip.
+// The customer can request the final OTP once the order has entered its return
+// leg. The customer must only reveal and confirm the code after the cylinder is
+// physically with them; no second driver scan is required.
 const DELIVERY_CONFIRMATION_STATES = new Set([
+  "return_en_route",
+  "returning",
   "delivery_verification_pending",
   "delivery_arrived",
   "customer_confirmation_pending",
@@ -246,14 +248,9 @@ export function CustomerOrderDetailScreen() {
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
   const actualKg = firstNumber(order, ["actualKg", "actual_kg"]);
   const trackable = TRACKABLE_ORDER_STATES.has(normalized);
-  const customerReturnScanVerified = hasVerifiedCustomerDeliveryScan(root, order);
-  // The return scan intentionally leaves the order in return_en_route.
-  // Expose the customer's OTP action only after this order's scan has passed.
-  const deliveryConfirmationStage = DELIVERY_CONFIRMATION_STATES.has(normalized)
-    || ["return_en_route", "returning"].includes(normalized);
-  const canVerifyDelivery = deliveryConfirmationStage && customerReturnScanVerified;
-  const customerDisplayStatus = customerReturnScanVerified
-    && ["return_en_route", "returning"].includes(normalized)
+  const deliveryConfirmationStage = DELIVERY_CONFIRMATION_STATES.has(normalized);
+  const canVerifyDelivery = deliveryConfirmationStage;
+  const customerDisplayStatus = ["return_en_route", "returning"].includes(normalized)
     ? "delivery_verification_pending"
     : status;
   const canShowReceipt = FINAL_ORDER_STATES.has(normalized) || ["paid", "settled"].includes(normalizeStatus(paymentStatus));
@@ -396,7 +393,7 @@ export function CustomerOrderDetailScreen() {
               />
             ) : null}
             {trackable && id ? <AppButton label="Open live tracking" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/tracking` as never)} /> : null}
-            {id && canVerifyDelivery ? <AppButton label="Confirm delivery" variant="secondary" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/verify` as never)} /> : null}
+            {id && canVerifyDelivery ? <AppButton label="Confirm delivery with OTP" variant="secondary" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/verify` as never)} /> : null}
             {id && canShowReceipt ? <AppButton label="View or share receipt" variant="ghost" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/receipt` as never)} /> : null}
           </View>
 
@@ -501,27 +498,6 @@ function formatDate(value: string | null) {
   if (!value) return "Time unavailable";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
-}
-
-function hasVerifiedCustomerDeliveryScan(
-  ...records: Array<PlatformRecord | null | undefined>
-): boolean {
-  return records.some((record) => {
-    if (!record) return false;
-    if (
-      record.customerDeliveryScanVerified === true
-      || record.customer_delivery_scan_verified === true
-    ) return true;
-
-    const scans = Array.isArray(record.scans) ? record.scans : [];
-    return scans.some((value) => {
-      if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-      const scan = value as PlatformRecord;
-      const scanType = firstString(scan, ["scanType", "scan_type"])?.toLowerCase();
-      const result = firstString(scan, ["result"])?.toLowerCase();
-      return scanType === "customer_delivery" && result === "passed";
-    });
-  });
 }
 
 function normalizeStatus(value: string) {
