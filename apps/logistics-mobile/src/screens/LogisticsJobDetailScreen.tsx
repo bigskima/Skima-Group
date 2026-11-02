@@ -2,7 +2,7 @@ import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, Clock3, MessageSquareText, RefreshCw, ShieldCheck, Truck, WalletCards } from "lucide-react-native";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { asNumber, asString, useLogisticsQuery } from "../api/logistics";
@@ -344,9 +344,10 @@ function BookingModeSheet({ visible, paymentMode, setPaymentMode, busy, onClose,
 
 function toMinorUnits(value: string, decimals: number): number | null {
   const clean = value.trim();
-  const pattern = decimals === 0 ? /^\d+$/ : new RegExp(\`^\\\\d+(?:\\\\.\\\\d{1,\${decimals}})?$\`);
-  if (!pattern.test(clean)) return null;
-  const [whole, fraction = ""] = clean.split(".");
+  const parts = clean.split(".");
+  if (parts.length > 2) return null;
+  const [whole, fraction = ""] = parts;
+  if (!/^\d+$/.test(whole) || !/^\d*$/.test(fraction) || fraction.length > decimals) return null;
   const scale = 10 ** decimals;
   const amount = Number(whole) * scale + Number((fraction + "0".repeat(decimals)).slice(0, decimals) || "0");
   return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
@@ -388,12 +389,12 @@ function CustomerCounterOfferSheet({ visible, offer, decimals, busy, error, onCl
           <Text style={[styles.sheetTitle, { color: palette.ink }]}>Make a counteroffer</Text>
           <Text style={[styles.description, { color: palette.muted }]}>The company’s current quote is {currentPrice}. Your counter must use the same currency; the company will be notified to respond.</Text>
           <AppField
-            label={\`Your price (\${currency})\`}
+            label={`Your price (${currency})`}
             value={price}
             onChangeText={(value) => { setPrice(value); setValidation(null); }}
             placeholder="Enter your proposed amount"
             keyboardType="decimal-pad"
-            hint={decimals === null ? "Currency precision is loading." : \`Use up to \${decimals} decimal places.\`}
+            hint={decimals === null ? "Currency precision is loading." : `Use up to ${decimals} decimal places.`}
           />
           <AppField
             label="Estimated delivery time (minutes)"
