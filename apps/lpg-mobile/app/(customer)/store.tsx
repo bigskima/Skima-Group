@@ -28,6 +28,8 @@ import {
   View,
 } from "react-native";
 import { z } from "zod";
+import { domainQueries } from "../../src/native/api/domains";
+import { firstNumber, firstString } from "../../src/native/api/records";
 import { useStorefrontData } from "../../src/native/api/store";
 import {
   type PlatformRecord,
@@ -36,6 +38,7 @@ import { RuntimeMediaImage } from "../../src/native/ui/RuntimeMediaImage";
 import { ScreenSkeleton } from "../../src/native/ui/ScreenSkeleton";
 import { useSession } from "../../src/native/session/SessionProvider";
 import { idempotencyKey } from "../../src/native/utilities/idempotency";
+import { selectWorkspaceWallet, walletRecordId } from "../../src/native/utilities/financeWallet";
 import { useAppTheme } from "../../src/native/theme/ThemeProvider";
 import { borders, radii, spacing, typography } from "../../src/native/theme/tokens";
 
@@ -68,6 +71,25 @@ export default function StoreScreen() {
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [selectedQuantity, setSelectedQuantity] = useState(1);
   const [cartOpen, setCartOpen] = useState(false);
+  const [fulfillmentMethod, setFulfillmentMethod] = useState<"delivery" | "pickup">("delivery");
+  const [deliveryLocationId, setDeliveryLocationId] = useState("");
+  const [customerNote, setCustomerNote] = useState("");
+  const locations = domainQueries.locations();
+  const wallets = domainQueries.wallets();
+  const customerWallet = selectWorkspaceWallet(
+    wallets.data ?? [],
+    "customer",
+    userId === "anonymous" ? null : userId,
+  );
+  const customerWalletId = walletRecordId(customerWallet);
+  const walletBalance = firstNumber(customerWallet, ["available_balance", "availableBalance", "balance"]) ?? 0;
+  const walletCurrency = firstString(customerWallet, ["currency_code", "currencyCode"]) ?? "NGN";
+  const availableLocations = (locations.data ?? []).filter((location) =>
+    !["inactive", "disabled", "deleted"].includes(firstString(location, ["status"]) ?? ""),
+  );
+  const selectedDeliveryLocation = availableLocations.find((location) =>
+    firstString(location, ["id"]) === deliveryLocationId
+  ) ?? null;
 
   useEffect(() => {
     let active = true;
@@ -103,6 +125,22 @@ export default function StoreScreen() {
   }, [cart, cartReady, cartStorageKey, loadedCartKey]);
 
   const settings = data.activeSettings;
+  const enabledFulfillmentMethods = Array.isArray(settings?.fulfillment_methods)
+    ? settings.fulfillment_methods.filter((method): method is "delivery" | "pickup" => method === "delivery" || method === "pickup")
+    : [];
+  useEffect(() => {
+    if (enabledFulfillmentMethods.length && !enabledFulfillmentMethods.includes(fulfillmentMethod)) {
+      setFulfillmentMethod(enabledFulfillmentMethods.includes(settings?.fulfillment_method as "delivery" | "pickup")
+        ? settings?.fulfillment_method as "delivery" | "pickup"
+        : enabledFulfillmentMethods[0]);
+    }
+  }, [enabledFulfillmentMethods.join("|"), fulfillmentMethod, settings?.fulfillment_method]);
+  useEffect(() => {
+    if (!deliveryLocationId && availableLocations.length) {
+      const preferred = availableLocations.find((location) => location.is_default === true) ?? availableLocations[0];
+      setDeliveryLocationId(firstString(preferred, ["id"]) ?? "");
+    }
+  }, [availableLocations, deliveryLocationId]);
   const storeModuleId = typeof data.storeModule?.id === "string" ? data.storeModule.id : null;
   const categories = useMemo(() =>
     (data.categories.data ?? []).filter((category) =>
@@ -247,6 +285,39 @@ export default function StoreScreen() {
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const cartTotal = cart.reduce((sum, line) => sum + line.quantity * line.unitAmount, 0);
   const currencyCode = typeof settings?.currency_code === "string" ? settings.currency_code : "NGN";
+  const deliveryDistanceKm = fulfillmentMethod === "delivery" && selectedDeliveryLocation && settings
+    ? haversineDistanceKm(
+        Number(settings.delivery_origin_latitude),
+        Number(settings.delivery_origin_longitude),
+        Number(firstNumber(selectedDeliveryLocation, ["latitude"])),
+        Number(firstNumber(selectedDeliveryLocation, ["longitude"])),
+      )
+    : null;
+  const deliveryBaseFee = firstNumber(settings, ["delivery_base_fee_amount"]) ?? 0;
+  const deliveryPerKmFee = firstNumber(settings, ["delivery_per_km_fee_amount"]) ?? 0;
+  const freeDeliveryMinimum = firstNumber(settings, ["free_delivery_minimum_amount"]);
+  const estimatedDeliveryFee = fulfillmentMethod === "pickup"
+    ? 0
+    : deliveryDistanceKm === null || !Number.isFinite(deliveryDistanceKm)
+      ? null
+      : freeDeliveryMinimum !== null && cartTotal >= freeDeliveryMinimum
+        ? 0
+        : Math.round((deliveryBaseFee + deliveryPerKmFee * deliveryDistanceKm) * 100) / 100;
+  const estimatedCheckoutTotal = estimatedDeliveryFee === null ? null : cartTotal + estimatedDeliveryFee;
+  const minimumOrderAmount = firstNumber(settings, ["minimum_order_amount"]) ?? 0;
+  const walletCurrencyMatches = walletCurrency === currencyCode;
+  const walletSufficient = estimatedCheckoutTotal !== null && walletBalance >= estimatedCheckoutTotal;
+  const canCheckout = Boolean(
+    settings &&
+    customerWalletId &&
+    walletCurrencyMatches &&
+    cart.length &&
+    estimatedCheckoutTotal !== null &&
+    estimatedCheckoutTotal > 0 &&
+    cartTotal >= minimumOrderAmount &&
+    walletSufficient &&
+    (fulfillmentMethod === "pickup" || deliveryLocationId),
+  );
 
   const checkout = useMutation({
     mutationFn: async () => {
@@ -629,6 +700,17 @@ function CategoryChip({ label, active, onPress }: { label: string; active: boole
 
 function chooseRecord(records: PlatformRecord[], variantId: string | null) {
   return records.find((record) => (record.variant_id ?? null) === variantId) ?? null;
+}
+
+function haversineDistanceKm(fromLatitude: number, fromLongitude: number, toLatitude: number, toLongitude: number) {
+  if (![fromLatitude, fromLongitude, toLatitude, toLongitude].every(Number.isFinite)) return Number.NaN;
+  const radians = (degrees: number) => degrees * Math.PI / 180;
+  const latitudeDelta = radians(toLatitude - fromLatitude);
+  const longitudeDelta = radians(toLongitude - fromLongitude);
+  const a = Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(radians(fromLatitude)) * Math.cos(radians(toLatitude)) *
+    Math.sin(longitudeDelta / 2) ** 2;
+  return 6371.0088 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function isEffective(record: PlatformRecord, now: number) {
