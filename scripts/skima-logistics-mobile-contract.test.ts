@@ -380,7 +380,7 @@ Deno.test("Foreground GPS sharing is explicit and visible only during an active 
   requireText(providerDriver, "LogisticsDriverLocationShare", "driver job screen owns the tracking control");
   requireText(providerDriver, '["in_progress", "picked_up", "in_transit"]', "location sharing is available only after work starts");
   requireText(booking, '"/runtime/logistics/bookings/tracking?bookingId="', "customer booking tracking read");
-  requireText(booking, "refetchInterval", "customer sees fresh driver location without manual reload");
+  requireText(booking, "15_000", "customer sees fresh driver location without manual reload");
   requireText(booking, "Open location in Maps", "customer can open the latest GPS position");
   requireText(booking, "tracking.refetch()", "customer pull-to-refresh also refreshes tracking");
   requireNotText(appConfig, "locationAlwaysAndWhenInUsePermission", "no implicit background location permission");
