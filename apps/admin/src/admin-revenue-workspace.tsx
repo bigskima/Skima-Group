@@ -539,6 +539,8 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
         ) : null}
       </section>
 
+      <FuelPricingControls />
+
       <section className="sk-panel">
         <div className="sk-panel__header">
           <div>
@@ -974,6 +976,449 @@ export function AdminRevenueWorkspace(_props: { readonly onOpenFinance: () => vo
       </section>
     </>
   );
+}
+
+type FuelPricingWorkspace = {
+  readonly products: readonly PlatformRecord[];
+  readonly branches: readonly PlatformRecord[];
+  readonly offers: readonly PlatformRecord[];
+  readonly managedPrices: readonly PlatformRecord[];
+  readonly modeControls: readonly PlatformRecord[];
+};
+
+function FuelPricingControls() {
+  const { context, status, supabase } = useSessionState();
+  const queryClient = useQueryClient();
+  const isSuperAdmin = context?.platformAdmin?.admin_kind === "super_admin";
+  const permissions = context?.permissions ?? [];
+  const canRead = Boolean(
+    isSuperAdmin ||
+    permissions.includes("platform.revenue.read") ||
+    permissions.includes("platform.revenue.manage") ||
+    permissions.includes("platform.financial_policy.read") ||
+    permissions.includes("platform.fuel.manage")
+  );
+  const canManageProducts = Boolean(isSuperAdmin || permissions.includes("platform.fuel.manage"));
+  const canManageModes = Boolean(canManageProducts || permissions.includes("platform.dispatch.manage"));
+  const canManageRetail = Boolean(canManageProducts || permissions.includes("platform.financial_policy.manage") || permissions.includes("platform.revenue.manage"));
+  const canManageOverrides = Boolean(canManageProducts || permissions.includes("platform.financial_policy.manage"));
+  const [currencyCode, setCurrencyCode] = useState("NGN");
+  const [managedPriceDrafts, setManagedPriceDrafts] = useState<Record<string, string>>({});
+  const [overrideDrafts, setOverrideDrafts] = useState<Record<string, string>>({});
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const workspace = useQuery({
+    queryKey: ["admin-revenue", "fuel-pricing"],
+    enabled: status === "authenticated" && canRead,
+    retry: false,
+    queryFn: async (): Promise<FuelPricingWorkspace> => {
+      const result = await supabase.rpc("read_fuel_admin_pricing_workspace");
+      if (result.error) throw result.error;
+      const record = requireRecord(result.data, "Fuel pricing workspace");
+      return {
+        products: requireRecordArray(record, "products", "Fuel pricing workspace"),
+        branches: requireRecordArray(record, "branches", "Fuel pricing workspace"),
+        offers: requireRecordArray(record, "offers", "Fuel pricing workspace"),
+        managedPrices: requireRecordArray(record, "managedPrices", "Fuel pricing workspace"),
+        modeControls: requireRecordArray(record, "modeControls", "Fuel pricing workspace"),
+      };
+    },
+  });
+
+  const currencies = useQuery({
+    queryKey: ["admin-revenue", "fuel-pricing-currencies"],
+    enabled: status === "authenticated" && canRead,
+    retry: false,
+    queryFn: async (): Promise<readonly string[]> => {
+      const result = await supabase
+        .from("currency_definitions")
+        .select("code")
+        .eq("status", "enabled")
+        .order("code", { ascending: true });
+      if (result.error) throw result.error;
+      return (result.data ?? [])
+        .map((row) => String(row.code ?? ""))
+        .filter(Boolean);
+    },
+  });
+
+  const products = workspace.data?.products ?? [];
+  const offers = workspace.data?.offers ?? [];
+  const managedPrices = workspace.data?.managedPrices ?? [];
+  const modeControls = workspace.data?.modeControls ?? [];
+  const currencyOptions = currencies.data?.length ? currencies.data : ["NGN"];
+  const branchNames = new Map((workspace.data?.branches ?? []).map((branch) => [
+    recordString(branch, "id") ?? "",
+    recordString(branch, "display_name") ?? recordString(branch, "key") ?? "Station branch",
+  ]));
+
+  useEffect(() => {
+    if (!currencyOptions.includes(currencyCode)) setCurrencyCode(currencyOptions[0] ?? "NGN");
+  }, [currencyOptions.join("|"), currencyCode]);
+
+  const productTitle = (productKey: string) =>
+    recordString(products.find((product) => recordString(product, "key") === productKey), "display_name") ?? label(productKey);
+
+  const runFuelAction = async (key: string, successMessage: string, action: () => Promise<void>) => {
+    setBusyKey(key);
+    setNotice(null);
+    setError(null);
+    try {
+      await action();
+      setNotice(successMessage);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin-revenue", "fuel-pricing"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin-revenue", "configuration"] }),
+      ]);
+    } catch (cause) {
+      setError(readError(cause));
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const setGlobalProductStatus = (productKey: string, enabled: boolean) => {
+    const actionKey = `product:${productKey}`;
+    void runFuelAction(
+      actionKey,
+      `${productTitle(productKey)} is now globally ${enabled ? "enabled" : "disabled"}.`,
+      async () => {
+        const result = await supabase.rpc("set_fuel_product_status", {
+          target_product_key: productKey,
+          target_status: enabled ? "enabled" : "disabled",
+          target_reason: "Changed by an authorized Admin in Money & Revenue",
+          target_idempotency_key: fuelAdminChangeKey(actionKey),
+        });
+        if (result.error) throw result.error;
+      },
+    );
+  };
+
+  const setGlobalModeStatus = (productKey: string, mode: string, enabled: boolean) => {
+    const actionKey = `mode:${productKey}:${mode}`;
+    void runFuelAction(
+      actionKey,
+      `${productTitle(productKey)} · ${label(mode)} is now ${enabled ? "enabled" : "disabled"} platform-wide.`,
+      async () => {
+        const result = await supabase.rpc("set_fuel_fulfillment_mode_control", {
+          target_product_key: productKey,
+          target_fulfillment_mode: mode,
+          target_enabled: enabled,
+          target_reason: "Changed by an authorized Admin in Money & Revenue",
+          target_idempotency_key: fuelAdminChangeKey(actionKey),
+        });
+        if (result.error) throw result.error;
+      },
+    );
+  };
+
+  const saveManagedPrice = (productKey: string, code: string, currentValue: string) => {
+    const key = `managed:${productKey}:${code}`;
+    const amount = Number(managedPriceDrafts[`${productKey}:${code}`] ?? currentValue);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Enter a positive SKIMA Managed retail price per litre.");
+      setNotice(null);
+      return;
+    }
+    void runFuelAction(
+      key,
+      `${productTitle(productKey)} SKIMA Managed retail pricing is active at ${money(amount, code)}/L.`,
+      async () => {
+        const result = await supabase.rpc("configure_fuel_managed_product_price", {
+          target_product_key: productKey,
+          target_currency_code: code,
+          target_price_per_litre: amount,
+          target_enabled: true,
+          target_reason: "SKIMA Managed retail price configured in Money & Revenue",
+          target_idempotency_key: fuelAdminChangeKey(key),
+          target_metadata: { module_key: "fuel", pricing_owner: "skima_platform" },
+        });
+        if (result.error) throw result.error;
+      },
+    );
+  };
+
+  const saveStationOverride = (offer: PlatformRecord, clear: boolean) => {
+    const offerId = recordString(offer, "id");
+    if (!offerId) return;
+    const key = `override:${offerId}`;
+    const amount = Number(overrideDrafts[offerId] ?? "");
+    if (!clear && (!Number.isFinite(amount) || amount <= 0)) {
+      setError("Enter a positive Admin override price per litre, or use Clear override.");
+      setNotice(null);
+      return;
+    }
+    const productKey = recordString(offer, "product_key") ?? "Fuel";
+    const code = recordString(offer, "currency_code") ?? "NGN";
+    const branchName = branchNames.get(recordString(offer, "branch_id") ?? "") ?? "Station";
+    void runFuelAction(
+      key,
+      clear
+        ? `Admin price override cleared for ${branchName} · ${productTitle(productKey)}.`
+        : `Admin price override applied to ${branchName} · ${productTitle(productKey)} at ${money(amount, code)}/L.`,
+      async () => {
+        const result = await supabase.rpc("configure_fuel_station_price_override", {
+          target_offer_id: offerId,
+          target_override_price_per_litre: clear ? null : amount,
+          target_reason: clear
+            ? "Admin cleared station price override in Money & Revenue"
+            : "Admin overrode station fuel price in Money & Revenue",
+          target_idempotency_key: fuelAdminChangeKey(key),
+        });
+        if (result.error) throw result.error;
+      },
+    );
+  };
+
+  if (!canRead) return null;
+
+  return (
+    <section className="sk-panel stack-md">
+      <div className="sk-panel__header">
+        <div>
+          <p className="admin-section-kicker">Fuel commercial controls</p>
+          <h2>Fuel products, SKIMA pricing & station overrides</h2>
+          <p className="skima-muted">This is part of Money & Revenue. Fuel litre markups remain in Platform Fees above; product switches, SKIMA Managed retail prices and station overrides are controlled here.</p>
+        </div>
+        <div className="admin-money-status-stack">
+          {workspace.isLoading ? <StatusBadge>Loading…</StatusBadge> : null}
+          {workspace.isSuccess ? <StatusBadge tone="success">{products.length} Fuel products</StatusBadge> : null}
+        </div>
+      </div>
+
+      {workspace.isLoading ? <LoadingState label="Loading Fuel commercial settings…" /> : null}
+      {workspace.error ? (
+        <ErrorState
+          title="Fuel commercial settings unavailable"
+          message={readError(workspace.error)}
+          onRetry={() => void workspace.refetch()}
+        />
+      ) : null}
+      {error ? <div role="alert" className="admin-notice is-error">{error}</div> : null}
+      {notice ? <div role="status" className="admin-notice">{notice}</div> : null}
+
+      {workspace.data ? (
+        <>
+          <div className="stack-sm">
+            <div className="sk-panel__header">
+              <div>
+                <p className="admin-section-kicker">Global catalogue control</p>
+                <h3>Products SKIMA allows stations to sell</h3>
+              </div>
+            </div>
+            <div className="admin-money-price-grid">
+              {products.map((product) => {
+                const key = recordString(product, "key") ?? "";
+                const enabled = recordString(product, "status") === "enabled";
+                return (
+                  <div key={key} className="admin-money-price-card">
+                    <div>
+                      <strong>{recordString(product, "display_name") ?? label(key)}</strong>
+                      <p className="skima-muted">{enabled ? "Available for station offers and customer ordering." : "Globally disabled. Stations cannot enable or sell this product."}</p>
+                    </div>
+                    <div className="admin-money-price-row">
+                      <StatusBadge tone={enabled ? "success" : "warning"}>{enabled ? "Globally enabled" : "Globally off"}</StatusBadge>
+                      <Button
+                        variant={enabled ? "outline" : "primary"}
+                        disabled={!canManageProducts || busyKey === `product:${key}`}
+                        onClick={() => setGlobalProductStatus(key, !enabled)}
+                      >
+                        {enabled ? "Disable globally" : "Enable globally"}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="divider" />
+
+          <div className="stack-sm">
+            <div className="sk-panel__header">
+              <div>
+                <p className="admin-section-kicker">SKIMA Managed retail prices</p>
+                <h3>Retail price per litre</h3>
+                <p className="skima-muted">Used for SKIMA Managed orders only. Station and Independent Managed orders use the station's price, unless an Admin override is active.</p>
+              </div>
+              <div className="admin-inline-actions">
+                {currencyOptions.map((code) => (
+                  <Button key={code} size="sm" variant={currencyCode === code ? "primary" : "outline"} onClick={() => setCurrencyCode(code)}>{code}</Button>
+                ))}
+              </div>
+            </div>
+            <div className="admin-money-price-grid">
+              {products.map((product) => {
+                const key = recordString(product, "key") ?? "";
+                const priceRecord = managedPrices.find((item) =>
+                  recordString(item, "product_key") === key && recordString(item, "currency_code") === currencyCode
+                );
+                const draftKey = `${key}:${currencyCode}`;
+                const livePrice = recordNumberOrNull(priceRecord, "price_per_litre");
+                const currentValue = managedPriceDrafts[draftKey] ?? (livePrice === null ? "" : String(livePrice));
+                const liveEnabled = recordBoolean(priceRecord, "enabled") === true;
+                return (
+                  <div key={draftKey} className="admin-money-price-card">
+                    <div>
+                      <strong>{productTitle(key)}</strong>
+                      <p className="skima-muted">{liveEnabled ? "Live SKIMA Managed retail price." : "Not configured yet. SKIMA Managed orders remain unavailable until this is saved."}</p>
+                    </div>
+                    <div className="admin-money-price-row">
+                      <label className="admin-money-price-field">
+                        <span style={{ fontWeight: 700 }}>Retail price ({currencyCode}/L)</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          className="sk-input"
+                          value={currentValue}
+                          disabled={!canManageRetail || busyKey === `managed:${key}:${currencyCode}`}
+                          onChange={(event) => {
+                            const value = event.currentTarget.value;
+                            setManagedPriceDrafts((current) => ({ ...current, [draftKey]: value }));
+                          }}
+                        />
+                      </label>
+                      <Button
+                        disabled={!canManageRetail || !currentValue || busyKey === `managed:${key}:${currencyCode}`}
+                        onClick={() => saveManagedPrice(key, currencyCode, currentValue)}
+                      >
+                        {liveEnabled ? "Save & apply" : "Configure & enable"}
+                      </Button>
+                    </div>
+                    <span className="admin-money-active-price">{liveEnabled && livePrice !== null ? `Live now: ${money(livePrice, currencyCode)}/L` : "No active SKIMA retail price"}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="divider" />
+
+          <div className="stack-sm">
+            <div>
+              <p className="admin-section-kicker">Three fulfilment models</p>
+              <h3>Global delivery-mode controls</h3>
+              <p className="skima-muted">A mode must be enabled here and selected by the station before it can be offered to customers.</p>
+            </div>
+            <div className="admin-money-price-grid">
+              {products.map((product) => {
+                const productKey = recordString(product, "key") ?? "";
+                return (
+                  <div key={productKey} className="admin-money-price-card">
+                    <strong>{productTitle(productKey)}</strong>
+                    {([
+                      ["station_managed", "Station Managed", "Station's own qualified driver and vehicle"],
+                      ["independent_driver", "Independent Managed", "Independent provider and own qualified vehicle"],
+                      ["skima_managed", "SKIMA Managed", "SKIMA driver programme and SKIMA fleet vehicle"],
+                    ] as const).map(([mode, title, description]) => {
+                      const control = modeControls.find((item) =>
+                        recordString(item, "product_key") === productKey &&
+                        recordString(item, "fulfillment_mode") === mode
+                      );
+                      const enabled = recordBoolean(control, "enabled") === true;
+                      const key = `mode:${productKey}:${mode}`;
+                      return (
+                        <div key={mode} className="admin-money-price-row">
+                          <div>
+                            <strong>{title}</strong>
+                            <p className="skima-muted">{description}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant={enabled ? "outline" : "primary"}
+                            disabled={!canManageModes || busyKey === key}
+                            onClick={() => setGlobalModeStatus(productKey, mode, !enabled)}
+                          >
+                            {enabled ? "Disable" : "Enable"}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="divider" />
+
+          <div className="stack-sm">
+            <div>
+              <p className="admin-section-kicker">Station price governance</p>
+              <h3>Admin overrides</h3>
+              <p className="skima-muted">The station remains the source of its own local price. An override temporarily replaces that effective price for new quotes until cleared.</p>
+            </div>
+            {offers.length === 0 ? <p className="skima-muted">No station Fuel offers have been configured yet.</p> : (
+              <div className="admin-money-price-grid">
+                {offers.map((offer) => {
+                  const offerId = recordString(offer, "id") ?? "";
+                  const productKey = recordString(offer, "product_key") ?? "";
+                  const code = recordString(offer, "currency_code") ?? "NGN";
+                  const stationPrice = recordNumber(offer, "price_per_litre");
+                  const override = recordNumberOrNull(offer, "admin_override_price_per_litre");
+                  const branchName = recordString(nestedRecord(offer, "branch"), "display_name") ??
+                    branchNames.get(recordString(offer, "branch_id") ?? "") ?? "Station";
+                  const draft = overrideDrafts[offerId] ?? (override === null ? "" : String(override));
+                  return (
+                    <div key={offerId} className="admin-money-price-card">
+                      <div>
+                        <strong>{branchName} · {productTitle(productKey)}</strong>
+                        <p className="skima-muted">Station price: {money(stationPrice, code)}/L</p>
+                        <p className="skima-muted">{override !== null ? `Admin override active: ${money(override, code)}/L` : "No Admin override · station price is effective."}</p>
+                      </div>
+                      <div className="admin-money-price-row">
+                        <label className="admin-money-price-field">
+                          <span style={{ fontWeight: 700 }}>Override price ({code}/L)</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className="sk-input"
+                            value={draft}
+                            disabled={!canManageOverrides || busyKey === `override:${offerId}`}
+                            onChange={(event) => {
+                              const value = event.currentTarget.value;
+                              setOverrideDrafts((current) => ({ ...current, [offerId]: value }));
+                            }}
+                          />
+                        </label>
+                        <Button
+                          size="sm"
+                          disabled={!canManageOverrides || !draft || busyKey === `override:${offerId}`}
+                          onClick={() => saveStationOverride(offer, false)}
+                        >
+                          Save override
+                        </Button>
+                        {override !== null ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={!canManageOverrides || busyKey === `override:${offerId}`}
+                            onClick={() => saveStationOverride(offer, true)}
+                          >
+                            Clear
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+function fuelAdminChangeKey(scope: string): string {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  return `admin-fuel:${scope}:${uuid ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
 }
 
 function normalizeSummary(value: unknown): RevenueSummary {
