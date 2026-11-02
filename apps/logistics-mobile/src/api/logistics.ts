@@ -18,12 +18,13 @@ export function useLogisticsQuery(key: readonly unknown[], path: string, enabled
   });
 }
 
-export function useLogisticsRecordQuery(key: readonly unknown[], path: string, enabled = true) {
+export function useLogisticsRecordQuery(key: readonly unknown[], path: string, enabled = true, refetchInterval?: number) {
   const { api, session, status } = useSession();
   return useQuery<LogisticsRecord>({
     queryKey: ["skima-logistics", ...key, session?.user.id ?? "anonymous"],
     enabled: status === "authenticated" && enabled,
     queryFn: ({ signal }) => api.get(path, RecordSchema, { signal }),
+    refetchInterval,
     staleTime: 20_000,
   });
 }
