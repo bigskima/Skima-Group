@@ -88,6 +88,13 @@ Deno.test("Matching is capability, cargo, coverage, verification and capacity co
   requireText(migration, "service.cargo_type_keys", "cargo-type requirements gate");
 });
 
+Deno.test("LGA and state coverage includes eligible descendant locations", () => {
+  requireText(migration, "public.logistics_geography_is_covered", "geography hierarchy matching helper");
+  requireText(migration, "with recursive requested_ancestors", "requested geography ancestor traversal");
+  requireText(migration, "public.logistics_geography_is_covered(origin.geography_id", "hierarchical pickup coverage");
+  requireText(migration, "public.logistics_geography_is_covered(destination.geography_id", "hierarchical destination coverage");
+});
+
 Deno.test("Customer-authorized rematching can discover newly eligible providers", () => {
   requireText(migration, "public.refresh_logistics_job_matches", "rematch RPC");
   requireText(migration, "only the job customer or marketplace administrator may refresh matching", "rematch actor guard");
