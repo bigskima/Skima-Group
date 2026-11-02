@@ -118,6 +118,6 @@
     "20261101203100_fuel_global_product_controls.sql",
     "20261102001000_fuel_quote_arithmetic_correction.sql",
     "20261102002000_fuel_order_settlement_runtime.sql",
-    "20261102010000_fuel_module_runtime_router_and_security.sql"
+    "20261102005600_fuel_module_runtime_router_and_security.sql"
   ]
 }
