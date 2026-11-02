@@ -109,6 +109,11 @@ export function ProviderTeamScreen() {
     Boolean(organizationId),
     30_000,
   );
+  const roles = useLogisticsQuery(
+    ["team-roles", organizationId ?? "none"],
+    "/runtime/organization-roles",
+    Boolean(organizationId),
+  );
   const invitations = useLogisticsQuery(
     ["team-invitations", organizationId ?? "none"],
     "/runtime/organization-invitations",
@@ -142,7 +147,7 @@ export function ProviderTeamScreen() {
   );
   const selectedRole = ROLE_PRESETS.find((role) => role.key === selectedRoleKey) ?? ROLE_PRESETS[1];
 
-  const refresh = () => Promise.all([companies.refetch(), directory.refetch(), invitations.refetch()]);
+  const refresh = () => Promise.all([companies.refetch(), directory.refetch(), invitations.refetch(), roles.refetch()]);
 
   const invite = useMutation({
     mutationFn: async () => {
@@ -155,17 +160,24 @@ export function ProviderTeamScreen() {
         "logistics.staff.invite",
         organizationId + ":" + invitedEmail + ":" + String(Date.now()),
       );
-      await api.post("/runtime/organization-roles", {
-        organizationId,
-        roleKey: selectedRole.key,
-        displayName: selectedRole.name,
-        description: selectedRole.description,
-        permissionKeys: [...selectedRole.permissions],
-        branchId: null,
-        source: "skima.logistics.mobile",
-        idempotencyKey: createClientIdempotencyKey("logistics.staff.role", organizationId + ":" + selectedRole.key),
-        metadata: { module: "logistics_network", preset: selectedRole.key },
-      }, z.string().uuid());
+      const roleExists = (roles.data ?? []).some((role) =>
+        asString(role, "organization_id") === organizationId &&
+        asString(role, "key") === selectedRole.key &&
+        asString(role, "status") === "active"
+      );
+      if (!roleExists) {
+        await api.post("/runtime/organization-roles", {
+          organizationId,
+          roleKey: selectedRole.key,
+          displayName: selectedRole.name,
+          description: selectedRole.description,
+          permissionKeys: [...selectedRole.permissions],
+          branchId: null,
+          source: "skima.logistics.mobile",
+          idempotencyKey: createClientIdempotencyKey("logistics.staff.role", organizationId + ":" + selectedRole.key),
+          metadata: { module: "logistics_network", preset: selectedRole.key },
+        }, z.string().uuid());
+      }
 
       return api.post("/runtime/organization-invitations", {
         organizationId,
@@ -187,7 +199,7 @@ export function ProviderTeamScreen() {
         client.invalidateQueries({ queryKey: ["skima-logistics", "team-directory"] }),
         client.invalidateQueries({ queryKey: ["skima-logistics", "team-invitations"] }),
       ]);
-      await Promise.all([directory.refetch(), invitations.refetch()]);
+      await Promise.all([directory.refetch(), invitations.refetch(), roles.refetch()]);
     },
     onError: (cause) => {
       setNotice(null);
@@ -235,9 +247,9 @@ export function ProviderTeamScreen() {
           <Text style={[styles.cardTitle, { color: palette.ink }]}>Owner access required</Text>
           <Text style={[styles.body, { color: palette.muted }]}>Only the company owner or an authorised organisation staff administrator can invite people or change company access.</Text>
         </Card>
-      ) : directory.isPending || invitations.isPending ? (
+      ) : directory.isPending || invitations.isPending || roles.isPending ? (
         <ScreenSkeleton cards={3} />
-      ) : directory.error || invitations.error ? (
+      ) : directory.error || invitations.error || roles.error ? (
         <StatePanel title="Team records could not load" description="The company directory or invitation list is unavailable." retry={() => void refresh()} />
       ) : (
         <View style={styles.content}>
