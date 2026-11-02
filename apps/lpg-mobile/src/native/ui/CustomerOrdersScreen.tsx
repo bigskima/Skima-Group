@@ -13,6 +13,7 @@ import {
   firstString,
   nestedRecord,
   recordId,
+  type PlatformRecord,
 } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
