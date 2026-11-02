@@ -60,8 +60,7 @@ begin
     and wallet_type = 'customer'
     and owner_entity_type = 'user'
     and owner_entity_id = target_customer_user_id
-    and status = 'active'
-  for update;
+    and status = 'active';
   if not found then
     raise exception 'source wallet must be an active customer wallet owned by the company operator';
   end if;
