@@ -19,7 +19,10 @@ const migrationDriver = await Deno.readTextFile(
 const migrationCancellation = await Deno.readTextFile(
   "supabase/migrations/20261102130000_logistics_customer_prebooking_cancellation.sql",
 );
-const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation;
+const migrationTracking = await Deno.readTextFile(
+  "supabase/migrations/20261102140000_logistics_driver_location_tracking.sql",
+);
+const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const apiGateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
@@ -503,4 +506,36 @@ Deno.test("Online booking wallet funding and escrow reservation run in one seria
   requireText(runtime, 'serviceClient.rpc("reserve_logistics_booking_online_payment"', "runtime uses atomic payment reservation");
   requireNotText(runtime, 'serviceClient.rpc("fund_order_from_wallet"', "Edge Function does not split wallet funding from booking reservation");
   requireNotText(runtime, 'serviceClient.rpc("mark_logistics_booking_payment_reserved"', "Edge Function does not split escrow marking into a second transaction");
+});
+
+
+Deno.test("Driver location sharing is opt-in and can be written only by the assigned driver during an active booking", () => {
+  requireText(migrationTracking, "public.record_logistics_driver_location", "driver location recording RPC");
+  requireText(migrationTracking, "auth.role() <> 'service_role'", "location writes are service-role mediated");
+  requireText(migrationTracking, "booking_record.assigned_driver_user_id is distinct from target_driver_user_id", "only the assigned driver may share this route");
+  requireText(migrationTracking, "booking_record.status <> 'in_progress'", "location is limited to an active delivery");
+  requireText(migrationTracking, "assignment.status in ('in_progress','picked_up','in_transit')", "an active driver assignment is required");
+  requireText(migrationTracking, "target_latitude < -90 or target_latitude > 90", "latitude bounds validation");
+  requireText(migrationTracking, "target_longitude < -180 or target_longitude > 180", "longitude bounds validation");
+  requireText(migrationTracking, "public.record_tracking_point(", "location points use shared tracking engine");
+  requireText(migrationTracking, "target_idempotency_key", "location point writes are idempotent");
+  requireText(runtime, '"/runtime/logistics/driver/location"', "driver location write route");
+});
+
+Deno.test("Booking tracking is visible only to the customer, provider company and assigned driver", () => {
+  requireText(migrationTracking, "public.read_logistics_booking_tracking", "booking tracking read RPC");
+  requireText(migrationTracking, "booking_record.requester_user_id <> auth.uid()", "customer participant check");
+  requireText(migrationTracking, "public.can_read_logistics_company(booking_record.provider_organization_id)", "provider tenant participant check");
+  requireText(migrationTracking, "assignment.driver_user_id = auth.uid()", "assigned driver participant check");
+  requireText(migrationTracking, "subject_type = 'logistics_booking'", "tracking session is bound to a Logistics booking");
+  requireText(migrationTracking, "point.tracking_session_id = tracking_record.id", "only this booking's points are returned");
+  requireText(runtime, '"/runtime/logistics/bookings/tracking"', "customer/provider tracking read route");
+});
+
+Deno.test("Driver tracking stops when a booking closes", () => {
+  requireText(migrationTracking, "public.finish_logistics_tracking_after_booking_close()", "booking close tracking trigger");
+  requireText(migrationTracking, "new.status in ('delivered','settled','completed_offline')", "successful delivery closes tracking");
+  requireText(migrationTracking, "new.status in ('cancelled','refunded')", "cancelled or refunded booking closes tracking");
+  requireText(migrationTracking, "update public.tracking_sessions", "shared tracking session is closed");
+  requireText(migrationTracking, "insert into public.tracking_session_events", "tracking closure is event recorded");
 });
