@@ -216,7 +216,7 @@ export function CustomerOrdersScreen() {
         </Text>
       ) : null}
 
-      {filteredItems.length === 0 ? (
+      {!(isPending && allItems.length === 0) && filteredItems.length === 0 ? (
         <EmptyState
           icon={<PackageCheck color={palette.brand} size={27} />}
           title={filter === "all" ? "Your SKIMA activity will appear here" : `No ${filter === "refills" ? "refill" : filter === "marketplace" ? "marketplace" : filter} activity yet`}
