@@ -290,13 +290,10 @@ create table if not exists public.storefront_settings (
   organization_id uuid not null references public.organizations(id) on delete restrict,
   branch_id uuid references public.organization_branches(id) on delete restrict,
   currency_code text not null references public.currency_definitions(code) on delete restrict,
-  fulfillment_method text not null default 'delivery'
-NaN$'),
+  fulfillment_method text not null default 'delivery' check (fulfillment_method ~ '^[a-z][a-z0-9_.:-]{1,120}$'),
   fulfillment_methods text[] not null default array['delivery', 'pickup'],
-  status text not null default 'draft'
-NaN
-  source text not null default 'platform.storefront'
-NaN$'),
+  status text not null default 'draft' check (status in ('draft', 'active', 'paused')),
+  source text not null default 'platform.storefront' check (source ~ '^[a-z][a-z0-9_.:-]{2,120}$'),
   idempotency_key text not null,
   metadata jsonb not null default '{}'::jsonb check (jsonb_typeof(metadata) = 'object'),
   created_by uuid references public.profiles(id) on delete set null default auth.uid(),
