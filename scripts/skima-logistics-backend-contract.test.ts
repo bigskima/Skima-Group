@@ -1,6 +1,10 @@
-const migration = await Deno.readTextFile(
+const migrationBase = await Deno.readTextFile(
   "supabase/migrations/20261102110000_logistics_marketplace_domain_foundation.sql",
 );
+const migrationHardening = await Deno.readTextFile(
+  "supabase/migrations/20261102111500_logistics_marketplace_tenant_and_matching_hardening.sql",
+);
+const migration = migrationBase + "\n" + migrationHardening;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
 const moduleRouter = await Deno.readTextFile("supabase/migrations/20261102005600_fuel_module_runtime_router_and_security.sql");
@@ -54,7 +58,8 @@ Deno.test("Every Logistics domain table enables RLS and denies direct authentica
 Deno.test("Provider opportunities reveal full contact details only to the matched provider tenant", () => {
   requireText(migration, "customer_contact_snapshot jsonb", "matched opportunity contact snapshot");
   requireText(migration, "public.can_read_logistics_company(organization_id)", "provider opportunity tenant read policy");
-  requireText(migration, "logistics_opportunities_read_matched_company", "company-scoped opportunity policy");
+  requireText(migration, "logistics_opportunities_read_customer_or_matched_company", "customer and company-scoped opportunity policy");
+  requireText(migration, "public.can_read_logistics_job(job_id)", "customer reads only their job opportunities");
   requireText(migration, "requester_user_id = auth.uid()", "customer-only source job read");
   requireText(migration, "create policy logistics_jobs_read_customer_or_admin", "private customer job policy");
   requireText(migration, "jsonb_strip_nulls(jsonb_build_object(", "contact snapshot field allow-list");
@@ -119,6 +124,28 @@ Deno.test("Runtime authenticates the user and uses the caller's RLS context", ()
   requireText(runtime, "check_rate_limit", "authenticated rate limit");
   requireText(runtime, "supabase.rpc(", "server-side lifecycle RPCs");
   requireNotText(runtime, "SUPABASE_SERVICE_ROLE_KEY", "no service role credential in request runtime");
+});
+
+Deno.test("Customer directory search exposes verified providers without private support contacts", () => {
+  requireText(migration, "public.search_logistics_providers", "provider directory search RPC");
+  requireText(migration, "provider.verification_status = 'verified'", "directory verification gate");
+  requireText(migration, "provider.operational_status = 'active'", "directory operating gate");
+  requireText(runtime, '"/runtime/logistics/providers/search"', "provider search route");
+  requireNotText(
+    migration.slice(migration.indexOf("create or replace function public.search_logistics_providers"), migration.indexOf("$;", migration.indexOf("create or replace function public.search_logistics_providers")) + 3),
+    "support_contact",
+    "public directory does not return private provider contact",
+  );
+});
+
+Deno.test("Provider and rematch controls are permission-gated and the internal event writer is not client-callable", () => {
+  requireText(migration, "public.update_logistics_provider_profile", "company profile management");
+  requireText(migration, "public.set_logistics_provider_operational_status", "company operating controls");
+  requireText(migration, "revoke all on function public.record_logistics_job_event", "event writer privilege revocation");
+  requireText(migration, "from public, anon, authenticated", "event writer is not directly executable by client roles");
+  requireText(migration, "to service_role", "event writer is internal only");
+  requireText(migration, "platform.super_admin", "platform super admin receives marketplace management permission");
+  requireText(migration, "platform.company_admin", "company admin receives marketplace management permission");
 });
 
 Deno.test("Free provider opportunity access has no lead unlock charge", () => {
