@@ -32,6 +32,7 @@ export function LogisticsBookingScreen() {
     ["booking-tracking", bookingId ?? "none"],
     "/runtime/logistics/bookings/tracking?bookingId=" + encodeURIComponent(bookingId ?? ""),
     Boolean(bookingId && ["in_progress", "delivered", "settled", "completed_offline"].includes(status)),
+    15_000,
   );
   const trackingSession = tracking.data?.tracking_session && typeof tracking.data.tracking_session === "object" && !Array.isArray(tracking.data.tracking_session)
     ? tracking.data.tracking_session as Record<string, unknown>
@@ -136,7 +137,7 @@ export function LogisticsBookingScreen() {
   return (
     <Screen eyebrow="BOOKING" title="Booking & payment" subtitle="Review the total and complete the payment step securely."
       action={<AppButton label="Back" size="sm" variant="secondary" icon={<ArrowLeft color={palette.ink} size={15} />} onPress={() => router.back()} />}
-      refreshControl={<RefreshControl refreshing={bookings.isRefetching || walletsQuery.isRefetching || balancesQuery.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}>
+      refreshControl={<RefreshControl refreshing={bookings.isRefetching || walletsQuery.isRefetching || balancesQuery.isRefetching || tracking.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}>
       {bookings.isPending ? <ScreenSkeleton cards={3} /> : !booking ? (
         <StatePanel title="Booking not found" description="This booking may not be available to the signed-in account." retry={() => void bookings.refetch()} />
       ) : (
