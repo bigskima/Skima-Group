@@ -285,14 +285,28 @@ export default function StoreScreen() {
   const cartCount = cart.reduce((sum, line) => sum + line.quantity, 0);
   const cartTotal = cart.reduce((sum, line) => sum + line.quantity * line.unitAmount, 0);
   const currencyCode = typeof settings?.currency_code === "string" ? settings.currency_code : "NGN";
-  const deliveryDistanceKm = fulfillmentMethod === "delivery" && selectedDeliveryLocation && settings
+  const deliveryOriginLatitude = firstNumber(settings, ["delivery_origin_latitude"]);
+  const deliveryOriginLongitude = firstNumber(settings, ["delivery_origin_longitude"]);
+  const deliveryDestinationLatitude = firstNumber(selectedDeliveryLocation, ["latitude"]);
+  const deliveryDestinationLongitude = firstNumber(selectedDeliveryLocation, ["longitude"]);
+  const deliveryDistanceKm = fulfillmentMethod === "delivery" &&
+      deliveryOriginLatitude !== null &&
+      deliveryOriginLongitude !== null &&
+      deliveryDestinationLatitude !== null &&
+      deliveryDestinationLongitude !== null
     ? haversineDistanceKm(
-        Number(settings.delivery_origin_latitude),
-        Number(settings.delivery_origin_longitude),
-        Number(firstNumber(selectedDeliveryLocation, ["latitude"])),
-        Number(firstNumber(selectedDeliveryLocation, ["longitude"])),
+        deliveryOriginLatitude,
+        deliveryOriginLongitude,
+        deliveryDestinationLatitude,
+        deliveryDestinationLongitude,
       )
     : null;
+  const deliveryRadiusKm = firstNumber(settings, ["delivery_radius_km"]);
+  const deliveryWithinRadius = fulfillmentMethod === "pickup" ||
+    deliveryDistanceKm !== null &&
+    Number.isFinite(deliveryDistanceKm) &&
+    deliveryRadiusKm !== null &&
+    deliveryDistanceKm <= deliveryRadiusKm;
   const deliveryBaseFee = firstNumber(settings, ["delivery_base_fee_amount"]) ?? 0;
   const deliveryPerKmFee = firstNumber(settings, ["delivery_per_km_fee_amount"]) ?? 0;
   const freeDeliveryMinimum = firstNumber(settings, ["free_delivery_minimum_amount"]);
@@ -316,7 +330,8 @@ export default function StoreScreen() {
     estimatedCheckoutTotal > 0 &&
     cartTotal >= minimumOrderAmount &&
     walletSufficient &&
-    (fulfillmentMethod === "pickup" || deliveryLocationId),
+    (fulfillmentMethod === "pickup" || deliveryLocationId) &&
+    deliveryWithinRadius,
   );
 
   const checkout = useMutation({
@@ -361,7 +376,7 @@ export default function StoreScreen() {
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : "Please review your basket and try again.";
-      if (/insufficient_wallet_balance|insufficient.*balance/i.test(message)) {
+      if (/insufficient_wallet_balance|insufficient.*balance|outside_delivery_area|delivery_coordinates_required|minimum_order_not_met|pickup_not_configured|invalid_checkout_snapshot/i.test(message)) {
         setCheckoutAttemptKey(idempotencyKey("store-order", userId));
       }
       Alert.alert("Checkout could not be completed", message);
@@ -754,7 +769,7 @@ export default function StoreScreen() {
                 {cartTotal < minimumOrderAmount ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Minimum Store order is {formatMoney(minimumOrderAmount, currencyCode)}.</Text> : null}
                 {walletCurrency !== currencyCode ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Your wallet currency must match Store currency ({currencyCode}).</Text> : null}
                 {estimatedCheckoutTotal !== null && !walletSufficient ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>Your wallet balance does not cover this order total.</Text> : null}
-                {deliveryDistanceKm !== null && Number.isFinite(deliveryDistanceKm) && firstNumber(settings, ["delivery_radius_km"]) !== null && deliveryDistanceKm > (firstNumber(settings, ["delivery_radius_km"]) ?? 0) ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>This address is outside the current delivery area. Choose pickup or another address.</Text> : null}
+                {deliveryDistanceKm !== null && Number.isFinite(deliveryDistanceKm) && deliveryRadiusKm !== null && deliveryDistanceKm > deliveryRadiusKm ? <Text style={[styles.checkoutNote, { color: palette.danger }]}>This address is outside the current delivery area. Choose pickup or another address.</Text> : null}
                 <Text style={[styles.checkoutNote, { color: palette.muted }]}>Payment is reserved in SKIMA escrow. The Store team can only prepare your order after the wallet reservation succeeds.</Text>
                 <Pressable disabled={checkout.isPending || !cartReady || !canCheckout} onPress={() => checkout.mutate()} style={[styles.primaryButton, styles.checkoutButton, { backgroundColor: palette.brand, opacity: checkout.isPending || !canCheckout ? 0.5 : 1 }]}>
                   {checkout.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Pay and place order</Text>}
