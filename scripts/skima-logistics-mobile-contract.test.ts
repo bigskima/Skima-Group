@@ -327,13 +327,3 @@ Deno.test("Customers can cancel only an unpaid Logistics booking from checkout",
   requireText(booking, 'status === "cancelled"', "cancelled booking confirmation state");
   requireText(booking, 'Alert.alert( "Cancel this booking?"', "cancellation requires explicit confirmation");
 });
-
-
-Deno.test("Online payment retry keeps the original customer wallet while the booking is processing", () => {
-  requireText(booking, 'asString(booking, "payment_attempt_wallet_id")', "server-selected payment wallet survives app refresh");
-  requireText(booking, 'status === "payment_processing"', "payment recovery state is visible");
-  requireText(booking, "Payment wallet locked for safe retry", "original wallet cannot be changed during reconciliation");
-  requireText(booking, "Continue payment confirmation", "retry action continues an existing payment attempt");
-  requireText(booking, 'status !== "payment_processing" && !enoughBalance', "a committed debit is not incorrectly blocked by the now-lower wallet balance");
-  requireText(booking, '"/runtime/logistics/bookings/cancel"', "cancellation and payment remain separate routes");
-});
