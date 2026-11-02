@@ -544,7 +544,7 @@ export function FuelStationOperationsScreen() {
     }, "All filled containers have been handed to the assigned driver. Delivery has started automatically.");
   };
 
-  const loading = stationInventory.isPending || operations.isPending || storage.isPending || offers.isPending || currencies.isPending || modeControls.isPending;
+  const loading = stationInventory.isPending || products.isPending || operations.isPending || storage.isPending || offers.isPending || currencies.isPending || modeControls.isPending;
   const failed = stationInventory.error || operations.error || storage.error || offers.error;
   const stageTone = (stage: string): "neutral" | "brand" | "success" | "warning" | "danger" => {
     if (["completed", "inspection_passed"].includes(stage)) return "success";
