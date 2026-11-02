@@ -289,6 +289,15 @@ begin
     raise exception using errcode='23514',message='Fuel qualification requires an active serviceable vehicle; any configured insurance, inspection and roadworthiness dates must be current';
   end if;
 
+  if target_fulfillment_mode='station_managed' and (
+       target_branch_id is null
+       or branch_record.id is null
+       or vehicle_record.organization_id is distinct from branch_record.organization_id
+       or vehicle_record.platform_owned is true
+     ) then
+    raise exception using errcode='23514',message='Station Managed delivery requires a non-SKIMA vehicle owned by the selected station branch organization';
+  end if;
+
   if target_branch_id is not null
      and vehicle_record.organization_id is distinct from branch_record.organization_id
      and vehicle_record.owner_user_id is distinct from target_driver_user_id
@@ -491,6 +500,17 @@ begin
        ) then
       raise exception using errcode='23514',message='Station Managed Fuel orders require an approved driver assigned to this station';
     end if;
+    if not exists (
+      select 1
+      from public.organization_branches branch
+      join public.vehicles vehicle
+        on vehicle.id=vehicle_id_value
+       and vehicle.organization_id=branch.organization_id
+       and vehicle.platform_owned is not true
+      where branch.id=operation_record.station_branch_id
+    ) then
+      raise exception using errcode='23514',message='Station Managed dispatch requires a vehicle owned by the same station branch organization';
+    end if;
   elsif operation_record.fulfillment_mode in ('independent_driver','skima_managed') then
     if qualification_record.driver_profile_id is null
        or not exists (
@@ -648,6 +668,17 @@ begin
            and driver.status='active'
        ) then
       raise exception using errcode='23514',message='Station Managed orders require an active approved driver assigned to this station';
+    end if;
+    if not exists (
+      select 1
+      from public.organization_branches branch
+      join public.vehicles vehicle
+        on vehicle.id=target_vehicle_id
+       and vehicle.organization_id=branch.organization_id
+       and vehicle.platform_owned is not true
+      where branch.id=operation_record.station_branch_id
+    ) then
+      raise exception using errcode='23514',message='Station Managed dispatch requires a vehicle owned by the same station branch organization';
     end if;
   else
     if driver_profile_id_value is null
@@ -1254,7 +1285,7 @@ begin
     raise exception using errcode='42501',message='Fuel rental return confirmation must use the authenticated driver runtime';
   end if;
   if target_order_id is null or target_actor_user_id is null
-     or target_action not in ('customer_returned_to_driver','driver_returned_to_station')
+     or target_action is null or target_action not in ('customer_returned_to_driver','driver_returned_to_station')
      or coalesce(btrim(target_idempotency_key),'')=''
      or target_metadata is null or jsonb_typeof(target_metadata)<>'object' then
     raise exception using errcode='22023',message='order, driver, return action, idempotency key and metadata are required';
