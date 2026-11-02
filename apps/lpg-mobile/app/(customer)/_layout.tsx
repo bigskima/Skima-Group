@@ -11,6 +11,8 @@ export default function Layout() {
         tabs={customerTabs}
         hidden={[
           "assistant",
+          "store",
+          "store-order/[id]",
           "cylinder/register",
           "cylinder/[id]",
           "cylinder/[id]/edit",
