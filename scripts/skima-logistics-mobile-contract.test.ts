@@ -177,6 +177,17 @@ Deno.test("Provider matched opportunities are free and enable customer contact a
   requireText(providerOpportunities, "There is no lead unlock fee", "free opportunity access");
 });
 
+Deno.test("Customer can counter a matched provider quote before booking", () => {
+  requireText(detail, '"/runtime/logistics/offers/counter"', "customer counteroffer API");
+  requireText(detail, "Make a counteroffer", "customer negotiation sheet");
+  requireText(detail, "Send counteroffer", "counteroffer submission control");
+  requireText(detail, "toMinorUnits", "currency minor-unit conversion");
+  requireText(detail, "counterAttemptRef", "network retry idempotency");
+  requireText(detail, "estimatedDurationMinutes", "optional proposed delivery duration");
+  requireText(detail, "Additional terms", "customer negotiation terms");
+  requireText(logisticsRuntime, 'supabase.rpc("counter_logistics_offer"', "shared counteroffer lifecycle");
+});
+
 Deno.test("Provider delivery payload is normalized to the database contract", () => {
   requireText(logisticsRuntime, "deliverySubmission.recipientName ?? deliverySubmission.recipient_name", "camelCase recipient compatibility");
   requireText(logisticsRuntime, "recipient_name: recipientName", "database recipient payload key");
