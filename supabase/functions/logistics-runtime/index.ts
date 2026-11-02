@@ -207,7 +207,7 @@ async function handleLogisticsRequest(
     const p = body.value;
     const organizationId = requireUuid(p.organizationId, "organizationId");
     const customerWalletId = requireUuid(p.customerWalletId, "customerWalletId");
-    const amount = requireNumber(p.amount, "amount");
+    const amount = optionalNumber(p.amount, "amount") ?? 0;
     const idempotencyKey = requireString(p.idempotencyKey, "idempotencyKey");
     if (amount <= 0) throw new RequestValidationError("amount must be greater than zero.");
 
