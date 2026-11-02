@@ -1600,6 +1600,116 @@ begin
 end;
 $$;
 
+create or replace function public.search_logistics_providers(
+  target_pickup_geography_id uuid,
+  target_destination_geography_id uuid,
+  target_category_key text default null,
+  target_service_key text default null,
+  target_cargo_type_keys text[] default '{}',
+  target_vehicle_type_keys text[] default '{}',
+  target_capability_keys text[] default '{}',
+  target_weight_kg numeric default null,
+  target_volume_m3 numeric default null,
+  target_search text default null,
+  target_limit integer default 30
+)
+returns table (
+  provider_organization_id uuid,
+  provider_name text,
+  provider_service_id uuid,
+  service_key text,
+  service_name text,
+  category_key text,
+  category_name text,
+  pricing_mode text,
+  capability_keys text[],
+  cargo_type_keys text[],
+  vehicle_type_keys text[],
+  maximum_weight_kg numeric,
+  maximum_volume_m3 numeric
+)
+language sql
+stable
+security definer
+set search_path = public
+as $
+  select
+    provider.organization_id,
+    provider.public_name,
+    service.id,
+    service.service_key,
+    service.display_name,
+    category.key,
+    category.display_name,
+    service.pricing_mode,
+    service.capability_keys,
+    service.cargo_type_keys,
+    service.vehicle_type_keys,
+    service.maximum_weight_kg,
+    service.maximum_volume_m3
+  from public.logistics_provider_services service
+  join public.logistics_provider_profiles provider
+    on provider.organization_id = service.organization_id
+  join public.logistics_service_categories category
+    on category.id = service.category_id
+  where auth.uid() is not null
+    and target_pickup_geography_id is not null
+    and target_destination_geography_id is not null
+    and provider.verification_status = 'verified'
+    and provider.operational_status = 'active'
+    and service.status = 'active'
+    and service.availability_enabled = true
+    and category.status = 'active'
+    and (target_category_key is null or category.key = target_category_key)
+    and (target_service_key is null or service.service_key = target_service_key)
+    and (target_weight_kg is null or service.maximum_weight_kg is null or service.maximum_weight_kg >= target_weight_kg)
+    and (target_volume_m3 is null or service.maximum_volume_m3 is null or service.maximum_volume_m3 >= target_volume_m3)
+    and (
+      coalesce(cardinality(target_cargo_type_keys), 0) = 0
+      or coalesce(cardinality(service.cargo_type_keys), 0) = 0
+      or service.cargo_type_keys && target_cargo_type_keys
+    )
+    and (
+      coalesce(cardinality(target_vehicle_type_keys), 0) = 0
+      or coalesce(cardinality(service.vehicle_type_keys), 0) = 0
+      or service.vehicle_type_keys && target_vehicle_type_keys
+    )
+    and (
+      coalesce(cardinality(target_capability_keys), 0) = 0
+      or service.capability_keys && target_capability_keys
+    )
+    and (
+      target_search is null
+      or provider.public_name ilike '%' || target_search || '%'
+      or service.display_name ilike '%' || target_search || '%'
+      or service.description ilike '%' || target_search || '%'
+    )
+    and exists (
+      select 1 from public.logistics_provider_coverage origin
+      where origin.provider_service_id = service.id
+        and origin.status = 'active'
+        and (
+          (origin.coverage_mode in ('origin', 'both') and origin.geography_id = target_pickup_geography_id)
+          or (origin.coverage_mode = 'route'
+            and origin.geography_id = target_pickup_geography_id
+            and origin.destination_geography_id = target_destination_geography_id)
+        )
+    )
+    and exists (
+      select 1 from public.logistics_provider_coverage destination
+      where destination.provider_service_id = service.id
+        and destination.status = 'active'
+        and (
+          (destination.coverage_mode in ('destination', 'both') and destination.geography_id = target_destination_geography_id)
+          or (destination.coverage_mode = 'route'
+            and destination.geography_id = target_pickup_geography_id
+            and destination.destination_geography_id = target_destination_geography_id)
+        )
+    )
+  order by provider.public_name, service.display_name
+  limit greatest(1, least(coalesce(target_limit, 30), 100));
+$;
+
 alter table public.logistics_service_categories enable row level security;
 alter table public.logistics_provider_profiles enable row level security;
 alter table public.logistics_provider_services enable row level security;
@@ -1771,6 +1881,7 @@ revoke all on function public.counter_logistics_offer(uuid, text, bigint, intege
 revoke all on function public.add_logistics_negotiation_message(uuid, uuid, text, text) from public, anon;
 revoke all on function public.select_logistics_offer(uuid, text) from public, anon;
 revoke all on function public.upsert_logistics_service_category(text, text, text, text, text, integer, jsonb) from public, anon;
+revoke all on function public.search_logistics_providers(uuid, uuid, text, text, text[], text[], text[], numeric, numeric, text, integer) from public, anon;
 
 grant execute on function public.can_manage_logistics_company(uuid) to authenticated, service_role;
 grant execute on function public.can_read_logistics_company(uuid) to authenticated, service_role;
@@ -1790,6 +1901,7 @@ grant execute on function public.counter_logistics_offer(uuid, text, bigint, int
 grant execute on function public.add_logistics_negotiation_message(uuid, uuid, text, text) to authenticated, service_role;
 grant execute on function public.select_logistics_offer(uuid, text) to authenticated, service_role;
 grant execute on function public.upsert_logistics_service_category(text, text, text, text, text, integer, jsonb) to authenticated, service_role;
+grant execute on function public.search_logistics_providers(uuid, uuid, text, text, text[], text[], text[], numeric, numeric, text, integer) to authenticated, service_role;
 
 notify pgrst, 'reload schema';
 commit;
