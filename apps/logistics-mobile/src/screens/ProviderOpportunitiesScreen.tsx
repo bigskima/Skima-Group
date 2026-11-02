@@ -55,7 +55,7 @@ export function ProviderOpportunitiesScreen() {
   const verified = asString(company, "verification_status") === "verified" && asString(company, "operational_status") === "active";
   const opportunitiesQuery = useLogisticsQuery(
     ["opportunities", organizationId ?? "none"],
-    \`/runtime/logistics/opportunities?organizationId=\${encodeURIComponent(organizationId ?? "")}\`,
+    `/runtime/logistics/opportunities?organizationId=${encodeURIComponent(organizationId ?? "")}`,
     Boolean(organizationId), 20_000,
   );
   const offersQuery = useLogisticsQuery(["provider-offers", organizationId ?? "none"], "/runtime/logistics/offers", Boolean(organizationId), 25_000);
