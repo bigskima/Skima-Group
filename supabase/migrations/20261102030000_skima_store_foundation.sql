@@ -99,7 +99,7 @@ begin
     (workflow_version_id, 'received', 'Received', 'initial', '{"customer_visible":true}'::jsonb),
     (workflow_version_id, 'accepted', 'Accepted', 'normal', '{"customer_visible":true}'::jsonb),
     (workflow_version_id, 'preparing', 'Preparing', 'normal', '{"customer_visible":true}'::jsonb),
-    (workflow_version_id, 'ready', 'Ready', 'normal', '{"customer_visible":true}'::jsonb),
+    (workflow_version_id, 'ready_for_pickup', 'Ready for pickup', 'normal', '{"customer_visible":true}'::jsonb),
     (workflow_version_id, 'fulfilled', 'Fulfilled', 'normal', '{"customer_visible":true}'::jsonb),
     (workflow_version_id, 'completed', 'Completed', 'terminal', '{"customer_visible":true}'::jsonb),
     (workflow_version_id, 'cancelled', 'Cancelled', 'failure', '{"customer_visible":true}'::jsonb)
@@ -116,11 +116,13 @@ begin
   values
     (workflow_version_id, 'received', 'accepted', 'event.store.order.accepted', null, '{}'::text[], '{}'::jsonb),
     (workflow_version_id, 'accepted', 'preparing', 'event.store.order.preparing', null, '{}'::text[], '{}'::jsonb),
-    (workflow_version_id, 'preparing', 'ready', 'event.store.order.ready', null, '{}'::text[], '{}'::jsonb),
-    (workflow_version_id, 'ready', 'fulfilled', 'event.partner.fulfillment.confirmed', null, '{}'::text[], '{}'::jsonb),
+    (workflow_version_id, 'preparing', 'ready_for_pickup', 'event.store.order.ready', null, '{}'::text[], '{}'::jsonb),
+    (workflow_version_id, 'ready_for_pickup', 'fulfilled', 'event.partner.fulfillment.confirmed', null, '{}'::text[], '{}'::jsonb),
     (workflow_version_id, 'fulfilled', 'completed', 'event.store.order.completed', null, '{}'::text[], '{}'::jsonb),
     (workflow_version_id, 'received', 'cancelled', 'event.request.cancelled', null, '{}'::text[], '{}'::jsonb),
-    (workflow_version_id, 'accepted', 'cancelled', 'event.request.cancelled', null, '{}'::text[], '{}'::jsonb)
+    (workflow_version_id, 'accepted', 'cancelled', 'event.request.cancelled', null, '{}'::text[], '{}'::jsonb),
+    (workflow_version_id, 'preparing', 'cancelled', 'event.request.cancelled', null, '{}'::text[], '{}'::jsonb),
+    (workflow_version_id, 'ready_for_pickup', 'cancelled', 'event.request.cancelled', null, '{}'::text[], '{}'::jsonb)
   on conflict (workflow_version_id, from_state_key, event_type_key) do update
   set to_state_key = excluded.to_state_key,
       guard_policy_key = excluded.guard_policy_key,
@@ -187,8 +189,100 @@ begin
       status = excluded.status,
       metadata = excluded.metadata,
       updated_at = timezone('utc', now());
+
+  insert into public.order_action_definitions (
+    key, display_name, scope_type, scope_id, event_type_key, actor_scope,
+    service_request_status, line_fulfillment_status, reservation_effect,
+    requires_reason, status, metadata
+  )
+  values
+    (
+      'store.order.accept',
+      'Accept Store Order',
+      'module',
+      store_module_id,
+      'event.store.order.accepted',
+      'business',
+      'in_progress',
+      'accepted',
+      'none',
+      false,
+      'active',
+      '{"module_key":"store","order_action":"accept"}'::jsonb
+    ),
+    (
+      'store.order.prepare',
+      'Start Store Order Preparation',
+      'module',
+      store_module_id,
+      'event.store.order.preparing',
+      'business',
+      'in_progress',
+      'preparing',
+      'none',
+      false,
+      'active',
+      '{"module_key":"store","order_action":"prepare"}'::jsonb
+    ),
+    (
+      'store.order.ready',
+      'Mark Store Order Ready',
+      'module',
+      store_module_id,
+      'event.store.order.ready',
+      'business',
+      'in_progress',
+      'ready',
+      'none',
+      false,
+      'active',
+      '{"module_key":"store","order_action":"ready"}'::jsonb
+    ),
+    (
+      'store.order.fulfill',
+      'Confirm Store Order Fulfilment',
+      'module',
+      store_module_id,
+      'event.partner.fulfillment.confirmed',
+      'business',
+      'fulfilled',
+      'fulfilled',
+      'consume',
+      false,
+      'active',
+      '{"module_key":"store","order_action":"fulfil","stock_consumption":"on_fulfilment"}'::jsonb
+    ),
+    (
+      'store.order.complete',
+      'Complete Store Order',
+      'module',
+      store_module_id,
+      'event.store.order.completed',
+      'business',
+      'completed',
+      null,
+      'none',
+      false,
+      'active',
+      '{"module_key":"store","order_action":"complete"}'::jsonb
+    ),
+    (
+      'store.order.cancel',
+      'Cancel Store Order',
+      'module',
+      store_module_id,
+      'event.request.cancelled',
+      'business',
+      'cancelled',
+      'cancelled',
+      'release',
+      true,
+      'active',
+      '{"module_key":"store","order_action":"cancel","stock_reservation":"release"}'::jsonb
+    )
+  on conflict do nothing;
 end;
-$$;
+$;
 
 create table if not exists public.storefront_settings (
   id uuid primary key default gen_random_uuid(),
