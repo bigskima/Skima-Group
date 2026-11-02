@@ -44,11 +44,6 @@ export function FuelDriverJobsScreen() {
     enabled: Boolean(selectedOrderId),
     refetchInterval: 10000,
   });
-  const changeStage = useGatewayMutation({
-    path: "/runtime/fuel/orders/stage",
-    schema: ActionResponseSchema,
-    invalidate: [["fuel", "driver", "orders"], ["fuel", "orders"]],
-  });
   const confirmDelivery = useGatewayMutation({
     path: "/runtime/fuel/orders/confirm-delivery",
     schema: ActionResponseSchema,
