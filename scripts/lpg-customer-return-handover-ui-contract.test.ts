@@ -23,7 +23,7 @@ Deno.test("customer can confirm delivery with OTP from the return stage without 
   includes(customer, '"return_en_route"', "the customer action becomes available when the return journey starts");
   includes(customer, 'label="Confirm delivery with OTP"', "customer sees the OTP action explicitly");
   includes(verification, "deliveryStageReady", "OTP screen validates the order's delivery stage");
-  includes(verification, '["return_en_route", "delivery_verification_pending"].includes(currentOrderStatus)', "OTP can be requested only after the return journey begins");
+  includes(verification, '["return_en_route", "returning", "delivery_verification_pending"].includes(currentOrderStatus)', "OTP can be requested only after the return journey begins");
   includes(verification, "I have received the cylinder — get OTP", "customer confirms physical receipt before requesting the code");
   includes(verification, 'path: "/lpg/orders/delivery-challenge"', "customer requests an order-specific delivery challenge");
   includes(verification, 'action: "verify"', "customer OTP confirmation completes the handover");
