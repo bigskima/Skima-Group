@@ -16,6 +16,7 @@ export function LogisticsDriverLocationShare({ bookingId }: { bookingId: string 
   const { api } = useSession();
   const subscription = useRef<Location.LocationSubscription | null>(null);
   const focused = useRef(false);
+  const sharingEnabled = useRef(false);
   const [sharing, setSharing] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export function LogisticsDriverLocationShare({ bookingId }: { bookingId: string 
     focused.current = true;
     return () => {
       focused.current = false;
+      sharingEnabled.current = false;
       subscription.current?.remove();
       subscription.current = null;
       setSharing(false);
@@ -32,6 +34,7 @@ export function LogisticsDriverLocationShare({ bookingId }: { bookingId: string 
   }, []));
 
   async function sendPoint(position: Location.LocationObject) {
+    if (!focused.current || !sharingEnabled.current) return;
     const latitude = position.coords.latitude;
     const longitude = position.coords.longitude;
     const keyIdentity = bookingId + ":" + Math.round(position.timestamp) + ":" +
@@ -51,10 +54,13 @@ export function LogisticsDriverLocationShare({ bookingId }: { bookingId: string 
       tracking_point_id: z.string().uuid(),
       recorded_at: z.string(),
     }).passthrough());
-    setLastSentAt(new Date(position.timestamp).toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", second: "2-digit" }));
+    if (focused.current && sharingEnabled.current) {
+      setLastSentAt(new Date(position.timestamp).toLocaleTimeString("en-NG", { hour: "numeric", minute: "2-digit", second: "2-digit" }));
+    }
   }
 
   async function stopSharing() {
+    sharingEnabled.current = false;
     subscription.current?.remove();
     subscription.current = null;
     setSharing(false);
@@ -72,6 +78,7 @@ export function LogisticsDriverLocationShare({ bookingId }: { bookingId: string 
         accuracy: Location.Accuracy.Balanced,
       });
       if (!focused.current) return;
+      sharingEnabled.current = true;
       await sendPoint(firstPosition);
       if (!focused.current) return;
 
@@ -82,8 +89,11 @@ export function LogisticsDriverLocationShare({ bookingId }: { bookingId: string 
           distanceInterval: 25,
         },
         (position) => {
+          if (!focused.current || !sharingEnabled.current) return;
           void sendPoint(position).catch((cause) => {
-            setError(cause instanceof Error ? cause.message : "The location update could not be sent.");
+            if (focused.current && sharingEnabled.current) {
+              setError(cause instanceof Error ? cause.message : "The location update could not be sent.");
+            }
           });
         },
       );
