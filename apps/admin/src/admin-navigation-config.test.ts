@@ -42,8 +42,8 @@ describe("admin navigation access rules", () => {
   });
 
 
-  it("restricts the Store workspace to Store readers", () => {
-    expect(canAccessAdminNavigationKey("store", (permission) => permission === "platform.store.read")).toBe(true);
+  it("restricts the Store workspace to Store managers", () => {
+    expect(canAccessAdminNavigationKey("store", (permission) => permission === "platform.store.manage")).toBe(true);
     expect(canAccessAdminNavigationKey("store", () => false)).toBe(false);
   });
 
