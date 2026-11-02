@@ -623,14 +623,14 @@ export function FuelStationOperationsScreen() {
               ) : null}
               {focusedStage === "ready_for_driver" && focusedFulfillmentMode === "independent_driver" ? (
                 <View style={styles.operationInfo}>
-                  <StatusPill label="Independent Driver · SKIMA dispatch" tone="brand" />
-                  <Text style={[styles.muted, { color: palette.ink }]}>This provider is not a station employee and does not use a SKIMA fleet vehicle. SKIMA Dispatch must assign an approved Independent Driver and their own qualified vehicle. You can hand over the containers after the driver has been assigned.</Text>
+                  <StatusPill label="Independent Managed · SKIMA dispatch" tone="brand" />
+                  <Text style={[styles.muted, { color: palette.ink }]}>This provider is not a station employee and does not use a SKIMA fleet vehicle. SKIMA Dispatch must assign an approved Independent Managed provider and their own qualified vehicle. You can hand over the containers after the driver has been assigned.</Text>
                 </View>
               ) : null}
               {focusedStage === "ready_for_driver" && focusedFulfillmentMode === "skima_managed" ? (
                 <View style={styles.operationInfo}>
-                  <StatusPill label="SKIMA Managed · SKIMA dispatch" tone="brand" />
-                  <Text style={[styles.muted, { color: palette.ink }]}>This is a SKIMA internal driver using an assigned SKIMA-owned fleet vehicle. It is not a station employee or an Independent Driver. SKIMA Dispatch assigns this driver and vehicle before you hand over the containers.</Text>
+                  <StatusPill label="SKIMA Managed / SKIMA Fleet · SKIMA dispatch" tone="brand" />
+                  <Text style={[styles.muted, { color: palette.ink }]}>This is a SKIMA internal driver using an assigned SKIMA-owned fleet vehicle. It is not a station employee or an Independent Managed provider. SKIMA Dispatch assigns this driver and vehicle before you hand over the containers.</Text>
                 </View>
               ) : null}
 
@@ -675,8 +675,8 @@ export function FuelStationOperationsScreen() {
 function fulfillmentModeLabel(value: string): string {
   switch (value) {
     case "station_managed": return "Station Managed · station driver and branch-controlled vehicle";
-    case "independent_driver": return "Independent Driver · third-party provider and own vehicle";
-    case "skima_managed": return "SKIMA Managed · internal SKIMA driver and SKIMA fleet vehicle";
+    case "independent_driver": return "Independent Managed · independent provider and own vehicle";
+    case "skima_managed": return "SKIMA Managed / SKIMA Fleet · internal SKIMA driver and fleet vehicle";
     default: return "Fuel fulfilment mode not resolved";
   }
 }
