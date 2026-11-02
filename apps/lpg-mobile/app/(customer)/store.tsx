@@ -61,6 +61,7 @@ export default function StoreScreen() {
   const [checkoutAttemptKey, setCheckoutAttemptKey] = useState(() => idempotencyKey("store-order", userId));
   const [cart, setCart] = useState<StoreCartLine[]>([]);
   const [cartReady, setCartReady] = useState(false);
+  const [loadedCartKey, setLoadedCartKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [categoryKey, setCategoryKey] = useState("all");
   const [selectedItem, setSelectedItem] = useState<PlatformRecord | null>(null);
@@ -72,6 +73,7 @@ export default function StoreScreen() {
     let active = true;
     setCart([]);
     setCartReady(false);
+    setLoadedCartKey(null);
     void AsyncStorage.getItem(cartStorageKey).then((stored) => {
       if (!active) return;
       if (stored) {
@@ -84,17 +86,21 @@ export default function StoreScreen() {
           setCart([]);
         }
       }
+      setLoadedCartKey(cartStorageKey);
       setCartReady(true);
     }).catch(() => {
-      if (active) setCartReady(true);
+      if (active) {
+        setLoadedCartKey(cartStorageKey);
+        setCartReady(true);
+      }
     });
     return () => { active = false; };
   }, [cartStorageKey]);
 
   useEffect(() => {
-    if (!cartReady) return;
+    if (!cartReady || loadedCartKey !== cartStorageKey) return;
     void AsyncStorage.setItem(cartStorageKey, JSON.stringify(cart)).catch(() => undefined);
-  }, [cart, cartReady, cartStorageKey]);
+  }, [cart, cartReady, cartStorageKey, loadedCartKey]);
 
   const settings = data.activeSettings;
   const storeModuleId = typeof data.storeModule?.id === "string" ? data.storeModule.id : null;
