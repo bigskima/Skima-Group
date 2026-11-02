@@ -182,6 +182,12 @@ begin
       from public.escrow_holds hold_record
       where hold_record.subject_type = 'service_request'
         and hold_record.subject_id = booking_record.service_request_id
+    )
+    or exists (
+      select 1
+      from public.service_requests request_record
+      where request_record.id = booking_record.service_request_id
+        and request_record.escrow_hold_id is not null
     ) then
     raise exception 'this booking has a financial record and cannot use pre-payment cancellation';
   end if;
