@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, Clock3, MessageSquareText, RefreshCw, ShieldCheck, Truck, WalletCards } from "lucide-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Modal, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { asNumber, asString, useLogisticsQuery } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
@@ -54,6 +54,7 @@ export function LogisticsJobDetailScreen() {
   const [counterOfferId, setCounterOfferId] = useState("");
   const counterAttemptRef = useRef<{ fingerprint: string; idempotencyKey: string } | null>(null);
   const bookingAttemptRef = useRef<{ offerId: string; paymentMode: PaymentMode; idempotencyKey: string } | null>(null);
+  const cancellationAttemptRef = useRef<{ jobId: string; idempotencyKey: string } | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const job = (jobs.data ?? []).find((item) => asString(item, "id") === jobId) ?? null;
@@ -135,6 +136,33 @@ export function LogisticsJobDetailScreen() {
     onError: (error) => setLocalError(error.message),
   });
 
+  const cancelJob = useMutation({
+    mutationFn: async () => {
+      if (!jobId) throw new Error("The request identifier is missing.");
+      const previous = cancellationAttemptRef.current;
+      const idempotencyKey = previous?.jobId === jobId
+        ? previous.idempotencyKey
+        : createClientIdempotencyKey("logistics.job.cancel", jobId);
+      cancellationAttemptRef.current = { jobId, idempotencyKey };
+      return api.post(
+        "/runtime/logistics/jobs/cancel",
+        {
+          jobId,
+          reason: "Cancelled by the customer before a provider booking was created.",
+          idempotencyKey,
+        },
+        z.string().uuid(),
+      );
+    },
+    onSuccess: async () => {
+      cancellationAttemptRef.current = null;
+      setLocalError(null);
+      await refresh();
+      router.replace("/(customer)/jobs" as never);
+    },
+    onError: (cause) => setLocalError(cause instanceof Error ? cause.message : "The request could not be cancelled."),
+  });
+
   const currencyDecimals = (code: string) => {
     const currency = currencies.data?.find((item) => asString(item, "code") === code);
     return currency ? asNumber(currency, "decimal_places") : null;
@@ -181,6 +209,38 @@ export function LogisticsJobDetailScreen() {
                 <View style={styles.successHead}><ShieldCheck color={palette.success} size={21} /><Text style={[styles.successTitle, { color: palette.ink }]}>A provider has been selected</Text></View>
                 <Text style={[styles.description, { color: palette.muted }]}>Your booking is ready for the next step.</Text>
                 <AppButton label="Open booking" fullWidth onPress={() => router.push({ pathname: "/(customer)/bookings/[id]", params: { id: String(existingBooking.id) } } as never)} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />
+              </Card>
+            ) : null}
+
+            {!existingBooking && ["open", "matching", "offers_received"].includes(status) ? (
+              <Card variant="warning" padding="lg">
+                <View style={styles.successHead}>
+                  <Clock3 color={palette.warning} size={19} />
+                  <Text style={[styles.successTitle, { color: palette.ink }]}>No provider booking has been created</Text>
+                </View>
+                <Text style={[styles.description, { color: palette.muted }]}>
+                  You can withdraw this request while it is still being matched or quoted. This does not cancel a paid booking or trigger a refund.
+                </Text>
+                <AppButton
+                  label="Cancel this request"
+                  fullWidth
+                  variant="secondary"
+                  loading={cancelJob.isPending}
+                  disabled={cancelJob.isPending}
+                  onPress={() => Alert.alert(
+                    "Cancel this request?",
+                    "The request will be withdrawn from provider opportunities and open quotes. This action is only available before a booking is created.",
+                    [
+                      { text: "Keep request", style: "cancel" },
+                      { text: "Cancel request", style: "destructive", onPress: () => { setLocalError(null); cancelJob.mutate(); } },
+                    ],
+                  )}
+                />
+              </Card>
+            ) : status === "cancelled" ? (
+              <Card variant="subtle" padding="lg">
+                <Text style={[styles.successTitle, { color: palette.ink }]}>This request was cancelled</Text>
+                <Text style={[styles.description, { color: palette.muted }]}>No provider booking or booking payment was created for this request.</Text>
               </Card>
             ) : null}
 
