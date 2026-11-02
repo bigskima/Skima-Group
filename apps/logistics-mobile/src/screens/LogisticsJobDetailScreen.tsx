@@ -49,6 +49,7 @@ export function LogisticsJobDetailScreen() {
   const bookings = useLogisticsQuery(["bookings"], "/runtime/logistics/bookings", Boolean(jobId));
   const [showBooking, setShowBooking] = useState(false);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("online_wallet");
+  const [selectedOfferId, setSelectedOfferId] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
   const job = (jobs.data ?? []).find((item) => asString(item, "id") === jobId) ?? null;
@@ -208,10 +209,7 @@ export function LogisticsJobDetailScreen() {
     </>
   );
 
-  function setSelectedOfferId(value: string) { selectedOfferRef.current = value; }
 }
-
-const selectedOfferRef = { current: "" };
 
 function BookingModeSheet({ visible, paymentMode, setPaymentMode, busy, onClose, onConfirm }: {
   visible: boolean; paymentMode: PaymentMode; setPaymentMode(value: PaymentMode): void;
