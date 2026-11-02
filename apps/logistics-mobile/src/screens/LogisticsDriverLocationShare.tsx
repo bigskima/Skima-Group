@@ -1,5 +1,6 @@
 import * as Location from "expo-location";
-import { useRef, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
@@ -14,10 +15,21 @@ export function LogisticsDriverLocationShare({ bookingId }: { bookingId: string 
   const { palette } = useAppTheme();
   const { api } = useSession();
   const subscription = useRef<Location.LocationSubscription | null>(null);
+  const focused = useRef(false);
   const [sharing, setSharing] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSentAt, setLastSentAt] = useState<string | null>(null);
+
+  useFocusEffect(useCallback(() => {
+    focused.current = true;
+    return () => {
+      focused.current = false;
+      subscription.current?.remove();
+      subscription.current = null;
+      setSharing(false);
+    };
+  }, []));
 
   async function sendPoint(position: Location.LocationObject) {
     const latitude = position.coords.latitude;
@@ -59,7 +71,9 @@ export function LogisticsDriverLocationShare({ bookingId }: { bookingId: string 
       const firstPosition = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
+      if (!focused.current) return;
       await sendPoint(firstPosition);
+      if (!focused.current) return;
 
       const watcher = await Location.watchPositionAsync(
         {
@@ -73,6 +87,10 @@ export function LogisticsDriverLocationShare({ bookingId }: { bookingId: string 
           });
         },
       );
+      if (!focused.current) {
+        watcher.remove();
+        return;
+      }
       subscription.current = watcher;
       setSharing(true);
     } catch (cause) {
