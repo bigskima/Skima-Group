@@ -116,15 +116,18 @@ export default function StoreScreen() {
       : [];
     const now = Date.now();
     return (data.items.data ?? [])
-      .filter((item) =>
-        item.module_id === storeModuleId &&
-        item.organization_id === settings.organization_id &&
-        item.status === "active" &&
-        metadataValue(item, "sales_channel") === "skima_store" &&
-        (configuredMethods.length === 0 ||
-          !Array.isArray(item.fulfillment_methods) ||
-          configuredMethods.some((method) => item.fulfillment_methods?.includes(method)))
-      )
+      .filter((item) => {
+        const itemFulfillmentMethods = Array.isArray(item.fulfillment_methods)
+          ? item.fulfillment_methods.filter((method): method is string => typeof method === "string")
+          : [];
+        return item.module_id === storeModuleId &&
+          item.organization_id === settings.organization_id &&
+          item.status === "active" &&
+          metadataValue(item, "sales_channel") === "skima_store" &&
+          (configuredMethods.length === 0 ||
+            itemFulfillmentMethods.length === 0 ||
+            configuredMethods.some((method) => itemFulfillmentMethods.includes(method)));
+      })
       .map((item) => {
         const itemId = recordString(item, "id");
         const variants = (data.variants.data ?? []).filter((variant) =>
