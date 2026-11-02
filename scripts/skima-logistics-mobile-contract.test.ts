@@ -256,3 +256,17 @@ Deno.test("Logistics invitees can discover, accept and decline only their own Lo
   requireText(account, "Company invitation accepted", "post-accept company workspace guidance");
   requireText(account, "You can now open the company workspace", "accepted company access next step");
 });
+
+
+Deno.test("Invited Logistics staff can accept or decline from their own account", () => {
+  requireText(account, '"/runtime/organization-invitations"', "recipient-visible invitation query");
+  requireText(account, 'metadata.module === "logistics_network"', "only Logistics invitations are shown");
+  requireText(account, '"/runtime/organization-invitations/" + input.action', "shared invitation accept/decline lifecycle");
+  requireText(account, 'action: "accept" | "decline"', "both invitation responses");
+  requireText(account, "Accept invitation", "accept invitation control");
+  requireText(account, "Decline invitation", "decline invitation confirmation");
+  requireText(account, "Open company workspace", "workspace entry after acceptance");
+  requireText(account, "invitations.refetch()", "invitation state refresh");
+  requireText(account, "context?.organizations.find", "accepted company membership can be labelled");
+  requireNotText(account, "invitationId + \":\" + String(Date.now())", "stable invitation idempotency across retries");
+});
