@@ -503,7 +503,6 @@ export function FuelStationOperationsScreen() {
       const latest = (await allocations.refetch()).data ?? [];
       const orderRows = latest.filter((row) => firstString(row, ["order_id"]) === orderId);
       const failed = orderRows.some((row) => firstString(row, ["status"]) === "exception");
-      const inspectionPending = orderRows.some((row) => firstString(row, ["status"]) === "inspection");
       if (failed) {
         await changeStage.mutateAsync({
           orderId,
