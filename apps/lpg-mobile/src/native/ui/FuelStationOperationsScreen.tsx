@@ -237,19 +237,10 @@ export function FuelStationOperationsScreen() {
         idempotencyKey: idempotencyKey("fuel-stock-batch", orderId),
         metadata: { branch_id: stationBranchId, product_key: firstString(order, ["product_key"]) },
       });
-      await changeStage.mutateAsync({
-        orderId,
-        stageKey: "stock_reserved",
-        idempotencyKey: idempotencyKey("fuel-stage-stock-reserved", orderId),
-        metadata: { station_branch_id: stationBranchId },
-      });
-      await changeStage.mutateAsync({
-        orderId,
-        stageKey: "station_filling",
-        idempotencyKey: idempotencyKey("fuel-stage-filling", orderId),
-      });
+      // The final stock-reservation event advances the order automatically
+      // through stock_reserved into station_filling.
       setFocusedOrderId(orderId);
-    }, "Stock has been reserved and the order is ready for station filling.");
+    }, "Full stock reserved. SKIMA has moved the order into station filling automatically.");
   };
 
   const finishStationFill = async () => {
@@ -360,12 +351,9 @@ export function FuelStationOperationsScreen() {
         throw new Error("Reserved fuel stock has not yet covered the complete measured order quantity.");
       }
 
-      await changeStage.mutateAsync({
-        orderId,
-        stageKey: "ready_for_driver",
-        idempotencyKey: idempotencyKey("fuel-stage-ready-driver", orderId),
-      });
-    }, "The measured fuel and all containers are prepared. The order is ready for a qualified driver.");
+      // The stock-consumption event writes the measured order litres. The
+      // database advances to ready_for_driver when all station checks balance.
+    }, "The measured fuel and all containers are prepared. SKIMA has advanced the order to driver assignment automatically.");
   };
 
   const assignQualifiedDriver = async () => {
@@ -415,13 +403,9 @@ export function FuelStationOperationsScreen() {
           idempotencyKey: idempotencyKey("fuel-stage-inspection-exception", orderId),
           reason: "At least one returned rental container failed inspection.",
         });
-      } else if (!inspectionPending && orderRows.length === (firstNumber(focusedOrder, ["container_count"]) ?? 0)) {
-        await changeStage.mutateAsync({
-          orderId,
-          stageKey: "inspection_passed",
-          idempotencyKey: idempotencyKey("fuel-stage-inspection-passed", orderId),
-        });
       }
+      // Each passing inspection inserts an immutable custody event. The final
+      // passing event advances inspection_passed and completed automatically.
     }, result === "passed" ? "Container inspection recorded as passed." : "Container flagged and quarantined for review.");
   };
 
@@ -448,21 +432,9 @@ export function FuelStationOperationsScreen() {
           metadata: { station_branch_id: stationBranchId },
         });
       }
-      await changeStage.mutateAsync({
-        orderId,
-        stageKey: "station_handover",
-        idempotencyKey: idempotencyKey("fuel-stage-station-handover", orderId),
-        metadata: { handover_recorded_for_all_containers: true },
-      });
-      // The station's completed physical handover is the departure event.
-      // Drivers do not need a second "start delivery" confirmation.
-      await changeStage.mutateAsync({
-        orderId,
-        stageKey: "out_for_delivery",
-        idempotencyKey: idempotencyKey("fuel-stage-out-for-delivery", orderId),
-        metadata: { station_confirmed_departure: true },
-      });
-    }, "All filled containers have been handed to the assigned driver.");
+      // The final handed_to_driver custody event automatically records the
+      // station handover and starts the assigned driver's delivery leg.
+    }, "All filled containers have been handed to the assigned driver. Delivery has started automatically.");
   };
 
   const loading = stationInventory.isPending || operations.isPending || storage.isPending || offers.isPending;
@@ -575,9 +547,7 @@ export function FuelStationOperationsScreen() {
               ) : null}
 
               {focusedStage === "stock_reserved" ? (
-                <AppButton label="Start station filling" fullWidth loading={busyOrderId === focusedOrderId} onPress={() => void withBusy(focusedOrderId, async () => {
-                  await changeStage.mutateAsync({ orderId: focusedOrderId, stageKey: "station_filling", idempotencyKey: idempotencyKey("fuel-stage-filling", focusedOrderId) });
-                }, "Station filling has started.")} />
+                <Text style={[styles.muted, { color: palette.muted }]}>Full stock reservation recorded. Station filling has started automatically.</Text>
               ) : null}
 
               {focusedStage === "station_filling" ? (
