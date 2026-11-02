@@ -46,7 +46,7 @@ Deno.test("station, Independent Driver and SKIMA Managed qualifications are mutu
   includes(migration, "link.relationship_type='fleet_owned'", "SKIMA Managed requires a fleet-owned vehicle relationship");
   includes(migration, "link.relationship_type='driver_owned'", "Independent Driver requires the driver's own vehicle relationship");
   includes(migration, "linked_vehicle.owner_user_id=target_driver_user_id", "Independent Driver vehicle must belong to the qualified driver");
-  includes(migration, "vehicle.organization_id is distinct from branch_record.organization_id", "Station Managed vehicle ownership is scoped to its station organization");
+  includes(migration, "vehicle_record.organization_id is distinct from branch_record.organization_id", "Station Managed vehicle ownership is scoped to its station organization");
   includes(migration, "target_actor_user_id uuid", "Qualification approval records the actual authenticated administrator");
   includes(runtime, "target_actor_user_id: authResult.user.id", "the runtime forwards the verified administrator identity");
 
@@ -63,7 +63,7 @@ Deno.test("station, Independent Driver and SKIMA Managed qualifications are mutu
 Deno.test("customer delivery and rental returns are confirmed once per order, not once per container", () => {
   includes(migration, "public.confirm_fuel_customer_delivery(", "atomic customer delivery RPC exists");
   includes(migration, "public.confirm_fuel_rental_container_return(", "atomic rental return RPC exists");
-  includes(migration, "Every filled container must be with the assigned driver", "delivery requires the full prepared container set");
+  includes(migration, "All filled containers must be with the assigned driver", "delivery requires the full prepared container set");
   includes(migration, "Only the driver assigned to this Fuel order can confirm its delivery", "only the assigned driver can confirm delivery");
   includes(migration, "order_level_delivery_confirmation", "each container event is recorded in the atomic order transaction");
   includes(migration, "customer_returned_to_driver", "customer rental return is a defined order-level action");
@@ -110,6 +110,6 @@ Deno.test("station direct dispatch is restricted to Station Managed; platform di
   includes(adminFuel, '"/runtime/fuel/orders/operations?stage=ready_for_driver"', "Admin has a Fuel dispatch queue");
   includes(adminFuel, '"/runtime/fuel/orders/assign-driver"', "Admin dispatches a qualified mode-matched driver");
   includes(adminFuel, '["independent_driver", "skima_managed"]', "the SKIMA dispatch queue excludes Station Managed orders");
-  includes(adminFuel, "not a station employee", "station and independent roles are not conflated");
+  includes(adminFuel, "These two modes are dispatched by SKIMA, not by the station", "station and independent roles are not conflated");
   includes(adminFuel, "SKIMA-owned fleet vehicle", "SKIMA Managed fleet ownership is explicit");
 });
