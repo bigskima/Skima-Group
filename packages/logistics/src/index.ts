@@ -57,6 +57,50 @@ export const LOGISTICS_PRICING_MODES = [
 
 export type LogisticsPricingMode = (typeof LOGISTICS_PRICING_MODES)[number];
 
+export interface LogisticsCompanyProfile {
+  readonly organizationId: string;
+  readonly displayName: string;
+  readonly verificationStatus: "pending" | "verified" | "rejected" | "suspended";
+  readonly operationalStatus: "active" | "paused" | "closed";
+  readonly serviceKeys: readonly string[];
+  readonly coveredGeographyIds: readonly string[];
+  readonly metadata: Readonly<Record<string, unknown>>;
+}
+
+export interface LogisticsJobRequest {
+  readonly id: string;
+  readonly requesterUserId: string;
+  readonly serviceCategoryKey: string;
+  readonly requestedServiceKey: string;
+  readonly description: string;
+  readonly pickup: LogisticsLocation;
+  readonly destination: LogisticsLocation;
+  readonly cargo: {
+    readonly cargoTypeKeys: readonly string[];
+    readonly quantity?: number | null;
+    readonly weightKg?: number | null;
+    readonly volumeM3?: number | null;
+    readonly dimensionsCm?: Readonly<{ length: number; width: number; height: number }> | null;
+    readonly handlingRequirements: readonly string[];
+  };
+  readonly requestedPickupAt?: string | null;
+  readonly status: LogisticsJobStatus;
+  readonly createdAt: string;
+}
+
+export interface LogisticsBookingCommercialSnapshot {
+  readonly bookingId: string;
+  readonly jobId: string;
+  readonly acceptedOfferId: string;
+  readonly providerOrganizationId: string;
+  readonly paymentMode: LogisticsPaymentMode;
+  readonly currencyCode: string;
+  readonly deliveryPriceMinor: number;
+  readonly financial: LogisticsFinancialBreakdown;
+  readonly feePolicy: LogisticsFeePolicySnapshot;
+  readonly confirmedAt: string;
+}
+
 export interface LogisticsLocation {
   readonly geographyId?: string | null;
   readonly countryCode: string;
@@ -134,6 +178,35 @@ export interface LogisticsFinancialBreakdown {
   readonly companyDeliveryProceedsMinor: number;
   readonly customerPaysThroughSkimaMinor: number;
   readonly customerPaysProviderOfflineMinor: number;
+}
+
+const JOB_STATUS_TRANSITIONS: Readonly<Record<LogisticsJobStatus, readonly LogisticsJobStatus[]>> = {
+  draft: ["open", "cancelled"],
+  open: ["matching", "offers_received", "cancelled", "expired"],
+  matching: ["offers_received", "cancelled", "expired"],
+  offers_received: ["matching", "booking_pending", "cancelled", "expired"],
+  booking_pending: ["booked", "offers_received", "cancelled", "expired"],
+  booked: ["assigned", "cancelled", "disputed"],
+  assigned: ["pickup_confirmed", "cancelled", "disputed"],
+  pickup_confirmed: ["in_progress", "cancelled", "disputed"],
+  in_progress: ["delivered", "disputed"],
+  delivered: ["completed", "disputed"],
+  completed: [],
+  cancelled: [],
+  disputed: ["completed", "cancelled"],
+  expired: [],
+};
+
+/**
+ * UI/domain guard for displaying an allowed transition.
+ * The authoritative workflow engine must re-check actor permissions,
+ * concurrency and state inside a database transaction.
+ */
+export function canTransitionLogisticsJobStatus(
+  current: LogisticsJobStatus,
+  next: LogisticsJobStatus,
+): boolean {
+  return JOB_STATUS_TRANSITIONS[current].includes(next);
 }
 
 /**
