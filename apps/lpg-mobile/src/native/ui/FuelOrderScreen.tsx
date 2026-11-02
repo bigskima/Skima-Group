@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { CheckCircle2, Droplets, Fuel, Gauge, MapPin, Package, ShieldCheck, Truck, WalletCards } from "lucide-react-native";
+import { CheckCircle2, Fuel, Gauge, MapPin, Package, ShieldCheck, Truck, WalletCards } from "lucide-react-native";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
