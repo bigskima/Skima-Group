@@ -59,6 +59,7 @@ type IconType = ComponentType<{ color?: string; size?: number; strokeWidth?: num
 
 export function CustomerDashboard() {
   const session = useSession();
+  const { palette } = useAppTheme();
   const cylinders = domainQueries.cylinders();
   const active = domainQueries.activeOrders();
   const locations = domainQueries.locations();
