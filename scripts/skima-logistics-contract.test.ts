@@ -1,5 +1,6 @@
 import {
   calculateLogisticsFinancialBreakdown,
+  canTransitionLogisticsJobStatus,
   isProviderEligibleForLogisticsJob,
   type LogisticsFeePolicySnapshot,
   type LogisticsProviderMatch,
@@ -105,6 +106,18 @@ Deno.test("fee calculation rejects floating amounts and invalid commission rates
     }
     if (!rejected) throw new Error("Invalid financial values must fail closed.");
   }
+});
+
+
+Deno.test("booking lifecycle rejects skipping required delivery milestones", () => {
+  if (!canTransitionLogisticsJobStatus("draft", "open")) throw new Error("Draft job should be publishable.");
+  if (!canTransitionLogisticsJobStatus("offers_received", "booking_pending")) throw new Error("Customer should be able to proceed to booking confirmation.");
+  if (!canTransitionLogisticsJobStatus("booking_pending", "booked")) throw new Error("Confirmed payment/fee state should allow booking.");
+  if (!canTransitionLogisticsJobStatus("pickup_confirmed", "in_progress")) throw new Error("Pickup confirmation should allow transit.");
+  if (!canTransitionLogisticsJobStatus("in_progress", "delivered")) throw new Error("In-progress job should allow delivery.");
+  if (canTransitionLogisticsJobStatus("open", "completed")) throw new Error("A job cannot skip booking and fulfilment.");
+  if (canTransitionLogisticsJobStatus("completed", "assigned")) throw new Error("Completed jobs are terminal.");
+  if (canTransitionLogisticsJobStatus("cancelled", "booked")) throw new Error("Cancelled jobs are terminal.");
 });
 
 Deno.test("provider matches require every hard eligibility gate", () => {
