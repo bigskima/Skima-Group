@@ -7,7 +7,10 @@ const migrationHardening = await Deno.readTextFile(
 const migrationBooking = await Deno.readTextFile(
   "supabase/migrations/20261102113000_logistics_booking_and_payment_modes.sql",
 );
-const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking;
+const migrationFulfillment = await Deno.readTextFile(
+  "supabase/migrations/20261102114500_logistics_booking_fulfillment_and_settlement.sql",
+);
+const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
 const moduleRouter = await Deno.readTextFile("supabase/migrations/20261102005600_fuel_module_runtime_router_and_security.sql");
@@ -227,6 +230,47 @@ Deno.test("Booking and payment routes do not expose the service-role credential"
   requireText(runtime, 'Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")', "server-only service-role environment");
   requireNotText(runtime, "serviceRoleKey:", "service-role key is not serialized in a response");
   requireText(migrationBooking, "from public,anon,authenticated", "payment confirmation RPC is service-role only");
+});
+
+Deno.test("Provider acceptance is blocked until the selected booking payment mode is satisfied", () => {
+  requireText(migrationFulfillment, "booking_record.payment_mode = 'online_wallet'", "online provider acceptance payment mode");
+  requireText(migrationFulfillment, "booking_record.status <> 'payment_reserved'", "online escrow must exist before provider acceptance");
+  requireText(migrationFulfillment, "booking_record.payment_mode = 'offline'", "offline provider acceptance payment mode");
+  requireText(migrationFulfillment, "booking_record.status <> 'offline_payment_confirmed'", "offline fees must be confirmed before provider acceptance");
+  requireText(runtime, '"/runtime/logistics/bookings/accept"', "provider accept API route");
+});
+
+Deno.test("Provider fulfilment requires acceptance, work start and a named delivery recipient", () => {
+  requireText(migrationFulfillment, "public.start_logistics_booking", "provider work-start lifecycle function");
+  requireText(migrationFulfillment, "public.submit_logistics_booking_delivery", "provider delivery submission function");
+  requireText(migrationFulfillment, "recipient_name", "delivery recipient evidence");
+  requireText(migrationFulfillment, "booking_record.status <> 'provider_accepted'", "work cannot start before provider acceptance");
+  requireText(migrationFulfillment, "booking_record.status <> 'in_progress'", "delivery cannot be submitted before work starts");
+  requireText(runtime, '"/runtime/logistics/bookings/start"', "provider start API route");
+  requireText(runtime, '"/runtime/logistics/bookings/delivery/submit"', "provider delivery submission API route");
+});
+
+Deno.test("Online customer delivery confirmation settles escrow to provider net and platform fees", () => {
+  requireText(migrationFulfillment, "public.execute_service_request_settlement(", "existing universal escrow settlement engine");
+  requireText(migrationFulfillment, "'logistics_provider_net'", "provider receives locked net delivery proceeds");
+  requireText(migrationFulfillment, "'logistics_platform_revenue'", "platform receives booking fee and online commission");
+  requireText(migrationFulfillment, "provider_net_amount + platform_revenue_amount <> booking_record.total_customer_charge", "split distribution equals escrowed total");
+  requireText(runtime, 'serviceClient.rpc("confirm_logistics_booking_delivery"', "service-role customer confirmation route");
+  requireText(migrationFulfillment, "'logistics-booking:' || booking_record.id::text || ':settlement:v1'", "server-side settlement idempotency");
+});
+
+Deno.test("Offline delivery completion never runs online commission or escrow settlement again", () => {
+  requireText(migrationFulfillment, "booking_record.payment_mode = 'offline'", "offline completion branch");
+  requireText(migrationFulfillment, "offline_fee_transaction_id is null", "offline booking fees were confirmed earlier");
+  requireText(migrationFulfillment, "current_status := 'completed_offline'", "offline terminal booking status");
+  requireNotText(
+    migrationFulfillment.slice(
+      migrationFulfillment.indexOf("elsif booking_record.payment_mode = 'offline'"),
+      migrationFulfillment.indexOf("else\n    raise exception 'booking payment mode", migrationFulfillment.indexOf("elsif booking_record.payment_mode = 'offline'")),
+    ),
+    "execute_service_request_settlement",
+    "offline delivery has no online settlement/commission debit",
+  );
 });
 
 Deno.test("Free provider opportunity access has no lead unlock charge", () => {
