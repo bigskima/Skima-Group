@@ -3,9 +3,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, ArrowLeft, CheckCircle2, LockKeyhole, ShieldCheck, WalletCards } from "lucide-react-native";
 import { useMemo, useRef, useState } from "react";
-import { Alert, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
-import { asNumber, asString, useLogisticsQuery } from "../api/logistics";
+import { asNumber, asString, useLogisticsQuery, useLogisticsRecordQuery } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -27,6 +27,21 @@ export function LogisticsBookingScreen() {
   const walletsQuery = useLogisticsQuery(["wallets"], "/runtime/wallets");
   const balancesQuery = useLogisticsQuery(["wallet-balances"], "/runtime/wallet-balances");
   const booking = (bookings.data ?? []).find((item) => asString(item, "id") === bookingId) ?? null;
+  const status = asString(booking, "status") ?? "awaiting_payment";
+  const tracking = useLogisticsRecordQuery(
+    ["booking-tracking", bookingId ?? "none"],
+    "/runtime/logistics/bookings/tracking?bookingId=" + encodeURIComponent(bookingId ?? ""),
+    Boolean(bookingId && ["in_progress", "delivered", "settled", "completed_offline"].includes(status)),
+  );
+  const trackingSession = tracking.data?.tracking_session && typeof tracking.data.tracking_session === "object" && !Array.isArray(tracking.data.tracking_session)
+    ? tracking.data.tracking_session as Record<string, unknown>
+    : null;
+  const trackingPoints = Array.isArray(tracking.data?.points)
+    ? tracking.data.points.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+  const latestTrackingPoint = trackingPoints[trackingPoints.length - 1] ?? null;
+  const latestLatitude = asNumber(latestTrackingPoint, "latitude");
+  const latestLongitude = asNumber(latestTrackingPoint, "longitude");
   const currency = asString(booking, "currency_code") ?? "";
   const customerId = session?.user.id ?? "";
   const customerWallets = useMemo(() => (walletsQuery.data ?? []).filter((wallet) =>
@@ -45,7 +60,6 @@ export function LogisticsBookingScreen() {
     ...wallet,
     balance: walletBalances.find((item) => asString(item, "wallet_id") === asString(wallet, "id"))?.balance ?? 0,
   }));
-  const status = asString(booking, "status") ?? "awaiting_payment";
   const preferredWalletId = selectedWalletId || asString(booking, "payment_attempt_wallet_id") || "";
   const selectedWallet = walletWithBalance.find((wallet) => asString(wallet, "id") === preferredWalletId)
     ?? (status === "payment_processing" ? null : walletWithBalance[0] ?? null);
@@ -116,7 +130,7 @@ export function LogisticsBookingScreen() {
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : "Delivery confirmation could not be completed."),
   });
-  const refresh = async () => { await Promise.all([bookings.refetch(), walletsQuery.refetch(), balancesQuery.refetch()]); };
+  const refresh = async () => { await Promise.all([bookings.refetch(), walletsQuery.refetch(), balancesQuery.refetch(), tracking.refetch()]); };
   const isWorking = payOnline.isPending || confirmOffline.isPending || confirmDelivery.isPending || cancelBooking.isPending;
 
   return (
@@ -147,6 +161,39 @@ export function LogisticsBookingScreen() {
             {paymentMode === "offline" ? <AmountLine label="Provider receival fee" value="Paid by the company" subtle /> : null}
             {paymentMode === "online_wallet" && (asNumber(booking, "provider_commission_amount") ?? 0) > 0 ? <AmountLine label="Provider commission" value="Deducted from provider proceeds" subtle /> : null}
           </Card>
+
+          {["in_progress", "delivered", "settled", "completed_offline"].includes(status) ? (
+            <Card padding="lg">
+              <View style={styles.sectionHeading}>
+                <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><MapPin color={palette.brand} size={18} /></View>
+                <View style={styles.sectionCopy}>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>Driver location</Text>
+                  <Text style={[styles.sectionDescription, { color: palette.muted }]}>Location updates are shared by your assigned driver during the active delivery.</Text>
+                </View>
+                {trackingSession ? <StatusPill status={asString(trackingSession, "status") ?? "active"} /> : null}
+              </View>
+              {tracking.isPending ? (
+                <Text style={[styles.sectionDescription, { color: palette.muted }]}>Checking for the latest driver location…</Text>
+              ) : latestLatitude !== null && latestLongitude !== null ? (
+                <View style={[styles.balanceRow, { backgroundColor: palette.surfaceSubtle }]}>
+                  <Text style={[styles.balanceLabel, { color: palette.muted }]}>Latest shared position</Text>
+                  <Text style={[styles.balanceValue, { color: palette.ink }]}>{latestLatitude.toFixed(5)}, {latestLongitude.toFixed(5)}</Text>
+                  {asString(latestTrackingPoint, "recorded_at") ? <Text style={[styles.sectionDescription, { color: palette.muted }]}>Updated {new Date(String(latestTrackingPoint?.recorded_at)).toLocaleString("en-NG")}</Text> : null}
+                  <AppButton
+                    label="Open location in Maps"
+                    fullWidth
+                    variant="secondary"
+                    onPress={() => void Linking.openURL("https://www.google.com/maps/search/?api=1&query=" + latestLatitude + "," + latestLongitude)}
+                  />
+                </View>
+              ) : (
+                <Text style={[styles.sectionDescription, { color: palette.muted }]}>
+                  The driver has not shared a location yet. Their latest location will appear here while they are sharing from the Logistics driver workspace.
+                </Text>
+              )}
+              {tracking.error ? <Text style={[styles.inlineError, { color: palette.danger }]}>The latest tracking update could not be loaded. Pull down to retry.</Text> : null}
+            </Card>
+          ) : null}
 
           {status === "awaiting_payment" || status === "awaiting_offline_confirmation" ? (
             <Card variant="warning" padding="lg">
