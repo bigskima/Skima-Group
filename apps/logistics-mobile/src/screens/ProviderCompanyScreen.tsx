@@ -43,6 +43,7 @@ export function ProviderCompanyScreen() {
     Boolean(organizationId),
   );
 
+  const [companyRegistrationKey] = useState(() => createClientIdempotencyKey("logistics.company.register"));
   const [companyName, setCompanyName] = useState("");
   const [legalName, setLegalName] = useState("");
   const [serviceCategory, setServiceCategory] = useState("");
@@ -67,7 +68,7 @@ export function ProviderCompanyScreen() {
     mutationFn: () => api.post("/runtime/logistics/company", {
       displayName: companyName.trim(),
       legalName: legalName.trim() || null,
-      idempotencyKey: createClientIdempotencyKey("logistics.company.register"),
+      idempotencyKey: companyRegistrationKey,
       metadata: { registration_source: "skima.logistics.mobile" },
     }, z.string().uuid()),
     onSuccess: async () => {
