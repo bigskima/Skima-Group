@@ -22,8 +22,8 @@ Deno.test("Fuel product display names and codes are sourced from the database re
     excludes(source, 'title: "Diesel"', `${name} does not hardcode Diesel title`);
     excludes(source, 'title: "Kerosene"', `${name} does not hardcode Kerosene title`);
   }
-  includes(customer, 'firstString(product, ["display_name"])', "customer product selection uses registry display name");
-  includes(customer, 'firstString(product, ["short_code"])', "customer product selection uses registry code");
+  includes(customer, 'firstString(item, ["display_name"])', "customer product selection uses registry display name in the shared selection card");
+  includes(customer, 'firstString(item, ["short_code"])', "customer product selection uses registry code in the shared selection card");
   includes(admin, 'catalogText(record, "display_name")', "admin product cards use registry display name");
   includes(admin, 'catalogText(record, "short_code")', "admin product cards use registry code");
   for (const source of [orders,details,station,driver]) {
