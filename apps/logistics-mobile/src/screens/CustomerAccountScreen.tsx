@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { asString, useLogisticsQuery } from "../api/logistics";
+import { asString, useLogisticsQuery, useLogisticsRecordQuery } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -15,13 +15,14 @@ import { BrandMark } from "../ui/BrandMark";
 import { Card } from "../ui/Card";
 import { Screen } from "../ui/Screen";
 
-export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: "customer" | "provider" }) {
+export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: "customer" | "provider" | "driver" }) {
   const { palette, scheme, toggle } = useAppTheme();
   const { api, context, session, signOut } = useSession();
   const client = useQueryClient();
   const [invitationNotice, setInvitationNotice] = useState<string | null>(null);
   const [invitationError, setInvitationError] = useState<string | null>(null);
   const invitations = useLogisticsQuery(["my-logistics-invitations"], "/runtime/organization-invitations", true, 60_000);
+  const driverProfile = useLogisticsRecordQuery(["my-driver-profile"], "/runtime/logistics/driver/profile", true);
   const pendingInvitations = useMemo(() => {
     const emailAddress = session?.user.email?.trim().toLowerCase();
     const currentUserId = session?.user.id;
@@ -135,11 +136,19 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: palette.ink }]}>Workspaces</Text>
         <AppButton
-          label={workspace === "customer" ? "Open company workspace" : "Return to customer app"}
+          label={workspace === "customer" || workspace === "driver" ? (workspace === "driver" ? "Return to customer app" : "Open company workspace") : "Return to customer app"}
           fullWidth
           variant="secondary"
           onPress={() => router.replace((workspace === "customer" ? "/(provider)" : "/(customer)") as never)}
         />
+        {workspace !== "driver" && asString(driverProfile.data, "driver_profile_id") ? (
+          <AppButton
+            label="Open driver workspace"
+            fullWidth
+            variant="secondary"
+            onPress={() => router.replace("/(driver)" as never)}
+          />
+        ) : null}
       </View>
 
       <View style={styles.section}>
@@ -158,7 +167,7 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
         { text: "Cancel", style: "cancel" },
         { text: "Sign out", style: "destructive", onPress: () => { void signOut().then(() => router.replace("/(auth)/sign-in" as never)); } },
       ])} />
-      <Text style={[styles.version, { color: palette.muted }]}>SKIMA Logistics · {workspace === "customer" ? "Customer app" : "Company workspace"}</Text>
+      <Text style={[styles.version, { color: palette.muted }]}>SKIMA Logistics · {workspace === "customer" ? "Customer app" : workspace === "driver" ? "Driver workspace" : "Company workspace"}</Text>
     </Screen>
   );
 }
