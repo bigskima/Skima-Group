@@ -1198,8 +1198,19 @@ begin
   if job.status not in ('matching', 'offers_received') then
     raise exception 'job is not accepting offer selection';
   end if;
-  if selected_offer.status not in ('submitted', 'countered') then
-    raise exception 'selected offer is no longer available';
+  if selected_offer.offer_type not in ('provider_quote', 'provider_counter') then
+    raise exception 'only an active provider offer may be selected';
+  end if;
+  if selected_offer.status <> 'submitted' then
+    raise exception 'selected offer is no longer the current provider offer';
+  end if;
+  if exists (
+    select 1
+    from public.logistics_offers child
+    where child.parent_offer_id = selected_offer.id
+      and child.status in ('submitted', 'countered')
+  ) then
+    raise exception 'only the latest offer in a negotiation may be selected';
   end if;
   if selected_offer.expires_at is not null and selected_offer.expires_at <= timezone('utc', now()) then
     raise exception 'selected offer has expired';
