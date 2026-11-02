@@ -263,8 +263,8 @@ export function InternalDriverJobDetailScreen() {
 
   return (
     <Screen
-      eyebrow="SKIMA fulfillment"
-      title={order ? displayTitle(order) : "Internal delivery job"}
+      eyebrow="SKIMA Managed / SKIMA Fleet"
+      title={order ? displayTitle(order) : "SKIMA Fleet delivery job"}
       subtitle="Pickup, source a safe LPG refill, record the supplier details and safety check, then return the verified cylinder. Receipt upload is optional."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
