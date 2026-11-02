@@ -213,7 +213,7 @@ begin
     raise exception 'pickup, destination, cargo, contact and metadata must be JSON objects';
   end if;
   if length(btrim(coalesce(target_payload #>> '{customer_contact,name}', ''))) < 2
-    or coalesce(btrim(target_payload #>> '{customer_contact,phone}'), '') !~ '^[+]?[0-9][0-9 ()-]{6,22}
+    or coalesce(btrim(target_payload #>> '{customer_contact,phone}'), '') !~ '^[+]?[0-9][0-9 ()-]{6,22}$' then
 
   select * into existing_job
   from public.logistics_job_requests
@@ -285,7 +285,12 @@ begin
       'instructions', nullif(btrim(target_payload->>'instructions'), ''),
       'requested_pickup_at', nullif(target_payload->>'requested_pickup_at', '') 
     ),
-    target_payload->'customer_contact'
+    jsonb_strip_nulls(jsonb_build_object(
+      'name', btrim(target_payload #>> '{customer_contact,name}'),
+      'phone', btrim(target_payload #>> '{customer_contact,phone}'),
+      'email', nullif(lower(btrim(target_payload #>> '{customer_contact,email}')), ''),
+      'contact_instructions', nullif(btrim(target_payload #>> '{customer_contact,contact_instructions}'), '')
+    ))
   from public.logistics_provider_services service
   join public.logistics_provider_profiles provider
     on provider.organization_id = service.organization_id
@@ -527,12 +532,6 @@ begin
     raise exception 'offer management permission is required for this provider company';
   end if;
   select * into job from public.logistics_job_requests where id = opportunity.job_id for update;
-  if job.status not in ('matching', 'offers_received') then
-    raise exception 'this logistics job is no longer accepting provider offers';
-  end if;
-  if opportunity.status not in ('matched', 'viewed', 'offered') then
-    raise exception 'this provider opportunity is no longer available';
-  end if;
   if target_delivery_price_minor is null or target_delivery_price_minor <= 0 then
     raise exception 'delivery offer must be a positive minor-unit amount';
   end if;
@@ -551,10 +550,6 @@ begin
   if target_idempotency_key is null or char_length(btrim(target_idempotency_key)) < 8 then
     raise exception 'valid idempotency key is required';
   end if;
-  if target_expires_at is not null and target_expires_at <= timezone('utc', now()) then
-    raise exception 'offer expiry must be in the future';
-  end if;
-
   if exists (
     select 1 from public.logistics_offers
     where created_by = auth.uid() and idempotency_key = target_idempotency_key
@@ -571,6 +566,15 @@ begin
     return offer_id;
   end if;
 
+  if job.status not in ('matching', 'offers_received') then
+    raise exception 'this logistics job is no longer accepting provider offers';
+  end if;
+  if opportunity.status not in ('matched', 'viewed', 'offered') then
+    raise exception 'this provider opportunity is no longer available';
+  end if;
+  if target_expires_at is not null and target_expires_at <= timezone('utc', now()) then
+    raise exception 'offer expiry must be in the future';
+  end if;
   if exists (
     select 1 from public.logistics_offers existing
     where existing.opportunity_id = target_opportunity_id
@@ -644,9 +648,6 @@ begin
   from public.logistics_job_requests
   where id = parent_offer.job_id
   for update;
-  if job.status not in ('matching', 'offers_received') then
-    raise exception 'this logistics job is no longer open for negotiation';
-  end if;
   if target_delivery_price_minor is null or target_delivery_price_minor <= 0 then
     raise exception 'counteroffer must be a positive minor-unit amount';
   end if;
@@ -668,10 +669,6 @@ begin
   if target_idempotency_key is null or char_length(btrim(target_idempotency_key)) < 8 then
     raise exception 'valid idempotency key is required';
   end if;
-  if target_expires_at is not null and target_expires_at <= timezone('utc', now()) then
-    raise exception 'counteroffer expiry must be in the future';
-  end if;
-
   if auth.uid() = job.requester_user_id then
     if parent_offer.offer_type = 'customer_counter' then
       raise exception 'the customer cannot counter their own latest offer';
@@ -703,6 +700,12 @@ begin
     return new_offer_id;
   end if;
 
+  if job.status not in ('matching', 'offers_received') then
+    raise exception 'this logistics job is no longer open for negotiation';
+  end if;
+  if target_expires_at is not null and target_expires_at <= timezone('utc', now()) then
+    raise exception 'counteroffer expiry must be in the future';
+  end if;
   if parent_offer.status <> 'submitted' then
     raise exception 'only the latest open offer can be negotiated';
   end if;
@@ -1073,14 +1076,14 @@ begin
     and exists (
       select 1 from public.logistics_provider_coverage origin
       where origin.provider_service_id = service.id and origin.status = 'active'
-        and ((origin.coverage_mode in ('origin','both') and origin.geography_id = job.pickup_geography_id)
-          or (origin.coverage_mode = 'route' and origin.geography_id = job.pickup_geography_id and origin.destination_geography_id = job.destination_geography_id))
+        and ((origin.coverage_mode in ('origin','both') and public.logistics_geography_is_covered(origin.geography_id, job.pickup_geography_id))
+          or (origin.coverage_mode = 'route' and public.logistics_geography_is_covered(origin.geography_id, job.pickup_geography_id) and public.logistics_geography_is_covered(origin.destination_geography_id, job.destination_geography_id)))
     )
     and exists (
       select 1 from public.logistics_provider_coverage destination
       where destination.provider_service_id = service.id and destination.status = 'active'
-        and ((destination.coverage_mode in ('destination','both') and destination.geography_id = job.destination_geography_id)
-          or (destination.coverage_mode = 'route' and destination.geography_id = job.pickup_geography_id and destination.destination_geography_id = job.destination_geography_id))
+        and ((destination.coverage_mode in ('destination','both') and public.logistics_geography_is_covered(destination.geography_id, job.destination_geography_id))
+          or (destination.coverage_mode = 'route' and public.logistics_geography_is_covered(destination.geography_id, job.pickup_geography_id) and public.logistics_geography_is_covered(destination.destination_geography_id, job.destination_geography_id)))
     )
     and (service.maximum_weight_kg is null or nullif(job.cargo_snapshot->>'weight_kg','') is null or service.maximum_weight_kg >= (job.cargo_snapshot->>'weight_kg')::numeric)
     and (service.maximum_volume_m3 is null or nullif(job.cargo_snapshot->>'volume_m3','') is null or service.maximum_volume_m3 >= (job.cargo_snapshot->>'volume_m3')::numeric)
@@ -1146,7 +1149,7 @@ as $$
       select 1 from public.logistics_provider_coverage destination
       where destination.provider_service_id=service.id and destination.status='active'
         and ((destination.coverage_mode in ('destination','both') and public.logistics_geography_is_covered(destination.geography_id,target_destination_geography_id))
-          or (destination.coverage_mode='route' and destination.geography_id=target_pickup_geography_id and public.logistics_geography_is_covered(destination.destination_geography_id,target_destination_geography_id)))
+          or (destination.coverage_mode='route' and public.logistics_geography_is_covered(destination.geography_id,target_pickup_geography_id) and public.logistics_geography_is_covered(destination.destination_geography_id,target_destination_geography_id)))
     )
   order by provider.public_name,service.display_name
   limit greatest(1,least(coalesce(target_limit,30),100));
