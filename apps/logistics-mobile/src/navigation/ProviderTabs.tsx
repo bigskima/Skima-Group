@@ -1,15 +1,17 @@
 import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
-import { BriefcaseBusiness, Building2, Settings2, Truck, UsersRound } from "lucide-react-native";
+import { BriefcaseBusiness, Building2, Navigation, Settings2, Truck, UsersRound } from "lucide-react-native";
 import { StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows } from "../theme/tokens";
+import { useLogisticsRecordQuery } from "../api/logistics";
 
 export function ProviderTabs() {
   const { palette, scheme } = useAppTheme();
   const desktop = useWindowDimensions().width >= 900;
   const insets = useSafeAreaInsets();
+  const driverProfile = useLogisticsRecordQuery(["driver-profile-navigation"], "/runtime/logistics/driver/profile", true);
   return (
     <Tabs screenOptions={{
       headerShown: false,
@@ -36,6 +38,7 @@ export function ProviderTabs() {
       <Tabs.Screen name="index" options={{ title: "Overview", tabBarIcon: ({ color, size }) => <Building2 color={String(color)} size={size} /> }} />
       <Tabs.Screen name="opportunities" options={{ title: "Opportunities", tabBarIcon: ({ color, size }) => <BriefcaseBusiness color={String(color)} size={size} /> }} />
       <Tabs.Screen name="work" options={{ title: "Jobs", tabBarIcon: ({ color, size }) => <Truck color={String(color)} size={size} /> }} />
+      {driverProfile.data?.registered === true ? <Tabs.Screen name="driver" options={{ title: "Driver", tabBarIcon: ({ color, size }) => <Navigation color={String(color)} size={size} /> }} /> : null}
       <Tabs.Screen name="services" options={{ title: "Company", tabBarIcon: ({ color, size }) => <Building2 color={String(color)} size={size} /> }} />
       <Tabs.Screen name="team" options={{ title: "Team", tabBarIcon: ({ color, size }) => <UsersRound color={String(color)} size={size} /> }} />
       <Tabs.Screen name="work/[id]" options={{ href: null }} />
