@@ -41,7 +41,8 @@
     "react-native-svg": "15.15.4",
     "react-native-url-polyfill": "^4.0.0",
     "react-native-web": "^0.21.2",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "expo-location": "~57.0.18"
   },
   "devDependencies": {
     "@types/react": "19.2.3",
