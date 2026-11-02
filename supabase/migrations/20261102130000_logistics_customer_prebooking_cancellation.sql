@@ -176,6 +176,7 @@ begin
   if booking_record.escrow_hold_id is not null
     or booking_record.payment_transaction_id is not null
     or booking_record.offline_fee_transaction_id is not null
+    or booking_record.settlement_execution_id is not null
     or exists (
       select 1
       from public.escrow_holds hold_record
@@ -530,12 +531,134 @@ begin
 end;
 $$;
 
+-- One authenticated API operation for online booking payment. This wrapper keeps
+-- the booking row locked while it acquires the attempt identity, creates the
+-- shared escrow hold, and marks the booking projection as funded.
+create or replace function public.reserve_logistics_booking_online_payment(
+  target_booking_id uuid,
+  target_requester_user_id uuid,
+  target_customer_wallet_id uuid,
+  target_client_idempotency_key text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  booking_record public.logistics_bookings%rowtype;
+  attempt_result jsonb;
+  escrow_hold_id uuid;
+  payment_attempt_key text;
+begin
+  if auth.role() <> 'service_role' then
+    raise exception 'service role is required';
+  end if;
+  if target_booking_id is null
+    or target_requester_user_id is null
+    or target_customer_wallet_id is null
+    or target_client_idempotency_key is null
+    or char_length(btrim(target_client_idempotency_key)) not between 8 and 180 then
+    raise exception 'booking, requester, wallet and valid client idempotency key are required';
+  end if;
+
+  select * into booking_record
+  from public.logistics_bookings
+  where id = target_booking_id
+  for update;
+
+  if not found or booking_record.requester_user_id <> target_requester_user_id then
+    raise exception 'logistics booking was not found for the authenticated customer';
+  end if;
+  if booking_record.payment_mode <> 'online_wallet' then
+    raise exception 'online payment is not available for an offline booking';
+  end if;
+
+  if booking_record.status = 'payment_reserved' and booking_record.escrow_hold_id is not null then
+    return jsonb_build_object(
+      'booking_id', booking_record.id,
+      'service_request_id', booking_record.service_request_id,
+      'escrow_hold_id', booking_record.escrow_hold_id,
+      'status', booking_record.status,
+      'currency_code', booking_record.currency_code,
+      'total_amount', booking_record.total_customer_charge,
+      'idempotent_replay', true
+    );
+  end if;
+
+  if booking_record.status not in ('awaiting_payment','payment_processing') then
+    raise exception 'logistics booking is not awaiting online payment';
+  end if;
+  if booking_record.order_id is null or booking_record.service_request_id is null then
+    raise exception 'logistics booking is missing its payment order or service request';
+  end if;
+
+  payment_attempt_key := 'logistics-booking:' || booking_record.id::text || ':online-wallet:v1';
+
+  attempt_result := public.begin_logistics_booking_online_payment(
+    booking_record.id,
+    target_requester_user_id,
+    target_customer_wallet_id,
+    payment_attempt_key
+  );
+
+  if attempt_result->>'status' = 'payment_reserved' then
+    return jsonb_build_object(
+      'booking_id', booking_record.id,
+      'service_request_id', booking_record.service_request_id,
+      'escrow_hold_id', attempt_result->'escrow_hold_id',
+      'status', 'payment_reserved',
+      'currency_code', booking_record.currency_code,
+      'total_amount', booking_record.total_customer_charge,
+      'idempotent_replay', true
+    );
+  end if;
+  if attempt_result->>'status' <> 'payment_processing' then
+    raise exception 'online payment attempt could not be started';
+  end if;
+
+  escrow_hold_id := public.fund_order_from_wallet(
+    booking_record.order_id,
+    target_customer_wallet_id,
+    null,
+    'platform.logistics.bookings',
+    payment_attempt_key,
+    jsonb_build_object(
+      'module_key', 'logistics_network',
+      'logistics_booking_id', booking_record.id,
+      'service_request_id', booking_record.service_request_id,
+      'payment_channel', 'customer_wallet',
+      'client_idempotency_key', target_client_idempotency_key,
+      'policy_snapshots', booking_record.policy_snapshots
+    )
+  );
+
+  perform public.mark_logistics_booking_payment_reserved(
+    booking_record.id,
+    target_requester_user_id,
+    escrow_hold_id
+  );
+
+  return jsonb_build_object(
+    'booking_id', booking_record.id,
+    'service_request_id', booking_record.service_request_id,
+    'escrow_hold_id', escrow_hold_id,
+    'status', 'payment_reserved',
+    'currency_code', booking_record.currency_code,
+    'total_amount', booking_record.total_customer_charge,
+    'idempotent_replay', false
+  );
+end;
+$;
+
 revoke all on function public.begin_logistics_booking_online_payment(uuid,uuid,uuid,text) from public, anon, authenticated;
 revoke all on function public.reset_logistics_booking_payment_attempt(uuid,uuid,text,text) from public, anon, authenticated;
 revoke all on function public.mark_logistics_booking_payment_reserved(uuid,uuid,uuid) from public, anon, authenticated;
+revoke all on function public.reserve_logistics_booking_online_payment(uuid,uuid,uuid,text) from public, anon, authenticated;
 grant execute on function public.begin_logistics_booking_online_payment(uuid,uuid,uuid,text) to service_role;
 grant execute on function public.reset_logistics_booking_payment_attempt(uuid,uuid,text,text) to service_role;
 grant execute on function public.mark_logistics_booking_payment_reserved(uuid,uuid,uuid) to service_role;
+grant execute on function public.reserve_logistics_booking_online_payment(uuid,uuid,uuid,text) to service_role;
 
 notify pgrst,'reload schema';
 commit;
