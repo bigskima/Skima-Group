@@ -16,7 +16,10 @@ const migrationWalletFunding = await Deno.readTextFile(
 const migrationDriver = await Deno.readTextFile(
   "supabase/migrations/20261102120000_logistics_company_driver_fulfillment.sql",
 );
-const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver;
+const migrationCancellation = await Deno.readTextFile(
+  "supabase/migrations/20261102130000_logistics_customer_prebooking_cancellation.sql",
+);
+const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const apiGateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
@@ -435,4 +438,20 @@ Deno.test("Driver self-service lifecycle controls acceptance, start, pickup, tra
   if (migrationDriver.includes("\nas $\ndeclare")) {
     throw new Error("driver profile migration: invalid standalone SQL dollar delimiter");
   }
+});
+
+
+Deno.test("Customer cancellation only withdraws requests before a provider booking exists", () => {
+  requireText(migrationCancellation, "auth.uid()", "authenticated customer actor");
+  requireText(migrationCancellation, "job_record.requester_user_id <> actor", "only the request owner may cancel");
+  requireText(migrationCancellation, "job_record.status not in ('open', 'matching', 'offers_received')", "cancellation is restricted to pre-booking requests");
+  requireText(migrationCancellation, "booking.status not in ('cancelled', 'payment_failed', 'refunded')", "any live booking blocks request cancellation");
+  requireText(migrationCancellation, "set status = 'cancelled'", "request cancellation state");
+  requireText(migrationCancellation, "set status = 'withdrawn'", "matched provider opportunities are withdrawn");
+  requireText(migrationCancellation, "status in ('submitted', 'countered')", "open quotes and counteroffers are withdrawn");
+  requireText(migrationCancellation, "logistics.job.customer_cancelled", "append-only cancellation event");
+  requireText(migrationCancellation, "unique", "database idempotency is backed by event uniqueness");
+  requireNotText(migrationCancellation, "post_financial_transaction", "pre-booking withdrawal does not post money");
+  requireNotText(migrationCancellation, "fund_order_from_wallet", "pre-booking withdrawal does not touch wallets");
+  requireText(runtime, '"/runtime/logistics/jobs/cancel"', "customer cancellation runtime route");
 });
