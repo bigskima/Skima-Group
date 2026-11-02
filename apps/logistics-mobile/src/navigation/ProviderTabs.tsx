@@ -36,7 +36,7 @@ export function ProviderTabs() {
       <Tabs.Screen name="index" options={{ title: "Overview", tabBarIcon: ({ color, size }) => <Building2 color={String(color)} size={size} /> }} />
       <Tabs.Screen name="opportunities" options={{ title: "Opportunities", tabBarIcon: ({ color, size }) => <BriefcaseBusiness color={String(color)} size={size} /> }} />
       <Tabs.Screen name="services" options={{ title: "Services", tabBarIcon: ({ color, size }) => <ClipboardList color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="account" options={{ title: "Company", tabBarIcon: ({ color, size }) => <Settings2 color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="account" options={{ title: "Account", tabBarIcon: ({ color, size }) => <Settings2 color={String(color)} size={size} /> }} />
       <Tabs.Screen name="jobs/[id]" options={{ href: null }} />
     </Tabs>
   );
