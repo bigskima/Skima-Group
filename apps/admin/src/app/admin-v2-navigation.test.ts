@@ -53,6 +53,7 @@ describe("SKIMA Admin V2 navigation", () => {
       { key: "finance", label: "Balances", href: "/finance", icon: "finance" },
       { key: "billing", label: "Utility Billing", href: "/utility-billing", icon: "billing" },
       { key: "catalog", label: "Services", href: "/catalog", icon: "catalog" },
+      { key: "store", label: "Store", href: "/store", icon: "store" },
       { key: "ai", label: "SKIMA Intelligence", href: "/ai", icon: "ai" },
       { key: "content", label: "Brand & Content", href: "/content", icon: "content" },
       { key: "policies", label: "Terms & Policies", href: "/policies", icon: "policies" },
@@ -70,6 +71,7 @@ describe("SKIMA Admin V2 navigation", () => {
       "operations",
       "money",
       "services",
+      "store",
       "intelligence",
       "experience",
       "platform",
@@ -78,6 +80,7 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(categories.find((item) => item.key === "operations")?.href).toBe("/operations");
     expect(categories.find((item) => item.key === "money")?.href).toBe("/money");
     expect(categories.find((item) => item.key === "services")?.href).toBe("/services");
+    expect(categories.find((item) => item.key === "store")?.href).toBe("/store");
     expect(categories.find((item) => item.key === "intelligence")?.href).toBe("/intelligence");
     expect(categories.find((item) => item.key === "experience")?.href).toBe("/experience");
     expect(categories.find((item) => item.key === "platform")?.href).toBe("/platform");
@@ -88,6 +91,7 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(resolveAdminPath("/operations")).toBe("/operations");
     expect(resolveAdminPath("/money")).toBe("/money");
     expect(resolveAdminPath("/services")).toBe("/services");
+    expect(resolveAdminPath("/store")).toBe("/store");
     expect(resolveAdminPath("/intelligence")).toBe("/intelligence");
     expect(resolveAdminPath("/experience")).toBe("/experience");
     expect(resolveAdminPath("/platform")).toBe("/platform");
@@ -164,6 +168,18 @@ describe("SKIMA Admin V2 navigation", () => {
       "/services/utility-billing",
       "/services/catalog",
       "/services/availability",
+    ]);
+  });
+
+
+  it("keeps Store in its own focused admin workspace", () => {
+    const items: NavigationItem[] = [
+      { key: "store", label: "Store", href: "/store", icon: "store" },
+    ].map(toAdminV2NavigationItem);
+
+    expect(getAdminWorkspaceForRoute("/store").key).toBe("store");
+    expect(getAdminWorkspaceNavigation("store", items).map((item) => item.href)).toEqual([
+      "/store",
     ]);
   });
 
