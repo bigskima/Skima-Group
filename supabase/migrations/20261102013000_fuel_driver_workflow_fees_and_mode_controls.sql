@@ -71,7 +71,10 @@ set display_name=excluded.display_name,
 with module_record as (
   select id from public.business_modules where key='fuel'
 ),
-currency_values(currency_code) as (values('NGN'::text),('USDC'::text)),
+currency_values(currency_code) as (
+  select code from public.currency_definitions
+  where code in ('NGN','USDC') and status='enabled'
+),
 missing_scopes as (
   select definition.id as policy_definition_id,
          currency_values.currency_code
