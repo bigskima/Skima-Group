@@ -57,6 +57,8 @@ export function ProviderBookingDetailScreen() {
   const activeAssignment = [...assignmentRows].reverse().find((item) =>
     ["offered", "accepted", "in_progress", "picked_up", "in_transit", "delivery_submitted"].includes(asString(item, "status") ?? "")
   ) ?? null;
+  const assignedDriver = nested(activeAssignment, "driver");
+  const assignedVehicle = nested(activeAssignment, "vehicle");
   const dispatchResources = useLogisticsRecordQuery(
     ["dispatch-resources", organizationId ?? "none"],
     `/runtime/logistics/company/dispatch-resources?organizationId=${encodeURIComponent(organizationId ?? "")}`,
@@ -117,7 +119,6 @@ export function ProviderBookingDetailScreen() {
       await client.invalidateQueries({ queryKey: ["skima-logistics", "bookings"] });
       await client.invalidateQueries({ queryKey: ["skima-logistics", "provider-bookings"] });
       await bookings.refetch();
-      if (status === "in_progress") Alert.alert("Delivery submitted", "The customer can now review and confirm delivery. Online escrow remains protected until they confirm.");
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : "The booking action could not be completed."),
   });
@@ -172,6 +173,12 @@ export function ProviderBookingDetailScreen() {
                 <View style={[styles.assignmentSummary, { backgroundColor: palette.surfaceSubtle }]}>
                   <Text style={[styles.contactName, { color: palette.ink }]}>Driver assignment sent</Text>
                   <Text style={[styles.meta, { color: palette.muted }]}>Assignment status: {asString(activeAssignment, "status")?.replace(/_/g, " ") ?? "pending"}</Text>
+                  <Text style={[styles.meta, { color: palette.muted }]}>
+                    Driver: {asString(assignedDriver, "driver_display_name") ?? asString(assignedDriver, "public_driver_id") ?? "Assigned driver"}
+                  </Text>
+                  <Text style={[styles.meta, { color: palette.muted }]}>
+                    Vehicle: {[asString(assignedVehicle, "manufacturer"), asString(assignedVehicle, "model"), asString(assignedVehicle, "registration_number")].filter(Boolean).join(" · ") || "Approved vehicle"}
+                  </Text>
                   <Text style={[styles.meta, { color: palette.muted }]}>The driver must accept before the job can start.</Text>
                   <StatusPill status={asString(activeAssignment, "status") ?? "offered"} />
                 </View>
