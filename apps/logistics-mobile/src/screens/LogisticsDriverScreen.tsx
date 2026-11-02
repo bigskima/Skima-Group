@@ -16,6 +16,7 @@ import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
 import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
+import { LogisticsDriverLocationShare } from "./LogisticsDriverLocationShare";
 
 type DriverAction = "accept" | "reject" | "start" | "pickup" | "transit" | "deliver";
 type DriverJob = Record<string, unknown>;
@@ -221,6 +222,9 @@ export function LogisticsDriverScreen() {
                     <Text style={[styles.instructionTitle, { color: palette.ink }]}>Customer instructions</Text>
                     <Text style={[styles.meta, { color: palette.ink }]}>{asString(job, "instructions")}</Text>
                   </View>
+                ) : null}
+                {["in_progress", "picked_up", "in_transit"].includes(status) ? (
+                  <LogisticsDriverLocationShare bookingId={bookingId} />
                 ) : null}
                 {asString(job, "customer_name") || asString(job, "customer_phone") ? (
                   <View style={styles.customer}>
