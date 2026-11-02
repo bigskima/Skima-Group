@@ -124,7 +124,7 @@ Deno.test("Fuel controls are consolidated into the existing Money & Revenue dash
   includes(adminRevenue, "set_fuel_fulfillment_mode_control", "Admin controls the three fulfillment modes centrally");
   includes(adminRevenue, "configure_fuel_managed_product_price", "SKIMA Managed retail pricing is configured centrally");
   includes(adminRevenue, "configure_fuel_station_price_override", "Admin overrides station prices from the same dashboard");
-  includes(migration, "public.has_permission('platform.financial_policy.manage',null)", "financial policy managers can read the controls they manage");
-  includes(migration, "public.has_permission('platform.revenue.manage',null)", "revenue managers can read the controls they manage");
+  includes(pricing, "public.has_permission('platform.financial_policy.manage',null)", "financial policy managers can read the controls they manage");
+  includes(pricing, "public.has_permission('platform.revenue.manage',null)", "revenue managers can read the controls they manage");
   includes(adminRevenue, 'supabase.rpc("set_platform_fee_amount"', "existing platform revenue markup controls remain in the same dashboard");
 });
