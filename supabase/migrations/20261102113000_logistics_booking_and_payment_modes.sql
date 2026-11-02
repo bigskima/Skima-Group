@@ -610,13 +610,17 @@ begin
     'logistics-revenue:' || booking_record.currency_code
   );
 
-  select coalesce(balance.balance, 0) into customer_balance
-  from public.wallet_balances balance
-  where balance.wallet_id = customer_wallet.id;
+  select coalesce((
+    select balance.balance
+    from public.wallet_balances balance
+    where balance.wallet_id = customer_wallet.id
+  ), 0) into customer_balance;
 
-  select coalesce(balance.balance, 0) into provider_balance
-  from public.wallet_balances balance
-  where balance.wallet_id = provider_wallet_id;
+  select coalesce((
+    select balance.balance
+    from public.wallet_balances balance
+    where balance.wallet_id = provider_wallet_id
+  ), 0) into provider_balance;
 
   if booking_record.customer_booking_fee_amount > 0
     and customer_balance < booking_record.customer_booking_fee_amount then
