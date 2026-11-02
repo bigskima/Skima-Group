@@ -8,7 +8,7 @@ const batchStatus = await Deno.readTextFile(
   "supabase/migrations/20261101203000_fuel_stock_batch_status_sync.sql",
 );
 const gateway = await Deno.readTextFile(
-  "supabase/functions/api-gateway/index.ts",
+  "supabase/functions/fuel-runtime/index.ts",
 );
 
 function requireIncludes(source: string, fragment: string, message: string): void {
