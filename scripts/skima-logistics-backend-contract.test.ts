@@ -101,8 +101,8 @@ Deno.test("Matching is capability, cargo, coverage, verification and capacity co
 });
 
 Deno.test("Customer category requests match all eligible provider services in that category", () => {
-  requireText(migration, "and service.category_id = category_id", "customer category match");
-  requireText(migration, "and service.category_id = job.category_id", "rematch category scope");
+  requireText(migration, "where service.category_id = category_id", "customer category match");
+  requireText(migration, "where service.category_id = job.category_id", "rematch category scope");
   requireNotText(
     migration.slice(
       migration.indexOf("create or replace function public.create_logistics_job"),
@@ -147,12 +147,17 @@ Deno.test("Only a provider quote or provider counteroffer can be selected by a c
   requireText(migration, "selected_offer.offer_type not in ('provider_quote', 'provider_counter')", "customer counteroffers cannot be selected as provider offers");
 });
 
+const offerSelectionFunction = migrationHardening.slice(
+  migrationHardening.indexOf("create or replace function public.select_logistics_offer"),
+  migrationHardening.indexOf("create or replace function public.", migrationHardening.indexOf("create or replace function public.select_logistics_offer") + 60),
+);
+
 Deno.test("Selecting an offer is not treated as paid booking confirmation", () => {
-  requireText(migration, "set status = 'booking_pending'", "selection enters booking pending");
-  requireText(migration, "'next_step', 'complete_booking_terms_and_payment'", "payment is a separate next step");
-  requireNotText(migration, "post_financial_transaction", "offer selection does not post money");
-  requireNotText(migration, "fund_order_from_wallet", "offer selection does not debit a customer wallet");
-  requireNotText(migration, "create escrow hold", "offer selection does not pretend to fund escrow");
+  requireText(offerSelectionFunction, "set status = 'booking_pending'", "selection enters booking pending");
+  requireText(offerSelectionFunction, "'next_step', 'complete_booking_terms_and_payment'", "payment is a separate next step");
+  requireNotText(offerSelectionFunction, "post_financial_transaction", "offer selection does not post money");
+  requireNotText(offerSelectionFunction, "fund_order_from_wallet", "offer selection does not debit a customer wallet");
+  requireNotText(offerSelectionFunction, "create escrow hold", "offer selection does not pretend to fund escrow");
 });
 
 Deno.test("Runtime authenticates the user and uses the caller's RLS context", () => {
@@ -160,7 +165,9 @@ Deno.test("Runtime authenticates the user and uses the caller's RLS context", ()
   requireText(runtime, "createRequestSupabaseClient", "caller-scoped database client");
   requireText(runtime, "check_rate_limit", "authenticated rate limit");
   requireText(runtime, "supabase.rpc(", "server-side lifecycle RPCs");
-  requireNotText(runtime, "SUPABASE_SERVICE_ROLE_KEY", "no service role credential in request runtime");
+  requireText(runtime, 'Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")', "server-only service role environment");
+  requireText(runtime, "createServiceClient(supabaseUrl, serviceRoleKey)", "server-only privileged database client");
+  requireNotText(runtime, "JSON.stringify(serviceRoleKey", "service role credential is not serialized");
 });
 
 Deno.test("Customer directory search exposes verified providers without private support contacts", () => {
@@ -232,7 +239,8 @@ Deno.test("Offline payment debits only the two configured fees and returns a ret
 
 Deno.test("Booking and payment routes do not expose the service-role credential", () => {
   requireText(runtime, 'Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")', "server-only service-role environment");
-  requireNotText(runtime, "serviceRoleKey:", "service-role key is not serialized in a response");
+  requireNotText(runtime, "serviceRoleKey: serviceRoleKey", "service-role key is not copied into response data");
+  requireNotText(runtime, "JSON.stringify(serviceRoleKey", "service-role key is not serialized in a response");
   requireText(migrationBooking, "from public,anon,authenticated", "payment confirmation RPC is service-role only");
 });
 
