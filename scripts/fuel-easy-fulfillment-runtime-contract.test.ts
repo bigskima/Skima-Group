@@ -13,6 +13,9 @@ const feeControls = await Deno.readTextFile(
 const walletGate = await Deno.readTextFile(
   "supabase/migrations/20261102162000_fuel_verified_settlement_platform_wallet_gate.sql",
 );
+const helperAcl = await Deno.readTextFile(
+  "supabase/migrations/20261102162500_fuel_internal_helper_rpc_acl.sql",
+);
 const fuelRuntime = await Deno.readTextFile("supabase/functions/fuel-runtime/index.ts");
 const customerOrder = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelOrderScreen.tsx");
 const customerDetails = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelOrderDetailsScreen.tsx");
@@ -112,6 +115,26 @@ Deno.test("purchased orders settle only after customer OTP; rental orders settle
   includes(customerDetails, "Check that the correct fuel and quantity are physically with you", "customer is instructed to inspect the delivered order before confirming");
   excludes(customerDetails, 'stageKey: "completed"', "customer cannot directly close or settle their own order");
   includes(customerDetails, "rental container return is still open", "rental handover verification does not prematurely settle the rental");
+});
+
+Deno.test("internal Fuel trigger and settlement helpers are not directly callable through PostgREST", () => {
+  for (const signature of [
+    "advance_fuel_order_after_driver_handover()",
+    "advance_fuel_order_after_station_preparation()",
+    "advance_fuel_order_after_stock_reservation()",
+    "can_advance_fuel_order_from_verified_otp(uuid)",
+    "can_complete_fuel_delivery_settlement(uuid)",
+    "can_create_fuel_verified_settlement_wallet(text,text,uuid,text,text,jsonb)",
+    "can_post_verified_fuel_financial_transaction(text,uuid,text,jsonb)",
+    "can_settle_verified_fuel_service_request(uuid)",
+    "complete_fuel_rental_after_station_inspection()",
+    "enforce_fuel_branch_offer_global_controls()",
+    "fuel_delivery_challenge_is_verified(uuid,uuid)",
+    "fuel_managed_price_is_available(text,text)",
+    "advance_fuel_rental_after_final_inspection_event()",
+  ]) {
+    includes(helperAcl, `revoke all on function public.${signature} from public, anon, authenticated`, `${signature} is internal-only`);
+  }
 });
 
 Deno.test("Fuel controls are consolidated into the existing Money & Revenue dashboard", () => {
