@@ -484,8 +484,8 @@ Deno.test("Customer may cancel an unpaid booking but not a paid or funded bookin
 
 Deno.test("Online booking wallet funding and escrow reservation run in one serialized database transaction", () => {
   requireText(migrationCancellation, "public.reserve_logistics_booking_online_payment", "atomic online payment reservation RPC");
-  requireText(migrationCancellation, "as $", "valid SQL function dollar-quoted body");
-  requireText(migrationCancellation, "end;\n$;", "valid SQL function terminator");
+  requireText(migrationCancellation, "as $$", "valid SQL function dollar-quoted body");
+  requireText(migrationCancellation, "end;\n$$;", "valid SQL function terminator");
   requireText(migrationCancellation, "from public.logistics_bookings", "booking is read in the reservation function");
   requireText(migrationCancellation, "for update", "booking lock is held during payment");
   requireText(migrationCancellation, "public.fund_order_from_wallet(", "existing double-entry wallet/escrow funding engine");
