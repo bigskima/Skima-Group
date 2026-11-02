@@ -295,6 +295,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
       )}
 
       <Dialog isOpen={settingsEditorOpen} title="Store operating setup" onClose={() => setSettingsEditorOpen(false)} footer={<><Button variant="ghost" onClick={() => setSettingsEditorOpen(false)}>Cancel</Button><Button isLoading={saveSettings.isPending} disabled={!organizationId} onClick={() => saveSettings.mutate()}>Save and activate Store</Button></>}>
+        <div className="admin-notice"><strong>First-party SKIMA Store</strong><p>The dedicated SKIMA Store organisation is preconfigured. Choose another organisation only when it has an active merchant profile; the shared order engine requires this before it can accept Store orders.</p></div>
         <div className="skima-form-grid">
           <SelectInput label="Operating organisation" value={organizationId} onChange={(event) => setOrganizationId(event.currentTarget.value)} options={organizationOptions(organizations.data ?? [])} />
           <SelectInput label="Store currency" value={currencyCode} onChange={(event) => setCurrencyCode(event.currentTarget.value)} options={[{ label: "Nigerian naira (NGN)", value: "NGN" }, { label: "USDC", value: "USDC" }]} />
