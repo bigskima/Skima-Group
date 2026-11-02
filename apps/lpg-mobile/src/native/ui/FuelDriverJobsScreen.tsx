@@ -274,8 +274,8 @@ function stageDescription(stage: string, rental: boolean): string {
 function modeLabel(mode: string): string {
   switch (mode) {
     case "station_managed": return "Station Managed";
-    case "independent_driver": return "Independent Driver";
-    case "skima_managed": return "SKIMA Managed";
+    case "independent_driver": return "Independent Managed";
+    case "skima_managed": return "SKIMA Managed / SKIMA Fleet";
     default: return "Mode not assigned";
   }
 }
@@ -285,9 +285,9 @@ function describeDriverMode(mode: string): string {
     case "station_managed":
       return "You are the station's own registered driver. The station branch controls your assignment and hands over the filled containers to you.";
     case "independent_driver":
-      return "You are an independent delivery provider, not a station employee and not a SKIMA staff driver. Use your own approved vehicle linked to your Independent Driver profile.";
+      return "You are an Independent Managed provider, not a station employee and not a SKIMA staff driver. Use your own approved vehicle linked to your independent provider profile.";
     case "skima_managed":
-      return "You are assigned through SKIMA Managed as an internal SKIMA driver. Use only your assigned SKIMA-owned fleet vehicle; this is not Station Managed or Independent delivery.";
+      return "You are assigned through SKIMA Managed / SKIMA Fleet as an internal SKIMA driver. Use only your assigned SKIMA-owned fleet vehicle; this is not Station Managed or Independent Managed delivery.";
     default:
       return "Your driver fulfilment mode is not resolved. Contact SKIMA Dispatch before accepting the order.";
   }
