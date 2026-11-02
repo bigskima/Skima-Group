@@ -332,48 +332,48 @@ Deno.test("Free provider opportunity access has no lead unlock charge", () => {
 
 
 Deno.test("Logistics dispatch assigns only an approved, available company member with a compliant linked vehicle", () => {
-  requireText(migrationDriverFulfillment, "public.read_logistics_company_dispatch_resources", "company dispatch resource reader");
-  requireText(migrationDriverFulfillment, "membership.status = 'active'", "driver must be an active company member");
-  requireText(migrationDriverFulfillment, "driver.verification_status = 'approved'", "driver approval gate");
-  requireText(migrationDriverFulfillment, "driver.operational_status = 'available'", "driver availability gate");
-  requireText(migrationDriverFulfillment, "public.vehicle_assignment_compliance", "shared vehicle compliance gate");
-  requireText(migrationDriverFulfillment, "compliance.vehicle_documents_valid = true", "vehicle document validity gate");
-  requireText(migrationDriverFulfillment, "public.assign_logistics_booking_driver", "company dispatch assignment RPC");
-  requireText(migrationDriverFulfillment, "selected vehicle does not have enough weight capacity", "vehicle cargo weight limit");
-  requireText(migrationDriverFulfillment, "vehicle does not have enough cargo volume", "vehicle cargo volume limit");
-  requireText(migrationDriverFulfillment, "selected vehicle type is not allowed", "service-specific vehicle type gate");
-  requireText(migrationDriverFulfillment, "logistics_driver_one_active_booking_idx", "no concurrent active booking for one driver");
+  requireText(migrationDriver, "public.read_logistics_company_dispatch_resources", "company dispatch resource reader");
+  requireText(migrationDriver, "membership.status = 'active'", "driver must be an active company member");
+  requireText(migrationDriver, "driver.verification_status = 'approved'", "driver approval gate");
+  requireText(migrationDriver, "driver.operational_status = 'available'", "driver availability gate");
+  requireText(migrationDriver, "public.vehicle_assignment_compliance", "shared vehicle compliance gate");
+  requireText(migrationDriver, "compliance.vehicle_documents_valid = true", "vehicle document validity gate");
+  requireText(migrationDriver, "public.assign_logistics_booking_driver", "company dispatch assignment RPC");
+  requireText(migrationDriver, "selected vehicle does not have enough weight capacity", "vehicle cargo weight limit");
+  requireText(migrationDriver, "vehicle does not have enough cargo volume", "vehicle cargo volume limit");
+  requireText(migrationDriver, "selected vehicle type is not allowed", "service-specific vehicle type gate");
+  requireText(migrationDriver, "logistics_driver_one_active_booking_idx", "no concurrent active booking for one driver");
 });
 
 Deno.test("Driver assignment responses are private to the assigned driver and retry-safe", () => {
-  requireText(migrationDriverFulfillment, "driver_user_id = auth.uid()", "only the assigned driver can read their assignment");
-  requireText(migrationDriverFulfillment, "public.respond_logistics_driver_assignment", "driver accept or reject RPC");
-  requireText(migrationDriverFulfillment, "assignment_record.driver_user_id <> actor", "driver identity check");
-  requireText(migrationDriverFulfillment, "status = 'accepted'", "assignment acceptance state");
-  requireText(migrationDriverFulfillment, "status = 'rejected'", "assignment rejection state");
-  requireText(migrationDriverFulfillment, "booking_record.status <> 'provider_accepted'", "driver response only before job start");
-  requireText(migrationDriverFulfillment, "public.read_my_logistics_driver_bookings", "driver-owned assigned booking reader");
+  requireText(migrationDriver, "driver_user_id = auth.uid()", "only the assigned driver can read their assignment");
+  requireText(migrationDriver, "public.respond_logistics_driver_assignment", "driver accept or reject RPC");
+  requireText(migrationDriver, "assignment_record.driver_user_id <> actor", "driver identity check");
+  requireText(migrationDriver, "status = 'accepted'", "assignment acceptance state");
+  requireText(migrationDriver, "status = 'rejected'", "assignment rejection state");
+  requireText(migrationDriver, "booking_record.status <> 'provider_accepted'", "driver response only before job start");
+  requireText(migrationDriver, "public.read_my_logistics_driver_bookings", "driver-owned assigned booking reader");
   requireText(runtime, '"/runtime/logistics/driver/bookings"', "driver jobs API route");
   requireText(runtime, '"/runtime/logistics/driver/assignment/respond"', "driver assignment response API route");
 });
 
 Deno.test("A Logistics driver must accept, start, confirm pickup and mark transit before delivery submission", () => {
-  requireText(migrationDriverFulfillment, "assigned driver must accept the job before the service can start", "driver acceptance prerequisite");
-  requireText(migrationDriverFulfillment, "company must assign an eligible driver before the service can start", "no unassigned provider start");
-  requireText(migrationDriverFulfillment, "public.update_logistics_driver_milestone", "driver milestone RPC");
-  requireText(migrationDriverFulfillment, "target_milestone not in ('picked_up','in_transit')", "supported milestone allow-list");
-  requireText(migrationDriverFulfillment, "cargo must be picked up before the driver marks it in transit", "pickup-before-transit gate");
-  requireText(migrationDriverFulfillment, "status = 'in_transit'", "in-transit status is required for delivery submission");
+  requireText(migrationDriver, "assigned driver must accept the job before the service can start", "driver acceptance prerequisite");
+  requireText(migrationDriver, "company must assign an eligible driver before the service can start", "no unassigned provider start");
+  requireText(migrationDriver, "public.update_logistics_driver_milestone", "driver milestone RPC");
+  requireText(migrationDriver, "target_milestone not in ('picked_up','in_transit')", "supported milestone allow-list");
+  requireText(migrationDriver, "cargo must be picked up before the driver marks it in transit", "pickup-before-transit gate");
+  requireText(migrationDriver, "status = 'in_transit'", "in-transit status is required for delivery submission");
   requireText(runtime, '"/runtime/logistics/driver/milestone"', "driver milestone API route");
   requireText(runtime, '"/runtime/logistics/bookings/assign-driver"', "company driver assignment API route");
-  requireText(migrationDriverFulfillment, "public.read_my_logistics_driver_profile", "signed-in driver profile projection");
+  requireText(migrationDriver, "public.read_my_logistics_driver_profile", "signed-in driver profile projection");
 });
 
 Deno.test("Driver completion remains subject to customer confirmation and the existing settlement trigger", () => {
-  requireText(migrationDriverFulfillment, "public.complete_logistics_driver_assignment_after_settlement", "assignment completion trigger");
-  requireText(migrationDriverFulfillment, "new.status in ('settled','completed_offline')", "customer-confirmed terminal booking states");
-  requireText(migrationDriverFulfillment, "status='completed'", "driver assignment only completes after booking settlement");
-  requireText(migrationDriverFulfillment, "delivery_submission_snapshot", "existing customer delivery proof is preserved");
+  requireText(migrationDriver, "public.complete_logistics_driver_assignment_after_settlement", "assignment completion trigger");
+  requireText(migrationDriver, "new.status in ('settled','completed_offline')", "customer-confirmed terminal booking states");
+  requireText(migrationDriver, "status='completed'", "driver assignment only completes after booking settlement");
+  requireText(migrationDriver, "delivery_submission_snapshot", "existing customer delivery proof is preserved");
 });
 
 
