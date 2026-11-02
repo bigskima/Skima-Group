@@ -65,6 +65,8 @@ Deno.test("customer delivery and rental returns are confirmed once per order, no
   includes(migration, "revoke all on function public.confirm_fuel_customer_delivery", "direct client execution is blocked");
   includes(runtime, 'routePath === "/runtime/fuel/orders/confirm-delivery"', "driver delivery is one endpoint");
   includes(runtime, 'routePath === "/runtime/fuel/orders/confirm-rental-return"', "rental return is one endpoint");
+  includes(runtime, 'serviceClient.rpc("create_fuel_commercial_quote"', "quote creation uses the trusted module runtime after public RPC access is revoked");
+  includes(runtime, 'orderResult.data.requester_user_id !== authResult.user.id', "customers can quote only their own Fuel orders");
   includes(driver, 'path: "/runtime/fuel/orders/confirm-delivery"', "driver screen uses one delivery confirmation endpoint");
   includes(driver, 'path: "/runtime/fuel/orders/confirm-rental-return"', "driver screen uses one rental return endpoint");
   excludes(driver, 'path: "/runtime/fuel/containers/handover"', "driver screen no longer sends one request for every container");
