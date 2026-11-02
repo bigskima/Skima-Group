@@ -668,7 +668,7 @@ security definer
 set search_path = public
 as $$
 declare
-  provider_service_id uuid;
+  v_provider_service_id uuid;
   coverage_id uuid;
 begin
   if not public.can_manage_logistics_company(target_organization_id) then
@@ -693,10 +693,10 @@ begin
     raise exception 'coverage metadata must be an object';
   end if;
 
-  select id into provider_service_id
+  select id into v_provider_service_id
   from public.logistics_provider_services
   where organization_id = target_organization_id and service_key = target_service_key;
-  if provider_service_id is null then raise exception 'provider service was not found'; end if;
+  if v_provider_service_id is null then raise exception 'provider service was not found'; end if;
 
   if not exists (select 1 from public.geographies where id = target_geography_id and status = 'active') then
     raise exception 'active origin geography is required';
@@ -712,7 +712,7 @@ begin
     destination_geography_id, status, metadata, created_by
   )
   values (
-    target_organization_id, provider_service_id, target_coverage_mode, target_geography_id,
+    target_organization_id, v_provider_service_id, target_coverage_mode, target_geography_id,
     target_destination_geography_id, 'active', target_metadata, auth.uid()
   )
   on conflict do nothing
@@ -722,7 +722,7 @@ begin
     select id into coverage_id
     from public.logistics_provider_coverage
     where logistics_provider_coverage.organization_id = target_organization_id
-      and logistics_provider_coverage.provider_service_id = provider_service_id
+      and logistics_provider_coverage.provider_service_id = v_provider_service_id
       and logistics_provider_coverage.coverage_mode = target_coverage_mode
       and geography_id = target_geography_id
       and destination_geography_id is not distinct from target_destination_geography_id
@@ -1281,6 +1281,84 @@ begin
 end;
 $$;
 
+create or replace function public.update_logistics_provider_profile(
+  target_organization_id uuid,
+  target_about text,
+  target_support_contact jsonb,
+  target_metadata jsonb default '{}'::jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  provider_id uuid;
+begin
+  if not public.can_manage_logistics_company(target_organization_id) then
+    raise exception 'logistics company management permission is required';
+  end if;
+  if target_about is not null and char_length(target_about) > 2000 then
+    raise exception 'company description is too long';
+  end if;
+  if target_support_contact is null or jsonb_typeof(target_support_contact) <> 'object'
+    or target_metadata is null or jsonb_typeof(target_metadata) <> 'object' then
+    raise exception 'support contact and metadata must be JSON objects';
+  end if;
+
+  update public.logistics_provider_profiles
+  set about = nullif(btrim(target_about), ''),
+      support_contact = target_support_contact,
+      metadata = metadata || target_metadata,
+      updated_at = timezone('utc', now())
+  where organization_id = target_organization_id
+  returning id into provider_id;
+
+  if provider_id is null then raise exception 'logistics provider profile was not found'; end if;
+  return provider_id;
+end;
+$;
+
+create or replace function public.set_logistics_provider_operational_status(
+  target_organization_id uuid,
+  target_status text,
+  target_reason text,
+  target_idempotency_key text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  provider_id uuid;
+begin
+  if not public.can_manage_logistics_company(target_organization_id)
+    and not public.has_permission('logistics.marketplace.manage', null) then
+    raise exception 'logistics company management permission is required';
+  end if;
+  if target_status not in ('active', 'paused', 'closed') then
+    raise exception 'provider operational status is not supported';
+  end if;
+  if target_reason is null or char_length(btrim(target_reason)) < 3
+    or target_idempotency_key is null or btrim(target_idempotency_key) = '' then
+    raise exception 'a reason and idempotency key are required';
+  end if;
+
+  update public.logistics_provider_profiles
+  set operational_status = case
+        when target_status = 'active' and verification_status <> 'verified' then 'onboarding'
+        else target_status
+      end,
+      updated_at = timezone('utc', now())
+  where organization_id = target_organization_id
+  returning id into provider_id;
+
+  if provider_id is null then raise exception 'logistics provider profile was not found'; end if;
+  return provider_id;
+end;
+$;
+
 create or replace function public.upsert_logistics_service_category(
   target_key text,
   target_display_name text,
@@ -1352,6 +1430,7 @@ create policy logistics_categories_read_active_or_admin
 on public.logistics_service_categories for select to authenticated
 using (
   status = 'active'
+  or public.has_permission('logistics.marketplace.read', null)
   or public.has_permission('logistics.marketplace.manage', null)
 );
 create policy logistics_categories_no_direct_insert
@@ -1493,6 +1572,8 @@ revoke all on function public.can_read_logistics_job(uuid) from public, anon;
 revoke all on function public.record_logistics_job_event(uuid, text, text, text, text, jsonb) from public, anon;
 revoke all on function public.register_logistics_company(text, text, text, jsonb) from public, anon;
 revoke all on function public.set_logistics_provider_verification(uuid, text, text, text) from public, anon;
+revoke all on function public.update_logistics_provider_profile(uuid, text, jsonb, jsonb) from public, anon;
+revoke all on function public.set_logistics_provider_operational_status(uuid, text, text, text) from public, anon;
 revoke all on function public.configure_logistics_provider_service(uuid, text, text, text, text, text, text[], text[], text[], numeric, numeric, boolean, text, jsonb) from public, anon;
 revoke all on function public.configure_logistics_provider_coverage(uuid, text, text, uuid, uuid, text, jsonb) from public, anon;
 revoke all on function public.create_logistics_job(jsonb, text) from public, anon;
@@ -1507,6 +1588,8 @@ grant execute on function public.can_read_logistics_company(uuid) to authenticat
 grant execute on function public.can_read_logistics_job(uuid) to authenticated, service_role;
 grant execute on function public.register_logistics_company(text, text, text, jsonb) to authenticated, service_role;
 grant execute on function public.set_logistics_provider_verification(uuid, text, text, text) to authenticated, service_role;
+grant execute on function public.update_logistics_provider_profile(uuid, text, jsonb, jsonb) to authenticated, service_role;
+grant execute on function public.set_logistics_provider_operational_status(uuid, text, text, text) to authenticated, service_role;
 grant execute on function public.configure_logistics_provider_service(uuid, text, text, text, text, text, text[], text[], text[], numeric, numeric, boolean, text, jsonb) to authenticated, service_role;
 grant execute on function public.configure_logistics_provider_coverage(uuid, text, text, uuid, uuid, text, jsonb) to authenticated, service_role;
 grant execute on function public.create_logistics_job(jsonb, text) to authenticated, service_role;
