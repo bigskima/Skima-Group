@@ -1256,19 +1256,20 @@ do $patch$
 declare function_sql text; old_guard text; new_guard text;
 begin
   select pg_get_functiondef('public.execute_service_request_settlement(uuid,uuid,jsonb,text,text,jsonb)'::regprocedure) into function_sql;
-  old_guard:=$old$  if auth.role() <> 'service_role'
-    and not public.has_permission('platform.settlement.execute', null)
-    and not public.can_execute_platform_runtime() then
-    raise exception 'settlement execution permission is required';
-  end if;$old$;
-  new_guard:=$new$  if auth.role() <> 'service_role'
-    and not public.has_permission('platform.settlement.execute', null)
-    and not public.can_execute_platform_runtime()
-    and not public.can_settle_verified_fuel_service_request(target_service_request_id) then
-    raise exception 'settlement execution permission is required';
-  end if;$new$;
-  if position(old_guard in function_sql)=0 then raise exception 'execute_service_request_settlement authorization changed; refusing an unsafe patch'; end if;
-  execute replace(function_sql,old_guard,new_guard);
+  old_guard:=$old$    and not public.can_execute_platform_runtime()$old$;
+  if position(old_guard in function_sql)=0 then
+    raise exception 'execute_service_request_settlement runtime authorization anchor changed; refusing an unsafe patch';
+  end if;
+  if position('and not public.can_settle_verified_fuel_service_request(target_service_request_id)' in function_sql)=0 then
+    -- Preserve any existing LPG automatic-settlement exception. Fuel is a
+    -- second narrowly scoped exception in the same shared settlement guard.
+    function_sql:=replace(
+      function_sql,
+      old_guard,
+      old_guard||E'\n    and not public.can_settle_verified_fuel_service_request(target_service_request_id)'
+    );
+    execute function_sql;
+  end if;
 
   select pg_get_functiondef('public.post_financial_transaction(text,text,text,text,uuid,jsonb,text,uuid,text,jsonb,jsonb)'::regprocedure) into function_sql;
   old_guard:=$old$    ) then
