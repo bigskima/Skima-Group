@@ -251,14 +251,27 @@ begin
     end if;
 
     if not exists (
-      select 1 from public.driver_vehicle_links link
+      select 1
+      from public.driver_vehicle_links link
+      join public.vehicles linked_vehicle on linked_vehicle.id=link.vehicle_id
       where link.driver_profile_id=target_driver_profile_id
         and link.vehicle_id=target_vehicle_id
         and link.status='active'
         and link.starts_at<=timezone('utc',now())
         and (link.ends_at is null or link.ends_at>timezone('utc',now()))
+        and (
+          (target_fulfillment_mode='independent_driver'
+            and link.relationship_type='driver_owned'
+            and linked_vehicle.owner_user_id=target_driver_user_id
+            and linked_vehicle.organization_id is null
+            and linked_vehicle.platform_owned is not true)
+          or
+          (target_fulfillment_mode='skima_managed'
+            and link.relationship_type='fleet_owned'
+            and linked_vehicle.platform_owned is true)
+        )
     ) then
-      raise exception using errcode='23514',message='Fuel vehicle must be actively linked to the independent driver';
+      raise exception using errcode='23514',message='Fuel vehicle ownership and active driver link must match the selected Independent or SKIMA Managed mode';
     end if;
   else
     select * into station_driver_record
@@ -563,8 +576,15 @@ begin
         and link.starts_at<=timezone('utc',now())
         and (link.ends_at is null or link.ends_at>timezone('utc',now()))
         and (
-          (operation_record.fulfillment_mode='skima_managed' and link.relationship_type='fleet_owned')
-          or (operation_record.fulfillment_mode='independent_driver' and link.relationship_type<>'fleet_owned')
+          (operation_record.fulfillment_mode='skima_managed'
+            and link.relationship_type='fleet_owned'
+            and vehicle.platform_owned is true)
+          or
+          (operation_record.fulfillment_mode='independent_driver'
+            and link.relationship_type='driver_owned'
+            and vehicle.owner_user_id=driver_user_id_value
+            and vehicle.organization_id is null
+            and vehicle.platform_owned is not true)
         )
     ) then
       raise exception using errcode='23514',message='Assigned vehicle is not linked for the selected driver fulfilment mode';
@@ -744,8 +764,15 @@ begin
            and link.starts_at<=timezone('utc',now())
            and (link.ends_at is null or link.ends_at>timezone('utc',now()))
            and (
-             (operation_record.fulfillment_mode='skima_managed' and link.relationship_type='fleet_owned')
-             or (operation_record.fulfillment_mode='independent_driver' and link.relationship_type<>'fleet_owned')
+             (operation_record.fulfillment_mode='skima_managed'
+               and link.relationship_type='fleet_owned'
+               and vehicle.platform_owned is true)
+             or
+             (operation_record.fulfillment_mode='independent_driver'
+               and link.relationship_type='driver_owned'
+               and vehicle.owner_user_id=driver_user_id_value
+               and vehicle.organization_id is null
+               and vehicle.platform_owned is not true)
            )
        ) then
       raise exception using errcode='23514',message='Driver profile, participation type and vehicle ownership must match the ordered Fuel fulfilment mode';
