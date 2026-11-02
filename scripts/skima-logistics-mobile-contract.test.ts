@@ -348,3 +348,14 @@ Deno.test("Driver workspace is reachable only for a registered driver and shows 
   requireText(providerDriver, "Awaiting customer confirmation", "customer remains final delivery confirmer");
   requireText(account, 'router.replace("/(provider)/driver" as never)', "customer/provider account opens the authenticated driver workspace");
 });
+
+
+Deno.test("An interrupted online booking payment can only be retried with its original customer wallet", () => {
+  requireText(booking, 'asString(booking, "payment_attempt_wallet_id")', "payment attempt wallet returned from the server");
+  requireText(booking, 'status === "payment_processing"', "recoverable payment attempt state");
+  requireText(booking, "Payment attempt in progress", "customer sees the payment recovery state");
+  requireText(booking, "original wallet is locked to this attempt", "customer is not offered a different wallet");
+  requireText(booking, "Continue payment confirmation", "customer can retry the atomic reservation");
+  requireText(booking, 'status !== "payment_processing" && !enoughBalance', "retry does not incorrectly require the wallet to retain the already-debited balance");
+  requireText(booking, '"/runtime/logistics/bookings/cancel"', "payment retry and cancellation remain distinct operations");
+});
