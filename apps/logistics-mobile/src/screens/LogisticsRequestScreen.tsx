@@ -33,6 +33,7 @@ export function LogisticsRequestScreen() {
   const params = useLocalSearchParams<{ category?: string }>();
   const categoriesQuery = useLogisticsQuery(["categories"], "/runtime/logistics/categories");
   const createJob = useCreateLogisticsJob();
+  const [jobIdempotencyKey, setJobIdempotencyKey] = useState(() => createClientIdempotencyKey("logistics.job.create"));
   const [step, setStep] = useState(1);
   const [categoryKey, setCategoryKey] = useState("");
   const [pickupSearch, setPickupSearch] = useState("");
@@ -89,7 +90,7 @@ export function LogisticsRequestScreen() {
 
     try {
       const jobId = await createJob.mutateAsync({
-        idempotencyKey: createClientIdempotencyKey("logistics.job.create"),
+        idempotencyKey: jobIdempotencyKey,
         payload: {
           category_key: category,
           service_key: category,
@@ -103,6 +104,7 @@ export function LogisticsRequestScreen() {
           metadata: { source: "skima.logistics.mobile", requested_via: "customer_app" },
         },
       });
+      setJobIdempotencyKey(createClientIdempotencyKey("logistics.job.create"));
       router.replace({ pathname: "/(customer)/jobs/[id]", params: { id: jobId } } as never);
     } catch (cause) {
       setFieldError(cause instanceof Error ? cause.message : "Your request could not be published. Please try again.");
