@@ -1360,7 +1360,10 @@ function FuelPricingControls() {
                   const code = recordString(offer, "currency_code") ?? "NGN";
                   const stationPrice = recordNumber(offer, "price_per_litre");
                   const override = recordNumberOrNull(offer, "admin_override_price_per_litre");
-                  const branchName = recordString(nestedRecord(offer, "branch"), "display_name") ??
+                  const branch = offer.branch && typeof offer.branch === "object" && !Array.isArray(offer.branch)
+                    ? offer.branch as PlatformRecord
+                    : null;
+                  const branchName = recordString(branch, "display_name") ??
                     branchNames.get(recordString(offer, "branch_id") ?? "") ?? "Station";
                   const draft = overrideDrafts[offerId] ?? (override === null ? "" : String(override));
                   return (
