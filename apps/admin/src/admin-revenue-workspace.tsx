@@ -1096,6 +1096,23 @@ function FuelPricingControls() {
     );
   };
 
+  const setAllGlobalProductStatuses = (enabled: boolean) => {
+    const actionKey = `products:all:${enabled ? "enabled" : "disabled"}`;
+    void runFuelAction(
+      actionKey,
+      `PMS, diesel and kerosene are now globally ${enabled ? "enabled" : "disabled"}.`,
+      async () => {
+        const result = await supabase.rpc("set_fuel_products_status", {
+          target_product_keys: ["fuel.pms", "fuel.ago", "fuel.dpk"],
+          target_status: enabled ? "enabled" : "disabled",
+          target_reason: "Bulk product availability changed in Money & Revenue",
+          target_idempotency_key: fuelAdminChangeKey(actionKey),
+        });
+        if (result.error) throw result.error;
+      },
+    );
+  };
+
   const setGlobalModeStatus = (productKey: string, mode: string, enabled: boolean) => {
     const actionKey = `mode:${productKey}:${mode}`;
     void runFuelAction(
@@ -1206,6 +1223,23 @@ function FuelPricingControls() {
               <div>
                 <p className="admin-section-kicker">Global catalogue control</p>
                 <h3>Products SKIMA allows stations to sell</h3>
+              </div>
+              <div className="admin-inline-actions">
+                <Button
+                  size="sm"
+                  disabled={!canManageProducts || busyKey === "products:all:enabled"}
+                  onClick={() => setAllGlobalProductStatuses(true)}
+                >
+                  Enable all products
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!canManageProducts || busyKey === "products:all:disabled"}
+                  onClick={() => setAllGlobalProductStatuses(false)}
+                >
+                  Disable all products
+                </Button>
               </div>
             </div>
             <div className="admin-money-price-grid">
