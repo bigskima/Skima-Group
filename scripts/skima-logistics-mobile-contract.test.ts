@@ -25,6 +25,12 @@ const providerDashboard = await Deno.readTextFile("apps/logistics-mobile/src/scr
 const providerOpportunities = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderOpportunitiesScreen.tsx");
 const providerCompany = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderCompanyScreen.tsx");
 const providerTeam = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderTeamScreen.tsx");
+const driverJobsScreen = await Deno.readTextFile("apps/logistics-mobile/src/screens/DriverJobsScreen.tsx");
+const driverJobDetailScreen = await Deno.readTextFile("apps/logistics-mobile/src/screens/DriverJobDetailScreen.tsx");
+const driverNavigation = await Deno.readTextFile("apps/logistics-mobile/src/navigation/DriverTabs.tsx");
+const driverRoutes = await Deno.readTextFile("apps/logistics-mobile/app/(driver)/_layout.tsx");
+const driverHomeRoute = await Deno.readTextFile("apps/logistics-mobile/app/(driver)/index.tsx");
+const driverWorkRoute = await Deno.readTextFile("apps/logistics-mobile/app/(driver)/work/[id].tsx");
 const providerTeamRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/team.tsx");
 const driverScreen = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsDriverScreen.tsx");
 const driverRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/driver.tsx");
@@ -293,4 +299,41 @@ Deno.test("Approved Logistics drivers have a dedicated authenticated delivery wo
   requireText(driverScreen, "createClientIdempotencyKey", "retry-safe driver operations");
   requireText(driverScreen, "actionKeys.current.get(fingerprint)", "stable action key reuse");
   requireNotText(driverScreen, "SUPABASE_SERVICE_ROLE_KEY", "no privileged database credential in driver app");
+});
+
+
+Deno.test("Company booking workspace assigns an eligible driver and vehicle before fulfillment starts", () => {
+  requireText(providerBookingDetail, '"/runtime/logistics/company/dispatch-resources?organizationId=', "eligible company driver and vehicle catalogue");
+  requireText(providerBookingDetail, '"/runtime/logistics/bookings/assign-driver"', "company dispatch assignment API");
+  requireText(providerBookingDetail, "Send driver assignment", "dispatch assignment control");
+  requireText(providerBookingDetail, "Choose vehicle", "company chooses driver vehicle pair");
+  requireText(providerBookingDetail, "The driver must accept", "driver acceptance before start");
+  requireNotText(providerBookingDetail, "Submit delivery details", "provider cannot submit delivery in place of assigned driver");
+});
+
+Deno.test("Driver has a distinct assigned-jobs workspace with accept, pickup, transit and delivery actions", () => {
+  requireText(driverNavigation, 'name="index"', "driver home tab");
+  requireText(driverNavigation, 'name="account"', "driver account tab");
+  requireText(driverJobsScreen, '"/runtime/logistics/driver/profile"', "driver eligibility profile");
+  requireText(driverJobsScreen, '"/runtime/logistics/driver/bookings"', "only assigned driver jobs are listed");
+  requireText(driverJobsScreen, "Only bookings assigned to your verified driver profile are shown", "driver job privacy");
+  requireText(driverJobDetailScreen, '"/runtime/logistics/driver/assignment/respond"', "driver accepts or declines assignment");
+  requireText(driverJobDetailScreen, '"/runtime/logistics/bookings/start"', "driver starts accepted job");
+  requireText(driverJobDetailScreen, '"/runtime/logistics/driver/milestone"', "driver pickup and transit milestones");
+  requireText(driverJobDetailScreen, '"picked_up"', "driver confirms pickup");
+  requireText(driverJobDetailScreen, '"in_transit"', "driver marks cargo in transit");
+  requireText(driverJobDetailScreen, '"/runtime/logistics/bookings/delivery/submit"', "driver records final delivery evidence");
+  requireText(driverJobDetailScreen, "Confirm pickup", "pickup action");
+  requireText(driverJobDetailScreen, "Mark in transit", "transit action");
+  requireText(driverJobDetailScreen, "Received by", "named delivery recipient evidence");
+  requireText(driverJobDetailScreen, "Awaiting customer confirmation", "delivery remains pending customer verification");
+});
+
+Deno.test("Driver workspace is a separate authenticated route and can be opened from the account", () => {
+  requireText(account, '"/runtime/logistics/driver/profile"', "driver workspace visibility check");
+  requireText(account, "Open driver workspace", "customer and provider account driver switch");
+  requireText(account, '"/(driver)"', "dedicated driver navigation entry");
+  requireText(driverRoutes, "DriverTabs", "authenticated driver route group");
+  requireText(driverHomeRoute, "DriverJobsScreen", "driver jobs home route");
+  requireText(driverWorkRoute, "DriverJobDetailScreen", "driver detail route");
 });
