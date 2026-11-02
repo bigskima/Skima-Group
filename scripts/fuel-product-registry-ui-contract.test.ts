@@ -22,14 +22,35 @@ Deno.test("Fuel product display names and codes are sourced from the database re
     excludes(source, 'title: "Diesel"', `${name} does not hardcode Diesel title`);
     excludes(source, 'title: "Kerosene"', `${name} does not hardcode Kerosene title`);
   }
-  includes(customer, 'firstString(product, ["display_name"])', "customer product selection uses registry display name");
-  includes(customer, 'firstString(product, ["short_code"])', "customer product selection uses registry code");
+  includes(customer, 'firstString(item, ["display_name"])', "customer product selection uses registry display name in the shared selection card");
+  includes(customer, 'firstString(item, ["short_code"])', "customer product selection uses registry code in the shared selection card");
   includes(admin, 'catalogText(record, "display_name")', "admin product cards use registry display name");
   includes(admin, 'catalogText(record, "short_code")', "admin product cards use registry code");
   for (const source of [orders,details,station,driver]) {
     includes(source, '/runtime/fuel/products', "operational workspace loads the product registry");
     includes(source, '["display_name"]', "operational workspace renders the registry display name");
   }
+});
+
+
+Deno.test("Fuel ordering follows the LPG-style progressive four-step customer journey", () => {
+  includes(customer, 'const [orderStep, setOrderStep] = useState(1)', "Fuel ordering tracks the active progressive step");
+  includes(customer, 'Step {orderStep} of 4', "Fuel ordering shows the customer's position in the journey");
+  includes(customer, '{orderStep === 1 ? (', "Fuel product selection is isolated in the first step");
+  includes(customer, 'eyebrow="DELIVERY LOCATION"', "The second step mirrors LPG pickup/return location selection");
+  includes(customer, 'eyebrow="FUEL QUANTITY"', "Fuel amount is isolated in the third step");
+  includes(customer, 'eyebrow="CONTAINER"', "Fuel container choice is paired with amount in the third step");
+  includes(customer, 'eyebrow="FULFILLMENT"', "Live station and fulfillment selection are isolated in the fourth step");
+
+  includes(customer, 'progressCard: { flexDirection: "row", alignItems: "center"', "Fuel progress indicator uses the same horizontal LPG layout");
+  includes(customer, 'quoteTotal: { color: "#FFFFFF", fontSize: 36', "Fuel quote hero matches the LPG quote treatment");
+  includes(customer, '<QuoteLine label="Total"', "Fuel quote breakdown uses the LPG line-item visual pattern");
+  includes(customer, '<View style={[styles.validity,', "Fuel quote validity and payment-reservation notice matches LPG");
+  includes(customer, 'function SectionLead(', "Fuel section headings reuse the LPG section-lead layout");
+  includes(customer, '<AppModal visible={reviewOpen}', "The complete order is reviewed before the secure quote is requested");
+  includes(customer, 'createOrder.mutateAsync({', "The visual refactor retains the server-side order and quote request");
+  includes(customer, 'payOrder.mutateAsync({', "The visual refactor retains the existing wallet payment flow");
+  excludes(customer, 'Card title="Choose your fuel"', "Fuel options must not regress into the old long stacked form");
 });
 
 Deno.test("the product registry API exposes display metadata alongside canonical keys", () => {
