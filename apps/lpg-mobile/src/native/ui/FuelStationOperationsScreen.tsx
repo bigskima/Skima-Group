@@ -629,7 +629,7 @@ export function FuelStationOperationsScreen() {
               ) : null}
               {focusedStage === "ready_for_driver" && focusedFulfillmentMode === "skima_managed" ? (
                 <View style={styles.operationInfo}>
-                  <StatusPill label="SKIMA Managed · SKIMA dispatch" tone="info" />
+                  <StatusPill label="SKIMA Managed · SKIMA dispatch" tone="brand" />
                   <Text style={[styles.muted, { color: palette.ink }]}>This is a SKIMA internal driver using an assigned SKIMA-owned fleet vehicle. It is not a station employee or an Independent Driver. SKIMA Dispatch assigns this driver and vehicle before you hand over the containers.</Text>
                 </View>
               ) : null}
