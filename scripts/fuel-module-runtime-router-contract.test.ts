@@ -1,7 +1,7 @@
 const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const moduleRuntime = await Deno.readTextFile("supabase/functions/fuel-runtime/index.ts");
 const migration = await Deno.readTextFile(
-  "supabase/migrations/20261102010000_fuel_module_runtime_router_and_security.sql",
+  "supabase/migrations/20261102005600_fuel_module_runtime_router_and_security.sql",
 );
 
 function requireIncludes(source: string, fragment: string, message: string): void {
