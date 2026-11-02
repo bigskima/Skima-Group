@@ -418,6 +418,15 @@ begin
     raise exception 'Choose an active operating organisation for SKIMA Store';
   end if;
 
+  if not exists (
+    select 1
+    from public.partner_profiles partner
+    where partner.organization_id = target_organization_id
+      and partner.status = 'active'
+  ) then
+    raise exception 'The Store operating organisation must have an active merchant profile before it can accept orders';
+  end if;
+
   if target_branch_id is not null and not exists (
     select 1 from public.organization_branches
     where id = target_branch_id
