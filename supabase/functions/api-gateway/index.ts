@@ -507,8 +507,8 @@ async async function dispatchBusinessModuleRuntimeRoute(
   request: Request,
   id: string,
   supabase: SupabaseClient,
-  supabaseUrl: string,
-  anonKey: string,
+  _supabaseUrl: string,
+  _anonKey: string,
   routePath: string,
 ): Promise<Response | null> {
   if (!routePath.startsWith("/runtime/")) return null;
@@ -526,29 +526,41 @@ async async function dispatchBusinessModuleRuntimeRoute(
     return jsonResponse({ ok: false, error: "module_runtime_misconfigured", requestId: id }, 503);
   }
 
-  const authorization = request.headers.get("authorization");
-  if (!authorization) return jsonResponse({ ok: false, error: "unauthorized", requestId: id }, 401);
-
   const sourceUrl = new URL(request.url);
-  const targetUrl = new URL(`/functions/v1/${edgeFunction}`, supabaseUrl);
-  targetUrl.search = sourceUrl.search;
+  const rawBody = request.method === "GET" || request.method === "HEAD"
+    ? null
+    : await request.text();
+  const invocation = await supabase.functions.invoke(edgeFunction, {
+    body: {
+      routePath,
+      method: request.method,
+      search: sourceUrl.search,
+      rawBody,
+    },
+    headers: {
+      "x-skima-runtime-envelope": "true",
+      "x-request-id": id,
+    },
+  });
 
-  const headers = new Headers();
-  headers.set("authorization", authorization);
-  headers.set("apikey", anonKey);
-  headers.set("x-skima-runtime-path", routePath);
-  headers.set("x-request-id", id);
-  for (const headerName of ["accept", "content-type", "prefer", "x-client-info"]) {
-    const value = request.headers.get(headerName);
-    if (value) headers.set(headerName, value);
+  if (invocation.error) {
+    const context = (invocation.error as { readonly context?: unknown }).context;
+    if (context instanceof Response) return context;
+    return jsonResponse({
+      ok: false,
+      error: "module_runtime_unavailable",
+      message: invocation.error.message,
+      requestId: id,
+    }, 502);
   }
 
-  return await fetch(targetUrl, {
-    method: request.method,
-    headers,
-    body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
-    redirect: "manual",
-  });
+  const payload = invocation.data;
+  return jsonResponse(
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? payload as Readonly<Record<string, unknown>>
+      : { ok: true, data: payload },
+    200,
+  );
 }
 
 function handleAuthenticatedRequest(request: Request, id: string): Promise<Response> {
