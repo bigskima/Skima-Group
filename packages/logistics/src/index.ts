@@ -164,10 +164,13 @@ export function calculateLogisticsFinancialBreakdown(input: {
     throw new Error("Settlement commission must be between 0 and 10,000 basis points.");
   }
   requirePolicyVersion(policy.bookingFeePolicyVersionId, "booking fee");
-  requirePolicyVersion(policy.providerReceivalFeePolicyVersionId, "provider receival fee");
-  requirePolicyVersion(policy.settlementCommissionPolicyVersionId, "settlement commission");
 
   const online = paymentMode === "skima_settlement";
+  if (online) {
+    requirePolicyVersion(policy.settlementCommissionPolicyVersionId, "settlement commission");
+  } else {
+    requirePolicyVersion(policy.providerReceivalFeePolicyVersionId, "provider receival fee");
+  }
   const settlementCommissionMinor = online
     ? roundBasisPoints(deliveryPriceMinor, policy.settlementCommissionBasisPoints)
     : 0;
