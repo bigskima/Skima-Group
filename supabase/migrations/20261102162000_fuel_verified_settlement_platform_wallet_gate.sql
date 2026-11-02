@@ -94,7 +94,7 @@ $patch$;
 drop trigger if exists fuel_auto_progress_after_driver_handover on public.fuel_container_allocations;
 
 revoke all on function public.can_create_fuel_verified_platform_purpose_wallet(text,text,text,text) from public,anon,authenticated;
-grant execute on function public.can_create_fuel_verified_platform_purpose_wallet(text,text,text) to service_role;
+grant execute on function public.can_create_fuel_verified_platform_purpose_wallet(text,text,text,text) to service_role;
 
 notify pgrst,'reload schema';
 commit;
