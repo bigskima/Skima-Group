@@ -210,7 +210,7 @@ export function ScanWorkspaceScreen({
               ? "Customer hand-over awaiting confirmation"
               : workspace === "station" ? "No station cylinder needs verification" : "No job needs verification right now"}
           </Text>
-          <Text style={styles.heroBody}>{workspace === "station" ? "Verify the driver's incoming cylinder at reception, then verify the filled cylinder before it leaves the station." : "Scan the assigned cylinder at pickup. Station staff handle station scans; the customer confirms final delivery with the order-specific OTP."}</Text>
+          <Text style={styles.heroBody}>{workspace === "station" ? "Verify the driver's incoming cylinder at reception, then verify the filled cylinder before it leaves the station." : "Scan the assigned cylinder once at customer pickup. SKIMA Managed drivers record supplier/refill details on their job; the customer confirms final delivery with the order-specific OTP."}</Text>
         </View>
       </View>
 
@@ -489,8 +489,7 @@ export function ScanWorkspaceScreen({
 function scanReady(job: PlatformRecord, workspace: "driver" | "station") {
   const value = (displayStatus(job) ?? "").toLowerCase().replace(/[\\s-]+/g, "_");
   if (workspace === "station") return ["station_en_route", "refill_confirmed", "station_settled"].includes(value);
-  const fulfillmentChannel = firstString(job, ["fulfillmentChannel", "fulfillment_channel"]);
-  if (["pickup_verified", "station_en_route"].includes(value)) return fulfillmentChannel === "skima_internal";
+  if (["pickup_verified", "station_en_route"].includes(value)) return false;
   if (["return_en_route", "delivery_verification_pending"].includes(value)) {
     return false;
   }
