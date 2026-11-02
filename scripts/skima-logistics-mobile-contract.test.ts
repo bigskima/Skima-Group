@@ -325,5 +325,5 @@ Deno.test("Customers can cancel only an unpaid Logistics booking from checkout",
   requireText(booking, "cancelBooking.isPending", "cancel button pending state");
   requireText(booking, "createClientIdempotencyKey(\"logistics.booking.cancel\"", "retry-safe booking cancellation key");
   requireText(booking, 'status === "cancelled"', "cancelled booking confirmation state");
-  requireNotText(booking, "cancelBooking.mutate()" , "cancellation is confirmation-gated");
+  requireText(booking, 'Alert.alert( "Cancel this booking?"', "cancellation requires explicit confirmation");
 });
