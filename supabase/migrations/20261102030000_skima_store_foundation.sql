@@ -79,7 +79,7 @@ begin
       updated_at = timezone('utc', now())
   returning id into v_workflow_id;
 
-  insert into public.workflow_versions (v_workflow_id, version, status, definition, activated_at)
+  insert into public.workflow_versions (workflow_id, version, status, definition, activated_at)
   values (
     v_workflow_id,
     1,
@@ -87,14 +87,14 @@ begin
     '{"module_key":"store","order_source":"catalog","amount_source":"active_catalog_price","stock_source":"catalog_availability"}'::jsonb,
     timezone('utc', now())
   )
-  on conflict (v_workflow_id, version) do update
+  on conflict (workflow_id, version) do update
   set status = excluded.status,
       definition = excluded.definition,
       activated_at = coalesce(public.workflow_versions.activated_at, excluded.activated_at),
       updated_at = timezone('utc', now())
   returning id into v_workflow_version_id;
 
-  insert into public.workflow_states (v_workflow_version_id, key, display_name, state_type, metadata)
+  insert into public.workflow_states (workflow_version_id, key, display_name, state_type, metadata)
   values
     (v_workflow_version_id, 'received', 'Received', 'initial', '{"customer_visible":true}'::jsonb),
     (v_workflow_version_id, 'accepted', 'Accepted', 'normal', '{"customer_visible":true}'::jsonb),
@@ -103,14 +103,14 @@ begin
     (v_workflow_version_id, 'fulfilled', 'Fulfilled', 'normal', '{"customer_visible":true}'::jsonb),
     (v_workflow_version_id, 'completed', 'Completed', 'terminal', '{"customer_visible":true}'::jsonb),
     (v_workflow_version_id, 'cancelled', 'Cancelled', 'failure', '{"customer_visible":true}'::jsonb)
-  on conflict (v_workflow_version_id, key) do update
+  on conflict (workflow_version_id, key) do update
   set display_name = excluded.display_name,
       state_type = excluded.state_type,
       metadata = excluded.metadata,
       updated_at = timezone('utc', now());
 
   insert into public.workflow_transitions (
-    v_workflow_version_id, from_state_key, to_state_key, event_type_key,
+    workflow_version_id, from_state_key, to_state_key, event_type_key,
     guard_policy_key, action_policy_keys, metadata
   )
   values
@@ -123,7 +123,7 @@ begin
     (v_workflow_version_id, 'accepted', 'cancelled', 'event.request.cancelled', null, '{}'::text[], '{}'::jsonb),
     (v_workflow_version_id, 'preparing', 'cancelled', 'event.request.cancelled', null, '{}'::text[], '{}'::jsonb),
     (v_workflow_version_id, 'ready_for_pickup', 'cancelled', 'event.request.cancelled', null, '{}'::text[], '{}'::jsonb)
-  on conflict (v_workflow_version_id, from_state_key, event_type_key) do update
+  on conflict (workflow_version_id, from_state_key, event_type_key) do update
   set to_state_key = excluded.to_state_key,
       guard_policy_key = excluded.guard_policy_key,
       action_policy_keys = excluded.action_policy_keys,
