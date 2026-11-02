@@ -2,6 +2,7 @@ const migration = await Deno.readTextFile(
   "supabase/migrations/20261102013000_fuel_driver_workflow_fees_and_mode_controls.sql",
 );
 const runtime = await Deno.readTextFile("supabase/functions/fuel-runtime/index.ts");
+const progression = await Deno.readTextFile("supabase/migrations/20261102161000_fuel_auto_progression_verified_delivery_completion.sql");
 const driver = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelDriverJobsScreen.tsx");
 const station = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelStationOperationsScreen.tsx");
 const adminFuel = await Deno.readTextFile("apps/admin/src/features/services/FuelAdminWorkspace.tsx");
@@ -78,7 +79,10 @@ Deno.test("customer delivery and rental returns are confirmed once per order, no
   excludes(driver, 'path: "/runtime/fuel/containers/handover"', "driver screen no longer sends one request for every container");
   excludes(driver, "recordHandover.mutateAsync", "driver no longer submits repeated per-container handover mutations");
   excludes(driver, "for (const allocation of withDriver)", "driver does not loop and reconfirm each container");
-  includes(station, 'stageKey: "out_for_delivery"', "station handover starts delivery without a second driver start tap");
+  includes(progression, "after insert on public.fuel_container_custody_events", "the handover trigger runs after physical custody evidence is recorded");
+  includes(progression, "fuel_auto_progress_after_driver_handover_event", "the final station-to-driver handover auto-advances the delivery leg");
+  excludes(station, 'stageKey: "out_for_delivery"', "station does not manually advance a derived delivery stage");
+  excludes(driver, 'stageKey: "out_for_delivery"', "driver does not manually confirm departure after station handover");
 });
 
 Deno.test("driver guidance is explicit for every current operational stage and fulfilment mode", () => {
@@ -100,7 +104,7 @@ Deno.test("driver guidance is explicit for every current operational stage and f
   includes(driver, "You are the station's own registered driver", "Station Managed guidance is explicit");
   includes(driver, "not a station employee and not a SKIMA staff driver", "Independent Driver is clearly distinct");
   includes(driver, "internal SKIMA driver", "SKIMA Managed is clearly distinct");
-  includes(driver, "you do not need to scan each container a second time", "driver is told the full set is confirmed together");
+  includes(driver, "No second scan per container is required", "driver is told the full set is confirmed together");
 });
 
 Deno.test("station direct dispatch is restricted to Station Managed; platform dispatch handles the other two", () => {
