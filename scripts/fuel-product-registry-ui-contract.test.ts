@@ -4,7 +4,7 @@ const orders = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelOrders
 const details = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelOrderDetailsScreen.tsx");
 const station = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelStationOperationsScreen.tsx");
 const driver = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelDriverJobsScreen.tsx");
-const gateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
+const gateway = await Deno.readTextFile("supabase/functions/fuel-runtime/index.ts");
 
 function includes(source: string, fragment: string, message: string): void {
   if (!source.includes(fragment)) throw new Error(`${message}: missing "${fragment}"`);
