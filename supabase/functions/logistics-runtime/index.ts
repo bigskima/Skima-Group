@@ -145,6 +145,45 @@ async function handleLogisticsRequest(
     }), id);
   }
 
+  if (routePath === "/runtime/logistics/geographies" && request.method === "GET") {
+    let query = supabase.from("geographies")
+      .select("id,parent_id,canonical_name,country_code,geography_level_id,aliases,status")
+      .eq("status", "active")
+      .order("canonical_name", { ascending: true })
+      .limit(50);
+    const search = optionalString(url.searchParams.get("search"));
+    const countryCode = optionalString(url.searchParams.get("countryCode"));
+    const parentId = optionalUuid(url.searchParams.get("parentId"), "parentId");
+    if (search) query = query.ilike("canonical_name", `%${search}%`);
+    if (countryCode) query = query.eq("country_code", countryCode.toUpperCase());
+    if (parentId) query = query.eq("parent_id", parentId);
+    return selectResponse(query, id);
+  }
+
+  if (routePath === "/runtime/logistics/company/profile" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("update_logistics_provider_profile", {
+      target_organization_id: requireUuid(p.organizationId, "organizationId"),
+      target_about: optionalString(p.about),
+      target_support_contact: optionalRecord(p.supportContact) ?? {},
+      target_metadata: optionalRecord(p.metadata) ?? {},
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/company/status" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("set_logistics_provider_operational_status", {
+      target_organization_id: requireUuid(p.organizationId, "organizationId"),
+      target_status: requireString(p.status, "status"),
+      target_reason: requireString(p.reason, "reason"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
   if (routePath === "/runtime/logistics/company/services" && request.method === "GET") {
     let query = supabase.from("logistics_provider_services")
       .select("id,organization_id,category_id,service_key,display_name,description,pricing_mode,capability_keys,cargo_type_keys,vehicle_type_keys,maximum_weight_kg,maximum_volume_m3,availability_enabled,status,metadata,created_at,updated_at")
