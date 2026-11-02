@@ -55,7 +55,7 @@ export function DeliveryVerificationScreen() {
   const currentOrderStatus = (firstString(currentOrder, ["status", "orderStatus", "order_status"]) ?? "")
     .toLowerCase()
     .replace(/[\\s-]+/g, "_");
-  const deliveryStageReady = ["return_en_route", "delivery_verification_pending"].includes(currentOrderStatus);
+  const deliveryStageReady = ["return_en_route", "returning", "delivery_verification_pending"].includes(currentOrderStatus);
   const currentChallengeId = firstString(currentOrder, ["deliveryChallengeId", "delivery_challenge_id"]);
   const currentChallengeVerified = currentOrder?.deliveryChallengeVerified === true
     || currentOrder?.delivery_challenge_verified === true;
