@@ -212,7 +212,11 @@ const servicesScreenLabels: Readonly<Record<string, string>> = {
   "/services/availability": "Service availability",
 };
 
-const storeScreenLabels: Readonly<Record<string, string>> = {\n  "/store": "SKIMA Store",\n};\n\nconst intelligenceScreenLabels: Readonly<Record<string, string>> = {
+const storeScreenLabels: Readonly<Record<string, string>> = {
+  "/store": "SKIMA Store",
+};
+
+const intelligenceScreenLabels: Readonly<Record<string, string>> = {
   "/intelligence": "SKIMA Intelligence overview",
   "/intelligence/ask": "SKIMA Intelligence",
 };
