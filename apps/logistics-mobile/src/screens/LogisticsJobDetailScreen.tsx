@@ -1,7 +1,7 @@
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Check, Clock3, RefreshCw, ShieldCheck, Truck, WalletCards } from "lucide-react-native";
+import { ArrowLeft, ArrowRight, Check, Clock3, MessageSquareText, RefreshCw, ShieldCheck, Truck, WalletCards } from "lucide-react-native";
 import { useMemo, useRef, useState } from "react";
 import { Modal, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
@@ -10,6 +10,7 @@ import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
 import { AppButton } from "../ui/AppButton";
+import { AppField } from "../ui/AppField";
 import { Card } from "../ui/Card";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
@@ -50,6 +51,8 @@ export function LogisticsJobDetailScreen() {
   const [showBooking, setShowBooking] = useState(false);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("online_wallet");
   const [selectedOfferId, setSelectedOfferId] = useState("");
+  const [counterOfferId, setCounterOfferId] = useState("");
+  const counterAttemptRef = useRef<{ fingerprint: string; idempotencyKey: string } | null>(null);
   const bookingAttemptRef = useRef<{ offerId: string; paymentMode: PaymentMode; idempotencyKey: string } | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -87,6 +90,37 @@ export function LogisticsJobDetailScreen() {
       bookingAttemptRef.current = null;
       setShowBooking(false);
       router.push({ pathname: "/(customer)/bookings/[id]", params: { id: bookingId } } as never);
+    },
+    onError: (error) => setLocalError(getErrorMessage(error)),
+  });
+
+  const counterOffer = useMutation({
+    mutationFn: async (input: { offerId: string; currencyCode: string; deliveryPriceMinor: number; durationMinutes: number | null; terms: string }) => {
+      const fingerprint = JSON.stringify(input);
+      const previous = counterAttemptRef.current;
+      const idempotencyKey = previous?.fingerprint === fingerprint
+        ? previous.idempotencyKey
+        : createClientIdempotencyKey("logistics.customer.counter", fingerprint);
+      counterAttemptRef.current = { fingerprint, idempotencyKey };
+      return api.post(
+        "/runtime/logistics/offers/counter",
+        {
+          parentOfferId: input.offerId,
+          currencyCode: input.currencyCode,
+          deliveryPriceMinor: input.deliveryPriceMinor,
+          estimatedDurationMinutes: input.durationMinutes,
+          terms: input.terms ? { note: input.terms } : {},
+          expiresAt: null,
+          idempotencyKey,
+        },
+        z.string().uuid(),
+      );
+    },
+    onSuccess: async () => {
+      counterAttemptRef.current = null;
+      setCounterOfferId("");
+      setLocalError(null);
+      await Promise.all([offersQuery.refetch(), opportunitiesQuery.refetch()]);
     },
     onError: (error) => setLocalError(getErrorMessage(error)),
   });
@@ -200,7 +234,16 @@ export function LogisticsJobDetailScreen() {
                                 <Text style={[styles.offerPrice, { color: palette.ink }]}>{amountMinor !== null ? majorAmount(amountMinor, currency, decimals) : "Price unavailable"}</Text>
                                 <Text style={[styles.offerMeta, { color: palette.muted }]}>{asNumber(offer, "estimated_duration_minutes") ? `Approx. ${asNumber(offer, "estimated_duration_minutes")} minutes` : "Delivery time to be agreed"} · {asString(offer, "offer_type")?.replace(/_/g, " ") ?? "Provider quote"}</Text>
                               </View>
-                              <AppButton label="Choose" size="sm" onPress={() => { setLocalError(null); setShowBooking(true); setSelectedOfferId(offerId ?? ""); }} />
+                              <View style={styles.offerActions}>
+                                <AppButton
+                                  label="Counter"
+                                  size="sm"
+                                  variant="secondary"
+                                  icon={<MessageSquareText color={palette.ink} size={14} />}
+                                  onPress={() => { setLocalError(null); counterAttemptRef.current = null; setCounterOfferId(offerId ?? ""); }}
+                                />
+                                <AppButton label="Choose" size="sm" onPress={() => { setLocalError(null); setShowBooking(true); setSelectedOfferId(offerId ?? ""); }} />
+                              </View>
                             </View>
                           );
                         })() : (
@@ -233,6 +276,34 @@ export function LogisticsJobDetailScreen() {
         onClose={() => setShowBooking(false)}
         onConfirm={() => selectedOfferId && createBooking.mutate(selectedOfferId)}
       />
+      <CustomerCounterOfferSheet
+        visible={Boolean(counterOfferId)}
+        offer={offers.find((item) => asString(item, "id") === counterOfferId) ?? null}
+        decimals={currencyDecimals(asString(offers.find((item) => asString(item, "id") === counterOfferId) ?? null, "currency_code") ?? "")}
+        busy={counterOffer.isPending}
+        error={counterOffer.error ? getErrorMessage(counterOffer.error) : null}
+        onClose={() => { if (!counterOffer.isPending) setCounterOfferId(""); }}
+        onSubmit={(price, duration, terms) => {
+          const offer = offers.find((item) => asString(item, "id") === counterOfferId) ?? null;
+          const currencyCode = asString(offer, "currency_code");
+          const decimals = currencyCode ? currencyDecimals(currencyCode) : null;
+          if (!offer || !currencyCode || decimals === null) {
+            setLocalError("This offer’s currency configuration is unavailable. Refresh and try again.");
+            return;
+          }
+          const deliveryPriceMinor = toMinorUnits(price, decimals);
+          if (deliveryPriceMinor === null) return;
+          const durationValue = duration.trim() ? Number(duration) : null;
+          if (durationValue !== null && (!Number.isSafeInteger(durationValue) || durationValue <= 0)) return;
+          counterOffer.mutate({
+            offerId: counterOfferId,
+            currencyCode,
+            deliveryPriceMinor,
+            durationMinutes: durationValue,
+            terms: terms.trim(),
+          });
+        }}
+      />
     </>
   );
 
@@ -264,6 +335,97 @@ function BookingModeSheet({ visible, paymentMode, setPaymentMode, busy, onClose,
           </Pressable>
           <AppButton label="Confirm provider" fullWidth loading={busy} onPress={onConfirm} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />
           <AppButton label="Not now" fullWidth variant="ghost" onPress={onClose} />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+
+function toMinorUnits(value: string, decimals: number): number | null {
+  const clean = value.trim();
+  const pattern = decimals === 0 ? /^\d+$/ : new RegExp(\`^\\\\d+(?:\\\\.\\\\d{1,\${decimals}})?$\`);
+  if (!pattern.test(clean)) return null;
+  const [whole, fraction = ""] = clean.split(".");
+  const scale = 10 ** decimals;
+  const amount = Number(whole) * scale + Number((fraction + "0".repeat(decimals)).slice(0, decimals) || "0");
+  return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
+}
+
+function CustomerCounterOfferSheet({ visible, offer, decimals, busy, error, onClose, onSubmit }: {
+  visible: boolean;
+  offer: Record<string, unknown> | null;
+  decimals: number | null;
+  busy: boolean;
+  error: string | null;
+  onClose(): void;
+  onSubmit(price: string, duration: string, terms: string): void;
+}) {
+  const { palette } = useAppTheme();
+  const [price, setPrice] = useState("");
+  const [duration, setDuration] = useState("");
+  const [terms, setTerms] = useState("");
+  const [validation, setValidation] = useState<string | null>(null);
+  const currency = asString(offer, "currency_code") ?? "";
+  const amountMinor = asNumber(offer, "delivery_price_minor");
+  const currentPrice = amountMinor !== null && decimals !== null ? majorAmount(amountMinor, currency, decimals) : "Current quote";
+  const validPrice = decimals !== null && toMinorUnits(price, decimals) !== null;
+  const validDuration = !duration.trim() || (Number.isSafeInteger(Number(duration)) && Number(duration) > 0);
+  const resetKey = asString(offer, "id") ?? "";
+  useEffect(() => {
+    setPrice("");
+    setDuration("");
+    setTerms("");
+    setValidation(null);
+  }, [resetKey, visible]);
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <View style={[styles.modalRoot, { backgroundColor: palette.overlay }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close counteroffer sheet" />
+        <View style={[styles.sheet, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+          <View style={styles.sheetHandle}><View style={[styles.handle, { backgroundColor: palette.borderStrong }]} /></View>
+          <Text style={[styles.sheetEyebrow, { color: palette.brand }]}>NEGOTIATE THE QUOTE</Text>
+          <Text style={[styles.sheetTitle, { color: palette.ink }]}>Make a counteroffer</Text>
+          <Text style={[styles.description, { color: palette.muted }]}>The company’s current quote is {currentPrice}. Your counter must use the same currency; the company will be notified to respond.</Text>
+          <AppField
+            label={\`Your price (\${currency})\`}
+            value={price}
+            onChangeText={(value) => { setPrice(value); setValidation(null); }}
+            placeholder="Enter your proposed amount"
+            keyboardType="decimal-pad"
+            hint={decimals === null ? "Currency precision is loading." : \`Use up to \${decimals} decimal places.\`}
+          />
+          <AppField
+            label="Estimated delivery time (minutes)"
+            value={duration}
+            onChangeText={(value) => { setDuration(value); setValidation(null); }}
+            placeholder="Optional"
+            keyboardType="number-pad"
+            optional
+          />
+          <AppField
+            label="Additional terms"
+            value={terms}
+            onChangeText={setTerms}
+            placeholder="Explain your preferred terms or changes"
+            multiline
+            optional
+            maxLength={1000}
+          />
+          {validation || error ? (
+            <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}>
+              <Text style={[styles.errorText, { color: palette.danger }]}>{validation ?? error}</Text>
+            </View>
+          ) : null}
+          <AppButton label="Send counteroffer" fullWidth loading={busy} disabled={!validPrice || !validDuration || decimals === null}
+            onPress={() => {
+              if (!validPrice) { setValidation("Enter a positive amount using the currency’s allowed decimal places."); return; }
+              if (!validDuration) { setValidation("Delivery time must be a positive whole number of minutes."); return; }
+              onSubmit(price, duration, terms);
+            }}
+            trailingIcon={<ArrowRight color="#FFFFFF" size={16} />}
+          />
+          <AppButton label="Cancel" fullWidth variant="ghost" disabled={busy} onPress={onClose} />
         </View>
       </View>
     </Modal>
@@ -308,6 +470,7 @@ const styles = StyleSheet.create({
   companyService: { ...typography.caption, fontSize: 9 },
   companyStatus: { ...typography.caption, fontSize: 10 },
   offerInline: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 11 },
+  offerActions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end", gap: 7 },
   offerPrice: { ...typography.heading, fontSize: 17, lineHeight: 21 },
   offerMeta: { ...typography.caption, fontSize: 9, lineHeight: 14, textTransform: "capitalize" },
   waiting: { alignItems: "flex-start", gap: 10 },
