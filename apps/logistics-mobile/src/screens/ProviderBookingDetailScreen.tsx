@@ -5,7 +5,7 @@ import { ArrowLeft, CheckCircle2, Clock3, MapPin, PackageCheck, Phone, ShieldChe
 import { useMemo, useRef, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
-import { asNumber, asString, useLogisticsQuery } from "../api/logistics";
+import { asNumber, asString, useLogisticsQuery, useLogisticsRecordQuery } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -52,10 +52,57 @@ export function ProviderBookingDetailScreen() {
   const title = asString(snapshot, "title") ?? asString(job, "title") ?? "Logistics booking";
   const status = asString(booking, "status") ?? "unknown";
   const paymentMode = asString(booking, "payment_mode") ?? "online_wallet";
+  const assignmentRows = Array.isArray(booking?.assignments)
+    ? booking.assignments.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+  const activeAssignment = [...assignmentRows].reverse().find((item) =>
+    ["offered", "accepted", "in_progress", "picked_up", "in_transit", "delivery_submitted"].includes(asString(item, "status") ?? "")
+  ) ?? null;
+  const dispatchResources = useLogisticsRecordQuery(
+    ["dispatch-resources", organizationId ?? "none"],
+    `/runtime/logistics/company/dispatch-resources?organizationId=${encodeURIComponent(organizationId ?? "")}`,
+    Boolean(organizationId && status === "provider_accepted" && !activeAssignment),
+  );
+  const driverResources = Array.isArray(dispatchResources.data?.drivers)
+    ? dispatchResources.data.drivers.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+  const [selectedDriverProfileId, setSelectedDriverProfileId] = useState("");
+  const selectedDriver = driverResources.find((item) => asString(item, "driver_profile_id") === selectedDriverProfileId) ?? null;
+  const selectedVehicles = Array.isArray(selectedDriver?.vehicles)
+    ? selectedDriver.vehicles.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [recipientName, setRecipientName] = useState("");
   const [deliveryNote, setDeliveryNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const actionKeysRef = useRef(new Map<string, string>());
+
+  const assignDriver = useMutation({
+    mutationFn: async () => {
+      if (!bookingId || !selectedDriverProfileId || !selectedVehicleId) {
+        throw new Error("Choose an eligible driver and their assigned vehicle.");
+      }
+      const fingerprint = `assign:${bookingId}:${selectedDriverProfileId}:${selectedVehicleId}`;
+      let key = actionKeysRef.current.get(fingerprint);
+      if (!key) {
+        key = createClientIdempotencyKey("logistics.company.driver.assignment", fingerprint);
+        actionKeysRef.current.set(fingerprint, key);
+      }
+      return api.post("/runtime/logistics/bookings/assign-driver", {
+        bookingId,
+        driverProfileId: selectedDriverProfileId,
+        vehicleId: selectedVehicleId,
+        idempotencyKey: key,
+      }, z.string().uuid());
+    },
+    onSuccess: async () => {
+      setError(null);
+      await client.invalidateQueries({ queryKey: ["skima-logistics", "provider-bookings"] });
+      await bookings.refetch();
+      Alert.alert("Driver assignment sent", "The driver has been notified in their SKIMA Logistics workspace and must accept before the job can start.");
+    },
+    onError: (cause) => setError(cause instanceof Error ? cause.message : "The driver could not be assigned."),
+  });
 
   const mutateAction = useMutation({
     mutationFn: async (action: "accept" | "start" | "deliver") => {
@@ -89,7 +136,7 @@ export function ProviderBookingDetailScreen() {
     onError: (cause) => setError(cause instanceof Error ? cause.message : "The booking action could not be completed."),
   });
 
-  const refresh = () => Promise.all([companies.refetch(), bookings.refetch()]);
+  const refresh = () => Promise.all([companies.refetch(), bookings.refetch(), dispatchResources.refetch()]);
   return (
     <Screen eyebrow="PROVIDER JOB" title={title} subtitle="Accept the booking, carry out the service and record the delivery hand-off."
       action={<AppButton label="Back" size="sm" variant="secondary" icon={<ArrowLeft color={palette.ink} size={15} />} onPress={() => router.back()} />}
@@ -133,9 +180,64 @@ export function ProviderBookingDetailScreen() {
             </Card>
           ) : status === "provider_accepted" ? (
             <Card padding="lg">
-              <View style={styles.actionHeading}><CheckCircle2 color={palette.success} size={20} /><Text style={[styles.sectionTitle, { color: palette.ink }]}>Booking accepted</Text></View>
-              <Text style={[styles.meta, { color: palette.muted }]}>Start the service when your team is ready to fulfil this booking.</Text>
-              <AppButton label="Start job" fullWidth loading={mutateAction.isPending} onPress={() => { setError(null); mutateAction.mutate("start"); }} />
+              <View style={styles.actionHeading}><Truck color={palette.brand} size={20} /><Text style={[styles.sectionTitle, { color: palette.ink }]}>Assign the delivery team</Text></View>
+              <Text style={[styles.meta, { color: palette.muted }]}>Choose a verified company driver and a compliant vehicle. The driver must accept the assignment before starting pickup and delivery.</Text>
+              {activeAssignment ? (
+                <View style={[styles.assignmentSummary, { backgroundColor: palette.surfaceSubtle }]}>
+                  <Text style={[styles.contactName, { color: palette.ink }]}>Driver assignment sent</Text>
+                  <Text style={[styles.meta, { color: palette.muted }]}>Assignment status: {asString(activeAssignment, "status")?.replace(/_/g, " ") ?? "pending"}</Text>
+                  <Text style={[styles.meta, { color: palette.muted }]}>The driver must accept before the job can start.</Text>
+                  <StatusPill status={asString(activeAssignment, "status") ?? "offered"} />
+                </View>
+              ) : dispatchResources.isPending ? (
+                <ScreenSkeleton cards={1} />
+              ) : dispatchResources.error ? (
+                <StatePanel title="Driver availability unavailable" description="The company driver and vehicle directory could not be loaded." retry={() => void dispatchResources.refetch()} />
+              ) : driverResources.length === 0 ? (
+                <StatePanel title="No eligible driver and vehicle pair" description="Add an approved driver as an active company member and link an approved, available vehicle before dispatching this booking." retry={() => void dispatchResources.refetch()} />
+              ) : (
+                <View style={styles.dispatchSection}>
+                  <Text style={[styles.meta, { color: palette.ink }]}>Available company drivers</Text>
+                  {driverResources.map((driver) => {
+                    const id = asString(driver, "driver_profile_id") ?? "";
+                    const chosen = selectedDriverProfileId === id;
+                    return (
+                      <Pressable key={id} onPress={() => {
+                        setSelectedDriverProfileId(id);
+                        const vehicles = Array.isArray(driver.vehicles) ? driver.vehicles as Record<string, unknown>[] : [];
+                        setSelectedVehicleId(asString(vehicles[0], "vehicle_id") ?? "");
+                      }} style={[styles.driverChoice, { borderColor: chosen ? palette.brand : palette.border, backgroundColor: chosen ? palette.brandSoft : palette.surface }]}>
+                        <View style={styles.driverChoiceCopy}>
+                          <Text style={[styles.contactName, { color: palette.ink }]}>{asString(driver, "display_name") ?? "Verified driver"}</Text>
+                          <Text style={[styles.meta, { color: palette.muted }]}>{asString(driver, "public_driver_id") ?? "Approved company driver"}</Text>
+                        </View>
+                        <StatusPill status={chosen ? "selected" : "available"} />
+                      </Pressable>
+                    );
+                  })}
+                  {selectedDriver ? (
+                    <View style={styles.dispatchSection}>
+                      <Text style={[styles.meta, { color: palette.ink }]}>Choose vehicle</Text>
+                      {selectedVehicles.map((vehicle) => {
+                        const id = asString(vehicle, "vehicle_id") ?? "";
+                        const chosen = selectedVehicleId === id;
+                        const vehicleName = [asString(vehicle, "vehicle_type_name"), asString(vehicle, "manufacturer"), asString(vehicle, "model")].filter(Boolean).join(" · ");
+                        return (
+                          <Pressable key={id} onPress={() => setSelectedVehicleId(id)} style={[styles.driverChoice, { borderColor: chosen ? palette.brand : palette.border, backgroundColor: chosen ? palette.brandSoft : palette.surface }]}>
+                            <View style={styles.driverChoiceCopy}>
+                              <Text style={[styles.contactName, { color: palette.ink }]}>{vehicleName || "Approved vehicle"}</Text>
+                              <Text style={[styles.meta, { color: palette.muted }]}>{asString(vehicle, "registration_number") ?? "Registration not supplied"} · {asNumber(vehicle, "max_load_kg") ?? "Unspecified"} kg capacity</Text>
+                            </View>
+                            <StatusPill status={chosen ? "selected" : "eligible"} />
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                  <AppButton label="Send driver assignment" fullWidth loading={assignDriver.isPending} disabled={!selectedDriverProfileId || !selectedVehicleId || assignDriver.isPending}
+                    onPress={() => { setError(null); assignDriver.mutate(); }} />
+                </View>
+              )}
             </Card>
           ) : status === "in_progress" ? (
             <Card padding="lg">
@@ -185,6 +287,10 @@ const styles = StyleSheet.create({
   contactLine: { minHeight: 26, flexDirection: "row", alignItems: "center", gap: 7 },
   phone: { ...typography.caption, fontWeight: "900", fontSize: 11 },
   actionHeading: { flexDirection: "row", alignItems: "center", gap: 8 },
+  dispatchSection: { gap: 9 },
+  driverChoice: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: radii.md, padding: 10 },
+  driverChoiceCopy: { flex: 1, minWidth: 0, gap: 2 },
+  assignmentSummary: { borderRadius: radii.md, padding: 12, gap: 6 },
   error: { padding: 12, borderRadius: radii.md },
   errorText: { ...typography.caption, fontSize: 10, lineHeight: 17 },
 });
