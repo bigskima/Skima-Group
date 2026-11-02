@@ -67,48 +67,66 @@ set display_name=excluded.display_name,
     metadata=public.platform_fee_controls.metadata||excluded.metadata,
     updated_at=timezone('utc',now());
 
--- Ensure both currently-supported Fuel currencies have an approved zero baseline.
+-- Ensure both currently-supported Fuel currencies have distinct, audited zero baselines.
 with module_record as (
   select id from public.business_modules where key='fuel'
 ),
-currency_values(currency_code) as (values('NGN'::text),('USDC'::text))
+currency_values(currency_code) as (values('NGN'::text),('USDC'::text)),
+missing_scopes as (
+  select definition.id as policy_definition_id,
+         currency_values.currency_code
+  from public.financial_policy_definitions definition
+  cross join module_record
+  cross join currency_values
+  where definition.key in (
+    'pricing.fuel.pms.platform_fee_per_litre',
+    'pricing.fuel.ago.platform_fee_per_litre',
+    'pricing.fuel.dpk.platform_fee_per_litre'
+  )
+  and not exists (
+    select 1 from public.financial_policy_versions existing
+    where existing.policy_definition_id=definition.id
+      and existing.module_id=module_record.id
+      and existing.service_key='fuel.order'
+      and existing.geography_type='global'
+      and existing.currency_code=currency_values.currency_code
+      and existing.lifecycle_status='active'
+      and existing.effective_from<=timezone('utc',now())
+      and (existing.effective_until is null or existing.effective_until>timezone('utc',now()))
+  )
+),
+numbered_scopes as (
+  select missing_scopes.*,
+         row_number() over(partition by policy_definition_id order by currency_code) as sequence_number,
+         coalesce((
+           select max(existing.version)
+           from public.financial_policy_versions existing
+           where existing.policy_definition_id=missing_scopes.policy_definition_id
+         ),0) as current_max_version
+  from missing_scopes
+)
 insert into public.financial_policy_versions(
   policy_definition_id,version,lifecycle_status,module_id,service_key,geography_type,
   geography_key,currency_code,priority,configuration,effective_from,change_reason,
   validation_snapshot,submitted_at,approved_at,activated_at,created_at,updated_at
 )
 select
-  definition.id,
-  coalesce((select max(existing.version)+1 from public.financial_policy_versions existing where existing.policy_definition_id=definition.id),1),
+  numbered_scopes.policy_definition_id,
+  numbered_scopes.current_max_version+numbered_scopes.sequence_number,
   'active',
   module_record.id,
   'fuel.order',
   'global',
   null,
-  currency_values.currency_code,
+  numbered_scopes.currency_code,
   100,
   '{"amount_per_litre":0}'::jsonb,
   timezone('utc',now()),
   'Initial zero-value Fuel platform fee baseline; administrators may configure a fee prospectively.',
   public.validate_financial_policy_configuration('service_fee','{"amount_per_litre":0}'::jsonb),
   timezone('utc',now()),timezone('utc',now()),timezone('utc',now()),timezone('utc',now()),timezone('utc',now())
-from public.financial_policy_definitions definition
-cross join module_record
-cross join currency_values
-where definition.key in (
-  'pricing.fuel.pms.platform_fee_per_litre',
-  'pricing.fuel.ago.platform_fee_per_litre',
-  'pricing.fuel.dpk.platform_fee_per_litre'
-)
-and not exists (
-  select 1 from public.financial_policy_versions existing
-  where existing.policy_definition_id=definition.id
-    and existing.module_id=module_record.id
-    and existing.service_key='fuel.order'
-    and existing.geography_type='global'
-    and existing.currency_code=currency_values.currency_code
-    and existing.lifecycle_status='active'
-);
+from numbered_scopes
+cross join module_record;
 
 create or replace function public.configure_fuel_driver_product_qualification_mode(
   target_driver_user_id uuid,
@@ -157,7 +175,7 @@ begin
   end if;
 
   if target_driver_user_id is null
-     or target_fulfillment_mode not in ('station_managed','independent_driver','skima_managed')
+     or target_fulfillment_mode is null or target_fulfillment_mode not in ('station_managed','independent_driver','skima_managed')
      or (target_fulfillment_mode='station_managed' and (target_station_managed_driver_id is null or target_driver_profile_id is not null))
      or (target_fulfillment_mode in ('independent_driver','skima_managed') and (target_driver_profile_id is null or target_station_managed_driver_id is not null))
      or target_vehicle_id is null
