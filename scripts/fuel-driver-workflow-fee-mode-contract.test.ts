@@ -55,8 +55,8 @@ Deno.test("station, Independent Driver and SKIMA Managed qualifications are mutu
   includes(migration, "Driver profile, participation type and vehicle ownership must match the ordered Fuel fulfilment mode", "driver dispatch rejects a mode/vehicle mismatch");
   includes(runtime, "target_fulfillment_mode: fulfillmentMode", "API passes the explicit fulfilment mode to the qualification RPC");
   includes(runtime, '.eq("fulfillment_mode", operationData.fulfillment_mode)', "dispatch query filters qualification to the order's mode");
-  includes(adminFuel, "Independent Driver · independent provider + own vehicle", "Admin labels Independent Driver separately");
-  includes(adminFuel, "SKIMA Managed · internal driver + SKIMA fleet", "Admin labels SKIMA Managed separately");
+  includes(adminFuel, "Independent Managed · provider + own vehicle", "Admin labels Independent Managed separately");
+  includes(adminFuel, "SKIMA Managed / SKIMA Fleet · internal driver + fleet vehicle", "Admin labels SKIMA Managed / SKIMA Fleet separately");
   includes(adminFuel, "Station Managed · station driver + branch vehicle", "Admin labels Station Managed separately");
 });
 
@@ -105,9 +105,10 @@ Deno.test("driver guidance is explicit for every current operational stage and f
 
 Deno.test("station direct dispatch is restricted to Station Managed; platform dispatch handles the other two", () => {
   includes(station, 'focusedFulfillmentMode === "station_managed"', "station driver selector is Station Managed only");
-  includes(station, 'focusedFulfillmentMode === "independent_driver"', "station explains Independent Driver dispatch");
-  includes(station, 'focusedFulfillmentMode === "skima_managed"', "station explains SKIMA Managed dispatch");
+  includes(station, 'focusedFulfillmentMode === "independent_driver"', "station explains Independent Managed dispatch");
+  includes(station, 'focusedFulfillmentMode === "skima_managed"', "station explains SKIMA Managed / SKIMA Fleet dispatch");
   includes(adminFuel, '"/runtime/fuel/orders/operations?stage=ready_for_driver"', "Admin has a Fuel dispatch queue");
+  includes(adminFuel, "Independent Managed & SKIMA Fleet orders ready for a driver", "SKIMA dispatch queue identifies the two network modes");
   includes(adminFuel, '"/runtime/fuel/orders/assign-driver"', "Admin dispatches a qualified mode-matched driver");
   includes(adminFuel, '["independent_driver", "skima_managed"]', "the SKIMA dispatch queue excludes Station Managed orders");
   includes(adminFuel, "These two modes are dispatched by SKIMA, not by the station", "station and independent roles are not conflated");
