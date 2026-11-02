@@ -524,7 +524,7 @@ Deno.test("Driver location sharing is opt-in and can be written only by the assi
 
 Deno.test("Booking tracking is visible only to the customer, provider company and assigned driver", () => {
   requireText(migrationTracking, "public.read_logistics_booking_tracking", "booking tracking read RPC");
-  requireText(migrationTracking, "booking_record.requester_user_id <> auth.uid()", "customer participant check");
+  requireText(migrationTracking, "booking_record.requester_user_id is distinct from auth.uid()", "null-safe customer participant check");
   requireText(migrationTracking, "public.can_read_logistics_company(booking_record.provider_organization_id)", "provider tenant participant check");
   requireText(migrationTracking, "assignment.driver_user_id = auth.uid()", "assigned driver participant check");
   requireText(migrationTracking, "subject_type = 'logistics_booking'", "tracking session is bound to a Logistics booking");
@@ -538,4 +538,20 @@ Deno.test("Driver tracking stops when a booking closes", () => {
   requireText(migrationTracking, "new.status in ('cancelled','refunded')", "cancelled or refunded booking closes tracking");
   requireText(migrationTracking, "update public.tracking_sessions", "shared tracking session is closed");
   requireText(migrationTracking, "insert into public.tracking_session_events", "tracking closure is event recorded");
+});
+
+
+Deno.test("Logistics tracking uses only shared SKIMA tracking records and no separate GPS store", () => {
+  requireText(migrationTracking, "references public.tracking_sessions", "booking links to the shared tracking session");
+  requireText(migrationTracking, "public.start_tracking_session(", "shared tracking session creation");
+  requireText(migrationTracking, "public.record_tracking_point(", "shared immutable GPS point recording");
+  requireText(migrationTracking, "public.tracking_session_events", "shared tracking event history");
+  requireText(migrationTracking, "booking.tracking_session_id = session.id", "tracking session bound to one logistics booking");
+  requireText(migrationTracking, "public.can_read_logistics_tracking_session", "participant-scoped tracking access");
+  requireText(migrationTracking, "tracking_points_select_logistics_booking_participants", "customer/provider/driver point-read policy");
+  requireText(migrationTracking, "tracking_session_events_select_logistics_booking_participants", "customer/provider/driver event-read policy");
+  requireText(migrationTracking, "tracking_session.status in ('completed','cancelled')", "terminal tracking sessions are not reopened");
+  requireText(runtime, '"/runtime/logistics/driver/location"', "driver location write endpoint");
+  requireText(runtime, '"/runtime/logistics/bookings/tracking"', "booking tracking read endpoint");
+  requireNotText(migrationTracking, "create table public.logistics_tracking_points", "no duplicate Logistics GPS store");
 });
