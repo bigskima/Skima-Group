@@ -188,19 +188,9 @@ export function InternalDriverJobDetailScreen() {
       ) {
         throw new Error("SKIMA rejected this scan because the returned cylinder match does not belong to this exact order. No verification success was accepted.");
       }
-      const responseScanType = resultRecord
-        ? firstString(resultRecord, ["scanType"])
-        : null;
-      const completedScanType = responseScanType === "customer_pickup"
-          || responseScanType === "station_receipt"
-          || responseScanType === "customer_delivery"
-        ? responseScanType
-        : scanType;
       setToken("");
       setNoticeSuccess(true);
-      setNotice(completedScanType === "customer_delivery"
-        ? "Returned cylinder scan verified. Ask the customer to complete the order-specific OTP in SKIMA; that final confirmation closes delivery."
-        : scanSuccess(completedScanType));
+      setNotice(scanSuccess("customer_pickup"));
       await detail.refetch();
     } catch (cause) {
       setNoticeSuccess(false);
@@ -407,9 +397,7 @@ export function InternalDriverJobDetailScreen() {
               {scanType ? (
                 <View style={[styles.card, shadows.soft, { backgroundColor: palette.surface, borderColor: palette.border }]}>
                   <View style={styles.sectionLead}>
-                    {scanType === "customer_delivery"
-                      ? <ShieldCheck color={palette.success} size={22} />
-                      : <ScanLine color={palette.brand} size={22} />}
+                    <ScanLine color={palette.brand} size={22} />
                     <View style={styles.sectionCopy}>
                       <Text style={[styles.sectionTitle, { color: palette.ink }]}>{scanTitle(scanType)}</Text>
                       <Text style={[styles.helper, { color: palette.muted }]}>{scanDescription(scanType)}</Text>
