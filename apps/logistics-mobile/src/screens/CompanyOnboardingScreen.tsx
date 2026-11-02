@@ -39,7 +39,7 @@ export function CompanyOnboardingScreen() {
     },
     onSuccess: async () => {
       try {
-        const companies = await api.get("/runtime/logistics/company", z.array(z.record(z.string(), z.unknown())));
+        const companies: Array<Record<string, unknown>> = await api.get("/runtime/logistics/company", z.array(z.record(z.string(), z.unknown())));
         const company = companies.find((item) => item.id === register.data);
         const organizationId = typeof company?.organization_id === "string" ? company.organization_id : null;
         if (organizationId) {
