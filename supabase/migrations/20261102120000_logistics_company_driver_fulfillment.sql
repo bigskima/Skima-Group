@@ -655,6 +655,16 @@ begin
     return booking_record.id;
   end if;
 
+    if not actor_is_company and not exists (
+      select 1 from public.logistics_booking_driver_assignments assignment
+      where assignment.id::text = existing_event.metadata->>'assignment_id'
+        and assignment.driver_user_id = actor
+    ) then
+      raise exception 'delivery submission retry is not available to this actor';
+    end if;
+    return booking_record.id;
+  end if;
+
   select * into assignment_record from public.logistics_booking_driver_assignments
   where booking_id = booking_record.id
     and status = 'in_transit'
