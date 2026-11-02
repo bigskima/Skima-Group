@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
-import { ActionResponseSchema, RecordArraySchema, firstNumber, firstString } from "../api/records";
+import { ActionResponseSchema, RecordArraySchema, firstNumber, firstString, nestedRecord } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
@@ -232,7 +232,7 @@ export function FuelOrderDetailsScreen() {
               description="Check the fuel quantity and container handover physically. Your confirmation is the security gate before the order can be completed."
             >
               {verificationError ? <Text accessibilityRole="alert" style={[styles.returnText, { color: palette.danger }]}>{verificationError}</Text> : null}
-              {verificationNotice ? <Text accessibilityRole="status" style={[styles.muted, { color: palette.success }]}>{verificationNotice}</Text> : null}
+              {verificationNotice ? <Text style={[styles.muted, { color: palette.success }]}>{verificationNotice}</Text> : null}
               <AppButton
                 label="Confirm I received this fuel order"
                 fullWidth
