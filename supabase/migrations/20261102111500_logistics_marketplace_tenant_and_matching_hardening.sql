@@ -1146,5 +1146,20 @@ grant execute on function public.set_logistics_provider_operational_status(uuid,
 grant execute on function public.refresh_logistics_job_matches(uuid,text) to authenticated,service_role;
 grant execute on function public.search_logistics_providers(uuid,uuid,text,text,text[],text[],text[],numeric,numeric,text,integer) to authenticated,service_role;
 
+insert into public.role_permissions (role_id, permission_id, conditions)
+select role_record.id, permission_record.id, '{}'::jsonb
+from public.roles role_record
+join public.permissions permission_record
+  on permission_record.key in ('logistics.marketplace.manage', 'logistics.marketplace.read')
+where role_record.organization_id is null
+  and (
+    (permission_record.key = 'logistics.marketplace.manage'
+      and role_record.key in ('platform.super_admin', 'platform.company_admin', 'platform.operations_admin'))
+    or
+    (permission_record.key = 'logistics.marketplace.read'
+      and role_record.key in ('platform.super_admin', 'platform.company_admin', 'platform.operations_admin', 'platform.module_admin', 'platform.audit_admin'))
+  )
+on conflict (role_id, permission_id) do nothing;
+
 notify pgrst,'reload schema';
 commit;
