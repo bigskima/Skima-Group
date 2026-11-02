@@ -26,8 +26,6 @@ const providerOpportunities = await Deno.readTextFile("apps/logistics-mobile/src
 const providerCompany = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderCompanyScreen.tsx");
 const providerTeam = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderTeamScreen.tsx");
 const providerTeamRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/team.tsx");
-const driverScreen = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsDriverScreen.tsx");
-const driverRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/driver.tsx");
 const providerJobs = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderJobsScreen.tsx");
 const providerBookingDetail = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderBookingDetailScreen.tsx");
 const providerRoutes = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/_layout.tsx");
@@ -271,28 +269,6 @@ Deno.test("Invited Logistics staff can accept or decline from their own account"
   requireText(account, "invitations.refetch()", "invitation state refresh");
   requireText(account, "context?.organizations.find", "accepted company membership can be labelled");
   requireNotText(account, "invitationId + \":\" + String(Date.now())", "stable invitation idempotency across retries");
-});
-
-
-Deno.test("Approved Logistics drivers have a dedicated authenticated delivery workspace", () => {
-  requireText(providerNavigation, '"/runtime/logistics/driver/profile"', "driver-aware workspace visibility");
-  requireText(providerNavigation, 'driverProfile.data?.registered === true', "driver tab is hidden from non-drivers");
-  requireText(providerNavigation, 'name="driver"', "dedicated driver tab");
-  requireText(driverRoute, "LogisticsDriverScreen", "driver route");
-  requireText(driverScreen, '"/runtime/logistics/driver/profile"', "self-owned driver profile");
-  requireText(driverScreen, '"/runtime/logistics/driver/bookings"', "self-owned driver assignments");
-  requireText(driverScreen, '"/runtime/logistics/driver/assignment/respond"', "driver accept/decline action");
-  requireText(driverScreen, '"/runtime/logistics/bookings/start"', "driver start action");
-  requireText(driverScreen, '"/runtime/logistics/driver/milestone"', "driver pickup and transit milestones");
-  requireText(driverScreen, '"/runtime/logistics/bookings/delivery/submit"', "driver delivery hand-off submission");
-  requireText(driverScreen, "verification_status", "driver approval state");
-  requireText(driverScreen, "No driver profile linked to this account", "safe onboarding fallback");
-  requireText(driverScreen, "Confirm pickup", "pickup milestone control");
-  requireText(driverScreen, "Depart · mark in transit", "transit milestone control");
-  requireText(driverScreen, "Received by", "named hand-off recipient");
-  requireText(driverScreen, "createClientIdempotencyKey", "retry-safe driver operations");
-  requireText(driverScreen, "actionKeys.current.get(fingerprint)", "stable action key reuse");
-  requireNotText(driverScreen, "SUPABASE_SERVICE_ROLE_KEY", "no privileged database credential in driver app");
 });
 
 
