@@ -78,13 +78,6 @@ type StaffMember = Record<string, unknown> & {
   roles?: Array<Record<string, unknown>>;
 };
 
-function nested(record: Record<string, unknown> | null | undefined, key: string) {
-  const value = record?.[key];
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
-
 function dateLabel(value: unknown) {
   if (typeof value !== "string") return "Date unavailable";
   const parsed = new Date(value);
