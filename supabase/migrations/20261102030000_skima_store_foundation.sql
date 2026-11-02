@@ -504,12 +504,15 @@ begin
   from public.permissions
   where key = 'business.orders.process';
 
-  if store_role_id is null or order_permission_id is null then
-    raise exception 'Store order-processing permission is not configured';
+  if store_role_id is null or order_permission_id is null
+    or not exists (select 1 from public.permissions where key = 'business.orders.read') then
+    raise exception 'Store order-processing permissions are not configured';
   end if;
 
   insert into public.role_permissions (role_id, permission_id)
-  values (store_role_id, order_permission_id)
+  select store_role_id, permission.id
+  from public.permissions permission
+  where permission.key in ('business.orders.read', 'business.orders.process')
   on conflict (role_id, permission_id) do nothing;
 
   insert into public.user_roles (organization_id, user_id, role_id, status)
