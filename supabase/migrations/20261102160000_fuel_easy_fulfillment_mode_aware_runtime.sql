@@ -1269,13 +1269,13 @@ begin
   execute replace(function_sql,old_guard,new_guard);
 
   select pg_get_functiondef('public.post_financial_transaction(text,text,text,text,uuid,jsonb,text,uuid,text,jsonb,jsonb)'::regprocedure) into function_sql;
-  old_guard:=$old$  if auth.role() <> 'service_role'
-    and not public.has_permission('platform.financial.manage', null) then
+  old_guard:=$old$    ) then
     raise exception 'platform financial management permission is required';
   end if;$old$;
-  new_guard:=$new$  if auth.role() <> 'service_role'
-    and not public.has_permission('platform.financial.manage', null)
-    and not public.can_post_verified_fuel_financial_transaction(target_subject_type,target_subject_id,target_source,target_metadata) then
+  new_guard:=$new$      or public.can_post_verified_fuel_financial_transaction(
+        target_subject_type,target_subject_id,target_source,target_metadata
+      )
+    ) then
     raise exception 'platform financial management permission is required';
   end if;$new$;
   if position(old_guard in function_sql)=0 then raise exception 'post_financial_transaction authorization changed; refusing an unsafe patch'; end if;
