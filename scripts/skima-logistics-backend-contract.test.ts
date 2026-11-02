@@ -93,6 +93,19 @@ Deno.test("Matching is capability, cargo, coverage, verification and capacity co
   requireText(migration, "service.cargo_type_keys", "cargo-type requirements gate");
 });
 
+Deno.test("Customer category requests match all eligible provider services in that category", () => {
+  requireText(migration, "and service.category_id = category_id", "customer category match");
+  requireText(migration, "and service.category_id = job.category_id", "rematch category scope");
+  requireNotText(
+    migration.slice(
+      migration.indexOf("create or replace function public.create_logistics_job"),
+      migration.indexOf("create or replace function public.refresh_logistics_job_matches"),
+    ),
+    "and service.service_key = request_service_key",
+    "customer job matching does not require knowing a provider's internal service key",
+  );
+});
+
 Deno.test("LGA and state coverage includes eligible descendant locations", () => {
   requireText(migration, "public.logistics_geography_is_covered", "geography hierarchy matching helper");
   requireText(migration, "with recursive requested_ancestors", "requested geography ancestor traversal");
