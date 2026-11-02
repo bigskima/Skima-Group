@@ -94,7 +94,7 @@ export function ProviderOpportunitiesScreen() {
       if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter a positive offer amount.");
       const minor = amount * (10 ** selected.decimals);
       if (!Number.isSafeInteger(Math.round(minor)) || Math.abs(minor - Math.round(minor)) > 1e-7) {
-        throw new Error(\`Enter an amount with no more than \${selected.decimals} decimal places.\`);
+        throw new Error(`Enter an amount with no more than ${selected.decimals} decimal places.`);
       }
       const durationMinutes = duration.trim() ? Number(duration) : null;
       if (durationMinutes !== null && (!Number.isSafeInteger(durationMinutes) || durationMinutes <= 0)) {
@@ -177,7 +177,7 @@ export function ProviderOpportunitiesScreen() {
                 return <Pressable key={key} onPress={() => setFilter(key)} style={[styles.filter, { backgroundColor: chosen ? palette.brand : palette.surface, borderColor: chosen ? palette.brand : palette.border }]}><Text style={[styles.filterText, { color: chosen ? "#FFFFFF" : palette.muted }]}>{key === "all" ? "All" : key[0].toUpperCase()+key.slice(1)}</Text></Pressable>;
               })}
             </View>
-            <SectionHeader title="Matched to your company" description={\`\${opportunities.length} \${opportunities.length === 1 ? "opportunity" : "opportunities"}\`} />
+            <SectionHeader title="Matched to your company" description={`${opportunities.length} ${opportunities.length === 1 ? "opportunity" : "opportunities"}`} />
             <View style={styles.list}>
               {opportunities.map((item) => {
                 const opportunityId = asString(item, "id") ?? "";
@@ -211,7 +211,7 @@ export function ProviderOpportunitiesScreen() {
                       <RouteLine color={palette.success} label={locationName(snapshot?.destination)} />
                     </View>
                     <View style={styles.summaryRow}>
-                      <View style={styles.summaryItem}><Weight color={palette.muted} size={13} /><Text style={[styles.summaryText, { color: palette.muted }]}>{durationKg ? \`\${durationKg} kg\` : "Weight not set"}</Text></View>
+                      <View style={styles.summaryItem}><Weight color={palette.muted} size={13} /><Text style={[styles.summaryText, { color: palette.muted }]}>{durationKg ? `${durationKg} kg` : "Weight not set"}</Text></View>
                       <Text style={[styles.summaryText, { color: palette.muted }]} numberOfLines={1}>{cargoTypes(cargo?.cargo_type_keys)}</Text>
                     </View>
                     {expanded ? (
@@ -221,8 +221,8 @@ export function ProviderOpportunitiesScreen() {
                         <View style={[styles.contact, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
                           <View style={styles.contactHead}><ShieldCheck color={palette.success} size={15} /><Text style={[styles.contactTitle, { color: palette.ink }]}>Customer contact</Text><Text style={[styles.contactTag, { color: palette.success }]}>Matched provider only</Text></View>
                           <Text style={[styles.contactName, { color: palette.ink }]}>{asString(contact, "name") ?? "Customer"}</Text>
-                          {asString(contact, "phone") ? <Pressable accessibilityRole="button" onPress={() => void Linking.openURL(\`tel:\${asString(contact, "phone")}\`)} style={styles.contactLine}><Phone color={palette.brand} size={14} /><Text style={[styles.contactValue, { color: palette.brand }]}>{asString(contact, "phone")}</Text></Pressable> : null}
-                          {asString(contact, "email") ? <Pressable accessibilityRole="button" onPress={() => void Linking.openURL(\`mailto:\${asString(contact, "email")}\`)} style={styles.contactLine}><Mail color={palette.brand} size={14} /><Text style={[styles.contactValue, { color: palette.brand }]}>{asString(contact, "email")}</Text></Pressable> : null}
+                          {asString(contact, "phone") ? <Pressable accessibilityRole="button" onPress={() => void Linking.openURL(`tel:${asString(contact, "phone")}`)} style={styles.contactLine}><Phone color={palette.brand} size={14} /><Text style={[styles.contactValue, { color: palette.brand }]}>{asString(contact, "phone")}</Text></Pressable> : null}
+                          {asString(contact, "email") ? <Pressable accessibilityRole="button" onPress={() => void Linking.openURL(`mailto:${asString(contact, "email")}`)} style={styles.contactLine}><Mail color={palette.brand} size={14} /><Text style={[styles.contactValue, { color: palette.brand }]}>{asString(contact, "email")}</Text></Pressable> : null}
                         </View>
                         {isCustomerCounter ? (
                           <Card variant="warning" padding="sm">
@@ -256,7 +256,7 @@ export function ProviderOpportunitiesScreen() {
             <Text style={[styles.sheetEyebrow, { color: palette.brand }]}>{selected?.action === "counter" ? "PROVIDER COUNTEROFFER" : "PROVIDER QUOTE"}</Text>
             <Text style={[styles.sheetTitle, { color: palette.ink }]}>{selected?.action === "counter" ? "Respond to customer" : "Send your offer"}</Text>
             <Text style={[styles.description, { color: palette.muted }]} numberOfLines={2}>{selected?.jobTitle}</Text>
-            <AppField label={\`Your price (\${selected?.currency ?? ""})\`} value={price} onChangeText={setPrice} keyboardType="decimal-pad" placeholder="Enter total delivery price" />
+            <AppField label={`Your price (${selected?.currency ?? ""})`} value={price} onChangeText={setPrice} keyboardType="decimal-pad" placeholder="Enter total delivery price" />
             <AppField label="Estimated time (minutes)" value={duration} onChangeText={setDuration} keyboardType="number-pad" placeholder="e.g. 120" optional />
             <AppField label="Offer notes" value={terms} onChangeText={setTerms} multiline placeholder="Included services, conditions or exclusions…" optional />
             <View style={[styles.feeNote, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={15} /><Text style={[styles.feeNoteText, { color: palette.ink }]}>There is no lead unlock fee. Provider fees follow the confirmed booking’s selected payment mode.</Text></View>
