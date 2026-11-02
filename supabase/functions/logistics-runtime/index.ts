@@ -396,7 +396,7 @@ async function handleLogisticsRequest(
     const paymentIdempotencyKey = requireString(p.idempotencyKey, "idempotencyKey");
 
     const bookingResult = await supabase.from("logistics_bookings")
-      .select("id,order_id,service_request_id,requester_user_id,payment_mode,status,currency_code,total_customer_charge,escrow_hold_id")
+      .select("id,order_id,service_request_id,requester_user_id,payment_mode,status,currency_code,total_customer_charge,escrow_hold_id,policy_snapshots")
       .eq("id", bookingId)
       .eq("requester_user_id", requesterUserId)
       .maybeSingle();
@@ -450,13 +450,17 @@ async function handleLogisticsRequest(
       target_customer_wallet_id: walletId,
       target_escrow_wallet_id: null,
       target_source: "platform.logistics.bookings",
-      target_idempotency_key: paymentIdempotencyKey,
+      // A server-derived booking key prevents a second wallet hold if a client
+      // retries with a new key after the first hold succeeded but before the
+      // booking projection was updated.
+      target_idempotency_key: `logistics-booking:${booking.id}:online-wallet:v1`,
       target_metadata: {
         module_key: "logistics_network",
         logistics_booking_id: booking.id,
         service_request_id: booking.service_request_id,
         payment_channel: "customer_wallet",
-        policy_snapshots: "booking_policy_snapshot",
+        client_idempotency_key: paymentIdempotencyKey,
+        policy_snapshots: booking.policy_snapshots,
       },
     });
     if (fundingResult.error) return databaseError(fundingResult.error, id);
@@ -492,7 +496,7 @@ async function handleLogisticsRequest(
     const paymentIdempotencyKey = requireString(p.idempotencyKey, "idempotencyKey");
 
     const bookingResult = await supabase.from("logistics_bookings")
-      .select("id,requester_user_id,payment_mode,status,currency_code,customer_booking_fee_amount,provider_receival_fee_amount")
+      .select("id,requester_user_id,payment_mode,status,currency_code,customer_booking_fee_amount,provider_receival_fee_amount,offline_fee_transaction_id")
       .eq("id", bookingId)
       .eq("requester_user_id", requesterUserId)
       .maybeSingle();
@@ -500,6 +504,21 @@ async function handleLogisticsRequest(
     if (!bookingResult.data) return jsonResponse({ ok: false, error: "logistics_booking_not_found", requestId: id }, 404);
     if (bookingResult.data.payment_mode !== "offline") {
       return jsonResponse({ ok: false, error: "wrong_payment_mode", message: "This booking requires online wallet payment.", requestId: id }, 409);
+    }
+    if (bookingResult.data.status === "offline_payment_confirmed") {
+      return jsonResponse({
+        ok: true,
+        data: {
+          bookingId,
+          status: "offline_payment_confirmed",
+          feeTransactionId: bookingResult.data.offline_fee_transaction_id,
+          paymentMode: "offline",
+        },
+        requestId: id,
+      });
+    }
+    if (bookingResult.data.status !== "awaiting_offline_confirmation") {
+      return jsonResponse({ ok: false, error: "booking_not_confirmable", message: "This booking is not awaiting offline payment confirmation.", requestId: id }, 409);
     }
 
     const walletResult = await supabase.from("wallet_accounts")
@@ -527,12 +546,15 @@ async function handleLogisticsRequest(
     });
     if (confirmation.error) return databaseError(confirmation.error, id);
 
+    const confirmationData = isRecord(confirmation.data) ? confirmation.data : {};
     return jsonResponse({
       ok: true,
       data: {
         bookingId,
-        status: "offline_payment_confirmed",
-        feeTransactionId: confirmation.data,
+        status: confirmationData.status === "offline_payment_confirmed" ? "offline_payment_confirmed" : bookingResult.data.status,
+        feeTransactionId: typeof confirmationData.fee_transaction_id === "string"
+          ? confirmationData.fee_transaction_id
+          : null,
         paymentMode: "offline",
       },
       requestId: id,
