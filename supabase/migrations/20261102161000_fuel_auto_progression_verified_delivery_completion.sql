@@ -186,7 +186,7 @@ begin
       where event.idempotency_key=target_idempotency_key||':event'
         and event.product_key=target_product_key
         and event.currency_code=target_currency_code
-        and event.after_snapshot->>'price_per_litre'=target_price_per_litre::text
+        and nullif(event.after_snapshot->>'price_per_litre','')::numeric=target_price_per_litre
         and (event.after_snapshot->>'enabled')::boolean=target_enabled
     ) then
       raise exception using errcode='23505',message='Fuel managed price idempotency key was reused with different values';
