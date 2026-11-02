@@ -957,7 +957,7 @@ language sql
 stable
 security definer
 set search_path = public
-as $
+as $$
   with recursive requested_ancestors(id, parent_id) as (
     select geography.id, geography.parent_id
     from public.geographies geography
@@ -975,7 +975,7 @@ as $
       select 1 from requested_ancestors
       where requested_ancestors.id = target_coverage_geography_id
     );
-$;
+$$;
 
 create or replace function public.update_logistics_provider_profile(
   target_organization_id uuid,
