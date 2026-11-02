@@ -2,7 +2,7 @@ import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CheckCircle2, Clock3, MapPin, PackageCheck, Phone, ShieldCheck, Truck, UserRound } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { asNumber, asString, useLogisticsQuery } from "../api/logistics";
@@ -55,14 +55,24 @@ export function ProviderBookingDetailScreen() {
   const [recipientName, setRecipientName] = useState("");
   const [deliveryNote, setDeliveryNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const actionKeysRef = useRef(new Map<string, string>());
 
   const mutateAction = useMutation({
     mutationFn: async (action: "accept" | "start" | "deliver") => {
       if (!bookingId) throw new Error("Booking id is missing.");
-      const key = createClientIdempotencyKey(`logistics.provider.booking.${action}`, bookingId);
+      if (action === "deliver" && recipientName.trim().length < 2) {
+        throw new Error("Enter the name of the person receiving the delivery.");
+      }
+      const fingerprint = action === "deliver"
+        ? `deliver:${recipientName.trim()}:${deliveryNote.trim()}`
+        : action;
+      let key = actionKeysRef.current.get(fingerprint);
+      if (!key) {
+        key = createClientIdempotencyKey(`logistics.provider.booking.${action}`, `${bookingId}:${fingerprint}`);
+        actionKeysRef.current.set(fingerprint, key);
+      }
       if (action === "accept") return api.post("/runtime/logistics/bookings/accept", { bookingId, idempotencyKey: key }, z.string().uuid());
       if (action === "start") return api.post("/runtime/logistics/bookings/start", { bookingId, idempotencyKey: key }, z.string().uuid());
-      if (recipientName.trim().length < 2) throw new Error("Enter the name of the person receiving the delivery.");
       return api.post("/runtime/logistics/bookings/delivery/submit", {
         bookingId,
         idempotencyKey: key,
