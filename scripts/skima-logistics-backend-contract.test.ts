@@ -4,7 +4,10 @@ const migrationBase = await Deno.readTextFile(
 const migrationHardening = await Deno.readTextFile(
   "supabase/migrations/20261102111500_logistics_marketplace_tenant_and_matching_hardening.sql",
 );
-const migration = migrationBase + "\n" + migrationHardening;
+const migrationBooking = await Deno.readTextFile(
+  "supabase/migrations/20261102113000_logistics_booking_and_payment_modes.sql",
+);
+const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
 const moduleRouter = await Deno.readTextFile("supabase/migrations/20261102005600_fuel_module_runtime_router_and_security.sql");
@@ -34,6 +37,8 @@ const domainTables = [
   "logistics_offers",
   "logistics_negotiation_messages",
   "logistics_job_events",
+  "logistics_bookings",
+  "logistics_booking_events",
 ] as const;
 
 Deno.test("Logistics has a separate module, route namespace and deployment target", () => {
@@ -153,6 +158,57 @@ Deno.test("Provider and rematch controls are permission-gated and the internal e
   requireText(migration, "to service_role", "event writer is internal only");
   requireText(migration, "platform.super_admin", "platform super admin receives marketplace management permission");
   requireText(migration, "platform.company_admin", "company admin receives marketplace management permission");
+});
+
+Deno.test("Booking creates locked customer/provider fee snapshots from approved financial policies", () => {
+  requireText(migrationBooking, "'fees.logistics.customer_booking'", "customer booking fee policy definition");
+  requireText(migrationBooking, "'fees.logistics.provider_receival'", "offline provider receival fee definition");
+  requireText(migrationBooking, "'commission.logistics.provider'", "online provider commission definition");
+  requireText(migrationBooking, "public.resolve_financial_policy(", "universal financial policy resolver");
+  requireText(migrationBooking, "policy_snapshots", "immutable booking policy snapshots");
+  requireText(migrationBooking, "target_payment_mode", "payment-mode-specific policy resolution");
+  requireText(migrationBooking, "target_module_key", "policy module scoping");
+  requireText(migrationBooking, "offer_record.organization_id", "policy provider-tenant scoping");
+  requireNotText(migrationBooking, "insert into public.financial_policy_versions", "no guessed/active fee amounts are seeded");
+});
+
+Deno.test("Offline and online fee paths are exclusive and cannot double-charge providers", () => {
+  requireText(migrationBooking, "target_payment_mode = 'offline'", "offline path gate");
+  requireText(migrationBooking, "target_payment_mode = 'online_wallet'", "online path gate");
+  requireText(migrationBooking, "provider_receival_fee_amount = 0", "online has no receival fee");
+  requireText(migrationBooking, "provider_commission_amount = 0", "offline has no commission");
+  requireText(migrationBooking, "provider_receival_policy", "offline receival policy");
+  requireText(migrationBooking, "provider_commission_policy", "online commission policy");
+  requireText(migrationBooking, "total_customer_charge = delivery_amount + customer_booking_fee_amount", "customer booking fee is charged in both modes");
+});
+
+Deno.test("Online payment reserves one escrow hold from the customer's own wallet", () => {
+  requireText(runtime, '"/runtime/logistics/bookings/pay"', "online payment API route");
+  requireText(runtime, '.eq("owner_entity_id", requesterUserId)', "wallet owner is the authenticated requester");
+  requireText(runtime, '.eq("wallet_type", "customer")', "customer wallet type check");
+  requireText(runtime, 'createServiceClient(supabaseUrl, serviceRoleKey)', "server-side financial client");
+  requireText(runtime, 'serviceClient.rpc("fund_order_from_wallet"', "shared escrow funding engine");
+  requireText(runtime, 'logistics-booking:', "server-derived stable payment idempotency key");
+  requireText(runtime, 'online-wallet:v1', "versioned wallet payment idempotency suffix");
+  requireText(runtime, 'serviceClient.rpc("mark_logistics_booking_payment_reserved"', "booking/hold linkage");
+  requireText(migrationBooking, "hold_record.hold_amount <> booking_record.total_customer_charge", "escrow amount must equal locked customer charge");
+});
+
+Deno.test("Offline payment debits only the two configured fees and returns a retry-safe result", () => {
+  requireText(runtime, '"/runtime/logistics/bookings/offline/confirm"', "offline confirmation API route");
+  requireText(runtime, 'serviceClient.rpc("confirm_logistics_offline_booking_payment"', "server-side offline fee collection");
+  requireText(runtime, 'bookingResult.data.status === "offline_payment_confirmed"', "already confirmed offline booking retry");
+  requireText(migrationBooking, "public.post_financial_transaction(", "existing immutable double-entry ledger");
+  requireText(migrationBooking, "'customer_booking_fee'", "customer booking fee debit");
+  requireText(migrationBooking, "'provider_offline_receival_fee'", "provider receival debit");
+  requireText(migrationBooking, "'logistics_marketplace_fee_revenue'", "platform fee revenue credit");
+  requireText(migrationBooking, "'fee_transaction_id'", "structured offline confirmation result");
+});
+
+Deno.test("Booking and payment routes do not expose the service-role credential", () => {
+  requireText(runtime, 'Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")', "server-only service-role environment");
+  requireNotText(runtime, "serviceRoleKey:", "service-role key is not serialized in a response");
+  requireText(migrationBooking, "from public,anon,authenticated", "payment confirmation RPC is service-role only");
 });
 
 Deno.test("Free provider opportunity access has no lead unlock charge", () => {
