@@ -88,7 +88,7 @@ Deno.test("Customer home, activity and request screens read live Logistics servi
   requireText(home, "StatePanel", "home failure presentation");
   requireText(jobs, '"/runtime/logistics/jobs"', "customer request list API");
   requireText(jobs, "StatusPill", "consistent request status treatment");
-  requireText(request, '"/runtime/logistics/geographies?countryCode=NG', "Nigeria geography catalogue");
+  requireText(geography, "/runtime/logistics/geographies?countryCode=NG&search=", "Nigeria geography catalogue");
   requireText(request, '"/runtime/logistics/jobs"', "customer job publish route");
   requireText(request, "createClientIdempotencyKey", "request submission idempotency");
   requireText(request, "step === 3", "three-stage review before publish");
@@ -106,7 +106,7 @@ Deno.test("Geography search is debounced and uses SKIMA's active location regist
 
 Deno.test("Request detail compares matched providers and only shows a current provider quote as selectable", () => {
   requireText(detail, '"/runtime/logistics/opportunities"', "matched provider opportunities");
-  requireText(detail, '"/runtime/logistics/offers?jobId=', "provider quotes");
+  requireText(detail, "/runtime/logistics/offers?jobId=", "provider quotes");
   requireText(detail, "provider_name", "matched company identity");
   requireText(detail, "latestProviderOffer", "latest provider offer selection");
   requireText(detail, '["provider_quote", "provider_counter"]', "provider-originated quote filtering");
@@ -159,8 +159,8 @@ Deno.test("Provider workspace has separate company, opportunities and jobs route
   requireText(providerBookingDetail, "/runtime/logistics/bookings/start", "provider start lifecycle");
   requireText(providerBookingDetail, "/runtime/logistics/bookings/delivery/submit", "provider delivery submission lifecycle");
   requireText(providerRoutes, "ProviderTabs", "provider tab route layout");
-  requireText(providerWorkRoute, "ProviderJobsScreen", "provider jobs route");
-  requireText(providerJobRoute, "ProviderBookingDetailScreen", "provider booking detail route");
+  requireText(providerJobRoute, "ProviderJobsScreen", "provider jobs route");
+  requireText(providerWorkRoute, "ProviderBookingDetailScreen", "provider booking detail route");
 });
 
 Deno.test("Provider matched opportunities are free and enable customer contact and quote negotiation", () => {
