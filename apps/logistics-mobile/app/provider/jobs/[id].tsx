@@ -1,2 +1,2 @@
-import { ProviderOpportunityScreen } from "../../../src/screens/ProviderOpportunityScreen";
-export default function ProviderOpportunityRoute() { return <ProviderOpportunityScreen />; }
+import { ProviderBookingDetailScreen } from "../../../src/screens/ProviderBookingDetailScreen";
+export default function ProviderBookingDetailRoute() { return <ProviderBookingDetailScreen />; }
