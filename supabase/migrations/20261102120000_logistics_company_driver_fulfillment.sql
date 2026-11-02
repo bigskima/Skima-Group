@@ -556,6 +556,10 @@ begin
       updated_at = timezone('utc',now())
   where id = assignment_record.id;
 
+  update public.driver_profiles
+  set operational_status = 'busy',updated_at = timezone('utc',now())
+  where id = assignment_record.driver_profile_id and operational_status = 'available';
+
   update public.service_requests set status = 'in_progress',updated_at = timezone('utc',now())
   where id = booking_record.service_request_id;
   update public.order_records
@@ -622,7 +626,7 @@ begin
 
   select * into assignment_record from public.logistics_booking_driver_assignments
   where booking_id = booking_record.id
-    and status in ('in_progress','picked_up','in_transit')
+    and status = 'in_transit'
   order by created_at desc limit 1 for update;
 
   if assignment_record.id is null or
