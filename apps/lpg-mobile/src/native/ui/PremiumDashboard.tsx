@@ -113,7 +113,7 @@ export function CustomerDashboard() {
         if (!hasPrice || !hasStock) return [];
         const media = (storefront.media.data ?? [])
           .filter((record) => record.item_id === itemId && record.status === "active")
-          .sort((left, right) => firstNumber(left, ["display_order"]) - firstNumber(right, ["display_order"]));
+          .sort((left, right) => (firstNumber(left, ["display_order"]) ?? 0) - (firstNumber(right, ["display_order"]) ?? 0));
         return [{
           id: itemId,
           name: displayTitle(item),
