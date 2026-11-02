@@ -499,7 +499,7 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
 
       <section className="sk-panel catalog-v2__form-card">
         <div className="sk-panel__header"><div><p className="admin-section-kicker">Driver & vehicle control</p><h2>Product-specific qualifications</h2></div><Truck size={21} /></div>
-        <p className="skima-muted">Fuel driver approvals are mode-specific. These three modes are not interchangeable: Station Managed uses the station's own registered driver and branch vehicle; Independent Driver uses an approved independent provider with their non-SKIMA vehicle; SKIMA Managed uses an internal SKIMA driver and SKIMA-owned fleet vehicle.</p>
+        <p className="skima-muted">Fuel driver approvals are mode-specific. These three modes are not interchangeable: Station Managed uses the station's own registered driver and branch vehicle; Independent Managed uses an approved independent provider with their own non-SKIMA vehicle; SKIMA Managed / SKIMA Fleet uses an internal SKIMA driver and SKIMA-owned fleet vehicle.</p>
         <div className="skima-form-grid">
           <SelectInput label="Fulfilment mode" value={qualificationForm.fulfillmentMode} onChange={(event) => setQualificationForm({
             ...qualificationForm,
@@ -509,8 +509,8 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
             stationManagedDriverId: event.currentTarget.value === "station_managed" ? qualificationForm.stationManagedDriverId : "",
           })} options={[
             { label: "Station Managed · station driver + branch vehicle", value: "station_managed" },
-            { label: "Independent Driver · independent provider + own vehicle", value: "independent_driver" },
-            { label: "SKIMA Managed · internal driver + SKIMA fleet", value: "skima_managed" },
+            { label: "Independent Managed · provider + own vehicle", value: "independent_driver" },
+            { label: "SKIMA Managed / SKIMA Fleet · internal driver + fleet vehicle", value: "skima_managed" },
           ]} />
           <TextInput label="Driver user ID" value={qualificationForm.driverUserId} onChange={(event) => setQualificationForm({ ...qualificationForm, driverUserId: event.currentTarget.value })} />
           {qualificationForm.fulfillmentMode === "station_managed" ? (
@@ -537,13 +537,13 @@ export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }
 
       <section className="sk-panel catalog-v2__form-card">
         <div className="sk-panel__header">
-          <div><p className="admin-section-kicker">SKIMA dispatch</p><h2>Independent & SKIMA Managed orders ready for a driver</h2></div>
+          <div><p className="admin-section-kicker">SKIMA dispatch</p><h2>Independent Managed & SKIMA Fleet orders ready for a driver</h2></div>
           <Truck size={21} />
         </div>
-        <p className="skima-muted">These two modes are dispatched by SKIMA, not by the station. Independent orders can only use an approved Independent Driver and a non-SKIMA vehicle. SKIMA Managed orders can only use an approved internal SKIMA driver and a SKIMA-owned fleet vehicle. Station Managed orders never appear in this queue.</p>
+        <p className="skima-muted">These two modes are dispatched by SKIMA, not by the station. Independent Managed orders use an approved independent provider and their own vehicle. SKIMA Managed / SKIMA Fleet orders use an approved internal SKIMA driver and a SKIMA-owned fleet vehicle. Station Managed orders never appear in this queue.</p>
         {dispatchQueue.isLoading ? <LoadingState label="Loading SKIMA Fuel dispatch queue" /> : null}
         {(dispatchQueue.data ?? []).filter((order) => ["independent_driver", "skima_managed"].includes(catalogText(order, "fulfillment_mode"))).length === 0 ? (
-          <p className="skima-muted">No Independent Driver or SKIMA Managed Fuel orders are waiting for SKIMA dispatch.</p>
+          <p className="skima-muted">No Independent Managed or SKIMA Fleet Fuel orders are waiting for SKIMA dispatch.</p>
         ) : (
           <div className="fuel-admin-list">
             {(dispatchQueue.data ?? []).filter((order) => ["independent_driver", "skima_managed"].includes(catalogText(order, "fulfillment_mode"))).map((order) => {
