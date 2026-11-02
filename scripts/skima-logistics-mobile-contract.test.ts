@@ -169,7 +169,7 @@ Deno.test("Provider matched opportunities are free and enable customer contact a
   requireText(providerOpportunities, "createClientIdempotencyKey", "retry-safe provider offer submission");
   requireText(providerOpportunities, '"/runtime/logistics/offers"', "provider quote submission");
   requireText(providerOpportunities, '"/runtime/logistics/offers/counter"', "provider counteroffer response");
-  requireText(providerOpportunities, "No lead unlock fee", "free opportunity access");
+  requireText(providerOpportunities, "There is no lead unlock fee", "free opportunity access");
 });
 
 Deno.test("Provider delivery payload is normalized to the database contract", () => {
