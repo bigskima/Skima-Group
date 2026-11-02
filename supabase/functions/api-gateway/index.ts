@@ -170,7 +170,10 @@ const ROUTES = new Set([
   "/lpg/maps/providers/status",
   "/runtime/catalog",
   "/runtime/storefront/settings",
+  "/runtime/storefront/full-settings",
   "/runtime/storefront/products",
+  "/runtime/storefront/orders",
+  "/runtime/storefront/checkout",
   "/runtime/session-context",
   "/runtime/profile/avatar",
   "/runtime/catalog/units",
@@ -3450,42 +3453,396 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     });
   }
 
-  if (routePath === "/runtime/storefront/settings") {
-    if (request.method === "GET") {
-      return selectRecords(
-        supabase
-          .from("storefront_settings")
-          .select(
-            "id,module_id,organization_id,branch_id,currency_code,fulfillment_method,fulfillment_methods,status,metadata,created_at,updated_at",
-          )
-          .order("updated_at", { ascending: false }),
-        id,
-      );
+  if (routePath === "/runtime/storefront/settings" && request.method === "GET") {
+    return selectRecords(
+      supabase
+        .from("storefront_settings")
+        .select(
+          "id,module_id,organization_id,branch_id,currency_code,fulfillment_method,fulfillment_methods,status,delivery_origin_label,delivery_origin_formatted_address,delivery_origin_latitude,delivery_origin_longitude,delivery_base_fee_amount,delivery_per_km_fee_amount,delivery_radius_km,free_delivery_minimum_amount,minimum_order_amount,pickup_location_label,pickup_formatted_address,pickup_instructions,metadata,created_at,updated_at",
+        )
+        .order("updated_at", { ascending: false }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/storefront/settings" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("configure_storefront_settings", {
+        target_branch_id: optionalUuid(payload.branchId, "branchId"),
+        target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
+        target_fulfillment_method: optionalString(payload.fulfillmentMethod) ?? "delivery",
+        target_fulfillment_methods: optionalStringArray(payload.fulfillmentMethods) ?? ["delivery", "pickup"],
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_organization_id: requireUuid(payload.organizationId, "organizationId"),
+        target_status: optionalString(payload.status) ?? "active",
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/storefront/full-settings" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("configure_storefront_fulfillment_settings", {
+        target_branch_id: optionalUuid(payload.branchId, "branchId"),
+        target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
+        target_delivery_base_fee_amount: requireNumber(payload.deliveryBaseFeeAmount, "deliveryBaseFeeAmount"),
+        target_delivery_origin_formatted_address: optionalString(payload.deliveryOriginFormattedAddress),
+        target_delivery_origin_label: optionalString(payload.deliveryOriginLabel),
+        target_delivery_origin_latitude: optionalNumber(payload.deliveryOriginLatitude, "deliveryOriginLatitude"),
+        target_delivery_origin_longitude: optionalNumber(payload.deliveryOriginLongitude, "deliveryOriginLongitude"),
+        target_delivery_per_km_fee_amount: requireNumber(payload.deliveryPerKmFeeAmount, "deliveryPerKmFeeAmount"),
+        target_delivery_radius_km: optionalNumber(payload.deliveryRadiusKm, "deliveryRadiusKm"),
+        target_fulfillment_method: optionalString(payload.fulfillmentMethod) ?? "delivery",
+        target_fulfillment_methods: optionalStringArray(payload.fulfillmentMethods) ?? ["delivery", "pickup"],
+        target_free_delivery_minimum_amount: optionalNumber(payload.freeDeliveryMinimumAmount, "freeDeliveryMinimumAmount"),
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: optionalRecord(payload.metadata) ?? {},
+        target_minimum_order_amount: requireNumber(payload.minimumOrderAmount, "minimumOrderAmount"),
+        target_organization_id: requireUuid(payload.organizationId, "organizationId"),
+        target_pickup_formatted_address: optionalString(payload.pickupFormattedAddress),
+        target_pickup_instructions: optionalString(payload.pickupInstructions),
+        target_pickup_location_label: optionalString(payload.pickupLocationLabel),
+        target_status: optionalString(payload.status) ?? "active",
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/storefront/orders" && request.method === "GET") {
+    const moduleResult = await supabase
+      .from("business_modules")
+      .select("id")
+      .eq("key", "store")
+      .eq("status", "active")
+      .maybeSingle();
+    if (moduleResult.error) return databaseError(moduleResult.error, id);
+    if (!moduleResult.data) return jsonResponse({ ok: true, data: [], requestId: id });
+
+    let orderQuery = supabase
+      .from("order_records")
+      .select("id,service_request_id,module_id,module_version_id,organization_id,branch_id,requester_user_id,status,fulfillment_method,currency_code,subtotal_amount,fee_amount,discount_amount,tax_amount,total_amount,order_payload,metadata,accepted_at,preparing_at,ready_at,fulfilled_at,completed_at,cancelled_at,created_at,updated_at,line_items:order_line_items(id,line_number,item_id,variant_id,quantity,unit_amount,line_amount,currency_code,fulfillment_status,item_snapshot)")
+      .eq("module_id", moduleResult.data.id)
+      .eq("requester_user_id", authResult.user.id)
+      .eq("order_payload->>channel", "skima_store")
+      .order("created_at", { ascending: false });
+    const requestedOrderId = url.searchParams.get("orderId");
+    if (requestedOrderId) orderQuery = orderQuery.eq("id", requireUuid(requestedOrderId, "orderId"));
+    return selectRecords(orderQuery, id);
+  }
+
+  if (routePath === "/runtime/storefront/checkout" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const lineItems = requireArray(payload.lineItems, "lineItems");
+    if (lineItems.length === 0) throw new RequestValidationError("Add at least one product before checkout.");
+
+    const fulfillmentMethod = requireString(payload.fulfillmentMethod, "fulfillmentMethod");
+    if (!["delivery", "pickup"].includes(fulfillmentMethod)) {
+      throw new RequestValidationError("Store fulfillment must be delivery or pickup.");
+    }
+    const customerWalletId = requireUuid(payload.customerWalletId, "customerWalletId");
+    const checkoutKey = requireString(payload.idempotencyKey, "idempotencyKey");
+    const customerNote = optionalString(payload.customerNote)?.trim().slice(0, 1200) ?? "";
+    const requestedLocationId = optionalUuid(payload.deliveryLocationId, "deliveryLocationId");
+
+    const moduleResult = await supabase
+      .from("business_modules")
+      .select("id")
+      .eq("key", "store")
+      .eq("status", "active")
+      .maybeSingle();
+    if (moduleResult.error) return databaseError(moduleResult.error, id);
+    if (!moduleResult.data) {
+      return jsonResponse({ ok: false, error: "store_unavailable", message: "SKIMA Store is not available yet.", requestId: id }, 503);
     }
 
-    if (request.method === "POST") {
-      const body = await readJsonBody(request, id);
+    const settingsResult = await supabase
+      .from("storefront_settings")
+      .select("id,module_id,organization_id,branch_id,currency_code,fulfillment_method,fulfillment_methods,status,delivery_origin_label,delivery_origin_formatted_address,delivery_origin_latitude,delivery_origin_longitude,delivery_base_fee_amount,delivery_per_km_fee_amount,delivery_radius_km,free_delivery_minimum_amount,minimum_order_amount,pickup_location_label,pickup_formatted_address,pickup_instructions")
+      .eq("module_id", moduleResult.data.id)
+      .eq("status", "active")
+      .maybeSingle();
+    if (settingsResult.error) return databaseError(settingsResult.error, id);
+    const settings = settingsResult.data;
+    if (!settings) {
+      return jsonResponse({ ok: false, error: "store_not_configured", message: "SKIMA Store has not been activated by an administrator.", requestId: id }, 409);
+    }
+    if (!Array.isArray(settings.fulfillment_methods) || !settings.fulfillment_methods.includes(fulfillmentMethod)) {
+      return jsonResponse({ ok: false, error: "fulfillment_unavailable", message: "That Store fulfillment option is not currently available.", requestId: id }, 409);
+    }
 
-      if ("response" in body) {
-        return body.response;
+    const walletResult = await supabase
+      .from("wallet_accounts")
+      .select("id,wallet_type,owner_entity_type,owner_entity_id,currency_code,status")
+      .eq("id", customerWalletId)
+      .eq("wallet_type", "customer")
+      .eq("owner_entity_type", "user")
+      .eq("owner_entity_id", authResult.user.id)
+      .eq("currency_code", settings.currency_code)
+      .eq("status", "active")
+      .maybeSingle();
+    if (walletResult.error) return databaseError(walletResult.error, id);
+    if (!walletResult.data) {
+      return jsonResponse({ ok: false, error: "customer_wallet_required", message: "Choose your own active customer wallet in the Store currency.", requestId: id }, 403);
+    }
+
+    let deliveryLocation: Record<string, unknown> | null = null;
+    if (fulfillmentMethod === "delivery") {
+      if (!requestedLocationId) {
+        return jsonResponse({ ok: false, error: "delivery_location_required", message: "Choose a saved delivery address before checkout.", requestId: id }, 400);
+      }
+      const locationResult = await supabase
+        .from("lpg_customer_locations")
+        .select("id,owner_user_id,label,formatted_address,latitude,longitude,landmark,delivery_instructions,contact_name,contact_phone,status,verification_status")
+        .eq("id", requestedLocationId)
+        .eq("owner_user_id", authResult.user.id)
+        .eq("status", "active")
+        .maybeSingle();
+      if (locationResult.error) return databaseError(locationResult.error, id);
+      if (!locationResult.data) {
+        return jsonResponse({ ok: false, error: "delivery_location_not_found", message: "That saved delivery address is no longer available. Choose another address.", requestId: id }, 404);
+      }
+      deliveryLocation = locationResult.data as Record<string, unknown>;
+    } else if (!settings.pickup_formatted_address) {
+      return jsonResponse({ ok: false, error: "pickup_not_configured", message: "Store customer pickup has not been configured yet.", requestId: id }, 409);
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) {
+      return jsonResponse({ ok: false, error: "server_misconfigured", message: "Secure Store wallet checkout is not configured on this SKIMA backend.", requestId: id }, 503);
+    }
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const source = "skima.store.customer";
+
+    const existingOrderResult = await serviceClient
+      .from("order_records")
+      .select("id,requester_user_id,module_id,status,currency_code,subtotal_amount,fee_amount,total_amount,order_payload,metadata,service_request_id")
+      .eq("source", source)
+      .eq("idempotency_key", checkoutKey)
+      .maybeSingle();
+    if (existingOrderResult.error) return databaseError(existingOrderResult.error, id);
+    if (existingOrderResult.data &&
+      (existingOrderResult.data.requester_user_id !== authResult.user.id ||
+        existingOrderResult.data.module_id !== moduleResult.data.id)) {
+      return jsonResponse({ ok: false, error: "idempotency_conflict", message: "This checkout key belongs to a different order. Start checkout again.", requestId: id }, 409);
+    }
+    const existingOrder = existingOrderResult.data;
+    if (existingOrder && ["cancelled", "failed", "rejected", "disputed"].includes(String(existingOrder.status))) {
+      return jsonResponse({ ok: false, error: "checkout_order_closed", message: "This checkout attempt was closed. Start checkout again.", requestId: id }, 409);
+    }
+
+    const locationSnapshot = deliveryLocation
+      ? {
+          id: deliveryLocation.id,
+          label: deliveryLocation.label,
+          formattedAddress: deliveryLocation.formatted_address,
+          latitude: deliveryLocation.latitude,
+          longitude: deliveryLocation.longitude,
+          landmark: deliveryLocation.landmark,
+          deliveryInstructions: deliveryLocation.delivery_instructions,
+          contactName: deliveryLocation.contact_name,
+          contactPhone: deliveryLocation.contact_phone,
+        }
+      : null;
+    const defaultOrderPayload = {
+      channel: "skima_store",
+      fulfillment_method: fulfillmentMethod,
+      customer_note: customerNote || null,
+      delivery_location: locationSnapshot,
+      pickup_location: fulfillmentMethod === "pickup" ? {
+        label: settings.pickup_location_label,
+        formattedAddress: settings.pickup_formatted_address,
+        instructions: settings.pickup_instructions,
+      } : null,
+    };
+    if (existingOrder &&
+      String((existingOrder.order_payload as Record<string, unknown>)?.channel ?? "") !== "skima_store") {
+      return jsonResponse({ ok: false, error: "idempotency_conflict", message: "This checkout key is already in use.", requestId: id }, 409);
+    }
+
+    let orderId: string;
+    if (existingOrder) {
+      orderId = existingOrder.id;
+    } else {
+      const createResult = await supabase.rpc("create_order_from_catalog", {
+        target_acceptance_policy_key: "store.order.acceptance.manual.v1",
+        target_branch_id: settings.branch_id,
+        target_currency_code: settings.currency_code,
+        target_fulfillment_method: fulfillmentMethod,
+        target_idempotency_key: checkoutKey,
+        target_line_items: lineItems,
+        target_metadata: { channel: "skima_store", storefront_module: "store", customer_app: "skima.lpg.mobile" },
+        target_module_key: "store",
+        target_order_payload: defaultOrderPayload,
+        target_organization_id: settings.organization_id,
+        target_source: source,
+      });
+      if (createResult.error) return databaseError(createResult.error, id);
+      orderId = requireUuid(createResult.data, "orderId");
+    }
+
+    const fullOrderResult = await serviceClient
+      .from("order_records")
+      .select("id,service_request_id,requester_user_id,module_id,status,currency_code,subtotal_amount,fee_amount,total_amount,order_payload,metadata")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (fullOrderResult.error) return databaseError(fullOrderResult.error, id);
+    if (!fullOrderResult.data ||
+      fullOrderResult.data.requester_user_id !== authResult.user.id ||
+      fullOrderResult.data.module_id !== moduleResult.data.id) {
+      return jsonResponse({ ok: false, error: "order_not_found", message: "The Store order could not be verified for this account.", requestId: id }, 404);
+    }
+    const order = fullOrderResult.data;
+
+    const lineItemsResult = await serviceClient
+      .from("order_line_items")
+      .select("line_amount,currency_code")
+      .eq("order_id", orderId);
+    if (lineItemsResult.error) return databaseError(lineItemsResult.error, id);
+    const subtotalAmount = (lineItemsResult.data ?? []).reduce((sum, line) => sum + Number(line.line_amount ?? 0), 0);
+    if (!Number.isFinite(subtotalAmount) || subtotalAmount <= 0) {
+      return jsonResponse({ ok: false, error: "invalid_store_order_total", message: "The Store order has no valid payable product total.", requestId: id }, 400);
+    }
+
+    const previousSnapshot = optionalRecord((order.order_payload as Record<string, unknown>)?.store_checkout_snapshot);
+    let deliveryFeeAmount = previousSnapshot ? Number(previousSnapshot.deliveryFeeAmount ?? 0) : 0;
+    let deliveryDistanceKm = previousSnapshot?.deliveryDistanceKm === null
+      ? null
+      : previousSnapshot && typeof previousSnapshot.deliveryDistanceKm === "number"
+        ? previousSnapshot.deliveryDistanceKm
+        : null;
+    let checkoutSnapshot = previousSnapshot;
+
+    if (!checkoutSnapshot) {
+      if (subtotalAmount < Number(settings.minimum_order_amount ?? 0)) {
+        await cancelUnfundedStoreOrder(serviceClient, orderId, checkoutKey, "minimum_order_not_met");
+        return jsonResponse({ ok: false, error: "minimum_order_not_met", message: "This basket is below the Store minimum order amount.", requestId: id }, 400);
       }
 
-      const payload = body.value;
-      return rpcResponse(
-        supabase.rpc("configure_storefront_settings", {
-          target_branch_id: optionalUuid(payload.branchId, "branchId"),
-          target_currency_code: optionalString(payload.currencyCode) ?? "NGN",
-          target_fulfillment_method: optionalString(payload.fulfillmentMethod) ?? "delivery",
-          target_fulfillment_methods: optionalStringArray(payload.fulfillmentMethods) ??
-            ["delivery", "pickup"],
-          target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
-          target_metadata: optionalRecord(payload.metadata) ?? {},
-          target_organization_id: requireUuid(payload.organizationId, "organizationId"),
-          target_status: optionalString(payload.status) ?? "active",
-        }),
-        id,
-      );
+      if (fulfillmentMethod === "delivery") {
+        const originLatitude = Number(settings.delivery_origin_latitude);
+        const originLongitude = Number(settings.delivery_origin_longitude);
+        const destinationLatitude = Number(deliveryLocation?.latitude);
+        const destinationLongitude = Number(deliveryLocation?.longitude);
+        if (![originLatitude, originLongitude, destinationLatitude, destinationLongitude].every(Number.isFinite)) {
+          await cancelUnfundedStoreOrder(serviceClient, orderId, checkoutKey, "invalid_delivery_coordinates");
+          return jsonResponse({ ok: false, error: "delivery_coordinates_required", message: "The Store delivery origin or saved address is missing valid coordinates.", requestId: id }, 409);
+        }
+        deliveryDistanceKm = haversineDistanceKm(originLatitude, originLongitude, destinationLatitude, destinationLongitude);
+        const maximumRadius = Number(settings.delivery_radius_km);
+        if (!Number.isFinite(maximumRadius) || maximumRadius <= 0 || deliveryDistanceKm > maximumRadius) {
+          await cancelUnfundedStoreOrder(serviceClient, orderId, checkoutKey, "outside_delivery_radius");
+          return jsonResponse({ ok: false, error: "outside_delivery_area", message: "This address is outside the current SKIMA Store delivery area. Choose pickup or another address.", requestId: id }, 409);
+        }
+        deliveryFeeAmount = Number(settings.delivery_base_fee_amount ?? 0) +
+          Number(settings.delivery_per_km_fee_amount ?? 0) * deliveryDistanceKm;
+        const freeThreshold = settings.free_delivery_minimum_amount === null ? null : Number(settings.free_delivery_minimum_amount);
+        if (freeThreshold !== null && subtotalAmount >= freeThreshold) deliveryFeeAmount = 0;
+      }
+      deliveryFeeAmount = Math.round(deliveryFeeAmount * 100) / 100;
+      checkoutSnapshot = {
+        subtotalAmount,
+        deliveryFeeAmount,
+        deliveryDistanceKm,
+        fulfillmentMethod,
+        deliveryLocation: locationSnapshot,
+        pickupLocation: defaultOrderPayload.pickup_location,
+        pricingCapturedAt: new Date().toISOString(),
+      };
     }
+
+    if (!Number.isFinite(deliveryFeeAmount) || deliveryFeeAmount < 0 ||
+      fulfillmentMethod !== String(checkoutSnapshot.fulfillmentMethod)) {
+      await cancelUnfundedStoreOrder(serviceClient, orderId, checkoutKey, "invalid_checkout_snapshot");
+      return jsonResponse({ ok: false, error: "invalid_checkout_snapshot", message: "The saved Store checkout details are invalid. Start checkout again.", requestId: id }, 409);
+    }
+    const totalAmount = Math.round((subtotalAmount + deliveryFeeAmount) * 100) / 100;
+    const orderPayloadWithSnapshot = {
+      ...(order.order_payload as Record<string, unknown>),
+      store_checkout_snapshot: checkoutSnapshot,
+    };
+    const updatedOrder = await serviceClient
+      .from("order_records")
+      .update({
+        fee_amount: deliveryFeeAmount,
+        total_amount: totalAmount,
+        order_payload: orderPayloadWithSnapshot,
+        metadata: {
+          ...(order.metadata as Record<string, unknown>),
+          store_checkout_snapshot: checkoutSnapshot,
+          storefront_module: "store",
+          channel: "skima_store",
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", orderId);
+    if (updatedOrder.error) return databaseError(updatedOrder.error, id);
+
+    const serviceRequestUpdated = await serviceClient
+      .from("service_requests")
+      .update({
+        request_payload: {
+          ...orderPayloadWithSnapshot,
+          order_id: orderId,
+          subtotal_amount: subtotalAmount,
+          fee_amount: deliveryFeeAmount,
+          total_amount: totalAmount,
+          currency_code: order.currency_code,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", order.service_request_id);
+    if (serviceRequestUpdated.error) return databaseError(serviceRequestUpdated.error, id);
+
+    const fundingResult = await serviceClient.rpc("fund_order_from_wallet", {
+      target_order_id: orderId,
+      target_customer_wallet_id: customerWalletId,
+      target_escrow_wallet_id: null,
+      target_source: "skima.store.checkout",
+      target_idempotency_key: checkoutKey + ":funding",
+      target_metadata: { storefront_module: "store", channel: "skima_store", delivery_fee_amount: deliveryFeeAmount },
+    });
+    if (fundingResult.error) {
+      await cancelUnfundedStoreOrder(serviceClient, orderId, checkoutKey, "wallet_funding_failed").catch(() => undefined);
+      const insufficient = /insufficient available wallet balance/i.test(fundingResult.error.message);
+      return jsonResponse({
+        ok: false,
+        error: insufficient ? "insufficient_wallet_balance" : "store_wallet_funding_failed",
+        message: insufficient ? "Your SKIMA Wallet balance is not enough for this order and delivery fee." : "SKIMA could not reserve payment for this order. No delivery will be dispatched.",
+        requestId: id,
+      }, insufficient ? 402 : 409);
+    }
+
+    const refreshed = await serviceClient
+      .from("order_records")
+      .select("metadata,status")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (refreshed.error) return databaseError(refreshed.error, id);
+    const metadata = optionalRecord(refreshed.data?.metadata) ?? {};
+    return jsonResponse({
+      ok: true,
+      data: {
+        orderId,
+        status: refreshed.data?.status ?? "payment_reserved",
+        paymentStatus: "reserved",
+        subtotalAmount,
+        deliveryFeeAmount,
+        totalAmount,
+        currencyCode: order.currency_code,
+        deliveryDistanceKm,
+        escrowHoldId: optionalString(metadata.escrow_hold_id),
+      },
+      requestId: id,
+    });
   }
 
   if (routePath === "/runtime/storefront/products" && request.method === "POST") {
@@ -13031,6 +13388,38 @@ async function adminAiRuntimeResponse(
     },
     requestId: id,
   });
+}
+
+async function cancelUnfundedStoreOrder(
+  serviceClient: SupabaseClient,
+  orderId: string,
+  idempotencyKey: string,
+  reason: string,
+): Promise<void> {
+  await serviceClient.rpc("process_order_action", {
+    target_action_key: "store.order.cancel",
+    target_idempotency_key: idempotencyKey + ":cancel:" + reason,
+    target_metadata: { channel: "skima_store", cancellation_reason: reason },
+    target_order_id: orderId,
+    target_payload: { reason },
+    target_reason: reason,
+    target_source: "skima.store.checkout",
+  });
+}
+
+function haversineDistanceKm(
+  fromLatitude: number,
+  fromLongitude: number,
+  toLatitude: number,
+  toLongitude: number,
+): number {
+  const radians = (degrees: number) => degrees * Math.PI / 180;
+  const latitudeDelta = radians(toLatitude - fromLatitude);
+  const longitudeDelta = radians(toLongitude - fromLongitude);
+  const a = Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(radians(fromLatitude)) * Math.cos(radians(toLatitude)) *
+    Math.sin(longitudeDelta / 2) ** 2;
+  return 6371.0088 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function createServiceClient(supabaseUrl: string, serviceRoleKey: string): SupabaseClient {
