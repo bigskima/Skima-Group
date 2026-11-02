@@ -411,9 +411,21 @@ async function handleLogisticsRequest(
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
     const p = body.value;
+    const deliverySubmission = requireRecord(p.deliverySubmission, "deliverySubmission");
+    const recipientName = requireString(
+      deliverySubmission.recipientName ?? deliverySubmission.recipient_name,
+      "deliverySubmission.recipientName",
+    );
+    const deliveryNote = optionalString(
+      deliverySubmission.deliveryNote ?? deliverySubmission.delivery_note,
+    );
+
     return rpcResponse(supabase.rpc("submit_logistics_booking_delivery", {
       target_booking_id: requireUuid(p.bookingId, "bookingId"),
-      target_delivery_submission: requireRecord(p.deliverySubmission, "deliverySubmission"),
+      target_delivery_submission: {
+        recipient_name: recipientName,
+        delivery_note: deliveryNote ?? null,
+      },
       target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
     }), id);
   }
