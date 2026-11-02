@@ -378,13 +378,88 @@ async function handleLogisticsRequest(
 
   if (routePath === "/runtime/logistics/bookings" && request.method === "GET") {
     let query = supabase.from("logistics_bookings")
-      .select("id,job_id,offer_id,requester_user_id,provider_organization_id,payment_mode,status,currency_code,delivery_amount,customer_booking_fee_amount,provider_receival_fee_amount,provider_commission_amount,provider_net_amount,total_customer_charge,policy_snapshots,service_request_id,order_id,escrow_hold_id,payment_transaction_id,offline_fee_transaction_id,settlement_execution_id,created_at,updated_at,job:logistics_job_requests(title,pickup_location,destination_location),offer:logistics_offers(delivery_price_minor,estimated_duration_minutes,terms)")
+      .select("id,job_id,offer_id,requester_user_id,provider_organization_id,payment_mode,status,currency_code,delivery_amount,customer_booking_fee_amount,provider_receival_fee_amount,provider_commission_amount,provider_net_amount,total_customer_charge,policy_snapshots,service_request_id,order_id,escrow_hold_id,payment_transaction_id,offline_fee_transaction_id,settlement_execution_id,provider_accepted_at,service_started_at,delivery_submitted_at,delivery_submitted_by,delivery_submission_snapshot,delivery_verified_at,delivery_verified_by,delivery_verification_snapshot,created_at,updated_at,job:logistics_job_requests(title,pickup_location,destination_location),offer:logistics_offers(delivery_price_minor,estimated_duration_minutes,terms,opportunity:logistics_job_opportunities(customer_contact_snapshot,job_snapshot))")
       .order("created_at", { ascending: false });
     const status = optionalString(url.searchParams.get("status"));
     const providerOrganizationId = optionalUuid(url.searchParams.get("providerOrganizationId"), "providerOrganizationId");
     if (status) query = query.eq("status", status);
     if (providerOrganizationId) query = query.eq("provider_organization_id", providerOrganizationId);
     return selectResponse(query, id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/accept" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("accept_logistics_booking", {
+      target_booking_id: requireUuid(p.bookingId, "bookingId"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/start" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("start_logistics_booking", {
+      target_booking_id: requireUuid(p.bookingId, "bookingId"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/delivery/submit" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("submit_logistics_booking_delivery", {
+      target_booking_id: requireUuid(p.bookingId, "bookingId"),
+      target_delivery_submission: requireRecord(p.deliverySubmission, "deliverySubmission"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/delivery/confirm" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    const bookingId = requireUuid(p.bookingId, "bookingId");
+    const idempotencyKey = requireString(p.idempotencyKey, "idempotencyKey");
+
+    const bookingResult = await supabase.from("logistics_bookings")
+      .select("id,requester_user_id,status,payment_mode")
+      .eq("id", bookingId)
+      .eq("requester_user_id", requesterUserId)
+      .maybeSingle();
+    if (bookingResult.error) return databaseError(bookingResult.error, id);
+    if (!bookingResult.data) {
+      return jsonResponse({ ok: false, error: "logistics_booking_not_found", requestId: id }, 404);
+    }
+    if (["settled", "completed_offline"].includes(bookingResult.data.status)) {
+      return jsonResponse({
+        ok: true,
+        data: { bookingId, status: bookingResult.data.status },
+        requestId: id,
+      });
+    }
+    if (bookingResult.data.status !== "delivered") {
+      return jsonResponse({
+        ok: false,
+        error: "delivery_not_ready_for_confirmation",
+        message: "The provider must submit delivery details before you can confirm completion.",
+        requestId: id,
+      }, 409);
+    }
+
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    const result = await serviceClient.rpc("confirm_logistics_booking_delivery", {
+      target_booking_id: bookingId,
+      target_requester_user_id: requesterUserId,
+      target_idempotency_key: idempotencyKey,
+    });
+    if (result.error) return databaseError(result.error, id);
+    return jsonResponse({ ok: true, data: result.data, requestId: id });
   }
 
   if (routePath === "/runtime/logistics/bookings/pay" && request.method === "POST") {
