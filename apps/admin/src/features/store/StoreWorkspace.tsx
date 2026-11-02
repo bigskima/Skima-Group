@@ -289,6 +289,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           </section>
           <section className="store-workspace__section">
             <AdminV2PageHeader eyebrow="Store operations" title="Recent Store orders" description="Customer orders submitted from the Store are recorded by the shared order engine and linked to the Store module." />
+            {processOrderAction.error ? <StatusBadge tone="danger">{catalogError(processOrderAction.error)}</StatusBadge> : null}
             <div className="sk-panel"><DataTable caption="Store orders" columns={orderColumns} records={storeOrders.slice(0, 20)} getRowKey={(item) => catalogText(item, "id")} emptyTitle="No Store orders yet" emptyMessage="Customer Store orders will appear here after the first checkout request." /></div>
           </section>
         </>
