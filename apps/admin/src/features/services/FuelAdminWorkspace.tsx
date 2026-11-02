@@ -650,7 +650,16 @@ function typeName(types: readonly CatalogRecord[], typeId: string): string {
 }
 
 function formatMode(value: string): string {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  switch (value) {
+    case "station_managed":
+      return "Station Managed";
+    case "independent_driver":
+      return "Independent Managed";
+    case "skima_managed":
+      return "SKIMA Managed / SKIMA Fleet";
+    default:
+      return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
 }
 
 function formatMoney(amount: number, currency: string): string {
