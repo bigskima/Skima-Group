@@ -503,7 +503,7 @@ async function handleInternalWhatsAppLpgQuote(request: Request, id: string): Pro
 }
 
 
-async async function dispatchBusinessModuleRuntimeRoute(
+async function dispatchBusinessModuleRuntimeRoute(
   request: Request,
   id: string,
   supabase: SupabaseClient,
@@ -563,7 +563,7 @@ async async function dispatchBusinessModuleRuntimeRoute(
   );
 }
 
-function handleAuthenticatedRequest(request: Request, id: string): Promise<Response> {
+async function handleAuthenticatedRequest(request: Request, id: string): Promise<Response> {
   const authResult = await requireAuthenticatedUser(request, id);
 
   if ("response" in authResult) {
