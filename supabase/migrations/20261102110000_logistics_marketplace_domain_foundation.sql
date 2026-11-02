@@ -1574,6 +1574,8 @@ revoke all on function public.register_logistics_company(text, text, text, jsonb
 revoke all on function public.set_logistics_provider_verification(uuid, text, text, text) from public, anon;
 revoke all on function public.update_logistics_provider_profile(uuid, text, jsonb, jsonb) from public, anon;
 revoke all on function public.set_logistics_provider_operational_status(uuid, text, text, text) from public, anon;
+revoke all on function public.update_logistics_provider_profile(uuid, text, jsonb, jsonb) from public, anon;
+revoke all on function public.set_logistics_provider_operational_status(uuid, text, text, text) from public, anon;
 revoke all on function public.configure_logistics_provider_service(uuid, text, text, text, text, text, text[], text[], text[], numeric, numeric, boolean, text, jsonb) from public, anon;
 revoke all on function public.configure_logistics_provider_coverage(uuid, text, text, uuid, uuid, text, jsonb) from public, anon;
 revoke all on function public.create_logistics_job(jsonb, text) from public, anon;
@@ -1588,6 +1590,8 @@ grant execute on function public.can_read_logistics_company(uuid) to authenticat
 grant execute on function public.can_read_logistics_job(uuid) to authenticated, service_role;
 grant execute on function public.register_logistics_company(text, text, text, jsonb) to authenticated, service_role;
 grant execute on function public.set_logistics_provider_verification(uuid, text, text, text) to authenticated, service_role;
+grant execute on function public.update_logistics_provider_profile(uuid, text, jsonb, jsonb) to authenticated, service_role;
+grant execute on function public.set_logistics_provider_operational_status(uuid, text, text, text) to authenticated, service_role;
 grant execute on function public.update_logistics_provider_profile(uuid, text, jsonb, jsonb) to authenticated, service_role;
 grant execute on function public.set_logistics_provider_operational_status(uuid, text, text, text) to authenticated, service_role;
 grant execute on function public.configure_logistics_provider_service(uuid, text, text, text, text, text, text[], text[], text[], numeric, numeric, boolean, text, jsonb) to authenticated, service_role;
