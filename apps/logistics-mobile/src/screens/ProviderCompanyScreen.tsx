@@ -291,7 +291,14 @@ function ProviderWalletFundingPanel({ organizationId }: { organizationId: string
     "decimal_places",
   ) ?? 2;
   const requestedAmount = Number(amount);
-  const enoughBalance = Number.isFinite(requestedAmount) && requestedAmount > 0 && sourceBalance >= requestedAmount;
+  const decimals = currencyDecimals(currency);
+  const amountPrecisionValid = amount.trim().length > 0
+    && !/[eE]/.test(amount.trim())
+    && (amount.trim().split(".")[1]?.length ?? 0) <= decimals;
+  const enoughBalance = amountPrecisionValid
+    && Number.isFinite(requestedAmount)
+    && requestedAmount > 0
+    && sourceBalance >= requestedAmount;
 
   const funding = useMutation({
     mutationFn: async (payload: { walletId: string; amount: number; key: string }) => api.post(
@@ -335,7 +342,7 @@ function ProviderWalletFundingPanel({ organizationId }: { organizationId: string
       </View>
       <View style={fundingStyles.form}>
         <Text style={[fundingStyles.label, { color: palette.ink }]}>Fund from your personal customer wallet</Text>
-        {wallets.isPending || balances.isPending ? (
+        {wallets.isPending || balances.isPending || currencies.isPending ? (
           <ScreenSkeleton cards={1} />
         ) : personalWallets.length === 0 ? (
           <StatePanel title="Personal wallet required" description="Create or top up your own customer wallet in SKIMA first. You can then move funds into the company wallet." retry={() => void Promise.all([wallets.refetch(), balances.refetch()])} />
@@ -362,7 +369,7 @@ function ProviderWalletFundingPanel({ organizationId }: { organizationId: string
               onChangeText={(value) => { setAmount(value); setIdempotencyKey(null); }}
               keyboardType="decimal-pad"
               placeholder="Enter amount to move"
-              hint="An internal transfer: your personal wallet is debited and the company wallet is credited."
+              hint={`An internal transfer: your personal wallet is debited and the company wallet is credited. Maximum ${decimals} decimal places.`}
             />
             <AppButton
               label="Move funds to company wallet"
@@ -378,7 +385,8 @@ function ProviderWalletFundingPanel({ organizationId }: { organizationId: string
               }}
               icon={<ArrowDownUp color="#FFFFFF" size={16} />}
             />
-            {amount.trim() && !enoughBalance ? <Text style={[fundingStyles.errorText, { color: palette.danger }]}>Enter an amount within your personal wallet’s available balance.</Text> : null}
+            {amount.trim() && !amountPrecisionValid ? <Text style={[fundingStyles.errorText, { color: palette.danger }]}>Enter an amount with no more than {decimals} decimal places.</Text> : null}
+            {amount.trim() && amountPrecisionValid && !enoughBalance ? <Text style={[fundingStyles.errorText, { color: palette.danger }]}>Enter an amount within your personal wallet’s available balance.</Text> : null}
           </>
         )}
         {fundError ? <View style={[fundingStyles.errorPanel, { backgroundColor: palette.dangerSoft }]}><XCircle color={palette.danger} size={15} /><Text style={[fundingStyles.errorText, { color: palette.danger }]}>{fundError}</Text></View> : null}
