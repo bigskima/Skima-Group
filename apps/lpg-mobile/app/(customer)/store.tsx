@@ -182,7 +182,7 @@ export default function StoreScreen() {
   const visibleProducts = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     return products.filter((item) => {
-      const inCategory = categoryKey === "all" || item.category_id === categoryKey;
+      const inCategory = categoryKey === "all" || recordString(item, "category_id") === categoryKey;
       const searchable = `${recordString(item, "display_name")} ${recordString(item, "description")}`.toLowerCase();
       return inCategory && (!normalizedSearch || searchable.includes(normalizedSearch));
     });
@@ -455,7 +455,7 @@ export default function StoreScreen() {
                   const price = basePrice ?? variantPrice;
                   const amount = numberValue(price?.amount);
                   const compareAt = optionalNumber(price?.compare_at_amount);
-                  const category = categories.find((candidate) => candidate.id === item.category_id);
+                  const category = categories.find((candidate) => recordString(candidate, "id") === recordString(item, "category_id"));
                   const salePercent = compareAt && compareAt > amount
                     ? Math.round((1 - amount / compareAt) * 100)
                     : 0;
