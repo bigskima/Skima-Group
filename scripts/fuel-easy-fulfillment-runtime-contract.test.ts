@@ -33,7 +33,7 @@ Deno.test("Fuel has three separately controlled fulfillment models", () => {
   }
   includes(fulfillmentModes, "configure_fuel_driver_product_qualification_mode", "the existing mode-specific qualification system remains the dispatch authority");
   includes(fulfillmentModes, "fulfillment_mode=operation_record.fulfillment_mode", "driver assignment rechecks the order's selected mode");
-  includes(driver, "Only the assigned Fuel driver can confirm", "delivery is tied to the assigned driver identity");
+  includes(fulfillmentModes, "Only the driver assigned to this Fuel order can confirm its delivery", "delivery is tied to the assigned driver identity");
   includes(driver, "The station has recorded the full handover", "the driver does not need a second departure action");
 });
 
