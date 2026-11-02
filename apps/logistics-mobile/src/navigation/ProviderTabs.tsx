@@ -5,6 +5,7 @@ import { StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows } from "../theme/tokens";
+import { useLogisticsRecordQuery } from "../api/logistics";
 
 export function ProviderTabs() {
   const { palette, scheme } = useAppTheme();
