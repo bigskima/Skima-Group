@@ -303,7 +303,6 @@ begin
   join public.logistics_provider_profiles provider
     on provider.organization_id = service.organization_id
   where service.category_id = category_id
-    and service.service_key = request_service_key
     and service.status = 'active'
     and service.availability_enabled = true
     and provider.verification_status = 'verified'
@@ -941,7 +940,6 @@ begin
   from public.logistics_provider_services service
   join public.logistics_provider_profiles provider on provider.organization_id = service.organization_id
   where service.category_id = job.category_id
-    and service.service_key = job.service_key
     and service.status = 'active'
     and service.availability_enabled = true
     and provider.verification_status = 'verified'
