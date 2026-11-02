@@ -261,6 +261,11 @@ create index if not exists logistics_provider_services_match_idx
   on public.logistics_provider_services (category_id, service_key, status, availability_enabled);
 create index if not exists logistics_provider_coverage_match_idx
   on public.logistics_provider_coverage (geography_id, destination_geography_id, coverage_mode, status);
+create unique index if not exists logistics_provider_coverage_identity_idx
+  on public.logistics_provider_coverage (
+    organization_id, provider_service_id, coverage_mode, geography_id,
+    coalesce(destination_geography_id, '00000000-0000-0000-0000-000000000000'::uuid)
+  );
 create index if not exists logistics_job_requests_customer_idx
   on public.logistics_job_requests (requester_user_id, created_at desc);
 create index if not exists logistics_job_opportunities_company_idx
@@ -466,7 +471,7 @@ begin
 
   insert into public.role_permissions (role_id, permission_id, conditions)
   select role_id, permission_id, '{}'::jsonb
-  from unnest(permission_ids) permission_id
+  from unnest(permission_ids) as role_permission_ids(permission_id)
   on conflict do nothing;
 
   insert into public.user_roles (
@@ -509,7 +514,7 @@ begin
   if not public.has_permission('logistics.marketplace.manage', null) then
     raise exception 'logistics marketplace administration permission is required';
   end if;
-  if target_decision not in ('verified', 'rejected', 'suspended') then
+  if target_decision is null or target_decision not in ('verified', 'rejected', 'suspended') then
     raise exception 'verification decision is not supported';
   end if;
   if target_reason is null or char_length(btrim(target_reason)) < 5 then
@@ -580,7 +585,7 @@ begin
   if target_display_name is null or char_length(btrim(target_display_name)) not between 2 and 160 then
     raise exception 'service display name is required';
   end if;
-  if target_pricing_mode not in ('fixed', 'distance', 'weight', 'time', 'capacity', 'negotiated', 'quote_required', 'hybrid') then
+  if target_pricing_mode is null or target_pricing_mode not in ('fixed', 'distance', 'weight', 'time', 'capacity', 'negotiated', 'quote_required', 'hybrid') then
     raise exception 'pricing mode is not supported';
   end if;
   if target_maximum_weight_kg is not null and target_maximum_weight_kg <= 0 then
@@ -663,7 +668,7 @@ begin
   if not public.can_manage_logistics_company(target_organization_id) then
     raise exception 'logistics company management permission is required';
   end if;
-  if target_coverage_mode not in ('origin', 'destination', 'both', 'route') then
+  if target_coverage_mode is null or target_coverage_mode not in ('origin', 'destination', 'both', 'route') then
     raise exception 'coverage mode is not supported';
   end if;
   if target_coverage_mode = 'route' and (
@@ -711,7 +716,7 @@ begin
     select id into coverage_id
     from public.logistics_provider_coverage
     where organization_id = target_organization_id
-      and provider_service_id = provider_service_id
+      and logistics_provider_coverage.provider_service_id = configure_logistics_provider_coverage.provider_service_id
       and coverage_mode = target_coverage_mode
       and geography_id = target_geography_id
       and destination_geography_id is not distinct from target_destination_geography_id
@@ -782,7 +787,716 @@ begin
     raise exception 'pickup, destination, cargo and customer contact must be JSON objects';
   end if;
   if length(btrim(coalesce(target_payload #>> '{customer_contact,name}', ''))) < 2
-    or length(btrim(coalesce(target_payload #>> '{customer_contact,phone}', ''))) < 7 then
+    or (target_payload #>> '{customer_contact,phone}') !~ '^[+0-9][0-9 ()-]{6,22}
+    raise exception 'customer contact name and phone are required';
+  end if;
+
+  select * into existing_job
+  from public.logistics_job_requests
+  where requester_user_id = actor and idempotency_key = target_idempotency_key;
+
+  if found then
+    if existing_job.category_id <> category_id
+      or existing_job.service_key <> request_service_key
+      or existing_job.title <> request_title
+      or existing_job.pickup_location <> target_payload->'pickup'
+      or existing_job.destination_location <> target_payload->'destination'
+      or existing_job.cargo_snapshot <> coalesce(target_payload->'cargo', '{}'::jsonb)
+      or existing_job.customer_contact_snapshot->>'phone' <> target_payload #>> '{customer_contact,phone}' then
+      raise exception 'idempotency key was already used for a different logistics job';
+    end if;
+    return existing_job.id;
+  end if;
+
+  insert into public.logistics_job_requests (
+    requester_user_id, category_id, service_key, title, description,
+    pickup_geography_id, destination_geography_id, pickup_location, destination_location,
+    cargo_snapshot, customer_contact_snapshot, instructions, requested_pickup_at,
+    status, published_at, expires_at, metadata, idempotency_key
+  )
+  values (
+    actor, category_id, request_service_key, request_title,
+    nullif(btrim(target_payload->>'description'), ''),
+    pickup_geo_id, destination_geo_id,
+    target_payload->'pickup', target_payload->'destination',
+    coalesce(target_payload->'cargo', '{}'::jsonb),
+    jsonb_strip_nulls(jsonb_build_object(
+      'name', btrim(target_payload #>> '{customer_contact,name}'),
+      'phone', btrim(target_payload #>> '{customer_contact,phone}'),
+      'email', nullif(lower(btrim(target_payload #>> '{customer_contact,email}')), ''),
+      'contact_instructions', nullif(btrim(target_payload #>> '{customer_contact,contact_instructions}'), '')
+    )),
+    nullif(btrim(target_payload->>'instructions'), ''),
+    nullif(target_payload->>'requested_pickup_at', '')::timestamptz,
+    'open', timezone('utc', now()),
+    timezone('utc', now()) + interval '7 days',
+    coalesce(target_payload->'metadata', '{}'::jsonb),
+    target_idempotency_key
+  )
+  returning id into job_id;
+
+  insert into public.logistics_job_opportunities (
+    job_id, organization_id, provider_service_id, status, match_reasons,
+    job_snapshot, customer_contact_snapshot
+  )
+  select
+    job_id,
+    service.organization_id,
+    service.id,
+    'matched',
+    jsonb_build_array('service_capability', 'pickup_coverage', 'destination_coverage', 'provider_verified'),
+    jsonb_build_object(
+      'job_id', job_id,
+      'title', request_title,
+      'description', nullif(btrim(target_payload->>'description'), ''),
+      'service_key', request_service_key,
+      'category_key', target_payload->>'category_key',
+      'pickup', target_payload->'pickup',
+      'destination', target_payload->'destination',
+      'cargo', coalesce(target_payload->'cargo', '{}'::jsonb),
+      'instructions', nullif(btrim(target_payload->>'instructions'), ''),
+      'requested_pickup_at', nullif(target_payload->>'requested_pickup_at', '') 
+    ),
+    target_payload->'customer_contact'
+  from public.logistics_provider_services service
+  join public.logistics_provider_profiles provider
+    on provider.organization_id = service.organization_id
+  where service.category_id = category_id
+    and service.service_key = request_service_key
+    and service.status = 'active'
+    and service.availability_enabled = true
+    and provider.verification_status = 'verified'
+    and provider.operational_status = 'active'
+    and exists (
+      select 1
+      from public.logistics_provider_coverage origin
+      where origin.provider_service_id = service.id
+        and origin.status = 'active'
+        and (
+          (origin.coverage_mode in ('origin', 'both') and origin.geography_id = pickup_geo_id)
+          or (origin.coverage_mode = 'route'
+            and origin.geography_id = pickup_geo_id
+            and origin.destination_geography_id = destination_geo_id)
+          or (origin.coverage_mode = 'both' and origin.geography_id = pickup_geo_id)
+        )
+    )
+    and exists (
+      select 1
+      from public.logistics_provider_coverage destination
+      where destination.provider_service_id = service.id
+        and destination.status = 'active'
+        and (
+          (destination.coverage_mode in ('destination', 'both') and destination.geography_id = destination_geo_id)
+          or (destination.coverage_mode = 'route'
+            and destination.geography_id = pickup_geo_id
+            and destination.destination_geography_id = destination_geo_id)
+        )
+    )
+    and (
+      service.maximum_weight_kg is null
+      or nullif(target_payload #>> '{cargo,weight_kg}', '') is null
+      or service.maximum_weight_kg >= (target_payload #>> '{cargo,weight_kg}')::numeric
+    )
+    and (
+      service.maximum_volume_m3 is null
+      or nullif(target_payload #>> '{cargo,volume_m3}', '') is null
+      or service.maximum_volume_m3 >= (target_payload #>> '{cargo,volume_m3}')::numeric
+    )
+    and (
+      cardinality(service.cargo_type_keys) = 0
+      or service.cargo_type_keys && array(
+        select jsonb_array_elements_text(coalesce(target_payload #> '{cargo,cargo_type_keys}', '[]'::jsonb))
+      )
+    )
+  on conflict (job_id, organization_id) do nothing;
+
+  get diagnostics match_count = row_count;
+  event_status := case when match_count > 0 then 'matching' else 'open' end;
+
+  update public.logistics_job_requests
+  set status = event_status, updated_at = timezone('utc', now())
+  where id = job_id;
+
+  perform public.record_logistics_job_event(
+    job_id,
+    case when match_count > 0 then 'logistics.job.distributed' else 'logistics.job.no_provider_match' end,
+    target_idempotency_key || ':published',
+    'draft',
+    event_status,
+    jsonb_build_object('matched_provider_count', match_count)
+  );
+
+  return job_id;
+end;
+$$;
+
+create or replace function public.create_logistics_offer(
+  target_opportunity_id uuid,
+  target_currency_code text,
+  target_delivery_price_minor bigint,
+  target_estimated_duration_minutes integer,
+  target_terms jsonb,
+  target_expires_at timestamptz,
+  target_idempotency_key text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  opportunity public.logistics_job_opportunities%rowtype;
+  job public.logistics_job_requests%rowtype;
+  offer_id uuid;
+begin
+  select * into opportunity
+  from public.logistics_job_opportunities
+  where id = target_opportunity_id
+  for update;
+  if not found then raise exception 'logistics opportunity was not found'; end if;
+  if not public.can_manage_logistics_company(opportunity.organization_id)
+    and not public.has_permission('business.logistics.offers.manage', opportunity.organization_id) then
+    raise exception 'offer management permission is required for this provider company';
+  end if;
+  select * into job from public.logistics_job_requests where id = opportunity.job_id for update;
+  if job.status not in ('matching', 'offers_received') then
+    raise exception 'this logistics job is no longer accepting provider offers';
+  end if;
+  if opportunity.status not in ('matched', 'viewed', 'offered') then
+    raise exception 'this provider opportunity is no longer available';
+  end if;
+  if target_delivery_price_minor is null or target_delivery_price_minor <= 0 then
+    raise exception 'delivery offer must be a positive minor-unit amount';
+  end if;
+  if target_currency_code is null or not exists (
+    select 1 from public.currency_definitions
+    where code = target_currency_code and status = 'enabled'
+  ) then
+    raise exception 'an enabled currency is required for a logistics offer';
+  end if;
+  if target_estimated_duration_minutes is not null and target_estimated_duration_minutes <= 0 then
+    raise exception 'estimated duration must be positive';
+  end if;
+  if target_terms is null or jsonb_typeof(target_terms) <> 'object' then
+    raise exception 'offer terms must be an object';
+  end if;
+  if target_idempotency_key is null or char_length(btrim(target_idempotency_key)) < 8 then
+    raise exception 'valid idempotency key is required';
+  end if;
+  if target_expires_at is not null and target_expires_at <= timezone('utc', now()) then
+    raise exception 'offer expiry must be in the future';
+  end if;
+
+  if exists (
+    select 1 from public.logistics_offers
+    where created_by = auth.uid() and idempotency_key = target_idempotency_key
+  ) then
+    select existing.id into offer_id
+    from public.logistics_offers existing
+    where existing.created_by = auth.uid() and existing.idempotency_key = target_idempotency_key
+      and existing.opportunity_id = target_opportunity_id
+      and existing.currency_code = target_currency_code
+      and existing.delivery_price_minor = target_delivery_price_minor
+      and existing.terms = target_terms;
+    if offer_id is null then raise exception 'idempotency key was reused with different offer details'; end if;
+    return offer_id;
+  end if;
+
+  if not exists (
+    select 1 from public.logistics_provider_profiles
+    where organization_id = opportunity.organization_id
+      and verification_status = 'verified'
+      and operational_status = 'active'
+  ) then raise exception 'only verified, active providers may submit offers'; end if;
+
+  insert into public.logistics_offers (
+    job_id, opportunity_id, organization_id, offer_type, currency_code,
+    delivery_price_minor, estimated_duration_minutes, terms, status,
+    expires_at, created_by, idempotency_key
+  )
+  values (
+    opportunity.job_id, opportunity.id, opportunity.organization_id, 'provider_quote',
+    target_currency_code, target_delivery_price_minor, target_estimated_duration_minutes,
+    target_terms, 'submitted', target_expires_at, auth.uid(), target_idempotency_key
+  )
+  returning id into offer_id;
+
+  update public.logistics_job_opportunities
+  set status = 'offered', updated_at = timezone('utc', now())
+  where id = opportunity.id;
+
+  update public.logistics_job_requests
+  set status = 'offers_received', updated_at = timezone('utc', now())
+  where id = job.id;
+
+  perform public.record_logistics_job_event(
+    job.id, 'logistics.offer.submitted', target_idempotency_key || ':event',
+    job.status, 'offers_received',
+    jsonb_build_object('offer_id', offer_id, 'provider_organization_id', opportunity.organization_id)
+  );
+
+  return offer_id;
+end;
+$$;
+
+create or replace function public.counter_logistics_offer(
+  target_parent_offer_id uuid,
+  target_currency_code text,
+  target_delivery_price_minor bigint,
+  target_estimated_duration_minutes integer,
+  target_terms jsonb,
+  target_expires_at timestamptz,
+  target_idempotency_key text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  parent_offer public.logistics_offers%rowtype;
+  new_offer_id uuid;
+  offer_type_value text;
+begin
+  select * into parent_offer
+  from public.logistics_offers
+  where id = target_parent_offer_id
+  for update;
+  if not found then raise exception 'offer to counter was not found'; end if;
+  if parent_offer.status not in ('submitted', 'countered') then
+    raise exception 'this offer is no longer open for negotiation';
+  end if;
+  if target_delivery_price_minor is null or target_delivery_price_minor <= 0 then
+    raise exception 'counteroffer must be a positive minor-unit amount';
+  end if;
+  if target_currency_code is null or not exists (
+    select 1 from public.currency_definitions
+    where code = target_currency_code and status = 'enabled'
+  ) then
+    raise exception 'an enabled currency is required for a counteroffer';
+  end if;
+  if target_terms is null or jsonb_typeof(target_terms) <> 'object' then
+    raise exception 'counteroffer terms must be an object';
+  end if;
+  if target_idempotency_key is null or char_length(btrim(target_idempotency_key)) < 8 then
+    raise exception 'valid idempotency key is required';
+  end if;
+  if target_expires_at is not null and target_expires_at <= timezone('utc', now()) then
+    raise exception 'counteroffer expiry must be in the future';
+  end if;
+
+  if auth.uid() = (select requester_user_id from public.logistics_job_requests where id = parent_offer.job_id) then
+    offer_type_value := 'customer_counter';
+  elsif public.can_manage_logistics_company(parent_offer.organization_id)
+    or public.has_permission('business.logistics.offers.manage', parent_offer.organization_id) then
+    offer_type_value := 'provider_counter';
+  else
+    raise exception 'only the customer or matched provider may negotiate this offer';
+  end if;
+
+  if exists (select 1 from public.logistics_offers where created_by = auth.uid() and idempotency_key = target_idempotency_key) then
+    select id into new_offer_id from public.logistics_offers
+    where created_by = auth.uid() and idempotency_key = target_idempotency_key;
+    return new_offer_id;
+  end if;
+
+  insert into public.logistics_offers (
+    job_id, opportunity_id, organization_id, parent_offer_id, offer_type, currency_code,
+    delivery_price_minor, estimated_duration_minutes, terms, status, expires_at,
+    created_by, idempotency_key
+  )
+  values (
+    parent_offer.job_id, parent_offer.opportunity_id, parent_offer.organization_id,
+    parent_offer.id, offer_type_value, target_currency_code,
+    target_delivery_price_minor, target_estimated_duration_minutes,
+    target_terms, 'submitted', target_expires_at, auth.uid(), target_idempotency_key
+  )
+  returning id into new_offer_id;
+
+  update public.logistics_offers
+  set status = 'countered'
+  where id = parent_offer.id;
+
+  return new_offer_id;
+end;
+$$;
+
+create or replace function public.add_logistics_negotiation_message(
+  target_opportunity_id uuid,
+  target_offer_id uuid,
+  target_message text,
+  target_idempotency_key text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  opportunity public.logistics_job_opportunities%rowtype;
+  message_id uuid;
+  requester_id uuid;
+begin
+  select * into opportunity
+  from public.logistics_job_opportunities
+  where id = target_opportunity_id;
+  if not found then raise exception 'logistics opportunity was not found'; end if;
+
+  select requester_user_id into requester_id
+  from public.logistics_job_requests where id = opportunity.job_id;
+
+  if auth.uid() <> requester_id
+    and not public.can_read_logistics_company(opportunity.organization_id) then
+    raise exception 'only the customer and matched provider may send negotiation messages';
+  end if;
+  if target_message is null or char_length(btrim(target_message)) not between 1 and 3000 then
+    raise exception 'message must contain 1 to 3000 characters';
+  end if;
+  if target_idempotency_key is null or char_length(btrim(target_idempotency_key)) < 8 then
+    raise exception 'valid idempotency key is required';
+  end if;
+  if target_offer_id is not null and not exists (
+    select 1 from public.logistics_offers
+    where id = target_offer_id and job_id = opportunity.job_id
+      and opportunity_id = opportunity.id
+  ) then raise exception 'message offer must belong to this opportunity'; end if;
+
+  insert into public.logistics_negotiation_messages (
+    job_id, opportunity_id, organization_id, offer_id, sender_user_id,
+    message, idempotency_key
+  )
+  values (
+    opportunity.job_id, opportunity.id, opportunity.organization_id, target_offer_id,
+    auth.uid(), btrim(target_message), target_idempotency_key
+  )
+  on conflict (sender_user_id, idempotency_key) do nothing
+  returning id into message_id;
+
+  if message_id is null then
+    select id into message_id
+    from public.logistics_negotiation_messages
+    where sender_user_id = auth.uid() and idempotency_key = target_idempotency_key;
+  end if;
+
+  return message_id;
+end;
+$$;
+
+create or replace function public.select_logistics_offer(
+  target_offer_id uuid,
+  target_idempotency_key text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  selected_offer public.logistics_offers%rowtype;
+  job public.logistics_job_requests%rowtype;
+begin
+  if target_idempotency_key is null or char_length(btrim(target_idempotency_key)) < 8 then
+    raise exception 'valid idempotency key is required';
+  end if;
+
+  select * into selected_offer
+  from public.logistics_offers
+  where id = target_offer_id
+  for update;
+  if not found then raise exception 'logistics offer was not found'; end if;
+
+  select * into job
+  from public.logistics_job_requests
+  where id = selected_offer.job_id
+  for update;
+
+  if job.requester_user_id <> auth.uid() then
+    raise exception 'only the job customer may select a provider offer';
+  end if;
+  if job.status not in ('matching', 'offers_received') then
+    raise exception 'job is not accepting offer selection';
+  end if;
+  if selected_offer.status not in ('submitted', 'countered') then
+    raise exception 'selected offer is no longer available';
+  end if;
+  if selected_offer.expires_at is not null and selected_offer.expires_at <= timezone('utc', now()) then
+    raise exception 'selected offer has expired';
+  end if;
+  if not exists (
+    select 1 from public.logistics_provider_profiles provider
+    where provider.organization_id = selected_offer.organization_id
+      and provider.verification_status = 'verified'
+      and provider.operational_status = 'active'
+  ) then raise exception 'provider is no longer eligible'; end if;
+
+  update public.logistics_offers
+  set status = case when id = target_offer_id then 'selected' else 'not_selected' end
+  where job_id = job.id and status in ('submitted', 'countered');
+
+  update public.logistics_job_opportunities
+  set status = case when id = selected_offer.opportunity_id then 'selected' else 'not_selected' end,
+      updated_at = timezone('utc', now())
+  where job_id = job.id;
+
+  update public.logistics_job_requests
+  set status = 'booking_pending', updated_at = timezone('utc', now())
+  where id = job.id;
+
+  perform public.record_logistics_job_event(
+    job.id,
+    'logistics.offer.selected',
+    target_idempotency_key || ':event',
+    job.status,
+    'booking_pending',
+    jsonb_build_object(
+      'offer_id', target_offer_id,
+      'provider_organization_id', selected_offer.organization_id,
+      'next_step', 'complete_booking_terms_and_payment'
+    )
+  );
+
+  return target_offer_id;
+end;
+$$;
+
+create or replace function public.upsert_logistics_service_category(
+  target_key text,
+  target_display_name text,
+  target_parent_key text default null,
+  target_description text default null,
+  target_status text default 'active',
+  target_sort_order integer default 100,
+  target_metadata jsonb default '{}'::jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  parent_id uuid;
+  category_id uuid;
+begin
+  if not public.has_permission('logistics.marketplace.manage', null) then
+    raise exception 'logistics marketplace administration permission is required';
+  end if;
+  if target_key is null or target_key !~ '^[a-z][a-z0-9_.:-]{2,120}$'
+    or target_display_name is null or char_length(btrim(target_display_name)) not between 2 and 120 then
+    raise exception 'valid category key and display name are required';
+  end if;
+  if target_status not in ('draft', 'active', 'suspended', 'retired') then
+    raise exception 'category status is not supported';
+  end if;
+  if target_metadata is null or jsonb_typeof(target_metadata) <> 'object' then
+    raise exception 'category metadata must be an object';
+  end if;
+  if target_parent_key is not null then
+    select id into parent_id from public.logistics_service_categories where key = target_parent_key;
+    if parent_id is null then raise exception 'parent logistics category was not found'; end if;
+  end if;
+
+  insert into public.logistics_service_categories (
+    key, display_name, description, parent_category_id, status, sort_order, metadata, created_by
+  )
+  values (
+    target_key, btrim(target_display_name), nullif(btrim(target_description), ''),
+    parent_id, target_status, target_sort_order, target_metadata, auth.uid()
+  )
+  on conflict (key) do update
+  set display_name = excluded.display_name,
+      description = excluded.description,
+      parent_category_id = excluded.parent_category_id,
+      status = excluded.status,
+      sort_order = excluded.sort_order,
+      metadata = excluded.metadata,
+      updated_at = timezone('utc', now())
+  returning id into category_id;
+
+  return category_id;
+end;
+$$;
+
+alter table public.logistics_service_categories enable row level security;
+alter table public.logistics_provider_profiles enable row level security;
+alter table public.logistics_provider_services enable row level security;
+alter table public.logistics_provider_coverage enable row level security;
+alter table public.logistics_job_requests enable row level security;
+alter table public.logistics_job_opportunities enable row level security;
+alter table public.logistics_offers enable row level security;
+alter table public.logistics_negotiation_messages enable row level security;
+alter table public.logistics_job_events enable row level security;
+
+create policy logistics_categories_read_active_or_admin
+on public.logistics_service_categories for select to authenticated
+using (
+  status = 'active'
+  or public.has_permission('logistics.marketplace.manage', null)
+);
+create policy logistics_categories_no_direct_insert
+on public.logistics_service_categories for insert to authenticated with check (false);
+create policy logistics_categories_no_direct_update
+on public.logistics_service_categories for update to authenticated using (false) with check (false);
+create policy logistics_categories_no_direct_delete
+on public.logistics_service_categories for delete to authenticated using (false);
+
+create policy logistics_provider_profiles_read_org_or_admin
+on public.logistics_provider_profiles for select to authenticated
+using (
+  public.can_read_logistics_company(organization_id)
+  or public.has_permission('logistics.marketplace.read', null)
+  or public.has_permission('logistics.marketplace.manage', null)
+);
+create policy logistics_provider_profiles_no_direct_insert
+on public.logistics_provider_profiles for insert to authenticated with check (false);
+create policy logistics_provider_profiles_no_direct_update
+on public.logistics_provider_profiles for update to authenticated using (false) with check (false);
+create policy logistics_provider_profiles_no_direct_delete
+on public.logistics_provider_profiles for delete to authenticated using (false);
+
+create policy logistics_provider_services_read_org_or_admin
+on public.logistics_provider_services for select to authenticated
+using (
+  public.can_read_logistics_company(organization_id)
+  or public.has_permission('logistics.marketplace.read', null)
+  or public.has_permission('logistics.marketplace.manage', null)
+);
+create policy logistics_provider_services_no_direct_insert
+on public.logistics_provider_services for insert to authenticated with check (false);
+create policy logistics_provider_services_no_direct_update
+on public.logistics_provider_services for update to authenticated using (false) with check (false);
+create policy logistics_provider_services_no_direct_delete
+on public.logistics_provider_services for delete to authenticated using (false);
+
+create policy logistics_provider_coverage_read_org_or_admin
+on public.logistics_provider_coverage for select to authenticated
+using (
+  public.can_read_logistics_company(organization_id)
+  or public.has_permission('logistics.marketplace.read', null)
+  or public.has_permission('logistics.marketplace.manage', null)
+);
+create policy logistics_provider_coverage_no_direct_insert
+on public.logistics_provider_coverage for insert to authenticated with check (false);
+create policy logistics_provider_coverage_no_direct_update
+on public.logistics_provider_coverage for update to authenticated using (false) with check (false);
+create policy logistics_provider_coverage_no_direct_delete
+on public.logistics_provider_coverage for delete to authenticated using (false);
+
+create policy logistics_jobs_read_customer_or_admin
+on public.logistics_job_requests for select to authenticated
+using (
+  requester_user_id = auth.uid()
+  or public.has_permission('logistics.marketplace.read', null)
+  or public.has_permission('logistics.marketplace.manage', null)
+);
+create policy logistics_jobs_no_direct_insert
+on public.logistics_job_requests for insert to authenticated with check (false);
+create policy logistics_jobs_no_direct_update
+on public.logistics_job_requests for update to authenticated using (false) with check (false);
+create policy logistics_jobs_no_direct_delete
+on public.logistics_job_requests for delete to authenticated using (false);
+
+create policy logistics_opportunities_read_matched_company
+on public.logistics_job_opportunities for select to authenticated
+using (
+  public.can_read_logistics_company(organization_id)
+  or public.has_permission('logistics.marketplace.manage', null)
+);
+create policy logistics_opportunities_no_direct_insert
+on public.logistics_job_opportunities for insert to authenticated with check (false);
+create policy logistics_opportunities_no_direct_update
+on public.logistics_job_opportunities for update to authenticated using (false) with check (false);
+create policy logistics_opportunities_no_direct_delete
+on public.logistics_job_opportunities for delete to authenticated using (false);
+
+create policy logistics_offers_read_customer_or_company
+on public.logistics_offers for select to authenticated
+using (
+  public.can_read_logistics_job(job_id)
+  or public.can_read_logistics_company(organization_id)
+  or public.has_permission('logistics.marketplace.manage', null)
+);
+create policy logistics_offers_no_direct_insert
+on public.logistics_offers for insert to authenticated with check (false);
+create policy logistics_offers_no_direct_update
+on public.logistics_offers for update to authenticated using (false) with check (false);
+create policy logistics_offers_no_direct_delete
+on public.logistics_offers for delete to authenticated using (false);
+
+create policy logistics_messages_read_customer_or_company
+on public.logistics_negotiation_messages for select to authenticated
+using (
+  public.can_read_logistics_job(job_id)
+  or public.can_read_logistics_company(organization_id)
+  or public.has_permission('logistics.marketplace.manage', null)
+);
+create policy logistics_messages_no_direct_insert
+on public.logistics_negotiation_messages for insert to authenticated with check (false);
+create policy logistics_messages_no_direct_update
+on public.logistics_negotiation_messages for update to authenticated using (false) with check (false);
+create policy logistics_messages_no_direct_delete
+on public.logistics_negotiation_messages for delete to authenticated using (false);
+
+create policy logistics_events_read_customer_or_company
+on public.logistics_job_events for select to authenticated
+using (
+  public.can_read_logistics_job(job_id)
+  or exists (
+    select 1 from public.logistics_job_opportunities opportunity
+    where opportunity.job_id = logistics_job_events.job_id
+      and public.can_read_logistics_company(opportunity.organization_id)
+  )
+  or public.has_permission('logistics.marketplace.manage', null)
+);
+create policy logistics_events_no_direct_insert
+on public.logistics_job_events for insert to authenticated with check (false);
+create policy logistics_events_no_direct_update
+on public.logistics_job_events for update to authenticated using (false) with check (false);
+create policy logistics_events_no_direct_delete
+on public.logistics_job_events for delete to authenticated using (false);
+
+grant select on public.logistics_service_categories,
+  public.logistics_provider_profiles,
+  public.logistics_provider_services,
+  public.logistics_provider_coverage,
+  public.logistics_job_requests,
+  public.logistics_job_opportunities,
+  public.logistics_offers,
+  public.logistics_negotiation_messages,
+  public.logistics_job_events
+to authenticated, service_role;
+
+revoke all on function public.can_manage_logistics_company(uuid) from public, anon;
+revoke all on function public.can_read_logistics_company(uuid) from public, anon;
+revoke all on function public.can_read_logistics_job(uuid) from public, anon;
+revoke all on function public.record_logistics_job_event(uuid, text, text, text, text, jsonb) from public, anon;
+revoke all on function public.register_logistics_company(text, text, text, jsonb) from public, anon;
+revoke all on function public.set_logistics_provider_verification(uuid, text, text, text) from public, anon;
+revoke all on function public.configure_logistics_provider_service(uuid, text, text, text, text, text, text[], text[], text[], numeric, numeric, boolean, text, jsonb) from public, anon;
+revoke all on function public.configure_logistics_provider_coverage(uuid, text, text, uuid, uuid, text, jsonb) from public, anon;
+revoke all on function public.create_logistics_job(jsonb, text) from public, anon;
+revoke all on function public.create_logistics_offer(uuid, text, bigint, integer, jsonb, timestamptz, text) from public, anon;
+revoke all on function public.counter_logistics_offer(uuid, text, bigint, integer, jsonb, timestamptz, text) from public, anon;
+revoke all on function public.add_logistics_negotiation_message(uuid, uuid, text, text) from public, anon;
+revoke all on function public.select_logistics_offer(uuid, text) from public, anon;
+revoke all on function public.upsert_logistics_service_category(text, text, text, text, text, integer, jsonb) from public, anon;
+
+grant execute on function public.can_manage_logistics_company(uuid) to authenticated, service_role;
+grant execute on function public.can_read_logistics_company(uuid) to authenticated, service_role;
+grant execute on function public.can_read_logistics_job(uuid) to authenticated, service_role;
+grant execute on function public.register_logistics_company(text, text, text, jsonb) to authenticated, service_role;
+grant execute on function public.set_logistics_provider_verification(uuid, text, text, text) to authenticated, service_role;
+grant execute on function public.configure_logistics_provider_service(uuid, text, text, text, text, text, text[], text[], text[], numeric, numeric, boolean, text, jsonb) to authenticated, service_role;
+grant execute on function public.configure_logistics_provider_coverage(uuid, text, text, uuid, uuid, text, jsonb) to authenticated, service_role;
+grant execute on function public.create_logistics_job(jsonb, text) to authenticated, service_role;
+grant execute on function public.create_logistics_offer(uuid, text, bigint, integer, jsonb, timestamptz, text) to authenticated, service_role;
+grant execute on function public.counter_logistics_offer(uuid, text, bigint, integer, jsonb, timestamptz, text) to authenticated, service_role;
+grant execute on function public.add_logistics_negotiation_message(uuid, uuid, text, text) to authenticated, service_role;
+grant execute on function public.select_logistics_offer(uuid, text) to authenticated, service_role;
+grant execute on function public.upsert_logistics_service_category(text, text, text, text, text, integer, jsonb) to authenticated, service_role;
+
+notify pgrst, 'reload schema';
+commit;
+ then
     raise exception 'customer contact name and phone are required';
   end if;
 
