@@ -94,6 +94,12 @@ Deno.test("Offers, counteroffers and messages are limited to the customer or mat
   requireText(migration, "public.can_manage_logistics_company(opportunity.organization_id)", "provider offer actor guard");
   requireText(migration, "only the customer or matched provider may negotiate this offer", "counteroffer actor guard");
   requireText(migration, "only the job customer may select a provider offer", "offer selection actor guard");
+  requireText(migration, "only the latest open offer can be negotiated", "no stale parent offer can be countered");
+  requireText(migration, "only the latest open offer may be selected", "no stale countered offer can be selected");
+  requireText(migration, "the provider cannot counter their own latest offer", "provider counteroffer alternation");
+  requireText(migration, "the customer cannot counter their own latest offer", "customer counteroffer alternation");
+  requireText(migration, "idempotency key was reused with different counteroffer details", "counteroffer replay protection");
+  requireText(migration, "idempotency key was reused to select a different offer", "offer selection replay protection");
   requireText(migration, "only the customer and matched provider may send negotiation messages", "message participant guard");
   requireText(migration, "unique (created_by, idempotency_key)", "offer idempotency constraint");
   requireText(migration, "unique (sender_user_id, idempotency_key)", "message idempotency constraint");
