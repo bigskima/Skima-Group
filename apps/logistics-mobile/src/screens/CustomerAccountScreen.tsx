@@ -149,6 +149,14 @@ export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: 
             onPress={() => router.replace("/(driver)" as never)}
           />
         ) : null}
+        {context?.permissions.some((permission) => String(permission) === "logistics.marketplace.manage") ? (
+          <AppButton
+            label="Open Logistics administration"
+            fullWidth
+            variant="secondary"
+            onPress={() => router.push("/logistics-admin" as never)}
+          />
+        ) : null}
       </View>
 
       <View style={styles.section}>
