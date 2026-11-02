@@ -48,6 +48,9 @@ export function StoreOrderDetailsScreen() {
   const metadata = nestedRecord(order, "metadata");
   const escrowHoldId = firstString(metadata, ["escrow_hold_id", "escrowHoldId"]);
   const fulfilment = firstString(order, ["fulfillment_method"]) ?? firstString(payload, ["fulfillment_method"]) ?? "delivery";
+  const fulfilmentAddress = fulfilment === "pickup"
+    ? (firstString(pickup, ["formattedAddress", "formatted_address"]) || firstString(pickup, ["label"]) || "Pickup point")
+    : (firstString(delivery, ["formattedAddress", "formatted_address"]) || "Saved delivery address");
 
   return (
     <Screen
@@ -131,9 +134,7 @@ export function StoreOrderDetailsScreen() {
               <View style={styles.addressCopy}>
                 <Text style={[styles.lineTitle, { color: palette.ink }]}>{fulfilment === "pickup" ? "Customer pickup" : "Delivery address"}</Text>
                 <Text style={[styles.muted, { color: palette.muted }]}>
-                  {fulfilment === "pickup"
-                    ? firstString(pickup, ["formattedAddress", "formatted_address"]) ?? firstString(pickup, ["label"]) ?? "Pickup point"}
-                    : firstString(delivery, ["formattedAddress", "formatted_address"]) ?? "Saved delivery address"}
+                  {fulfilmentAddress}
                 </Text>
                 {firstString(delivery, ["landmark"]) ? <Text style={[styles.muted, { color: palette.muted }]}>Landmark: {firstString(delivery, ["landmark"])}</Text> : null}
                 {firstString(delivery, ["deliveryInstructions"]) ? <Text style={[styles.muted, { color: palette.muted }]}>Instructions: {firstString(delivery, ["deliveryInstructions"])}</Text> : null}
