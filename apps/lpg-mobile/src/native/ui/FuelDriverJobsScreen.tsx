@@ -49,10 +49,15 @@ export function FuelDriverJobsScreen() {
     schema: ActionResponseSchema,
     invalidate: [["fuel", "driver", "orders"], ["fuel", "orders"]],
   });
-  const recordHandover = useGatewayMutation({
-    path: "/runtime/fuel/containers/handover",
+  const confirmDelivery = useGatewayMutation({
+    path: "/runtime/fuel/orders/confirm-delivery",
     schema: ActionResponseSchema,
-    invalidate: [["fuel", "driver", "allocations"], ["fuel", "orders"]],
+    invalidate: [["fuel", "driver", "orders"], ["fuel", "orders"]],
+  });
+  const confirmRentalReturn = useGatewayMutation({
+    path: "/runtime/fuel/orders/confirm-rental-return",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "driver", "orders"], ["fuel", "orders"], ["fuel", "driver", "allocations"]],
   });
 
   const records = orders.data ?? [];
@@ -63,6 +68,10 @@ export function FuelDriverJobsScreen() {
   const productKey = firstString(selectedOrder, ["product_key"]) ?? "fuel.pms";
   const productName = productNameForKey(productKey);
   const requestedLitres = firstNumber(selectedOrder, ["requested_litres"]) ?? 0;
+  const fulfillmentMode = firstString(selectedOrder, ["fulfillment_mode"]) ?? "";
+  const driverModeDescription = describeDriverMode(fulfillmentMode);
+  const containerCount = firstNumber(selectedOrder, ["container_count"]) ?? 0;
+  const withDriverCount = selectedAllocations.filter((row) => firstString(row, ["status"]) === "with_driver").length;
 
   const refresh = async () => {
     await Promise.allSettled([orders.refetch(), allocations.refetch()]);
@@ -98,129 +107,55 @@ export function FuelDriverJobsScreen() {
   const completeCustomerHandover = async () => {
     if (!selectedOrder) return;
     await perform(selectedOrderId, async () => {
-      const rows = (await allocations.refetch()).data?.filter((row) =>
-        firstString(row, ["order_id"]) === selectedOrderId
-      ) ?? [];
-      const withDriver = rows.filter((row) => firstString(row, ["status"]) === "with_driver");
-      const expected = firstNumber(selectedOrder, ["container_count"]) ?? 0;
-      if (withDriver.length !== expected) {
-        throw new Error(`The station handed over ${withDriver.length} of ${expected} required containers to you.`);
-      }
-
-      let deliveredLitres = 0;
-      for (const allocation of withDriver) {
-        const allocationId = firstString(allocation, ["id"]);
-        const profileId = firstString(allocation, ["container_profile_id"]);
-        const litres = firstNumber(allocation, ["filled_litres"]) ?? firstNumber(allocation, ["allocated_litres"]) ?? 0;
-        if (!allocationId || litres <= 0) throw new Error("A filled container is missing its measured litre value.");
-        await recordHandover.mutateAsync({
-          allocationId,
-          eventKey: "delivered_to_customer",
-          measuredLitres: litres,
-          note: "Fuel delivered and quantity confirmed with customer",
-          idempotencyKey: idempotencyKey("fuel-container-delivered", `${selectedOrderId}:${profileId ?? allocationId}`),
-          metadata: { customer_handover_confirmed: true },
-        });
-        deliveredLitres += litres;
-      }
-      if (Math.abs(deliveredLitres-requestedLitres)>0.001) {
-        throw new Error("Measured container litres do not match the ordered Fuel quantity. Please report this discrepancy to the station.");
-      }
-      await changeStage.mutateAsync({
+      // One server-side transaction validates all containers, records every
+      // custody event, advances the order and settles completed purchase orders.
+      // The driver does not scan each container or submit a second delivery step.
+      await confirmDelivery.mutateAsync({
         orderId: selectedOrderId,
-        stageKey: "delivered",
-        deliveredLitres,
-        idempotencyKey: idempotencyKey("fuel-driver-delivered", selectedOrderId),
-        metadata: { delivered_litres: deliveredLitres, customer_handover_confirmed: true },
+        idempotencyKey: idempotencyKey("fuel-order-customer-delivery", selectedOrderId),
+        metadata: { customer_handover_confirmed: true, delivery_mode: firstString(selectedOrder, ["fulfillment_mode"]) },
       });
-      if (isRental) {
-        await changeStage.mutateAsync({
-          orderId: selectedOrderId,
-          stageKey: "return_due",
-          idempotencyKey: idempotencyKey("fuel-driver-return-due", selectedOrderId),
-          metadata: { rental_container_return_required: true },
-        });
-      }
     }, isRental
-      ? "Fuel delivery is confirmed. The customer must transfer the fuel and return the SKIMA containers to you."
-      : "Fuel delivery is confirmed. Purchased container ownership has transferred to the customer.");
+      ? "Delivery confirmed once for the full order. The customer must now transfer the fuel and return every SKIMA rental container to you."
+      : "Delivery confirmed once for the full order. The customer owns the purchased containers and this delivery is complete.");
   };
 
-  const confirmRentalReturn = async () => {
+  const confirmCustomerReturn = async () => {
     if (!selectedOrder) return;
     await perform(selectedOrderId, async () => {
-      const rows = (await allocations.refetch()).data?.filter((row) =>
-        firstString(row, ["order_id"]) === selectedOrderId
-      ) ?? [];
-      const delivered = rows.filter((row) => firstString(row, ["status"]) === "delivered");
-      const expected = firstNumber(selectedOrder, ["container_count"]) ?? 0;
-      if (delivered.length !== expected) throw new Error("Not all rental containers have a delivered customer handover.");
-
-      for (const allocation of delivered) {
-        const allocationId = firstString(allocation, ["id"]);
-        const profileId = firstString(allocation, ["container_profile_id"]);
-        if (!allocationId) continue;
-        await recordHandover.mutateAsync({
-          allocationId,
-          eventKey: "returned_to_driver",
-          note: "Customer returned the empty SKIMA rental container after transferring fuel",
-          idempotencyKey: idempotencyKey("fuel-container-returned-to-driver", allocationId),
-          metadata: { customer_return_confirmed: true },
-        });
-      }
-
-      await changeStage.mutateAsync({
+      await confirmRentalReturn.mutateAsync({
         orderId: selectedOrderId,
-        stageKey: "returned_to_driver",
-        idempotencyKey: idempotencyKey("fuel-stage-returned-to-driver", selectedOrderId),
-        metadata: { all_rental_containers_received: true },
+        action: "customer_returned_to_driver",
+        idempotencyKey: idempotencyKey("fuel-order-customer-rental-return", selectedOrderId),
+        metadata: { customer_return_confirmed: true },
       });
-    }, "All rental containers have been returned to you. Take them back to the assigned station.");
+    }, "All rental containers were recorded as returned to you. Take the complete set back to the assigned station.");
   };
 
   const confirmStationReturn = async () => {
     if (!selectedOrder) return;
     await perform(selectedOrderId, async () => {
-      const rows = (await allocations.refetch()).data?.filter((row) =>
-        firstString(row, ["order_id"]) === selectedOrderId
-      ) ?? [];
-      const returned = rows.filter((row) => firstString(row, ["status"]) === "returned_to_driver");
-      const expected = firstNumber(selectedOrder, ["container_count"]) ?? 0;
-      if (returned.length !== expected) throw new Error("All rented containers must be received from the customer before station return.");
-
-      for (const allocation of returned) {
-        const allocationId = firstString(allocation, ["id"]);
-        if (!allocationId) continue;
-        await recordHandover.mutateAsync({
-          allocationId,
-          eventKey: "received_at_station",
-          note: "Returned SKIMA rental container received at its assigned station",
-          idempotencyKey: idempotencyKey("fuel-container-received-at-station", allocationId),
-          metadata: { station_return_confirmed: true },
-        });
-      }
-
-      await changeStage.mutateAsync({
+      await confirmRentalReturn.mutateAsync({
         orderId: selectedOrderId,
-        stageKey: "received_at_station",
-        idempotencyKey: idempotencyKey("fuel-stage-received-at-station", selectedOrderId),
-        metadata: { all_rental_containers_returned_to_station: true },
+        action: "driver_returned_to_station",
+        idempotencyKey: idempotencyKey("fuel-order-driver-rental-return", selectedOrderId),
+        metadata: { station_return_confirmed: true },
       });
-    }, "Rental containers are back at the station. The station team must inspect each one before it can be reused.");
+    }, "The complete rental-container return was recorded at the assigned station. The station team must inspect the containers before reuse.");
   };
 
   const actionForStage = () => {
     if (currentStage === "station_handover") {
-      return <AppButton label="Start fuel delivery" fullWidth loading={busyOrderId === selectedOrderId || changeStage.isPending} onPress={() => void startDelivery()} icon={<Truck color="#FFFFFF" size={18} />} />;
+      return <AppButton label="Confirm departure from station" fullWidth loading={busyOrderId === selectedOrderId || changeStage.isPending} onPress={() => void startDelivery()} icon={<Truck color="#FFFFFF" size={18} />} />;
     }
     if (currentStage === "out_for_delivery") {
       return <AppButton label="Confirm customer delivery" fullWidth loading={busyOrderId === selectedOrderId || recordHandover.isPending || changeStage.isPending} onPress={() => void completeCustomerHandover()} icon={<CheckCircle2 color="#FFFFFF" size={18} />} />;
     }
     if (currentStage === "return_due") {
-      return <AppButton label="Confirm customer returned rental containers" fullWidth loading={busyOrderId === selectedOrderId || recordHandover.isPending} onPress={() => void confirmRentalReturn()} icon={<RotateCcw color="#FFFFFF" size={18} />} />;
+      return <AppButton label="Confirm all rental containers received" fullWidth loading={busyOrderId === selectedOrderId || confirmRentalReturn.isPending} onPress={() => void confirmCustomerReturn()} icon={<RotateCcw color="#FFFFFF" size={18} />} />;
     }
     if (currentStage === "returned_to_driver") {
-      return <AppButton label="Confirm containers returned to station" fullWidth loading={busyOrderId === selectedOrderId || recordHandover.isPending} onPress={() => void confirmStationReturn()} icon={<Package color="#FFFFFF" size={18} />} />;
+      return <AppButton label="Confirm all containers back at station" fullWidth loading={busyOrderId === selectedOrderId || confirmRentalReturn.isPending} onPress={() => void confirmStationReturn()} icon={<Package color="#FFFFFF" size={18} />} />;
     }
     return null;
   };
@@ -229,7 +164,7 @@ export function FuelDriverJobsScreen() {
     <Screen
       eyebrow="SKIMA Fuel · Driver"
       title="Fuel delivery jobs"
-      subtitle="Deliver filled containers, confirm measured litres and return SKIMA rental containers to the station."
+      subtitle="Follow the instructions for your assigned fulfilment mode and current order stage. The app confirms all containers together when you complete a handover."
       action={<AppButton label="My LPG jobs" size="sm" variant="ghost" onPress={() => router.push("/(driver)/jobs" as never)} />}
     >
       {orders.isPending ? (
@@ -256,7 +191,7 @@ export function FuelDriverJobsScreen() {
                     <View style={[styles.icon, { backgroundColor: selected ? palette.brand : palette.surfaceSubtle }]}><Fuel color={selected ? "#FFFFFF" : palette.brand} size={20} /></View>
                     <View style={styles.jobCopy}>
                       <Text style={[styles.jobTitle, { color: palette.ink }]}>{product} · {firstNumber(order, ["requested_litres"]) ?? 0} L</Text>
-                      <Text style={[styles.muted, { color: palette.muted }]}>{isRentalOrder ? "Rental container return required" : "Purchased container"} · {orderId.slice(0, 8).toUpperCase()}</Text>
+                      <Text style={[styles.muted, { color: palette.muted }]}>{modeLabel(firstString(order, ["fulfillment_mode"]) ?? "")} · {isRentalOrder ? "Rental containers" : "Purchased containers"} · {orderId.slice(0, 8).toUpperCase()}</Text>
                     </View>
                     <StatusPill label={humanize(stage)} tone={stageTone(stage)} />
                   </Pressable>
@@ -267,6 +202,13 @@ export function FuelDriverJobsScreen() {
 
           {selectedOrder ? (
             <Card title={productName + " delivery"} description={stageDescription(currentStage, isRental)}>
+              <View style={[styles.returnCard, { backgroundColor: palette.surfaceSubtle }]}>
+                <Truck color={palette.brand} size={20} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={[styles.jobTitle, { color: palette.ink }]}>{modeLabel(fulfillmentMode)}</Text>
+                  <Text style={[styles.muted, { color: palette.ink }]}>{driverModeDescription}</Text>
+                </View>
+              </View>
               <View style={styles.metrics}>
                 <Metric label="Ordered" value={`${requestedLitres} L`} />
                 <Metric label="Containers" value={String(firstNumber(selectedOrder, ["container_count"]) ?? 0)} />
@@ -278,6 +220,10 @@ export function FuelDriverJobsScreen() {
                   <Text style={[styles.muted, { color: palette.ink }]}>For a rental, the customer transfers the fuel and returns every SKIMA container to you. You must take the empty containers back to the same station.</Text>
                 </View>
               ) : null}
+              <View style={[styles.returnCard, { backgroundColor: palette.surfaceSubtle }]}>
+                <Package color={palette.brand} size={20} />
+                <Text style={[styles.muted, { color: palette.ink }]}>Container custody: {withDriverCount} of {containerCount} with you. The app records the full order handover together; you do not need to scan each container a second time.</Text>
+              </View>
               {actionForStage()}
               {["delivered","inspection_passed","completed","exception"].includes(currentStage) ? (
                 <Text style={[styles.muted, { color: palette.muted }]}>There is no further driver action for this order at the current stage.</Text>
@@ -311,17 +257,40 @@ function stageTone(stage: string): "neutral" | "brand" | "success" | "warning" |
 
 function stageDescription(stage: string, rental: boolean): string {
   const descriptions: Record<string,string> = {
-    driver_assigned: "You have been assigned to this Fuel order. The station must hand the prepared containers to you before departure.",
-    station_handover: "The station has handed the filled containers to you. Confirm departure to start the delivery.",
-    out_for_delivery: "The customer delivery is in progress. Confirm all container handovers and the measured litres at the destination.",
-    delivered: rental ? "Delivery is confirmed. The customer needs to transfer the fuel and return all SKIMA containers." : "Delivery is confirmed. The purchased container now belongs to the customer.",
-    return_due: "Wait for the customer to transfer the fuel and return every SKIMA rental container to you.",
-    returned_to_driver: "You have received the empty rental containers. Return them to the assigned station.",
-    received_at_station: "The station has received the containers. The station team must inspect them before they re-enter service.",
-    completed: "This Fuel order is complete.",
-    exception: "This Fuel order is under operational review. Contact station support before taking further action.",
+    driver_assigned: "CURRENT STEP — Meet the station team. Verify the product, ordered litres, order reference and the assigned vehicle. Wait until the station physically hands over every filled container. Do not leave before custody is recorded.",
+    station_handover: "CURRENT STEP — The station has recorded the handover. Confirm departure from the station. This is a legacy transition; new handovers start delivery automatically.",
+    out_for_delivery: "CURRENT STEP — Take the assigned containers to the customer's delivery address. Let the customer check the fuel and confirm the delivered quantity. Then tap Confirm customer delivery once for the entire order. No second scan per container is required.",
+    delivered: rental ? "DELIVERY CONFIRMED — The customer must transfer the fuel into their own container(s), then return every empty SKIMA rental container to you." : "DELIVERY CONFIRMED — The customer owns the purchased containers. There is no further driver action.",
+    return_due: "CURRENT STEP — Wait for the customer to transfer the fuel and return the full set of empty SKIMA rental containers. Count the containers, then confirm the return once for the whole order.",
+    returned_to_driver: "CURRENT STEP — You have received the complete set of rental containers from the customer. Take all of them back to the same station shown on the order and hand them to station staff.",
+    received_at_station: "STATION RETURN RECORDED — The station team is responsible for inspection. Do not reuse or release these containers until inspection is passed.",
+    inspection_passed: "RETURN INSPECTION PASSED — The station has confirmed the rental containers are safe to reuse. No further driver action is required.",
+    completed: "ORDER COMPLETE — There is no further driver action for this order.",
+    exception: "ORDER ON HOLD — Do not continue handover or delivery. Contact the station operator or SKIMA Dispatch and follow their resolution instructions.",
   };
-  return descriptions[stage] ?? "Follow the station handover and customer delivery instructions for this order.";
+  return descriptions[stage] ?? "Wait for the station or SKIMA Dispatch to update the order. Follow only the instruction for the current stage.";
+}
+
+function modeLabel(mode: string): string {
+  switch (mode) {
+    case "station_managed": return "Station Managed";
+    case "independent_driver": return "Independent Driver";
+    case "skima_managed": return "SKIMA Managed";
+    default: return "Mode not assigned";
+  }
+}
+
+function describeDriverMode(mode: string): string {
+  switch (mode) {
+    case "station_managed":
+      return "You are the station's own registered driver. The station branch controls your assignment and hands over the filled containers to you.";
+    case "independent_driver":
+      return "You are an independent delivery provider, not a station employee and not a SKIMA staff driver. Use your own approved vehicle linked to your Independent Driver profile.";
+    case "skima_managed":
+      return "You are assigned through SKIMA Managed as an internal SKIMA driver. Use only your assigned SKIMA-owned fleet vehicle; this is not Station Managed or Independent delivery.";
+    default:
+      return "Your driver fulfilment mode is not resolved. Contact SKIMA Dispatch before accepting the order.";
+  }
 }
 
 const styles = StyleSheet.create({
