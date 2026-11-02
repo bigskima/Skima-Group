@@ -287,6 +287,10 @@ begin
       'description', nullif(btrim(target_payload->>'description'), ''),
       'service_key', request_service_key,
       'category_key', target_payload->>'category_key',
+      'provider_organization_id', service.organization_id,
+      'provider_name', provider.public_name,
+      'provider_service_id', service.id,
+      'provider_service_name', service.display_name,
       'pickup', target_payload->'pickup',
       'destination', target_payload->'destination',
       'cargo', coalesce(target_payload->'cargo', '{}'::jsonb),
@@ -934,7 +938,9 @@ begin
     job.id, service.organization_id, service.id, 'matched',
     jsonb_build_array('service_capability', 'pickup_coverage', 'destination_coverage', 'provider_verified'),
     jsonb_build_object('job_id',job.id,'title',job.title,'description',job.description,'service_key',job.service_key,
-      'category_id',job.category_id,'pickup',job.pickup_location,'destination',job.destination_location,
+      'category_id',job.category_id,'provider_organization_id',service.organization_id,
+      'provider_name',provider.public_name,'provider_service_id',service.id,
+      'provider_service_name',service.display_name,'pickup',job.pickup_location,'destination',job.destination_location,
       'cargo',job.cargo_snapshot,'instructions',job.instructions,'requested_pickup_at',job.requested_pickup_at),
     job.customer_contact_snapshot
   from public.logistics_provider_services service
