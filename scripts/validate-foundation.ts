@@ -1177,6 +1177,7 @@ requireMatch(
 );
 
 await requireFile("supabase/functions/runtime-worker/index.ts");
+await requireFile("supabase/functions/fuel-runtime/index.ts");
 await requireFile("supabase/functions/payment-webhook/index.ts");
 await requireFile("supabase/functions/webhook-sandbox-receiver/index.ts");
 await requireFile("scripts/verify-backend-lifecycle.ts");

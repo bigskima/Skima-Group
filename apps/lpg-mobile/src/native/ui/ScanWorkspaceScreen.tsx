@@ -210,7 +210,7 @@ export function ScanWorkspaceScreen({
               ? "Customer hand-over awaiting confirmation"
               : workspace === "station" ? "No station cylinder needs verification" : "No job needs verification right now"}
           </Text>
-          <Text style={styles.heroBody}>{workspace === "station" ? "Verify the driver's incoming cylinder at reception, then verify the filled cylinder before it leaves the station." : "Scan pickup, supplier arrival and the returned cylinder at the customer. The customer OTP is the final confirmation."}</Text>
+          <Text style={styles.heroBody}>{workspace === "station" ? "Verify the driver's incoming cylinder at reception, then verify the filled cylinder before it leaves the station." : "Scan the assigned cylinder once at customer pickup. SKIMA Managed drivers record supplier/refill details on their job; the customer confirms final delivery with the order-specific OTP."}</Text>
         </View>
       </View>
 
@@ -221,7 +221,7 @@ export function ScanWorkspaceScreen({
             <View style={styles.scannerCopy}>
               <Text style={[styles.scannerTitle, { color: palette.ink }]}>Customer hand-over · OTP confirmation</Text>
               <Text style={[styles.scannerBody, { color: palette.muted }]}>
-                These cylinders are returning to customers. First scan the returned cylinder at the customer's address. Then the customer confirms the order-specific OTP inside SKIMA.
+                These cylinders are returning to customers. No final driver scan is needed. Once the customer physically has the cylinder, they confirm the order-specific OTP inside SKIMA.
               </Text>
             </View>
             <StatusPill label={`${handoverJobs.length} waiting`} tone="warning" />
@@ -231,11 +231,11 @@ export function ScanWorkspaceScreen({
             const status = (displayStatus(job) ?? "").toLowerCase().replace(/[\\s-]+/g, "_");
             return (
               <View key={orderId ?? displayReference(job)} style={[styles.tagNoticeCard, { backgroundColor: palette.surfaceSubtle }]}>
-                <View style={styles.scannerCopy}>
+                <View style={styles.tagNoticeCopy}>
                   <Text style={[styles.scannerTitle, { color: palette.ink }]}>{displayReference(job) ?? "LPG order"}</Text>
                   <Text style={[styles.scannerBody, { color: palette.muted }]}>
                     {cylinderPermanentIdentifier(job) ? `Cylinder ${cylinderPermanentIdentifier(job)} · ` : ""}
-                    {status === "return_en_route" ? "Returning to customer · record arrival, then scan the cylinder." : "Returned-cylinder scan is required first; customer OTP closes the order afterwards."}
+                    {status === "return_en_route" ? "Returning to customer · customer confirms OTP after physical hand-over." : "Waiting for the customer's order-specific OTP confirmation."}
                   </Text>
                 </View>
                 {orderId ? (
@@ -489,10 +489,9 @@ export function ScanWorkspaceScreen({
 function scanReady(job: PlatformRecord, workspace: "driver" | "station") {
   const value = (displayStatus(job) ?? "").toLowerCase().replace(/[\\s-]+/g, "_");
   if (workspace === "station") return ["station_en_route", "refill_confirmed", "station_settled"].includes(value);
-  const fulfillmentChannel = firstString(job, ["fulfillmentChannel", "fulfillment_channel"]);
-  if (["pickup_verified", "station_en_route"].includes(value)) return fulfillmentChannel === "skima_internal";
+  if (["pickup_verified", "station_en_route"].includes(value)) return false;
   if (["return_en_route", "delivery_verification_pending"].includes(value)) {
-    return job.customerDeliveryScanVerified !== true;
+    return false;
   }
   return [
     "driver_accepted",
@@ -561,7 +560,8 @@ const styles = StyleSheet.create({
   identityBody: { ...typography.caption, lineHeight: 18 },
   identityNote: { ...typography.caption, lineHeight: 18 },
   tagNotice: { ...typography.caption, lineHeight: 18, fontWeight: "700" },
-  tagNoticeCard: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md },
+  tagNoticeCard: { flexDirection: "column", alignItems: "stretch", gap: spacing.sm, padding: spacing.md, borderRadius: radii.md },
+  tagNoticeCopy: { width: "100%", minWidth: 0, gap: 3 },
   manualFallbackToggle: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.pill, minHeight: 42, alignItems: "center", justifyContent: "center" },
   manualFallbackToggleText: { ...typography.caption, fontWeight: "900" },
   scannerCard: { gap: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.md },

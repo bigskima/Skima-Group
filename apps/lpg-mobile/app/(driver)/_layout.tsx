@@ -25,6 +25,7 @@ export default function Layout() {
           "service-zone",
           "account-tools",
           "account-settings",
+          "fuel-jobs",
         ]}
       />
     </WorkspaceGate>

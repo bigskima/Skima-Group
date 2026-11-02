@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CircleCheck,
   CircleHelp,
+  Fuel,
   MapPin,
   Navigation,
   PackageCheck,
@@ -209,6 +210,12 @@ export function DriverDashboard() {
               label="Availability"
               hint="Update your live status"
               href="/(driver)/availability"
+            />
+            <OperationalAction
+              icon={Fuel}
+              label="Fuel deliveries"
+              hint="Deliver PMS, AGO or DPK orders and handle container returns"
+              href="/(driver)/fuel-jobs"
             />
           </GuideTarget>
 
@@ -491,6 +498,7 @@ function CustomerServiceCards({
   };
 }) {
   const Icon = primary.icon;
+  const { palette } = useAppTheme();
   const live = primary.eyebrow.toLowerCase().includes("live") || primary.eyebrow.toLowerCase().includes("payment");
   return (
     <View style={styles.customerServiceGrid}>
@@ -512,6 +520,20 @@ function CustomerServiceCards({
         <View style={styles.customerServiceArrow}><ChevronRight color={colors.brandDark} size={17} /></View>
       </Pressable>
       <CustomerBillsCard />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Order liquid fuel"
+        onPress={() => router.push("/(customer)/fuel" as never)}
+        style={[styles.customerServiceCard, { backgroundColor: palette.surface, borderColor: palette.border }]}
+      >
+        <View style={[styles.customerServiceIcon, { backgroundColor: palette.brandSoft }]}><Fuel color={colors.brand} size={25} /></View>
+        <View style={styles.customerServiceCopy}>
+          <Text style={[styles.customerServiceEyebrow, { color: colors.brand }]}>LIQUID FUEL DELIVERY</Text>
+          <Text style={[styles.customerServiceTitle, { color: palette.ink }]}>Order fuel</Text>
+          <Text style={[styles.customerServiceBody, { color: palette.muted }]}>Order available fuel products by the litre.</Text>
+        </View>
+        <View style={[styles.customerServiceArrow, { backgroundColor: palette.soft }]}><ChevronRight color={palette.ink} size={17} /></View>
+      </Pressable>
     </View>
   );
 }

@@ -129,9 +129,9 @@ export function friendlyError(
     return "This cylinder changed after the review was submitted. Start a fresh capacity review.";
 
   if (message.includes("final cylinder hand-over scan must be recorded"))
-    return "The driver has not recorded the returned-cylinder scan yet. Ask the driver to scan the cylinder at your address first; then request and confirm your delivery OTP.";
+    return "This hand-over no longer requires a second cylinder scan. Once you physically have the cylinder, refresh the order and confirm with its one-time delivery code.";
   if (message.includes("customer delivery scan is not valid for the current order status"))
-    return "This order is not currently waiting for a returned-cylinder scan. Refresh the assigned job and follow the next step shown.";
+    return "A returned-cylinder scan is not required for this delivery. Once you have the cylinder, confirm the order-specific OTP in SKIMA.";
   if (message.includes("no matching active assigned order for this cylinder"))
     return "SKIMA found no active order for this cylinder assigned to this driver login. Check that you opened the correct driver's workspace and that the order is still assigned to you.";
   if (message.includes("this cylinder has no active order ready for verification in your workspace"))
@@ -139,7 +139,7 @@ export function friendlyError(
   if (message.includes("this code matches more than one cylinder"))
     return "This code is linked to more than one cylinder. Stop the hand-over and ask Operations to review the cylinder identity.";
   if (message.includes("verified lpg delivery challenge is required"))
-    return "Refresh the assigned job. SKIMA records the driver's returned-cylinder scan first, then the customer confirms the order-specific OTP.";
+    return "The customer must confirm the order-specific delivery code before the LPG order can be completed.";
   if (
     message.includes("scanned cylinder does not match") ||
     message.includes("scan cylinder does not exist")

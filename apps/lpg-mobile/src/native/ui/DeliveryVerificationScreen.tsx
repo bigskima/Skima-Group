@@ -52,13 +52,10 @@ export function DeliveryVerificationScreen() {
   }, [draftType, id, owner]);
 
   const currentOrder = nestedRecord(details.data, "order") ?? details.data;
-  const deliveryScans = Array.isArray(details.data?.scans)
-    ? details.data.scans as Array<Record<string, unknown>>
-    : [];
-  const returnCylinderScanVerified = deliveryScans.some((scan) =>
-    (scan.scanType === "customer_delivery" || scan.scan_type === "customer_delivery")
-      && scan.result === "passed",
-  );
+  const currentOrderStatus = (firstString(currentOrder, ["status", "orderStatus", "order_status"]) ?? "")
+    .toLowerCase()
+    .replace(/[\\s-]+/g, "_");
+  const deliveryStageReady = ["return_en_route", "returning", "delivery_verification_pending"].includes(currentOrderStatus);
   const currentChallengeId = firstString(currentOrder, ["deliveryChallengeId", "delivery_challenge_id"]);
   const currentChallengeVerified = currentOrder?.deliveryChallengeVerified === true
     || currentOrder?.delivery_challenge_verified === true;
@@ -101,9 +98,9 @@ export function DeliveryVerificationScreen() {
 
   const request = async () => {
     setNotice(null);
-    if (!returnCylinderScanVerified) {
+    if (!deliveryStageReady) {
       setNoticeTone("neutral");
-      setNotice("Wait for the assigned driver to scan the returned cylinder at your address. You can request the delivery OTP once that scan is recorded.");
+      setNotice("The driver has not started the return leg yet. Once your order shows Returning to customer, request the OTP only when the cylinder is physically with you.");
       return;
     }
     if (!id || !session.context?.user.email) {
@@ -222,7 +219,7 @@ export function DeliveryVerificationScreen() {
     <Screen
       eyebrow="Secure hand-over"
       title="Confirm your delivery"
-      subtitle="After the driver scans the returned cylinder at your address, request your order-specific OTP and confirm delivery here."
+      subtitle="When the cylinder is physically with you, confirm the hand-over with the order-specific OTP. No final driver scan is required."
       action={<AppButton label="Back" variant="ghost" size="sm" onPress={() => router.back()} />}
     >
       <View style={[styles.hero, shadows.raised, { backgroundColor: palette.brand }]}>
@@ -233,7 +230,7 @@ export function DeliveryVerificationScreen() {
           <Text style={styles.heroEyebrow}>SKIMA SECURE DELIVERY</Text>
           <Text style={styles.heroTitle}>Confirm only when the cylinder is with you</Text>
           <Text style={styles.heroBody}>
-            The driver must first scan the returned cylinder. Your OTP is the final confirmation that closes this order.
+            The driver's pickup and station handovers are already recorded. Your order-specific OTP is the final delivery authorization.
           </Text>
         </View>
       </View>
@@ -255,18 +252,18 @@ export function DeliveryVerificationScreen() {
               ? "Your customer OTP was accepted earlier. You do not need another code; finish the hand-over to close this order."
               : challengeId
                 ? "Enter the code generated for this order. It can only be used for this delivery confirmation."
-                : "Once the driver has scanned the returned cylinder at your address, request a code for this order and confirm the hand-over."}
+                : "When the cylinder is physically with you and the order is returning to you, request the code and confirm the hand-over."}
           </Text>
         </View>
       </View>
 
-      {!returnCylinderScanVerified ? (
+      {!deliveryStageReady && !canFinalizeVerifiedChallenge ? (
         <View style={[styles.codeCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <View style={[styles.deliveryCodeDisplay, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
             <Clock3 color={palette.mutedStrong} size={22} />
-            <Text style={[styles.fieldLabel, { color: palette.ink }]}>Waiting for returned-cylinder scan</Text>
+            <Text style={[styles.fieldLabel, { color: palette.ink }]}>Waiting for the return journey</Text>
             <Text style={[styles.deliveryCodeHint, { color: palette.muted }]}>
-              Your driver must scan the cylinder's QR or permanent five-character ID at your address first. Then request a fresh OTP for this order.
+              You can confirm delivery when the assigned driver has started returning to you. Do not request or share the OTP until the cylinder is physically with you.
             </Text>
           </View>
           <AppButton
@@ -279,7 +276,7 @@ export function DeliveryVerificationScreen() {
         </View>
       ) : !challengeId ? (
         <AppButton
-          label="Get verification code"
+          label="I have received the cylinder — get OTP"
           fullWidth
           size="lg"
           loading={mutation.isPending || deliveryMutation.isPending}
@@ -351,7 +348,7 @@ export function DeliveryVerificationScreen() {
               label="Request a new code"
               variant="ghost"
               fullWidth
-              disabled={mutation.isPending || deliveryMutation.isPending || !returnCylinderScanVerified}
+              disabled={mutation.isPending || deliveryMutation.isPending || !deliveryStageReady}
               onPress={() => void request()}
             />
           ) : null}

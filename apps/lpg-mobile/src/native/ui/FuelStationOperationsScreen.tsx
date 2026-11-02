@@ -1,0 +1,727 @@
+import { router } from "expo-router";
+import { CheckCircle2, Fuel, Package, ShieldCheck, Truck } from "lucide-react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+
+import { domainQueries, useStationInventory } from "../api/domains";
+import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
+import {
+  ActionResponseSchema,
+  RecordArraySchema,
+  firstNumber,
+  firstString,
+  nestedRecord,
+  type PlatformRecord,
+} from "../api/records";
+import { useAppTheme } from "../theme/ThemeProvider";
+import { radii, spacing, typography } from "../theme/tokens";
+import { friendlyError } from "../utilities/friendlyError";
+import { idempotencyKey } from "../utilities/idempotency";
+import { AppButton } from "./AppButton";
+import { Card } from "./Card";
+import { EmptyState } from "./EmptyState";
+import { Screen } from "./Screen";
+import { StatusPill } from "./StatusPill";
+
+type FuelOperation = PlatformRecord & {
+  order_id?: string;
+  product_key?: string;
+  station_branch_id?: string;
+  requested_litres?: number;
+  container_count?: number;
+  container_mode?: string;
+  container_type_id?: string;
+  fulfillment_mode?: string;
+  stage_key?: string;
+};
+
+export function FuelStationOperationsScreen() {
+  const { palette } = useAppTheme();
+  const stationInventory = useStationInventory();
+  const station = nestedRecord(stationInventory.data, "station");
+  const stationBranchId = firstString(station, ["stationBranchId", "station_branch_id", "branchId", "branch_id"]) ?? "";
+  const organizationId = firstString(station, ["organizationId", "organization_id"]) ?? "";
+  const products = useGatewayQuery({
+    key: ["fuel", "products"],
+    path: "/runtime/fuel/products",
+    schema: RecordArraySchema,
+    refetchInterval: 60000,
+  });
+  const productNameForKey = (key: string) =>
+    firstString((products.data ?? []).find((item) => firstString(item, ["key"]) === key), ["display_name"]) || key || "Fuel";
+
+  const operations = useGatewayQuery({
+    key: ["fuel", "station", "operations", stationBranchId],
+    path: `/runtime/fuel/orders/operations?branchId=${encodeURIComponent(stationBranchId)}`,
+    schema: RecordArraySchema,
+    enabled: Boolean(stationBranchId),
+    refetchInterval: 12000,
+  });
+  const storage = useGatewayQuery({
+    key: ["fuel", "station", "storage", stationBranchId],
+    path: `/runtime/fuel/storage?branchId=${encodeURIComponent(stationBranchId)}`,
+    schema: RecordArraySchema,
+    enabled: Boolean(stationBranchId),
+    refetchInterval: 20000,
+  });
+  const offers = useGatewayQuery({
+    key: ["fuel", "station", "offers", stationBranchId],
+    path: `/runtime/fuel/offers?branchId=${encodeURIComponent(stationBranchId)}`,
+    schema: RecordArraySchema,
+    enabled: Boolean(stationBranchId),
+    refetchInterval: 30000,
+  });
+  const containerTypes = useGatewayQuery({
+    key: ["fuel", "station", "container-types"],
+    path: "/runtime/fuel/container-types",
+    schema: RecordArraySchema,
+    refetchInterval: 60000,
+  });
+  const containers = useGatewayQuery({
+    key: ["fuel", "station", "containers", organizationId],
+    path: "/runtime/fuel/containers",
+    schema: RecordArraySchema,
+    refetchInterval: 20000,
+  });
+  const qualifications = useGatewayQuery({
+    key: ["fuel", "station", "qualifications", stationBranchId],
+    path: `/runtime/fuel/driver-qualifications?branchId=${encodeURIComponent(stationBranchId)}`,
+    schema: RecordArraySchema,
+    enabled: Boolean(stationBranchId),
+    refetchInterval: 30000,
+  });
+  const vehicles = domainQueries.vehicles();
+
+  const [focusedOrderId, setFocusedOrderId] = useState("");
+  const [selectedDriverQualificationId, setSelectedDriverQualificationId] = useState("");
+  const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const reservations = useGatewayQuery({
+    key: ["fuel", "station", "reservations", focusedOrderId],
+    path: `/runtime/fuel/orders/stock/reservations?orderId=${encodeURIComponent(focusedOrderId)}`,
+    schema: RecordArraySchema,
+    enabled: Boolean(focusedOrderId),
+    refetchInterval: 10000,
+  });
+  const allocations = useGatewayQuery({
+    key: ["fuel", "station", "allocations", focusedOrderId],
+    path: "/runtime/fuel/container-allocations",
+    schema: RecordArraySchema,
+    enabled: Boolean(focusedOrderId),
+    refetchInterval: 10000,
+  });
+
+  const reserveBatch = useGatewayMutation({
+    path: "/runtime/fuel/orders/stock/reserve-for-order",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "storage"], ["fuel", "station", "operations"]],
+  });
+  const changeStage = useGatewayMutation({
+    path: "/runtime/fuel/orders/stage",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "operations"]],
+  });
+  const consumeStock = useGatewayMutation({
+    path: "/runtime/fuel/orders/stock/consume",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "storage"], ["fuel", "station", "reservations"]],
+  });
+  const allocateContainer = useGatewayMutation({
+    path: "/runtime/fuel/containers/allocate",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "containers"], ["fuel", "station", "allocations"]],
+  });
+  const recordHandover = useGatewayMutation({
+    path: "/runtime/fuel/containers/handover",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "containers"], ["fuel", "station", "allocations"]],
+  });
+  const assignDriver = useGatewayMutation({
+    path: "/runtime/fuel/orders/assign-driver",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "operations"], ["fuel", "station", "qualifications"]],
+  });
+  const inspectContainer = useGatewayMutation({
+    path: "/runtime/fuel/containers/inspection",
+    schema: ActionResponseSchema,
+    invalidate: [["fuel", "station", "allocations"], ["fuel", "station", "containers"]],
+  });
+
+  const rows = (operations.data ?? []) as FuelOperation[];
+  const sortedRows = [...rows].sort((a, b) => {
+    const order = stagePriority(firstString(a, ["stage_key"]) ?? "") - stagePriority(firstString(b, ["stage_key"]) ?? "");
+    return order || String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""));
+  });
+  const focusedOrder = sortedRows.find((row) => firstString(row, ["order_id"]) === focusedOrderId) ?? null;
+  const focusedProduct = focusedOrder ? firstString(focusedOrder, ["product_key"]) ?? "fuel.pms" : "";
+  const focusedLitres = focusedOrder ? firstNumber(focusedOrder, ["requested_litres"]) ?? 0 : 0;
+  const focusedMode = focusedOrder ? firstString(focusedOrder, ["container_mode"]) ?? "rental" : "rental";
+  const focusedContainerTypeId = focusedOrder ? firstString(focusedOrder, ["container_type_id"]) ?? "" : "";
+  const focusedStage = focusedOrder ? firstString(focusedOrder, ["stage_key"]) ?? "" : "";
+  const focusedSettlementExecutionId = firstString(focusedOrder, ["settlement_execution_id"]);
+  const focusedSettlementStatementId = firstString(focusedOrder, ["settlement_statement_id"]);
+  const focusedSettledAt = firstString(focusedOrder, ["settled_at"]);
+  const branchOffers = (offers.data ?? []).filter((offer) =>
+    firstString(offer, ["status"]) === "active" && firstString(offer, ["branch_id"]) === stationBranchId
+  );
+  const orderCurrency = firstString(nestedRecord(focusedOrder, "order"), ["currency_code"]) ?? "NGN";
+  const currentOffer = focusedOrder
+    ? branchOffers.find((offer) =>
+        firstString(offer, ["product_key"]) === focusedProduct &&
+        firstString(offer, ["currency_code"]) === orderCurrency
+      ) ?? null
+    : null;
+
+  const availableContainers = useMemo(() => (containers.data ?? []).filter((container) => {
+    if (firstString(container, ["status"]) !== "available") return false;
+    if (firstString(container, ["container_type_id"]) !== focusedContainerTypeId) return false;
+    if (firstString(container, ["ownership_mode"]) !== "skima") return false;
+    const asset = nestedRecord(container, "asset");
+    const assetOrganization = firstString(asset, ["organization_id"]);
+    return !organizationId || !assetOrganization || assetOrganization === organizationId;
+  }), [containers.data, focusedContainerTypeId, organizationId]);
+
+  const existingAllocations = (allocations.data ?? []).filter((row) =>
+    firstString(row, ["order_id"]) === focusedOrderId &&
+    firstString(row, ["status"]) !== "cancelled"
+  );
+  const filledAllocations = existingAllocations.filter((row) => firstString(row, ["status"]) === "station_prepared");
+  const focusedFulfillmentMode = firstString(focusedOrder, ["fulfillment_mode"]) ?? "";
+  const readyQualifications = (qualifications.data ?? []).filter((row) =>
+    focusedFulfillmentMode === "station_managed" &&
+    firstString(row, ["fulfillment_mode"]) === "station_managed" &&
+    firstString(row, ["status"]) === "approved" &&
+    firstString(row, ["product_key"]) === focusedProduct &&
+    (firstNumber(row, ["maximum_load_litres"]) ?? 0) >= focusedLitres &&
+    (!firstString(row, ["valid_until"]) || Date.parse(firstString(row, ["valid_until"]) ?? "") > Date.now()) &&
+    firstString(row, ["branch_id"]) === stationBranchId &&
+    Boolean(firstString(row, ["station_managed_driver_id"])) &&
+    !firstString(row, ["driver_profile_id"])
+  );
+  const selectedQualification = readyQualifications.find((row) =>
+    firstString(row, ["id"]) === selectedDriverQualificationId
+  ) ?? readyQualifications[0] ?? null;
+
+  const refreshAll = async () => {
+    await Promise.allSettled([
+      stationInventory.refetch(), operations.refetch(), storage.refetch(), offers.refetch(),
+      containerTypes.refetch(), containers.refetch(), qualifications.refetch(),
+      reservations.refetch(), allocations.refetch(), vehicles.refetch(),
+    ]);
+  };
+
+  const withBusy = async (orderId: string, action: () => Promise<void>, successMessage: string) => {
+    setBusyOrderId(orderId);
+    setError(null);
+    setNotice(null);
+    try {
+      await action();
+      setNotice(successMessage);
+      await refreshAll();
+    } catch (cause) {
+      setError(friendlyError(cause, "SKIMA could not complete this station operation. Check the order and try again."));
+    } finally {
+      setBusyOrderId(null);
+    }
+  };
+
+  const startOrderPreparation = async (order: FuelOperation) => {
+    const orderId = firstString(order, ["order_id"]) ?? "";
+    const litres = firstNumber(order, ["requested_litres"]) ?? 0;
+    await withBusy(orderId, async () => {
+      await reserveBatch.mutateAsync({
+        orderId,
+        requestedLitres: litres,
+        idempotencyKey: idempotencyKey("fuel-stock-batch", orderId),
+        metadata: { branch_id: stationBranchId, product_key: firstString(order, ["product_key"]) },
+      });
+      await changeStage.mutateAsync({
+        orderId,
+        stageKey: "stock_reserved",
+        idempotencyKey: idempotencyKey("fuel-stage-stock-reserved", orderId),
+        metadata: { station_branch_id: stationBranchId },
+      });
+      await changeStage.mutateAsync({
+        orderId,
+        stageKey: "station_filling",
+        idempotencyKey: idempotencyKey("fuel-stage-filling", orderId),
+      });
+      setFocusedOrderId(orderId);
+    }, "Stock has been reserved and the order is ready for station filling.");
+  };
+
+  const finishStationFill = async () => {
+    if (!focusedOrder) return;
+    const orderId = focusedOrderId;
+    const order = focusedOrder;
+    await withBusy(orderId, async () => {
+      const requiredCount = firstNumber(order, ["container_count"]) ?? 0;
+      const existing = (await allocations.refetch()).data?.filter((row) =>
+        firstString(row, ["order_id"]) === orderId &&
+        firstString(row, ["status"]) !== "cancelled"
+      ) ?? [];
+      if (existing.length > requiredCount) throw new Error("Container allocation count exceeds the accepted order quote.");
+
+      const alreadyAllocatedProfiles = new Set(existing.map((row) => firstString(row, ["container_profile_id"])).filter(Boolean));
+      const missingCount = Math.max(0, requiredCount - existing.length);
+      const candidates = availableContainers.filter((container) =>
+        !alreadyAllocatedProfiles.has(firstString(container, ["id"]))
+      ).slice(0, missingCount);
+      if (candidates.length !== missingCount) {
+        throw new Error(`Only ${candidates.length} of ${missingCount} additional compatible SKIMA containers are available at this station.`);
+      }
+      if (requiredCount > 0 && !currentOffer) throw new Error("The station's accepted currency offer could not be found for container charges.");
+
+      const markContainerFilled = async (allocationId: string, profileId: string, litres: number) => {
+        await recordHandover.mutateAsync({
+          allocationId,
+          eventKey: "station_filled",
+          measuredLitres: litres,
+          note: "Filled and measured at station",
+          idempotencyKey: idempotencyKey("fuel-container-filled", `${orderId}:${profileId}`),
+          metadata: { station_branch_id: stationBranchId },
+        });
+      };
+
+      // Complete any allocation left reserved by a previous interrupted station session.
+      const unfilledExisting = existing.filter((row) => firstString(row, ["status"]) === "reserved");
+      for (const allocation of unfilledExisting) {
+        const allocationId = firstString(allocation, ["id"]);
+        const profileId = firstString(allocation, ["container_profile_id"]);
+        const litres = firstNumber(allocation, ["allocated_litres"]) ?? 0;
+        if (!allocationId || !profileId || litres <= 0) {
+          throw new Error("An existing container allocation is missing its identity or litre amount.");
+        }
+        await markContainerFilled(allocationId, profileId, litres);
+      }
+
+      const alreadyAllocatedLitres = existing.reduce((total, row) =>
+        total + (firstNumber(row, ["allocated_litres"]) ?? 0), 0
+      );
+      let litresLeft = Math.max(0, focusedLitres - alreadyAllocatedLitres);
+
+      for (const container of candidates) {
+        const profileId = firstString(container, ["id"]) ?? "";
+        const capacity = firstNumber(container, ["capacity_litres"]) ?? 0;
+        const allocatedLitres = Math.min(capacity, litresLeft);
+        if (!profileId || capacity <= 0 || allocatedLitres <= 0) {
+          throw new Error("A selected container has an invalid capacity.");
+        }
+
+        await allocateContainer.mutateAsync({
+          orderId,
+          containerProfileId: profileId,
+          allocatedLitres,
+          allocationMode: focusedMode,
+          purchaseAmount: focusedMode === "purchase" ? firstNumber(currentOffer, ["container_purchase_amount"]) ?? 0 : 0,
+          rentalAmount: focusedMode === "rental" ? firstNumber(currentOffer, ["container_rental_amount"]) ?? 0 : 0,
+          refundableDepositAmount: focusedMode === "rental" ? firstNumber(currentOffer, ["refundable_deposit_amount"]) ?? 0 : 0,
+          currencyCode: orderCurrency,
+          idempotencyKey: idempotencyKey("fuel-container-allocation", `${orderId}:${profileId}`),
+          metadata: { station_branch_id: stationBranchId },
+        });
+
+        const latestAllocations = (await allocations.refetch()).data ?? [];
+        const allocation = latestAllocations.find((row) =>
+          firstString(row, ["order_id"]) === orderId &&
+          firstString(row, ["container_profile_id"]) === profileId
+        );
+        const allocationId = allocation ? firstString(allocation, ["id"]) : null;
+        if (!allocationId) throw new Error("The container was allocated but its order allocation could not be reloaded.");
+
+        await markContainerFilled(allocationId, profileId, allocatedLitres);
+        litresLeft -= allocatedLitres;
+      }
+
+      if (litresLeft > 0.001) throw new Error("Registered container capacity is not enough for the ordered litres.");
+
+      const reservedRows = (await reservations.refetch()).data ?? [];
+      if (reservedRows.length === 0) throw new Error("No stock reservation exists for this Fuel order.");
+      for (const reservation of reservedRows) {
+        const reserved = firstNumber(reservation, ["reserved_litres"]) ?? 0;
+        const consumed = firstNumber(reservation, ["consumed_litres"]) ?? 0;
+        const remaining = Math.max(0, reserved - consumed);
+        if (remaining <= 0.001) continue;
+        const reservationId = firstString(reservation, ["id"]);
+        if (!reservationId) throw new Error("A fuel stock reservation is missing its identity.");
+        await consumeStock.mutateAsync({
+          reservationId,
+          consumedLitres: remaining,
+          idempotencyKey: idempotencyKey("fuel-stock-consume", `${orderId}:${reservationId}:${reserved}`),
+          metadata: { measured_at_station: true, order_id: orderId },
+        });
+      }
+
+      const finalReservations = (await reservations.refetch()).data ?? [];
+      const fullyConsumed = finalReservations.reduce((total, row) => total + (firstNumber(row, ["consumed_litres"]) ?? 0), 0);
+      if (fullyConsumed < focusedLitres - 0.001) {
+        throw new Error("Reserved fuel stock has not yet covered the complete measured order quantity.");
+      }
+
+      await changeStage.mutateAsync({
+        orderId,
+        stageKey: "ready_for_driver",
+        idempotencyKey: idempotencyKey("fuel-stage-ready-driver", orderId),
+      });
+    }, "The measured fuel and all containers are prepared. The order is ready for a qualified driver.");
+  };
+
+  const assignQualifiedDriver = async () => {
+    if (!focusedOrder || !selectedQualification) return;
+    const orderId = focusedOrderId;
+    const driverEntityId = firstString(selectedQualification, [
+      firstString(focusedOrder, ["fulfillment_mode"]) === "station_managed" ? "station_managed_driver_id" : "driver_profile_id",
+    ]);
+    const vehicleId = firstString(selectedQualification, ["vehicle_id"]);
+    if (!driverEntityId || !vehicleId) {
+      setError("The selected Fuel qualification is missing its driver identity or vehicle.");
+      return;
+    }
+    await withBusy(orderId, async () => {
+      await assignDriver.mutateAsync({
+        orderId,
+        driverEntityId,
+        vehicleId,
+        idempotencyKey: idempotencyKey("fuel-driver-assignment", orderId),
+        metadata: { station_branch_id: stationBranchId },
+      });
+    }, "A Fuel-approved driver and vehicle have been assigned to this order.");
+  };
+
+  const recordContainerInspection = async (allocation: PlatformRecord, result: "passed" | "failed") => {
+    if (!focusedOrder) return;
+    const orderId = focusedOrderId;
+    const allocationId = firstString(allocation, ["id"]);
+    if (!allocationId) return;
+    await withBusy(orderId, async () => {
+      await inspectContainer.mutateAsync({
+        allocationId,
+        inspectionResult: result,
+        note: result === "passed" ? "Station physical inspection passed." : "Station physical inspection failed; container quarantined.",
+        idempotencyKey: idempotencyKey("fuel-container-inspection", `${allocationId}:${result}`),
+        metadata: { station_branch_id: stationBranchId },
+      });
+
+      const latest = (await allocations.refetch()).data ?? [];
+      const orderRows = latest.filter((row) => firstString(row, ["order_id"]) === orderId);
+      const failed = orderRows.some((row) => firstString(row, ["status"]) === "exception");
+      const inspectionPending = orderRows.some((row) => firstString(row, ["status"]) === "inspection");
+      if (failed) {
+        await changeStage.mutateAsync({
+          orderId,
+          stageKey: "exception",
+          idempotencyKey: idempotencyKey("fuel-stage-inspection-exception", orderId),
+          reason: "At least one returned rental container failed inspection.",
+        });
+      } else if (!inspectionPending && orderRows.length === (firstNumber(focusedOrder, ["container_count"]) ?? 0)) {
+        await changeStage.mutateAsync({
+          orderId,
+          stageKey: "inspection_passed",
+          idempotencyKey: idempotencyKey("fuel-stage-inspection-passed", orderId),
+        });
+      }
+    }, result === "passed" ? "Container inspection recorded as passed." : "Container flagged and quarantined for review.");
+  };
+
+  const handContainersToDriver = async () => {
+    if (!focusedOrder) return;
+    const orderId = focusedOrderId;
+    await withBusy(orderId, async () => {
+      const allAllocations = (await allocations.refetch()).data ?? [];
+      const prepared = allAllocations.filter((row) =>
+        firstString(row, ["order_id"]) === orderId &&
+        firstString(row, ["status"]) === "station_prepared"
+      );
+      if (prepared.length !== (firstNumber(focusedOrder, ["container_count"]) ?? 0)) {
+        throw new Error("Every prepared container must be visible before station-to-driver handover.");
+      }
+      for (const allocation of prepared) {
+        const allocationId = firstString(allocation, ["id"]);
+        if (!allocationId) continue;
+        await recordHandover.mutateAsync({
+          allocationId,
+          eventKey: "handed_to_driver",
+          note: "Handed to the assigned Fuel driver",
+          idempotencyKey: idempotencyKey("fuel-container-driver-handover", allocationId),
+          metadata: { station_branch_id: stationBranchId },
+        });
+      }
+      await changeStage.mutateAsync({
+        orderId,
+        stageKey: "station_handover",
+        idempotencyKey: idempotencyKey("fuel-stage-station-handover", orderId),
+        metadata: { handover_recorded_for_all_containers: true },
+      });
+      // The station's completed physical handover is the departure event.
+      // Drivers do not need a second "start delivery" confirmation.
+      await changeStage.mutateAsync({
+        orderId,
+        stageKey: "out_for_delivery",
+        idempotencyKey: idempotencyKey("fuel-stage-out-for-delivery", orderId),
+        metadata: { station_confirmed_departure: true },
+      });
+    }, "All filled containers have been handed to the assigned driver.");
+  };
+
+  const loading = stationInventory.isPending || operations.isPending || storage.isPending || offers.isPending;
+  const failed = stationInventory.error || operations.error || storage.error || offers.error;
+  const stageTone = (stage: string): "neutral" | "brand" | "success" | "warning" | "danger" => {
+    if (["completed", "inspection_passed"].includes(stage)) return "success";
+    if (["cancelled", "exception"].includes(stage)) return "danger";
+    if (["delivered", "return_due", "received_at_station"].includes(stage)) return "warning";
+    return "brand";
+  };
+
+  return (
+    <Screen
+      eyebrow="SKIMA Fuel · Station"
+      title="Fuel operations"
+      subtitle="Accept paid orders, reserve tank stock, fill and measure containers, then assign an approved driver and vehicle."
+      action={<AppButton label="Back to station" size="sm" variant="ghost" onPress={() => router.replace("/(station)" as never)} />}
+    >
+      {!stationBranchId ? (
+        <EmptyState
+          title="Station branch not resolved"
+          description="Complete station workspace setup before processing Fuel orders."
+          action={<AppButton label="Refresh station" variant="secondary" onPress={() => void refreshAll()} />}
+        />
+      ) : loading ? (
+        <View style={styles.loading}><ActivityIndicator /><Text style={[styles.muted, { color: palette.muted }]}>Loading Fuel station operations…</Text></View>
+      ) : failed ? (
+        <EmptyState title="Fuel operations could not be loaded" description="Refresh and try again." action={<AppButton label="Refresh" onPress={() => void refreshAll()} />} />
+      ) : (
+        <>
+          <Card title="Fuel tank availability" description="Only the unreserved stock above the tank safety reserve can be committed to new orders.">
+            <View style={styles.stockGrid}>
+              {branchOffers.map((offer) => {
+                const productKey = firstString(offer, ["product_key"]) ?? "";
+                const units = (storage.data ?? []).filter((unit) =>
+                  firstString(unit, ["product_key"]) === productKey &&
+                  firstString(unit, ["status"]) === "active"
+                );
+                const available = units.reduce((total, unit) =>
+                  total +
+                  Math.max(0,
+                    (firstNumber(unit, ["physical_stock_litres"]) ?? 0) -
+                    (firstNumber(unit, ["reserved_stock_litres"]) ?? 0) -
+                    (firstNumber(unit, ["safety_reserve_litres"]) ?? 0)
+                  ), 0
+                );
+                const productName = productNameForKey(productKey);
+                return (
+                  <View key={productKey} style={[styles.stockTile, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
+                    <Fuel size={18} />
+                    <Text style={[styles.stockProduct, { color: palette.ink }]}>{productName}</Text>
+                    <Text style={[styles.stockAmount, { color: palette.brand }]}>{available.toLocaleString()} L</Text>
+                    <Text style={[styles.muted, { color: palette.muted }]}>{units.length} active tank(s)</Text>
+                  </View>
+                );
+              })}
+            </View>
+            {branchOffers.length === 0 ? <Text style={[styles.muted, { color: palette.muted }]}>No active Fuel offers are configured for this branch.</Text> : null}
+          </Card>
+
+          {notice ? <Text style={[styles.successText, { color: palette.success }]}>{notice}</Text> : null}
+          {error ? <Text accessibilityRole="alert" style={[styles.errorText, { color: palette.danger }]}>{error}</Text> : null}
+
+          <Card title="Incoming Fuel orders" description="The station queue contains orders whose payment has already been reserved in escrow.">
+            {sortedRows.length === 0 ? (
+              <EmptyState icon={<Fuel size={27} />} title="No Fuel orders waiting" description="New paid Fuel orders will appear here." />
+            ) : (
+              <View style={styles.orderList}>
+                {sortedRows.map((order) => {
+                  const orderId = firstString(order, ["order_id"]) ?? "";
+                  const productKey = firstString(order, ["product_key"]) ?? "";
+                  const stage = firstString(order, ["stage_key"]) ?? "unknown";
+                  const selected = orderId === focusedOrderId;
+                  return (
+                    <Pressable key={orderId} onPress={() => { setFocusedOrderId(orderId); setSelectedDriverQualificationId(""); void reservations.refetch(); void allocations.refetch(); }} style={[styles.orderRow, { borderColor: selected ? palette.brand : palette.border, backgroundColor: selected ? palette.brandSoft : palette.surface }]}>
+                      <View style={styles.orderCopy}>
+                        <Text style={[styles.orderTitle, { color: palette.ink }]}>{productNameForKey(productKey)} · {firstNumber(order, ["requested_litres"]) ?? 0} L</Text>
+                        <Text style={[styles.muted, { color: palette.muted }]}>{orderId.slice(0, 8).toUpperCase()} · {firstNumber(order, ["container_count"]) ?? 0} container(s)</Text>
+                      </View>
+                      <StatusPill label={humanize(stage)} tone={stageTone(stage)} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </Card>
+
+          {focusedOrder ? (
+            <Card title="Selected order" description="Each station action is validated against payment, stock, container custody and driver qualification.">
+              <View style={styles.focusSummary}>
+                <View style={[styles.focusIcon, { backgroundColor: palette.brandSoft }]}><Package size={22} /></View>
+                <View style={styles.orderCopy}>
+                  <Text style={[styles.orderTitle, { color: palette.ink }]}>{productNameForKey(focusedProduct)} · {focusedLitres} L</Text>
+                  <Text style={[styles.muted, { color: palette.muted }]}>{focusedMode === "rental" ? "SKIMA rental containers" : "Purchased containers"} · {firstNumber(focusedOrder, ["container_count"]) ?? 0} total</Text>
+                </View>
+                <StatusPill label={humanize(focusedStage)} tone={stageTone(focusedStage)} />
+                <Text style={[styles.muted, { color: palette.muted }]}>{fulfillmentModeLabel(focusedFulfillmentMode)}</Text>
+              </View>
+
+              {focusedSettlementExecutionId ? (
+                <View style={styles.operationInfo}>
+                  <StatusPill label="Station settlement posted" tone="success" />
+                  {focusedSettledAt ? <Text style={[styles.muted, { color: palette.muted }]}>Posted {new Date(focusedSettledAt).toLocaleString()}</Text> : null}
+                  {focusedSettlementStatementId ? <Text style={[styles.muted, { color: palette.muted }]}>Statement reference · {focusedSettlementStatementId.slice(0, 8).toUpperCase()}</Text> : null}
+                </View>
+              ) : null}
+
+              {focusedStage === "awaiting_station_acceptance" ? (
+                <AppButton label="Accept order & reserve full tank stock" fullWidth loading={busyOrderId === focusedOrderId || reserveBatch.isPending} onPress={() => void startOrderPreparation(focusedOrder)} icon={<ShieldCheck color="#FFFFFF" size={18} />} />
+              ) : null}
+
+              {focusedStage === "stock_reserved" ? (
+                <AppButton label="Start station filling" fullWidth loading={busyOrderId === focusedOrderId} onPress={() => void withBusy(focusedOrderId, async () => {
+                  await changeStage.mutateAsync({ orderId: focusedOrderId, stageKey: "station_filling", idempotencyKey: idempotencyKey("fuel-stage-filling", focusedOrderId) });
+                }, "Station filling has started.")} />
+              ) : null}
+
+              {focusedStage === "station_filling" ? (
+                <>
+                  <View style={styles.operationInfo}>
+                    <Text style={[styles.muted, { color: palette.muted }]}>Prepared containers: {filledAllocations.length} / {firstNumber(focusedOrder, ["container_count"]) ?? 0}</Text>
+                    <Text style={[styles.muted, { color: palette.muted }]}>Open stock reservations: {(reservations.data ?? []).filter(row => ["reserved","partially_consumed"].includes(firstString(row, ["status"]) ?? "")).length}</Text>
+                  </View>
+                  <AppButton label="Complete measured fill & prepare containers" fullWidth loading={busyOrderId === focusedOrderId || allocateContainer.isPending || consumeStock.isPending} onPress={() => void finishStationFill()} />
+                </>
+              ) : null}
+
+              {focusedStage === "ready_for_driver" && focusedFulfillmentMode === "station_managed" ? (
+                <>
+                  <Text style={[styles.sectionLabel, { color: palette.ink }]}>Station Managed driver and vehicle</Text>
+                  <Text style={[styles.muted, { color: palette.muted }]}>This is your station's own driver. Select only a Station Managed driver registered to this branch and a vehicle qualified for this fuel product and load.</Text>
+                  {readyQualifications.length === 0 ? (
+                    <EmptyState title="No approved Station Managed driver" description="Approve a Station Managed driver identity, this branch's vehicle and the product/load qualification before assigning the order." />
+                  ) : (
+                    <View style={styles.orderList}>
+                      {readyQualifications.map((qualification) => {
+                        const id = firstString(qualification, ["id"]) ?? "";
+                        const selected = selectedQualification?.id === id;
+                        const driverId = firstString(qualification, ["station_managed_driver_id"]) ?? "";
+                        const vehicleId = firstString(qualification, ["vehicle_id"]) ?? "";
+                        const vehicle = (vehicles.data ?? []).find((row) => firstString(row, ["id"]) === vehicleId);
+                        const vehicleLabel = firstString(vehicle, ["registration_number", "registrationNumber", "plate_number", "plateNumber"]) ?? vehicleId.slice(0, 8).toUpperCase();
+                        return (
+                          <Pressable key={id} onPress={() => setSelectedDriverQualificationId(id)} style={[styles.driverRow, { borderColor: selected ? palette.brand : palette.border, backgroundColor: selected ? palette.brandSoft : palette.surface }]}>
+                            <Truck size={19} />
+                            <View style={styles.orderCopy}>
+                              <Text style={[styles.orderTitle, { color: palette.ink }]}>Station driver {driverId.slice(0, 8).toUpperCase()}</Text>
+                              <Text style={[styles.muted, { color: palette.muted }]}>{vehicleLabel} · up to {firstNumber(qualification, ["maximum_load_litres"])} L</Text>
+                            </View>
+                            {selected ? <CheckCircle2 size={19} /> : null}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
+                  <AppButton label="Assign station driver" fullWidth disabled={!selectedQualification} loading={busyOrderId === focusedOrderId || assignDriver.isPending} onPress={() => void assignQualifiedDriver()} />
+                </>
+              ) : null}
+              {focusedStage === "ready_for_driver" && focusedFulfillmentMode === "independent_driver" ? (
+                <View style={styles.operationInfo}>
+                  <StatusPill label="Independent Managed · SKIMA dispatch" tone="brand" />
+                  <Text style={[styles.muted, { color: palette.ink }]}>This provider is not a station employee and does not use a SKIMA fleet vehicle. SKIMA Dispatch must assign an approved Independent Managed provider and their own qualified vehicle. You can hand over the containers after the driver has been assigned.</Text>
+                </View>
+              ) : null}
+              {focusedStage === "ready_for_driver" && focusedFulfillmentMode === "skima_managed" ? (
+                <View style={styles.operationInfo}>
+                  <StatusPill label="SKIMA Managed / SKIMA Fleet · SKIMA dispatch" tone="brand" />
+                  <Text style={[styles.muted, { color: palette.ink }]}>This is a SKIMA internal driver using an assigned SKIMA-owned fleet vehicle. It is not a station employee or an Independent Managed provider. SKIMA Dispatch assigns this driver and vehicle before you hand over the containers.</Text>
+                </View>
+              ) : null}
+
+              {focusedStage === "driver_assigned" ? (
+                <View style={{ gap: spacing.sm }}>
+                  <Text style={[styles.muted, { color: palette.ink }]}>Check the driver and vehicle identity, then hand over all filled containers. This confirmation records the container custody handoff and starts the delivery for the driver.</Text>
+                  <AppButton label="Hand over containers & start delivery" fullWidth loading={busyOrderId === focusedOrderId || recordHandover.isPending || changeStage.isPending} onPress={() => void handContainersToDriver()} />
+                </View>
+              ) : null}
+
+              {focusedStage === "received_at_station" ? (
+                <View style={styles.inspectionList}>
+                  <Text style={[styles.sectionLabel, { color: palette.ink }]}>Inspect returned SKIMA containers</Text>
+                  {existingAllocations.filter((row) => firstString(row, ["status"]) === "inspection").map((allocation) => (
+                    <View key={firstString(allocation, ["id"])} style={[styles.inspectionRow, { borderColor: palette.border }]}>
+                      <View style={styles.orderCopy}>
+                        <Text style={[styles.orderTitle, { color: palette.ink }]}>Container {firstString(allocation, ["container_profile_id"])?.slice(0, 8).toUpperCase()}</Text>
+                        <Text style={[styles.muted, { color: palette.muted }]}>{firstNumber(allocation, ["allocated_litres"])} L · Rental return received</Text>
+                      </View>
+                      <AppButton label="Pass" size="sm" onPress={() => void recordContainerInspection(allocation, "passed")} loading={busyOrderId === focusedOrderId || inspectContainer.isPending} />
+                      <AppButton label="Fail" size="sm" variant="secondary" onPress={() => void recordContainerInspection(allocation, "failed")} loading={busyOrderId === focusedOrderId || inspectContainer.isPending} />
+                    </View>
+                  ))}
+                  {existingAllocations.every((row) => firstString(row, ["status"]) !== "inspection") ? (
+                    <Text style={[styles.muted, { color: palette.muted }]}>All returned containers have inspection outcomes recorded.</Text>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {["station_handover","out_for_delivery","delivered","return_due","returned_to_driver","received_at_station","inspection_passed","completed","exception"].includes(focusedStage) ? (
+                <Text style={[styles.muted, { color: palette.muted }]}>The station portion of this order is complete or has been handed to the driver. Follow rental returns and inspection in the station queue when the driver brings the SKIMA container back.</Text>
+              ) : null}
+            </Card>
+          ) : null}
+          <AppButton label="Refresh station operations" variant="secondary" fullWidth onPress={() => void refreshAll()} />
+        </>
+      )}
+    </Screen>
+  );
+}
+
+function fulfillmentModeLabel(value: string): string {
+  switch (value) {
+    case "station_managed": return "Station Managed · station driver and branch-controlled vehicle";
+    case "independent_driver": return "Independent Managed · independent provider and own vehicle";
+    case "skima_managed": return "SKIMA Managed / SKIMA Fleet · internal SKIMA driver and fleet vehicle";
+    default: return "Fuel fulfilment mode not resolved";
+  }
+}
+
+function stagePriority(stage: string): number {
+  const order: Record<string, number> = {
+    awaiting_station_acceptance: 0,
+    stock_reserved: 1,
+    station_filling: 2,
+    ready_for_driver: 3,
+    driver_assigned: 4,
+    station_handover: 5,
+    out_for_delivery: 6,
+    delivered: 7,
+    return_due: 8,
+    returned_to_driver: 9,
+    received_at_station: 10,
+    inspection_passed: 11,
+    completed: 12,
+  };
+  return order[stage] ?? 50;
+}
+
+function humanize(value: string): string {
+  return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+const styles = StyleSheet.create({
+  loading: { minHeight: 180, alignItems: "center", justifyContent: "center", gap: spacing.md },
+  muted: { ...typography.caption, fontSize: 11, lineHeight: 16 },
+  successText: { ...typography.caption, fontWeight: "800" },
+  errorText: { ...typography.caption, fontWeight: "800", lineHeight: 18 },
+  stockGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  stockTile: { minWidth: 100, flexGrow: 1, gap: 5, borderWidth: 1, borderRadius: radii.lg, padding: 11 },
+  stockProduct: { ...typography.bodyStrong, fontSize: 12 },
+  stockAmount: { ...typography.sectionTitle, fontSize: 18 },
+  orderList: { gap: spacing.sm },
+  orderRow: { borderWidth: 1, borderRadius: radii.lg, padding: 11, flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  orderCopy: { flex: 1, gap: 3 },
+  orderTitle: { ...typography.bodyStrong, fontSize: 13 },
+  focusSummary: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  focusIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  operationInfo: { gap: 3, padding: 10, borderRadius: radii.md, backgroundColor: "rgba(127,127,127,.08)" },
+  sectionLabel: { ...typography.bodyStrong, fontSize: 13 },
+  driverRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, padding: 11, borderWidth: 1, borderRadius: radii.lg },
+  inspectionList: { gap: spacing.sm },
+  inspectionRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, borderWidth: 1, borderRadius: radii.lg, padding: 10 },
+});

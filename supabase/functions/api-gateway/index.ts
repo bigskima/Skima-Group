@@ -503,6 +503,66 @@ async function handleInternalWhatsAppLpgQuote(request: Request, id: string): Pro
 }
 
 
+async function dispatchBusinessModuleRuntimeRoute(
+  request: Request,
+  id: string,
+  supabase: SupabaseClient,
+  _supabaseUrl: string,
+  _anonKey: string,
+  routePath: string,
+): Promise<Response | null> {
+  if (!routePath.startsWith("/runtime/")) return null;
+
+  const resolved = await supabase.rpc("resolve_business_module_runtime_route", {
+    target_route_path: routePath,
+  });
+  if (resolved.error) return databaseError(resolved.error, id);
+
+  const routeRecord = Array.isArray(resolved.data) ? resolved.data[0] : resolved.data;
+  const edgeFunction = stringOrNull(getRecordValue(routeRecord, "edge_function"));
+  if (!edgeFunction) return null;
+
+  if (!/^[a-z][a-z0-9-]{1,62}$/.test(edgeFunction)) {
+    return jsonResponse({ ok: false, error: "module_runtime_misconfigured", requestId: id }, 503);
+  }
+
+  const sourceUrl = new URL(request.url);
+  const rawBody = request.method === "GET" || request.method === "HEAD"
+    ? null
+    : await request.text();
+  const invocation = await supabase.functions.invoke(edgeFunction, {
+    body: {
+      routePath,
+      method: request.method,
+      search: sourceUrl.search,
+      rawBody,
+    },
+    headers: {
+      "x-skima-runtime-envelope": "true",
+      "x-request-id": id,
+    },
+  });
+
+  if (invocation.error) {
+    const context = (invocation.error as { readonly context?: unknown }).context;
+    if (context instanceof Response) return context;
+    return jsonResponse({
+      ok: false,
+      error: "module_runtime_unavailable",
+      message: invocation.error.message,
+      requestId: id,
+    }, 502);
+  }
+
+  const payload = invocation.data;
+  return jsonResponse(
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? payload as Readonly<Record<string, unknown>>
+      : { ok: true, data: payload },
+    200,
+  );
+}
+
 async function handleAuthenticatedRequest(request: Request, id: string): Promise<Response> {
   const authResult = await requireAuthenticatedUser(request, id);
 
@@ -527,6 +587,16 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
 
   const supabase = createRequestSupabaseClient(request, supabaseUrl, anonKey);
   const routePath = normalizeGatewayPath(url.pathname);
+
+  const moduleRuntimeResponse = await dispatchBusinessModuleRuntimeRoute(
+    request,
+    id,
+    supabase,
+    supabaseUrl,
+    anonKey,
+    routePath,
+  );
+  if (moduleRuntimeResponse) return moduleRuntimeResponse;
 
   const rateLimitResult = await supabase.rpc("check_rate_limit", {
     target_increment: 1,
@@ -3358,10 +3428,21 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
   }
 
   if (routePath === "/runtime/catalog" && request.method === "GET") {
+    const moduleRoutesResult = await supabase.rpc("list_active_business_module_runtime_routes");
+    if (moduleRoutesResult.error) return databaseError(moduleRoutesResult.error, id);
+    const moduleRoutePrefixes = Array.isArray(moduleRoutesResult.data)
+      ? moduleRoutesResult.data
+        .map((record) => stringOrNull(getRecordValue(record, "route_prefix")))
+        .filter((value): value is string => Boolean(value))
+        .map((prefix) => `${prefix}/*`)
+      : [];
     return jsonResponse({
       ok: true,
       data: {
-        routes: Array.from(ROUTES).filter((route) => route.startsWith("/runtime/")),
+        routes: [
+          ...Array.from(ROUTES).filter((route) => route.startsWith("/runtime/")),
+          ...moduleRoutePrefixes,
+        ],
       },
       requestId: id,
     });
@@ -13459,6 +13540,7 @@ function recordsByStringId(records: readonly unknown[]): Map<string, unknown> {
 
   return byId;
 }
+
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;

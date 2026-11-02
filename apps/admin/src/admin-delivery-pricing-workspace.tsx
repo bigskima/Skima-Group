@@ -122,7 +122,7 @@ const PRICING_SPECS: Record<PricingKind, PricingSpec> = {
     eyebrow: "Money · Driver pricing",
     title: "Driver Pricing",
     description:
-      "Set the independent driver's gross LPG delivery earning and SKIMA's percentage deduction from that earning. By default, the delivery fee is the gross driver earning; SKIMA keeps only the configured percentage. SKIMA Fleet and Station Managed payouts are handled separately.",
+      "Set the Independent Managed provider's gross LPG delivery earning and SKIMA's percentage deduction from that earning. By default, the delivery fee is the gross driver earning; SKIMA keeps only the configured percentage. SKIMA Fleet and Station Managed payouts are handled separately.",
     editTitle: "Driver payout formula",
     pendingTitle: "Pending driver pricing proposals",
     pendingDescription: "Delegated finance admins can propose driver payout changes here. Super Admin edits apply immediately.",
@@ -688,7 +688,7 @@ function AdminMoneyPricingWorkspace(props: { readonly kind: PricingKind }) {
 
               {spec.kind === "driver" ? (
                 <div className="admin-money-guardrail">
-                  Independent drivers only: set gross earnings to either the full customer delivery fee or the configured base + route distance + load formula. SKIMA deducts the percentage above from those gross earnings; the remaining net amount is paid to the driver. SKIMA Fleet uses its own managed payout policy, and Station Managed drivers are paid by their station.
+                  Independent Managed providers only: set gross earnings to either the full customer delivery fee or the configured base + route distance + load formula. SKIMA deducts the percentage above from those gross earnings; the remaining net amount is paid to the driver. SKIMA Fleet uses its own managed payout policy, and Station Managed drivers are paid by their station.
                 </div>
               ) : null}
 

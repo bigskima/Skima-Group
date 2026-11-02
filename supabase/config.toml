@@ -55,6 +55,9 @@ verify_jwt = false
 [functions.api-gateway]
 verify_jwt = true
 
+[functions.fuel-runtime]
+verify_jwt = true
+
 [functions.runtime-worker]
 verify_jwt = false
 

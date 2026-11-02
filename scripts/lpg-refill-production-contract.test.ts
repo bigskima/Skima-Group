@@ -111,8 +111,8 @@ Deno.test("driver job final delivery uses the assigned-cylinder resolver and ref
   assertIncludes(internalScan, "continuousScan.mutateAsync");
   assertIncludes(internalScan, 'workspace: "driver"');
   assertIncludes(detail, "deliveryChallengeVerified");
-  assertIncludes(detail, "Scan the returned cylinder first. Then ask the customer");
-  assertIncludes(internal, "Scan the returned cylinder at the customer's address first.");
+  assertIncludes(detail, "No second driver scan is required.");
+  assertIncludes(internal, "No second return scan is required.");
   assertIncludes(projection, "deliveryChallengeVerified");
   assertIncludes(projection, "public.lpg_delivery_challenge_is_verified");
   assertIncludes(payoutAuthorization, "can_create_driver_wallet");
@@ -900,103 +900,89 @@ Deno.test("SKIMA Managed supplier receipt remains optional evidence, not a refil
 });
 
 
-Deno.test("LPG final customer hand-over records the physical cylinder first, then customer OTP, across all fulfillment models", async () => {
+Deno.test("LPG final hand-over uses customer OTP only across Station, Independent and SKIMA Managed modes", async () => {
   const [
     driver,
     internal,
-    stationScan,
     stationJobs,
     scanScreen,
     verification,
     errors,
-    scanBeforeOtpMigration,
-    allowedHistoryMigration,
-    idempotencyMigration,
+    oldOtpGuard,
+    singleHandoverMigration,
     otpCompletionMigration,
-    returnScanReadModelMigration,
-    otpScanGuardMigration,
+    internalRefillMigration,
   ] = await Promise.all([
     read("apps/lpg-mobile/src/native/ui/JobDetailScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/InternalDriverJobDetailScreen.tsx"),
-    read("apps/lpg-mobile/src/native/ui/StationManagedDriverScanScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/StationManagedDriverJobsScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/ScanWorkspaceScreen.tsx"),
     read("apps/lpg-mobile/src/native/ui/DeliveryVerificationScreen.tsx"),
     read("apps/lpg-mobile/src/native/utilities/friendlyError.ts"),
-    read("supabase/migrations/20261101112617_lpg_delivery_cylinder_scan_then_customer_otp.sql"),
-    read("supabase/migrations/20261101112723_lpg_delivery_scan_uses_allowed_history_event.sql"),
-    read("supabase/migrations/20261101113502_lpg_delivery_scan_idempotency.sql"),
-    read("supabase/migrations/20261031171508_lpg_delivery_otp_completion_and_payout_bridge.sql"),
-    read("supabase/migrations/20261101120000_lpg_job_reads_expose_return_scan_state.sql"),
     read("supabase/migrations/20261101121000_lpg_delivery_otp_enforces_return_scan.sql"),
+    read("supabase/migrations/20261102014500_lpg_single_customer_otp_handover.sql"),
+    read("supabase/migrations/20261031171508_lpg_delivery_otp_completion_and_payout_bridge.sql"),
+    read("supabase/migrations/20260916163041_lpg_internal_procurement_and_earnings.sql"),
   ]);
 
-  // Independent and Station Managed drivers share the assigned-job scan surface.
-  assertIncludes(driver, 'if (["return_en_route", "delivery_verification_pending"].includes(status)) return "customer_delivery";');
-  assertIncludes(driver, "At the customer's address, scan the returned cylinder");
-  assertIncludes(driver, "Verify returned cylinder");
-  assertIncludes(driver, "Returned cylinder scan verified.");
-  assertIncludes(driver, "The customer then confirms the order-specific OTP");
+  // Independent and Station Managed share one pickup scan. The station owns
+  // its receipt/release checks; the driver does not scan again at the customer.
+  assertIncludes(driver, 'return ["driver_accepted", "pickup_en_route"].includes(status) ? "customer_pickup" : null;');
+  assertIncludes(driver, "No second driver scan is required.");
+  assertIncludes(driver, "Customer OTP hand-over");
+  assertIncludes(driver, "customer physically has the cylinder");
+  assertNotIncludes(driver, 'return "customer_delivery"');
+  assertNotIncludes(driver, "Verify returned cylinder");
   assertIncludes(driver, "function stationManagedDriverScanTypeForStatus");
-  assertIncludes(driver, 'return ["return_en_route", "delivery_verification_pending"].includes(status) ? "customer_delivery" : null;');
-  assertIncludes(driver, "scan the returned cylinder's QR or permanent ID at the customer's address");
 
-  // SKIMA Managed keeps a physical scan control at the return stage too.
-  assertIncludes(internal, "const detectedScanType = driverScanTypeForStatus(status)");
-  assertIncludes(internal, "At the customer's address, scan the returned cylinder");
-  assertIncludes(internal, "Verify returned cylinder");
-  assertIncludes(internal, "Returned cylinder scan verified.");
-  assertIncludes(internal, "<Scanner enabled onDetected={setToken} />");
-  assertNotIncludes(internal, "No further driver cylinder scan is needed.");
+  // SKIMA Managed uses one customer pickup scan, then records supplier/refill
+  // evidence on the job. No separate supplier or final return scan is needed.
+  assertIncludes(internal, 'return ["driver_accepted", "pickup_en_route"].includes(status) ? "customer_pickup" : null;');
+  assertIncludes(internal, '["station_en_route", "station_verified", "refill_in_progress"].includes(status)');
+  assertIncludes(internal, "Open Refill, record the supplier, actual price and kilograms, confirm the safety check, then submit");
+  assertIncludes(internal, "No second return scan is required.");
+  assertNotIncludes(internal, 'return "station_receipt"');
+  assertNotIncludes(internal, 'return "customer_delivery"');
+  assertNotIncludes(internal, "Verify returned cylinder");
 
-  // Station Managed driver Scan tab opens the station-driver job route, while
-  // the shared scanner is allowed to handle return-stage scans.
-  assertIncludes(stationScan, 'jobRouteWorkspace="station_driver"');
-  assertIncludes(stationJobs, "scan the returned cylinder's QR or permanent ID");
+  // The shared scan workspace is for pickup and station custody, not a final
+  // customer-delivery scan queue.
   const scanReadyStart = scanScreen.indexOf("function scanReady");
   const scanReadyEnd = scanScreen.indexOf("function scanStatus", scanReadyStart);
   const scanReady = scanScreen.slice(scanReadyStart, scanReadyEnd);
-  assertIncludes(scanReady, '"return_en_route"');
-  assertIncludes(scanReady, '"delivery_verification_pending"');
-  assertIncludes(scanScreen, "Customer hand-over · OTP confirmation");
-  assertIncludes(scanScreen, "Returned-cylinder scan recorded.");
-  assertNotIncludes(scanScreen, "matchingHandover");
-  assertNotIncludes(scanScreen, "Do not scan these cylinders again.");
+  assertIncludes(scanReady, 'if (["return_en_route", "delivery_verification_pending"].includes(value))');
+  assertIncludes(scanReady, "return false;");
+  assertNotIncludes(scanReady, "customerDeliveryScanVerified");
+  assertIncludes(scanScreen, "No final driver scan is needed");
+  assertIncludes(stationJobs, "No second driver scan or separate delivery button is required.");
 
-  // The customer gets an order-specific OTP only after the driver has scanned.
-  assertIncludes(verification, "After the driver scans the returned cylinder at your address");
+  // The customer requests and verifies an order-specific OTP only after the
+  // return leg has started and the cylinder is physically in their possession.
+  assertIncludes(verification, "deliveryStageReady");
+  assertIncludes(verification, '["return_en_route", "returning", "delivery_verification_pending"].includes(currentOrderStatus)');
+  assertIncludes(verification, "I have received the cylinder — get OTP");
   assertIncludes(verification, 'path: "/lpg/orders/delivery-challenge"');
   assertIncludes(verification, 'action: "verify"');
   assertIncludes(verification, '["delivered", "completed"].includes(finalStatus ?? "")');
-  assertIncludes(errors, "final cylinder hand-over scan must be recorded");
-  assertIncludes(errors, "scan the cylinder at your address first");
+  assertNotIncludes(verification, "returnCylinderScanVerified");
+  assertNotIncludes(verification, "Waiting for returned-cylinder scan");
+  assertNotIncludes(errors, "Ask the driver to scan the cylinder at your address first");
 
-  // Production migrations remove the circular OTP gate from the scan, keep
-  // OTP as the final order completion step, and make repeated scans idempotent.
-  assertIncludes(scanBeforeOtpMigration, "new_status := order_record.status;");
-  assertIncludes(scanBeforeOtpMigration, "The driver records physical cylinder hand-over first.");
-  assertIncludes(scanBeforeOtpMigration, "new_status = 'delivered'");
-  assertIncludes(allowedHistoryMigration, "history_event := 'verified';");
-  assertIncludes(idempotencyMigration, "existing.scan_type = 'customer_delivery'");
-  assertIncludes(idempotencyMigration, "'alreadyVerified', true");
-  assertIncludes(returnScanReadModelMigration, "customerDeliveryScanVerified");
-  assertIncludes(returnScanReadModelMigration, "public.read_lpg_jobs(text,integer)");
-  assertIncludes(returnScanReadModelMigration, "public.read_lpg_station_managed_driver_jobs(integer)");
-  assertIncludes(otpScanGuardMigration, "final cylinder hand-over scan must be recorded before requesting customer OTP");
-  assertIncludes(otpScanGuardMigration, "final cylinder hand-over scan must be recorded before customer OTP verification");
-  assertIncludes(otpScanGuardMigration, "public.request_lpg_delivery_challenge");
-  assertIncludes(otpScanGuardMigration, "public.verify_lpg_delivery_challenge");
-  assertIncludes(otpScanGuardMigration, "public.lpg_cylinder_scans handover_scan");
-  assertIncludes(driver, "customerDeliveryScanVerified");
-  assertIncludes(internal, "customerDeliveryScanVerified");
-  assertIncludes(scanScreen, "job.customerDeliveryScanVerified !== true");
-  assertIncludes(verification, "Waiting for returned-cylinder scan");
+  // The additive production migration removes the historical API guards that
+  // made a second driver scan mandatory. Customer OTP still closes the order,
+  // emits the delivery-completed event and triggers existing payouts/settlement.
+  assertIncludes(oldOtpGuard, "final cylinder hand-over scan must be recorded before requesting customer OTP");
+  assertIncludes(oldOtpGuard, "final cylinder hand-over scan must be recorded before customer OTP verification");
+  assertIncludes(singleHandoverMigration, "replace(request_ddl,request_guard,'')");
+  assertIncludes(singleHandoverMigration, "replace(verify_ddl,verify_guard,'')");
+  assertIncludes(singleHandoverMigration, "'station_en_route','station_verified','refill_in_progress'");
+  assertIncludes(singleHandoverMigration, "public.confirm_lpg_internal_refill");
   assertIncludes(otpCompletionMigration, "set status = 'delivered'");
   assertIncludes(otpCompletionMigration, "'lpg.delivery.completed'");
   assertIncludes(otpCompletionMigration, "target_idempotency_key || ':delivery-completed'");
+  assertIncludes(internalRefillMigration, "supplier_name");
 });
-
-
+ 
 Deno.test("open LPG job scans are bound to that exact order and cylinder", async () => {
   const [migration, gateway, driverJob, internalJob, autoScan, stationDriverScan] = await Promise.all([
     read("supabase/migrations/20261101134500_lpg_order_bound_cylinder_scan.sql"),
@@ -1074,9 +1060,9 @@ Deno.test("LPG driver stages advance from verified events and live Admin routing
   assertNotIncludes(stationManagedActions, "lpg.delivery.pending");
   assertIncludes(internalActions, "return null;");
   assertNotIncludes(internalActions, "lpg.return.start");
-  assertIncludes(driver, '["return_en_route", "delivery_verification_pending"].includes(status)');
-  assertIncludes(driver, "The order remains pending until that confirmation.");
-  assertIncludes(internal, '["return_en_route", "delivery_verification_pending"].includes(status)');
+  assertIncludes(driver, 'if (status === "return_en_route") return "Return the filled cylinder to the customer.');
+  assertIncludes(driver, "no returned-cylinder scan or extra delivery button is required.");
+  assertIncludes(internal, 'if (status === "refill_confirmed" || status === "return_en_route") return "Return the filled cylinder to the customer.');
   assertIncludes(lifecycle, "delivery challenge must be requested by the LPG order customer");
   assertIncludes(lifecycle, "order_record.status not in ('return_en_route', 'delivery_verification_pending')");
   assertIncludes(lifecycle, "public.lpg_delivery_challenge_is_verified(order_record.id, target_challenge_id)");

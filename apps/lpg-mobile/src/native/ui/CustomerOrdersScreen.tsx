@@ -41,12 +41,13 @@ const TRACKABLE_ORDER_STATES = new Set([
   "delivery_verification_pending",
 ]);
 
-// Delivery confirmation is deliberately narrow. A customer must never be offered
-// the final hand-over action merely because the driver has started the return trip.
+// The customer can request the final OTP once the order has entered its return
+// leg. The customer must only reveal and confirm the code after the cylinder is
+// physically with them; no second driver scan is required.
 const DELIVERY_CONFIRMATION_STATES = new Set([
+  "return_en_route",
+  "returning",
   "delivery_verification_pending",
-  "delivery_arrived",
-  "customer_confirmation_pending",
 ]);
 
 const FINAL_ORDER_STATES = new Set(["delivered", "completed"]);
@@ -127,7 +128,7 @@ export function CustomerOrdersScreen() {
             const fulfillmentChannel = firstString(order, ["fulfillment_channel", "fulfillmentChannel"]);
             const internalFulfillment = isSkimaInternalFulfillmentChannel(fulfillmentChannel);
             const stationText = internalFulfillment
-              ? "SKIMA-managed fulfillment"
+              ? "SKIMA Managed / SKIMA Fleet"
               : station
                 ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned partner station")
                 : "Finding an available partner station";
@@ -246,7 +247,11 @@ export function CustomerOrderDetailScreen() {
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
   const actualKg = firstNumber(order, ["actualKg", "actual_kg"]);
   const trackable = TRACKABLE_ORDER_STATES.has(normalized);
-  const canVerifyDelivery = DELIVERY_CONFIRMATION_STATES.has(normalized);
+  const deliveryConfirmationStage = DELIVERY_CONFIRMATION_STATES.has(normalized);
+  const canVerifyDelivery = deliveryConfirmationStage;
+  const customerDisplayStatus = ["return_en_route", "returning"].includes(normalized)
+    ? "delivery_verification_pending"
+    : status;
   const canShowReceipt = FINAL_ORDER_STATES.has(normalized) || ["paid", "settled"].includes(normalizeStatus(paymentStatus));
   const aiOrderReference = order ? (displayReference(order) ?? id ?? "this refill") : "this refill";
   const fulfillmentChannel = firstString(order, ["fulfillment_channel", "fulfillmentChannel"]);
@@ -311,7 +316,7 @@ export function CustomerOrderDetailScreen() {
           <Card padding="lg">
             <View style={styles.detailStatusRow}>
               <Text style={[styles.detailSectionTitle, { color: palette.ink }]}>Order summary</Text>
-              <StatusPill label={friendlyOrderStatus(status, fulfillmentChannel)} tone={orderStatusTone(status)} />
+              <StatusPill label={friendlyOrderStatus(customerDisplayStatus, fulfillmentChannel)} tone={orderStatusTone(customerDisplayStatus)} />
             </View>
             <View style={styles.infoGrid}>
               <InfoField label="Cylinder" value={cylinderSummary(cylinder)} />
@@ -387,7 +392,7 @@ export function CustomerOrderDetailScreen() {
               />
             ) : null}
             {trackable && id ? <AppButton label="Open live tracking" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/tracking` as never)} /> : null}
-            {id && canVerifyDelivery ? <AppButton label="Confirm delivery" variant="secondary" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/verify` as never)} /> : null}
+            {id && canVerifyDelivery ? <AppButton label="Confirm delivery with OTP" variant="secondary" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/verify` as never)} /> : null}
             {id && canShowReceipt ? <AppButton label="View or share receipt" variant="ghost" fullWidth onPress={() => router.push(`/(customer)/orders/${id}/receipt` as never)} /> : null}
           </View>
 

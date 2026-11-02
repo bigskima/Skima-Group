@@ -1,0 +1,671 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Package, Plus, RefreshCcw, Save, ShieldCheck, Truck, Warehouse } from "lucide-react";
+import { useMemo, useState } from "react";
+import { z } from "zod";
+
+import { createClientIdempotencyKey } from "@skima/frontend-core";
+import {
+  Button,
+  ErrorState,
+  LoadingState,
+  MetricTile,
+  SelectInput,
+  StatusBadge,
+  TextInput,
+} from "@skima/ui";
+
+import { useSessionState } from "../../session";
+import { AdminFormSection, AdminV2PageHeader } from "../../shared/patterns/AdminV2Patterns";
+import {
+  CatalogRecordArraySchema,
+  catalogError,
+  catalogLabel,
+  catalogNumber,
+  catalogText,
+  type CatalogRecord,
+} from "./service-catalog-v2-shared";
+import "./service-catalog-v2.css";
+
+const PRODUCT_KEYS = ["fuel.pms", "fuel.ago", "fuel.dpk"] as const;
+const CURRENCIES = [
+  { label: "Nigerian naira (NGN)", value: "NGN" },
+  { label: "USDC", value: "USDC" },
+];
+const FULFILLMENT_MODES = ["station_managed", "independent_driver", "skima_managed"] as const;
+const empty = {
+  branchId: "",
+  productKey: "fuel.pms",
+  currencyCode: "NGN",
+  pricePerLitre: "",
+  minimumLitres: "1",
+  maximumLitres: "200",
+  purchaseAmount: "",
+  rentalAmount: "",
+  depositAmount: "",
+  deliveryFee: "",
+  platformFee: "",
+  taxRate: "0",
+  status: "draft",
+};
+type OfferForm = typeof empty;
+
+export function FuelAdminWorkspace(props: { onNavigate: (href: string) => void }) {
+  const { api, status, context } = useSessionState();
+  const client = useQueryClient();
+  const [offerForm, setOfferForm] = useState<OfferForm>(empty);
+  const [selectedModes, setSelectedModes] = useState<string[]>([...FULFILLMENT_MODES]);
+  const [storageForm, setStorageForm] = useState({
+    branchId: "", productKey: "fuel.pms", key: "", name: "", capacity: "", reserve: "0", status: "active",
+  });
+  const [containerTypeForm, setContainerTypeForm] = useState({
+    key: "", name: "", capacity: "", products: ["fuel.pms"] as string[], status: "draft",
+  });
+  const [containerForm, setContainerForm] = useState({ serial: "", containerTypeId: "", branchId: "", organizationId: "" });
+  const [qualificationForm, setQualificationForm] = useState({
+    fulfillmentMode: "independent_driver",
+    driverUserId: "", driverProfileId: "", stationManagedDriverId: "", branchId: "",
+    vehicleId: "", productKey: "fuel.pms", maximumLoad: "", status: "pending",
+  });
+  const [dispatchQualificationByOrder, setDispatchQualificationByOrder] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const products = useFuelQuery(api, status, "products", "/runtime/fuel/products");
+  const branches = useFuelQuery(api, status, "branches", "/runtime/organization-branches");
+  const offers = useFuelQuery(api, status, "offers", "/runtime/fuel/offers");
+  const tanks = useFuelQuery(api, status, "storage", "/runtime/fuel/storage");
+  const containerTypes = useFuelQuery(api, status, "container-types", "/runtime/fuel/container-types");
+  const containers = useFuelQuery(api, status, "containers", "/runtime/fuel/containers");
+  const qualifications = useFuelQuery(api, status, "qualifications", "/runtime/fuel/driver-qualifications");
+  const dispatchQueue = useFuelQuery(api, status, "dispatch-queue", "/runtime/fuel/orders/operations?stage=ready_for_driver");
+
+  const queries = [products, branches, offers, tanks, containerTypes, containers, qualifications, dispatchQueue];
+  const loading = queries.some((query) => query.isLoading);
+  const failed = queries.find((query) => query.error)?.error;
+  const branchOptions = useMemo(() => [
+    { label: "Choose station branch", value: "" },
+    ...(branches.data ?? []).map((branch) => ({
+      label: catalogLabel(branch, "Station branch"),
+      value: catalogText(branch, "id"),
+    })).filter((option) => option.value),
+  ], [branches.data]);
+  const typeOptions = useMemo(() => [
+    { label: "Choose container type", value: "" },
+    ...(containerTypes.data ?? []).filter((type) => catalogText(type, "status") === "active").map((type) => ({
+      label: `${catalogLabel(type)} · ${catalogNumber(type, "nominal_capacity_litres")} L`,
+      value: catalogText(type, "id"),
+    })).filter((option) => option.value),
+  ], [containerTypes.data]);
+
+  const refresh = async () => {
+    await Promise.all(queries.map((query) => query.refetch()));
+  };
+  const invalidate = async () => {
+    await client.invalidateQueries({ queryKey: ["admin-fuel"] });
+    await refresh();
+  };
+  const toggleProduct = useFuelMutation(api, "/runtime/fuel/products", invalidate, setNotice, setActionError);
+  const bulkToggleProducts = useFuelMutation(api, "/runtime/fuel/products", invalidate, setNotice, setActionError);
+  const saveOffer = useFuelMutation(api, "/runtime/fuel/offers", invalidate, setNotice, setActionError);
+  const saveTank = useFuelMutation(api, "/runtime/fuel/storage", invalidate, setNotice, setActionError);
+  const saveContainerType = useFuelMutation(api, "/runtime/fuel/container-types", invalidate, setNotice, setActionError);
+  const registerContainer = useFuelMutation(api, "/runtime/fuel/containers/register", invalidate, setNotice, setActionError);
+  const saveQualification = useFuelMutation(api, "/runtime/fuel/driver-qualifications", invalidate, setNotice, setActionError);
+  const dispatchQualifiedDriver = useFuelMutation(api, "/runtime/fuel/orders/assign-driver", invalidate, setNotice, setActionError);
+
+  const onProductToggle = async (product: CatalogRecord) => {
+    const key = catalogText(product, "key");
+    const enabled = catalogText(product, "status") === "enabled";
+    await toggleProduct.mutateAsync({
+      productKey: key,
+      status: enabled ? "disabled" : "enabled",
+      reason: enabled ? "Disabled from Fuel administration workspace" : "Enabled from Fuel administration workspace",
+      idempotencyKey: createClientIdempotencyKey("admin.fuel.product", key),
+    });
+  };
+
+  const onBulkToggleProducts = async (status: "enabled" | "disabled") => {
+    await bulkToggleProducts.mutateAsync({
+      productKeys: [...PRODUCT_KEYS],
+      status,
+      reason: status === "enabled"
+        ? "All fuel products globally enabled by a platform administrator"
+        : "All fuel products globally disabled by a platform administrator",
+      idempotencyKey: createClientIdempotencyKey("admin.fuel.products.bulk", status),
+    });
+  };
+
+  const submitOffer = async () => {
+    if (!offerForm.branchId || !offerForm.pricePerLitre || !offerForm.minimumLitres || !offerForm.maximumLitres) {
+      setActionError("Choose a branch and enter the per-litre price and valid litre limits.");
+      return;
+    }
+    await saveOffer.mutateAsync({
+      branchId: offerForm.branchId,
+      productKey: offerForm.productKey,
+      currencyCode: offerForm.currencyCode,
+      pricePerLitre: Number(offerForm.pricePerLitre),
+      minimumLitres: Number(offerForm.minimumLitres),
+      maximumLitres: Number(offerForm.maximumLitres),
+      containerPurchaseAmount: numeric(offerForm.purchaseAmount),
+      containerRentalAmount: numeric(offerForm.rentalAmount),
+      refundableDepositAmount: numeric(offerForm.depositAmount),
+      driverDeliveryFeeAmount: numeric(offerForm.deliveryFee),
+      platformFeeAmount: numeric(offerForm.platformFee),
+      taxRatePercent: numeric(offerForm.taxRate),
+      fulfillmentModes: selectedModes,
+      status: offerForm.status,
+      idempotencyKey: createClientIdempotencyKey("admin.fuel.offer", `${offerForm.branchId}:${offerForm.productKey}:${offerForm.currencyCode}`),
+      metadata: { configured_from: "admin_fuel_workspace" },
+    });
+  };
+
+  const submitTank = async () => {
+    if (!storageForm.branchId || !storageForm.key.trim() || !storageForm.name.trim() || !storageForm.capacity) {
+      setActionError("Choose a branch and provide a tank key, display name and positive capacity.");
+      return;
+    }
+    const branch = (branches.data ?? []).find((item) => catalogText(item, "id") === storageForm.branchId);
+    const organizationId = branch ? catalogText(branch, "organization_id") : "";
+    if (!organizationId) {
+      setActionError("The selected station branch has no resolvable organization.");
+      return;
+    }
+    await saveTank.mutateAsync({
+      organizationId,
+      branchId: storageForm.branchId,
+      productKey: storageForm.productKey,
+      storageKey: storageForm.key.trim(),
+      displayName: storageForm.name.trim(),
+      capacityLitres: Number(storageForm.capacity),
+      safetyReserveLitres: numeric(storageForm.reserve),
+      status: storageForm.status,
+      metadata: {},
+      idempotencyKey: createClientIdempotencyKey("admin.fuel.tank", `${storageForm.branchId}:${storageForm.key.trim()}`),
+    });
+    setStorageForm({ branchId: storageForm.branchId, productKey: storageForm.productKey, key: "", name: "", capacity: "", reserve: "0", status: "active" });
+  };
+
+  const submitContainerType = async () => {
+    if (!containerTypeForm.key.trim() || !containerTypeForm.name.trim() || Number(containerTypeForm.capacity) <= 0 || containerTypeForm.products.length === 0) {
+      setActionError("Enter a type key, name, positive litre capacity and at least one compatible product.");
+      return;
+    }
+    await saveContainerType.mutateAsync({
+      key: containerTypeForm.key.trim(),
+      displayName: containerTypeForm.name.trim(),
+      nominalCapacityLitres: Number(containerTypeForm.capacity),
+      supportedProductKeys: containerTypeForm.products,
+      status: containerTypeForm.status,
+      metadata: {},
+      idempotencyKey: createClientIdempotencyKey("admin.fuel.container-type", containerTypeForm.key.trim()),
+    });
+    setContainerTypeForm({ key: "", name: "", capacity: "", products: ["fuel.pms"], status: "draft" });
+  };
+
+  const submitContainer = async () => {
+    if (!containerForm.serial.trim() || !containerForm.containerTypeId) {
+      setActionError("Enter a unique container serial and choose its type.");
+      return;
+    }
+    await registerContainer.mutateAsync({
+      serialNumber: containerForm.serial.trim(),
+      containerTypeId: containerForm.containerTypeId,
+      organizationId: containerForm.organizationId || undefined,
+      metadata: { registered_from: "admin_fuel_workspace" },
+    });
+    setContainerForm({ serial: "", containerTypeId: containerForm.containerTypeId, branchId: containerForm.branchId, organizationId: containerForm.organizationId });
+  };
+
+  const submitQualification = async () => {
+    const stationManaged = qualificationForm.fulfillmentMode === "station_managed";
+    const validMode = ["station_managed", "independent_driver", "skima_managed"].includes(qualificationForm.fulfillmentMode);
+    const correctIdentity = stationManaged
+      ? Boolean(qualificationForm.stationManagedDriverId && !qualificationForm.driverProfileId && qualificationForm.branchId)
+      : Boolean(qualificationForm.driverProfileId && !qualificationForm.stationManagedDriverId);
+    if (!validMode || !qualificationForm.driverUserId || !correctIdentity || !qualificationForm.vehicleId || Number(qualificationForm.maximumLoad) <= 0) {
+      setActionError("Choose one fulfilment mode and provide only its matching driver identity, vehicle and positive approved litre capacity.");
+      return;
+    }
+    await saveQualification.mutateAsync({
+      fulfillmentMode: qualificationForm.fulfillmentMode,
+      driverUserId: qualificationForm.driverUserId,
+      driverProfileId: stationManaged ? undefined : qualificationForm.driverProfileId,
+      stationManagedDriverId: stationManaged ? qualificationForm.stationManagedDriverId : undefined,
+      branchId: qualificationForm.branchId || undefined,
+      vehicleId: qualificationForm.vehicleId,
+      productKey: qualificationForm.productKey,
+      maximumLoadLitres: Number(qualificationForm.maximumLoad),
+      status: qualificationForm.status,
+      idempotencyKey: createClientIdempotencyKey("admin.fuel.driver-qualification", `${qualificationForm.fulfillmentMode}:${qualificationForm.driverUserId}:${qualificationForm.vehicleId}:${qualificationForm.productKey}:${qualificationForm.branchId}`),
+      metadata: { reviewed_from: "admin_fuel_workspace", fulfillment_mode: qualificationForm.fulfillmentMode },
+    });
+    setQualificationForm({ ...qualificationForm, maximumLoad: "" });
+  };
+
+  const assignDispatchDriver = async (order: CatalogRecord) => {
+    const orderId = catalogText(order, "order_id");
+    const mode = catalogText(order, "fulfillment_mode");
+    const qualificationId = dispatchQualificationByOrder[orderId];
+    const qualification = (qualifications.data ?? []).find((row) => catalogText(row, "id") === qualificationId);
+    const expectedIdentityField = mode === "station_managed" ? "station_managed_driver_id" : "driver_profile_id";
+    const driverEntityId = qualification ? catalogText(qualification, expectedIdentityField) : "";
+    const vehicleId = qualification ? catalogText(qualification, "vehicle_id") : "";
+    if (!orderId || !qualification || !driverEntityId || !vehicleId || catalogText(qualification, "fulfillment_mode") !== mode) {
+      setActionError("Choose an approved driver and vehicle for this exact order fulfilment mode.");
+      return;
+    }
+    await dispatchQualifiedDriver.mutateAsync({
+      orderId,
+      driverEntityId,
+      vehicleId,
+      idempotencyKey: createClientIdempotencyKey("admin.fuel.dispatch", orderId),
+      metadata: { dispatched_from: "admin_fuel_workspace", fulfillment_mode: mode },
+    });
+    setDispatchQualificationByOrder((current) => {
+      const next = { ...current };
+      delete next[orderId];
+      return next;
+    });
+  };
+
+  if (loading) return <LoadingState label="Loading SKIMA Fuel configuration" />;
+  if (failed) return <ErrorState title="Fuel administration unavailable" message={catalogError(failed)} onRetry={() => void refresh()} />;
+
+  const productRows = (products.data ?? []).filter((item) =>
+    PRODUCT_KEYS.some((productKey) => productKey === catalogText(item, "key"))
+  );
+  const enabledCount = productRows.filter((item) => catalogText(item, "status") === "enabled").length;
+  const canManageFuel = context?.platformAdmin?.admin_kind === "super_admin"
+    || context?.permissions.includes("platform.fuel.manage") === true;
+
+  if (!canManageFuel) {
+    return (
+      <div className="catalog-v2">
+        <AdminV2PageHeader
+          eyebrow="Services · SKIMA Fuel"
+          title="Fuel administration"
+          description="Read the global product availability and station configuration. Platform Fuel management permission is required to change settings."
+          actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button>}
+        />
+        <div className="catalog-v2__review-grid">
+          <MetricTile label="Enabled products" value={String(enabledCount)} />
+          <MetricTile label="Station offers" value={String(offers.data?.filter((item) => catalogText(item, "status") === "active").length ?? 0)} />
+          <MetricTile label="Fuel tanks" value={String(tanks.data?.length ?? 0)} />
+          <MetricTile label="Container assets" value={String(containers.data?.length ?? 0)} />
+        </div>
+        <section className="sk-panel catalog-v2__form-card">
+          <div className="sk-panel__header">
+            <div><p className="admin-section-kicker">Platform-level switches</p><h2>Fuel products · Read only</h2></div>
+            <StatusBadge>{enabledCount} of 3 enabled</StatusBadge>
+          </div>
+          <div className="fuel-admin-product-grid">
+            {productRows.map((record) => {
+              const productKey = catalogText(record, "key");
+              const productName = catalogText(record, "display_name") || productKey;
+              const productCode = catalogText(record, "short_code") || productKey;
+              const productStatus = catalogText(record, "status") || "not configured";
+              return (
+                <article className="fuel-admin-product" key={productKey}>
+                  <div><strong>{productName}</strong><small>{productCode} · {productKey}</small></div>
+                  <StatusBadge tone={productStatus === "enabled" ? "success" : "warning"}>{productStatus}</StatusBadge>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="catalog-v2">
+      <AdminV2PageHeader
+        eyebrow="Services · SKIMA Fuel"
+        title="Fuel administration"
+        description="Control registered Fuel products, global availability, station offers, tank stock, reusable containers and product-qualified delivery teams."
+        actions={<Button icon={RefreshCcw} variant="outline" onClick={() => void refresh()}>Refresh</Button>}
+      />
+
+      <div className="catalog-v2__review-grid">
+        <MetricTile label="Enabled products" value={String(enabledCount)} />
+        <MetricTile label="Station offers" value={String(offers.data?.filter((item) => catalogText(item, "status") === "active").length ?? 0)} />
+        <MetricTile label="Fuel tanks" value={String(tanks.data?.length ?? 0)} />
+        <MetricTile label="Container assets" value={String(containers.data?.length ?? 0)} />
+      </div>
+
+      {notice ? <section className="admin-notice"><strong>Saved</strong><p>{notice}</p></section> : null}
+      {actionError ? <section className="admin-notice is-error"><strong>Action could not be completed</strong><p>{actionError}</p></section> : null}
+
+      <section className="sk-panel catalog-v2__form-card">
+        <div className="sk-panel__header">
+          <div><p className="admin-section-kicker">Platform-level switches</p><h2>Fuel products</h2></div>
+          <StatusBadge>{enabledCount} of 3 enabled</StatusBadge>
+        </div>
+        <p className="skima-muted">The Fuel module remains available to administrators while product switches control customer orderability globally. Use the bulk controls to enable or disable all registered Fuel products together; accepted orders are not cancelled.</p>
+        <div className="fuel-admin-product-grid">
+          {productRows.map((record) => {
+            const productKey = catalogText(record, "key");
+            const productName = catalogText(record, "display_name") || productKey;
+            const productCode = catalogText(record, "short_code") || productKey;
+            const enabled = catalogText(record, "status") === "enabled";
+            return (
+              <article className="fuel-admin-product" key={productKey}>
+                <div><strong>{productName}</strong><small>{productCode} · {productKey}</small></div>
+                <StatusBadge tone={enabled ? "success" : "warning"}>{enabled ? "Enabled" : "Disabled"}</StatusBadge>
+                <Button
+                  variant={enabled ? "outline" : "primary"}
+                  isLoading={toggleProduct.isPending}
+                  onClick={() => record ? void onProductToggle(record) : undefined}
+                  disabled={!record}
+                >{enabled ? "Disable product" : "Enable product"}</Button>
+              </article>
+            );
+          })}
+        </div>
+        <div className="fuel-admin-global-actions">
+          <Button
+            variant="primary"
+            isLoading={bulkToggleProducts.isPending}
+            disabled={enabledCount === PRODUCT_KEYS.length}
+            onClick={() => void onBulkToggleProducts("enabled")}
+          >Enable all products</Button>
+          <Button
+            variant="outline"
+            isLoading={bulkToggleProducts.isPending}
+            disabled={enabledCount === 0}
+            onClick={() => void onBulkToggleProducts("disabled")}
+          >Disable all products</Button>
+        </div>
+      </section>
+
+      <section className="sk-panel catalog-v2__form-card">
+        <div className="sk-panel__header"><div><p className="admin-section-kicker">Branch-level offer</p><h2>Station prices and charges</h2></div><StatusBadge>Per product · Per currency</StatusBadge></div>
+        <p className="skima-muted">Each branch and product has independent litre limits and prices. Container charges, delivery, platform fee and tax are stored with the station offer and included in the server-calculated customer quote.</p>
+        <div className="skima-form-grid">
+          <SelectInput label="Station branch" value={offerForm.branchId} onChange={(event) => setOfferForm({ ...offerForm, branchId: event.currentTarget.value })} options={branchOptions} />
+          <SelectInput label="Fuel product" value={offerForm.productKey} onChange={(event) => setOfferForm({ ...offerForm, productKey: event.currentTarget.value })} options={productRows.map((product) => ({ label: catalogText(product, "display_name") || catalogText(product, "key"), value: catalogText(product, "key") }))} />
+          <SelectInput label="Currency" value={offerForm.currencyCode} onChange={(event) => setOfferForm({ ...offerForm, currencyCode: event.currentTarget.value })} options={CURRENCIES} />
+          <TextInput label="Price per litre" type="number" value={offerForm.pricePerLitre} onChange={(event) => setOfferForm({ ...offerForm, pricePerLitre: event.currentTarget.value })} />
+          <TextInput label="Minimum litres" type="number" value={offerForm.minimumLitres} onChange={(event) => setOfferForm({ ...offerForm, minimumLitres: event.currentTarget.value })} />
+          <TextInput label="Maximum litres" type="number" value={offerForm.maximumLitres} onChange={(event) => setOfferForm({ ...offerForm, maximumLitres: event.currentTarget.value })} />
+          <TextInput label="Container purchase charge (per container)" type="number" value={offerForm.purchaseAmount} onChange={(event) => setOfferForm({ ...offerForm, purchaseAmount: event.currentTarget.value })} />
+          <TextInput label="Container rental charge (per container)" type="number" value={offerForm.rentalAmount} onChange={(event) => setOfferForm({ ...offerForm, rentalAmount: event.currentTarget.value })} />
+          <TextInput label="Refundable rental deposit (per container)" type="number" value={offerForm.depositAmount} onChange={(event) => setOfferForm({ ...offerForm, depositAmount: event.currentTarget.value })} />
+          <TextInput label="Driver / delivery fee" type="number" value={offerForm.deliveryFee} onChange={(event) => setOfferForm({ ...offerForm, deliveryFee: event.currentTarget.value })} />
+          <TextInput label="Platform fee" type="number" value={offerForm.platformFee} onChange={(event) => setOfferForm({ ...offerForm, platformFee: event.currentTarget.value })} />
+          <TextInput label="Tax rate (%)" type="number" value={offerForm.taxRate} onChange={(event) => setOfferForm({ ...offerForm, taxRate: event.currentTarget.value })} />
+          <SelectInput label="Offer status" value={offerForm.status} onChange={(event) => setOfferForm({ ...offerForm, status: event.currentTarget.value })} options={[{ label: "Draft", value: "draft" }, { label: "Active", value: "active" }, { label: "Paused", value: "paused" }]} />
+        </div>
+        <AdminFormSection title="Allowed fulfilment modes" description="The customer can only choose modes enabled here for this specific branch and product.">
+          <div className="fuel-admin-checks">
+            {FULFILLMENT_MODES.map((mode) => (
+              <label key={mode}><input type="checkbox" checked={selectedModes.includes(mode)} onChange={(event) => setSelectedModes(event.currentTarget.checked ? [...selectedModes, mode] : selectedModes.filter((value) => value !== mode))} />{formatMode(mode)}</label>
+            ))}
+          </div>
+        </AdminFormSection>
+        <Button icon={Save} isLoading={saveOffer.isPending} disabled={!selectedModes.length} onClick={() => void submitOffer()}>Save branch offer</Button>
+        <div className="fuel-admin-list">
+          {(offers.data ?? []).map((offer) => (
+            <article className="fuel-admin-list-row" key={catalogText(offer, "id")}>
+              <div><strong>{productName(catalogText(offer, "product_key"), productRows)}</strong><small>{branchName(branches.data ?? [], catalogText(offer, "branch_id"))} · {catalogText(offer, "currency_code")}</small></div>
+              <div><strong>{formatMoney(catalogNumber(offer, "price_per_litre"), catalogText(offer, "currency_code"))} / L</strong><small>{catalogNumber(offer, "minimum_litres")}–{catalogNumber(offer, "maximum_litres")} L</small></div>
+              <StatusBadge tone={catalogText(offer, "status") === "active" ? "success" : "warning"}>{catalogText(offer, "status")}</StatusBadge>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <div className="fuel-admin-two-column">
+        <section className="sk-panel catalog-v2__form-card">
+          <div className="sk-panel__header"><div><p className="admin-section-kicker">Station inventory</p><h2>Configure fuel tanks</h2></div><Warehouse size={21} /></div>
+          <div className="skima-form-grid">
+            <SelectInput label="Station branch" value={storageForm.branchId} onChange={(event) => setStorageForm({ ...storageForm, branchId: event.currentTarget.value })} options={branchOptions} />
+            <SelectInput label="Product" value={storageForm.productKey} onChange={(event) => setStorageForm({ ...storageForm, productKey: event.currentTarget.value })} options={productRows.map((product) => ({ label: catalogText(product, "display_name") || catalogText(product, "key"), value: catalogText(product, "key") }))} />
+            <TextInput label="Tank key" value={storageForm.key} onChange={(event) => setStorageForm({ ...storageForm, key: event.currentTarget.value })} />
+            <TextInput label="Tank name" value={storageForm.name} onChange={(event) => setStorageForm({ ...storageForm, name: event.currentTarget.value })} />
+            <TextInput label="Capacity (litres)" type="number" value={storageForm.capacity} onChange={(event) => setStorageForm({ ...storageForm, capacity: event.currentTarget.value })} />
+            <TextInput label="Safety reserve (litres)" type="number" value={storageForm.reserve} onChange={(event) => setStorageForm({ ...storageForm, reserve: event.currentTarget.value })} />
+          </div>
+          <Button icon={Plus} isLoading={saveTank.isPending} onClick={() => void submitTank()}>Save tank configuration</Button>
+          <div className="fuel-admin-list">
+            {(tanks.data ?? []).map((tank) => (
+              <article className="fuel-admin-list-row" key={catalogText(tank, "id")}>
+                <div><strong>{catalogLabel(tank)}</strong><small>{productName(catalogText(tank, "product_key"), productRows)} · {branchName(branches.data ?? [], catalogText(tank, "branch_id"))}</small></div>
+                <div><strong>{catalogNumber(tank, "physical_stock_litres").toLocaleString()} / {catalogNumber(tank, "capacity_litres").toLocaleString()} L</strong><small>{catalogNumber(tank, "reserved_stock_litres")} L reserved · {catalogNumber(tank, "safety_reserve_litres")} L safety reserve</small></div>
+                <StatusBadge>{catalogText(tank, "status")}</StatusBadge>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="sk-panel catalog-v2__form-card">
+          <div className="sk-panel__header"><div><p className="admin-section-kicker">Returnable asset setup</p><h2>Container types</h2></div><Package size={21} /></div>
+          <div className="skima-form-grid">
+            <TextInput label="Container type key" value={containerTypeForm.key} onChange={(event) => setContainerTypeForm({ ...containerTypeForm, key: event.currentTarget.value })} />
+            <TextInput label="Display name" value={containerTypeForm.name} onChange={(event) => setContainerTypeForm({ ...containerTypeForm, name: event.currentTarget.value })} />
+            <TextInput label="Capacity (litres)" type="number" value={containerTypeForm.capacity} onChange={(event) => setContainerTypeForm({ ...containerTypeForm, capacity: event.currentTarget.value })} />
+            <SelectInput label="Type status" value={containerTypeForm.status} onChange={(event) => setContainerTypeForm({ ...containerTypeForm, status: event.currentTarget.value })} options={[{ label: "Draft", value: "draft" }, { label: "Active", value: "active" }, { label: "Paused", value: "paused" }]} />
+          </div>
+          <AdminFormSection title="Compatible fuel products">
+            <div className="fuel-admin-checks">
+              {productRows.map((product) => {
+                const productKey = catalogText(product, "key");
+                return (
+                  <label key={productKey}><input type="checkbox" checked={containerTypeForm.products.includes(productKey)} onChange={(event) => setContainerTypeForm({ ...containerTypeForm, products: event.currentTarget.checked ? [...containerTypeForm.products, productKey] : containerTypeForm.products.filter((value) => value !== productKey) })} />{catalogText(product, "display_name") || productKey}</label>
+                );
+              })}
+            </div>
+          </AdminFormSection>
+          <Button icon={Save} isLoading={saveContainerType.isPending} onClick={() => void submitContainerType()}>Save container type</Button>
+          <div className="fuel-admin-list">
+            {(containerTypes.data ?? []).map((type) => (
+              <article className="fuel-admin-list-row" key={catalogText(type, "id")}>
+                <div><strong>{catalogLabel(type)}</strong><small>{catalogText(type, "key")}</small></div>
+                <div><strong>{catalogNumber(type, "nominal_capacity_litres")} L</strong><small>{Array.isArray(type.supported_product_keys) ? type.supported_product_keys.map((key) => productName(String(key), productRows)).join(", ") : ""}</small></div>
+                <StatusBadge>{catalogText(type, "status")}</StatusBadge>
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <section className="sk-panel catalog-v2__form-card">
+        <div className="sk-panel__header"><div><p className="admin-section-kicker">Physical container registry</p><h2>Register SKIMA containers</h2></div><Package size={21} /></div>
+        <p className="skima-muted">A registered container is a serialized physical asset. Assign it to the station's organization so station staff can see the container inventory. Reuse remains blocked until a rental return passes station inspection.</p>
+        <div className="skima-form-grid">
+          <TextInput label="Serial / asset number" value={containerForm.serial} onChange={(event) => setContainerForm({ ...containerForm, serial: event.currentTarget.value })} />
+          <SelectInput label="Container type" value={containerForm.containerTypeId} onChange={(event) => setContainerForm({ ...containerForm, containerTypeId: event.currentTarget.value })} options={typeOptions} />
+          <SelectInput label="Owning station branch" value={containerForm.branchId} onChange={(event) => {
+            const branch = (branches.data ?? []).find((item) => catalogText(item, "id") === event.currentTarget.value);
+            setContainerForm({
+              ...containerForm,
+              branchId: event.currentTarget.value,
+              organizationId: branch ? catalogText(branch, "organization_id") : "",
+            });
+          }} options={branchOptions} />
+        </div>
+        <Button icon={Plus} isLoading={registerContainer.isPending} onClick={() => void submitContainer()}>Register container asset</Button>
+        <div className="fuel-admin-list">
+          {(containers.data ?? []).slice(0, 40).map((container) => (
+            <article className="fuel-admin-list-row" key={catalogText(container, "id")}>
+              <div><strong>{catalogText(container, "serial_number")}</strong><small>{typeName(containerTypes.data ?? [], catalogText(container, "container_type_id"))}</small></div>
+              <div><strong>{catalogNumber(container, "capacity_litres")} L</strong><small>{catalogText(container, "ownership_mode")}</small></div>
+              <StatusBadge tone={catalogText(container, "status") === "available" ? "success" : "warning"}>{catalogText(container, "status")}</StatusBadge>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="sk-panel catalog-v2__form-card">
+        <div className="sk-panel__header"><div><p className="admin-section-kicker">Driver & vehicle control</p><h2>Product-specific qualifications</h2></div><Truck size={21} /></div>
+        <p className="skima-muted">Fuel driver approvals are mode-specific. These three modes are not interchangeable: Station Managed uses the station's own registered driver and branch vehicle; Independent Managed uses an approved independent provider with their own non-SKIMA vehicle; SKIMA Managed / SKIMA Fleet uses an internal SKIMA driver and SKIMA-owned fleet vehicle.</p>
+        <div className="skima-form-grid">
+          <SelectInput label="Fulfilment mode" value={qualificationForm.fulfillmentMode} onChange={(event) => setQualificationForm({
+            ...qualificationForm,
+            fulfillmentMode: event.currentTarget.value,
+            branchId: event.currentTarget.value === "station_managed" ? qualificationForm.branchId : "",
+            driverProfileId: event.currentTarget.value === "station_managed" ? "" : qualificationForm.driverProfileId,
+            stationManagedDriverId: event.currentTarget.value === "station_managed" ? qualificationForm.stationManagedDriverId : "",
+          })} options={[
+            { label: "Station Managed · station driver + branch vehicle", value: "station_managed" },
+            { label: "Independent Managed · provider + own vehicle", value: "independent_driver" },
+            { label: "SKIMA Managed / SKIMA Fleet · internal driver + fleet vehicle", value: "skima_managed" },
+          ]} />
+          <TextInput label="Driver user ID" value={qualificationForm.driverUserId} onChange={(event) => setQualificationForm({ ...qualificationForm, driverUserId: event.currentTarget.value })} />
+          {qualificationForm.fulfillmentMode === "station_managed" ? (
+            <TextInput label="Station Managed driver ID" value={qualificationForm.stationManagedDriverId} onChange={(event) => setQualificationForm({ ...qualificationForm, stationManagedDriverId: event.currentTarget.value, driverProfileId: "" })} />
+          ) : (
+            <TextInput label={qualificationForm.fulfillmentMode === "skima_managed" ? "SKIMA Managed driver profile ID" : "Independent driver profile ID"} value={qualificationForm.driverProfileId} onChange={(event) => setQualificationForm({ ...qualificationForm, driverProfileId: event.currentTarget.value, stationManagedDriverId: "" })} />
+          )}
+          <SelectInput label={qualificationForm.fulfillmentMode === "station_managed" ? "Station branch (required)" : "Station branch (optional scope)"} value={qualificationForm.branchId} onChange={(event) => setQualificationForm({ ...qualificationForm, branchId: event.currentTarget.value })} options={[{ label: qualificationForm.fulfillmentMode === "station_managed" ? "Choose station branch" : "All branches (where permitted)", value: "" }, ...branchOptions.filter((option) => option.value)]} />
+          <TextInput label="Vehicle ID" value={qualificationForm.vehicleId} onChange={(event) => setQualificationForm({ ...qualificationForm, vehicleId: event.currentTarget.value })} />
+          <SelectInput label="Fuel product" value={qualificationForm.productKey} onChange={(event) => setQualificationForm({ ...qualificationForm, productKey: event.currentTarget.value })} options={productRows.map((product) => ({ label: catalogText(product, "display_name") || catalogText(product, "key"), value: catalogText(product, "key") }))} />
+          <TextInput label="Maximum approved load (litres)" type="number" value={qualificationForm.maximumLoad} onChange={(event) => setQualificationForm({ ...qualificationForm, maximumLoad: event.currentTarget.value })} />
+          <SelectInput label="Qualification status" value={qualificationForm.status} onChange={(event) => setQualificationForm({ ...qualificationForm, status: event.currentTarget.value })} options={[{ label: "Pending", value: "pending" }, { label: "Approved", value: "approved" }, { label: "Rejected", value: "rejected" }, { label: "Suspended", value: "suspended" }]} />
+        </div>
+        <Button icon={ShieldCheck} isLoading={saveQualification.isPending} onClick={() => void submitQualification()}>Save driver qualification</Button>
+        <div className="fuel-admin-list">
+          {(qualifications.data ?? []).map((qualification) => (
+            <article className="fuel-admin-list-row" key={catalogText(qualification, "id")}>
+              <div><strong>{productName(catalogText(qualification, "product_key"), productRows)} · {catalogNumber(qualification, "maximum_load_litres")} L</strong><small>{formatMode(catalogText(qualification, "fulfillment_mode"))} · {catalogText(qualification, "driver_user_id")} · {catalogText(qualification, "vehicle_id")}</small></div>
+              <StatusBadge tone={catalogText(qualification, "status") === "approved" ? "success" : "warning"}>{catalogText(qualification, "status")}</StatusBadge>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="sk-panel catalog-v2__form-card">
+        <div className="sk-panel__header">
+          <div><p className="admin-section-kicker">SKIMA dispatch</p><h2>Independent Managed & SKIMA Fleet orders ready for a driver</h2></div>
+          <Truck size={21} />
+        </div>
+        <p className="skima-muted">These two modes are dispatched by SKIMA, not by the station. Independent Managed orders use an approved independent provider and their own vehicle. SKIMA Managed / SKIMA Fleet orders use an approved internal SKIMA driver and a SKIMA-owned fleet vehicle. Station Managed orders never appear in this queue.</p>
+        {dispatchQueue.isLoading ? <LoadingState label="Loading SKIMA Fuel dispatch queue" /> : null}
+        {(dispatchQueue.data ?? []).filter((order) => ["independent_driver", "skima_managed"].includes(catalogText(order, "fulfillment_mode"))).length === 0 ? (
+          <p className="skima-muted">No Independent Managed or SKIMA Fleet Fuel orders are waiting for SKIMA dispatch.</p>
+        ) : (
+          <div className="fuel-admin-list">
+            {(dispatchQueue.data ?? []).filter((order) => ["independent_driver", "skima_managed"].includes(catalogText(order, "fulfillment_mode"))).map((order) => {
+              const orderId = catalogText(order, "order_id");
+              const mode = catalogText(order, "fulfillment_mode");
+              const productKey = catalogText(order, "product_key");
+              const branchId = catalogText(order, "station_branch_id");
+              const load = catalogNumber(order, "requested_litres");
+              const eligible = (qualifications.data ?? []).filter((qualification) =>
+                catalogText(qualification, "fulfillment_mode") === mode &&
+                catalogText(qualification, "status") === "approved" &&
+                catalogText(qualification, "product_key") === productKey &&
+                catalogNumber(qualification, "maximum_load_litres") >= load &&
+                (catalogText(qualification, "branch_id") === branchId || !catalogText(qualification, "branch_id")) &&
+                (!catalogText(qualification, "valid_until") || Date.parse(catalogText(qualification, "valid_until")) > Date.now())
+              );
+              const options = eligible.map((qualification) => ({
+                label: `${catalogText(qualification, "driver_user_id").slice(0, 8)} · ${catalogText(qualification, "vehicle_id").slice(0, 8)} · ${catalogNumber(qualification, "maximum_load_litres")} L`,
+                value: catalogText(qualification, "id"),
+              }));
+              return (
+                <article className="fuel-admin-list-row" key={orderId}>
+                  <div>
+                    <strong>{productName(productKey, productRows)} · {load} L</strong>
+                    <small>{formatMode(mode)} · {branchName(branches.data ?? [], branchId)} · Order {orderId.slice(0, 8).toUpperCase()}</small>
+                  </div>
+                  <div className="fuel-admin-dispatch-actions">
+                    <SelectInput
+                      label="Qualified driver & vehicle"
+                      value={dispatchQualificationByOrder[orderId] ?? ""}
+                      onChange={(event) => setDispatchQualificationByOrder((current) => ({ ...current, [orderId]: event.currentTarget.value }))}
+                      options={[{ label: eligible.length ? "Choose approved driver and vehicle" : "No matching approved qualification", value: "" }, ...options]}
+                    />
+                    <Button
+                      icon={Truck}
+                      disabled={!dispatchQualificationByOrder[orderId] || !eligible.length}
+                      isLoading={dispatchQualifiedDriver.isPending}
+                      onClick={() => void assignDispatchDriver(order)}
+                    >Assign & dispatch</Button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="admin-notice">
+        <strong>Service coverage must also be enabled for Fuel</strong>
+        <p>Global products and station offers do not automatically launch service in every location. Configure the Fuel customer-ordering coverage policy and approved station/driver Fuel assignments in the existing coverage workspace before enabling customer ordering in a launch area.</p>
+        <Button variant="outline" onClick={() => props.onNavigate("/operations/coverage")}>Open service coverage</Button>
+      </section>
+    </div>
+  );
+}
+
+function useFuelQuery(api: ReturnType<typeof useSessionState>["api"], status: string, key: string, path: string) {
+  return useQuery({
+    queryKey: ["admin-fuel", key],
+    enabled: status === "authenticated",
+    retry: false,
+    queryFn: () => api.get(path, CatalogRecordArraySchema),
+  });
+}
+
+function useFuelMutation(
+  api: ReturnType<typeof useSessionState>["api"],
+  path: string,
+  onSuccess: () => Promise<void>,
+  setNotice: (value: string | null) => void,
+  setError: (value: string | null) => void,
+) {
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) => api.post(path, payload, z.unknown()),
+    onSuccess: async () => {
+      setError(null);
+      setNotice("Your Fuel configuration was saved.");
+      await onSuccess();
+    },
+    onError: (error) => {
+      setNotice(null);
+      setError(catalogError(error));
+    },
+  });
+}
+
+function numeric(value: string): number {
+  const result = Number(value || 0);
+  return Number.isFinite(result) ? result : 0;
+}
+
+function productName(key: string, products: readonly CatalogRecord[]): string {
+  const record = products.find((product) => catalogText(product, "key") === key);
+  return catalogText(record, "display_name") || key || "Fuel";
+}
+
+function branchName(branches: readonly CatalogRecord[], branchId: string): string {
+  const branch = branches.find((item) => catalogText(item, "id") === branchId);
+  return catalogLabel(branch, branchId || "Station branch");
+}
+
+function typeName(types: readonly CatalogRecord[], typeId: string): string {
+  return catalogLabel(types.find((item) => catalogText(item, "id") === typeId), typeId || "Container type");
+}
+
+function formatMode(value: string): string {
+  switch (value) {
+    case "station_managed":
+      return "Station Managed";
+    case "independent_driver":
+      return "Independent Managed";
+    case "skima_managed":
+      return "SKIMA Managed / SKIMA Fleet";
+    default:
+      return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+}
+
+function formatMoney(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(2)}`;
+  }
+}
