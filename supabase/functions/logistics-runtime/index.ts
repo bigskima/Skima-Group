@@ -334,6 +334,12 @@ async function handleLogisticsRequest(
     }), id);
   }
 
+  if (routePath === "/runtime/logistics/company/dispatch-resources" && request.method === "GET") {
+    return rpcResponse(supabase.rpc("read_logistics_company_dispatch_resources", {
+      target_organization_id: requireUuid(url.searchParams.get("organizationId"), "organizationId"),
+    }), id);
+  }
+
   if (routePath === "/runtime/logistics/jobs" && request.method === "GET") {
     let query = supabase.from("logistics_job_requests")
       .select("id,requester_user_id,category_id,service_key,title,description,pickup_geography_id,destination_geography_id,pickup_location,destination_location,cargo_snapshot,instructions,requested_pickup_at,status,published_at,expires_at,metadata,created_at,updated_at")
@@ -435,6 +441,50 @@ async function handleLogisticsRequest(
     if (status) query = query.eq("status", status);
     if (providerOrganizationId) query = query.eq("provider_organization_id", providerOrganizationId);
     return selectResponse(query, id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/assign-driver" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("assign_logistics_booking_driver", {
+      target_booking_id: requireUuid(p.bookingId, "bookingId"),
+      target_driver_profile_id: requireUuid(p.driverProfileId, "driverProfileId"),
+      target_vehicle_id: requireUuid(p.vehicleId, "vehicleId"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/driver/profile" && request.method === "GET") {
+    return rpcResponse(supabase.rpc("read_my_logistics_driver_profile"), id);
+  }
+
+  if (routePath === "/runtime/logistics/driver/bookings" && request.method === "GET") {
+    return rpcResponse(supabase.rpc("read_my_logistics_driver_bookings"), id);
+  }
+
+  if (routePath === "/runtime/logistics/driver/assignment/respond" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("respond_logistics_driver_assignment", {
+      target_assignment_id: requireUuid(p.assignmentId, "assignmentId"),
+      target_decision: requireString(p.decision, "decision"),
+      target_reason: optionalString(p.reason),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/driver/milestone" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("update_logistics_driver_milestone", {
+      target_booking_id: requireUuid(p.bookingId, "bookingId"),
+      target_milestone: requireString(p.milestone, "milestone"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+      target_metadata: optionalRecord(p.metadata) ?? {},
+    }), id);
   }
 
   if (routePath === "/runtime/logistics/bookings/accept" && request.method === "POST") {
