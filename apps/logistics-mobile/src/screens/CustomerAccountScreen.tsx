@@ -9,7 +9,7 @@ import { BrandMark } from "../ui/BrandMark";
 import { Card } from "../ui/Card";
 import { Screen } from "../ui/Screen";
 
-export function CustomerAccountScreen() {
+export function CustomerAccountScreen({ workspace = "customer" }: { workspace?: "customer" | "provider" }) {
   const { palette, scheme, toggle } = useAppTheme();
   const { session, context, signOut } = useSession();
   const name = context?.profile?.display_name ?? (typeof session?.user.user_metadata?.display_name === "string" ? session.user.user_metadata.display_name : "SKIMA customer");
@@ -29,6 +29,16 @@ export function CustomerAccountScreen() {
       </Card>
 
       <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: palette.ink }]}>Workspaces</Text>
+        <AppButton
+          label={workspace === "customer" ? "Open company workspace" : "Return to customer app"}
+          fullWidth
+          variant="secondary"
+          onPress={() => router.replace((workspace === "customer" ? "/(provider)" : "/(customer)") as never)}
+        />
+      </View>
+
+      <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: palette.ink }]}>Preferences</Text>
         <PressableRow icon={scheme === "dark" ? <Moon color={palette.brand} size={19} /> : <Sun color={palette.brand} size={19} />}
           title="Appearance" subtitle={scheme === "dark" ? "Dark mode" : "Light mode"} action={scheme === "dark" ? "Switch to light" : "Switch to dark"} onPress={() => void toggle()} />
@@ -44,7 +54,7 @@ export function CustomerAccountScreen() {
         { text: "Cancel", style: "cancel" },
         { text: "Sign out", style: "destructive", onPress: () => { void signOut().then(() => router.replace("/(auth)/sign-in" as never)); } },
       ])} />
-      <Text style={[styles.version, { color: palette.muted }]}>SKIMA Logistics · Customer app</Text>
+      <Text style={[styles.version, { color: palette.muted }]}>SKIMA Logistics · {workspace === "customer" ? "Customer app" : "Company workspace"}</Text>
     </Screen>
   );
 }
