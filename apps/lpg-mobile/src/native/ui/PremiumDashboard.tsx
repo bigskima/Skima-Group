@@ -102,12 +102,14 @@ export function CustomerDashboard() {
           ? variants.some((variant) => Boolean(prices.find((price) => price.variant_id === variant.id) ?? basePrice))
           : Boolean(basePrice);
         const baseStock = availability.find((rule) => !rule.variant_id) ?? null;
-        const hasStock = variants.length
-          ? variants.some((variant) => {
-              const rule = availability.find((candidate) => candidate.variant_id === variant.id) ?? baseStock;
-              return Boolean(rule && isAvailableStockRecord(rule));
-            })
-          : Boolean(baseStock && isAvailableStockRecord(baseStock));
+        const hasStock = availability.length === 0
+          ? true
+          : variants.length
+            ? variants.some((variant) => {
+                const rule = availability.find((candidate) => candidate.variant_id === variant.id) ?? baseStock;
+                return Boolean(rule && isAvailableStockRecord(rule));
+              })
+            : Boolean(baseStock && isAvailableStockRecord(baseStock));
         if (!hasPrice || !hasStock) return [];
         const media = (storefront.media.data ?? [])
           .filter((record) => record.item_id === itemId && record.status === "active")
