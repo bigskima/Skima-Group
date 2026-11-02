@@ -204,6 +204,37 @@ export function CustomerDashboard() {
             <ActiveOrder record={order} href={`/(customer)/orders/${orderId}`} />
           ) : null}
 
+          {marketplacePreview.length ? (
+            <HomeSection title="Marketplace" action="Explore" href="/(customer)/store">
+              <View style={styles.marketplacePreview}>
+                {marketplacePreview.map((product, index) => (
+                  <Pressable
+                    key={product.id}
+                    accessibilityRole="button"
+                    onPress={() => router.push("/(customer)/store" as never)}
+                    style={[
+                      styles.marketplacePreviewRow,
+                      index > 0 && { borderTopColor: palette.border, borderTopWidth: StyleSheet.hairlineWidth },
+                    ]}
+                  >
+                    <View style={[styles.marketplaceThumb, { backgroundColor: palette.surfaceSubtle }]}>
+                      <RuntimeMediaImage
+                        assetId={product.imageAssetId}
+                        label={product.name}
+                        variant="avatarCompact"
+                      />
+                    </View>
+                    <View style={styles.marketplaceCopy}>
+                      <Text numberOfLines={1} style={[styles.marketplaceName, { color: palette.ink }]}>{product.name}</Text>
+                      <Text style={[styles.marketplacePrice, { color: palette.muted }]}>{formatMoney(product.amount, product.currency)}</Text>
+                    </View>
+                    <ChevronRight color={palette.muted} size={17} />
+                  </Pressable>
+                ))}
+              </View>
+            </HomeSection>
+          ) : null}
+
           <HomeSection
             title="Your cylinders"
             action={cylinder ? "See all" : "Add one"}
@@ -1163,9 +1194,9 @@ function isEffectiveRecord(record: PlatformRecord, now: number) {
 function isAvailableStockRecord(record: PlatformRecord) {
   if (record.availability_status !== "available" || record.status !== "active") return false;
   const stock = firstNumber(record, ["stock_quantity"]);
-  const reserved = firstNumber(record, ["reserved_quantity"]);
-  return record.stock_quantity === null || record.stock_quantity === undefined ||
-    stock - reserved > 0;
+  if (stock === null) return true;
+  const reserved = firstNumber(record, ["reserved_quantity"]) ?? 0;
+  return stock - reserved > 0;
 }
 
 const styles = StyleSheet.create({
