@@ -180,7 +180,7 @@ async function handleLogisticsRequest(
     const p = body.value;
     return rpcResponse(supabase.rpc("register_logistics_company", {
       target_display_name: requireString(p.displayName, "displayName"),
-      target_legal_name: optionalString(p.legalName),
+      target_legal_name: optionalString(p.legalName) ?? null,
       target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
       target_metadata: optionalRecord(p.metadata) ?? {},
     }), id);
@@ -245,7 +245,7 @@ async function handleLogisticsRequest(
       target_category_key: requireString(p.categoryKey, "categoryKey"),
       target_service_key: requireString(p.serviceKey, "serviceKey"),
       target_display_name: requireString(p.displayName, "displayName"),
-      target_description: optionalString(p.description),
+      target_description: optionalString(p.description) ?? null,
       target_pricing_mode: requireString(p.pricingMode, "pricingMode"),
       target_capability_keys: optionalStringArray(p.capabilityKeys),
       target_cargo_type_keys: optionalStringArray(p.cargoTypeKeys),
