@@ -16,10 +16,10 @@ const migrationWalletFunding = await Deno.readTextFile(
 const migrationDriver = await Deno.readTextFile(
   "supabase/migrations/20261102120000_logistics_company_driver_fulfillment.sql",
 );
-const migrationPrePayment = await Deno.readTextFile(
+const migrationCancellation = await Deno.readTextFile(
   "supabase/migrations/20261102130000_logistics_customer_prebooking_cancellation.sql",
 );
-const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationPrePayment;
+const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const apiGateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
@@ -443,18 +443,18 @@ Deno.test("Driver self-service lifecycle controls acceptance, start, pickup, tra
 
 
 Deno.test("Customer may cancel a Logistics request only before a provider booking is created", () => {
-  requireText(migrationPrePayment, "perform offer.id", "cancellation locks provider offers before the request");
-  requireText(migrationPrePayment, "where offer.job_id = target_job_id", "offer lock is scoped to the request");
-  requireText(migrationPrePayment, "job_record.requester_user_id <> actor", "only the request owner may cancel");
-  requireText(migrationPrePayment, "job_record.status not in ('open', 'matching', 'offers_received')", "cancellation is restricted to pre-booking requests");
-  requireText(migrationPrePayment, "where booking.job_id = job_record.id", "any provider booking blocks request-only cancellation");
-  requireText(migrationPrePayment, "update public.logistics_job_opportunities", "matched provider opportunities are withdrawn");
-  requireText(migrationPrePayment, "update public.logistics_offers", "open provider offers are withdrawn");
-  requireText(migrationPrePayment, "logistics.job.customer_cancelled", "append-only request cancellation event");
-  requireText(migrationPrePayment, "existing_event.actor_user_id is distinct from actor", "cancellation idempotency is actor-bound");
-  const jobCancellation = migrationPrePayment.slice(
-    migrationPrePayment.indexOf("create or replace function public.cancel_logistics_job"),
-    migrationPrePayment.indexOf("create or replace function public.cancel_logistics_booking_before_payment"),
+  requireText(migrationCancellation, "perform offer.id", "cancellation locks provider offers before the request");
+  requireText(migrationCancellation, "where offer.job_id = target_job_id", "offer lock is scoped to the request");
+  requireText(migrationCancellation, "job_record.requester_user_id <> actor", "only the request owner may cancel");
+  requireText(migrationCancellation, "job_record.status not in ('open', 'matching', 'offers_received')", "cancellation is restricted to pre-booking requests");
+  requireText(migrationCancellation, "where booking.job_id = job_record.id", "any provider booking blocks request-only cancellation");
+  requireText(migrationCancellation, "update public.logistics_job_opportunities", "matched provider opportunities are withdrawn");
+  requireText(migrationCancellation, "update public.logistics_offers", "open provider offers are withdrawn");
+  requireText(migrationCancellation, "logistics.job.customer_cancelled", "append-only request cancellation event");
+  requireText(migrationCancellation, "existing_event.actor_user_id is distinct from actor", "cancellation idempotency is actor-bound");
+  const jobCancellation = migrationCancellation.slice(
+    migrationCancellation.indexOf("create or replace function public.cancel_logistics_job"),
+    migrationCancellation.indexOf("create or replace function public.cancel_logistics_booking_before_payment"),
   );
   requireNotText(jobCancellation, "post_financial_transaction", "request withdrawal never posts money");
   requireNotText(jobCancellation, "fund_order_from_wallet", "request withdrawal does not touch wallets");
@@ -462,18 +462,18 @@ Deno.test("Customer may cancel a Logistics request only before a provider bookin
 });
 
 Deno.test("Customer may cancel an unpaid booking but not a paid or funded booking", () => {
-  requireText(migrationPrePayment, "public.cancel_logistics_booking_before_payment", "unpaid booking cancellation RPC");
-  requireText(migrationPrePayment, "booking_record.requester_user_id <> actor", "booking owner check");
-  requireText(migrationPrePayment, "booking_record.status not in ('awaiting_payment', 'awaiting_offline_confirmation')", "only unpaid booking statuses are cancellable");
-  requireText(migrationPrePayment, "booking_record.escrow_hold_id is not null", "escrow hold blocks cancellation");
-  requireText(migrationPrePayment, "booking_record.payment_transaction_id is not null", "online payment blocks cancellation");
-  requireText(migrationPrePayment, "booking_record.offline_fee_transaction_id is not null", "offline fee transaction blocks cancellation");
-  requireText(migrationPrePayment, "booking_record.settlement_execution_id is not null", "settled booking cannot be cancelled");
-  requireText(migrationPrePayment, "update public.service_requests", "shared service request is closed");
-  requireText(migrationPrePayment, "update public.order_records", "shared order record is closed");
-  const bookingCancellation = migrationPrePayment.slice(
-    migrationPrePayment.indexOf("create or replace function public.cancel_logistics_booking_before_payment"),
-    migrationPrePayment.indexOf("create or replace function public.reserve_logistics_booking_online_payment"),
+  requireText(migrationCancellation, "public.cancel_logistics_booking_before_payment", "unpaid booking cancellation RPC");
+  requireText(migrationCancellation, "booking_record.requester_user_id <> actor", "booking owner check");
+  requireText(migrationCancellation, "booking_record.status not in ('awaiting_payment', 'awaiting_offline_confirmation')", "only unpaid booking statuses are cancellable");
+  requireText(migrationCancellation, "booking_record.escrow_hold_id is not null", "escrow hold blocks cancellation");
+  requireText(migrationCancellation, "booking_record.payment_transaction_id is not null", "online payment blocks cancellation");
+  requireText(migrationCancellation, "booking_record.offline_fee_transaction_id is not null", "offline fee transaction blocks cancellation");
+  requireText(migrationCancellation, "booking_record.settlement_execution_id is not null", "settled booking cannot be cancelled");
+  requireText(migrationCancellation, "update public.service_requests", "shared service request is closed");
+  requireText(migrationCancellation, "update public.order_records", "shared order record is closed");
+  const bookingCancellation = migrationCancellation.slice(
+    migrationCancellation.indexOf("create or replace function public.cancel_logistics_booking_before_payment"),
+    migrationCancellation.indexOf("create or replace function public.reserve_logistics_booking_online_payment"),
   );
   requireNotText(bookingCancellation, "post_financial_transaction", "unpaid cancellation posts no ledger entry");
   requireNotText(bookingCancellation, "execute_service_request_settlement", "unpaid cancellation releases no escrow");
@@ -481,14 +481,14 @@ Deno.test("Customer may cancel an unpaid booking but not a paid or funded bookin
 });
 
 Deno.test("Online booking wallet funding and escrow reservation run in one serialized database transaction", () => {
-  requireText(migrationPrePayment, "public.reserve_logistics_booking_online_payment", "atomic online payment reservation RPC");
-  requireText(migrationPrePayment, "from public.logistics_bookings", "booking is read in the reservation function");
-  requireText(migrationPrePayment, "for update", "booking lock is held during payment");
-  requireText(migrationPrePayment, "public.fund_order_from_wallet(", "existing double-entry wallet/escrow funding engine");
-  requireText(migrationPrePayment, "public.mark_logistics_booking_payment_reserved(", "booking projection is linked in the same transaction");
-  const reservation = migrationPrePayment.slice(
-    migrationPrePayment.indexOf("create or replace function public.reserve_logistics_booking_online_payment"),
-    migrationPrePayment.indexOf("revoke all on function public.cancel_logistics_job"),
+  requireText(migrationCancellation, "public.reserve_logistics_booking_online_payment", "atomic online payment reservation RPC");
+  requireText(migrationCancellation, "from public.logistics_bookings", "booking is read in the reservation function");
+  requireText(migrationCancellation, "for update", "booking lock is held during payment");
+  requireText(migrationCancellation, "public.fund_order_from_wallet(", "existing double-entry wallet/escrow funding engine");
+  requireText(migrationCancellation, "public.mark_logistics_booking_payment_reserved(", "booking projection is linked in the same transaction");
+  const reservation = migrationCancellation.slice(
+    migrationCancellation.indexOf("create or replace function public.reserve_logistics_booking_online_payment"),
+    migrationCancellation.indexOf("revoke all on function public.begin_logistics_booking_online_payment"),
   );
   const lockAt = reservation.indexOf("for update");
   const fundAt = reservation.indexOf("public.fund_order_from_wallet(");
