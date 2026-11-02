@@ -115,12 +115,12 @@ export interface LogisticsOffer {
 
 export interface LogisticsFeePolicySnapshot {
   readonly bookingFeeMinor: number;
-  readonly providerReceivalFeeMinor: number;
+  readonly providerReceivalFeeMinor?: number;
   /** 1 basis point = 0.01%; 10,000 basis points = 100%. */
-  readonly settlementCommissionBasisPoints: number;
+  readonly settlementCommissionBasisPoints?: number;
   readonly bookingFeePolicyVersionId: string;
-  readonly providerReceivalFeePolicyVersionId: string;
-  readonly settlementCommissionPolicyVersionId: string;
+  readonly providerReceivalFeePolicyVersionId?: string;
+  readonly settlementCommissionPolicyVersionId?: string;
 }
 
 export interface LogisticsFinancialBreakdown {
@@ -154,27 +154,34 @@ export function calculateLogisticsFinancialBreakdown(input: {
   }
   assertMinorAmount(deliveryPriceMinor, "deliveryPriceMinor");
   assertMinorAmount(policy.bookingFeeMinor, "bookingFeeMinor");
-  assertMinorAmount(policy.providerReceivalFeeMinor, "providerReceivalFeeMinor");
-
-  if (
-    !Number.isInteger(policy.settlementCommissionBasisPoints) ||
-    policy.settlementCommissionBasisPoints < 0 ||
-    policy.settlementCommissionBasisPoints > 10_000
-  ) {
-    throw new Error("Settlement commission must be between 0 and 10,000 basis points.");
-  }
   requirePolicyVersion(policy.bookingFeePolicyVersionId, "booking fee");
 
   const online = paymentMode === "skima_settlement";
+  let settlementCommissionBasisPoints = 0;
+  let settlementCommissionMinor = 0;
+  let providerReceivalFeeMinor = 0;
+
   if (online) {
+    const configuredBasisPoints = policy.settlementCommissionBasisPoints;
+    if (
+      configuredBasisPoints === undefined ||
+      !Number.isInteger(configuredBasisPoints) ||
+      configuredBasisPoints < 0 ||
+      configuredBasisPoints > 10_000
+    ) {
+      throw new Error("Settlement commission must be configured between 0 and 10,000 basis points.");
+    }
     requirePolicyVersion(policy.settlementCommissionPolicyVersionId, "settlement commission");
+    settlementCommissionBasisPoints = configuredBasisPoints;
+    settlementCommissionMinor = roundBasisPoints(deliveryPriceMinor, configuredBasisPoints);
   } else {
+    if (policy.providerReceivalFeeMinor === undefined) {
+      throw new Error("Provider receival fee must be explicitly configured for offline bookings.");
+    }
+    assertMinorAmount(policy.providerReceivalFeeMinor, "providerReceivalFeeMinor");
     requirePolicyVersion(policy.providerReceivalFeePolicyVersionId, "provider receival fee");
+    providerReceivalFeeMinor = policy.providerReceivalFeeMinor;
   }
-  const settlementCommissionMinor = online
-    ? roundBasisPoints(deliveryPriceMinor, policy.settlementCommissionBasisPoints)
-    : 0;
-  const providerReceivalFeeMinor = online ? 0 : policy.providerReceivalFeeMinor;
 
   if (online && settlementCommissionMinor > deliveryPriceMinor) {
     throw new Error("Settlement commission cannot exceed the agreed delivery price.");
@@ -186,14 +193,15 @@ export function calculateLogisticsFinancialBreakdown(input: {
     deliveryPriceMinor,
     customerBookingFeeMinor: policy.bookingFeeMinor,
     providerReceivalFeeMinor,
-    settlementCommissionBasisPoints: online ? policy.settlementCommissionBasisPoints : 0,
+    settlementCommissionBasisPoints,
     settlementCommissionMinor,
     companyDeliveryProceedsMinor: online
       ? deliveryPriceMinor - settlementCommissionMinor
       : deliveryPriceMinor,
-    customerPaysThroughSkimaMinor: online
-      ? deliveryPriceMinor + policy.bookingFeeMinor
-      : policy.bookingFeeMinor,
+    customerPaysThroughSkimaMinor: safeMinorSum(
+      online ? deliveryPriceMinor : 0,
+      policy.bookingFeeMinor,
+    ),
     customerPaysProviderOfflineMinor: online ? 0 : deliveryPriceMinor,
   };
 }
@@ -214,6 +222,14 @@ function roundBasisPoints(amountMinor: number, basisPoints: number): number {
   // BigInt avoids precision loss in percentage fee calculations.
   const numerator = BigInt(amountMinor) * BigInt(basisPoints);
   return Number((numerator + 5_000n) / 10_000n);
+}
+
+function safeMinorSum(left: number, right: number): number {
+  const total = BigInt(left) + BigInt(right);
+  if (total > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("Combined customer payment exceeds the safe minor-unit range.");
+  }
+  return Number(total);
 }
 
 function assertMinorAmount(value: number, field: string): void {
