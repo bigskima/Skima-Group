@@ -109,13 +109,7 @@ export function InternalDriverJobDetailScreen() {
   const delivery = nestedRecord(root, "deliveryLocation") ?? nestedRecord(order, "deliveryLocation");
   const latestDriver = nestedRecord(root, "latestDriverLocation") ?? nestedRecord(root, "driverLocation");
   const status = displayStatus(order ?? {}) ?? "unknown";
-  const orderScanRows = Array.isArray(root?.scans)
-    ? root.scans as Array<Record<string, unknown>>
-    : [];
-  const customerDeliveryScanVerified = orderScanRows.some((scan) =>
-    (scan.scanType === "customer_delivery" || scan.scan_type === "customer_delivery")
-      && scan.result === "passed",
-  );
+
   const requestedKg = firstNumber(order, ["requestedKg", "requested_kg"]);
   const earningAmount = firstNumber(order, ["driverCommissionAmount", "driver_commission_amount"]);
   const currencyCode = firstString(order, ["currencyCode", "currency_code"]) ?? "NGN";
@@ -129,10 +123,7 @@ export function InternalDriverJobDetailScreen() {
     : ["driver_accepted", "pickup_en_route"].includes(status)
       ? locationPoint(pickup, "customer")
       : null;
-  const detectedScanType = driverScanTypeForStatus(status);
-  const scanType = detectedScanType === "customer_delivery" && customerDeliveryScanVerified
-    ? null
-    : detectedScanType;
+  const scanType = driverScanTypeForStatus(status);
   const actionKey = driverActionForStatus(status);
   const supplierFormReady = status === "station_verified" || status === "refill_in_progress";
 
@@ -583,10 +574,9 @@ function locationPoint(record: ReturnType<typeof nestedRecord>, label: string): 
   return latitude !== null && longitude !== null ? { latitude, longitude, label } : null;
 }
 
-function driverScanTypeForStatus(status: string): "customer_pickup" | "station_receipt" | "customer_delivery" | null {
+function driverScanTypeForStatus(status: string): "customer_pickup" | "station_receipt" | null {
   if (["driver_accepted", "pickup_en_route"].includes(status)) return "customer_pickup";
   if (["pickup_verified", "station_en_route"].includes(status)) return "station_receipt";
-  if (["return_en_route", "delivery_verification_pending"].includes(status)) return "customer_delivery";
   return null;
 }
 
@@ -611,27 +601,23 @@ function actionSuccess(key: string) {
   return "Job updated.";
 }
 
-function scanTitle(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
+function scanTitle(type: "customer_pickup" | "station_receipt") {
   if (type === "station_receipt") return "Verify cylinder at supplier";
-  if (type === "customer_delivery") return "Verify final customer hand-over";
   return "Verify customer pickup";
 }
 
-function scanDescription(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
-  if (type === "station_receipt") return "At the supplier, scan the same SKIMA cylinder before recording the purchase and refill.";
-  if (type === "customer_delivery") return "At the customer's address, scan the returned cylinder or enter its five-character ID first. The customer then confirms the order-specific OTP in their SKIMA order to close delivery.";
-  return "Scan the customer's registered SKIMA cylinder before taking custody.";
+function scanDescription(type: "customer_pickup" | "station_receipt") {
+  if (type === "station_receipt") return "At the supplier, verify the same SKIMA cylinder. Record supplier, actual refill, price and safety details on this job.";
+  return "Scan the customer's registered SKIMA cylinder once before taking custody. No final driver scan is required at delivery.";
 }
 
-function scanButton(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
+function scanButton(type: "customer_pickup" | "station_receipt") {
   if (type === "station_receipt") return "Confirm supplier arrival";
-  if (type === "customer_delivery") return "Verify returned cylinder";
   return "Confirm pickup";
 }
 
-function scanSuccess(type: "customer_pickup" | "station_receipt" | "customer_delivery") {
-  if (type === "station_receipt") return "Supplier arrival verified. Record the real refill and supplier receipt next.";
-  if (type === "customer_delivery") return "Returned cylinder scan recorded. Ask the customer to complete the order-specific OTP; that is the final delivery confirmation.";
+function scanSuccess(type: "customer_pickup" | "station_receipt") {
+  if (type === "station_receipt") return "Supplier arrival verified. Record the real refill and supplier details next.";
   return "Cylinder pickup verified.";
 }
 
@@ -653,16 +639,15 @@ function friendlyStatus(status: string) {
   return labels[status] ?? status.replace(/_/g, " ");
 }
 
-function stageDescription(status: string, deliveryChallengeVerified = false, customerDeliveryScanVerified = false) {
+function stageDescription(status: string, deliveryChallengeVerified = false) {
   if (["driver_offered", "driver_accepted"].includes(status)) return "This job is reserved for a managed SKIMA fulfillment driver.";
-  if (status === "pickup_en_route") return "Collect and verify the customer's registered cylinder.";
+  if (status === "pickup_en_route") return "Go to the customer and scan the assigned cylinder once before taking custody.";
   if (status === "pickup_verified") return "Continue to a suitable LPG supplier for the requested refill.";
-  if (status === "station_en_route") return "Choose a safe supplier, then scan the cylinder when you arrive.";
-  if (["station_verified", "refill_in_progress"].includes(status)) return "Record the supplier, actual price, actual kilograms, safety check and receipt.";
-  if (["refill_confirmed", "return_en_route"].includes(status)) return "Return the filled cylinder to the customer.";
+  if (status === "station_en_route") return "Choose a safe supplier. Record supplier details, actual refill and safety evidence on this order; no supplier re-scan is needed.";
+  if (["station_verified", "refill_in_progress"].includes(status)) return "Record the supplier, actual price, actual kilograms, safety check and receipt details.";
+  if (status === "refill_confirmed" || status === "return_en_route") return "Return the filled cylinder to the customer. When the customer physically has it, ask them to confirm the order-specific OTP in SKIMA. No second return scan is required.";
   if (status === "delivery_verification_pending" && deliveryChallengeVerified) return "Customer OTP is verified. Refresh the job to see the delivered status and settlement update.";
-  if (status === "delivery_verification_pending" && customerDeliveryScanVerified) return "Returned cylinder verified. The customer must now confirm this order with the order-specific OTP in SKIMA.";
-  if (status === "delivery_verification_pending") return "Scan the returned cylinder at the customer's address first. Then ask the customer to open this order in SKIMA, choose Confirm delivery and complete the order-specific OTP."
+  if (status === "delivery_verification_pending") return "The customer has been invited to confirm delivery with the order-specific OTP. Wait for their confirmation; no returned-cylinder scan or extra delivery action is required.";
   return "Follow the SKIMA-managed fulfillment workflow.";
 }
 
