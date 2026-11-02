@@ -256,6 +256,7 @@ function ProviderWalletFundingPanel({ organizationId }: { organizationId: string
   const queryClient = useQueryClient();
   const wallets = useLogisticsQuery(["wallets"], "/runtime/wallets", Boolean(organizationId), 30_000);
   const balances = useLogisticsQuery(["wallet-balances"], "/runtime/wallet-balances", Boolean(organizationId), 30_000);
+  const currencies = useLogisticsQuery(["currencies"], "/engines/currencies", Boolean(organizationId), 60_000);
   const personalWallets = useMemo(() => (wallets.data ?? []).filter((wallet) =>
     asString(wallet, "wallet_type") === "customer" &&
     asString(wallet, "owner_entity_type") === "user" &&
@@ -285,6 +286,10 @@ function ProviderWalletFundingPanel({ organizationId }: { organizationId: string
   };
   const sourceBalance = readBalance(asString(selectedWallet, "id"));
   const providerBalance = readBalance(asString(providerWallet, "id"));
+  const currencyDecimals = (code: string) => asNumber(
+    (currencies.data ?? []).find((item) => asString(item, "code") === code),
+    "decimal_places",
+  ) ?? 2;
   const requestedAmount = Number(amount);
   const enoughBalance = Number.isFinite(requestedAmount) && requestedAmount > 0 && sourceBalance >= requestedAmount;
 
@@ -306,6 +311,7 @@ function ProviderWalletFundingPanel({ organizationId }: { organizationId: string
       await Promise.all([
         wallets.refetch(),
         balances.refetch(),
+        currencies.refetch(),
         queryClient.invalidateQueries({ queryKey: ["skima-logistics", "wallets"] }),
         queryClient.invalidateQueries({ queryKey: ["skima-logistics", "wallet-balances"] }),
       ]);
@@ -324,7 +330,7 @@ function ProviderWalletFundingPanel({ organizationId }: { organizationId: string
       </View>
       <View style={[fundingStyles.balancePanel, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
         <Text style={[fundingStyles.balanceLabel, { color: palette.muted }]}>Company balance · {currency}</Text>
-        <Text style={[fundingStyles.balanceValue, { color: palette.ink }]}>{formatCurrency(providerBalance, currency, 2)}</Text>
+        <Text style={[fundingStyles.balanceValue, { color: palette.ink }]}>{formatCurrency(providerBalance, currency, currencyDecimals(currency))}</Text>
         <Text style={[fundingStyles.balanceHint, { color: palette.muted }]}>Online bookings do not debit this wallet for commission. That is deducted from escrow at settlement.</Text>
       </View>
       <View style={fundingStyles.form}>
@@ -345,7 +351,7 @@ function ProviderWalletFundingPanel({ organizationId }: { organizationId: string
                   <Pressable key={id} accessibilityRole="button" onPress={() => { setSourceWalletId(id); setIdempotencyKey(null); }}
                     style={[fundingStyles.walletChoice, { backgroundColor: selected ? palette.brandSofter : palette.surface, borderColor: selected ? palette.brand : palette.border }]}>
                     <Text style={[fundingStyles.walletCode, { color: selected ? palette.brand : palette.ink }]}>{code}</Text>
-                    <Text style={[fundingStyles.walletAvailable, { color: palette.muted }]}>{formatCurrency(walletBalance, code, 2)}</Text>
+                    <Text style={[fundingStyles.walletAvailable, { color: palette.muted }]}>{formatCurrency(walletBalance, code, currencyDecimals(code))}</Text>
                   </Pressable>
                 );
               })}
