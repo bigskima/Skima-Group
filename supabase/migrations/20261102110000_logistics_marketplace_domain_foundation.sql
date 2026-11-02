@@ -942,6 +942,136 @@ begin
 end;
 $$;
 
+create or replace function public.refresh_logistics_job_matches(
+  target_job_id uuid,
+  target_idempotency_key text
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $
+declare
+  job public.logistics_job_requests%rowtype;
+  added_count integer := 0;
+begin
+  if target_idempotency_key is null or char_length(btrim(target_idempotency_key)) < 8 then
+    raise exception 'valid idempotency key is required';
+  end if;
+
+  select * into job
+  from public.logistics_job_requests
+  where id = target_job_id
+  for update;
+  if not found then raise exception 'logistics job was not found'; end if;
+
+  if job.requester_user_id <> auth.uid()
+    and not public.has_permission('logistics.marketplace.manage', null) then
+    raise exception 'only the job customer or marketplace administrator may refresh matching';
+  end if;
+  if job.status not in ('open', 'matching', 'offers_received') then
+    raise exception 'this logistics job is no longer accepting provider matches';
+  end if;
+
+  insert into public.logistics_job_opportunities (
+    job_id, organization_id, provider_service_id, status, match_reasons,
+    job_snapshot, customer_contact_snapshot
+  )
+  select
+    job.id,
+    service.organization_id,
+    service.id,
+    'matched',
+    jsonb_build_array('service_capability', 'pickup_coverage', 'destination_coverage', 'provider_verified'),
+    jsonb_build_object(
+      'job_id', job.id,
+      'title', job.title,
+      'description', job.description,
+      'service_key', job.service_key,
+      'category_id', job.category_id,
+      'pickup', job.pickup_location,
+      'destination', job.destination_location,
+      'cargo', job.cargo_snapshot,
+      'instructions', job.instructions,
+      'requested_pickup_at', job.requested_pickup_at
+    ),
+    job.customer_contact_snapshot
+  from public.logistics_provider_services service
+  join public.logistics_provider_profiles provider
+    on provider.organization_id = service.organization_id
+  where service.category_id = job.category_id
+    and service.service_key = job.service_key
+    and service.status = 'active'
+    and service.availability_enabled = true
+    and provider.verification_status = 'verified'
+    and provider.operational_status = 'active'
+    and exists (
+      select 1 from public.logistics_provider_coverage origin
+      where origin.provider_service_id = service.id
+        and origin.status = 'active'
+        and (
+          (origin.coverage_mode in ('origin', 'both') and origin.geography_id = job.pickup_geography_id)
+          or (origin.coverage_mode = 'route'
+            and origin.geography_id = job.pickup_geography_id
+            and origin.destination_geography_id = job.destination_geography_id)
+        )
+    )
+    and exists (
+      select 1 from public.logistics_provider_coverage destination
+      where destination.provider_service_id = service.id
+        and destination.status = 'active'
+        and (
+          (destination.coverage_mode in ('destination', 'both') and destination.geography_id = job.destination_geography_id)
+          or (destination.coverage_mode = 'route'
+            and destination.geography_id = job.pickup_geography_id
+            and destination.destination_geography_id = job.destination_geography_id)
+        )
+    )
+    and (
+      service.maximum_weight_kg is null
+      or nullif(job.cargo_snapshot->>'weight_kg', '') is null
+      or service.maximum_weight_kg >= (job.cargo_snapshot->>'weight_kg')::numeric
+    )
+    and (
+      service.maximum_volume_m3 is null
+      or nullif(job.cargo_snapshot->>'volume_m3', '') is null
+      or service.maximum_volume_m3 >= (job.cargo_snapshot->>'volume_m3')::numeric
+    )
+    and (
+      cardinality(service.cargo_type_keys) = 0
+      or service.cargo_type_keys && array(
+        select jsonb_array_elements_text(coalesce(job.cargo_snapshot->'cargo_type_keys', '[]'::jsonb))
+      )
+    )
+    and (
+      cardinality(service.vehicle_type_keys) = 0
+      or service.vehicle_type_keys && array(
+        select jsonb_array_elements_text(coalesce(job.cargo_snapshot->'vehicle_type_keys', '[]'::jsonb))
+      )
+    )
+  on conflict (job_id, organization_id) do nothing;
+
+  get diagnostics added_count = row_count;
+
+  if added_count > 0 and job.status in ('open', 'matching') then
+    update public.logistics_job_requests
+    set status = 'matching', updated_at = timezone('utc', now())
+    where id = job.id;
+  end if;
+
+  perform public.record_logistics_job_event(
+    job.id,
+    'logistics.job.matching_refreshed',
+    target_idempotency_key || ':event',
+    job.status,
+    case when added_count > 0 then 'matching' else job.status end,
+    jsonb_build_object('additional_provider_matches', added_count)
+  );
+
+  return added_count;
+end;
+$;
+
 create or replace function public.create_logistics_offer(
   target_opportunity_id uuid,
   target_currency_code text,
@@ -1610,6 +1740,7 @@ revoke all on function public.set_logistics_provider_operational_status(uuid, te
 revoke all on function public.configure_logistics_provider_service(uuid, text, text, text, text, text, text[], text[], text[], numeric, numeric, boolean, text, jsonb) from public, anon;
 revoke all on function public.configure_logistics_provider_coverage(uuid, text, text, uuid, uuid, text, jsonb) from public, anon;
 revoke all on function public.create_logistics_job(jsonb, text) from public, anon;
+revoke all on function public.refresh_logistics_job_matches(uuid, text) from public, anon;
 revoke all on function public.create_logistics_offer(uuid, text, bigint, integer, jsonb, timestamptz, text) from public, anon;
 revoke all on function public.counter_logistics_offer(uuid, text, bigint, integer, jsonb, timestamptz, text) from public, anon;
 revoke all on function public.add_logistics_negotiation_message(uuid, uuid, text, text) from public, anon;
@@ -1628,6 +1759,7 @@ grant execute on function public.set_logistics_provider_operational_status(uuid,
 grant execute on function public.configure_logistics_provider_service(uuid, text, text, text, text, text, text[], text[], text[], numeric, numeric, boolean, text, jsonb) to authenticated, service_role;
 grant execute on function public.configure_logistics_provider_coverage(uuid, text, text, uuid, uuid, text, jsonb) to authenticated, service_role;
 grant execute on function public.create_logistics_job(jsonb, text) to authenticated, service_role;
+grant execute on function public.refresh_logistics_job_matches(uuid, text) to authenticated, service_role;
 grant execute on function public.create_logistics_offer(uuid, text, bigint, integer, jsonb, timestamptz, text) to authenticated, service_role;
 grant execute on function public.counter_logistics_offer(uuid, text, bigint, integer, jsonb, timestamptz, text) to authenticated, service_role;
 grant execute on function public.add_logistics_negotiation_message(uuid, uuid, text, text) to authenticated, service_role;
