@@ -83,6 +83,13 @@ Deno.test("Matching is capability, cargo, coverage, verification and capacity co
   requireText(migration, "service.cargo_type_keys", "cargo-type requirements gate");
 });
 
+Deno.test("Customer-authorized rematching can discover newly eligible providers", () => {
+  requireText(migration, "public.refresh_logistics_job_matches", "rematch RPC");
+  requireText(migration, "only the job customer or marketplace administrator may refresh matching", "rematch actor guard");
+  requireText(migration, "on conflict (job_id, organization_id) do nothing", "one opportunity per job and provider");
+  requireText(runtime, '"/runtime/logistics/jobs/match"', "rematch API route");
+});
+
 Deno.test("Offers, counteroffers and messages are limited to the customer or matched provider", () => {
   requireText(migration, "public.can_manage_logistics_company(opportunity.organization_id)", "provider offer actor guard");
   requireText(migration, "only the customer or matched provider may negotiate this offer", "counteroffer actor guard");
