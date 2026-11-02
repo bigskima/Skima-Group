@@ -1,6 +1,8 @@
 import { router } from "expo-router";
 import { ChevronRight, CircleHelp, LogOut, Moon, ShieldCheck, Sun, UserRound } from "lucide-react-native";
-import { Alert, Pressable, StyleSheet, Text, View, type ReactNode } from "react-native";
+import { useMemo } from "react";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import type { ReactNode } from "react";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
