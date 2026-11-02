@@ -195,7 +195,7 @@ begin
   if not found then
     raise exception 'logistics booking was not found';
   end if;
-  if booking_record.requester_user_id <> auth.uid()
+  if booking_record.requester_user_id is distinct from auth.uid()
     and not public.can_read_logistics_company(booking_record.provider_organization_id)
     and not public.has_permission('logistics.marketplace.read',null)
     and not public.has_permission('logistics.marketplace.manage',null)
