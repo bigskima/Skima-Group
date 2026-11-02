@@ -149,8 +149,11 @@ export function calculateLogisticsFinancialBreakdown(input: {
 }): LogisticsFinancialBreakdown {
   const { currencyCode, paymentMode, deliveryPriceMinor, policy } = input;
 
+  if (!LOGISTICS_PAYMENT_MODES.includes(paymentMode)) {
+    throw new Error("A supported logistics payment mode is required.");
+  }
   if (!/^[A-Z0-9]{3,12}$/.test(currencyCode)) {
-    throw new Error("A valid registered currency code is required.");
+    throw new Error("A valid currency code format is required.");
   }
   assertMinorAmount(deliveryPriceMinor, "deliveryPriceMinor");
   assertMinorAmount(policy.bookingFeeMinor, "bookingFeeMinor");
@@ -238,7 +241,7 @@ function assertMinorAmount(value: number, field: string): void {
   }
 }
 
-function requirePolicyVersion(value: string, label: string): void {
+function requirePolicyVersion(value: string | undefined, label: string): void {
   if (!value || value.trim().length === 0) {
     throw new Error(`An active, approved ${label} policy version is required.`);
   }
