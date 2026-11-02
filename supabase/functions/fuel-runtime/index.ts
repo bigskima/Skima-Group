@@ -449,7 +449,7 @@ async function handleFuelRuntimeRequest(
     if (request.method === "GET") {
       let query = supabase
         .from("fuel_driver_product_qualifications")
-        .select("id,driver_user_id,driver_profile_id,station_managed_driver_id,branch_id,vehicle_id,product_key,maximum_load_litres,status,approved_by,approved_at,valid_until,metadata,created_at,updated_at")
+        .select("id,driver_user_id,driver_profile_id,station_managed_driver_id,fulfillment_mode,branch_id,vehicle_id,product_key,maximum_load_litres,status,approved_by,approved_at,valid_until,metadata,created_at,updated_at")
         .order("updated_at", { ascending: false });
       const branchId = optionalUuid(url.searchParams.get("branchId"), "branchId");
       const driverUserId = optionalUuid(url.searchParams.get("driverUserId"), "driverUserId");
@@ -464,12 +464,47 @@ async function handleFuelRuntimeRequest(
       const body = await readJsonBody(request, id);
       if ("response" in body) return body.response;
       const payload = body.value;
+      const fulfillmentMode = requireString(payload.fulfillmentMode, "fulfillmentMode");
+      const branchId = optionalUuid(payload.branchId, "branchId");
+      const driverProfileId = optionalUuid(payload.driverProfileId, "driverProfileId");
+      const stationManagedDriverId = optionalUuid(payload.stationManagedDriverId, "stationManagedDriverId");
+      if (fulfillmentMode === "station_managed" && (!branchId || !stationManagedDriverId || driverProfileId)) {
+        throw new RequestValidationError("Station Managed qualification requires a station driver identity and its branch only.");
+      }
+      if (fulfillmentMode === "independent_driver" && (!driverProfileId || stationManagedDriverId)) {
+        throw new RequestValidationError("Independent Driver qualification requires an independent driver profile only.");
+      }
+      if (fulfillmentMode === "skima_managed" && (!driverProfileId || stationManagedDriverId)) {
+        throw new RequestValidationError("SKIMA Managed qualification requires a SKIMA driver profile only.");
+      }
+      if (!["station_managed", "independent_driver", "skima_managed"].includes(fulfillmentMode)) {
+        throw new RequestValidationError("Choose Station Managed, Independent Driver or SKIMA Managed explicitly.");
+      }
+
+      const manageResults = await Promise.all([
+        supabase.rpc("can_manage_fuel_platform"),
+        branchId ? supabase.rpc("has_permission_for_branch", {
+          target_permission: "business.fuel.orders.manage",
+          target_organization_id: null,
+          target_branch_id: branchId,
+        }) : Promise.resolve({ data: false, error: null }),
+      ]);
+      const permissionError = manageResults.find((result) => result.error)?.error;
+      if (permissionError) return databaseError(permissionError, id);
+      if (manageResults.every((result) => result.data !== true)) {
+        return jsonResponse({ ok: false, error: "forbidden", message: "Fuel driver qualification management permission is required.", requestId: id }, 403);
+      }
+
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+      const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
       return rpcResponse(
-        supabase.rpc("configure_fuel_driver_product_qualification", {
+        serviceClient.rpc("configure_fuel_driver_product_qualification_mode", {
           target_driver_user_id: requireUuid(payload.driverUserId, "driverUserId"),
-          target_driver_profile_id: optionalUuid(payload.driverProfileId, "driverProfileId"),
-          target_station_managed_driver_id: optionalUuid(payload.stationManagedDriverId, "stationManagedDriverId"),
-          target_branch_id: optionalUuid(payload.branchId, "branchId"),
+          target_driver_profile_id: driverProfileId,
+          target_station_managed_driver_id: stationManagedDriverId,
+          target_fulfillment_mode: fulfillmentMode,
+          target_branch_id: branchId,
           target_vehicle_id: requireUuid(payload.vehicleId, "vehicleId"),
           target_product_key: requireString(payload.productKey, "productKey"),
           target_maximum_load_litres: requireNumber(payload.maximumLoadLitres, "maximumLoadLitres"),
@@ -490,7 +525,16 @@ async function handleFuelRuntimeRequest(
       .order("created_at", { ascending: false });
     const branchId = optionalUuid(url.searchParams.get("branchId"), "branchId");
     const orderId = optionalUuid(url.searchParams.get("orderId"), "orderId");
+    const stage = optionalString(url.searchParams.get("stage"));
+    const fulfillmentMode = optionalString(url.searchParams.get("fulfillmentMode"));
     const scope = optionalString(url.searchParams.get("scope"));
+    if (stage) query = query.eq("stage_key", stage);
+    if (fulfillmentMode) {
+      if (!["station_managed", "independent_driver", "skima_managed"].includes(fulfillmentMode)) {
+        throw new RequestValidationError("Unknown Fuel fulfilment mode filter.");
+      }
+      query = query.eq("fulfillment_mode", fulfillmentMode);
+    }
     if (scope === "customer") query = query.eq("customer_user_id", authResult.user.id);
     if (scope === "driver") {
       const assigned = await supabase
@@ -649,9 +693,10 @@ async function handleFuelRuntimeRequest(
 
     const qualificationQuery = supabase
       .from("fuel_driver_product_qualifications")
-      .select("id,driver_user_id,driver_profile_id,station_managed_driver_id,branch_id,vehicle_id,product_key,maximum_load_litres,status,valid_until")
+      .select("id,driver_user_id,driver_profile_id,station_managed_driver_id,fulfillment_mode,branch_id,vehicle_id,product_key,maximum_load_litres,status,valid_until")
       .eq("vehicle_id", vehicleId)
       .eq("product_key", operationData.product_key)
+      .eq("fulfillment_mode", operationData.fulfillment_mode)
       .eq("status", "approved")
       .gte("maximum_load_litres", operationData.requested_litres)
       .or(`branch_id.is.null,branch_id.eq.${operationData.station_branch_id}`)
@@ -738,6 +783,92 @@ async function handleFuelRuntimeRequest(
         target_consumed_litres: requireNumber(payload.consumedLitres, "consumedLitres"),
         target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
         target_metadata: optionalRecord(payload.metadata) ?? {},
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/confirm-delivery" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const orderId = requireUuid(payload.orderId, "orderId");
+    const idempotencyKeyValue = requireString(payload.idempotencyKey, "idempotencyKey");
+    const operationResult = await supabase
+      .from("fuel_order_operations")
+      .select("order_id,requested_litres,filled_litres,fulfillment_mode,stage_key")
+      .eq("order_id", orderId)
+      .maybeSingle();
+    if (operationResult.error) return databaseError(operationResult.error, id);
+    if (!operationResult.data || operationResult.data.stage_key !== "out_for_delivery") {
+      return jsonResponse({ ok: false, error: "fuel_order_not_out_for_delivery", message: "The order must be handed over by the station before delivery can be confirmed.", requestId: id }, 409);
+    }
+    const assignedDriver = await resolveFuelAssignedDriver(supabase, orderId);
+    if (assignedDriver.error) return databaseError(assignedDriver.error, id);
+    if (!assignedDriver.assignment || assignedDriver.userId !== authResult.user.id) {
+      return jsonResponse({ ok: false, error: "forbidden", message: "Only the assigned Fuel driver can confirm this delivery.", requestId: id }, 403);
+    }
+    const measuredLitres = Number(operationResult.data.filled_litres ?? 0);
+    if (!Number.isFinite(measuredLitres) || measuredLitres <= 0) {
+      return jsonResponse({ ok: false, error: "fuel_quantity_not_verified", message: "Station fill measurements are not complete yet.", requestId: id }, 409);
+    }
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("confirm_fuel_customer_delivery", {
+        target_order_id: orderId,
+        target_actor_user_id: authResult.user.id,
+        target_measured_litres: measuredLitres,
+        target_idempotency_key: idempotencyKeyValue,
+        target_metadata: {
+          initiated_by: "assigned_fuel_driver",
+          confirmed_at_runtime: new Date().toISOString(),
+          fulfillment_mode: operationResult.data.fulfillment_mode,
+        },
+      }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/fuel/orders/confirm-rental-return" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    const orderId = requireUuid(payload.orderId, "orderId");
+    const action = requireString(payload.action, "action");
+    if (!["customer_returned_to_driver", "driver_returned_to_station"].includes(action)) {
+      throw new RequestValidationError("Choose a valid rental return handover action.");
+    }
+    const assignedDriver = await resolveFuelAssignedDriver(supabase, orderId);
+    if (assignedDriver.error) return databaseError(assignedDriver.error, id);
+    if (!assignedDriver.assignment || assignedDriver.userId !== authResult.user.id) {
+      return jsonResponse({ ok: false, error: "forbidden", message: "Only the assigned Fuel driver can confirm this rental return.", requestId: id }, 403);
+    }
+    const operationResult = await supabase
+      .from("fuel_order_operations")
+      .select("order_id,container_mode,stage_key,fulfillment_mode")
+      .eq("order_id", orderId)
+      .maybeSingle();
+    if (operationResult.error) return databaseError(operationResult.error, id);
+    const expectedStage = action === "customer_returned_to_driver" ? "return_due" : "returned_to_driver";
+    if (!operationResult.data || operationResult.data.container_mode !== "rental" || operationResult.data.stage_key !== expectedStage) {
+      return jsonResponse({ ok: false, error: "fuel_rental_return_stage_invalid", message: "The order is not at the expected rental-container return stage.", requestId: id }, 409);
+    }
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey) return jsonResponse({ ok: false, error: "server_misconfigured", requestId: id }, 503);
+    const serviceClient = createServiceClient(supabaseUrl, serviceRoleKey);
+    return rpcResponse(
+      serviceClient.rpc("confirm_fuel_rental_container_return", {
+        target_order_id: orderId,
+        target_actor_user_id: authResult.user.id,
+        target_action: action,
+        target_idempotency_key: requireString(payload.idempotencyKey, "idempotencyKey"),
+        target_metadata: {
+          initiated_by: "assigned_fuel_driver",
+          confirmed_at_runtime: new Date().toISOString(),
+          fulfillment_mode: operationResult.data.fulfillment_mode,
+        },
       }),
       id,
     );
