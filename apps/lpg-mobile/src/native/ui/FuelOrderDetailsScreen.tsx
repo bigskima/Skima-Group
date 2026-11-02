@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
-import { ActionResponseSchema, RecordArraySchema, firstNumber, firstString, nestedRecord } from "../api/records";
+import { ActionResponseSchema, RecordArraySchema, firstNumber, firstString } from "../api/records";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { spacing, typography } from "../theme/tokens";
 import { friendlyError } from "../utilities/friendlyError";
