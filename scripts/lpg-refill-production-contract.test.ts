@@ -348,7 +348,7 @@ Deno.test("awaiting-payment orders remain resumable without creating duplicate r
   assertIncludes(orders, 'orders/${id}/payment');
   assertIncludes(orders, "const ORDER_PAGE_SIZE = 12");
   assertIncludes(orders, "filteredItems.slice(0, visibleCount)");
-  assertIncludes(orders, 'setFilter(useState<OrderFilter>("all"))');
+  assertIncludes(orders, 'const [filter, setFilter] = useState<OrderFilter>("all")');
   assertIncludes(orders, "jobOrder ?? savedOrder");
   assertIncludes(customerLayout, '"orders/[id]/payment"');
 });
