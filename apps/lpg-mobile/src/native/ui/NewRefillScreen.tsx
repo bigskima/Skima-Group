@@ -327,7 +327,7 @@ export function NewRefillScreen() {
       isSkimaInternalFulfillmentId(stationId) && skimaManagedTripEnabled,
     );
     if (!tripServiceable && !stationManagedCoverageOverride && !skimaManagedCoverageOverride) {
-      setError("SKIMA Managed and Independent delivery are not available for this trip. Select an eligible Station Managed option if one is offered, or choose another location.");
+      setError("SKIMA Managed / SKIMA Fleet and Independent Managed delivery are not available for this trip. Select an eligible Station Managed option if one is offered, or choose another location.");
       return;
     }
     if (!Number.isFinite(kilograms) || kilograms <= 0) {
@@ -702,7 +702,7 @@ export function NewRefillScreen() {
                     <Text style={[styles.requirementTitle, { color: palette.ink }]}>SKIMA's general delivery coverage is not active here yet</Text>
                     <Text style={[styles.requirementBody, { color: palette.muted }]}>
                       {pickupUnavailable && deliveryUnavailable
-                        ? "The selected pickup and return locations are outside SKIMA Managed and Independent delivery coverage."
+                        ? "The selected pickup and return locations are outside SKIMA Managed / SKIMA Fleet and Independent Managed delivery coverage."
                         : pickupUnavailable
                           ? "The selected pickup location is outside SKIMA Managed and Independent delivery coverage."
                           : "The selected return location is outside SKIMA Managed and Independent delivery coverage."} You can still continue: SKIMA will separately check whether an approved Station Managed station can serve both locations within its own delivery radius. No refill is confirmed unless a valid station option and quote are available.
@@ -721,7 +721,7 @@ export function NewRefillScreen() {
                 <View style={styles.availabilityLead}>
                   <ShieldCheck color={palette.success} size={22} />
                   <View style={styles.requirementCopy}>
-                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>SKIMA Managed is enabled for both locations</Text>
+                    <Text style={[styles.requirementTitle, { color: palette.ink }]}>SKIMA Managed / SKIMA Fleet is enabled for both locations</Text>
                     <Text style={[styles.requirementBody, { color: palette.muted }]}>SKIMA is checking its own live driver, vehicle, pricing and dispatch readiness. General marketplace coverage is not required for this option.</Text>
                   </View>
                 </View>
@@ -943,7 +943,7 @@ export function NewRefillScreen() {
                 eyebrow="DELIVERY METHOD"
                 icon={<Store color={palette.brand} size={20} />}
                 title="Who delivers your cylinder?"
-                description="Choose Independent Managed delivery or let this station deliver through its own Station Managed driver."
+                description="Choose Independent Managed delivery or let this station deliver through its own Station Managed driver. SKIMA Managed / SKIMA Fleet may also be offered when its own fleet and driver network is eligible."
               />
               <View style={styles.choices}>
                 <Pressable
