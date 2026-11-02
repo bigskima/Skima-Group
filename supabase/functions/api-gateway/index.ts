@@ -3541,8 +3541,17 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
     const payload = body.value;
-    const lineItems = requireArray(payload.lineItems, "lineItems");
-    if (lineItems.length === 0) throw new RequestValidationError("Add at least one product before checkout.");
+    const requestedLineItems = requireArray(payload.lineItems, "lineItems").map((value, index) => {
+      const line = requireRecord(value, `lineItems[${index}]`);
+      const quantity = requireNumber(line.quantity, `lineItems[${index}].quantity`);
+      if (quantity <= 0) throw new RequestValidationError(`lineItems[${index}].quantity must be greater than zero.`);
+      return {
+        itemId: requireUuid(line.itemId, `lineItems[${index}].itemId`),
+        variantId: optionalUuid(line.variantId, `lineItems[${index}].variantId`),
+        quantity,
+      };
+    });
+    if (requestedLineItems.length === 0) throw new RequestValidationError("Add at least one product before checkout.");
 
     const fulfillmentMethod = requireString(payload.fulfillmentMethod, "fulfillmentMethod");
     if (!["delivery", "pickup"].includes(fulfillmentMethod)) {
@@ -3687,7 +3696,7 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
         target_currency_code: settings.currency_code,
         target_fulfillment_method: fulfillmentMethod,
         target_idempotency_key: checkoutKey,
-        target_line_items: lineItems,
+        target_line_items: requestedLineItems,
         target_metadata: { channel: "skima_store", storefront_module: "store", customer_app: "skima.lpg.mobile" },
         target_module_key: "store",
         target_order_payload: defaultOrderPayload,
@@ -3716,7 +3725,27 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
       .select("line_amount,currency_code")
       .eq("order_id", orderId);
     if (lineItemsResult.error) return databaseError(lineItemsResult.error, id);
-    const subtotalAmount = (lineItemsResult.data ?? []).reduce((sum, line) => sum + Number(line.line_amount ?? 0), 0);
+    const persistedLines = lineItemsResult.data ?? [];
+    if (existingOrder) {
+      const normalizeLines = (items: Array<{ itemId: string; variantId: string | null; quantity: number }>) => {
+        const totals = new Map<string, number>();
+        for (const item of items) {
+          const key = `${item.itemId}:${item.variantId ?? "base"}`;
+          totals.set(key, (totals.get(key) ?? 0) + item.quantity);
+        }
+        return Array.from(totals.entries()).sort(([left], [right]) => left.localeCompare(right));
+      };
+      const expectedLines = normalizeLines(requestedLineItems);
+      const actualLines = normalizeLines(persistedLines.map((line) => ({
+        itemId: String(line.item_id),
+        variantId: line.variant_id ? String(line.variant_id) : null,
+        quantity: Number(line.quantity),
+      })));
+      if (JSON.stringify(expectedLines) !== JSON.stringify(actualLines)) {
+        return jsonResponse({ ok: false, error: "idempotency_conflict", message: "The basket changed after this checkout attempt. Start checkout again.", requestId: id }, 409);
+      }
+    }
+    const subtotalAmount = persistedLines.reduce((sum, line) => sum + Number(line.line_amount ?? 0), 0);
     if (!Number.isFinite(subtotalAmount) || subtotalAmount <= 0) {
       return jsonResponse({ ok: false, error: "invalid_store_order_total", message: "The Store order has no valid payable product total.", requestId: id }, 400);
     }
