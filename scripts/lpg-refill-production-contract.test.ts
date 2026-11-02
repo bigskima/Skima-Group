@@ -111,8 +111,8 @@ Deno.test("driver job final delivery uses the assigned-cylinder resolver and ref
   assertIncludes(internalScan, "continuousScan.mutateAsync");
   assertIncludes(internalScan, 'workspace: "driver"');
   assertIncludes(detail, "deliveryChallengeVerified");
-  assertIncludes(detail, "Scan the returned cylinder first. Then ask the customer");
-  assertIncludes(internal, "Scan the returned cylinder at the customer's address first.");
+  assertIncludes(detail, "No second driver scan is required.");
+  assertIncludes(internal, "No second return scan is required.");
   assertIncludes(projection, "deliveryChallengeVerified");
   assertIncludes(projection, "public.lpg_delivery_challenge_is_verified");
   assertIncludes(payoutAuthorization, "can_create_driver_wallet");
@@ -939,7 +939,7 @@ Deno.test("LPG final hand-over uses customer OTP only across Station, Independen
   // evidence on the job. No separate supplier or final return scan is needed.
   assertIncludes(internal, 'return ["driver_accepted", "pickup_en_route"].includes(status) ? "customer_pickup" : null;');
   assertIncludes(internal, '["station_en_route", "station_verified", "refill_in_progress"].includes(status)');
-  assertIncludes(internal, "record supplier, actual price and kilograms, confirm the safety check, then submit");
+  assertIncludes(internal, "Open Refill, record the supplier, actual price and kilograms, confirm the safety check, then submit");
   assertIncludes(internal, "No second return scan is required.");
   assertNotIncludes(internal, 'return "station_receipt"');
   assertNotIncludes(internal, 'return "customer_delivery"');
@@ -1061,7 +1061,7 @@ Deno.test("LPG driver stages advance from verified events and live Admin routing
   assertIncludes(internalActions, "return null;");
   assertNotIncludes(internalActions, "lpg.return.start");
   assertIncludes(driver, '["return_en_route", "delivery_verification_pending"].includes(status)');
-  assertIncludes(driver, "The order remains pending until that confirmation.");
+  assertIncludes(driver, "no returned-cylinder scan or extra delivery button is required.");
   assertIncludes(internal, '["return_en_route", "delivery_verification_pending"].includes(status)');
   assertIncludes(lifecycle, "delivery challenge must be requested by the LPG order customer");
   assertIncludes(lifecycle, "order_record.status not in ('return_en_route', 'delivery_verification_pending')");
