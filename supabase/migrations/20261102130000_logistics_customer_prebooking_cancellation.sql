@@ -163,7 +163,13 @@ begin
   end if;
   if booking_record.escrow_hold_id is not null
     or booking_record.payment_transaction_id is not null
-    or booking_record.offline_fee_transaction_id is not null then
+    or booking_record.offline_fee_transaction_id is not null
+    or exists (
+      select 1
+      from public.escrow_holds hold_record
+      where hold_record.subject_type = 'service_request'
+        and hold_record.subject_id = booking_record.service_request_id
+    ) then
     raise exception 'this booking has a financial record and cannot use pre-payment cancellation';
   end if;
 
@@ -319,8 +325,8 @@ begin
   end if;
 
   if booking_record.status = 'payment_processing' then
-    if booking_record.payment_attempt_wallet_id <> target_customer_wallet_id
-      or booking_record.payment_attempt_idempotency_key <> target_idempotency_key then
+    if booking_record.payment_attempt_wallet_id is distinct from target_customer_wallet_id
+      or booking_record.payment_attempt_idempotency_key is distinct from target_idempotency_key then
       raise exception 'an online payment attempt is already in progress; retry with the original wallet and idempotency key';
     end if;
     return jsonb_build_object(
@@ -405,7 +411,7 @@ begin
     return booking_record.id;
   end if;
   if booking_record.status <> 'payment_processing'
-    or booking_record.payment_attempt_idempotency_key <> target_idempotency_key then
+    or booking_record.payment_attempt_idempotency_key is distinct from target_idempotency_key then
     raise exception 'the online payment attempt cannot be reset by this request';
   end if;
 
