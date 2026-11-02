@@ -179,6 +179,17 @@ Deno.test("Provider delivery payload is normalized to the database contract", ()
   requireText(bookingFulfillmentMigration, "recipient_name text", "required delivery recipient");
 });
 
+Deno.test("Provider company can view and fund its receivables wallet without bypassing the shared ledger", () => {
+  requireText(providerCompany, "Company wallet", "provider wallet balance panel");
+  requireText(providerCompany, "/runtime/wallets", "owner-visible wallet catalogue");
+  requireText(providerCompany, "/runtime/wallet-balances", "live company wallet balance");
+  requireText(providerCompany, "personalWallets", "funding source is the owner's personal customer wallet");
+  requireText(providerCompany, "/runtime/logistics/company/wallet/fund", "secure company wallet funding route");
+  requireText(providerCompany, "Move funds to company wallet", "interactive owner funding action");
+  requireText(providerCompany, "createClientIdempotencyKey", "funding retry idempotency");
+  requireNotText(providerCompany, "SUPABASE_SERVICE_ROLE_KEY", "no privileged database credential in the app");
+});
+
 Deno.test("Customer confirmation triggers online settlement but never double-charges offline completion", () => {
   requireText(booking, "/runtime/logistics/bookings/delivery/confirm", "customer completion action");
   requireText(booking, "Confirm delivery received", "customer delivery confirmation");
