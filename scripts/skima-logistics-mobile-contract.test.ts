@@ -40,6 +40,13 @@ const providerWorkRoute = await Deno.readTextFile("apps/logistics-mobile/app/(pr
 const providerJobRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/work.tsx");
 const bookingFulfillmentMigration = await Deno.readTextFile("supabase/migrations/20261102114500_logistics_booking_fulfillment_and_settlement.sql");
 const logisticsRuntime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
+const companyApplication = await Deno.readTextFile("apps/logistics-mobile/src/ui/LogisticsCompanyApplicationPanel.tsx");
+const companyFleet = await Deno.readTextFile("apps/logistics-mobile/src/ui/LogisticsCompanyFleetPanel.tsx");
+const publicMediaPicker = await Deno.readTextFile("apps/logistics-mobile/src/ui/LogisticsMediaPicker.tsx");
+const companyApplicationMigration = await Deno.readTextFile("supabase/migrations/20261103165000_logistics_company_application_documents.sql");
+const publicMediaMigration = await Deno.readTextFile("supabase/migrations/20261103164500_logistics_public_company_and_vehicle_media.sql");
+const companyFleetMigration = await Deno.readTextFile("supabase/migrations/20261103170000_logistics_company_managed_fleet.sql");
+const companyFleetDriverMigration = await Deno.readTextFile("supabase/migrations/20261103171000_logistics_company_fleet_driver_directory.sql");
 
 function requireText(source: string, fragment: string, label: string): void {
   const normalizedSource = source.replace(/\s+/g, " ");
@@ -500,4 +507,67 @@ Deno.test("Platform Logistics administration can review disputes with finance-au
   requireText(logisticsAdmin, "Close finance review", "offline review closure");
   requireText(logisticsAdmin, "recoveredDeliverySubmitted", "admin can recognize verified recovered delivery");
   requireText(logisticsAdmin, "recovered_delivery_submitted", "customer confirmation remains available after recovered delivery");
+});
+
+
+Deno.test("Logistics address search is Nigeria-scoped, detailed and supports manual full-address entry", () => {
+  requireText(geography, '"/lpg/maps/autocomplete"', "server-side LocationIQ address autocomplete");
+  requireText(geography, '"/runtime/logistics/geographies?countryCode=NG"', "complete Nigeria geography hierarchy");
+  requireText(geography, "address_components", "full address components retained");
+  requireText(geography, "coordinates:", "address coordinates retained");
+  requireText(geography, "Use typed address instead", "manual entry is available alongside suggestions");
+  requireText(geography, "manualBase", "manual address linked to nearest known geography");
+  requireText(geography, "state_district", "LGA/district hierarchy matching");
+  requireText(logisticsRuntime, 'routePath === "/runtime/logistics/geographies"', "searchable canonical geography runtime");
+  requireText(logisticsRuntime, '.contains("aliases", [search])', "configured geography aliases are searchable");
+  requireText(request, "address_snapshot: locationSnapshot(pickup)", "pickup address details retained on request");
+  requireText(request, "address_snapshot: locationSnapshot(destination)", "destination address details retained on request");
+});
+
+Deno.test("Unregistered Logistics companies can apply and submit optional private evidence for SKIMA review", () => {
+  requireText(companyApplicationMigration, "'application.logistics.company'", "Logistics company application type");
+  requireText(companyApplicationMigration, "'logistics.company.registration'", "optional business registration evidence requirement");
+  requireText(companyApplicationMigration, "false", "company registration evidence is not mandatory");
+  requireText(companyApplicationMigration, "optional_for_unregistered_company", "unregistered applicants may continue");
+  requireText(companyApplicationMigration, "'workflow.application.review.default'", "existing review workflow");
+  requireText(companyApplication, "registrationEvidenceOptional: true", "application captures unregistered status");
+  requireText(companyApplication, "Start company application", "company can initiate application");
+  requireText(companyApplication, '"/runtime/media/upload-sessions"', "protected company evidence upload session");
+  requireText(companyApplication, '"/runtime/documents"', "document submission uses shared verification registry");
+  requireText(companyApplication, '"skima-platform-documents"', "private document storage bucket");
+  requireText(companyApplication, "platformReviewRequired: true", "SKIMA retains final approval authority");
+});
+
+Deno.test("Logistics public company, driver and vehicle photos use the protected media registry", () => {
+  requireText(publicMediaPicker, '"/runtime/media/upload-sessions"', "protected image upload session");
+  requireText(publicMediaPicker, '"/runtime/media/assets"', "media registry asset registration");
+  requireText(publicMediaPicker, '"/runtime/media/entity-links"', "public entity-media link");
+  requireText(publicMediaPicker, '"/runtime/media/read-sessions"', "protected media preview");
+  requireText(publicMediaMigration, "'logistics_company'", "company public-media entity support");
+  requireText(publicMediaMigration, "'logistics_vehicle'", "company vehicle public-media entity support");
+  requireText(publicMediaMigration, "'logistics.company.logo.public'", "company logo role");
+  requireText(publicMediaMigration, "'logistics.company.photo.public'", "company accountability photo role");
+  requireText(publicMediaMigration, "'logistics.vehicle.photo.public'", "vehicle public photo role");
+  requireText(publicMediaMigration, "PRIVATE_KYC", "private KYC media cannot be published");
+  requireText(providerCompany, "Public company identity", "company logo and public photo controls");
+  requireText(providerDriver, "Your public driver photo", "driver portrait is customer-facing");
+});
+
+Deno.test("Company-managed fleet bypasses SKIMA vehicle approval but preserves driver and expiry safeguards", () => {
+  requireText(companyFleet, '"/runtime/logistics/company/vehicles"', "company-managed vehicle registration");
+  requireText(companyFleet, '"/runtime/logistics/company/vehicles/assign-driver"', "company-owned driver/vehicle assignment");
+  requireText(companyFleet, "SKIMA does not need to approve the vehicle or its licensing", "no platform vehicle-approval step");
+  requireText(companyFleet, "insurance_expires_at", "company-managed insurance expiry display");
+  requireText(companyFleet, "Assign a company driver", "company can manage vehicle assignment");
+  requireText(companyFleetMigration, "ownership_relationship", "company ownership is explicit");
+  requireText(companyFleetMigration, "'business_owned'", "company-owned vehicle type");
+  requireText(companyFleetMigration, "'active'", "company-managed vehicle is immediately active");
+  requireText(companyFleetMigration, "company_attested_ownership", "company ownership is audited");
+  requireText(companyFleetMigration, "licensing_responsibility", "company retains licensing responsibility");
+  requireText(companyFleetMigration, "verification_status = 'approved'", "driver identity approval remains required");
+  requireText(companyFleetMigration, "assign_logistics_company_vehicle_to_driver", "dedicated company assignment RPC");
+  requireText(companyFleetMigration, "read_logistics_company_fleet_drivers", "tenant-scoped company driver directory");
+  requireText(logisticsRuntime, "register_logistics_company_vehicle", "vehicle API uses database lifecycle");
+  requireText(logisticsRuntime, "assign_logistics_company_vehicle_to_driver", "driver assignment API uses database lifecycle");
+  requireText(logisticsRuntime, "read_logistics_company_fleet_drivers", "company driver directory endpoint");
 });
