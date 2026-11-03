@@ -492,7 +492,7 @@ async function handleLogisticsRequest(
 
   if (routePath === "/runtime/logistics/bookings/disputes" && request.method === "GET") {
     let query = supabase.from("logistics_booking_disputes")
-      .select("id,booking_id,job_id,provider_organization_id,requester_user_id,incident_id,reason,details,booking_status_before_dispute,status,resolution_code,resolution_note,resolved_by,resolved_at,refund_transaction_id,metadata,created_at,updated_at,incident:logistics_booking_incidents(status,resolution_code,booking_status_before_incident,assignment_status_before_incident,cargo_custody_status)")
+      .select("id,booking_id,job_id,provider_organization_id,requester_user_id,incident_id,reason,details,booking_status_before_dispute,status,resolution_code,resolution_note,resolved_by,resolved_at,refund_transaction_id,metadata,created_at,updated_at,booking:logistics_bookings(status,cargo_custody_status),incident:logistics_booking_incidents(status,resolution_code,booking_status_before_incident,assignment_status_before_incident,cargo_custody_status)")
       .order("created_at", { ascending: false });
     const bookingId = optionalUuid(url.searchParams.get("bookingId"), "bookingId");
     if (bookingId) query = query.eq("booking_id", bookingId);
