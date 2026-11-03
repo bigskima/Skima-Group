@@ -445,13 +445,83 @@ async function handleLogisticsRequest(
 
   if (routePath === "/runtime/logistics/bookings" && request.method === "GET") {
     let query = supabase.from("logistics_bookings")
-      .select("id,job_id,offer_id,requester_user_id,provider_organization_id,assigned_driver_profile_id,assigned_driver_user_id,assigned_vehicle_id,driver_assigned_at,payment_mode,status,currency_code,delivery_amount,customer_booking_fee_amount,provider_receival_fee_amount,provider_commission_amount,provider_net_amount,total_customer_charge,policy_snapshots,service_request_id,order_id,escrow_hold_id,payment_transaction_id,offline_fee_transaction_id,payment_attempt_wallet_id,payment_attempt_idempotency_key,settlement_execution_id,provider_accepted_at,service_started_at,delivery_submitted_at,delivery_submitted_by,delivery_submission_snapshot,delivery_verified_at,delivery_verified_by,delivery_verification_snapshot,created_at,updated_at,job:logistics_job_requests(title,pickup_location,destination_location),assignments:logistics_booking_driver_assignments(id,status,driver_profile_id,driver_user_id,vehicle_id,offered_at,responded_at,started_at,picked_up_at,in_transit_at,delivery_submitted_at,response_reason,driver:driver_profiles(driver_display_name,public_driver_id),vehicle:vehicles(registration_number,manufacturer,model)),offer:logistics_offers(delivery_price_minor,estimated_duration_minutes,terms,opportunity:logistics_job_opportunities(customer_contact_snapshot,job_snapshot))")
+      .select("id,job_id,offer_id,requester_user_id,provider_organization_id,assigned_driver_profile_id,assigned_driver_user_id,assigned_vehicle_id,driver_assigned_at,payment_mode,status,cargo_custody_status,delivery_exception_reason,currency_code,delivery_amount,customer_booking_fee_amount,provider_receival_fee_amount,provider_commission_amount,provider_net_amount,total_customer_charge,policy_snapshots,service_request_id,order_id,escrow_hold_id,payment_transaction_id,offline_fee_transaction_id,payment_attempt_wallet_id,payment_attempt_idempotency_key,settlement_execution_id,provider_accepted_at,service_started_at,delivery_submitted_at,delivery_submitted_by,delivery_submission_snapshot,delivery_verified_at,delivery_verified_by,delivery_verification_snapshot,created_at,updated_at,job:logistics_job_requests(title,pickup_location,destination_location),assignments:logistics_booking_driver_assignments(id,status,driver_profile_id,driver_user_id,vehicle_id,offered_at,responded_at,started_at,picked_up_at,in_transit_at,delivery_submitted_at,response_reason,driver:driver_profiles(driver_display_name,public_driver_id),vehicle:vehicles(registration_number,manufacturer,model)),offer:logistics_offers(delivery_price_minor,estimated_duration_minutes,terms,opportunity:logistics_job_opportunities(customer_contact_snapshot,job_snapshot))")
       .order("created_at", { ascending: false });
     const status = optionalString(url.searchParams.get("status"));
     const providerOrganizationId = optionalUuid(url.searchParams.get("providerOrganizationId"), "providerOrganizationId");
     if (status) query = query.eq("status", status);
     if (providerOrganizationId) query = query.eq("provider_organization_id", providerOrganizationId);
     return selectResponse(query, id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/incidents" && request.method === "GET") {
+    let query = supabase.from("logistics_booking_incidents")
+      .select("id,booking_id,job_id,provider_organization_id,assignment_id,reporter_user_id,reporter_role,incident_type,severity,description,cargo_custody_status,booking_status_before_incident,assignment_status_before_incident,location_snapshot,status,resolution_code,resolution_note,resolved_by,resolved_at,created_at,updated_at")
+      .order("created_at", { ascending: false });
+    const bookingId = optionalUuid(url.searchParams.get("bookingId"), "bookingId");
+    if (bookingId) query = query.eq("booking_id", bookingId);
+    return selectResponse(query, id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/incidents/report" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("report_logistics_booking_incident", {
+      target_booking_id: requireUuid(p.bookingId, "bookingId"),
+      target_incident_type: requireString(p.incidentType, "incidentType"),
+      target_severity: requireString(p.severity, "severity"),
+      target_description: requireString(p.description, "description"),
+      target_cargo_custody_status: requireString(p.cargoCustodyStatus, "cargoCustodyStatus"),
+      target_location_snapshot: optionalRecord(p.locationSnapshot) ?? {},
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/incidents/respond" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("respond_logistics_booking_incident", {
+      target_incident_id: requireUuid(p.incidentId, "incidentId"),
+      target_decision: requireString(p.decision, "decision"),
+      target_resolution_note: requireString(p.resolutionNote, "resolutionNote"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/disputes" && request.method === "GET") {
+    let query = supabase.from("logistics_booking_disputes")
+      .select("id,booking_id,job_id,provider_organization_id,requester_user_id,incident_id,reason,details,booking_status_before_dispute,status,resolution_code,resolution_note,resolved_by,resolved_at,refund_transaction_id,created_at,updated_at")
+      .order("created_at", { ascending: false });
+    const bookingId = optionalUuid(url.searchParams.get("bookingId"), "bookingId");
+    if (bookingId) query = query.eq("booking_id", bookingId);
+    return selectResponse(query, id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/disputes/open" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("open_logistics_booking_dispute", {
+      target_booking_id: requireUuid(p.bookingId, "bookingId"),
+      target_reason: requireString(p.reason, "reason"),
+      target_details: requireString(p.details, "details"),
+      target_incident_id: optionalUuid(p.incidentId, "incidentId") ?? null,
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/disputes/resolve" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("resolve_logistics_booking_dispute", {
+      target_dispute_id: requireUuid(p.disputeId, "disputeId"),
+      target_decision: requireString(p.decision, "decision"),
+      target_resolution_note: requireString(p.resolutionNote, "resolutionNote"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
   }
 
   if (routePath === "/runtime/logistics/bookings/assign-driver" && request.method === "POST") {
