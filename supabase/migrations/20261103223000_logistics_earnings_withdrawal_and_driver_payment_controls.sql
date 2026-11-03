@@ -168,6 +168,9 @@ create table if not exists public.logistics_company_payment_settings (
 );
 alter table public.logistics_company_payment_settings enable row level security;
 revoke all on public.logistics_company_payment_settings from public, anon, authenticated;
+create policy logistics_company_payment_settings_read_owner
+on public.logistics_company_payment_settings for select to authenticated
+using (public.can_manage_logistics_company(organization_id));
 
 create table if not exists public.logistics_driver_payment_records (
   id uuid primary key default gen_random_uuid(),
