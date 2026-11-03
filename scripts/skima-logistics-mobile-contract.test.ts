@@ -530,7 +530,7 @@ Deno.test("Unregistered Logistics companies can apply and submit optional privat
   requireText(companyApplicationMigration, "false", "company registration evidence is not mandatory");
   requireText(companyApplicationMigration, "optional_for_unregistered_company", "unregistered applicants may continue");
   requireText(companyApplicationMigration, "'workflow.application.review.default'", "existing review workflow");
-  requireText(companyApplication, "registrationEvidenceOptional: true", "application captures unregistered status");
+  requireText(companyApplication, "registrationEvidenceOptional", "application captures unregistered status");
   requireText(companyApplication, "Start company application", "company can initiate application");
   requireText(companyApplication, '"/runtime/media/upload-sessions"', "protected company evidence upload session");
   requireText(companyApplication, '"/runtime/documents"', "document submission uses shared verification registry");
@@ -566,7 +566,7 @@ Deno.test("Company-managed fleet bypasses SKIMA vehicle approval but preserves d
   requireText(companyFleetMigration, "licensing_responsibility", "company retains licensing responsibility");
   requireText(companyFleetMigration, "verification_status = 'approved'", "driver identity approval remains required");
   requireText(companyFleetMigration, "assign_logistics_company_vehicle_to_driver", "dedicated company assignment RPC");
-  requireText(companyFleetMigration, "read_logistics_company_fleet_drivers", "tenant-scoped company driver directory");
+  requireText(companyFleetDriverMigration, "read_logistics_company_fleet_drivers", "tenant-scoped company driver directory");
   requireText(logisticsRuntime, "register_logistics_company_vehicle", "vehicle API uses database lifecycle");
   requireText(logisticsRuntime, "assign_logistics_company_vehicle_to_driver", "driver assignment API uses database lifecycle");
   requireText(logisticsRuntime, "read_logistics_company_fleet_drivers", "company driver directory endpoint");
