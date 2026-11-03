@@ -1,9 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useState } from "react";
 import { router } from "expo-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Minus, Plus, Search, ShoppingBag, ShoppingCart, Store, X } from "lucide-react-native";
-import { Alert, ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { Alert, ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { z } from "zod";
 import { useLogisticsQuery, asString, asNumber } from "../api/logistics";
 import { useLogisticsStorefrontData } from "../api/store";
@@ -15,8 +15,9 @@ import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { StatePanel } from "../ui/StatePanel";
 
 type CartLine = { itemId: string; variantId: string | null; name: string; variantName: string | null; quantity: number; unitAmount: number; currencyCode: string };
-type Product = { item: Record<string, unknown>; id: string; variantId: string | null; name: string; variantName: string | null; description: string | null; amount: number; currency: string; stock: number | null };
+type Product = { item: Record<string, unknown>; id: string; variantId: string | null; name: string; variantName: string | null; description: string | null; amount: number; currency: string; stock: number | null; imageAssetId: string | null };
 const OrderSchema = z.union([z.string(), z.record(z.string(), z.unknown())]);
+const MediaReadSchema = z.object({ assetId:z.string(), contentType:z.string().nullable(), expiresInSeconds:z.number().positive(), signedUrl:z.string().url() });
 const money = (amount: number, currency: string) => new Intl.NumberFormat("en-NG", { style: "currency", currency, maximumFractionDigits: 2 }).format(amount);
 const idempotency = () => `logistics-store:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -94,8 +95,8 @@ export function LogisticsStoreScreen() {
       const choices=variants.length?variants:[null];
       for(const variant of choices){
         const variantId=variant?asString(variant,"id"):null;
-        const price=prices.find((entry)=>(asString(entry,"variant_id")??null)===variantId);
-        const stock=stockRules.find((entry)=>(asString(entry,"variant_id")??null)===variantId);
+        const price=prices.find((entry)=>(asString(entry,"variant_id")??null)===variantId) ?? prices.find((entry)=>!asString(entry,"variant_id"));
+        const stock=stockRules.find((entry)=>(asString(entry,"variant_id")??null)===variantId) ?? stockRules.find((entry)=>!asString(entry,"variant_id"));
         if(!price || !stock || asString(stock,"availability_status")!=="available") continue;
         const amount=asNumber(price,"amount","unit_amount","price_amount");
         if(amount===null || amount<=0) continue;
@@ -107,12 +108,13 @@ export function LogisticsStoreScreen() {
           item,id:itemId,variantId,
           name:asString(item,"display_name","name","title")??"Store item",
           variantName:variant?asString(variant,"display_name","name","label"):null,
-          description:asString(item,"description"),amount,currency,stock:remaining
+          description:asString(item,"description"),amount,currency,stock:remaining,
+          imageAssetId:asString((store.media.data??[]).filter((media)=>asString(media,"item_id")===itemId&&asString(media,"status")==="active").sort((left,right)=>(asNumber(left,"display_order")??0)-(asNumber(right,"display_order")??0))[0],"media_asset_id")
         });
       }
     }
     return output;
-  },[settings,storeModuleId,store.items.data,store.variants.data,store.prices.data,store.availability.data,allowedMethods.join("|"),currency]);
+  },[settings,storeModuleId,store.items.data,store.variants.data,store.prices.data,store.availability.data,store.media.data,allowedMethods.join("|"),currency]);
 
   const activeCategories=(store.categories.data??[]).filter((item)=>asString(item,"status")==="active" && asString(item,"module_id")===storeModuleId);
   const filtered=products.filter((product)=>(category==="all" || asString(product.item,"category_id")===category) && `${product.name} ${product.variantName??""} ${product.description??""}`.toLowerCase().includes(search.trim().toLowerCase()));
@@ -156,7 +158,7 @@ export function LogisticsStoreScreen() {
   function add(product:Product){
     setCart(current=>{
       const existing=current.find((line)=>line.itemId===product.id&&line.variantId===product.variantId);
-      if(existing) return current.map((line)=>line.itemId===product.id&&line.variantId===product.variantId?{...line,quantity:Math.min(product.stock??99,line.quantity+1)}:line);
+      if(existing) return current.map((line)=>line.itemId===product.id&&line.variantId===product.variantId?{...line,quantity:product.stock===null?line.quantity+1:Math.min(product.stock,line.quantity+1)}:line);
       return [...current,{itemId:product.id,variantId:product.variantId,name:product.name,variantName:product.variantName,quantity:1,unitAmount:product.amount,currencyCode:product.currency}];
     });
   }
@@ -183,7 +185,7 @@ export function LogisticsStoreScreen() {
            store.items.error||store.prices.error||store.availability.error? <StatePanel title="Products could not load" description="Refresh the catalogue and try again." retry={()=>void Promise.all([store.items.refetch(),store.prices.refetch(),store.availability.refetch()])}/> :
            filtered.length? <View style={styles.grid}>
             {filtered.map(product=><View key={`${product.id}:${product.variantId??"base"}`} style={[styles.product,{width:width>=1100?"23.5%":width>=700?"31.5%":"48.5%",backgroundColor:palette.surface,borderColor:palette.border}]}>
-              <View style={[styles.productIcon,{backgroundColor:palette.brandSoft}]}><ShoppingBag color={palette.brand} size={22}/></View>
+              <ProductImage assetId={product.imageAssetId} label={product.name}/>
               <Text style={[styles.productName,{color:palette.ink}]} numberOfLines={2}>{product.name}</Text>
               {product.variantName?<Text style={[styles.productDescription,{color:palette.muted}]} numberOfLines={1}>{product.variantName}</Text>:null}
               {product.description?<Text style={[styles.productDescription,{color:palette.muted}]} numberOfLines={2}>{product.description}</Text>:null}
@@ -199,6 +201,7 @@ export function LogisticsStoreScreen() {
               {fulfillment==="delivery"?<View style={styles.locationChoices}><Text style={[styles.formLabel,{color:palette.ink}]}>Delivery address</Text>{availableLocations.length?availableLocations.slice(0,6).map(location=>{const id=asString(location,"id")??"";return <Pressable key={id} onPress={()=>setLocationId(id)} style={[styles.location,{borderColor:locationId===id?palette.brand:palette.border,backgroundColor:locationId===id?palette.brandSoft:palette.surface}]}><Text style={[styles.locationText,{color:palette.ink}]} numberOfLines={2}>{asString(location,"formatted_address","display_name","address")??"Saved address"}</Text></Pressable>;}) : <Text style={[styles.productDescription,{color:palette.muted}]}>Add a saved address or choose pickup.</Text>}</View>:null}
               <TextInput value={note} onChangeText={setNote} placeholder="Order note (optional)" placeholderTextColor={palette.muted} style={[styles.note,{color:palette.ink,borderColor:palette.border}]}/>
               {fulfillment==="delivery"&&deliveryFee!==null?<Text style={[styles.productDescription,{color:palette.muted}]}>Estimated delivery: {money(deliveryFee,currency)}{deliveryDistance!==null? ` · ${deliveryDistance.toFixed(1)} km`:""}</Text>:null}
+              <Pressable onPress={()=>router.push("/(customer)/wallet" as never)}><Text style={[styles.productDescription,{color:palette.brand,fontWeight:"800"}]}>View shared SKIMA Wallet · Add funds</Text></Pressable>
               {!walletId?<Text style={[styles.error,{color:palette.danger}]}>Your shared SKIMA customer wallet is unavailable.</Text>:!withinRadius?<Text style={[styles.error,{color:palette.danger}]}>This address is outside the Store delivery coverage.</Text>:!walletEnough?<Text style={[styles.error,{color:palette.danger}]}>Your {currency} customer wallet cannot cover this order and delivery.</Text>:cartTotal<minimumOrder?<Text style={[styles.error,{color:palette.danger}]}>Minimum order: {money(minimumOrder,currency)}.</Text>:null}
               <Pressable disabled={checkout.isPending||!canCheckout} onPress={()=>checkout.mutate()} style={[styles.checkout,{backgroundColor:palette.brand,opacity:checkout.isPending||!canCheckout?0.5:1}]}>{checkout.isPending?<ActivityIndicator color="#fff"/>:<Text style={styles.checkoutText}>Pay {money(total??cartTotal,currency)}</Text>}</Pressable>
             </>:<Text style={[styles.productDescription,{color:palette.muted}]}>Add a product to your basket to continue.</Text>}
@@ -207,6 +210,21 @@ export function LogisticsStoreScreen() {
       )}
     </Screen>
   );
+}
+
+
+function ProductImage({assetId,label}:{assetId:string|null;label:string}){
+ const {palette}=useAppTheme();
+ const {session,api,status}=useSession();
+ const media=useQuery({
+  queryKey:["logistics-store-media",assetId,session?.user.id??"anonymous"],
+  enabled:Boolean(assetId&&status==="authenticated"),
+  staleTime:12*60*1000,
+  queryFn:()=>api.post("/runtime/media/read-sessions",{assetId,idempotencyKey:`logistics-store-media:${assetId}`},MediaReadSchema),
+ });
+ return <View style={[styles.productImage,{backgroundColor:palette.brandSoft}]}>
+  {media.data?.signedUrl?<Image source={{uri:media.data.signedUrl}} resizeMode="cover" style={{width:"100%",height:"100%"}} accessibilityLabel={label}/>:<ShoppingBag color={palette.brand} size={24}/>}
+ </View>;
 }
 
 function Filter({label,active,onPress}:{label:string;active:boolean;onPress:()=>void}){
@@ -218,6 +236,7 @@ const styles=StyleSheet.create({
  toolbar:{borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:8,flexDirection:"row",alignItems:"center",gap:8},
  search:{flex:1,minWidth:0,height:38,flexDirection:"row",alignItems:"center",gap:7,paddingHorizontal:8},searchInput:{flex:1,minWidth:0,fontSize:12,paddingVertical:0},
  walletPill:{flexDirection:"row",alignItems:"center",gap:5,borderRadius:radii.pill,backgroundColor:"rgba(220,45,65,.09)",paddingHorizontal:9,paddingVertical:8},
+ productImage:{height:100,width:"100%",borderRadius:radii.md,overflow:"hidden",alignItems:"center",justifyContent:"center",backgroundColor:"rgba(220,45,65,.07")},
  filters:{gap:7,paddingVertical:9},filter:{paddingHorizontal:12,paddingVertical:8,borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.pill},
  grid:{flexDirection:"row",flexWrap:"wrap",gap:10},product:{minWidth:142,flexGrow:1,borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:11,gap:6},
  productIcon:{width:44,height:44,borderRadius:13,alignItems:"center",justifyContent:"center"},productName:{...typography.bodyStrong,fontSize:12,lineHeight:16},
