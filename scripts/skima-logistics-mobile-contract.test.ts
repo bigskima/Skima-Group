@@ -449,6 +449,9 @@ Deno.test("Customer can raise a delivery dispute and see the protected payment o
 Deno.test("Company dispatch can resolve an incident or send a distinct cargo recovery driver", () => {
   requireText(providerBookingDetail, '"/runtime/logistics/bookings/incidents/respond"', "company incident response endpoint");
   requireText(providerBookingDetail, "Require cargo recovery", "company can require recovery");
+  requireText(providerBookingDetail, "Restore customer delivery confirmation", "submitted delivery incidents restore the customer receipt step");
+  requireText(providerBookingDetail, "incidentBookingStatus === \"in_progress\"", "same-driver resume is only offered for active transit");
+  requireText(providerBookingDetail, "incidentBookingStatus === \"delivered\"", "confirmation restoration is reserved for a submitted delivery");
   requireText(providerBookingDetail, "Resume delivery with current driver", "safe same-driver resume path");
   requireText(providerBookingDetail, "Cargo recovery dispatch", "recovery dispatch workspace");
   requireText(providerBookingDetail, '"/runtime/logistics/bookings/assign-recovery-driver"', "dedicated recovery assignment route");
