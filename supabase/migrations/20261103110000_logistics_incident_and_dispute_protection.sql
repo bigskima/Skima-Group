@@ -717,6 +717,29 @@ begin
     where id = booking_record.id;
   end if;
 
+  if target_decision = 'refund_customer' then
+    update public.logistics_booking_incidents
+    set status = 'resolved',
+        resolution_code = 'closed_by_customer_refund',
+        resolution_note = 'Incident closed as part of the authorized full escrow refund after dispute review.',
+        resolved_by = actor,
+        resolved_at = timezone('utc',now()),
+        updated_at = timezone('utc',now())
+    where booking_id = booking_record.id
+      and status in ('reported','investigating','recovery_required');
+  elsif target_decision in ('allow_delivery_confirmation','resume_delivery')
+    and dispute_record.incident_id is not null then
+    update public.logistics_booking_incidents
+    set status = 'resolved',
+        resolution_code = 'resolved_by_dispute_' || target_decision,
+        resolution_note = btrim(target_resolution_note),
+        resolved_by = actor,
+        resolved_at = timezone('utc',now()),
+        updated_at = timezone('utc',now())
+    where id = dispute_record.incident_id
+      and status in ('reported','investigating','recovery_required');
+  end if;
+
   update public.logistics_booking_disputes
   set status = 'resolved',
       resolution_code = target_decision,
