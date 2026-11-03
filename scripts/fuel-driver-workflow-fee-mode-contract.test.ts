@@ -2,7 +2,7 @@ const migration = await Deno.readTextFile(
   "supabase/migrations/20261102013000_fuel_driver_workflow_fees_and_mode_controls.sql",
 );
 const runtime = await Deno.readTextFile("supabase/functions/fuel-runtime/index.ts");
-const progression = await Deno.readTextFile("supabase/migrations/20261102161000_fuel_auto_progression_verified_delivery_completion.sql");
+const progression = await Deno.readTextFile("supabase/migrations/20261102210720_fuel_auto_progression_verified_delivery_completion.sql");
 const driver = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelDriverJobsScreen.tsx");
 const station = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelStationOperationsScreen.tsx");
 const adminFuel = await Deno.readTextFile("apps/admin/src/features/services/FuelAdminWorkspace.tsx");
