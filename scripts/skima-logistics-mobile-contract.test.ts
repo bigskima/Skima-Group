@@ -168,8 +168,8 @@ Deno.test("Provider workspace has separate company, opportunities and jobs route
   requireText(providerCompany, 'coverageMode === "route"', "route corridor coverage mode");
   requireText(providerJobs, "/runtime/logistics/bookings?providerOrganizationId=", "provider-owned booking list");
   requireText(providerBookingDetail, "/runtime/logistics/bookings/accept", "provider accept lifecycle");
-  requireText(providerBookingDetail, "/runtime/logistics/bookings/start", "provider start lifecycle");
-  requireText(providerBookingDetail, "/runtime/logistics/bookings/delivery/submit", "provider delivery submission lifecycle");
+  requireText(providerDriver, "/runtime/logistics/bookings/start", "assigned driver start lifecycle");
+  requireText(providerDriver, "/runtime/logistics/bookings/delivery/submit", "assigned driver delivery submission lifecycle");
   requireText(providerRoutes, "ProviderTabs", "provider tab route layout");
   requireText(providerJobRoute, "ProviderJobsScreen", "provider jobs route");
   requireText(providerWorkRoute, "ProviderBookingDetailScreen", "provider booking detail route");
@@ -186,11 +186,16 @@ Deno.test("Provider matched opportunities are free and enable customer contact a
 
 Deno.test("Provider booking actions preserve idempotency on retries and changed delivery evidence", () => {
   requireText(providerBookingDetail, "actionKeysRef", "provider action idempotency cache");
-  requireText(providerBookingDetail, "const fingerprint = action === \"deliver\"", "delivery payload fingerprint");
-  requireText(providerBookingDetail, "recipientName.trim()", "delivery recipient part of retry identity");
-  requireText(providerBookingDetail, "deliveryNote.trim()", "delivery note part of retry identity");
-  requireText(providerBookingDetail, "actionKeysRef.current.get(fingerprint)", "same action retry reuses its key");
-  requireText(providerBookingDetail, "actionKeysRef.current.set(fingerprint, key)", "new delivery evidence receives a new key");
+  requireText(providerBookingDetail, "assign:", "driver-and-vehicle assignment retry fingerprint");
+  requireText(providerBookingDetail, "selectedDriverProfileId", "company assignment identity includes its driver");
+  requireText(providerBookingDetail, "selectedVehicleId", "company assignment identity includes its vehicle");
+  requireText(providerBookingDetail, "actionKeysRef.current.get(fingerprint)", "same company assignment retry reuses its key");
+  requireText(providerBookingDetail, "actionKeysRef.current.set(fingerprint, key)", "new company assignment receives a new key");
+  requireText(providerDriver, "const evidence = input.kind === \"deliver\"", "delivery evidence is fingerprinted separately");
+  requireText(providerDriver, "input.recipientName?.trim()", "delivery recipient part of retry identity");
+  requireText(providerDriver, "input.deliveryNote?.trim()", "delivery note part of retry identity");
+  requireText(providerDriver, "actionKeys.current.get(fingerprint)", "same driver action retry reuses its key");
+  requireText(providerDriver, "actionKeys.current.set(fingerprint, idempotencyKey)", "changed driver evidence receives a new key");
 });
 
 Deno.test("Customer can counter a matched provider quote before booking", () => {
@@ -261,7 +266,9 @@ Deno.test("Logistics invitees can discover, accept and decline only their own Lo
   requireText(account, 'asString(item, "invited_user_id")', "match invitation to signed-in profile");
   requireText(account, 'asString(item, "status") === "pending"', "only pending invitations may be actioned");
   requireText(account, 'input.action === "accept"', "acceptance confirmation");
-  requireText(account, 'input.action === "decline"', "decline confirmation");
+  requireText(account, 'action: "accept" | "decline"', "both invitation responses are supported");
+  requireText(account, 'respondToInvitation.mutate({ invitationId, action: "decline" })', "decline confirmation action");
+  requireText(account, "Company invitation declined.", "decline result is shown to the invitee");
   requireText(account, "Company invitation accepted", "post-accept company workspace guidance");
   requireText(account, "You can now open the company workspace", "accepted company access next step");
 });
@@ -282,7 +289,7 @@ Deno.test("Invited Logistics staff can accept or decline from their own account"
 
 
 Deno.test("Company booking workspace assigns an eligible driver and vehicle before fulfillment starts", () => {
-  requireText(providerBookingDetail, '"/runtime/logistics/company/dispatch-resources?organizationId=', "eligible company driver and vehicle catalogue");
+  requireText(providerBookingDetail, "/runtime/logistics/company/dispatch-resources?organizationId=", "eligible company driver and vehicle catalogue");
   requireText(providerBookingDetail, '"/runtime/logistics/bookings/assign-driver"', "company dispatch assignment API");
   requireText(providerBookingDetail, "Send driver assignment", "dispatch assignment control");
   requireText(providerBookingDetail, "Choose vehicle", "company chooses driver vehicle pair");

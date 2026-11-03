@@ -229,10 +229,11 @@ Deno.test("Online payment reserves one escrow hold from the customer's own walle
   requireText(runtime, '.eq("owner_entity_id", requesterUserId)', "wallet owner is the authenticated requester");
   requireText(runtime, '.eq("wallet_type", "customer")', "customer wallet type check");
   requireText(runtime, 'createServiceClient(supabaseUrl, serviceRoleKey)', "server-side financial client");
-  requireText(runtime, 'serviceClient.rpc("fund_order_from_wallet"', "shared escrow funding engine");
+  requireText(runtime, 'serviceClient.rpc("reserve_logistics_booking_online_payment"', "atomic booking payment reservation RPC");
+  requireText(migrationBooking, "public.fund_order_from_wallet(", "shared wallet and escrow ledger inside the reservation transaction");
   requireText(runtime, 'logistics-booking:', "server-derived stable payment idempotency key");
   requireText(runtime, 'online-wallet:v1', "versioned wallet payment idempotency suffix");
-  requireText(runtime, 'serviceClient.rpc("mark_logistics_booking_payment_reserved"', "booking/hold linkage");
+  requireText(migrationBooking, "public.mark_logistics_booking_payment_reserved(", "booking and hold linkage happens inside the same database transaction");
   requireText(migrationBooking, "hold_record.hold_amount <> booking_record.total_customer_charge", "escrow amount must equal locked customer charge");
 });
 
@@ -430,7 +431,8 @@ Deno.test("Driver self-service lifecycle controls acceptance, start, pickup, tra
   requireText(migrationDriver, "target_milestone not in ('picked_up','in_transit')", "supported driver milestones");
   requireText(migrationDriver, "driver must start the booking before updating pickup or transit", "milestones follow service start");
   requireText(migrationDriver, "cargo must be picked up before the driver marks it in transit", "transit follows pickup");
-  requireText(migrationDriver, "where booking_id = booking_record.id and driver_user_id = actor and status = 'in_transit'", "delivery can only be submitted from transit");
+  requireText(migrationDriver, "where booking_id = booking_record.id and status = 'in_transit'", "delivery can only be submitted from an in-transit assignment");
+  requireText(migrationDriver, "assignment_record.driver_user_id <> actor and not actor_is_company", "delivery actor must be the assigned driver or an authorised company dispatcher");
   requireText(migrationDriver, "the name of the person receiving the delivery is required", "recipient evidence is mandatory");
   requireText(migrationDriver, "public.complete_logistics_driver_assignment_after_settlement()", "assignment follows booking settlement");
   requireText(migrationDriver, "set status='completed'", "completed settlement closes driver assignment");
