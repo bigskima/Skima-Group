@@ -38,6 +38,8 @@ export function CustomerTabs() {
       <Tabs.Screen name="request" options={{ title: "Request", tabBarIcon: ({ color }) => <Plus color={String(color)} size={21} strokeWidth={3} /> }} />
       <Tabs.Screen name="jobs" options={{ title: "Activity", tabBarIcon: ({ color, size }) => <ClipboardList color={String(color)} size={size} /> }} />
       <Tabs.Screen name="account" options={{ title: "Account", tabBarIcon: ({ color, size }) => <UserRound color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="wallet" options={{ href: null }} />
+      <Tabs.Screen name="store" options={{ href: null }} />
       <Tabs.Screen name="jobs/[id]" options={{ href: null }} />
       <Tabs.Screen name="bookings/[id]" options={{ href: null }} />
     </Tabs>
