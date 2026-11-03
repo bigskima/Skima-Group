@@ -351,6 +351,8 @@ export function LogisticsAdminScreen() {
               const disputeId = asString(dispute, "id") ?? "";
               const disputeStatus = asString(dispute, "status") ?? "open";
               const bookingStatus = asString(dispute, "booking_status_before_dispute") ?? "";
+              const linkedIncident = nested(dispute, "incident");
+              const incidentBookingStatus = asString(linkedIncident, "booking_status_before_incident") ?? "";
               const paymentMode = asString(nested(dispute, "metadata"), "payment_mode") ?? "unknown";
               const isOffline = paymentMode === "offline";
               const isEscalated = disputeStatus === "escalated";
@@ -435,7 +437,7 @@ export function LogisticsAdminScreen() {
                           )}
                         />
                       ) : null}
-                      {!isOffline && bookingStatus === "delivered" ? (
+                      {!isOffline && (bookingStatus === "delivered" || (bookingStatus === "delivery_exception" && incidentBookingStatus === "delivered")) ? (
                         <AppButton
                           label="Allow customer confirmation"
                           size="sm"
@@ -453,7 +455,7 @@ export function LogisticsAdminScreen() {
                           )}
                         />
                       ) : null}
-                      {!isOffline && bookingStatus === "delivery_exception" ? (
+                      {!isOffline && bookingStatus === "delivery_exception" && incidentBookingStatus === "in_progress" ? (
                         <AppButton
                           label="Resume delivery"
                           size="sm"
