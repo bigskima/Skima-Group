@@ -438,6 +438,27 @@ export function LogisticsDriverScreen() {
                       </View>
                     </View>
                     <AppButton label="Start cargo recovery" fullWidth loading={isBusy} onPress={() => runAction.mutate({ kind: "recover_start", bookingId, assignmentId })} />
+                    <AppField
+                      label="Reason you cannot start recovery"
+                      value={releaseReason}
+                      onChangeText={(value) => setReleaseReasons((current) => ({ ...current, [bookingId]: value }))}
+                      placeholder="Explain why you cannot reach or recover the cargo."
+                      multiline
+                    />
+                    <AppButton
+                      label="Return recovery task to dispatch"
+                      fullWidth
+                      variant="secondary"
+                      disabled={runAction.isPending || releaseReason.trim().length < 5}
+                      onPress={() => Alert.alert(
+                        "Return this recovery task?",
+                        "Your reason will be recorded. Cargo remains marked recovery pending and the company can assign another recovery driver.",
+                        [
+                          { text: "Keep recovery task", style: "cancel" },
+                          { text: "Return to dispatch", style: "destructive", onPress: () => runAction.mutate({ kind: "release", bookingId, assignmentId, reason: releaseReason }) },
+                        ],
+                      )}
+                    />
                   </View>
                 ) : status === "accepted" && !bookingOnHold ? (
                   <View style={styles.actions}>
