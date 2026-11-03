@@ -6,6 +6,7 @@ import { OperationsWorkspaceRouter } from "../features/operations/OperationsWork
 import { PartnersWorkspaceRouter } from "../features/partners/PartnersWorkspaceRouter";
 import { PlatformWorkspaceRouter } from "../features/platform/PlatformWorkspaceRouter";
 import { ServicesWorkspaceRouter } from "../features/services/ServicesWorkspaceRouter";
+import { StoreWorkspace } from "../features/store/StoreWorkspace";
 import { toLegacyAdminWorkspacePath } from "./admin-v2-navigation";
 
 export function AdminV2WorkspaceRouter(props: {
