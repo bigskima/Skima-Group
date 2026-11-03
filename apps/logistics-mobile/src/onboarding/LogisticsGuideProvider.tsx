@@ -165,7 +165,7 @@ export function GuideLaunchLink({workspace}:{workspace:Workspace}){
 
 const styles=StyleSheet.create({
  overlay:{flex:1},fullDim:{backgroundColor:"rgba(8,8,10,.62)"},
- scrim:{position:"absolute",backgroundColor:"rgba(8,8,10,.62")},
+ scrim:{position:"absolute",backgroundColor:"rgba(8,8,10,.62)"},
  spotlight:{position:"absolute",borderWidth:2,borderRadius:16,backgroundColor:"transparent",shadowColor:"#000",shadowOpacity:.4,shadowRadius:12,elevation:8},
  tooltip:{position:"absolute",left:16,right:16,borderWidth:1,borderRadius:radii.lg,padding:15,gap:9,elevation:12},
  tooltipTop:{flexDirection:"row",alignItems:"center",justifyContent:"space-between"},progress:{...typography.eyebrow,fontSize:8},
