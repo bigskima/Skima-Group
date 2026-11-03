@@ -49,12 +49,17 @@ function nearestGeography(prediction: Place, geographies: readonly Place[]) {
     asString(address, "city"),
     asString(address, "name"),
     asString(address, "district"),
+    asString(address, "county"),
+    asString(address, "municipality"),
     asString(address, "lga"),
   ].filter((value): value is string => Boolean(value));
   const lgaCandidates = [
     asString(address, "lga"),
     asString(address, "district"),
     asString(address, "city_district"),
+    asString(address, "state_district"),
+    asString(address, "county"),
+    asString(address, "municipality"),
     asString(address, "suburb"),
   ].filter((value): value is string => Boolean(value));
   const stateCandidates = [
@@ -255,6 +260,7 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
           <Text style={[styles.hint, { color: palette.muted }]}>Searching Nigeria locations and address suggestions…</Text>
         </View>
       ) : places.length ? (
+        <>
         <View style={[styles.results, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           {places.slice(0, 8).map((place, index) => {
             const id = asString(place, "id");
@@ -285,6 +291,7 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
             </Text>
           </Pressable>
         ) : null}
+        </>
       ) : (
         <View style={[styles.resultsState, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
           <Text style={[styles.hint, { color: palette.muted }]}>
