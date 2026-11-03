@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { ArrowLeft, Bell, CheckCheck, ChevronRight, RefreshCw } from "lucide-react-native";
+import { ArrowLeft, Bell, CheckCheck, ChevronRight } from "lucide-react-native";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { useSession } from "../session/SessionProvider";
