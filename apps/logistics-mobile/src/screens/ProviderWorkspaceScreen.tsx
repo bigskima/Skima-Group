@@ -9,6 +9,7 @@ import { Card } from "../ui/Card";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { StatusPill } from "../ui/StatusPill";
+import { GuideLaunchLink, GuideTarget } from "../onboarding/LogisticsGuideProvider";
 
 export function ProviderWorkspaceScreen() {
   const { palette } = useAppTheme();
@@ -23,6 +24,7 @@ export function ProviderWorkspaceScreen() {
       title="Company workspace"
       denseHeader
     >
+      <GuideLaunchLink workspace="company"/>
       {companies.isPending ? <ScreenSkeleton cards={2} /> : companies.error ? (
         <Card variant="warning" padding="lg">
           <Text style={[styles.title, { color: palette.ink }]}>Workspace unavailable</Text>
@@ -58,6 +60,7 @@ export function ProviderWorkspaceScreen() {
             </Card>
           )}
 
+          <GuideTarget targetKey="company-workspace-finance" style={styles.grid}>
           <View style={styles.grid}>
             <WorkspaceCard title="Company wallet & payouts" description="View settled earnings, withdraw and set driver payment method." icon={<WalletCards color={palette.brand} size={21} />} onPress={() => router.push("/(provider)/finance" as never)} desktop={desktop} disabled={!company} />
             <WorkspaceCard
@@ -100,6 +103,10 @@ export function ProviderWorkspaceScreen() {
               desktop={desktop}
             />
           </View>
+          </GuideTarget>
+          <GuideTarget targetKey="company-workspace-services">
+            <View style={{height:1}} />
+          </GuideTarget>
           {driverProfile.isError ? (
             <Text style={[styles.hint, { color: palette.muted }]}>Driver access is temporarily unavailable. Your company workspace remains usable.</Text>
           ) : null}
