@@ -6,6 +6,7 @@ export type AdminWorkspaceKey =
   | "operations"
   | "money"
   | "services"
+  | "store"
   | "intelligence"
   | "experience"
   | "platform";
@@ -40,6 +41,7 @@ const screenRoutes: Readonly<Record<string, string>> = {
   "driver-pricing": "/money/pricing/drivers",
   billing: "/services/utility-billing",
   catalog: "/services/catalog",
+  store: "/store",
   fuel: "/services/fuel",
   ai: "/intelligence/ask",
   content: "/experience/content",
@@ -92,6 +94,14 @@ export const adminWorkspaceDefinitions: readonly AdminWorkspaceDefinition[] = [
     basePath: "/services",
     icon: "services",
     screenKeys: ["billing", "catalog", "fuel"],
+  },
+  {
+    key: "store",
+    label: "Store",
+    description: "SKIMA direct commerce: products, offers, stock and customer orders.",
+    basePath: "/store",
+    icon: "store",
+    screenKeys: ["store"],
   },
   {
     key: "intelligence",
@@ -202,6 +212,10 @@ const servicesScreenLabels: Readonly<Record<string, string>> = {
   "/services/availability": "Service availability",
 };
 
+const storeScreenLabels: Readonly<Record<string, string>> = {
+  "/store": "SKIMA Store",
+};
+
 const intelligenceScreenLabels: Readonly<Record<string, string>> = {
   "/intelligence": "SKIMA Intelligence overview",
   "/intelligence/ask": "SKIMA Intelligence",
@@ -243,6 +257,7 @@ export function buildAdminCategoryNavigation(items: readonly NavigationItem[]): 
       "partners",
       "operations",
       "services",
+      "store",
       "intelligence",
       "experience",
       "platform",

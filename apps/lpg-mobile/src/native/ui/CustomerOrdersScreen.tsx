@@ -1,8 +1,8 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { ChevronRight, ClipboardList, MapPin, PackageCheck, QrCode, ShieldCheck, Truck } from "lucide-react-native";
+import { ChevronRight, ClipboardList, Fuel, MapPin, PackageCheck, QrCode, ReceiptText, ShieldCheck, ShoppingBag, Truck } from "lucide-react-native";
 import QRCode from "react-native-qrcode-svg";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { domainQueries, useJobDetails } from "../api/domains";
 import { isSkimaInternalFulfillmentChannel } from "../api/lpgFulfillment";
 import { useResolvedLocationLabel } from "../domains/maps/readableLocation";
@@ -52,18 +52,135 @@ const DELIVERY_CONFIRMATION_STATES = new Set([
 
 const FINAL_ORDER_STATES = new Set(["delivered", "completed"]);
 
-const ORDER_PAGE_SIZE = 8;
-type OrderFilter = "active" | "payment" | "completed" | "all";
+const ORDER_PAGE_SIZE = 12;
+type OrderFilter = "all" | "refills" | "fuel" | "bills" | "marketplace";
+type UnifiedOrderKind = Exclude<OrderFilter, "all">;
+type UnifiedOrderItem = {
+  id: string;
+  kind: UnifiedOrderKind;
+  title: string;
+  subtitle: string;
+  status: string;
+  statusTone: "neutral" | "brand" | "success" | "warning" | "danger";
+  reference: string;
+  createdAt: string | null;
+  amount: number | null;
+  currency: string;
+  route: string;
+};
 
 export function CustomerOrdersScreen() {
   const { palette } = useAppTheme();
-  const orders = domainQueries.orders();
-  const [filter, setFilter] = useState<OrderFilter>("active");
+  const refills = domainQueries.orders();
+  const fuelOrders = domainQueries.fuelOrders();
+  const fuelProducts = domainQueries.fuelProducts();
+  const billPayments = domainQueries.utilityPayments();
+  const utilityCatalog = domainQueries.utilityCatalog();
+  const storeOrders = domainQueries.storeOrders();
+  const [filter, setFilter] = useState<OrderFilter>("all");
   const [visibleCount, setVisibleCount] = useState(ORDER_PAGE_SIZE);
-  const allOrders = orders.data ?? [];
-  const filteredOrders = allOrders.filter((order) => orderMatchesFilter(order, filter));
-  const visibleOrders = filteredOrders.slice(0, visibleCount);
 
+  const allItems: UnifiedOrderItem[] = [
+    ...(refills.data ?? []).map((order, index): UnifiedOrderItem => {
+      const id = recordId(order) ?? firstString(order, ["service_request_id"]) ?? `refill-${index}`;
+      const cylinder = nestedRecord(order, "cylinder");
+      const station = nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
+      const status = displayStatus(order) ?? "created";
+      const fulfillmentChannel = firstString(order, ["fulfillment_channel", "fulfillmentChannel"]);
+      const internalFulfillment = isSkimaInternalFulfillmentChannel(fulfillmentChannel);
+      const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? status;
+      const paymentNeeded = isPaymentActionRequired(status, paymentStatus);
+      const stationLabel = internalFulfillment
+        ? "SKIMA-managed delivery"
+        : station
+          ? firstString(station, ["displayName", "display_name", "name"]) ?? "Partner station"
+          : "Finding a refill station";
+      return {
+        id,
+        kind: "refills",
+        title: "LPG refill",
+        subtitle: `${cylinderSummary(cylinder)} · ${stationLabel}`,
+        status: paymentNeeded ? "Payment needed" : friendlyOrderStatus(status, fulfillmentChannel),
+        statusTone: paymentNeeded ? "warning" : orderStatusTone(status),
+        reference: displayReference(order) ?? id.slice(0, 8).toUpperCase(),
+        createdAt: firstString(order, ["created_at", "createdAt"]),
+        amount: firstNumber(order, ["total_amount", "totalAmount", "quoted_total", "quotedTotal"]),
+        currency: firstString(order, ["currency_code", "currencyCode"]) ?? "NGN",
+        route: paymentNeeded ? `/(customer)/orders/${id}/payment` : `/(customer)/orders/${id}`,
+      };
+    }),
+    ...(fuelOrders.data ?? []).map((order, index): UnifiedOrderItem => {
+      const id = firstString(order, ["order_id"]) ?? `fuel-${index}`;
+      const productKey = firstString(order, ["product_key"]) ?? "fuel";
+      const product = (fuelProducts.data ?? []).find((item) => firstString(item, ["key"]) === productKey);
+      const productName = firstString(product, ["display_name"]) ?? humanizeStatus(productKey);
+      const litres = firstNumber(order, ["requested_litres"]) ?? 0;
+      const stage = firstString(order, ["stage_key"]) ?? "awaiting_station_acceptance";
+      const currency = firstString(nestedRecord(order, "order"), ["currency_code", "currencyCode"]) ?? "NGN";
+      return {
+        id,
+        kind: "fuel",
+        title: `${productName} · ${litres.toLocaleString()} L`,
+        subtitle: `${firstString(order, ["fulfillment_mode"]) ? humanizeStatus(firstString(order, ["fulfillment_mode"])!) : "Fuel delivery"} · ${firstNumber(order, ["container_count"]) ?? 1} container(s)`,
+        status: humanizeStatus(stage),
+        statusTone: unifiedStatusTone(stage),
+        reference: id.slice(0, 8).toUpperCase(),
+        createdAt: firstString(order, ["created_at", "createdAt"]),
+        amount: firstNumber(nestedRecord(order, "order"), ["total_amount", "totalAmount"]) ?? firstNumber(order, ["total_amount", "totalAmount", "amount"]),
+        currency,
+        route: `/(customer)/fuel-order/${id}`,
+      };
+    }),
+    ...(billPayments.data ?? []).map((payment, index): UnifiedOrderItem => {
+      const id = firstString(payment, ["id", "request_id"]) ?? `bill-${index}`;
+      const status = firstString(payment, ["status", "payment_status"]) ?? "pending";
+      const product = (utilityCatalog.data ?? []).find((item) => firstString(item, ["id"]) === firstString(payment, ["product_id"]));
+      return {
+        id,
+        kind: "bills",
+        title: firstString(payment, ["product_name", "display_name", "service_name", "provider_name"]) ?? firstString(product, ["display_name", "name"]) ?? "Bill payment",
+        subtitle: firstString(payment, ["customer_identifier", "customer_name", "recipient_phone"]) ?? "Utility payment",
+        status: humanizeStatus(status),
+        statusTone: unifiedStatusTone(status),
+        reference: firstString(payment, ["public_reference", "reference"]) ?? id.slice(0, 8).toUpperCase(),
+        createdAt: firstString(payment, ["created_at", "createdAt", "requested_at"]),
+        amount: firstNumber(payment, ["amount", "requested_amount", "total_amount", "amount_major"]),
+        currency: firstString(payment, ["currency_code", "currencyCode"]) ?? "NGN",
+        route: "/(customer)/bills",
+      };
+    }),
+    ...(storeOrders.data ?? []).filter(isStoreOrder).map((order, index): UnifiedOrderItem => {
+      const id = recordId(order) ?? `store-${index}`;
+      const payload = nestedRecord(order, "order_payload");
+      const status = displayStatus(order) ?? "received";
+      return {
+        id,
+        kind: "marketplace",
+        title: "Marketplace order",
+        subtitle: firstString(payload, ["fulfillment_method"]) ? `Store · ${humanizeStatus(firstString(payload, ["fulfillment_method"])!)}` : "SKIMA Store purchase",
+        status: humanizeStatus(status),
+        statusTone: unifiedStatusTone(status),
+        reference: firstString(payload, ["customerReference", "customer_reference", "public_reference"]) ?? id.slice(0, 8).toUpperCase(),
+        createdAt: firstString(order, ["created_at", "createdAt"]),
+        amount: firstNumber(order, ["total_amount", "totalAmount"]),
+        currency: firstString(order, ["currency_code", "currencyCode"]) ?? "NGN",
+        route: `/(customer)/store-order/${id}`,
+      };
+    }),
+  ].sort((left, right) => timestamp(right.createdAt) - timestamp(left.createdAt));
+
+  const filteredItems = filter === "all" ? allItems : allItems.filter((item) => item.kind === filter);
+  const visibleItems = filteredItems.slice(0, visibleCount);
+  const isPending = refills.isPending || fuelOrders.isPending || billPayments.isPending || storeOrders.isPending;
+  const sourceErrors = [refills.error, fuelOrders.error, billPayments.error, storeOrders.error].filter(Boolean);
+  const refresh = () => void Promise.all([
+    refills.refetch(),
+    fuelOrders.refetch(),
+    fuelProducts.refetch(),
+    billPayments.refetch(),
+    utilityCatalog.refetch(),
+    storeOrders.refetch(),
+  ]);
   const selectFilter = (next: OrderFilter) => {
     setFilter(next);
     setVisibleCount(ORDER_PAGE_SIZE);
@@ -71,140 +188,125 @@ export function CustomerOrdersScreen() {
 
   return (
     <Screen
-      eyebrow="Refills"
-      title="My orders"
-      subtitle="Track every refill from payment and pickup through fulfillment and return delivery."
+      eyebrow="Your activity"
+      title="Orders"
+      subtitle="Refills, fuel deliveries, bill payments and marketplace purchases together in one place."
       action={<AppButton label="New refill" size="sm" onPress={() => router.push("/(customer)/orders/new")} />}
       refreshControl={
         <RefreshControl
-          refreshing={orders.isRefetching}
-          onRefresh={() => void orders.refetch()}
+          refreshing={[refills, fuelOrders, billPayments, storeOrders].some((query) => query.isRefetching)}
+          onRefresh={refresh}
           tintColor={palette.brand}
         />
       }
     >
-      {orders.isPending ? (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+        <OrderFilterChip label={`All · ${allItems.length}`} active={filter === "all"} onPress={() => selectFilter("all")} />
+        <OrderFilterChip label={`Refills · ${allItems.filter((item) => item.kind === "refills").length}`} active={filter === "refills"} onPress={() => selectFilter("refills")} />
+        <OrderFilterChip label={`Fuel · ${allItems.filter((item) => item.kind === "fuel").length}`} active={filter === "fuel"} onPress={() => selectFilter("fuel")} />
+        <OrderFilterChip label={`Bills · ${allItems.filter((item) => item.kind === "bills").length}`} active={filter === "bills"} onPress={() => selectFilter("bills")} />
+        <OrderFilterChip label={`Marketplace · ${allItems.filter((item) => item.kind === "marketplace").length}`} active={filter === "marketplace"} onPress={() => selectFilter("marketplace")} />
+      </ScrollView>
+
+      {isPending && allItems.length === 0 ? (
         <View style={styles.loading}>
           <ActivityIndicator color={palette.brand} />
-          <Text style={[styles.loadingText, { color: palette.muted }]}>Loading your refill history…</Text>
+          <Text style={[styles.loadingText, { color: palette.muted }]}>Gathering your SKIMA activity…</Text>
         </View>
-      ) : orders.error ? (
-        <EmptyState
-          title="We couldn't load your orders"
-          description="Check your connection and try again."
-          action={<AppButton label="Try again" variant="secondary" onPress={() => void orders.refetch()} />}
-        />
-      ) : allOrders.length === 0 ? (
+      ) : sourceErrors.length > 0 ? (
+        <Text style={[styles.sourceNotice, { color: palette.muted }]}>
+          Some activity sources could not refresh. The records below are from the sources currently available.
+        </Text>
+      ) : null}
+
+      {!(isPending && allItems.length === 0) && filteredItems.length === 0 ? (
         <EmptyState
           icon={<PackageCheck color={palette.brand} size={27} />}
-          title="Ready for your first refill"
-          description="Choose a registered cylinder and pickup location. SKIMA shows the full price before you confirm."
-          action={<AppButton label="Request a refill" onPress={() => router.push("/(customer)/orders/new")} />}
+          title={filter === "all" ? "Your SKIMA activity will appear here" : `No ${filter === "refills" ? "refill" : filter === "marketplace" ? "marketplace" : filter} activity yet`}
+          description={filter === "all"
+            ? "Your refills, fuel deliveries, bill payments and Store purchases will be collected in this list."
+            : "Choose All to see activity from every SKIMA service."}
+          action={filter === "all"
+            ? <AppButton label="Start a refill" onPress={() => router.push("/(customer)/orders/new")} />
+            : <AppButton label="Show all activity" variant="secondary" onPress={() => selectFilter("all")} />}
         />
       ) : (
-        <>
-          <View style={styles.filters}>
-            <OrderFilterChip label="Active" active={filter === "active"} onPress={() => selectFilter("active")} />
-            <OrderFilterChip label="Payment" active={filter === "payment"} onPress={() => selectFilter("payment")} />
-            <OrderFilterChip label="Completed" active={filter === "completed"} onPress={() => selectFilter("completed")} />
-            <OrderFilterChip label="All" active={filter === "all"} onPress={() => selectFilter("all")} />
-          </View>
-
-          {filteredOrders.length === 0 ? (
-            <EmptyState
-              title={filter === "payment" ? "No payments waiting" : filter === "completed" ? "No completed refills yet" : "Nothing in this view"}
-              description={filter === "payment" ? "Orders that still need payment will appear here with a direct Continue payment route." : "Choose another order filter to see the rest of your refill history."}
-              action={<AppButton label="Show all orders" variant="secondary" onPress={() => selectFilter("all")} />}
-            />
-          ) : (
-          <View style={styles.orderList}>
-          {visibleOrders.map((order, index) => {
-            const id = recordId(order);
-            const cylinder = nestedRecord(order, "cylinder");
-            const station = nestedRecord(order, "station") ?? nestedRecord(order, "stationBranch");
-            const status = displayStatus(order) ?? "created";
-            const currency = firstString(order, ["currency_code", "currencyCode"]) ?? "NGN";
-            const total = firstNumber(order, ["total_amount", "totalAmount", "quoted_total", "quotedTotal"]);
-            const fulfillmentChannel = firstString(order, ["fulfillment_channel", "fulfillmentChannel"]);
-            const internalFulfillment = isSkimaInternalFulfillmentChannel(fulfillmentChannel);
-            const stationText = internalFulfillment
-              ? "SKIMA Managed / SKIMA Fleet"
-              : station
-                ? (firstString(station, ["displayName", "display_name", "formattedAddress", "formatted_address"]) ?? "Assigned partner station")
-                : "Finding an available partner station";
-            const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? status;
-            const paymentNeeded = isPaymentActionRequired(status, paymentStatus);
-
+        <View style={styles.unifiedList}>
+          {visibleItems.map((item) => {
+            const Icon = item.kind === "refills"
+              ? PackageCheck
+              : item.kind === "fuel"
+                ? Fuel
+                : item.kind === "bills"
+                  ? ReceiptText
+                  : ShoppingBag;
+            const kindLabel = item.kind === "refills" ? "LPG REFILL" : item.kind === "fuel" ? "FUEL DELIVERY" : item.kind === "bills" ? "BILL PAYMENT" : "MARKETPLACE";
             return (
               <Pressable
-                key={id ?? String(index)}
+                key={`${item.kind}:${item.id}`}
                 accessibilityRole="button"
-                disabled={!id}
-                onPress={() => router.push((
-                  paymentNeeded
-                    ? `/(customer)/orders/${id}/payment`
-                    : `/(customer)/orders/${id}`
-                ) as never)}
+                onPress={() => router.push(item.route as never)}
                 style={({ pressed }) => [
-                  styles.order,
-                  shadows.soft,
-                  {
-                    backgroundColor: palette.surface,
-                    borderColor: palette.border,
-                    opacity: pressed ? 0.8 : 1,
-                    transform: [{ scale: pressed ? 0.988 : 1 }],
-                  },
+                  styles.unifiedOrder,
+                  { backgroundColor: palette.surface, borderColor: palette.border, opacity: pressed ? 0.78 : 1 },
                 ]}
               >
-                <View style={styles.orderHead}>
-                  <View style={[styles.orderIcon, { backgroundColor: palette.brandSoft }]}>
-                    <ClipboardList color={palette.brand} size={21} />
-                  </View>
-                  <View style={styles.orderHeadCopy}>
-                    <Text numberOfLines={1} style={[styles.orderRef, { color: palette.ink }]}>{displayReference(order) ?? "Refill order"}</Text>
-                    <Text style={[styles.date, { color: palette.muted }]}>{formatDate(firstString(order, ["created_at", "createdAt"]))}</Text>
-                  </View>
-                  <StatusPill label={friendlyOrderStatus(status, fulfillmentChannel)} tone={orderStatusTone(status)} />
+                <View style={[styles.unifiedIcon, { backgroundColor: palette.brandSoft }]}>
+                  <Icon color={palette.brand} size={20} />
                 </View>
-
-                <View style={[styles.divider, { backgroundColor: palette.border }]} />
-
-                <View style={styles.summaryRow}>
-                  <View style={styles.summaryCopy}>
-                    <Text style={[styles.label, { color: palette.muted }]}>CYLINDER</Text>
-                    <Text style={[styles.value, { color: palette.ink }]}>{cylinderSummary(cylinder)}</Text>
-                  </View>
-                  <View style={styles.amountCopy}>
-                    <Text style={[styles.label, { color: palette.muted }]}>TOTAL</Text>
-                    <Text style={[styles.amount, { color: palette.ink }]}>
-                      {total === null ? "Pending" : money(total, currency)}
-                    </Text>
-                  </View>
+                <View style={styles.unifiedCopy}>
+                  <Text style={[styles.unifiedKind, { color: palette.brand }]}>{kindLabel}</Text>
+                  <Text numberOfLines={1} style={[styles.unifiedTitle, { color: palette.ink }]}>{item.title}</Text>
+                  <Text numberOfLines={1} style={[styles.unifiedSubtitle, { color: palette.muted }]}>{item.subtitle}</Text>
+                  <Text numberOfLines={1} style={[styles.unifiedMeta, { color: palette.muted }]}>{item.reference} · {formatDate(item.createdAt)}</Text>
                 </View>
-
-                <View style={[styles.station, { backgroundColor: paymentNeeded ? palette.warningSoft : palette.surfaceSubtle }]}>
-                  <MapPin color={paymentNeeded ? palette.warning : palette.mutedStrong} size={16} />
-                  <Text numberOfLines={1} style={[styles.stationText, { color: paymentNeeded ? palette.warning : palette.mutedStrong }]}>
-                    {paymentNeeded ? "Payment needed · Tap to continue" : stationText}
+                <View style={styles.unifiedTrailing}>
+                  <Text numberOfLines={1} style={[styles.unifiedAmount, { color: palette.ink }]}>
+                    {item.amount === null ? "Pending" : money(item.amount, item.currency)}
                   </Text>
-                  <ChevronRight color={paymentNeeded ? palette.warning : palette.muted} size={17} />
+                  <StatusPill label={item.status} tone={item.statusTone} />
+                  <ChevronRight color={palette.muted} size={17} />
                 </View>
               </Pressable>
             );
           })}
-          {visibleCount < filteredOrders.length ? (
+          {visibleCount < filteredItems.length ? (
             <AppButton
-              label={`Show ${Math.min(ORDER_PAGE_SIZE, filteredOrders.length - visibleCount)} older orders`}
+              label={`Show ${Math.min(ORDER_PAGE_SIZE, filteredItems.length - visibleCount)} older items`}
               variant="secondary"
               onPress={() => setVisibleCount((count) => count + ORDER_PAGE_SIZE)}
             />
           ) : null}
         </View>
-          )}
-        </>
       )}
     </Screen>
   );
+}
+
+function isStoreOrder(order: PlatformRecord) {
+  const payload = nestedRecord(order, "order_payload");
+  const metadata = nestedRecord(order, "metadata");
+  return firstString(payload, ["channel"]) === "skima_store" ||
+    firstString(metadata, ["storefront_module"]) === "store" ||
+    firstString(metadata, ["channel"]) === "skima_store";
+}
+
+function timestamp(value: string | null) {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function humanizeStatus(value: string) {
+  return value.replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function unifiedStatusTone(value: string): "neutral" | "brand" | "success" | "warning" | "danger" {
+  const normalized = normalizeStatus(value);
+  if (["completed", "delivered", "fulfilled", "paid", "settled", "refunded"].includes(normalized)) return "success";
+  if (["failed", "rejected", "cancelled", "exception"].includes(normalized)) return "danger";
+  if (["pending", "created", "received", "awaiting_payment", "awaiting_station_acceptance"].includes(normalized)) return "warning";
+  return "brand";
 }
 
 export function CustomerOrderDetailScreen() {
@@ -437,16 +539,6 @@ function OrderFilterChip({
   );
 }
 
-function orderMatchesFilter(order: PlatformRecord, filter: OrderFilter) {
-  if (filter === "all") return true;
-  const status = displayStatus(order) ?? "created";
-  const paymentStatus = firstString(order, ["payment_status", "paymentStatus"]) ?? status;
-  const normalized = normalizeStatus(status);
-  if (filter === "payment") return isPaymentActionRequired(status, paymentStatus);
-  if (filter === "completed") return FINAL_ORDER_STATES.has(normalized);
-  return !FINAL_ORDER_STATES.has(normalized) && !isPaymentActionRequired(status, paymentStatus);
-}
-
 function isPaymentActionRequired(orderStatus: string, paymentStatus: string) {
   const orderState = normalizeStatus(orderStatus);
   const paymentState = normalizeStatus(paymentStatus);
@@ -581,7 +673,18 @@ function paymentStatusTone(value: string): "neutral" | "brand" | "success" | "wa
 const styles = StyleSheet.create({
   loading: { minHeight: 180, alignItems: "center", justifyContent: "center", gap: spacing.sm },
   loadingText: { ...typography.caption },
-  filters: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  filters: { flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingRight: spacing.md },
+  sourceNotice: { ...typography.caption, lineHeight: 16 },
+  unifiedList: { gap: spacing.sm + 2 },
+  unifiedOrder: { minHeight: 94, flexDirection: "row", alignItems: "center", gap: spacing.sm + 2, padding: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl },
+  unifiedIcon: { width: 42, height: 42, alignItems: "center", justifyContent: "center", borderRadius: 14 },
+  unifiedCopy: { flex: 1, minWidth: 0, gap: 2 },
+  unifiedKind: { ...typography.eyebrow, fontSize: 7.5 },
+  unifiedTitle: { ...typography.bodyStrong, fontSize: 13 },
+  unifiedSubtitle: { ...typography.caption, fontSize: 10 },
+  unifiedMeta: { ...typography.caption, fontSize: 9 },
+  unifiedTrailing: { maxWidth: "38%", alignItems: "flex-end", gap: 5 },
+  unifiedAmount: { fontSize: 12, fontWeight: "900" },
   filterChip: { minHeight: 38, justifyContent: "center", borderWidth: 1, borderRadius: radii.pill, paddingHorizontal: 13 },
   filterChipText: { ...typography.caption, fontSize: 10, fontWeight: "900" },
   orderList: { gap: spacing.sm + 2 },

@@ -17,6 +17,28 @@ export const domainQueries = {
       path: "/lpg/orders?scope=customer",
       schema: RecordArraySchema,
     }),
+  fuelOrders: () =>
+    useGatewayQuery({
+      key: ["fuel", "orders", "customer"],
+      path: "/runtime/fuel/orders/operations?scope=customer",
+      schema: RecordArraySchema,
+      refetchInterval: 15000,
+    }),
+  fuelProducts: () =>
+    useGatewayQuery({
+      key: ["fuel", "products"],
+      path: "/runtime/fuel/products",
+      schema: RecordArraySchema,
+      refetchInterval: 60000,
+      persist: true,
+    }),
+  storeOrders: () =>
+    useGatewayQuery({
+      key: ["orders", "store", "customer"],
+      path: "/runtime/storefront/orders",
+      schema: RecordArraySchema,
+      refetchInterval: 15000,
+    }),
   quotes: () =>
     useGatewayQuery({
       key: ["quotes"],
