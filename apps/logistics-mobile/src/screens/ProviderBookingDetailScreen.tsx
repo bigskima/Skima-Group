@@ -60,6 +60,7 @@ export function ProviderBookingDetailScreen() {
   const job = nested(booking, "job");
   const title = asString(snapshot, "title") ?? asString(job, "title") ?? "Logistics booking";
   const status = asString(booking, "status") ?? "unknown";
+  const isRecoveryDispatch = status === "failed_delivery" && asString(booking, "cargo_custody_status") === "recovery_pending";
   const paymentMode = asString(booking, "payment_mode") ?? "online_wallet";
   const assignmentRows = Array.isArray(booking?.assignments)
     ? booking.assignments.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
@@ -74,7 +75,7 @@ export function ProviderBookingDetailScreen() {
   const dispatchResources = useLogisticsRecordQuery(
     ["dispatch-resources", organizationId ?? "none"],
     `/runtime/logistics/company/dispatch-resources?organizationId=${encodeURIComponent(organizationId ?? "")}`,
-    Boolean(organizationId && status === "provider_accepted" && (!activeAssignment || isReplacingAssignment)),
+    Boolean(organizationId && ((status === "provider_accepted" && (!activeAssignment || isReplacingAssignment)) || (isRecoveryDispatch && !activeAssignment))),
   );
   const driverResources = Array.isArray(dispatchResources.data?.drivers)
     ? dispatchResources.data.drivers.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
@@ -102,7 +103,7 @@ export function ProviderBookingDetailScreen() {
         actionKeysRef.current.set(fingerprint, key);
       }
       lastAssignmentFingerprintRef.current = fingerprint;
-      return api.post("/runtime/logistics/bookings/assign-driver", {
+      return api.post(isRecoveryDispatch ? "/runtime/logistics/bookings/assign-recovery-driver" : "/runtime/logistics/bookings/assign-driver", {
         bookingId,
         driverProfileId: selectedDriverProfileId,
         vehicleId: selectedVehicleId,
@@ -118,7 +119,12 @@ export function ProviderBookingDetailScreen() {
       setSelectedVehicleId("");
       await client.invalidateQueries({ queryKey: ["skima-logistics", "provider-bookings"] });
       await bookings.refetch();
-      Alert.alert("Driver assignment sent", "The driver has been notified in their SKIMA Logistics workspace and must accept before the job can start.");
+      Alert.alert(
+        isRecoveryDispatch ? "Recovery driver assignment sent" : "Driver assignment sent",
+        isRecoveryDispatch
+          ? "The recovery driver has been notified. They must accept, start recovery and confirm physical custody before continuing to delivery."
+          : "The driver has been notified in their SKIMA Logistics workspace and must accept before the job can start.",
+      );
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : "The driver could not be assigned."),
   });
@@ -422,6 +428,79 @@ export function ProviderBookingDetailScreen() {
                         assignDriver.mutate();
                       }
                     }}
+                  />
+                </View>
+              )}
+            </Card>
+          ) : isRecoveryDispatch ? (
+            <Card variant="warning" padding="lg">
+              <View style={styles.actionHeading}>
+                <ShieldCheck color={palette.warning} size={20} />
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Cargo recovery dispatch</Text>
+              </View>
+              <Text style={[styles.meta, { color: palette.muted }]}>
+                This delivery failed after an incident and cargo custody is marked recovery pending. Select a different approved company driver and compliant vehicle to recover the cargo. The original assignment remains in the audit trail.
+              </Text>
+              {activeAssignment ? (
+                <View style={[styles.assignmentSummary, { backgroundColor: palette.surfaceSubtle }]}>
+                  <Text style={[styles.contactName, { color: palette.ink }]}>Recovery driver offer</Text>
+                  <Text style={[styles.meta, { color: palette.muted }]}>
+                    {asString(assignedDriver, "driver_display_name") ?? asString(assignedDriver, "public_driver_id") ?? "Recovery driver"} · {asString(activeAssignment, "status") ?? "offered"}
+                  </Text>
+                  <Text style={[styles.meta, { color: palette.muted }]}>The recovery driver must accept before starting the recovery task.</Text>
+                  <StatusPill status={asString(activeAssignment, "status") ?? "offered"} />
+                </View>
+              ) : dispatchResources.isPending ? (
+                <ScreenSkeleton cards={1} />
+              ) : dispatchResources.error ? (
+                <StatePanel title="Recovery drivers unavailable" description="The company driver and vehicle directory could not be loaded." retry={() => void dispatchResources.refetch()} />
+              ) : driverResources.length === 0 ? (
+                <StatePanel title="No eligible recovery driver" description="Add or make an approved company driver and a compliant vehicle available before cargo recovery." retry={() => void dispatchResources.refetch()} />
+              ) : (
+                <View style={styles.dispatchSection}>
+                  <Text style={[styles.meta, { color: palette.ink }]}>Available recovery drivers</Text>
+                  {driverResources.map((driver) => {
+                    const id = asString(driver, "driver_profile_id") ?? "";
+                    const chosen = selectedDriverProfileId === id;
+                    return (
+                      <Pressable key={id} disabled={assignDriver.isPending} onPress={() => {
+                        setSelectedDriverProfileId(id);
+                        const vehicles = Array.isArray(driver.vehicles) ? driver.vehicles as Record<string, unknown>[] : [];
+                        setSelectedVehicleId(asString(vehicles[0], "vehicle_id") ?? "");
+                      }} style={[styles.driverChoice, { borderColor: chosen ? palette.brand : palette.border, backgroundColor: chosen ? palette.brandSoft : palette.surface }]}>
+                        <View style={styles.driverChoiceCopy}>
+                          <Text style={[styles.contactName, { color: palette.ink }]}>{asString(driver, "display_name") ?? "Verified recovery driver"}</Text>
+                          <Text style={[styles.meta, { color: palette.muted }]}>{asString(driver, "public_driver_id") ?? "Approved company driver"}</Text>
+                        </View>
+                        <StatusPill status={chosen ? "selected" : "available"} />
+                      </Pressable>
+                    );
+                  })}
+                  {selectedDriver ? (
+                    <View style={styles.dispatchSection}>
+                      <Text style={[styles.meta, { color: palette.ink }]}>Recovery vehicle</Text>
+                      {selectedVehicles.map((vehicle) => {
+                        const id = asString(vehicle, "vehicle_id") ?? "";
+                        const chosen = selectedVehicleId === id;
+                        const vehicleName = [asString(vehicle, "vehicle_type_name"), asString(vehicle, "manufacturer"), asString(vehicle, "model")].filter(Boolean).join(" · ");
+                        return (
+                          <Pressable key={id} disabled={assignDriver.isPending} onPress={() => setSelectedVehicleId(id)} style={[styles.driverChoice, { borderColor: chosen ? palette.brand : palette.border, backgroundColor: chosen ? palette.brandSoft : palette.surface }]}>
+                            <View style={styles.driverChoiceCopy}>
+                              <Text style={[styles.contactName, { color: palette.ink }]}>{vehicleName || "Approved vehicle"}</Text>
+                              <Text style={[styles.meta, { color: palette.muted }]}>{asString(vehicle, "registration_number") ?? "Registration not supplied"} · {asNumber(vehicle, "max_load_kg") ?? "Unspecified"} kg capacity</Text>
+                            </View>
+                            <StatusPill status={chosen ? "selected" : "eligible"} />
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                  <AppButton
+                    label="Assign recovery driver"
+                    fullWidth
+                    loading={assignDriver.isPending}
+                    disabled={!selectedDriverProfileId || !selectedVehicleId || assignDriver.isPending}
+                    onPress={() => assignDriver.mutate()}
                   />
                 </View>
               )}
