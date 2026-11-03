@@ -209,7 +209,7 @@ grant select on public.logistics_driver_payment_records to authenticated;
 create policy logistics_driver_payment_records_read_participants
 on public.logistics_driver_payment_records for select to authenticated
 using (
-  public.can_read_logistics_company(provider_organization_id)
+  public.can_manage_logistics_company(provider_organization_id)
   or driver_user_id = auth.uid()
 );
 
