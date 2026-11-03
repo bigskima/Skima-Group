@@ -63,7 +63,7 @@ $$;
 do $withdrawal_wallet_patch$
 declare
   function_sql text;
-  old_gate text := $old_gate$wallet_record.wallet_type not in ('customer', 'driver', 'partner', 'commission', 'refund', 'generic')$old_gate$;
+  old_gate text := $old_gate$wallet_record.wallet_type not in ('customer','driver','partner','commission','refund','generic')$old_gate$;
   new_gate text := $$wallet_record.wallet_type not in ('customer', 'driver', 'partner', 'commission', 'refund', 'generic', 'logistics_earnings')$$;
 begin
   function_sql := pg_get_functiondef(
