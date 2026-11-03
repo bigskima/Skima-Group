@@ -262,8 +262,27 @@ export function ProviderBookingDetailScreen() {
                       })}
                     </View>
                   ) : null}
-                  <AppButton label="Send driver assignment" fullWidth loading={assignDriver.isPending} disabled={!selectedDriverProfileId || !selectedVehicleId || assignDriver.isPending}
-                    onPress={() => { setError(null); assignDriver.mutate(); }} />
+                  <AppButton
+                    label={isReplacingAssignment ? "Send replacement assignment" : "Send driver assignment"}
+                    fullWidth
+                    loading={assignDriver.isPending}
+                    disabled={!selectedDriverProfileId || !selectedVehicleId || assignDriver.isPending}
+                    onPress={() => {
+                      setError(null);
+                      if (isReplacingAssignment && activeAssignment) {
+                        Alert.alert(
+                          "Replace the current driver?",
+                          "The existing offered/accepted assignment will be marked as reassigned and the new driver will receive the job. The customer booking and payment will remain unchanged.",
+                          [
+                            { text: "Keep current driver", style: "cancel" },
+                            { text: "Confirm replacement", onPress: () => assignDriver.mutate() },
+                          ],
+                        );
+                      } else {
+                        assignDriver.mutate();
+                      }
+                    }}
+                  />
                 </View>
               )}
             </Card>
