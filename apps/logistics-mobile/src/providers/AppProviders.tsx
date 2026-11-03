@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { SessionProvider } from "../session/SessionProvider";
+import { LogisticsGuideProvider } from "../onboarding/LogisticsGuideProvider";
 
 export function AppProviders({ children }: PropsWithChildren) {
   const [queryClient] = useState(() => new QueryClient({
@@ -27,7 +28,7 @@ export function AppProviders({ children }: PropsWithChildren) {
       <SafeAreaProvider>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <SessionProvider>{children}</SessionProvider>
+            <SessionProvider><LogisticsGuideProvider>{children}</LogisticsGuideProvider></SessionProvider>
           </QueryClientProvider>
         </ThemeProvider>
       </SafeAreaProvider>
