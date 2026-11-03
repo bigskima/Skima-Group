@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
-import { BriefcaseBusiness, Building2, LayoutGrid, Settings2, Truck } from "lucide-react-native";
+import { Building2, LayoutGrid, Settings2, Truck } from "lucide-react-native";
 import { StyleSheet, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -35,7 +35,7 @@ export function ProviderTabs() {
       tabBarLabelStyle: { fontSize: desktop ? 13 : 10, fontWeight: "900", paddingBottom: desktop ? 0 : 3 },
     }}>
       <Tabs.Screen name="index" options={{ title: "Overview", tabBarIcon: ({ color, size }) => <Building2 color={String(color)} size={size} /> }} />
-      <Tabs.Screen name="opportunities" options={{ title: "Opportunities", tabBarIcon: ({ color, size }) => <BriefcaseBusiness color={String(color)} size={size} /> }} />
+      <Tabs.Screen name="opportunities" options={{ href: null }} />
       <Tabs.Screen name="work" options={{ title: "Jobs", tabBarIcon: ({ color, size }) => <Truck color={String(color)} size={size} /> }} />
       <Tabs.Screen name="workspace" options={{ title: "Workspace", tabBarIcon: ({ color, size }) => <LayoutGrid color={String(color)} size={size} /> }} />
       <Tabs.Screen name="account" options={{ title: "Account", tabBarIcon: ({ color, size }) => <Settings2 color={String(color)} size={size} /> }} />
