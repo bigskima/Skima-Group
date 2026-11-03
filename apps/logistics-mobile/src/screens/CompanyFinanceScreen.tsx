@@ -7,7 +7,7 @@ import { z } from "zod";
 import { useLogisticsQuery, asString, asNumber, RecordSchema } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { radii, spacing, typography } from "../theme/tokens";
+import { radii, typography } from "../theme/tokens";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { StatePanel } from "../ui/StatePanel";
@@ -31,6 +31,15 @@ export function CompanyFinanceScreen() {
   const withdrawals = useLogisticsQuery(["finance-withdrawals"], "/runtime/withdrawals", Boolean(organizationId), 30_000);
   const earningsWallets = (wallets.data ?? []).filter((w) => asString(w,"wallet_type")==="logistics_earnings" && asString(w,"owner_entity_type")==="organization" && asString(w,"owner_entity_id")===organizationId && asString(w,"status")==="active");
   const [currency,setCurrency]=useState("NGN");
+  const [amount,setAmount]=useState("");
+  const [beneficiaryId,setBeneficiaryId]=useState("");
+  const [bankCode,setBankCode]=useState("");
+  const [accountNumber,setAccountNumber]=useState("");
+  const [newBeneficiary,setNewBeneficiary]=useState(false);
+  const [preview,setPreview]=useState<Record<string,unknown>|null>(null);
+  const [payingBooking,setPayingBooking]=useState<Record<string,unknown>|null>(null);
+  const [driverAmount,setDriverAmount]=useState("");
+  const [driverNote,setDriverNote]=useState("");
   const availableCurrencies = [...new Set(earningsWallets.map((wallet)=>asString(wallet,"currency_code")).filter((value):value is string=>Boolean(value)))];
   useEffect(()=>{ if(availableCurrencies.length && !availableCurrencies.includes(currency)) setCurrency(availableCurrencies[0]); },[availableCurrencies.join("|"),currency]);
   const earningsWallet = earningsWallets.find((wallet)=>asString(wallet,"currency_code")===currency) ?? null;
@@ -61,16 +70,6 @@ export function CompanyFinanceScreen() {
     },
   });
   const paymentMethod = asString(settings.data,"default_driver_payment_method") ?? "offline";
-  const [amount,setAmount]=useState("");
-  const [beneficiaryId,setBeneficiaryId]=useState("");
-  const [bankCode,setBankCode]=useState("");
-  const [accountNumber,setAccountNumber]=useState("");
-  const [newBeneficiary,setNewBeneficiary]=useState(false);
-  const [preview,setPreview]=useState<Record<string,unknown>|null>(null);
-  const [payingBooking,setPayingBooking]=useState<Record<string,unknown>|null>(null);
-  const [driverAmount,setDriverAmount]=useState("");
-  const [driverNote,setDriverNote]=useState("");
-
   const banksQuery=useQuery({
     queryKey:["logistics-payout-banks"],
     queryFn:()=>session.api.get("/runtime/banks",MoneySchema),
