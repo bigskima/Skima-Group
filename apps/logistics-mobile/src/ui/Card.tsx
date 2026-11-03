@@ -3,9 +3,10 @@ import { StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 
-export function Card({ children, variant = "default", padding = "md", eyebrow, title, description, action, style }: PropsWithChildren<{
+export function Card({ children, variant = "default", padding = "md", gap = 14, eyebrow, title, description, action, style }: PropsWithChildren<{
   variant?: "default" | "subtle" | "outline" | "elevated" | "brandSoft" | "success" | "warning" | "danger";
   padding?: "sm" | "md" | "lg";
+  gap?: number;
   eyebrow?: string; title?: string; description?: string; action?: ReactNode; style?: ViewStyle;
 }>) {
   const { palette } = useAppTheme();
@@ -28,7 +29,7 @@ export function Card({ children, variant = "default", padding = "md", eyebrow, t
     <View style={[
       styles.card, variant === "default" && shadows.soft, variant === "elevated" && shadows.raised,
       padding === "sm" && styles.paddingSm, padding === "md" && styles.paddingMd, padding === "lg" && styles.paddingLg,
-      cardStyle, style,
+      cardStyle, { gap }, style,
     ]}>
       {eyebrow || title || description || action ? (
         <View style={styles.header}>
