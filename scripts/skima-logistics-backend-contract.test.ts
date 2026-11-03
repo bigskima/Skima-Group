@@ -573,7 +573,9 @@ Deno.test("An accepted driver may release a booking only before service start", 
   requireText(migrationDispatch, "assigned_vehicle_id = null", "booking clears old vehicle in the same update");
   requireText(migrationDispatch, "response_reason = btrim(target_reason)", "release reason is audited");
   requireText(migrationDispatch, "logistics.booking.driver_released", "release event is appended");
-  requireText(migrationDispatch, "existing_event.metadata->>'driver_user_id' <> actor::text", "idempotency replay is actor-bound");
+  requireText(migrationDispatch, "existing_event.metadata->>'driver_user_id' is distinct from actor::text", "idempotency replay is actor-bound");
+  requireText(migrationDispatch, "existing_event.metadata->>'assignment_id' is distinct from assignment_record.id::text", "idempotency replay is assignment-bound");
+  requireText(migrationDispatch, "existing_event.metadata->>'reason' is distinct from btrim(target_reason)", "idempotency replay is reason-bound");
   requireNotText(migrationDispatch, "update public.logistics_bookings set status", "release does not cancel or change booking/payment status");
   requireNotText(migrationDispatch, "post_financial_transaction", "release does not create financial postings");
   requireText(runtime, '"/runtime/logistics/driver/assignment/release"', "driver pre-start release route");
