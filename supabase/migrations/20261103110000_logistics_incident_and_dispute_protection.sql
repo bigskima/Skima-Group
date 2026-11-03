@@ -752,31 +752,50 @@ begin
     where id = booking_record.id;
 
   elsif target_decision = 'allow_delivery_confirmation' then
-    if dispute_record.booking_status_before_dispute = 'delivery_exception'
-      and dispute_record.incident_id is not null then
+    if dispute_record.incident_id is not null then
       select * into incident_record
       from public.logistics_booking_incidents
       where id = dispute_record.incident_id and booking_id = booking_record.id
       for update;
-      if not found or incident_record.booking_status_before_incident <> 'delivered' then
-        raise exception 'customer confirmation can be reopened only for a delivery that was already submitted';
+      if not found then
+        raise exception 'the linked Logistics incident could not be found';
       end if;
-      if incident_record.assignment_id is not null then
+
+      if incident_record.booking_status_before_incident = 'delivered' then
+        if incident_record.assignment_id is not null then
+          select * into assignment_record
+          from public.logistics_booking_driver_assignments
+          where id = incident_record.assignment_id and booking_id = booking_record.id
+          for update;
+          if assignment_record.id is not null and assignment_record.status = 'incident_hold' then
+            update public.logistics_booking_driver_assignments
+            set status = 'delivery_submitted',
+                updated_at = timezone('utc',now()),
+                metadata = metadata || jsonb_build_object('incident_review_outcome','delivery_confirmation_reopened')
+            where id = assignment_record.id;
+          end if;
+        end if;
+      elsif incident_record.status = 'resolved'
+        and incident_record.resolution_code = 'recovered_delivery_submitted'
+        and booking_record.cargo_custody_status = 'delivered' then
         select * into assignment_record
         from public.logistics_booking_driver_assignments
-        where id = incident_record.assignment_id and booking_id = booking_record.id
+        where booking_id = booking_record.id
+          and metadata->>'assignment_kind' = 'recovery'
+          and status = 'delivery_submitted'
+        order by created_at desc
+        limit 1
         for update;
-        if assignment_record.id is not null and assignment_record.status = 'incident_hold' then
-          update public.logistics_booking_driver_assignments
-          set status = 'delivery_submitted',
-              updated_at = timezone('utc',now()),
-              metadata = metadata || jsonb_build_object('incident_review_outcome','delivery_confirmation_reopened')
-          where id = assignment_record.id;
+        if assignment_record.id is null then
+          raise exception 'the recovered delivery submission must remain available for customer confirmation';
         end if;
+      else
+        raise exception 'customer confirmation can be reopened only for a submitted delivery or verified recovered delivery';
       end if;
     elsif dispute_record.booking_status_before_dispute <> 'delivered' then
       raise exception 'delivery confirmation can be reopened only for a delivered booking';
     end if;
+
     if booking_record.payment_mode = 'online_wallet' then
       update public.escrow_holds set status = 'held',updated_at = timezone('utc',now())
       where id = booking_record.escrow_hold_id and status = 'disputed' and released_amount = 0;
