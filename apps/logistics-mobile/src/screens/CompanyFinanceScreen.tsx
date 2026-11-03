@@ -200,13 +200,11 @@ export function CompanyFinanceScreen() {
       </View>
 
       <View style={[styles.panel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
-        <Text style={[styles.panelTitle,{color:palette.ink}]}>Driver payment method</Text>
-        <Text style={[styles.hint,{color:palette.muted}]}>Choose the company default for completed Logistics jobs.</Text>
+        <Text style={[styles.panelTitle,{color:palette.ink}]}>Driver payment recording</Text>
         <View style={styles.methodRow}>
-          <Method label="SKIMA Wallet" detail="Automatic ledger transfer" active={paymentMethod==="skima_wallet"} onPress={()=>saveMethod.mutate("skima_wallet")}/>
-          <Method label="Offline / manual" detail="Company pays directly" active={paymentMethod==="offline"} onPress={()=>saveMethod.mutate("offline")}/>
+          <Method label="Company-managed payment" detail="Bank transfer, cash or another channel" active={paymentMethod==="offline"} onPress={()=>saveMethod.mutate("offline")}/>
         </View>
-        <Text style={[styles.hint,{color:palette.muted}]}>SKIMA Wallet payments require a settled online booking, company earnings balance and an active driver wallet in the same currency. Offline payments are recorded without moving SKIMA funds.</Text>
+        <Text style={[styles.hint,{color:palette.muted}]}>The company chooses the actual payment channel and records its reference below. SKIMA keeps the completion record; it does not move money for these external driver payments. Withdraw settled company earnings separately.</Text>
       </View>
 
       <View style={[styles.panel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
@@ -222,8 +220,8 @@ export function CompanyFinanceScreen() {
         {payingBooking ? <View style={[styles.payForm,{borderColor:palette.brand}]}>
           <Text style={[styles.beneficiaryName,{color:palette.ink}]}>Pay assigned driver</Text>
           <TextInput value={driverAmount} onChangeText={setDriverAmount} keyboardType="decimal-pad" placeholder="Amount" placeholderTextColor={palette.muted} style={[styles.input,{borderColor:palette.border,color:palette.ink}]}/>
-          {paymentMethod==="offline"?<TextInput value={driverNote} onChangeText={setDriverNote} placeholder="Payment reference / note" placeholderTextColor={palette.muted} style={[styles.input,{borderColor:palette.border,color:palette.ink}]}/>:null}
-          <Action label={paymentMethod==="skima_wallet"?"Pay from company earnings":"Record offline payment"} busy={recordDriverPayment.isPending} disabled={!Number(driverAmount)||Number(driverAmount)<=0||(paymentMethod==="offline"&&driverNote.trim().length<3)} onPress={()=>recordDriverPayment.mutate()}/>
+          <TextInput value={driverNote} onChangeText={setDriverNote} placeholder="Payment channel + reference (bank transfer, cash, etc.)" placeholderTextColor={palette.muted} style={[styles.input,{borderColor:palette.border,color:palette.ink}]}/>
+          <Action label="Record driver payment" busy={recordDriverPayment.isPending} disabled={!Number(driverAmount)||Number(driverAmount)<=0||driverNote.trim().length<3} onPress={()=>recordDriverPayment.mutate()}/>
           <Pressable onPress={()=>setPayingBooking(null)}><Text style={{color:palette.muted,fontSize:10,fontWeight:"800",textAlign:"center"}}>Cancel</Text></Pressable>
         </View>:null}
       </View>
