@@ -51,6 +51,9 @@ export function LogisticsDriverScreen() {
   const [recipientNames, setRecipientNames] = useState<Record<string, string>>({});
   const [deliveryNotes, setDeliveryNotes] = useState<Record<string, string>>({});
   const [releaseReasons, setReleaseReasons] = useState<Record<string, string>>({});
+  const [incidentTypes, setIncidentTypes] = useState<Record<string, string>>({});
+  const [incidentSeverities, setIncidentSeverities] = useState<Record<string, string>>({});
+  const [incidentDescriptions, setIncidentDescriptions] = useState<Record<string, string>>({});
   const actionKeys = useRef(new Map<string, string>());
 
   const runAction = useMutation({
@@ -123,6 +126,29 @@ export function LogisticsDriverScreen() {
       }
       await client.invalidateQueries({ queryKey: ["skima-logistics", "driver-workspace-bookings"] });
       await jobs.refetch();
+    },
+  });
+
+  const reportIncident = useMutation({
+    mutationFn: async (input: {
+      bookingId: string;
+      incidentType: string;
+      severity: string;
+      description: string;
+      cargoCustodyStatus: string;
+    }) => api.post("/runtime/logistics/bookings/incidents/report", {
+      ...input,
+      locationSnapshot: { captured_from: "skima-logistics.driver-workspace" },
+      idempotencyKey: createClientIdempotencyKey(
+        "logistics.driver.incident",
+        input.bookingId + ":" + input.incidentType + ":" + input.description,
+      ),
+    }, z.string().uuid()),
+    onSuccess: async (_result, input) => {
+      setIncidentDescriptions((current) => ({ ...current, [input.bookingId]: "" }));
+      await client.invalidateQueries({ queryKey: ["skima-logistics", "driver-workspace-bookings"] });
+      await jobs.refetch();
+      Alert.alert("Incident reported", "Your company has been notified. Keep the cargo secure and follow dispatch instructions. Customer funds remain protected.");
     },
   });
 
@@ -235,6 +261,106 @@ export function LogisticsDriverScreen() {
                     <Text style={[styles.meta, { color: palette.ink }]}>{asString(job, "instructions")}</Text>
                   </View>
                 ) : null}
+
+                {["in_progress", "picked_up", "in_transit"].includes(status) ? (
+                  <Card variant="warning" padding="md">
+                    <Text style={[styles.instructionTitle, { color: palette.ink }]}>Report a delivery incident</Text>
+                    <Text style={[styles.meta, { color: palette.muted }]}>
+                      Report a breakdown, accident, route problem or cargo issue immediately. Do not abandon cargo or hand it to an unverified person.
+                    </Text>
+                    <View style={styles.actions}>
+                      <View style={styles.incidentChoices}>
+                        {[
+                          ["vehicle_breakdown", "Vehicle breakdown"],
+                          ["accident", "Accident"],
+                          ["route_blocked", "Route blocked"],
+                          ["security_risk", "Security risk"],
+                          ["cargo_damaged", "Cargo damaged"],
+                          ["cargo_missing", "Cargo missing"],
+                          ["customer_unavailable", "Customer unavailable"],
+                          ["other", "Other"],
+                        ].map(([value, label]) => {
+                          const selected = (incidentTypes[bookingId] ?? "other") === value;
+                          return (
+                            <Pressable
+                              key={value}
+                              onPress={() => setIncidentTypes((current) => ({ ...current, [bookingId]: value }))}
+                              style={[
+                                styles.incidentChoice,
+                                {
+                                  borderColor: selected ? palette.brand : palette.border,
+                                  backgroundColor: selected ? palette.brandSoft : palette.surface,
+                                },
+                              ]}
+                            >
+                              <Text style={[styles.meta, { color: selected ? palette.brand : palette.ink }]}>{label}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      <View style={styles.incidentChoices}>
+                        {["medium", "high", "critical"].map((value) => {
+                          const selected = (incidentSeverities[bookingId] ?? "medium") === value;
+                          return (
+                            <Pressable
+                              key={value}
+                              onPress={() => setIncidentSeverities((current) => ({ ...current, [bookingId]: value }))}
+                              style={[
+                                styles.incidentChoice,
+                                {
+                                  borderColor: selected ? palette.brand : palette.border,
+                                  backgroundColor: selected ? palette.brandSoft : palette.surface,
+                                },
+                              ]}
+                            >
+                              <Text style={[styles.meta, { color: selected ? palette.brand : palette.ink }]}>{value.toUpperCase()}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      <AppField
+                        label="What happened?"
+                        value={incidentDescriptions[bookingId] ?? ""}
+                        onChangeText={(value) => setIncidentDescriptions((current) => ({ ...current, [bookingId]: value }))}
+                        placeholder="Explain what happened and where the cargo is now."
+                        multiline
+                      />
+                      <AppButton
+                        label="Report incident to dispatch"
+                        fullWidth
+                        loading={reportIncident.isPending && reportIncident.variables?.bookingId === bookingId}
+                        disabled={reportIncident.isPending || (incidentDescriptions[bookingId] ?? "").trim().length < 5}
+                        onPress={() => Alert.alert(
+                          "Send incident report?",
+                          "This will place the delivery on an exception hold. Dispatch will be notified and online escrow will remain protected.",
+                          [
+                            { text: "Continue delivery", style: "cancel" },
+                            {
+                              text: "Report incident",
+                              style: "destructive",
+                              onPress: () => reportIncident.mutate({
+                                bookingId,
+                                incidentType: incidentTypes[bookingId] ?? "other",
+                                severity: incidentSeverities[bookingId] ?? "medium",
+                                description: incidentDescriptions[bookingId] ?? "",
+                                cargoCustodyStatus: status === "in_progress" ? "not_collected" : "driver_custody",
+                              }),
+                            },
+                          ],
+                        )}
+                      />
+                    </View>
+                  </Card>
+                ) : null}
+                {status === "incident_hold" ? (
+                  <View style={[styles.notice, { backgroundColor: palette.warningSoft }]}>
+                    <ShieldCheck color={palette.warning} size={17} />
+                    <View style={styles.noticeCopy}>
+                      <Text style={[styles.instructionTitle, { color: palette.ink }]}>Dispatch is reviewing an incident</Text>
+                      <Text style={[styles.meta, { color: palette.muted }]}>Keep the cargo secure, remain contactable and follow the company recovery instructions. Do not transfer custody without an authorized hand-off.</Text>
+                    </View>
+                  </View>
+                ) : null}
                 {["in_progress", "picked_up", "in_transit"].includes(status) ? (
                   <LogisticsDriverLocationShare bookingId={bookingId} />
                 ) : null}
@@ -342,6 +468,13 @@ export function LogisticsDriverScreen() {
             );
           })}
 
+          {reportIncident.error ? (
+            <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}>
+              <Text style={[styles.errorText, { color: palette.danger }]}>
+                {reportIncident.error instanceof Error ? reportIncident.error.message : "The incident could not be reported."}
+              </Text>
+            </View>
+          ) : null}
           {runAction.error ? (
             <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}>
               <Text style={[styles.errorText, { color: palette.danger }]}>
@@ -379,6 +512,8 @@ const styles = StyleSheet.create({
   phoneAction: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 28 },
   phoneText: { ...typography.caption, fontWeight: "900", fontSize: 10 },
   actions: { gap: 9 },
+  incidentChoices: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  incidentChoice: { borderWidth: 1, borderRadius: radii.md, paddingHorizontal: 9, paddingVertical: 7 },
   notice: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 11, borderRadius: radii.md },
   noticeCopy: { flex: 1, gap: 3 },
   error: { borderRadius: radii.md, padding: 11 },
