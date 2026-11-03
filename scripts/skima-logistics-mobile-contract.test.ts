@@ -412,5 +412,9 @@ Deno.test("Company dispatch can replace an offered or accepted pre-start driver"
   requireText(providerBookingDetail, "Keep current assignment", "replacement can be abandoned safely");
   requireText(providerBookingDetail, "Previous driver update", "company sees prior driver release or rejection context");
   requireText(providerBookingDetail, "response_reason", "the driver's reason is displayed to dispatch");
+  requireText(providerBookingDetail, "Replace the current driver?", "replacement requires dispatcher confirmation");
+  requireText(providerBookingDetail, "Confirm replacement", "dispatcher explicitly confirms reassignment");
+  requireText(providerBookingDetail, "Send replacement assignment", "replacement action is clearly labelled");
+
   requireText(providerBookingDetail, '"/runtime/logistics/bookings/assign-driver"', "replacement uses the existing tenant-guarded assignment function");
 });
