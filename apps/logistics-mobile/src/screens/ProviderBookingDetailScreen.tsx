@@ -230,7 +230,7 @@ export function ProviderBookingDetailScreen() {
                   && incidentBookingStatus === "delivered"
                   && custody === "delivered";
                 const canRequireRecovery = ["driver_custody", "unknown", "recovery_pending"].includes(custody);
-                const canMarkFailed = !canRequireRecovery && incidentBookingStatus !== "delivered";
+                const canMarkFailed = !canRequireRecovery && custody !== "delivered" && incidentBookingStatus !== "delivered";
                 const canResolve = ["reported", "investigating", "recovery_required"].includes(incidentStatus);
                 return (
                   <View key={incidentId} style={[styles.assignmentSummary, { backgroundColor: palette.surfaceSubtle }]}>
