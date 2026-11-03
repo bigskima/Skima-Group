@@ -636,7 +636,7 @@ Deno.test("Logistics incidents preserve custody and block financial settlement u
   requireText(migrationExceptions, "hold_record.hold_amount <> booking_record.total_customer_charge", "refund escrow amount must match the original customer charge");
   requireText(migrationExceptions, "logistics_booking_incidents_no_direct_insert", "incident writes are RPC-only");
   requireText(migrationExceptions, "logistics_booking_disputes_no_direct_update", "dispute updates are RPC-only");
-  requireText(migrationExceptions, "cargo custody is required only when cargo is with the driver or is uncertain", "recovery decisions require custody justification");
+  requireText(migrationExceptions, "cargo recovery is required only when cargo custody is with the driver or is uncertain", "recovery decisions require custody justification");
   requireText(migrationExceptions, "must enter controlled recovery, not be closed as a failed attempt", "driver-held or unaccounted cargo cannot be marked safely failed");
   requireText(migrationExceptions, "closed_by_customer_refund", "authorized refund closes linked unresolved incident records");
   requireText(migrationExceptions, "'restore_customer_confirmation'", "submitted delivery incidents have a distinct confirmation recovery outcome");
