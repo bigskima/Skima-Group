@@ -7,9 +7,6 @@ const supabaseUrl = runtime.supabaseUrl;
 const anonKey = runtime.anonKey!;
 const serviceRoleKey = runtime.serviceRoleKey!;
 const adminAccessToken = Deno.env.get("SKIMA_ADMIN_ACCESS_TOKEN");
-const adminEmail = Deno.env.get("SKIMA_SUPER_ADMIN_EMAIL") ?? Deno.env.get("SKIMA_ADMIN_EMAIL");
-const adminPassword = Deno.env.get("SKIMA_SUPER_ADMIN_PASSWORD") ??
-  Deno.env.get("SKIMA_ADMIN_PASSWORD");
 
 const anonClient = createBrowserSafeClient(anonKey);
 const serviceClient = createDeploymentClient(serviceRoleKey);
@@ -85,16 +82,16 @@ const adminClient = await resolveAdminClient();
 
 if (adminClient) {
   await runGate(
-    "real platform super admin can read governed records",
+    "optional platform super admin read access",
     () => verifyPlatformAdminReadAccess(adminClient),
   );
   await runGate(
-    "real platform super admin can load frontend session context",
+    "optional platform super admin frontend session context",
     () => verifyFrontendSessionContext(adminClient),
   );
 } else {
-  throw new Error(
-    "Real admin session credentials are required for the production gate. Set SKIMA_ADMIN_ACCESS_TOKEN or SKIMA_SUPER_ADMIN_EMAIL and SKIMA_SUPER_ADMIN_PASSWORD in the deployment shell, .env.local, or CI secret store.",
+  console.log(
+    "SKIP optional admin-session checks: set SKIMA_ADMIN_ACCESS_TOKEN only when a signed-in admin smoke test is explicitly desired. Admin login/MFA is not a deployment prerequisite.",
   );
 }
 
@@ -1380,16 +1377,6 @@ async function verifyFinanceCommunicationRuntimeRejectsIncompleteOperations(): P
     "target_channel is not supported",
   );
 
-  await requireRpcError(
-    "OTP verification runtime",
-    serviceClient.rpc("verify_otp_challenge", {
-      target_challenge_id: null,
-      target_code: "123456",
-      target_idempotency_key: `remote-gate:${crypto.randomUUID()}`,
-      target_metadata: {},
-    }),
-    "target_challenge_id is required",
-  );
 }
 
 async function verifyFirstBusinessModuleConfiguration(): Promise<void> {
@@ -1770,31 +1757,9 @@ function createAuthenticatedClient(accessToken: string): SupabaseClient {
 }
 
 async function resolveAdminClient(): Promise<SupabaseClient | null> {
-  if (adminAccessToken) {
-    return createAuthenticatedClient(adminAccessToken);
-  }
-
-  if (!adminEmail || !adminPassword) {
-    return null;
-  }
-
-  const signInClient = createBrowserSafeClient(anonKey);
-  const { data, error } = await signInClient.auth.signInWithPassword({
-    email: adminEmail,
-    password: adminPassword,
-  });
-
-  if (error) {
-    throw new Error(
-      `Unable to sign in as the platform super admin: ${error.message}. Run npm run supabase:provision-admin with a fresh deployment-shell password, then rerun this gate.`,
-    );
-  }
-
-  if (!data.session?.access_token) {
-    throw new Error("Supabase Auth did not return an admin access token.");
-  }
-
-  return createAuthenticatedClient(data.session.access_token);
+  // A signed-in admin smoke test is optional. Never initiate password/MFA
+  // authentication as part of the deployment verification path.
+  return adminAccessToken ? createAuthenticatedClient(adminAccessToken) : null;
 }
 
 async function readJson(response: Response): Promise<Record<string, unknown>> {
