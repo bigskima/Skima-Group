@@ -349,6 +349,12 @@ async function handleLogisticsRequest(
     }), id);
   }
 
+  if (routePath === "/runtime/logistics/company/fleet-drivers" && request.method === "GET") {
+    return rpcResponse(supabase.rpc("read_logistics_company_fleet_drivers", {
+      target_organization_id: requireUuid(url.searchParams.get("organizationId"), "organizationId"),
+    }), id);
+  }
+
   if (routePath === "/runtime/logistics/company/vehicles" && request.method === "GET") {
     const organizationId = requireUuid(url.searchParams.get("organizationId"), "organizationId");
     const permission = await supabase.rpc("can_manage_logistics_company", {
