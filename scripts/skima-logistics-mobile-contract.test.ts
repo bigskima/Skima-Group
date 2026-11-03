@@ -401,6 +401,10 @@ Deno.test("An accepted driver can return an unstarted Logistics booking to compa
   requireText(providerDriver, '"/runtime/logistics/driver/assignment/release"', "release endpoint");
   requireText(providerDriver, "I can't start this job", "pre-start unavailability control");
   requireText(providerDriver, "Return this job to dispatch?", "driver release confirmation");
+  requireText(providerDriver, "Reason you cannot start", "driver supplies an operational release reason");
+  requireText(providerDriver, "releaseReason.trim().length < 5", "driver cannot release without a useful reason");
+  requireText(providerDriver, "reason: releaseReason", "driver's actual reason is sent to dispatch");
+
   requireText(providerDriver, "The customer booking and payment remain unchanged", "release does not imply booking cancellation");
   requireText(providerDriver, 'status === "accepted"', "release control exists only before service start");
 });
