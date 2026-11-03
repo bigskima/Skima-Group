@@ -23,16 +23,16 @@ const migrationTracking = await Deno.readTextFile(
   "supabase/migrations/20261102140000_logistics_driver_location_tracking.sql",
 );
 const migrationDispatch = await Deno.readTextFile(
-  "supabase/migrations/20261103090000_logistics_driver_prestart_release.sql",
+  "supabase/migrations/20261103131700_logistics_driver_prestart_release.sql",
 );
 const migrationReplacementHandoff = await Deno.readTextFile(
-  "supabase/migrations/20261103100000_logistics_safe_replacement_handoff.sql",
+  "supabase/migrations/20261103131800_logistics_safe_replacement_handoff.sql",
 );
 const migrationExceptions = await Deno.readTextFile(
-  "supabase/migrations/20261103110000_logistics_incident_and_dispute_protection.sql",
+  "supabase/migrations/20261103131900_logistics_incident_and_dispute_protection.sql",
 );
 const migrationCargoRecovery = await Deno.readTextFile(
-  "supabase/migrations/20261103120000_logistics_cargo_recovery_dispatch.sql",
+  "supabase/migrations/20261103132000_logistics_cargo_recovery_dispatch.sql",
 );
 const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch + "\n" + migrationReplacementHandoff + "\n" + migrationExceptions + "\n" + migrationCargoRecovery;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
