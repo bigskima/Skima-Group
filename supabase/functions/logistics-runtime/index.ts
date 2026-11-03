@@ -187,18 +187,33 @@ async function handleLogisticsRequest(
   }
 
   if (routePath === "/runtime/logistics/geographies" && request.method === "GET") {
-    let query = supabase.from("geographies")
-      .select("id,parent_id,canonical_name,country_code,geography_level_id,aliases,status")
-      .eq("status", "active")
-      .order("canonical_name", { ascending: true })
-      .limit(50);
     const search = optionalString(url.searchParams.get("search"));
     const countryCode = optionalString(url.searchParams.get("countryCode"));
     const parentId = optionalUuid(url.searchParams.get("parentId"), "parentId");
-    if (search) query = query.ilike("canonical_name", `%${search}%`);
-    if (countryCode) query = query.eq("country_code", countryCode.toUpperCase());
-    if (parentId) query = query.eq("parent_id", parentId);
-    return selectResponse(query, id);
+    if (!search) {
+      let query = supabase.from("geographies")
+        .select("id,parent_id,canonical_name,country_code,geography_level_id,aliases,status")
+        .eq("status", "active")
+        .order("canonical_name", { ascending: true })
+        .limit(50);
+      if (countryCode) query = query.eq("country_code", countryCode.toUpperCase());
+      if (parentId) query = query.eq("parent_id", parentId);
+      return selectResponse(query, id);
+    }
+    if (search.trim().length < 2) {
+      return jsonResponse({ ok: true, data: [], requestId: id });
+    }
+    const rawLimit = url.searchParams.get("limit");
+    const limit = rawLimit === null ? 40 : requireInteger(Number(rawLimit), "limit");
+    if (limit < 1 || limit > 50) {
+      throw new RequestValidationError("limit must be between 1 and 50.");
+    }
+    return rpcResponse(supabase.rpc("search_logistics_geographies", {
+      target_search: search.trim(),
+      target_country_code: optionalString(url.searchParams.get("countryCode")) ?? "NG",
+      target_parent_id: optionalUuid(url.searchParams.get("parentId"), "parentId") ?? null,
+      target_limit: limit,
+    }), id);
   }
 
   if (routePath === "/runtime/logistics/company/wallet/fund" && request.method === "POST") {
@@ -331,6 +346,76 @@ async function handleLogisticsRequest(
       target_destination_geography_id: optionalUuid(p.destinationGeographyId, "destinationGeographyId"),
       target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
       target_metadata: optionalRecord(p.metadata) ?? {},
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/company/fleet-drivers" && request.method === "GET") {
+    return rpcResponse(supabase.rpc("read_logistics_company_fleet_drivers", {
+      target_organization_id: requireUuid(url.searchParams.get("organizationId"), "organizationId"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/company/vehicles" && request.method === "GET") {
+    const organizationId = requireUuid(url.searchParams.get("organizationId"), "organizationId");
+    const permission = await supabase.rpc("can_manage_logistics_company", {
+      target_organization_id: organizationId,
+    });
+    if (permission.error) return databaseError(permission.error, id);
+    if (permission.data !== true) {
+      return jsonResponse({ ok: false, error: "company_fleet_access_denied", requestId: id }, 403);
+    }
+    return selectResponse(
+      supabase.from("vehicles")
+        .select("id,organization_id,vehicle_type_id,status,manufacturer,model,model_year,registration_number,color,max_load_kg,cargo_volume_m3,passenger_capacity,fuel_type,insurance_expires_at,inspection_expires_at,roadworthiness_expires_at,ownership_type,ownership_relationship,metadata,created_at,vehicle_type:vehicle_types(id,key,display_name)")
+        .eq("organization_id", organizationId)
+        .eq("ownership_relationship", "business_owned")
+        .order("created_at", { ascending: false }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/logistics/company/vehicle-types" && request.method === "GET") {
+    return selectResponse(
+      supabase.from("vehicle_types")
+        .select("id,key,display_name,capability_schema")
+        .eq("status", "active")
+        .order("display_name", { ascending: true }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/logistics/company/vehicles" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("register_logistics_company_vehicle", {
+      target_organization_id: requireUuid(p.organizationId, "organizationId"),
+      target_vehicle_type_id: requireUuid(p.vehicleTypeId, "vehicleTypeId"),
+      target_registration_number: requireString(p.registrationNumber, "registrationNumber"),
+      target_manufacturer: optionalString(p.manufacturer) ?? null,
+      target_model: optionalString(p.model) ?? null,
+      target_model_year: optionalInteger(p.modelYear) ?? null,
+      target_color: optionalString(p.color) ?? null,
+      target_max_load_kg: optionalNumber(p.maxLoadKg, "maxLoadKg") ?? null,
+      target_cargo_volume_m3: optionalNumber(p.cargoVolumeM3, "cargoVolumeM3") ?? null,
+      target_passenger_capacity: optionalInteger(p.passengerCapacity) ?? null,
+      target_fuel_type: optionalString(p.fuelType) ?? null,
+      target_insurance_expires_at: optionalString(p.insuranceExpiresAt) ?? null,
+      target_inspection_expires_at: optionalString(p.inspectionExpiresAt) ?? null,
+      target_roadworthiness_expires_at: optionalString(p.roadworthinessExpiresAt) ?? null,
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/company/vehicles/assign-driver" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("assign_logistics_company_vehicle_to_driver", {
+      target_organization_id: requireUuid(p.organizationId, "organizationId"),
+      target_driver_profile_id: requireUuid(p.driverProfileId, "driverProfileId"),
+      target_vehicle_id: requireUuid(p.vehicleId, "vehicleId"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
     }), id);
   }
 

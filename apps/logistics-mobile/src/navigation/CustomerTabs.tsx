@@ -19,6 +19,7 @@ export function CustomerTabs() {
       tabBarActiveTintColor: palette.brand,
       tabBarInactiveTintColor: palette.muted,
       tabBarHideOnKeyboard: true,
+      tabBarShowLabel: desktop,
       tabBarBackground: desktop ? undefined : () => <BlurView intensity={88} tint={scheme} style={StyleSheet.absoluteFill} />,
       tabBarStyle: desktop ? {
         backgroundColor: palette.surface, borderRightColor: palette.border, borderRightWidth: StyleSheet.hairlineWidth,

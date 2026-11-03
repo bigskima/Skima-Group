@@ -5,6 +5,7 @@ import {
   House, Package, PackageCheck, ShieldCheck, Truck, Weight,
 } from "lucide-react-native";
 import { useMemo } from "react";
+import { useWindowDimensions } from "react-native";
 import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useLogisticsQuery, asString } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
@@ -12,6 +13,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, spacing, typography } from "../theme/tokens";
 import { AppButton } from "../ui/AppButton";
 import { BrandMark } from "../ui/BrandMark";
+import { LogisticsPromotionBanner } from "../ui/LogisticsPromotionBanner";
 import { Card } from "../ui/Card";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
@@ -46,6 +48,7 @@ function displayDate(value: string | null) {
 export function CustomerHomeScreen() {
   const { palette } = useAppTheme();
   const { context, session } = useSession();
+  const { width } = useWindowDimensions();
   const categories = useLogisticsQuery(["categories"], "/runtime/logistics/categories");
   const jobs = useLogisticsQuery(["jobs"], "/runtime/logistics/jobs", true, 30_000);
   const bookings = useLogisticsQuery(["bookings"], "/runtime/logistics/bookings", true, 30_000);
@@ -117,6 +120,7 @@ export function CustomerHomeScreen() {
         </View>
       </LinearGradient>
 
+      <LogisticsPromotionBanner />
       <View style={styles.statsRow}>
         <View style={[styles.stat, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <Text style={[styles.statValue, { color: palette.ink }]}>{activeJobs.length}</Text>
@@ -145,7 +149,7 @@ export function CustomerHomeScreen() {
               const Icon = CATEGORY_ICONS[key] ?? Package;
               return (
                 <Pressable key={key} accessibilityRole="button" onPress={() => router.push({ pathname: "/(customer)/request", params: { category: key } } as never)}
-                  style={({ pressed }) => [styles.categoryCard, shadows.subtle, { backgroundColor: palette.surface, borderColor: palette.border, transform: [{ scale: pressed ? 0.985 : 1 }] }]}>
+                  style={({ pressed }) => [styles.categoryCard, shadows.subtle, { width: width >= 1120 ? "31.5%" : width >= 680 ? "48.5%" : "48.5%", flexBasis: width >= 1120 ? "31.5%" : "46%", flexGrow: width >= 1120 ? 0 : 1, backgroundColor: palette.surface, borderColor: palette.border, transform: [{ scale: pressed ? 0.985 : 1 }] }]}>
                   <View style={[styles.categoryIcon, { backgroundColor: palette.brandSoft }]}><Icon color={palette.brand} size={22} strokeWidth={1.9} /></View>
                   <View style={styles.categoryCopy}>
                     <Text style={[styles.categoryTitle, { color: palette.ink }]} numberOfLines={2}>{asString(item, "display_name") ?? "Logistics service"}</Text>

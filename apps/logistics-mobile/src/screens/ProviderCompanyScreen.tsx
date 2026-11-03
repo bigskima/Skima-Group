@@ -1,4 +1,5 @@
 import { createClientIdempotencyKey } from "@skima/frontend-core";
+import { router } from "expo-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownUp, Building2, CheckCircle2, MapPin, Plus, ShieldCheck, Truck, WalletCards, XCircle } from "lucide-react-native";
 import { useMemo, useState } from "react";
@@ -12,6 +13,9 @@ import { AppButton } from "../ui/AppButton";
 import { AppField } from "../ui/AppField";
 import { Card } from "../ui/Card";
 import { GeographyPicker } from "../ui/GeographyPicker";
+import { LogisticsMediaPicker } from "../ui/LogisticsMediaPicker";
+import { LogisticsCompanyApplicationPanel } from "../ui/LogisticsCompanyApplicationPanel";
+import { LogisticsCompanyFleetPanel } from "../ui/LogisticsCompanyFleetPanel";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
@@ -27,7 +31,6 @@ type Place = Record<string, unknown>;
 export function ProviderCompanyScreen() {
   const { palette } = useAppTheme();
   const { api } = useSession();
-  const client = useQueryClient();
   const companies = useLogisticsQuery(["company"], "/runtime/logistics/company", true, 45_000);
   const categoriesQuery = useLogisticsQuery(["categories"], "/runtime/logistics/categories");
   const company = companies.data?.[0] ?? null;
@@ -43,9 +46,8 @@ export function ProviderCompanyScreen() {
     Boolean(organizationId),
   );
 
-  const [companyRegistrationKey] = useState(() => createClientIdempotencyKey("logistics.company.register"));
-  const [companyName, setCompanyName] = useState("");
-  const [legalName, setLegalName] = useState("");
+  const [showServiceForm, setShowServiceForm] = useState(false);
+  const [showCoverageForm, setShowCoverageForm] = useState(false);
   const [serviceCategory, setServiceCategory] = useState("");
   const [serviceName, setServiceName] = useState("");
   const [serviceDescription, setServiceDescription] = useState("");
@@ -60,23 +62,14 @@ export function ProviderCompanyScreen() {
 
   const activeCategories = (categoriesQuery.data ?? []).filter((item) => asString(item, "status") === "active");
   const organization = nested(company, "organization");
+  const companyMetadata = nested(company, "metadata");
+  const registrationStatusValue = asString(companyMetadata, "registration_status");
+  const registrationStatus = registrationStatusValue === "registered" || registrationStatusValue === "in_progress"
+    ? registrationStatusValue
+    : "not_registered";
   const availableServices = services.data ?? [];
   const serviceKey = useMemo(() => serviceCategory && serviceName ? serviceSlug(serviceCategory, serviceName) : "", [serviceCategory, serviceName]);
   const refresh = () => Promise.all([companies.refetch(), categoriesQuery.refetch(), services.refetch(), coverage.refetch()]);
-
-  const registerCompany = useMutation({
-    mutationFn: () => api.post("/runtime/logistics/company", {
-      displayName: companyName.trim(),
-      legalName: legalName.trim() || null,
-      idempotencyKey: companyRegistrationKey,
-      metadata: { registration_source: "skima.logistics.mobile" },
-    }, z.string().uuid()),
-    onSuccess: async () => {
-      setCompanyName(""); setLegalName("");
-      await client.invalidateQueries({ queryKey: ["skima-logistics", "company"] });
-    },
-    onError: (cause) => setError(cause instanceof Error ? cause.message : "Company registration could not be completed."),
-  });
 
   const addService = useMutation({
     mutationFn: () => {
@@ -103,6 +96,7 @@ export function ProviderCompanyScreen() {
     },
     onSuccess: async () => {
       setServiceName(""); setServiceDescription(""); setServiceWeight("");
+      setShowServiceForm(false);
       await Promise.all([services.refetch(), coverage.refetch()]);
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : "Service could not be saved."),
@@ -127,6 +121,7 @@ export function ProviderCompanyScreen() {
     },
     onSuccess: async () => {
       setCoverageSearch(""); setCoveragePlace(null); setDestinationSearch(""); setDestinationPlace(null);
+      setShowCoverageForm(false);
       await coverage.refetch();
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : "Coverage could not be saved."),
@@ -142,11 +137,9 @@ export function ProviderCompanyScreen() {
           {!company ? (
             <Card padding="lg">
               <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><Building2 color={palette.brand} size={22} /></View>
-              <Text style={[styles.sectionTitle, { color: palette.ink }]}>Register your company</Text>
-              <Text style={[styles.sectionBody, { color: palette.muted }]}>Create your separate logistics provider organisation. It will start in pending verification until SKIMA reviews it.</Text>
-              <AppField label="Company display name" value={companyName} onChangeText={setCompanyName} placeholder="e.g. Eastern Star Logistics" />
-              <AppField label="Legal name" value={legalName} onChangeText={setLegalName} placeholder="Registered legal name" optional />
-              <AppButton label="Register company" fullWidth loading={registerCompany.isPending} disabled={companyName.trim().length < 2} onPress={() => { setError(null); registerCompany.mutate(); }} />
+              <Text style={[styles.sectionTitle, { color: palette.ink }]}>Start your company application</Text>
+              <Text style={[styles.sectionBody, { color: palette.muted }]}>Use the guided application to provide your company details, select your registration status and submit private supporting documents for SKIMA review. CAC registration is not required to apply.</Text>
+              <AppButton label="Start company application" fullWidth onPress={() => router.push("/provider/register" as never)} />
             </Card>
           ) : (
             <>
@@ -166,6 +159,37 @@ export function ProviderCompanyScreen() {
                 </View>
               </Card>
 
+              <View style={styles.section}>
+                <SectionHeader title="Public company identity" description="These verified business images help customers recognise the company they are booking." />
+                <LogisticsMediaPicker
+                  entityType="logistics_company"
+                  entityId={organizationId ?? ""}
+                  organizationId={organizationId}
+                  mediaRole="logistics.company.logo.public"
+                  title="Company logo"
+                  description="A clear square logo used across company cards and booking summaries."
+                  compact
+                />
+                <LogisticsMediaPicker
+                  entityType="logistics_company"
+                  entityId={organizationId ?? ""}
+                  organizationId={organizationId}
+                  mediaRole="logistics.company.photo.public"
+                  title="Company public photo"
+                  description="Show customers your fleet, depot, team or business premises."
+                  compact
+                />
+              </View>
+
+              <LogisticsCompanyApplicationPanel
+                organizationId={organizationId ?? ""}
+                displayName={asString(company, "public_name") ?? ""}
+                legalName={asString(organization, "legal_name")}
+                registrationStatus={registrationStatus}
+              />
+
+              <LogisticsCompanyFleetPanel organizationId={organizationId ?? ""} />
+
               <ProviderWalletFundingPanel organizationId={organizationId ?? ""} />
 
               <View style={styles.section}>
@@ -184,6 +208,7 @@ export function ProviderCompanyScreen() {
                     ))}
                   </View>
                 ) : <StatePanel title="No services configured" description="Add at least one service to tell SKIMA what your company can handle." />}
+                {showServiceForm ? (
                 <Card padding="lg">
                   <View style={styles.sectionLead}><Plus color={palette.brand} size={18} /><Text style={[styles.formTitle, { color: palette.ink }]}>Add a service</Text></View>
                   <AppField label="Service name" value={serviceName} onChangeText={setServiceName} placeholder="e.g. Furniture and home delivery" />
@@ -198,8 +223,14 @@ export function ProviderCompanyScreen() {
                   <AppField label="Service description" value={serviceDescription} onChangeText={setServiceDescription} placeholder="What is included in this service?" optional multiline />
                   <AppField label="Maximum cargo weight (kg)" value={serviceWeight} onChangeText={setServiceWeight} keyboardType="decimal-pad" placeholder="Leave blank if not limited" optional />
                   <View style={styles.quoteHint}><ShieldCheck color={palette.success} size={14} /><Text style={[styles.quoteHintText, { color: palette.muted }]}>Offers are quoted per customer request. No lead unlock fee is charged.</Text></View>
-                  <AppButton label="Save service" fullWidth loading={addService.isPending} disabled={!serviceCategory || serviceName.trim().length < 2} onPress={() => { setError(null); addService.mutate(); }} />
+                  <View style={styles.actions}>
+                    <AppButton label="Cancel" variant="secondary" onPress={() => setShowServiceForm(false)} />
+                    <AppButton label="Save service" fullWidth loading={addService.isPending} disabled={!serviceCategory || serviceName.trim().length < 2} onPress={() => { setError(null); addService.mutate(); }} />
+                  </View>
                 </Card>
+                ) : (
+                  <AppButton label="Add a service" fullWidth variant="secondary" icon={<Plus color={palette.brand} size={15} />} onPress={() => setShowServiceForm(true)} />
+                )}
               </View>
 
               <View style={styles.section}>
@@ -221,6 +252,7 @@ export function ProviderCompanyScreen() {
                   </View>
                 ) : <StatePanel title="No coverage configured" description="Add your service area so SKIMA can match you with relevant customer requests." />}
                 {availableServices.length ? (
+                  showCoverageForm ? (
                   <Card padding="lg">
                     <View style={styles.sectionLead}><MapPin color={palette.brand} size={18} /><Text style={[styles.formTitle, { color: palette.ink }]}>Add operating area</Text></View>
                     <Text style={[styles.fieldLabel, { color: palette.ink }]}>Service</Text>
@@ -235,11 +267,17 @@ export function ProviderCompanyScreen() {
                       <AppButton size="sm" variant={coverageMode === "both" ? "primary" : "secondary"} label="Pickup & delivery area" onPress={() => { setCoverageMode("both"); setDestinationPlace(null); }} />
                       <AppButton size="sm" variant={coverageMode === "route" ? "primary" : "secondary"} label="Specific route" onPress={() => setCoverageMode("route")} />
                     </View>
-                    <GeographyPicker label={coverageMode === "route" ? "Route origin" : "Operating location"} value={coverageSearch} selected={coveragePlace} onChange={(value) => { setCoverageSearch(value); setCoveragePlace(null); }} onSelect={(place) => { setCoveragePlace(place); setCoverageSearch(asString(place, "canonical_name") ?? ""); }} />
-                    {coverageMode === "route" ? <GeographyPicker label="Route destination" value={destinationSearch} selected={destinationPlace} onChange={(value) => { setDestinationSearch(value); setDestinationPlace(null); }} onSelect={(place) => { setDestinationPlace(place); setDestinationSearch(asString(place, "canonical_name") ?? ""); }} /> : null}
+                    <GeographyPicker mode="service_area" label={coverageMode === "route" ? "Route origin" : "Operating location"} value={coverageSearch} selected={coveragePlace} onChange={(value) => { setCoverageSearch(value); setCoveragePlace(null); }} onSelect={(place) => { setCoveragePlace(place); setCoverageSearch(asString(place, "canonical_name") ?? ""); }} />
+                    {coverageMode === "route" ? <GeographyPicker mode="service_area" label="Route destination" value={destinationSearch} selected={destinationPlace} onChange={(value) => { setDestinationSearch(value); setDestinationPlace(null); }} onSelect={(place) => { setDestinationPlace(place); setDestinationSearch(asString(place, "canonical_name") ?? ""); }} /> : null}
                     <Text style={[styles.coverageHint, { color: palette.muted }]}>{coverageMode === "route" ? "Only matching requests on this origin-to-destination corridor will be routed to the service." : "This setting covers both pickup and delivery within the selected geographic area."}</Text>
-                    <AppButton label="Save operating coverage" fullWidth loading={addCoverage.isPending} disabled={!coverageServiceKey || !coveragePlace || (coverageMode === "route" && !destinationPlace)} onPress={() => { setError(null); addCoverage.mutate(); }} />
+                    <View style={styles.actions}>
+                      <AppButton label="Cancel" variant="secondary" onPress={() => setShowCoverageForm(false)} />
+                      <AppButton label="Save operating coverage" fullWidth loading={addCoverage.isPending} disabled={!coverageServiceKey || !coveragePlace || (coverageMode === "route" && !destinationPlace)} onPress={() => { setError(null); addCoverage.mutate(); }} />
+                    </View>
                   </Card>
+                  ) : (
+                    <AppButton label="Add operating area" fullWidth variant="secondary" icon={<Plus color={palette.brand} size={15} />} onPress={() => setShowCoverageForm(true)} />
+                  )
                 ) : null}
               </View>
             </>
@@ -440,6 +478,7 @@ const fundingStyles = StyleSheet.create({
   errorText: { flex: 1, ...typography.caption, fontSize: 9, lineHeight: 15 },
 });
 const styles = StyleSheet.create({
+  actions: { flexDirection: "row", gap: spacing.sm },
   content: { gap: spacing.lg },
   section: { gap: 12 },
   sectionIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },

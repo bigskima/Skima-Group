@@ -16,6 +16,7 @@ import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
 import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
+import { LogisticsMediaPicker } from "../ui/LogisticsMediaPicker";
 import { LogisticsDriverLocationShare } from "./LogisticsDriverLocationShare";
 
 type DriverAction = "accept" | "reject" | "release" | "start" | "recover_start" | "pickup" | "transit" | "deliver";
@@ -55,6 +56,7 @@ export function LogisticsDriverScreen() {
   const [incidentTypes, setIncidentTypes] = useState<Record<string, string>>({});
   const [incidentSeverities, setIncidentSeverities] = useState<Record<string, string>>({});
   const [incidentDescriptions, setIncidentDescriptions] = useState<Record<string, string>>({});
+  const [expandedIncidentBookingId, setExpandedIncidentBookingId] = useState<string | null>(null);
   const actionKeys = useRef(new Map<string, string>());
 
   const runAction = useMutation({
@@ -210,6 +212,16 @@ export function LogisticsDriverScreen() {
             </View>
           </Card>
 
+          <LogisticsMediaPicker
+            entityType="driver"
+            entityId={driverId ?? ""}
+            organizationId={asString(profile.data, "organization_id")}
+            mediaRole="driver.photo.public"
+            title="Your public driver photo"
+            description="Customers can see the driver who has been assigned to their delivery."
+            compact
+          />
+
           <SectionHeader
             title="Assigned to you"
             description={rows.length + " " + (rows.length === 1 ? "assignment" : "assignments") + " · Only jobs assigned to your driver profile are shown"}
@@ -283,6 +295,7 @@ export function LogisticsDriverScreen() {
                     <Text style={[styles.meta, { color: palette.muted }]}>
                       Report a breakdown, accident, route problem or cargo issue immediately. Do not abandon cargo or hand it to an unverified person.
                     </Text>
+                    {expandedIncidentBookingId === bookingId ? (
                     <View style={styles.actions}>
                       <View style={styles.incidentChoices}>
                         {[
@@ -365,6 +378,15 @@ export function LogisticsDriverScreen() {
                         )}
                       />
                     </View>
+                    ) : (
+                      <AppButton
+                        label="Report an issue"
+                        fullWidth
+                        variant="secondary"
+                        onPress={() => setExpandedIncidentBookingId(bookingId)}
+                        icon={<ShieldCheck color={palette.brand} size={15} />}
+                      />
+                    )}
                   </Card>
                 ) : null}
                 {assignmentKind === "recovery" ? (
