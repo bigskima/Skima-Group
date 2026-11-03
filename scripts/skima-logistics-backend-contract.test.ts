@@ -28,7 +28,10 @@ const migrationDispatch = await Deno.readTextFile(
 const migrationReplacementHandoff = await Deno.readTextFile(
   "supabase/migrations/20261103100000_logistics_safe_replacement_handoff.sql",
 );
-const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch + "\n" + migrationReplacementHandoff;
+const migrationExceptions = await Deno.readTextFile(
+  "supabase/migrations/20261103110000_logistics_incident_and_dispute_protection.sql",
+);
+const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch + "\n" + migrationReplacementHandoff + "\n" + migrationExceptions;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const apiGateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
@@ -606,4 +609,33 @@ Deno.test("Driver replacement preserves the incumbent until the replacement acce
   requireText(migrationReplacementHandoff, "replacement_declined_by", "decline recovery audit");
   requireText(migrationReplacementHandoff, "set assigned_driver_profile_id = prior_assignment.driver_profile_id", "restore incumbent after replacement decline");
   requireText(migrationReplacementHandoff, "status in ('offered','accepted','replacement_pending','in_progress','picked_up','in_transit')", "prevent double-booking incumbent during replacement");
+});
+
+
+Deno.test("Logistics incidents preserve custody and block financial settlement until resolved", () => {
+  requireText(migrationExceptions, "create table if not exists public.logistics_booking_incidents", "dedicated incident ledger");
+  requireText(migrationExceptions, "create table if not exists public.logistics_booking_disputes", "dedicated customer dispute ledger");
+  requireText(migrationExceptions, "cargo_custody_status", "explicit cargo custody state");
+  requireText(migrationExceptions, "'recovery_pending'", "explicit cargo recovery state");
+  requireText(migrationExceptions, "'incident_hold'", "historical driver custody remains traceable");
+  requireText(migrationExceptions, "guard_logistics_settlement_on_open_exceptions", "database settlement guard");
+  requireText(migrationExceptions, "dispute.status in ('open','under_review','escalated')", "active customer disputes block settlement");
+  requireText(migrationExceptions, "incident.status in ('reported','investigating','recovery_required')", "unresolved delivery incidents block settlement");
+  requireText(migrationExceptions, "public.refund_escrow_hold(", "refund uses shared escrow ledger");
+  requireText(migrationExceptions, "hold_record.released_amount <> 0", "full refund refuses a partially released escrow");
+  requireText(migrationExceptions, "payment_mode <> 'online_wallet'", "offline disputes cannot use escrow refund");
+  requireText(migrationExceptions, "platform.escrow.execute", "refund resolution requires platform escrow permission");
+  requireText(migrationExceptions, "logistics_booking_incidents_no_direct_insert", "incident writes are RPC-only");
+  requireText(migrationExceptions, "logistics_booking_disputes_no_direct_update", "dispute updates are RPC-only");
+});
+
+Deno.test("Logistics incident and dispute routes use authenticated runtime RPCs and RLS reads", () => {
+  requireText(runtime, '"/runtime/logistics/bookings/incidents"', "incident read route");
+  requireText(runtime, '"/runtime/logistics/bookings/incidents/report"', "incident report route");
+  requireText(runtime, '"/runtime/logistics/bookings/incidents/respond"', "company incident response route");
+  requireText(runtime, '"/runtime/logistics/bookings/disputes"', "dispute read route");
+  requireText(runtime, '"/runtime/logistics/bookings/disputes/open"', "customer dispute route");
+  requireText(runtime, '"/runtime/logistics/bookings/disputes/resolve"', "platform dispute resolution route");
+  requireText(runtime, 'supabase.rpc("report_logistics_booking_incident"', "incident report uses a database RPC");
+  requireText(runtime, 'supabase.rpc("resolve_logistics_booking_dispute"', "refund resolution uses permission-gated database RPC");
 });
