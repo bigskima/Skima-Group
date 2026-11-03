@@ -51,6 +51,7 @@ export function LogisticsCompanyFleetPanel({ organizationId }: { organizationId:
     return Array.isArray(items) ? items.filter((item): item is Row => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
   }, [driversQuery.data]);
   const [showForm, setShowForm] = useState(false);
+  const [vehicleFormStep, setVehicleFormStep] = useState(1);
   const [vehicleTypeId, setVehicleTypeId] = useState("");
   const [registrationNumber, setRegistrationNumber] = useState("");
   const [manufacturer, setManufacturer] = useState("");
@@ -102,6 +103,7 @@ export function LogisticsCompanyFleetPanel({ organizationId }: { organizationId:
     },
     onSuccess: async () => {
       setShowForm(false);
+      setVehicleFormStep(1);
       setVehicleTypeId("");
       setRegistrationNumber("");
       setManufacturer("");
@@ -254,42 +256,68 @@ export function LogisticsCompanyFleetPanel({ organizationId }: { organizationId:
             <Card padding="lg" gap={spacing.md}>
               <Text style={[styles.vehicleTitle, { color: palette.ink }]}>Add a company vehicle</Text>
               <Text style={[styles.copy, { color: palette.muted }]}>This vehicle is registered directly to your company. SKIMA does not run a separate vehicle-approval step.</Text>
-              <Text style={[styles.label, { color: palette.ink }]}>Vehicle type</Text>
-              <View style={styles.driverChoices}>
-                {(vehicleTypes.data ?? []).map((type) => {
-                  const id = asString(type, "id") ?? "";
-                  const selected = id === vehicleTypeId;
-                  return (
-                    <Pressable key={id} accessibilityRole="button" onPress={() => setVehicleTypeId(id)}
-                      style={[styles.driverChoice, { backgroundColor: selected ? palette.brandSofter : palette.surface, borderColor: selected ? palette.brand : palette.border }]}>
-                      <Text style={[styles.driverName, { color: selected ? palette.brand : palette.ink }]}>{asString(type, "display_name") ?? asString(type, "key")}</Text>
-                    </Pressable>
-                  );
-                })}
+              <View style={styles.formProgress}>
+                {[1, 2, 3].map((part) => <View key={part} style={[styles.formProgressSegment, { backgroundColor: part <= vehicleFormStep ? palette.brand : palette.border }]} />)}
+                <Text style={[styles.formStepLabel, { color: palette.muted }]}>STEP {vehicleFormStep} OF 3</Text>
               </View>
-              <AppField label="Registration number" value={registrationNumber} onChangeText={setRegistrationNumber} placeholder="e.g. ABC-123XY" />
-              <AppField label="Manufacturer" value={manufacturer} onChangeText={setManufacturer} placeholder="e.g. Toyota" optional />
-              <AppField label="Model" value={model} onChangeText={setModel} placeholder="e.g. Hiace" optional />
-              <AppField label="Model year" value={modelYear} onChangeText={setModelYear} keyboardType="number-pad" placeholder="e.g. 2021" optional />
-              <AppField label="Colour" value={color} onChangeText={setColor} placeholder="e.g. White" optional />
-              <AppField label="Maximum load (kg)" value={maxLoadKg} onChangeText={setMaxLoadKg} keyboardType="decimal-pad" optional />
-              <AppField label="Cargo volume (m³)" value={cargoVolume} onChangeText={setCargoVolume} keyboardType="decimal-pad" optional />
-              <AppField label="Passenger capacity" value={passengerCapacity} onChangeText={setPassengerCapacity} keyboardType="number-pad" optional />
-              <AppField label="Fuel type" value={fuelType} onChangeText={setFuelType} placeholder="e.g. Petrol, Diesel or CNG" optional />
-              <Text style={[styles.label, { color: palette.ink }]}>Company-managed licensing dates (YYYY-MM-DD)</Text>
-              <AppField label="Insurance expiry" value={insuranceExpiresAt} onChangeText={setInsuranceExpiresAt} placeholder="YYYY-MM-DD" optional />
-              <AppField label="Inspection expiry" value={inspectionExpiresAt} onChangeText={setInspectionExpiresAt} placeholder="YYYY-MM-DD" optional />
-              <AppField label="Roadworthiness expiry" value={roadworthinessExpiresAt} onChangeText={setRoadworthinessExpiresAt} placeholder="YYYY-MM-DD" optional />
+              {vehicleFormStep === 1 ? (
+                <View style={styles.formStep}>
+                  <SectionHeader title="Vehicle identity" description="Start with the vehicle type and registration details." />
+                  <Text style={[styles.label, { color: palette.ink }]}>Vehicle type</Text>
+                  <View style={styles.driverChoices}>
+                    {(vehicleTypes.data ?? []).map((type) => {
+                      const id = asString(type, "id") ?? "";
+                      const selected = id === vehicleTypeId;
+                      return (
+                        <Pressable key={id} accessibilityRole="button" onPress={() => setVehicleTypeId(id)}
+                          style={[styles.driverChoice, { backgroundColor: selected ? palette.brandSofter : palette.surface, borderColor: selected ? palette.brand : palette.border }]}>
+                          <Text style={[styles.driverName, { color: selected ? palette.brand : palette.ink }]}>{asString(type, "display_name") ?? asString(type, "key")}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <AppField label="Registration number" value={registrationNumber} onChangeText={setRegistrationNumber} placeholder="e.g. ABC-123XY" />
+                  <AppField label="Manufacturer" value={manufacturer} onChangeText={setManufacturer} placeholder="e.g. Toyota" optional />
+                  <AppField label="Model" value={model} onChangeText={setModel} placeholder="e.g. Hiace" optional />
+                  <AppField label="Model year" value={modelYear} onChangeText={setModelYear} keyboardType="number-pad" placeholder="e.g. 2021" optional />
+                  <AppField label="Colour" value={color} onChangeText={setColor} placeholder="e.g. White" optional />
+                </View>
+              ) : vehicleFormStep === 2 ? (
+                <View style={styles.formStep}>
+                  <SectionHeader title="Capacity & operation" description="Add the operating details that help match this vehicle to suitable customer jobs." />
+                  <AppField label="Maximum load (kg)" value={maxLoadKg} onChangeText={setMaxLoadKg} keyboardType="decimal-pad" optional />
+                  <AppField label="Cargo volume (m³)" value={cargoVolume} onChangeText={setCargoVolume} keyboardType="decimal-pad" optional />
+                  <AppField label="Passenger capacity" value={passengerCapacity} onChangeText={setPassengerCapacity} keyboardType="number-pad" optional />
+                  <AppField label="Fuel type" value={fuelType} onChangeText={setFuelType} placeholder="e.g. Petrol, Diesel or CNG" optional />
+                </View>
+              ) : (
+                <View style={styles.formStep}>
+                  <SectionHeader title="Company-managed licensing" description="Your company owns and maintains these records. SKIMA does not separately approve your company vehicle or its licences." />
+                  <Text style={[styles.label, { color: palette.ink }]}>Enter dates as YYYY-MM-DD when available.</Text>
+                  <AppField label="Insurance expiry" value={insuranceExpiresAt} onChangeText={setInsuranceExpiresAt} placeholder="YYYY-MM-DD" optional />
+                  <AppField label="Inspection expiry" value={inspectionExpiresAt} onChangeText={setInspectionExpiresAt} placeholder="YYYY-MM-DD" optional />
+                  <AppField label="Roadworthiness expiry" value={roadworthinessExpiresAt} onChangeText={setRoadworthinessExpiresAt} placeholder="YYYY-MM-DD" optional />
+                </View>
+              )}
               <View style={styles.actions}>
-                <AppButton label="Cancel" variant="secondary" onPress={() => setShowForm(false)} />
-                <AppButton label="Add vehicle" fullWidth loading={registerVehicle.isPending}
-                  disabled={busy || !vehicleTypeId || registrationNumber.trim().length < 3}
-                  onPress={() => { setError(null); registerVehicle.mutate(); }} />
+                <AppButton label="Cancel" variant="secondary" onPress={() => { setShowForm(false); setVehicleFormStep(1); }} />
+                {vehicleFormStep > 1 ? (
+                  <AppButton label="Back" variant="secondary" onPress={() => setVehicleFormStep((step) => Math.max(1, step - 1))} />
+                ) : null}
+                {vehicleFormStep < 3 ? (
+                  <AppButton label="Continue" fullWidth
+                    disabled={vehicleFormStep === 1 && (!vehicleTypeId || registrationNumber.trim().length < 3)}
+                    onPress={() => { setError(null); setVehicleFormStep((step) => Math.min(3, step + 1)); }} />
+                ) : (
+                  <AppButton label="Add vehicle" fullWidth loading={registerVehicle.isPending}
+                    disabled={busy || !vehicleTypeId || registrationNumber.trim().length < 3}
+                    onPress={() => { setError(null); registerVehicle.mutate(); }} />
+                )}
               </View>
             </Card>
           ) : (
             <AppButton label="Add a company vehicle" fullWidth variant="secondary" disabled={busy}
-              onPress={() => setShowForm(true)} />
+              onPress={() => { setVehicleFormStep(1); setShowForm(true); }} />
           )}
         </>
       )}
@@ -305,6 +333,10 @@ export function LogisticsCompanyFleetPanel({ organizationId }: { organizationId:
 
 const styles = StyleSheet.create({
   section: { gap: spacing.md },
+  formProgress: { flexDirection: "row", alignItems: "center", gap: 6 },
+  formProgressSegment: { flex: 1, height: 5, borderRadius: radii.pill },
+  formStepLabel: { ...typography.eyebrow, fontSize: 8, marginLeft: 4 },
+  formStep: { gap: spacing.md },
   driverDirectory: { gap: spacing.sm },
   vehicleHeader: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   vehicleCopy: { flex: 1, minWidth: 0, gap: 4 },
