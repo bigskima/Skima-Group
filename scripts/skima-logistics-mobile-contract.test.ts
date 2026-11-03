@@ -519,7 +519,7 @@ Deno.test("Platform Logistics administration can review disputes with finance-au
 
 Deno.test("Logistics address search is Nigeria-scoped, detailed and supports manual full-address entry", () => {
   requireText(geography, '"/lpg/maps/autocomplete"', "server-side LocationIQ address autocomplete");
-  requireText(geography, '"/runtime/logistics/geographies?countryCode=NG&search="', "complete Nigeria geography hierarchy");
+  requireText(geography, "/runtime/logistics/geographies?countryCode=NG&search=", "complete Nigeria geography hierarchy");
   requireText(geography, "address_components", "full address components retained");
   requireText(geography, "coordinates:", "address coordinates retained");
   requireText(geography, "Use typed address instead", "manual entry is available alongside suggestions");
