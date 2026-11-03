@@ -44,7 +44,7 @@ export function ProviderDashboardScreen() {
   const refresh = () => Promise.all([companies.refetch(), opportunities.refetch(), jobs.refetch()]);
   return (
     <Screen eyebrow="PROVIDER WORKSPACE" title={`Welcome, ${ownerName}`} subtitle="Run your logistics company and respond to qualified customer requests."
-      action={<Pressable accessibilityRole="button" accessibilityLabel="Open company settings" onPress={() => router.push("/(provider)/workspace" as never)
+      action={<Pressable accessibilityRole="button" accessibilityLabel="Open company settings" onPress={() => router.push("/(provider)/workspace" as never)}
         style={[styles.avatar, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}><Building2 color={palette.brand} size={19} /></Pressable>}
       refreshControl={<RefreshControl refreshing={companies.isRefetching || opportunities.isRefetching || jobs.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}>
       <View style={styles.brandRow}><BrandMark /><View style={[styles.trustBadge, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={13} /><Text style={[styles.trustText, { color: palette.success }]}>Company portal</Text></View></View>
