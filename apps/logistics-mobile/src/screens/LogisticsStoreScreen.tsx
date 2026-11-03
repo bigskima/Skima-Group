@@ -44,6 +44,9 @@ export function LogisticsStoreScreen() {
   const wallets = useLogisticsQuery(["store", "wallets"], "/runtime/wallets");
   const balances = useLogisticsQuery(["store", "wallet-balances"], "/runtime/wallet-balances");
   const locations = useLogisticsQuery(["store", "locations"], "/lpg/locations");
+  const cartStorageKey = `skima:logistics:store:v1:${userId}:${asString(store.storeModule,"id")??"pending"}`;
+  const [cartReady,setCartReady]=useState(false);
+  const [loadedCartKey,setLoadedCartKey]=useState("");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -51,6 +54,25 @@ export function LogisticsStoreScreen() {
   const [locationId, setLocationId] = useState("");
   const [note, setNote] = useState("");
   const [checkoutKey, setCheckoutKey] = useState(idempotency());
+
+  useEffect(()=>{
+    let active=true;
+    setCartReady(false);
+    void AsyncStorage.getItem(cartStorageKey).then((saved)=>{
+      if(!active) return;
+      if(saved){
+        const parsed:unknown=JSON.parse(saved);
+        setCart(Array.isArray(parsed)?parsed.filter(isCartLine):[]);
+      }else setCart([]);
+    }).catch(()=>{if(active)setCart([]);}).finally(()=>{
+      if(active){setLoadedCartKey(cartStorageKey);setCartReady(true);}
+    });
+    return()=>{active=false;};
+  },[cartStorageKey]);
+  useEffect(()=>{
+    if(!cartReady||loadedCartKey!==cartStorageKey) return;
+    void AsyncStorage.setItem(cartStorageKey,JSON.stringify(cart)).catch(()=>undefined);
+  },[cart,cartReady,cartStorageKey,loadedCartKey]);
 
   const settings = store.activeSettings;
   const storeModuleId = asString(store.storeModule, "id");
@@ -134,7 +156,7 @@ export function LogisticsStoreScreen() {
   const total=deliveryFee===null?null:cartTotal+deliveryFee;
   const walletEnough=cartCurrency===currency && total!==null && walletBalance>=total;
   const currenciesMatch=cart.every((line)=>line.currencyCode===currency);
-  const canCheckout=Boolean(settings&&walletId&&cart.length&&walletEnough&&currenciesMatch&&total!==null&&total>0&&cartTotal>=minimumOrder&&withinRadius&&(fulfillment==="pickup"||Boolean(locationId)));
+  const canCheckout=Boolean(settings&&cartReady&&walletId&&cart.length&&walletEnough&&currenciesMatch&&total!==null&&total>0&&cartTotal>=minimumOrder&&withinRadius&&(fulfillment==="pickup"||Boolean(locationId)));
 
   const checkout=useMutation({
     mutationFn:async()=>{
@@ -203,7 +225,7 @@ export function LogisticsStoreScreen() {
               {fulfillment==="delivery"&&deliveryFee!==null?<Text style={[styles.productDescription,{color:palette.muted}]}>Estimated delivery: {money(deliveryFee,currency)}{deliveryDistance!==null? ` · ${deliveryDistance.toFixed(1)} km`:""}</Text>:null}
               <Pressable onPress={()=>router.push("/(customer)/wallet" as never)}><Text style={[styles.productDescription,{color:palette.brand,fontWeight:"800"}]}>View shared SKIMA Wallet · Add funds</Text></Pressable>
               {!walletId?<Text style={[styles.error,{color:palette.danger}]}>Your shared SKIMA customer wallet is unavailable.</Text>:!withinRadius?<Text style={[styles.error,{color:palette.danger}]}>This address is outside the Store delivery coverage.</Text>:!walletEnough?<Text style={[styles.error,{color:palette.danger}]}>Your {currency} customer wallet cannot cover this order and delivery.</Text>:cartTotal<minimumOrder?<Text style={[styles.error,{color:palette.danger}]}>Minimum order: {money(minimumOrder,currency)}.</Text>:null}
-              <Pressable disabled={checkout.isPending||!canCheckout} onPress={()=>checkout.mutate()} style={[styles.checkout,{backgroundColor:palette.brand,opacity:checkout.isPending||!canCheckout?0.5:1}]}>{checkout.isPending?<ActivityIndicator color="#fff"/>:<Text style={styles.checkoutText}>Pay {money(total??cartTotal,currency)}</Text>}</Pressable>
+              <Pressable disabled={checkout.isPending||!cartReady||!canCheckout} onPress={()=>checkout.mutate()} style={[styles.checkout,{backgroundColor:palette.brand,opacity:checkout.isPending||!cartReady||!canCheckout?0.5:1}]}>{checkout.isPending?<ActivityIndicator color="#fff"/>:<Text style={styles.checkoutText}>Pay {money(total??cartTotal,currency)}</Text>}</Pressable>
             </>:<Text style={[styles.productDescription,{color:palette.muted}]}>Add a product to your basket to continue.</Text>}
           </View>
         </>
@@ -212,6 +234,15 @@ export function LogisticsStoreScreen() {
   );
 }
 
+
+function isCartLine(value:unknown):value is CartLine{
+ const line=record(value);
+ return typeof line.itemId==="string" && (typeof line.variantId==="string"||line.variantId===null) &&
+  typeof line.name==="string" && (typeof line.variantName==="string"||line.variantName===null) &&
+  typeof line.quantity==="number" && Number.isInteger(line.quantity) && line.quantity>0 && line.quantity<=99 &&
+  typeof line.unitAmount==="number" && Number.isFinite(line.unitAmount) && line.unitAmount>0 &&
+  typeof line.currencyCode==="string";
+}
 
 function ProductImage({assetId,label}:{assetId:string|null;label:string}){
  const {palette}=useAppTheme();
