@@ -613,6 +613,8 @@ declare
   actor uuid := auth.uid();
   dispute_record public.logistics_booking_disputes%rowtype;
   booking_record public.logistics_bookings%rowtype;
+  incident_record public.logistics_booking_incidents%rowtype;
+  assignment_record public.logistics_booking_driver_assignments%rowtype;
   hold_record public.escrow_holds%rowtype;
   refund_wallet public.wallet_accounts%rowtype;
   v_refund_transaction_id uuid;
@@ -701,7 +703,29 @@ begin
     where id = booking_record.id;
 
   elsif target_decision = 'allow_delivery_confirmation' then
-    if dispute_record.booking_status_before_dispute <> 'delivered' then
+    if dispute_record.booking_status_before_dispute = 'delivery_exception'
+      and dispute_record.incident_id is not null then
+      select * into incident_record
+      from public.logistics_booking_incidents
+      where id = dispute_record.incident_id and booking_id = booking_record.id
+      for update;
+      if not found or incident_record.booking_status_before_incident <> 'delivered' then
+        raise exception 'customer confirmation can be reopened only for a delivery that was already submitted';
+      end if;
+      if incident_record.assignment_id is not null then
+        select * into assignment_record
+        from public.logistics_booking_driver_assignments
+        where id = incident_record.assignment_id and booking_id = booking_record.id
+        for update;
+        if assignment_record.id is not null and assignment_record.status = 'incident_hold' then
+          update public.logistics_booking_driver_assignments
+          set status = 'delivery_submitted',
+              updated_at = timezone('utc',now()),
+              metadata = metadata || jsonb_build_object('incident_review_outcome','delivery_confirmation_reopened')
+          where id = assignment_record.id;
+        end if;
+      end if;
+    elsif dispute_record.booking_status_before_dispute <> 'delivered' then
       raise exception 'delivery confirmation can be reopened only for a delivered booking';
     end if;
     if booking_record.payment_mode = 'online_wallet' then
@@ -713,18 +737,46 @@ begin
     where id = booking_record.id;
 
   elsif target_decision = 'resume_delivery' then
-    if dispute_record.booking_status_before_dispute <> 'delivery_exception' then
+    if dispute_record.booking_status_before_dispute <> 'delivery_exception'
+      or dispute_record.incident_id is null then
       raise exception 'delivery can resume only when the dispute was opened during an active delivery exception';
     end if;
-    if booking_record.cargo_custody_status in ('recovery_pending','unknown') then
-      raise exception 'cargo recovery must be completed before delivery can resume';
+    select * into incident_record
+    from public.logistics_booking_incidents
+    where id = dispute_record.incident_id and booking_id = booking_record.id
+    for update;
+    if not found
+      or incident_record.booking_status_before_incident <> 'in_progress'
+      or incident_record.assignment_status_before_incident not in ('in_progress','picked_up','in_transit')
+      or incident_record.cargo_custody_status in ('recovery_pending','unknown') then
+      raise exception 'only the same active delivery with known cargo custody can resume';
     end if;
+    select * into assignment_record
+    from public.logistics_booking_driver_assignments
+    where id = incident_record.assignment_id and booking_id = booking_record.id
+    for update;
+    if not found or assignment_record.status <> 'incident_hold' then
+      raise exception 'the original incident-held driver assignment must be available for safe resumption';
+    end if;
+    update public.logistics_booking_driver_assignments
+    set status = incident_record.assignment_status_before_incident,
+        updated_at = timezone('utc',now()),
+        metadata = metadata || jsonb_build_object('incident_review_outcome','delivery_resumed')
+    where id = assignment_record.id;
     if booking_record.payment_mode = 'online_wallet' then
       update public.escrow_holds set status = 'held',updated_at = timezone('utc',now())
       where id = booking_record.escrow_hold_id and status = 'disputed' and released_amount = 0;
     end if;
     next_booking_status := 'in_progress';
-    update public.logistics_bookings set status = 'in_progress',updated_at = timezone('utc',now())
+    update public.logistics_bookings
+    set status = 'in_progress',
+        assigned_driver_profile_id = assignment_record.driver_profile_id,
+        assigned_driver_user_id = assignment_record.driver_user_id,
+        assigned_vehicle_id = assignment_record.vehicle_id,
+        driver_assigned_at = coalesce(driver_assigned_at,assignment_record.offered_at),
+        cargo_custody_status = incident_record.cargo_custody_status,
+        delivery_exception_reason = null,
+        updated_at = timezone('utc',now())
     where id = booking_record.id;
 
   elsif target_decision = 'offline_finance_review' then
