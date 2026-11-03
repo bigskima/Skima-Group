@@ -230,10 +230,10 @@ Deno.test("Online payment reserves one escrow hold from the customer's own walle
   requireText(runtime, '.eq("wallet_type", "customer")', "customer wallet type check");
   requireText(runtime, 'createServiceClient(supabaseUrl, serviceRoleKey)', "server-side financial client");
   requireText(runtime, 'serviceClient.rpc("reserve_logistics_booking_online_payment"', "atomic booking payment reservation RPC");
-  requireText(migrationBooking, "public.fund_order_from_wallet(", "shared wallet and escrow ledger inside the reservation transaction");
+  requireText(migrationCancellation, "public.fund_order_from_wallet(", "shared wallet and escrow ledger inside the reservation transaction");
   requireText(runtime, 'logistics-booking:', "server-derived stable payment idempotency key");
   requireText(runtime, 'online-wallet:v1', "versioned wallet payment idempotency suffix");
-  requireText(migrationBooking, "public.mark_logistics_booking_payment_reserved(", "booking and hold linkage happens inside the same database transaction");
+  requireText(migrationCancellation, "public.mark_logistics_booking_payment_reserved(", "booking and hold linkage happens inside the same database transaction");
   requireText(migrationBooking, "hold_record.hold_amount <> booking_record.total_customer_charge", "escrow amount must equal locked customer charge");
 });
 
