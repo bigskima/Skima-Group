@@ -13,6 +13,11 @@ const skeleton = await Deno.readTextFile("apps/logistics-mobile/src/ui/ScreenSke
 const statePanel = await Deno.readTextFile("apps/logistics-mobile/src/ui/StatePanel.tsx");
 const account = await Deno.readTextFile("apps/logistics-mobile/src/screens/CustomerAccountScreen.tsx");
 const home = await Deno.readTextFile("apps/logistics-mobile/src/screens/CustomerHomeScreen.tsx");
+const customerNavigation = await Deno.readTextFile("apps/logistics-mobile/src/navigation/CustomerTabs.tsx");
+const storeScreen = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsStoreScreen.tsx");
+const notificationScreen = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsNotificationsScreen.tsx");
+const customerNotificationRoute = await Deno.readTextFile("apps/logistics-mobile/app/(customer)/notifications.tsx");
+const providerNotificationRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/notifications.tsx");
 const request = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsRequestScreen.tsx");
 const jobs = await Deno.readTextFile("apps/logistics-mobile/src/screens/CustomerJobsScreen.tsx");
 const detail = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsJobDetailScreen.tsx");
@@ -572,4 +577,29 @@ Deno.test("Company-managed fleet bypasses SKIMA vehicle approval but preserves d
   requireText(logisticsRuntime, "register_logistics_company_vehicle", "vehicle API uses database lifecycle");
   requireText(logisticsRuntime, "assign_logistics_company_vehicle_to_driver", "driver assignment API uses database lifecycle");
   requireText(logisticsRuntime, "read_logistics_company_fleet_drivers", "company driver directory endpoint");
+});
+
+
+Deno.test("Customer and company workspaces keep phone, tablet and desktop responsive layouts", () => {
+  requireText(screen, "const compact = width < 600", "compact phone header breakpoint");
+  requireText(screen, "width >= 1440 ? 1160 : width >= 900 ? 960 : 780", "responsive content widths");
+  requireText(customerNavigation, "useWindowDimensions().width >= 900", "customer desktop navigation breakpoint");
+  requireText(providerNavigation, "useWindowDimensions().width >= 900", "company desktop navigation breakpoint");
+  requireText(customerNavigation, 'tabBarPosition: desktop ? "left" : "bottom"', "customer desktop side navigation");
+  requireText(providerNavigation, 'tabBarPosition: desktop ? "left" : "bottom"', "company desktop side navigation");
+  requireText(providerWorkspace, "const desktop = width >= 720", "company workspace tablet card layout");
+  requireText(home, 'width: width >= 1120 ? "31.5%" : width >= 680 ? "48.5%" : "48.5%"', "responsive customer service cards");
+  requireText(storeScreen, 'width>=1100?"23.5%":width>=700?"31.5%":"48.5%"', "responsive Store product grid");
+});
+
+Deno.test("Customer and company bell controls open the shared authenticated notification inbox", () => {
+  requireText(home, 'router.push("/(customer)/notifications" as never)', "customer notification bell route");
+  requireText(providerDashboard, 'router.push("/(provider)/notifications" as never)', "company notification bell route");
+  requireText(customerNavigation, 'name="notifications"', "customer notification route registration");
+  requireText(providerNavigation, 'name="notifications"', "company notification route registration");
+  requireText(customerNotificationRoute, "LogisticsNotificationsScreen", "customer notification screen route");
+  requireText(providerNotificationRoute, "LogisticsNotificationsScreen", "company notification screen route");
+  requireText(notificationScreen, "read_notification_center", "shared notification center RPC");
+  requireText(notificationScreen, "mark_notification_read", "mark a notification read");
+  requireText(notificationScreen, "mark_all_notifications_read", "mark all notifications read");
 });
