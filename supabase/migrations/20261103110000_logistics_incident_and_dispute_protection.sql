@@ -30,6 +30,15 @@ alter table public.logistics_booking_driver_assignments
     'delivery_submitted','incident_hold','completed','rejected','reassigned','cancelled'
   ));
 
+-- A driver whose assignment is on incident hold may still have physical custody
+-- or unresolved cargo responsibility. Do not dispatch that driver to another job.
+drop index if exists public.logistics_driver_one_active_booking_idx;
+create unique index logistics_driver_one_active_booking_idx
+  on public.logistics_booking_driver_assignments(driver_profile_id)
+  where status in (
+    'offered','accepted','replacement_pending','in_progress','picked_up','in_transit','incident_hold'
+  );
+
 alter table public.logistics_bookings
   drop constraint if exists logistics_bookings_cargo_custody_status_check;
 alter table public.logistics_bookings
