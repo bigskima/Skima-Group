@@ -570,7 +570,7 @@ Deno.test("An accepted driver may release a booking only before service start", 
   requireText(migrationDispatch, "booking_record.assigned_driver_user_id is distinct from actor", "booking must still belong to this driver");
   requireText(migrationDispatch, "set status = 'reassigned'", "assignment returns to dispatch");
   requireText(migrationDispatch, "set assigned_driver_profile_id = null", "booking clears old driver profile");
-  requireText(migrationDispatch, "set assigned_vehicle_id = null", "booking clears old vehicle");
+  requireText(migrationDispatch, "assigned_vehicle_id = null", "booking clears old vehicle in the same update");
   requireText(migrationDispatch, "response_reason = btrim(target_reason)", "release reason is audited");
   requireText(migrationDispatch, "logistics.booking.driver_released", "release event is appended");
   requireText(migrationDispatch, "existing_event.metadata->>'driver_user_id' <> actor::text", "idempotency replay is actor-bound");
