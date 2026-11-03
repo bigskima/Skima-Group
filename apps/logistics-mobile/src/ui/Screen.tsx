@@ -27,7 +27,7 @@ export function Screen({ children, title, eyebrow, subtitle, action, refreshCont
         <View style={[styles.ambientPrimary, { backgroundColor: palette.brandSoft }]} />
         <View style={[styles.ambientSecondary, { backgroundColor: palette.soft }]} />
       </View>
-      <View style={[styles.content, { maxWidth: width >= 1024 ? 1120 : 780, paddingHorizontal: compact ? 18 : 24 }]}>
+      <View style={[styles.content, { maxWidth: width >= 1440 ? 1160 : width >= 900 ? 960 : 780, paddingHorizontal: width < 600 ? 18 : width < 900 ? 22 : 28 }]}>
         {network.isConnected === false ? (
           <View accessibilityRole="alert" style={[styles.offline, { backgroundColor: palette.warningSoft, borderColor: palette.warning }]}>
             <View style={[styles.offlineDot, { backgroundColor: palette.warning }]} />
@@ -50,7 +50,7 @@ export function Screen({ children, title, eyebrow, subtitle, action, refreshCont
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
-  outer: { alignItems: "center", paddingTop: 14, paddingBottom: 124 },
+  outer: { alignItems: "center", paddingTop: 14, paddingBottom: 124, width: "100%" },
   content: { width: "100%", zIndex: 1 },
   ambientLayer: { position: "absolute", inset: 0, overflow: "hidden" },
   ambientPrimary: { position: "absolute", width: 280, height: 280, borderRadius: 140, right: -150, top: -150, opacity: 0.7 },
