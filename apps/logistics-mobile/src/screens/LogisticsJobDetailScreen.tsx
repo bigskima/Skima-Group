@@ -140,7 +140,7 @@ export function LogisticsJobDetailScreen() {
     mutationFn: async () => {
       if (!jobId) throw new Error("The request identifier is missing.");
       const previous = cancellationAttemptRef.current;
-      const idempotencyKey = previous?.jobId === jobId
+      const idempotencyKey = previous && previous.jobId === jobId
         ? previous.idempotencyKey
         : createClientIdempotencyKey("logistics.job.cancel", jobId);
       cancellationAttemptRef.current = { jobId, idempotencyKey };

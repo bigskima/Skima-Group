@@ -324,6 +324,8 @@ export function LogisticsDriverScreen() {
 
 const styles = StyleSheet.create({
   content: { gap: spacing.md },
+  header: { flexDirection: "row", alignItems: "center", gap: 8 },
+  sectionTitle: { ...typography.bodyStrong, fontSize: 13 },
   profileRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   profileCopy: { flex: 1, minWidth: 0, gap: 2 },
   eyebrow: { ...typography.eyebrow, fontSize: 8 },

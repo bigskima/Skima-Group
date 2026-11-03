@@ -1,7 +1,7 @@
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, ArrowLeft, CheckCircle2, LockKeyhole, ShieldCheck, WalletCards } from "lucide-react-native";
+import { AlertCircle, ArrowLeft, CheckCircle2, LockKeyhole, MapPin, ShieldCheck, WalletCards } from "lucide-react-native";
 import { useMemo, useRef, useState } from "react";
 import { Alert, Linking, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
