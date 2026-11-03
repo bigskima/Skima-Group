@@ -270,7 +270,6 @@ export function LogisticsDriverScreen() {
                       onChangeText={(value) => setReleaseReasons((current) => ({ ...current, [bookingId]: value }))}
                       placeholder="e.g. Vehicle issue or unexpected schedule conflict"
                       multiline
-                      optional
                     />
                     <AppButton
                       label="I can't start this job"
