@@ -466,4 +466,6 @@ Deno.test("Platform Logistics administration can review disputes with finance-au
   requireText(logisticsAdmin, "Refund full escrow", "full escrow refund action");
   requireText(logisticsAdmin, "Send to finance review", "offline dispute escalation");
   requireText(logisticsAdmin, "Close finance review", "offline review closure");
+  requireText(logisticsAdmin, "recoveredDeliverySubmitted", "admin can recognize verified recovered delivery");
+  requireText(logisticsAdmin, "recovered_delivery_submitted", "customer confirmation remains available after recovered delivery");
 });
