@@ -1,8 +1,8 @@
 const pricing = await Deno.readTextFile(
-  "supabase/migrations/20261102160000_fuel_easy_fulfillment_mode_aware_runtime.sql",
+  "supabase/migrations/20261102210712_fuel_easy_fulfillment_mode_aware_runtime.sql",
 );
 const progression = await Deno.readTextFile(
-  "supabase/migrations/20261102161000_fuel_auto_progression_verified_delivery_completion.sql",
+  "supabase/migrations/20261102210720_fuel_auto_progression_verified_delivery_completion.sql",
 );
 const fulfillmentModes = await Deno.readTextFile(
   "supabase/migrations/20261102013000_fuel_driver_workflow_fees_and_mode_controls.sql",
@@ -11,10 +11,10 @@ const feeControls = await Deno.readTextFile(
   "supabase/migrations/20261102013000_fuel_driver_workflow_fees_and_mode_controls.sql",
 );
 const walletGate = await Deno.readTextFile(
-  "supabase/migrations/20261102162000_fuel_verified_settlement_platform_wallet_gate.sql",
+  "supabase/migrations/20261102210817_fuel_verified_settlement_platform_wallet_gate.sql",
 );
 const helperAcl = await Deno.readTextFile(
-  "supabase/migrations/20261102162500_fuel_internal_helper_rpc_acl.sql",
+  "supabase/migrations/20261102211004_fuel_internal_helper_rpc_acl.sql",
 );
 const fuelRuntime = await Deno.readTextFile("supabase/functions/fuel-runtime/index.ts");
 const customerOrder = await Deno.readTextFile("apps/lpg-mobile/src/native/ui/FuelOrderScreen.tsx");
