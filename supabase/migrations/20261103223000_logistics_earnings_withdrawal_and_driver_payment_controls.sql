@@ -383,5 +383,38 @@ end;
 $$;
 
 
+create or replace function public.read_logistics_company_driver_payments(target_organization_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $
+declare result jsonb;
+begin
+  if auth.uid() is null or not public.can_manage_logistics_company(target_organization_id) then
+    raise exception using errcode = '42501', message = 'company driver payment records are restricted to company owners';
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id',payment.id,'booking_id',payment.booking_id,'driver_profile_id',payment.driver_profile_id,
+    'driver_user_id',payment.driver_user_id,'currency_code',payment.currency_code,'amount',payment.amount,
+    'payment_method',payment.payment_method,'status',payment.status,'paid_at',payment.paid_at,'note',payment.note
+  ) order by payment.paid_at desc),'[]'::jsonb)
+  into result
+  from public.logistics_driver_payment_records payment
+  where payment.provider_organization_id = target_organization_id;
+  return result;
+end;
+$;
+
+revoke all on function public.read_logistics_company_payment_settings(uuid) from public,anon;
+revoke all on function public.update_logistics_company_payment_settings(uuid,text) from public,anon;
+revoke all on function public.record_logistics_driver_payment(uuid,numeric,text,text,text) from public,anon;
+revoke all on function public.read_logistics_company_driver_payments(uuid) from public,anon;
+grant execute on function public.read_logistics_company_payment_settings(uuid) to authenticated,service_role;
+grant execute on function public.update_logistics_company_payment_settings(uuid,text) to authenticated,service_role;
+grant execute on function public.record_logistics_driver_payment(uuid,numeric,text,text,text) to authenticated,service_role;
+grant execute on function public.read_logistics_company_driver_payments(uuid) to authenticated,service_role;
+
 notify pgrst,'reload schema';
 commit;
