@@ -33,8 +33,10 @@ as $$
         and (
           (
             wallet.wallet_type = 'platform_revenue'
+            and wallet.owner_entity_type = 'platform'
             and (
-              public.has_permission('platform.revenue.read', null)
+              public.is_platform_super_admin()
+              or public.has_permission('platform.revenue.read', null)
               or public.has_permission('platform.revenue.manage', null)
             )
           )
@@ -156,7 +158,7 @@ begin
   if auth.uid() is null or not public.can_manage_logistics_company(target_organization_id) then
     raise exception using errcode = '42501', message = 'company payment settings update is restricted to company owners';
   end if;
-  if target_default_driver_payment_method not in ('skima_wallet','offline') then
+  if target_default_driver_payment_method is null or target_default_driver_payment_method not in ('skima_wallet','offline') then
     raise exception 'driver payment method must be skima_wallet or offline';
   end if;
 
@@ -236,6 +238,7 @@ declare
 begin
   if actor is null then raise exception 'authentication is required'; end if;
   if target_booking_id is null or target_amount is null or target_amount <= 0
+    or target_payment_method is null
     or target_payment_method not in ('skima_wallet','offline')
     or target_idempotency_key is null
     or char_length(btrim(target_idempotency_key)) not between 8 and 180 then
