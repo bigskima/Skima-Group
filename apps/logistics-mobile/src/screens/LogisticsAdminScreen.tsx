@@ -39,6 +39,11 @@ export function LogisticsAdminScreen() {
 
   const providers = useLogisticsQuery(["admin-providers"], "/runtime/logistics/company", canManage, 30_000);
   const categories = useLogisticsQuery(["admin-categories"], "/runtime/logistics/categories", canManage, 30_000);
+  const disputes = useLogisticsQuery(["admin-disputes"], "/runtime/logistics/bookings/disputes", canManage, 15_000);
+  const canResolveFinance =
+    context?.permissions.some((permission) =>
+      ["platform.escrow.execute", "platform.settlement.execute"].includes(String(permission)),
+    ) === true;
 
   const [reason, setReason] = useState("");
   const [categoryKey, setCategoryKey] = useState("");
@@ -46,14 +51,17 @@ export function LogisticsAdminScreen() {
   const [categoryDescription, setCategoryDescription] = useState("");
   const [parentKey, setParentKey] = useState("");
   const [sortOrder, setSortOrder] = useState("100");
+  const [resolutionNote, setResolutionNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const providerRows = useMemo(() => providers.data ?? [], [providers.data]);
   const categoryRows = useMemo(() => categories.data ?? [], [categories.data]);
+  const disputeRows = useMemo(() => (disputes.data ?? []) as Row[], [disputes.data]);
+  const activeDisputes = disputeRows.filter((item) => ["open", "under_review", "escalated"].includes(asString(item, "status") ?? ""));
   const pendingProviders = providerRows.filter((item) => asString(item, "verification_status") === "pending");
   const verifiedProviders = providerRows.filter((item) => asString(item, "verification_status") === "verified");
-  const refresh = () => Promise.all([providers.refetch(), categories.refetch()]);
+  const refresh = () => Promise.all([providers.refetch(), categories.refetch(), disputes.refetch()]);
 
   const verifyProvider = useMutation({
     mutationFn: async (input: { organizationId: string; decision: "verified" | "rejected" | "suspended" }) => {
@@ -134,15 +142,51 @@ export function LogisticsAdminScreen() {
     },
   });
 
-  const isWorking = verifyProvider.isPending || setProviderStatus.isPending || saveCategory.isPending;
-  const isLoading = canManage && (providers.isPending || categories.isPending);
+  const resolveDispute = useMutation({
+    mutationFn: async (input: { disputeId: string; decision: string }) => {
+      if (resolutionNote.trim().length < 5) {
+        throw new Error("Enter a clear resolution note of at least five characters.");
+      }
+      return api.post("/runtime/logistics/bookings/disputes/resolve", {
+        disputeId: input.disputeId,
+        decision: input.decision,
+        resolutionNote: resolutionNote.trim(),
+        idempotencyKey: createClientIdempotencyKey(
+          "logistics.admin.dispute.resolve",
+          input.disputeId + ":" + input.decision + ":" + resolutionNote.trim(),
+        ),
+      }, z.record(z.string(), z.unknown()));
+    },
+    onSuccess: async (_result, input) => {
+      setResolutionNote("");
+      setError(null);
+      setNotice(
+        input.decision === "refund_customer"
+          ? "The full eligible escrow refund was posted to the original customer wallet."
+          : input.decision === "offline_finance_review"
+            ? "The offline payment dispute has been escalated for manual finance review. No automatic refund was posted."
+            : input.decision === "close_offline_finance_review"
+              ? "The offline finance review has been closed and its recorded booking state restored."
+              : "The dispute decision was recorded.",
+      );
+      await client.invalidateQueries({ queryKey: ["skima-logistics", "admin-disputes"] });
+      await disputes.refetch();
+    },
+    onError: (cause) => {
+      setNotice(null);
+      setError(cause instanceof Error ? cause.message : "The dispute decision could not be recorded.");
+    },
+  });
+
+  const isWorking = verifyProvider.isPending || setProviderStatus.isPending || saveCategory.isPending || resolveDispute.isPending;
+  const isLoading = canManage && (providers.isPending || categories.isPending || disputes.isPending);
 
   return (
     <Screen
       eyebrow="LOGISTICS GOVERNANCE"
       title="SKIMA Logistics Admin"
       subtitle="Review provider companies, control operational eligibility and maintain the Logistics service catalogue."
-      refreshControl={<RefreshControl refreshing={providers.isRefetching || categories.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}
+      refreshControl={<RefreshControl refreshing={providers.isRefetching || categories.isRefetching || disputes.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}
     >
       {!canManage ? (
         <Card variant="warning" padding="lg">
@@ -279,6 +323,162 @@ export function LogisticsAdminScreen() {
           </View>
 
           <View style={styles.section}>
+            <SectionHeader
+              title="Customer disputes & refund review"
+              description={String(activeDisputes.length) + " active cases · online escrow refunds require platform finance authority."}
+            />
+            <AppField
+              label="Resolution note"
+              value={resolutionNote}
+              onChangeText={setResolutionNote}
+              placeholder="Record the evidence reviewed and why this decision is appropriate."
+              multiline
+            />
+            {!canResolveFinance ? (
+              <Card variant="warning" padding="md">
+                <Text style={[styles.body, { color: palette.ink }]}>
+                  You can review Logistics disputes, but resolution actions require the existing platform escrow or settlement execution permission.
+                </Text>
+              </Card>
+            ) : null}
+            {disputes.error ? (
+              <StatePanel title="Dispute queue unavailable" description="The platform could not load the Logistics dispute register." retry={() => void disputes.refetch()} />
+            ) : activeDisputes.length === 0 ? (
+              <Card variant="subtle" padding="md">
+                <Text style={[styles.body, { color: palette.muted }]}>There are no open Logistics customer disputes.</Text>
+              </Card>
+            ) : activeDisputes.map((dispute) => {
+              const disputeId = asString(dispute, "id") ?? "";
+              const disputeStatus = asString(dispute, "status") ?? "open";
+              const bookingStatus = asString(dispute, "booking_status_before_dispute") ?? "";
+              const paymentMode = asString(nested(dispute, "metadata"), "payment_mode") ?? "unknown";
+              const isOffline = paymentMode === "offline";
+              const isEscalated = disputeStatus === "escalated";
+              const canResolveThis = canResolveFinance && resolutionNote.trim().length >= 5 && !resolveDispute.isPending;
+              return (
+                <Card key={disputeId} variant={isEscalated ? "warning" : "default"} padding="lg">
+                  <View style={styles.providerHead}>
+                    <View style={[styles.icon, { backgroundColor: palette.warningSoft }]}><ShieldCheck color={palette.warning} size={19} /></View>
+                    <View style={styles.copy}>
+                      <Text style={[styles.cardTitle, { color: palette.ink }]}>Booking {asString(dispute, "booking_id")?.slice(0, 8).toUpperCase() ?? "—"}</Text>
+                      <Text style={[styles.meta, { color: palette.muted }]}>{(asString(dispute, "reason") ?? "other").replace(/_/g, " ")} · {paymentMode.replace(/_/g, " ")}</Text>
+                      <Text style={[styles.meta, { color: palette.muted }]}>Opened {dateLabel(dispute.created_at)} · Before dispute: {bookingStatus.replace(/_/g, " ")}</Text>
+                    </View>
+                    <StatusPill status={disputeStatus} />
+                  </View>
+                  <Text style={[styles.body, { color: palette.ink }]}>{asString(dispute, "details") ?? "No details supplied."}</Text>
+                  {asString(dispute, "resolution_note") ? (
+                    <Text style={[styles.meta, { color: palette.muted }]}>Previous review: {asString(dispute, "resolution_note")}</Text>
+                  ) : null}
+                  {isOffline ? (
+                    <Text style={[styles.meta, { color: palette.warning }]}>
+                      Offline payment: no wallet escrow is available for an automatic refund. Record a finance review; the actual off-platform payment must be verified separately.
+                    </Text>
+                  ) : (
+                    <Text style={[styles.meta, { color: palette.muted }]}>
+                      Online payment: refund is permitted only when the original escrow is fully held and none of it has already been released.
+                    </Text>
+                  )}
+                  {canResolveFinance ? (
+                    <View style={styles.disputeActions}>
+                      {isOffline && !isEscalated ? (
+                        <AppButton
+                          label="Send to finance review"
+                          size="sm"
+                          fullWidth
+                          variant="secondary"
+                          disabled={!canResolveThis}
+                          loading={resolveDispute.isPending && resolveDispute.variables?.disputeId === disputeId}
+                          onPress={() => Alert.alert(
+                            "Escalate offline dispute?",
+                            "This records a manual finance review. It does not claim that money has been refunded.",
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              { text: "Escalate", onPress: () => resolveDispute.mutate({ disputeId, decision: "offline_finance_review" }) },
+                            ],
+                          )}
+                        />
+                      ) : null}
+                      {isOffline && isEscalated ? (
+                        <AppButton
+                          label="Close finance review"
+                          size="sm"
+                          fullWidth
+                          variant="secondary"
+                          disabled={!canResolveThis}
+                          loading={resolveDispute.isPending && resolveDispute.variables?.disputeId === disputeId}
+                          onPress={() => Alert.alert(
+                            "Close this finance review?",
+                            "This closes the dispute record and restores its prior workflow status. It does not post a payment or refund.",
+                            [
+                              { text: "Keep open", style: "cancel" },
+                              { text: "Close review", onPress: () => resolveDispute.mutate({ disputeId, decision: "close_offline_finance_review" }) },
+                            ],
+                          )}
+                        />
+                      ) : null}
+                      {!isOffline ? (
+                        <AppButton
+                          label="Refund full escrow"
+                          size="sm"
+                          fullWidth
+                          variant="secondary"
+                          disabled={!canResolveThis}
+                          loading={resolveDispute.isPending && resolveDispute.variables?.disputeId === disputeId}
+                          onPress={() => Alert.alert(
+                            "Refund this customer?",
+                            "This attempts a full refund from the original fully held Logistics escrow to the customer's original wallet. Partially released escrow cannot use this full-refund path.",
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              { text: "Refund full escrow", style: "destructive", onPress: () => resolveDispute.mutate({ disputeId, decision: "refund_customer" }) },
+                            ],
+                          )}
+                        />
+                      ) : null}
+                      {!isOffline && bookingStatus === "delivered" ? (
+                        <AppButton
+                          label="Allow customer confirmation"
+                          size="sm"
+                          fullWidth
+                          variant="secondary"
+                          disabled={!canResolveThis}
+                          loading={resolveDispute.isPending && resolveDispute.variables?.disputeId === disputeId}
+                          onPress={() => Alert.alert(
+                            "Allow delivery confirmation?",
+                            "This restores the delivered state and returns eligible escrow to held. The customer must still confirm receipt before settlement.",
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              { text: "Allow confirmation", onPress: () => resolveDispute.mutate({ disputeId, decision: "allow_delivery_confirmation" }) },
+                            ],
+                          )}
+                        />
+                      ) : null}
+                      {!isOffline && bookingStatus === "delivery_exception" ? (
+                        <AppButton
+                          label="Resume delivery"
+                          size="sm"
+                          fullWidth
+                          variant="secondary"
+                          disabled={!canResolveThis}
+                          loading={resolveDispute.isPending && resolveDispute.variables?.disputeId === disputeId}
+                          onPress={() => Alert.alert(
+                            "Resume delivery?",
+                            "The server will verify the cargo custody state and original delivery incident before resuming the booking.",
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              { text: "Resume delivery", onPress: () => resolveDispute.mutate({ disputeId, decision: "resume_delivery" }) },
+                            ],
+                          )}
+                        />
+                      ) : null}
+                    </View>
+                  ) : null}
+                </Card>
+              );
+            })}
+          </View>
+
+          <View style={styles.section}>
             <SectionHeader title="Service category catalogue" description="Active categories appear to customers and provider companies." />
             <Card padding="lg">
               <AppField
@@ -391,6 +591,7 @@ const styles = StyleSheet.create({
   icon: { width: 39, height: 39, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   copy: { flex: 1, minWidth: 0, gap: 2 },
   actions: { flexDirection: "row", gap: 8 },
+  disputeActions: { gap: 8 },
   actionCell: { flex: 1 },
   categoryRow: { minHeight: 66, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 10, flexDirection: "row", alignItems: "center", gap: 8 },
   iconSmall: { width: 33, height: 33, borderRadius: 11, alignItems: "center", justifyContent: "center" },
