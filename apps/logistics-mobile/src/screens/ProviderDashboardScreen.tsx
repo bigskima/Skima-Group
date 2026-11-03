@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { ArrowRight, BriefcaseBusiness, Building2, ShieldCheck, Truck, WalletCards } from "lucide-react-native";
+import { ArrowRight, Bell, BriefcaseBusiness, Building2, ShieldCheck, Truck, WalletCards } from "lucide-react-native";
 import { useMemo, type ReactNode } from "react";
 import { Pressable, RefreshControl, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { asString, useLogisticsQuery } from "../api/logistics";
@@ -44,7 +44,7 @@ export function ProviderDashboardScreen() {
   const refresh = () => Promise.all([companies.refetch(), opportunities.refetch(), jobs.refetch()]);
   return (
     <Screen denseHeader title={`Good day, ${ownerName}`}
-      action={<View style={styles.headerActions}><BrandMark /><Pressable accessibilityRole="button" accessibilityLabel="Open notifications" onPress={() => router.push("/(provider)/notifications" as never)} style={[styles.notification, { backgroundColor: palette.surface, borderColor: palette.border }]}><ShieldCheck color={palette.ink} size={18} /></Pressable></View>}
+      action={<View style={styles.headerActions}><BrandMark /><Pressable accessibilityRole="button" accessibilityLabel="Open notifications" onPress={() => router.push("/(provider)/work" as never)} style={[styles.notification, { backgroundColor: palette.surface, borderColor: palette.border }]}><Bell color={palette.ink} size={18} /></Pressable></View>}
       refreshControl={<RefreshControl refreshing={companies.isRefetching || opportunities.isRefetching || jobs.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}>
       {companies.isPending ? <ScreenSkeleton cards={2} /> : companies.error ? (
         <StatePanel title="Company profile unavailable" description="We could not load your company workspace." retry={() => void companies.refetch()} />
