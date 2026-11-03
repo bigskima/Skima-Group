@@ -7,6 +7,7 @@ export type AdminWorkspaceKey =
   | "money"
   | "services"
   | "store"
+  | "logistics"
   | "intelligence"
   | "experience"
   | "platform";
@@ -42,6 +43,7 @@ const screenRoutes: Readonly<Record<string, string>> = {
   billing: "/services/utility-billing",
   catalog: "/services/catalog",
   store: "/store",
+  logistics: "/logistics",
   fuel: "/services/fuel",
   ai: "/intelligence/ask",
   content: "/experience/content",
@@ -102,6 +104,14 @@ export const adminWorkspaceDefinitions: readonly AdminWorkspaceDefinition[] = [
     basePath: "/store",
     icon: "store",
     screenKeys: ["store"],
+  },
+  {
+    key: "logistics",
+    label: "Logistics",
+    description: "Run the nationwide logistics marketplace: providers, jobs, bookings, incidents and customer disputes.",
+    basePath: "/logistics",
+    icon: "logistics",
+    screenKeys: ["logistics"],
   },
   {
     key: "intelligence",
@@ -216,6 +226,15 @@ const storeScreenLabels: Readonly<Record<string, string>> = {
   "/store": "SKIMA Store",
 };
 
+const logisticsScreenLabels: Readonly<Record<string, string>> = {
+  "/logistics": "Logistics overview",
+  "/logistics/providers": "Provider companies",
+  "/logistics/categories": "Service categories",
+  "/logistics/bookings": "Bookings & dispatch",
+  "/logistics/incidents": "Incidents & cargo recovery",
+  "/logistics/disputes": "Customer disputes",
+};
+
 const intelligenceScreenLabels: Readonly<Record<string, string>> = {
   "/intelligence": "SKIMA Intelligence overview",
   "/intelligence/ask": "SKIMA Intelligence",
@@ -258,6 +277,7 @@ export function buildAdminCategoryNavigation(items: readonly NavigationItem[]): 
       "operations",
       "services",
       "store",
+      "logistics",
       "intelligence",
       "experience",
       "platform",
@@ -276,6 +296,7 @@ export function getAdminWorkspaceNavigation(
   workspaceKey: AdminWorkspaceKey,
   items: readonly NavigationItem[],
 ): readonly NavigationItem[] {
+  if (workspaceKey === "logistics") return buildLogisticsWorkspaceNavigation(items);
   if (workspaceKey === "money") return buildMoneyWorkspaceNavigation(items);
   if (workspaceKey === "partners") return buildPartnersWorkspaceNavigation(items);
   if (workspaceKey === "operations") return buildOperationsWorkspaceNavigation(items);
@@ -305,6 +326,7 @@ export function getAdminScreenLabel(route: string, items: readonly NavigationIte
   if (partnerScreenLabels[path]) return partnerScreenLabels[path];
   if (operationsScreenLabels[path]) return operationsScreenLabels[path];
   if (servicesScreenLabels[path]) return servicesScreenLabels[path];
+  if (logisticsScreenLabels[path]) return logisticsScreenLabels[path];
   if (intelligenceScreenLabels[path]) return intelligenceScreenLabels[path];
   if (experienceScreenLabels[path]) return experienceScreenLabels[path];
   if (platformScreenLabels[path]) return platformScreenLabels[path];
@@ -354,6 +376,19 @@ export function normalizePath(rawPath: string): string {
   const withLeadingSlash = withoutQuery.startsWith("/") ? withoutQuery : `/${withoutQuery}`;
   const normalized = withLeadingSlash.replace(/\/{2,}/g, "/").replace(/\/+$/, "");
   return normalized || "/";
+}
+
+function buildLogisticsWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
+  const root = items.find((item) => item.key === "logistics");
+  if (!root) return [];
+  return [
+    { ...root, key: "logistics-overview", label: "Overview", href: "/logistics" },
+    { ...root, key: "logistics-providers", label: "Providers", href: "/logistics/providers" },
+    { ...root, key: "logistics-bookings", label: "Bookings & dispatch", href: "/logistics/bookings" },
+    { ...root, key: "logistics-incidents", label: "Incidents & recovery", href: "/logistics/incidents" },
+    { ...root, key: "logistics-disputes", label: "Customer disputes", href: "/logistics/disputes" },
+    { ...root, key: "logistics-categories", label: "Service categories", href: "/logistics/categories" },
+  ];
 }
 
 function buildMoneyWorkspaceNavigation(items: readonly NavigationItem[]): readonly NavigationItem[] {
