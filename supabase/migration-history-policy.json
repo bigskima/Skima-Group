@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "remoteHeadVersion": "20261103131611",
+  "remoteHeadVersion": "20261103144006",
   "requiredRestoredMigration": "20260820013807_harden_document_correction_review_flow.sql",
   "pendingPermissionMigration": null,
   "staleAliases": {
@@ -31,7 +31,19 @@
     "20260821103100_lpg_revenue_station_pricing_repair.sql": "20260821093119_revenue_station_pricing_repair.sql",
     "20260821104200_tighten_revenue_station_pricing_security.sql": "20260821093652_tighten_revenue_station_pricing_security.sql",
     "20260906043000_awka_south_lpg_pilot_coverage.sql": "20260906034845_awka_south_lpg_pilot_coverage.sql",
-    "20260906050000_station_location_management.sql": "20260906053855_station_location_management.sql"
+    "20260906050000_station_location_management.sql": "20260906053855_station_location_management.sql",
+    "20261102110000_logistics_marketplace_domain_foundation.sql": "20261103143731_logistics_marketplace_domain_foundation.sql",
+    "20261102111500_logistics_marketplace_tenant_and_matching_hardening.sql": "20261103143833_logistics_marketplace_tenant_and_matching_hardening.sql",
+    "20261102113000_logistics_booking_and_payment_modes.sql": "20261103143845_logistics_booking_and_payment_modes.sql",
+    "20261102114500_logistics_booking_fulfillment_and_settlement.sql": "20261103143849_logistics_booking_fulfillment_and_settlement.sql",
+    "20261102115000_logistics_provider_wallet_funding.sql": "20261103143852_logistics_provider_wallet_funding.sql",
+    "20261102120000_logistics_company_driver_fulfillment.sql": "20261103143906_logistics_company_driver_fulfillment.sql",
+    "20261102130000_logistics_customer_prebooking_cancellation.sql": "20261103143909_logistics_customer_prebooking_cancellation.sql",
+    "20261102140000_logistics_driver_location_tracking.sql": "20261103143913_logistics_driver_location_tracking.sql",
+    "20261103131700_logistics_driver_prestart_release.sql": "20261103143942_logistics_driver_prestart_release.sql",
+    "20261103131800_logistics_safe_replacement_handoff.sql": "20261103143948_logistics_safe_replacement_handoff.sql",
+    "20261103131900_logistics_incident_and_dispute_protection.sql": "20261103143956_logistics_incident_and_dispute_protection.sql",
+    "20261103132000_logistics_cargo_recovery_dispatch.sql": "20261103144006_logistics_cargo_recovery_dispatch.sql"
   },
   "businessModuleMigrations": [
     "20260810010000_phase_two_experience_runtime.sql",
@@ -122,22 +134,22 @@
     "20261102013000_fuel_driver_workflow_fees_and_mode_controls.sql",
     "20261102014500_lpg_single_customer_otp_handover.sql",
     "20261102112220_skima_store_foundation.sql",
-    "20261102110000_logistics_marketplace_domain_foundation.sql",
-    "20261102111500_logistics_marketplace_tenant_and_matching_hardening.sql",
-    "20261102113000_logistics_booking_and_payment_modes.sql",
-    "20261102114500_logistics_booking_fulfillment_and_settlement.sql",
-    "20261102115000_logistics_provider_wallet_funding.sql",
-    "20261102120000_logistics_company_driver_fulfillment.sql",
+    "20261103143731_logistics_marketplace_domain_foundation.sql",
+    "20261103143833_logistics_marketplace_tenant_and_matching_hardening.sql",
+    "20261103143845_logistics_booking_and_payment_modes.sql",
+    "20261103143849_logistics_booking_fulfillment_and_settlement.sql",
+    "20261103143852_logistics_provider_wallet_funding.sql",
+    "20261103143906_logistics_company_driver_fulfillment.sql",
     "20261103131401_skima_store_checkout_delivery.sql",
-    "20261102130000_logistics_customer_prebooking_cancellation.sql",
-    "20261102140000_logistics_driver_location_tracking.sql",
+    "20261103143909_logistics_customer_prebooking_cancellation.sql",
+    "20261103143913_logistics_driver_location_tracking.sql",
     "20261102210712_fuel_easy_fulfillment_mode_aware_runtime.sql",
     "20261102210720_fuel_auto_progression_verified_delivery_completion.sql",
     "20261102210817_fuel_verified_settlement_platform_wallet_gate.sql",
     "20261102211004_fuel_internal_helper_rpc_acl.sql",
-    "20261103131700_logistics_driver_prestart_release.sql",
-    "20261103131800_logistics_safe_replacement_handoff.sql",
-    "20261103131900_logistics_incident_and_dispute_protection.sql",
-    "20261103132000_logistics_cargo_recovery_dispatch.sql"
+    "20261103143942_logistics_driver_prestart_release.sql",
+    "20261103143948_logistics_safe_replacement_handoff.sql",
+    "20261103143956_logistics_incident_and_dispute_protection.sql",
+    "20261103144006_logistics_cargo_recovery_dispatch.sql"
   ]
 }

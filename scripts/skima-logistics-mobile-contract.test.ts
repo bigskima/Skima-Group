@@ -38,7 +38,7 @@ const providerBookingDetail = await Deno.readTextFile("apps/logistics-mobile/src
 const providerRoutes = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/_layout.tsx");
 const providerWorkRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/work/[id].tsx");
 const providerJobRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/work.tsx");
-const bookingFulfillmentMigration = await Deno.readTextFile("supabase/migrations/20261102114500_logistics_booking_fulfillment_and_settlement.sql");
+const bookingFulfillmentMigration = await Deno.readTextFile("supabase/migrations/20261103143849_logistics_booking_fulfillment_and_settlement.sql");
 const logisticsRuntime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 
 function requireText(source: string, fragment: string, label: string): void {
