@@ -15,6 +15,7 @@ import { SectionHeader } from "./SectionHeader";
 import { StatusPill } from "./StatusPill";
 
 type Row = Record<string, unknown>;
+type RegistrationStatus = "registered" | "in_progress" | "not_registered";
 const IdSchema = z.string().uuid();
 const UploadSessionSchema = z.object({
   signedUrl: z.string().url(),
@@ -31,10 +32,12 @@ export function LogisticsCompanyApplicationPanel({
   organizationId,
   displayName,
   legalName,
+  registrationStatus: initialRegistrationStatus,
 }: {
   organizationId: string;
   displayName: string;
   legalName: string | null;
+  registrationStatus: RegistrationStatus;
 }) {
   const { palette } = useAppTheme();
   const { api, session } = useSession();
@@ -44,6 +47,7 @@ export function LogisticsCompanyApplicationPanel({
   const requirements = useLogisticsQuery(["document-requirements"], "/runtime/documents/requirements", true, 120_000);
   const documents = useLogisticsQuery(["documents"], "/runtime/documents", true, 30_000);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const [registrationStatus, setRegistrationStatus] = useState<RegistrationStatus>(initialRegistrationStatus);
   const [error, setError] = useState<string | null>(null);
   const applicationType = types.data?.find((item) => asString(item, "key") === "application.logistics.company") ?? null;
   const applicationTypeId = asString(applicationType, "id");
@@ -71,8 +75,8 @@ export function LogisticsCompanyApplicationPanel({
           organizationId,
           displayName,
           legalName,
-          registrationStatus: legalName ? "provided" : "not_registered_or_not_provided",
-          registrationEvidenceOptional: true,
+          registrationStatus,
+          registrationEvidenceOptional: registrationStatus !== "registered",
         },
         application: {
           productModule: "logistics_network",
@@ -83,6 +87,7 @@ export function LogisticsCompanyApplicationPanel({
         productModule: "logistics_network",
         organizationId,
         platformReviewRequired: true,
+        registrationStatus,
       },
     }, IdSchema),
     onSuccess: async () => {
@@ -190,8 +195,19 @@ export function LogisticsCompanyApplicationPanel({
         <Card padding="lg">
           <Text style={[styles.heading, { color: palette.ink }]}>Start company application</Text>
           <Text style={[styles.copy, { color: palette.muted }]}>
-            You can apply even when the company is not CAC-registered. Registration evidence is optional; SKIMA will review the company and make the final approval decision.
+            You can apply when your company is not CAC-registered. Registration evidence is optional; SKIMA will review the company and make the final approval decision.
           </Text>
+          <Text style={[styles.registrationLabel, { color: palette.ink }]}>Company registration status</Text>
+          <View style={styles.registrationChoices}>
+            {([
+              ["registered", "Registered"],
+              ["in_progress", "In progress"],
+              ["not_registered", "Not registered"],
+            ] as const).map(([value, label]) => (
+              <AppButton key={value} size="sm" variant={registrationStatus === value ? "primary" : "secondary"}
+                label={label} onPress={() => setRegistrationStatus(value)} disabled={busy} />
+            ))}
+          </View>
           <AppButton label="Start company application" fullWidth loading={createApplication.isPending}
             disabled={busy || !organizationId} onPress={() => { setError(null); createApplication.mutate(); }} />
         </Card>
@@ -203,7 +219,10 @@ export function LogisticsCompanyApplicationPanel({
                 <Text style={[styles.heading, { color: palette.ink }]}>Application evidence</Text>
                 <Text style={[styles.copy, { color: palette.muted }]}>Application {applicationId?.slice(0, 8).toUpperCase()}</Text>
               </View>
-              <StatusPill status={asString(application, "status") ?? "draft"} />
+              <View style={styles.applicationBadges}>
+                <StatusPill status={asString(application, "status") ?? "draft"} />
+                <StatusPill status={registrationStatus} />
+              </View>
             </View>
             <Text style={[styles.copy, { color: palette.muted }]}>
               Registration proof is optional. You may leave it empty and continue operating as an unregistered applicant while SKIMA reviews your company identity and operating information.
@@ -253,6 +272,9 @@ const styles = StyleSheet.create({
   documentTitle: { ...typography.bodyStrong, fontSize: 12 },
   copy: { ...typography.caption, fontSize: 10, lineHeight: 15 },
   documentStatus: { ...typography.caption, fontSize: 9, fontWeight: "700" },
+  registrationLabel: { ...typography.caption, fontSize: 10, fontWeight: "900", marginTop: spacing.sm },
+  registrationChoices: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  applicationBadges: { alignItems: "flex-end", gap: 5 },
   statusRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   statusCopy: { flex: 1, minWidth: 0, gap: 4 },
   error: { ...typography.caption, fontSize: 10, lineHeight: 15 },
