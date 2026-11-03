@@ -43,7 +43,12 @@ as $$
           or (
             wallet.wallet_type = 'logistics_earnings'
             and wallet.owner_entity_type = 'organization'
-            and public.can_manage_logistics_company(wallet.owner_entity_id)
+            and (
+              public.can_manage_logistics_company(wallet.owner_entity_id)
+              or public.is_platform_super_admin()
+              or public.has_permission('platform.wallets.manage', null)
+              or public.has_permission('platform.financial.manage', null)
+            )
           )
           or (
             wallet.wallet_type not in ('platform_revenue','logistics_earnings')
@@ -105,6 +110,53 @@ begin
   execute function_sql;
 end;
 $settlement_wallet_patch$;
+
+-- ensure_wallet_account validates supported wallet types independently of the
+-- wallet_accounts table constraint. Permit this one internal wallet role while
+-- retaining its existing service-role/platform-wallet-manager creation guard.
+do $logistics_earnings_wallet_type_patch$
+declare
+  function_sql text;
+  old_types text := $old_types$
+    'customer',
+    'driver',
+    'partner',
+    'platform',
+    'escrow',
+    'commission',
+    'refund',
+    'bonus',
+    'loyalty',
+    'generic'
+  ) then
+    raise exception 'target_wallet_type is not supported';
+  $old_types$;
+  new_types text := $new_types$
+    'customer',
+    'driver',
+    'partner',
+    'platform',
+    'escrow',
+    'commission',
+    'refund',
+    'bonus',
+    'loyalty',
+    'generic',
+    'logistics_earnings'
+  ) then
+    raise exception 'target_wallet_type is not supported';
+  $new_types$;
+begin
+  function_sql := pg_get_functiondef(
+    'public.ensure_wallet_account(text,text,uuid,text,text,jsonb,text)'::regprocedure
+  );
+  if position(old_types in function_sql) = 0 then
+    raise exception 'ensure_wallet_account supported-type guard changed; refusing an unsafe patch';
+  end if;
+  function_sql := replace(function_sql, old_types, new_types);
+  execute function_sql;
+end;
+$logistics_earnings_wallet_type_patch$;
 
 create table if not exists public.logistics_company_payment_settings (
   organization_id uuid primary key references public.organizations(id) on delete cascade,
