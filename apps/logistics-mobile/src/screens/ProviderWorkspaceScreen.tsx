@@ -1,6 +1,7 @@
 import { router } from "expo-router";
-import { BriefcaseBusiness, Building2, ChevronRight, Settings2, ShieldCheck, Truck, UsersRound } from "lucide-react-native";
+import { Building2, ChevronRight, Settings2, Truck, UsersRound } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import type { ReactNode } from "react";
 import { asString, useLogisticsRecordQuery, useLogisticsQuery } from "../api/logistics";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -103,7 +104,7 @@ export function ProviderWorkspaceScreen() {
 function WorkspaceCard({ title, description, icon, onPress, desktop, disabled = false }: {
   title: string;
   description: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   onPress: () => void;
   desktop: boolean;
   disabled?: boolean;
