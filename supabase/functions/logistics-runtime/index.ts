@@ -187,18 +187,45 @@ async function handleLogisticsRequest(
   }
 
   if (routePath === "/runtime/logistics/geographies" && request.method === "GET") {
-    let query = supabase.from("geographies")
-      .select("id,parent_id,canonical_name,country_code,geography_level_id,aliases,status")
-      .eq("status", "active")
-      .order("canonical_name", { ascending: true })
-      .limit(50);
     const search = optionalString(url.searchParams.get("search"));
     const countryCode = optionalString(url.searchParams.get("countryCode"));
     const parentId = optionalUuid(url.searchParams.get("parentId"), "parentId");
-    if (search) query = query.ilike("canonical_name", `%${search}%`);
-    if (countryCode) query = query.eq("country_code", countryCode.toUpperCase());
-    if (parentId) query = query.eq("parent_id", parentId);
-    return selectResponse(query, id);
+    const baseQuery = () => {
+      let query = supabase.from("geographies")
+        .select("id,parent_id,canonical_name,country_code,geography_level_id,aliases,status")
+        .eq("status", "active")
+        .order("canonical_name", { ascending: true })
+        .limit(50);
+      if (countryCode) query = query.eq("country_code", countryCode.toUpperCase());
+      if (parentId) query = query.eq("parent_id", parentId);
+      return query;
+    };
+
+    if (!search) {
+      return selectResponse(baseQuery(), id);
+    }
+
+    // Search the canonical name and the configured aliases independently.
+    // Alias matching stays database-side so callers do not need to download
+    // the full national geography catalogue to resolve names such as "Anambra".
+    const [nameResult, aliasResult] = await Promise.all([
+      baseQuery().ilike("canonical_name", `%${search}%`),
+      baseQuery().contains("aliases", [search]),
+    ]);
+    if (nameResult.error) return databaseError(nameResult.error, id);
+    if (aliasResult.error) return databaseError(aliasResult.error, id);
+
+    const unique = new Map<string, Record<string, unknown>>();
+    for (const row of [...(nameResult.data ?? []), ...(aliasResult.data ?? [])]) {
+      if (row && typeof row.id === "string") unique.set(row.id, row as Record<string, unknown>);
+    }
+    return jsonResponse({
+      ok: true,
+      data: [...unique.values()].sort((left, right) =>
+        String(left.canonical_name ?? "").localeCompare(String(right.canonical_name ?? ""))
+      ),
+      requestId: id,
+    });
   }
 
   if (routePath === "/runtime/logistics/company/wallet/fund" && request.method === "POST") {
