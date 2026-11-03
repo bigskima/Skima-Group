@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { router } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { ArrowLeft, Banknote, CheckCircle2, ChevronRight, ShieldCheck, WalletCards } from "lucide-react-native";
 import { z } from "zod";
-import { useLogisticsQuery, asString, asNumber, RecordArraySchema, RecordSchema } from "../api/logistics";
+import { useLogisticsQuery, asString, asNumber, RecordSchema } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
@@ -29,13 +29,17 @@ export function CompanyFinanceScreen() {
   const bookings = useLogisticsQuery(["finance-bookings", organizationId], `/runtime/logistics/bookings?providerOrganizationId=${encodeURIComponent(organizationId ?? "")}`, Boolean(organizationId), 30_000);
   const beneficiaries = useLogisticsQuery(["finance-beneficiaries"], "/runtime/withdrawal-beneficiaries", Boolean(organizationId), 30_000);
   const withdrawals = useLogisticsQuery(["finance-withdrawals"], "/runtime/withdrawals", Boolean(organizationId), 30_000);
-  const earningsWallet = (wallets.data ?? []).find((w) => asString(w,"wallet_type")==="logistics_earnings" && asString(w,"owner_entity_type")==="organization" && asString(w,"owner_entity_id")===organizationId && asString(w,"status")==="active") ?? null;
-  const operatingWallets = (wallets.data ?? []).filter((w) => asString(w,"wallet_type")==="partner" && asString(w,"owner_entity_type")==="organization" && asString(w,"owner_entity_id")===organizationId && asString(w,"status")==="active");
+  const earningsWallets = (wallets.data ?? []).filter((w) => asString(w,"wallet_type")==="logistics_earnings" && asString(w,"owner_entity_type")==="organization" && asString(w,"owner_entity_id")===organizationId && asString(w,"status")==="active");
+  const [currency,setCurrency]=useState("NGN");
+  const availableCurrencies = [...new Set(earningsWallets.map((wallet)=>asString(wallet,"currency_code")).filter((value):value is string=>Boolean(value)))];
+  useEffect(()=>{ if(availableCurrencies.length && !availableCurrencies.includes(currency)) setCurrency(availableCurrencies[0]); },[availableCurrencies.join("|"),currency]);
+  const earningsWallet = earningsWallets.find((wallet)=>asString(wallet,"currency_code")===currency) ?? null;
+  const operatingWallets = (wallets.data ?? []).filter((w) => asString(w,"wallet_type")==="partner" && asString(w,"owner_entity_type")==="organization" && asString(w,"owner_entity_id")===organizationId && asString(w,"status")==="active" && asString(w,"currency_code")===currency);
   const walletBalance = (wallet: Record<string,unknown> | null) => wallet ? asNumber((balances.data??[]).find((b)=>asString(b,"wallet_id")===asString(wallet,"id")),"balance")??0 : 0;
   const earningsBalance = walletBalance(earningsWallet);
   const operatingBalance = operatingWallets.reduce((sum,w)=>sum+walletBalance(w),0);
-  const currency = asString(earningsWallet,"currency_code") ?? "NGN";
   const walletId = asString(earningsWallet,"id");
+  useEffect(()=>{ setBeneficiaryId(""); setPreview(null); setAmount(""); },[walletId]);
   const payoutBeneficiaries = (beneficiaries.data??[]).filter((item)=>asString(item,"wallet_id")===walletId && asString(item,"status")==="verified");
 
   const settings = useQuery({
@@ -160,6 +164,7 @@ export function CompanyFinanceScreen() {
     <Screen title="Company wallet" denseHeader>
       <Pressable onPress={()=>router.back()} style={styles.back}><ArrowLeft color={palette.ink} size={17}/><Text style={{color:palette.ink,fontWeight:"800",fontSize:11}}>Workspace</Text></Pressable>
       {settings.isError ? <StatePanel title="Finance access is restricted" description="Only the authorized company owner can manage payout settings and company earnings."/> : null}
+      {availableCurrencies.length>1?<View style={styles.currencyRow}>{availableCurrencies.map((code)=><Pressable key={code} onPress={()=>setCurrency(code)} style={[styles.currencyChip,{backgroundColor:currency===code?palette.brandSoft:palette.surface,borderColor:currency===code?palette.brand:palette.border}]}><Text style={{color:currency===code?palette.brand:palette.ink,fontSize:10,fontWeight:"900"}}>{code}</Text></Pressable>)}</View>:null}
       <View style={[styles.balanceCard,{backgroundColor:palette.surface,borderColor:palette.border}]}>
         <View style={styles.balanceHead}><View style={[styles.icon,{backgroundColor:palette.brandSoft}]}><WalletCards color={palette.brand} size={20}/></View><View style={{flex:1}}><Text style={[styles.label,{color:palette.muted}]}>LOGISTICS EARNINGS</Text><Text style={[styles.balance,{color:palette.ink}]}>{formatMoney(earningsBalance,currency)}</Text></View><ShieldCheck color={palette.success} size={19}/></View>
         <Text style={[styles.hint,{color:palette.muted}]}>Only customer-confirmed online Logistics settlements are withdrawable.</Text>
