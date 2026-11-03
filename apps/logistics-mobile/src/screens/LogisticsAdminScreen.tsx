@@ -42,7 +42,7 @@ export function LogisticsAdminScreen() {
   const disputes = useLogisticsQuery(["admin-disputes"], "/runtime/logistics/bookings/disputes", canManage, 15_000);
   const canResolveFinance =
     context?.permissions.some((permission) =>
-      ["platform.escrow.execute", "platform.settlement.execute"].includes(String(permission)),
+      String(permission) === "platform.escrow.execute",
     ) === true;
 
   const [reason, setReason] = useState("");
@@ -337,7 +337,7 @@ export function LogisticsAdminScreen() {
             {!canResolveFinance ? (
               <Card variant="warning" padding="md">
                 <Text style={[styles.body, { color: palette.ink }]}>
-                  You can review Logistics disputes, but resolution actions require the existing platform escrow or settlement execution permission.
+                  You can review Logistics disputes, but resolution actions require the existing platform escrow execution permission.
                 </Text>
               </Card>
             ) : null}
