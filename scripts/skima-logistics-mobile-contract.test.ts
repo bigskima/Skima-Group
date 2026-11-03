@@ -522,7 +522,7 @@ Deno.test("Logistics address search is Nigeria-scoped, detailed and supports man
   requireText(geography, '"/lpg/maps/autocomplete"', "server-side LocationIQ address autocomplete");
   requireText(geography, "/runtime/logistics/geographies?countryCode=NG&search=", "complete Nigeria geography hierarchy");
   requireText(geography, "address_components", "full address components retained");
-  requireText(geography, "coordinates:", "address coordinates retained");
+  requireText(geography, "location: location,", "address coordinates retained in the selected place payload");
   requireText(geography, "Use typed address instead", "manual entry is available alongside suggestions");
   requireText(geography, "manualBase", "manual address linked to nearest known geography");
   requireText(geography, "state_district", "LGA/district hierarchy matching");
