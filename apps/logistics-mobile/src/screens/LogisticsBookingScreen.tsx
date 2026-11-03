@@ -17,6 +17,12 @@ import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
 import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
+import { LogisticsPublicEntityImage } from "../ui/LogisticsPublicEntityImage";
+
+function nested(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
 
 export function LogisticsBookingScreen() {
   const { id: routeId } = useLocalSearchParams<{ id: string }>();
@@ -29,6 +35,16 @@ export function LogisticsBookingScreen() {
   const balancesQuery = useLogisticsQuery(["wallet-balances"], "/runtime/wallet-balances");
   const booking = (bookings.data ?? []).find((item) => asString(item, "id") === bookingId) ?? null;
   const status = asString(booking, "status") ?? "awaiting_payment";
+  const assignmentRows = Array.isArray(booking?.assignments)
+    ? booking.assignments.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+  const activeAssignment = [...assignmentRows].reverse().find((item) =>
+    ["offered", "accepted", "in_progress", "picked_up", "in_transit", "delivery_submitted"].includes(asString(item, "status") ?? "")
+  ) ?? null;
+  const assignedDriver = nested(activeAssignment, "driver");
+  const assignedVehicle = nested(activeAssignment, "vehicle");
+  const assignedDriverProfileId = asString(activeAssignment, "driver_profile_id");
+  const assignedVehicleId = asString(activeAssignment, "vehicle_id");
   const incidentsQuery = useLogisticsQuery(
     ["booking-incidents", bookingId ?? "none"],
     "/runtime/logistics/bookings/incidents?bookingId=" + encodeURIComponent(bookingId ?? ""),
@@ -210,6 +226,36 @@ export function LogisticsBookingScreen() {
             {paymentMode === "offline" ? <AmountLine label="Provider receival fee" value="Paid by the company" subtle /> : null}
             {paymentMode === "online_wallet" && (asNumber(booking, "provider_commission_amount") ?? 0) > 0 ? <AmountLine label="Provider commission" value="Deducted from provider proceeds" subtle /> : null}
           </Card>
+
+          {activeAssignment ? (
+            <Card padding="lg" gap={spacing.md}>
+              <SectionHeader title="Your assigned driver & vehicle" description="Check the driver and vehicle your company provider has assigned to this booking." />
+              <View style={styles.assignmentPerson}>
+                <LogisticsPublicEntityImage entityType="driver" entityId={assignedDriverProfileId}
+                  mediaRole="driver.photo.public" size={68} />
+                <View style={styles.assignmentCopy}>
+                  <Text style={[styles.assignmentLabel, { color: palette.muted }]}>YOUR DRIVER</Text>
+                  <Text style={[styles.assignmentTitle, { color: palette.ink }]}>{asString(assignedDriver, "driver_display_name") ?? asString(assignedDriver, "public_driver_id") ?? "Assigned driver"}</Text>
+                  <Text style={[styles.assignmentMeta, { color: palette.muted }]}>{asString(assignedDriver, "public_driver_id") ?? "SKIMA driver"}</Text>
+                  <StatusPill status={asString(activeAssignment, "status") ?? "offered"} />
+                </View>
+              </View>
+              <View style={styles.assignmentDivider} />
+              <View style={styles.assignmentPerson}>
+                <LogisticsPublicEntityImage entityType="logistics_vehicle" entityId={assignedVehicleId}
+                  mediaRole="logistics.vehicle.photo.public" size={68} />
+                <View style={styles.assignmentCopy}>
+                  <Text style={[styles.assignmentLabel, { color: palette.muted }]}>YOUR VEHICLE</Text>
+                  <Text style={[styles.assignmentTitle, { color: palette.ink }]}>
+                    {[asString(assignedVehicle, "manufacturer"), asString(assignedVehicle, "model")].filter(Boolean).join(" ") || "Assigned company vehicle"}
+                  </Text>
+                  <Text style={[styles.assignmentMeta, { color: palette.muted }]}>
+                    {asString(assignedVehicle, "registration_number") ?? "Registration not provided"}
+                  </Text>
+                </View>
+              </View>
+            </Card>
+          ) : null}
 
           {["in_progress", "delivered", "settled", "completed_offline"].includes(status) ? (
             <Card padding="lg">
@@ -498,6 +544,12 @@ function formatMoney(amount: number, currency: string) {
 }
 const styles = StyleSheet.create({
   content: { gap: spacing.md },
+  assignmentPerson: { flexDirection: "row", alignItems: "center", gap: 12 },
+  assignmentCopy: { flex: 1, minWidth: 0, gap: 3 },
+  assignmentLabel: { ...typography.eyebrow, fontSize: 8 },
+  assignmentTitle: { ...typography.bodyStrong, fontSize: 13 },
+  assignmentMeta: { ...typography.caption, fontSize: 10 },
+  assignmentDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "rgba(128,128,128,0.22)" },
   bookingHead: { flexDirection: "row", alignItems: "center", gap: 10 },
   bookingIcon: { width: 43, height: 43, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   bookingCopy: { flex: 1, gap: 2 },
