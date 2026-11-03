@@ -68,16 +68,26 @@ $$;
 do $withdrawal_wallet_patch$
 declare
   function_sql text;
-  old_gate text := $old_gate$wallet_record.wallet_type not in ('customer','driver','partner','commission','refund','generic')$old_gate$;
-  new_gate text := $$wallet_record.wallet_type not in ('customer', 'driver', 'partner', 'commission', 'refund', 'generic', 'logistics_earnings')$$;
+  old_gate_compact text := $old_gate_compact$wallet_record.wallet_type not in ('customer','driver','partner','commission','refund','generic')$old_gate_compact$;
+  new_gate_compact text := $new_gate_compact$wallet_record.wallet_type not in ('customer','driver','partner','commission','refund','generic','logistics_earnings')$new_gate_compact$;
+  old_gate_spaced text := $old_gate_spaced$wallet_record.wallet_type not in ('customer', 'driver', 'partner', 'commission', 'refund', 'generic')$old_gate_spaced$;
+  new_gate_spaced text := $new_gate_spaced$wallet_record.wallet_type not in ('customer', 'driver', 'partner', 'commission', 'refund', 'generic', 'logistics_earnings')$new_gate_spaced$;
 begin
   function_sql := pg_get_functiondef(
     'public.request_wallet_withdrawal(uuid,uuid,numeric,numeric,text,text,jsonb)'::regprocedure
   );
-  if position(old_gate in function_sql) = 0 then
+
+  -- Production's normalized live function and clean migration replay format
+  -- the existing allow-list differently. Accept only these exact, verified
+  -- forms and refuse any other function body.
+  if position(old_gate_compact in function_sql) > 0 then
+    function_sql := replace(function_sql, old_gate_compact, new_gate_compact);
+  elsif position(old_gate_spaced in function_sql) > 0 then
+    function_sql := replace(function_sql, old_gate_spaced, new_gate_spaced);
+  else
     raise exception 'request_wallet_withdrawal wallet-type guard changed; refusing an unsafe patch';
   end if;
-  function_sql := replace(function_sql, old_gate, new_gate);
+
   execute function_sql;
 end;
 $withdrawal_wallet_patch$;
