@@ -169,6 +169,33 @@ export function LogisticsRequestScreen() {
                 <GeographyPicker label="Destination" value={destinationSearch} selected={destination} onChange={(value) => { setDestinationSearch(value); setDestination(null); }} onSelect={(place) => { setDestination(place); setDestinationSearch(asString(place, "canonical_name") ?? ""); }} error={fieldError && pickup && !destination ? fieldError : null} />
               </Card>
             </>
+          ) : step === 2 ? (
+            <>
+              <SectionHeader title="A little more detail" description="Help providers understand the item and prepare a suitable offer." />
+              <Card padding="lg">
+                <View style={styles.sectionLead}>
+                  <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><FileText color={palette.brand} size={20} /></View>
+                  <View style={styles.sectionCopy}>
+                    <Text style={[styles.sectionTitle, { color: palette.ink }]}>Describe your request</Text>
+                    <Text style={[styles.sectionDescription, { color: palette.muted }]}>A clear title helps companies respond faster.</Text>
+                  </View>
+                </View>
+                <AppField label="What are you moving?" value={title} onChangeText={setTitle} placeholder="e.g. Deliver a sofa and two chairs" maxLength={180} error={fieldError?.includes("title") ? fieldError : null} />
+                <AppField label="Additional details" value={description} onChangeText={setDescription} placeholder="Size, quantity, handling needs…" multiline optional />
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.fieldLabel, { color: palette.ink }]}>Cargo type</Text>
+                  <View style={styles.typeChoices}>
+                    {CARGO_TYPES.map((choice) => {
+                      const chosen = cargoType === choice.key;
+                      return <Pressable key={choice.key} onPress={() => setCargoType(choice.key)} style={[styles.typeChip, { borderColor: chosen ? palette.brand : palette.border, backgroundColor: chosen ? palette.brandSoft : palette.surface }]}>
+                        <Text style={[styles.typeText, { color: chosen ? palette.brand : palette.muted }]}>{choice.label}</Text>
+                      </Pressable>;
+                    })}
+                  </View>
+                </View>
+                <AppField label="Estimated weight (kg)" value={weight} onChangeText={setWeight} placeholder="e.g. 25" keyboardType="decimal-pad" optional leading={<Weight color={palette.muted} size={16} />} error={fieldError?.includes("Weight") ? fieldError : null} hint="Leave blank if you do not know the weight." />
+              </Card>
+            </>
           ) : step === 3 ? (
             <>
               <SectionHeader title="Contact details" description="Tell the selected companies how to reach you about the request." />
