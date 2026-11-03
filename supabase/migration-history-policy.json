@@ -131,6 +131,7 @@
     "20261102121000_skima_store_checkout_delivery.sql",
     "20261102130000_logistics_customer_prebooking_cancellation.sql",
     "20261102140000_logistics_driver_location_tracking.sql",
+    "20261103090000_logistics_driver_prestart_release.sql",
     "20261102160000_fuel_easy_fulfillment_mode_aware_runtime.sql",
     "20261102161000_fuel_auto_progression_verified_delivery_completion.sql",
     "20261102162000_fuel_verified_settlement_platform_wallet_gate.sql",
