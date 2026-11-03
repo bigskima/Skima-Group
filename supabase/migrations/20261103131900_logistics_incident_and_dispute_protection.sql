@@ -169,7 +169,8 @@ on public.logistics_booking_disputes for update to authenticated using (false) w
 create policy logistics_booking_disputes_no_direct_delete
 on public.logistics_booking_disputes for delete to authenticated using (false);
 
-revoke all on public.logistics_booking_incidents,public.logistics_booking_disputes from public,anon,authenticated;\ngrant select on public.logistics_booking_incidents,public.logistics_booking_disputes to authenticated,service_role;
+revoke all on public.logistics_booking_incidents,public.logistics_booking_disputes from public,anon,authenticated;
+grant select on public.logistics_booking_incidents,public.logistics_booking_disputes to authenticated,service_role;
 
 create or replace function public.guard_logistics_settlement_on_open_exceptions()
 returns trigger

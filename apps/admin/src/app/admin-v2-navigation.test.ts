@@ -54,6 +54,7 @@ describe("SKIMA Admin V2 navigation", () => {
       { key: "billing", label: "Utility Billing", href: "/utility-billing", icon: "billing" },
       { key: "catalog", label: "Services", href: "/catalog", icon: "catalog" },
       { key: "store", label: "Store", href: "/store", icon: "store" },
+      { key: "logistics", label: "Logistics", href: "/logistics", icon: "logistics" },
       { key: "ai", label: "SKIMA Intelligence", href: "/ai", icon: "ai" },
       { key: "content", label: "Brand & Content", href: "/content", icon: "content" },
       { key: "policies", label: "Terms & Policies", href: "/policies", icon: "policies" },
@@ -72,6 +73,7 @@ describe("SKIMA Admin V2 navigation", () => {
       "money",
       "services",
       "store",
+      "logistics",
       "intelligence",
       "experience",
       "platform",
@@ -86,12 +88,29 @@ describe("SKIMA Admin V2 navigation", () => {
     expect(categories.find((item) => item.key === "platform")?.href).toBe("/platform");
   });
 
+  it("exposes Logistics as a dedicated permission-gated workspace with operational sections", () => {
+    const items: NavigationItem[] = [
+      { key: "logistics", label: "Logistics", href: "/logistics", icon: "logistics" },
+    ].map(toAdminV2NavigationItem);
+
+    expect(getAdminWorkspaceForRoute("/logistics/disputes").key).toBe("logistics");
+    expect(getAdminWorkspaceNavigation("logistics", items).map((item) => item.href)).toEqual([
+      "/logistics",
+      "/logistics/providers",
+      "/logistics/bookings",
+      "/logistics/incidents",
+      "/logistics/disputes",
+      "/logistics/categories",
+    ]);
+  });
+
   it("keeps migrated category roots as real landing screens", () => {
     expect(resolveAdminPath("/partners")).toBe("/partners");
     expect(resolveAdminPath("/operations")).toBe("/operations");
     expect(resolveAdminPath("/money")).toBe("/money");
     expect(resolveAdminPath("/services")).toBe("/services");
     expect(resolveAdminPath("/store")).toBe("/store");
+    expect(resolveAdminPath("/logistics")).toBe("/logistics");
     expect(resolveAdminPath("/intelligence")).toBe("/intelligence");
     expect(resolveAdminPath("/experience")).toBe("/experience");
     expect(resolveAdminPath("/platform")).toBe("/platform");

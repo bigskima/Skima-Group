@@ -28,6 +28,7 @@ export const foundationNavigation: readonly NavigationItem[] = [
   { key: "branding", label: "App Branding", href: "/branding", icon: "branding", requiredPermissions: ["platform.configuration.read"] },
   { key: "catalog", label: "Services", href: "/catalog", icon: "catalog", requiredPermissions: ["platform.configuration.read"] },
   { key: "store", label: "Store", href: "/store", icon: "store", requiredPermissions: ["platform.store.manage"] },
+  { key: "logistics", label: "Logistics", href: "/logistics", icon: "logistics" },
   { key: "fuel", label: "Fuel administration", href: "/services/fuel", icon: "inventory", requiredPermissions: ["platform.fuel.read"] },
   { key: "governance", label: "Configuration", href: "/governance", icon: "governance", requiredPermissions: ["platform.configuration.read"] },
   { key: "providers", label: "Integrations", href: "/providers", icon: "providers", requiredPermissions: ["platform.providers.manage"] },
@@ -42,6 +43,7 @@ export interface AdminNavigationPermissionRule {
 }
 
 const navigationAnyOfPermissions: Readonly<Record<string, readonly string[]>> = {
+  logistics: ["logistics.marketplace.read", "logistics.marketplace.manage"],
   verification: [
     "platform.verification.read",
     "platform.verification.manage",

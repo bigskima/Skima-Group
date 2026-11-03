@@ -7,6 +7,7 @@ import { PartnersWorkspaceRouter } from "../features/partners/PartnersWorkspaceR
 import { PlatformWorkspaceRouter } from "../features/platform/PlatformWorkspaceRouter";
 import { ServicesWorkspaceRouter } from "../features/services/ServicesWorkspaceRouter";
 import { StoreWorkspace } from "../features/store/StoreWorkspace";
+import { LogisticsWorkspace } from "../features/logistics/LogisticsWorkspace";
 import { toLegacyAdminWorkspacePath } from "./admin-v2-navigation";
 
 export function AdminV2WorkspaceRouter(props: {
@@ -31,6 +32,10 @@ export function AdminV2WorkspaceRouter(props: {
 
   if (props.route === "/store" || props.route.startsWith("/store/")) {
     return <StoreWorkspace onNavigate={props.onNavigate} />;
+  }
+
+  if (props.route === "/logistics" || props.route.startsWith("/logistics/")) {
+    return <LogisticsWorkspace route={props.route} onNavigate={props.onNavigate} />;
   }
 
   if (props.route === "/intelligence" || props.route.startsWith("/intelligence/")) {

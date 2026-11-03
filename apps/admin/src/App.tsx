@@ -84,6 +84,7 @@ const navIconMap = {
   policies: FileText,
   ai: Sparkles,
   fleet: Truck,
+  logistics: Truck,
   finance: WalletCards,
   content: Megaphone,
   branding: Image,
