@@ -422,3 +422,45 @@ Deno.test("Company dispatch can replace an offered or accepted pre-start driver"
 
   requireText(providerBookingDetail, '"/runtime/logistics/bookings/assign-driver"', "replacement uses the existing tenant-guarded assignment function");
 });
+
+
+Deno.test("Driver incidents stop normal delivery controls until dispatch resolves cargo custody", () => {
+  requireText(providerDriver, '"/runtime/logistics/bookings/incidents/report"', "driver incident report endpoint");
+  requireText(providerDriver, "Report a delivery incident", "driver incident entry point");
+  requireText(providerDriver, "Vehicle breakdown", "breakdown incident type");
+  requireText(providerDriver, "Cargo damaged", "cargo damage incident type");
+  requireText(providerDriver, "Cargo missing", "missing cargo incident type");
+  requireText(providerDriver, "cargoCustodyStatus", "driver submits explicit custody state");
+  requireText(providerDriver, "bookingOnHold", "active exception blocks normal driver controls");
+  requireText(providerDriver, "Delivery exception under review", "driver sees dispatch hold instructions");
+  requireText(providerDriver, "!bookingOnHold", "GPS and delivery milestones stop while the booking is on hold");
+});
+
+Deno.test("Customer can raise a delivery dispute and see the protected payment outcome", () => {
+  requireText(booking, '"/runtime/logistics/bookings/disputes/open"', "customer dispute endpoint");
+  requireText(booking, "Report a delivery problem", "customer complaint entry point");
+  requireText(booking, "Not received", "non-delivery reason");
+  requireText(booking, "Partial delivery", "partial delivery reason");
+  requireText(booking, "Cargo damaged", "damaged cargo reason");
+  requireText(booking, "original escrow remains frozen", "online disputed funds stay protected");
+  requireText(booking, "manual finance review", "offline payment complaint does not promise an automatic refund");
+});
+
+Deno.test("Company dispatch can resolve an incident or send a distinct cargo recovery driver", () => {
+  requireText(providerBookingDetail, '"/runtime/logistics/bookings/incidents/respond"', "company incident response endpoint");
+  requireText(providerBookingDetail, "Require cargo recovery", "company can require recovery");
+  requireText(providerBookingDetail, "Resume delivery with current driver", "safe same-driver resume path");
+  requireText(providerBookingDetail, "Cargo recovery dispatch", "recovery dispatch workspace");
+  requireText(providerBookingDetail, '"/runtime/logistics/bookings/assign-recovery-driver"', "dedicated recovery assignment route");
+  requireText(providerDriver, '"/runtime/logistics/bookings/recovery/start"', "recovery driver start route");
+  requireText(providerDriver, "Start cargo recovery", "recovery driver start control");
+});
+
+Deno.test("Platform Logistics administration can review disputes with finance-authorized outcomes", () => {
+  requireText(logisticsAdmin, '"/runtime/logistics/bookings/disputes"', "admin dispute register");
+  requireText(logisticsAdmin, "Customer disputes & refund review", "admin dispute queue");
+  requireText(logisticsAdmin, "platform.escrow.execute", "refund authority is permission-gated");
+  requireText(logisticsAdmin, "Refund full escrow", "full escrow refund action");
+  requireText(logisticsAdmin, "Send to finance review", "offline dispute escalation");
+  requireText(logisticsAdmin, "Close finance review", "offline review closure");
+});
