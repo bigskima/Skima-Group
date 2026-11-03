@@ -13,6 +13,11 @@ const skeleton = await Deno.readTextFile("apps/logistics-mobile/src/ui/ScreenSke
 const statePanel = await Deno.readTextFile("apps/logistics-mobile/src/ui/StatePanel.tsx");
 const account = await Deno.readTextFile("apps/logistics-mobile/src/screens/CustomerAccountScreen.tsx");
 const home = await Deno.readTextFile("apps/logistics-mobile/src/screens/CustomerHomeScreen.tsx");
+const customerNavigation = await Deno.readTextFile("apps/logistics-mobile/src/navigation/CustomerTabs.tsx");
+const storeScreen = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsStoreScreen.tsx");
+const notificationScreen = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsNotificationsScreen.tsx");
+const customerNotificationRoute = await Deno.readTextFile("apps/logistics-mobile/app/(customer)/notifications.tsx");
+const providerNotificationRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/notifications.tsx");
 const request = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsRequestScreen.tsx");
 const jobs = await Deno.readTextFile("apps/logistics-mobile/src/screens/CustomerJobsScreen.tsx");
 const detail = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsJobDetailScreen.tsx");
@@ -26,6 +31,8 @@ const providers = await Deno.readTextFile("apps/logistics-mobile/src/providers/A
 const routes = await Deno.readTextFile("apps/logistics-mobile/app/(customer)/_layout.tsx");
 const providerNavigation = await Deno.readTextFile("apps/logistics-mobile/src/navigation/ProviderTabs.tsx");
 const providerDashboard = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderDashboardScreen.tsx");
+const providerWorkspace = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderWorkspaceScreen.tsx");
+const guideProvider = await Deno.readTextFile("apps/logistics-mobile/src/onboarding/LogisticsGuideProvider.tsx");
 const providerOpportunities = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderOpportunitiesScreen.tsx");
 const providerCompany = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderCompanyScreen.tsx");
 const providerTeam = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderTeamScreen.tsx");
@@ -40,6 +47,7 @@ const providerWorkRoute = await Deno.readTextFile("apps/logistics-mobile/app/(pr
 const providerJobRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/work.tsx");
 const bookingFulfillmentMigration = await Deno.readTextFile("supabase/migrations/20261103143849_logistics_booking_fulfillment_and_settlement.sql");
 const logisticsRuntime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
+const geographySearchMigration = await Deno.readTextFile("supabase/migrations/20261103161500_logistics_location_hierarchy_search.sql");
 const companyApplication = await Deno.readTextFile("apps/logistics-mobile/src/ui/LogisticsCompanyApplicationPanel.tsx");
 const companyFleet = await Deno.readTextFile("apps/logistics-mobile/src/ui/LogisticsCompanyFleetPanel.tsx");
 const publicMediaPicker = await Deno.readTextFile("apps/logistics-mobile/src/ui/LogisticsMediaPicker.tsx");
@@ -139,10 +147,10 @@ Deno.test("Customer home, activity and request screens read live Logistics servi
   requireText(request, "useCreateLogisticsJob", "customer job publish mutation");
   requireText(logisticsApi, 'api.post("/runtime/logistics/jobs"', "customer job publish API route");
   requireText(request, "createClientIdempotencyKey", "request submission idempotency");
-  requireText(request, "[1, 2, 3].map", "three-stage progress indicator");
-  requireText(request, "STEP {step} OF 3", "three-stage request progress");
+  requireText(request, "[1, 2, 3, 4].map", "four-stage progress indicator");
+  requireText(request, "STEP {step} OF 4", "four-stage request progress");
   requireText(request, "Review your request", "customer review step before publishing");
-  requireText(request, "step < 3", "two information stages before the final publish stage");
+  requireText(request, "step < 4", "three information stages before the final publish stage");
   requireText(request, "customer_contact", "provider coordination contact");
   requireNotText(request.toLowerCase(), "fixed booking fee", "no hardcoded customer booking rate");
   requireNotText(request.toLowerCase(), "sample provider", "no mock service-provider names");
@@ -386,8 +394,9 @@ Deno.test("Customers can cancel only an unpaid Logistics booking from checkout",
 
 Deno.test("Driver workspace is reachable only for a registered driver and shows assigned work", () => {
   requireText(providerNavigation, 'name="driver"', "dedicated driver navigation tab");
-  requireText(providerNavigation, 'driverProfile.data?.registered === true', "driver tab requires a registered driver profile");
-  requireText(providerNavigation, '"/runtime/logistics/driver/profile"', "navigation resolves driver registration");
+  requireText(providerWorkspace, "driverProfile.data?.registered === true", "company workspace shows the driver entry only for a registered driver profile");
+  requireText(providerWorkspace, 'router.push("/(provider)/driver" as never)', "registered driver opens the dedicated workspace");
+  requireText(providerWorkspace, '"/runtime/logistics/driver/profile"', "workspace resolves registered driver profile");
   requireText(providerDriverRoute, "LogisticsDriverScreen", "dedicated authenticated provider driver route");
   requireText(providerDriver, '"/runtime/logistics/driver/profile"', "driver profile and verification check");
   requireText(providerDriver, '"/runtime/logistics/driver/bookings"', "driver-owned assigned booking inbox");
@@ -500,11 +509,11 @@ Deno.test("Company dispatch can resolve an incident or send a distinct cargo rec
 
 Deno.test("Platform Logistics administration can review disputes with finance-authorized outcomes", () => {
   requireText(logisticsAdmin, '"/runtime/logistics/bookings/disputes"', "admin dispute register");
-  requireText(logisticsAdmin, "Customer disputes & refund review", "admin dispute queue");
+  requireText(logisticsAdmin, "Customer dispute review", "admin dispute queue");
   requireText(logisticsAdmin, "platform.escrow.execute", "refund authority is permission-gated");
   requireText(logisticsAdmin, "Refund full escrow", "full escrow refund action");
   requireText(logisticsAdmin, "Send to finance review", "offline dispute escalation");
-  requireText(logisticsAdmin, "Close finance review", "offline review closure");
+  requireText(logisticsAdmin, "Close review", "offline review closure");
   requireText(logisticsAdmin, "recoveredDeliverySubmitted", "admin can recognize verified recovered delivery");
   requireText(logisticsAdmin, "recovered_delivery_submitted", "customer confirmation remains available after recovered delivery");
 });
@@ -512,14 +521,16 @@ Deno.test("Platform Logistics administration can review disputes with finance-au
 
 Deno.test("Logistics address search is Nigeria-scoped, detailed and supports manual full-address entry", () => {
   requireText(geography, '"/lpg/maps/autocomplete"', "server-side LocationIQ address autocomplete");
-  requireText(geography, '"/runtime/logistics/geographies?countryCode=NG"', "complete Nigeria geography hierarchy");
+  requireText(geography, "/runtime/logistics/geographies?countryCode=NG&search=", "complete Nigeria geography hierarchy");
   requireText(geography, "address_components", "full address components retained");
-  requireText(geography, "coordinates:", "address coordinates retained");
+  requireText(geography, "location: location,", "address coordinates retained in the selected place payload");
   requireText(geography, "Use typed address instead", "manual entry is available alongside suggestions");
   requireText(geography, "manualBase", "manual address linked to nearest known geography");
   requireText(geography, "state_district", "LGA/district hierarchy matching");
   requireText(logisticsRuntime, 'routePath === "/runtime/logistics/geographies"', "searchable canonical geography runtime");
-  requireText(logisticsRuntime, '.contains("aliases", [search])', "configured geography aliases are searchable");
+  requireText(logisticsRuntime, 'supabase.rpc("search_logistics_geographies"', "canonical geography search uses the dedicated RPC");
+  requireText(geographySearchMigration, "jsonb_array_elements_text", "configured geography aliases are searchable");
+  requireText(geographySearchMigration, "match_rank", "geography results prioritize precise matches");
   requireText(request, "address_snapshot: locationSnapshot(pickup)", "pickup address details retained on request");
   requireText(request, "address_snapshot: locationSnapshot(destination)", "destination address details retained on request");
 });
@@ -570,4 +581,41 @@ Deno.test("Company-managed fleet bypasses SKIMA vehicle approval but preserves d
   requireText(logisticsRuntime, "register_logistics_company_vehicle", "vehicle API uses database lifecycle");
   requireText(logisticsRuntime, "assign_logistics_company_vehicle_to_driver", "driver assignment API uses database lifecycle");
   requireText(logisticsRuntime, "read_logistics_company_fleet_drivers", "company driver directory endpoint");
+});
+
+
+Deno.test("Customer and company workspaces keep phone, tablet and desktop responsive layouts", () => {
+  requireText(screen, "const compact = width < 600", "compact phone header breakpoint");
+  requireText(screen, "width >= 1440 ? 1160 : width >= 900 ? 960 : 780", "responsive content widths");
+  requireText(customerNavigation, "useWindowDimensions().width >= 900", "customer desktop navigation breakpoint");
+  requireText(providerNavigation, "useWindowDimensions().width >= 900", "company desktop navigation breakpoint");
+  requireText(customerNavigation, 'tabBarPosition: desktop ? "left" : "bottom"', "customer desktop side navigation");
+  requireText(providerNavigation, 'tabBarPosition: desktop ? "left" : "bottom"', "company desktop side navigation");
+  requireText(providerWorkspace, "const desktop = width >= 720", "company workspace tablet card layout");
+  requireText(home, 'width: width >= 1120 ? "31.5%" : width >= 680 ? "48.5%" : "48.5%"', "responsive customer service cards");
+  requireText(storeScreen, 'width>=1100?"23.5%":width>=700?"31.5%":"48.5%"', "responsive Store product grid");
+});
+
+Deno.test("Customer and company bell controls open the shared authenticated notification inbox", () => {
+  requireText(home, 'router.push("/(customer)/notifications" as never)', "customer notification bell route");
+  requireText(providerDashboard, 'router.push("/(provider)/notifications" as never)', "company notification bell route");
+  requireText(customerNavigation, 'name="notifications"', "customer notification route registration");
+  requireText(providerNavigation, 'name="notifications"', "company notification route registration");
+  requireText(customerNotificationRoute, "LogisticsNotificationsScreen", "customer notification screen route");
+  requireText(providerNotificationRoute, "LogisticsNotificationsScreen", "company notification screen route");
+  requireText(notificationScreen, "read_notification_center", "shared notification center RPC");
+  requireText(notificationScreen, "mark_notification_read", "mark a notification read");
+  requireText(notificationScreen, "mark_all_notifications_read", "mark all notifications read");
+});
+
+
+Deno.test("Logistics visual tours normalize routes and resolve customer/company targets", () => {
+  requireText(guideProvider, "normalizeGuideRoute", "Expo route group and index normalization");
+  requireText(guideProvider, "routeGroup", "customer/company workspace detection");
+  requireText(guideProvider, "requiredRoute=normalizeGuideRoute(step.route)", "route-aligned spotlight lookup");
+  requireText(guideProvider, "measureInWindow", "actual control highlight measurement");
+  requireText(guideProvider, "Remind me later", "tour snooze action");
+  requireText(guideProvider, "7 days", "tour reminder period");
+  requireText(guideProvider, "customer-home-request", "customer request highlight");
+  requireText(guideProvider, "company-workspace-finance", "company finance highlight");
 });

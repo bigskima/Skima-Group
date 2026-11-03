@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { BriefcaseBusiness, Building2, ChevronRight, Settings2, Truck, UsersRound } from "lucide-react-native";
+import { BriefcaseBusiness, Building2, ChevronRight, Settings2, Truck, UsersRound, WalletCards } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import type { ReactNode } from "react";
 import { asString, useLogisticsRecordQuery, useLogisticsQuery } from "../api/logistics";
@@ -9,6 +9,7 @@ import { Card } from "../ui/Card";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { StatusPill } from "../ui/StatusPill";
+import { GuideLaunchLink, GuideTarget } from "../onboarding/LogisticsGuideProvider";
 
 export function ProviderWorkspaceScreen() {
   const { palette } = useAppTheme();
@@ -20,10 +21,10 @@ export function ProviderWorkspaceScreen() {
 
   return (
     <Screen
-      eyebrow="COMPANY WORKSPACE"
-      title="Run your operations"
-      subtitle="Company setup, people and delivery access live here. Your main navigation stays focused on daily work."
+      title="Company workspace"
+      denseHeader
     >
+      <GuideLaunchLink workspace="company"/>
       {companies.isPending ? <ScreenSkeleton cards={2} /> : companies.error ? (
         <Card variant="warning" padding="lg">
           <Text style={[styles.title, { color: palette.ink }]}>Workspace unavailable</Text>
@@ -60,6 +61,9 @@ export function ProviderWorkspaceScreen() {
           )}
 
           <View style={styles.grid}>
+            <GuideTarget targetKey="company-workspace-finance" style={{ width: desktop ? "48.5%" : "100%" }}>
+              <WorkspaceCard title="Company wallet & payouts" description="View settled earnings, withdraw and set driver payment method." icon={<WalletCards color={palette.brand} size={21} />} onPress={() => router.push("/(provider)/finance" as never)} desktop={false} disabled={!company} />
+            </GuideTarget>
             <WorkspaceCard
               title="Customer opportunities"
               description="Review matched customer requests and prepare offers for routes your company serves."
@@ -68,13 +72,15 @@ export function ProviderWorkspaceScreen() {
               desktop={desktop}
               disabled={!company}
             />
-            <WorkspaceCard
-              title="Services & coverage"
-              description="Set up what your company offers, pricing approach and operating areas."
-              icon={<Truck color={palette.brand} size={21} />}
-              onPress={() => router.push("/(provider)/services" as never)}
-              desktop={desktop}
-            />
+            <GuideTarget targetKey="company-workspace-services" style={{ width: desktop ? "48.5%" : "100%" }}>
+              <WorkspaceCard
+                title="Services & coverage"
+                description="Set up what your company offers, pricing approach and operating areas."
+                icon={<Truck color={palette.brand} size={21} />}
+                onPress={() => router.push("/(provider)/services" as never)}
+                desktop={false}
+              />
+            </GuideTarget>
             <WorkspaceCard
               title="Team & access"
               description="Invite staff and assign the right operational responsibilities."
@@ -155,9 +161,9 @@ const styles = StyleSheet.create({
   title: { ...typography.sectionTitle, fontSize: 16 },
   body: { ...typography.caption, fontSize: 11, lineHeight: 17 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12, maxWidth: 1000, alignItems: "stretch" },
-  tile: { minHeight: 156, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: spacing.lg, gap: 9 },
+  tile: { minHeight: 108, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: spacing.md, gap: 6 },
   tileTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  tileIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  tileTitle: { ...typography.bodyStrong, fontSize: 14 },
+  tileIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  tileTitle: { ...typography.bodyStrong, fontSize: 12 },
   hint: { ...typography.caption, fontSize: 10 },
 });

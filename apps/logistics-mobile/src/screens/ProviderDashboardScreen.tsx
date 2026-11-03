@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { ArrowRight, Bell, BriefcaseBusiness, Building2, CheckCircle2, ClipboardList, ShieldCheck, Truck } from "lucide-react-native";
+import { ArrowRight, Bell, BriefcaseBusiness, Building2, ShieldCheck, Truck, WalletCards } from "lucide-react-native";
 import { useMemo, type ReactNode } from "react";
 import { Pressable, RefreshControl, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { asString, useLogisticsQuery } from "../api/logistics";
@@ -14,6 +14,7 @@ import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
 import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
+import { GuideLaunchLink, GuideTarget } from "../onboarding/LogisticsGuideProvider";
 
 export function ProviderDashboardScreen() {
   const { palette } = useAppTheme();
@@ -43,11 +44,10 @@ export function ProviderDashboardScreen() {
   const ownerName = context?.profile?.display_name?.split(/\s+/)[0] ?? session?.user.email?.split("@")[0] ?? "there";
   const refresh = () => Promise.all([companies.refetch(), opportunities.refetch(), jobs.refetch()]);
   return (
-    <Screen eyebrow="PROVIDER WORKSPACE" title={`Welcome, ${ownerName}`} subtitle="Run your logistics company and respond to qualified customer requests."
-      action={<Pressable accessibilityRole="button" accessibilityLabel="Open company settings" onPress={() => router.push("/(provider)/workspace" as never)}
-        style={[styles.avatar, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}><Building2 color={palette.brand} size={19} /></Pressable>}
+    <Screen denseHeader title={`Good day, ${ownerName}`}
+      action={<View style={styles.headerActions}><BrandMark /><Pressable accessibilityRole="button" accessibilityLabel="Open notifications" onPress={() => router.push("/(provider)/notifications" as never)} style={[styles.notification, { backgroundColor: palette.surface, borderColor: palette.border }]}><Bell color={palette.ink} size={18} /></Pressable></View>}
       refreshControl={<RefreshControl refreshing={companies.isRefetching || opportunities.isRefetching || jobs.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}>
-      <View style={styles.brandRow}><BrandMark /><View style={[styles.trustBadge, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={13} /><Text style={[styles.trustText, { color: palette.success }]}>Company portal</Text></View></View>
+      <GuideTarget targetKey="company-home-overview">
       {companies.isPending ? <ScreenSkeleton cards={2} /> : companies.error ? (
         <StatePanel title="Company profile unavailable" description="We could not load your company workspace." retry={() => void companies.refetch()} />
       ) : !company ? (
@@ -65,8 +65,7 @@ export function ProviderDashboardScreen() {
               <View style={styles.companyCopy}>
                 <Text style={[styles.companyEyebrow, { color: palette.brand }]}>YOUR COMPANY</Text>
                 <Text style={[styles.companyName, { color: palette.ink }]}>{asString(company, "public_name") ?? asString(company, "organization_name") ?? "Logistics provider"}</Text>
-                <Text style={[styles.companySub, { color: palette.muted }]}>{asString(company, "verification_status") === "verified" ? "Verified provider" : "Verification in progress"}</Text>
-              </View>
+                </View>
               <StatusPill status={asString(company, "operational_status") ?? "onboarding"} />
             </View>
             {asString(company, "verification_status") !== "verified" ? (
@@ -80,7 +79,7 @@ export function ProviderDashboardScreen() {
           </View>
 
           <View style={styles.section}>
-            <SectionHeader title="Company activity" description="New opportunities and confirmed work for your organisation." action={<Pressable onPress={() => router.push("/(provider)/opportunities" as never)}><Text style={[styles.seeAll, { color: palette.brand }]}>See all</Text></Pressable>} />
+            <SectionHeader title="Company activity" action={<Pressable onPress={() => router.push("/(provider)/opportunities" as never)}><Text style={[styles.seeAll, { color: palette.brand }]}>See all</Text></Pressable>} />
             {opportunities.isPending || jobs.isPending ? <ScreenSkeleton cards={2} /> : opportunities.error || jobs.error ? (
               <StatePanel title="Activity could not load" description="Refresh to check the latest company activity." retry={() => void refresh()} />
             ) : openOpportunities.length === 0 && activeBookings.length === 0 ? (
@@ -106,11 +105,14 @@ export function ProviderDashboardScreen() {
             )}
           </View>
           <View style={styles.quickRow}>
+            <AppButton label="Company wallet" fullWidth variant="secondary" onPress={() => router.push("/(provider)/finance" as never)} trailingIcon={<WalletCards color={palette.brand} size={15} />} />
             <AppButton label="Open opportunities" fullWidth onPress={() => router.push("/(provider)/opportunities" as never)} trailingIcon={<ArrowRight color="#FFFFFF" size={15} />} />
             <AppButton label="Company settings" fullWidth variant="secondary" onPress={() => router.push("/(provider)/services" as never)} />
           </View>
         </>
       )}
+      </GuideTarget>
+      <GuideLaunchLink workspace="company"/>
     </Screen>
   );
 }
@@ -123,10 +125,8 @@ function Stat({ value, label, icon }: { value: string; label: string; icon: Reac
   return <View style={[styles.stat, { backgroundColor: palette.surface, borderColor: palette.border }]}><View style={[styles.statIcon, { backgroundColor: palette.brandSofter }]}>{icon}</View><Text style={[styles.statValue, { color: palette.ink }]}>{value}</Text><Text style={[styles.statLabel, { color: palette.muted }]}>{label}</Text></View>;
 }
 const styles = StyleSheet.create({
-  brandRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: -7 },
-  trustBadge: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: radii.pill, paddingHorizontal: 10, paddingVertical: 7 },
-  trustText: { ...typography.caption, fontSize: 9, fontWeight: "900" },
-  avatar: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  notification: { width: 40, height: 40, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center" },
   setupIcon: { width: 54, height: 54, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   setupTitle: { ...typography.heading, fontSize: 19 },
   setupBody: { ...typography.caption, fontSize: 11, lineHeight: 18 },
@@ -135,18 +135,18 @@ const styles = StyleSheet.create({
   companyCopy: { flex: 1, gap: 3 },
   companyEyebrow: { ...typography.eyebrow, fontSize: 8 },
   companyName: { ...typography.bodyStrong, fontSize: 14 },
-  companySub: { ...typography.caption, fontSize: 9 },
+
   notice: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 11, borderRadius: radii.md },
   noticeText: { flex: 1, ...typography.caption, fontSize: 10, lineHeight: 16 },
   stats: { flexDirection: "row", gap: 10, maxWidth: 820 },
-  stat: { flex: 1, minWidth: 0, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 13, gap: 3 },
+  stat: { flex: 1, minWidth: 0, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 10, gap: 2 },
   statIcon: { width: 32, height: 32, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 3 },
   statValue: { ...typography.heading, fontSize: 23 },
   statLabel: { ...typography.caption, fontSize: 9 },
   section: { gap: 12 },
   seeAll: { ...typography.caption, fontSize: 10, fontWeight: "900" },
   activityList: { gap: 8 },
-  activity: { flexDirection: "row", alignItems: "center", gap: 9, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 11 },
+  activity: { flexDirection: "row", alignItems: "center", gap: 9, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 9 },
   activityIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   activityCopy: { flex: 1, gap: 2, minWidth: 0 },
   activityTitle: { ...typography.bodyStrong, fontSize: 11 },
