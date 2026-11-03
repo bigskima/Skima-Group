@@ -19,6 +19,17 @@ alter table public.logistics_bookings
     'settled','completed_offline','cancelled','payment_failed','disputed','refunded'
   ));
 
+-- Preserve the assigned driver record during incident review without treating an
+-- incident-held driver as an active dispatch resource.
+alter table public.logistics_booking_driver_assignments
+  drop constraint if exists logistics_booking_driver_assignments_status_check;
+alter table public.logistics_booking_driver_assignments
+  add constraint logistics_booking_driver_assignments_status_check
+  check (status in (
+    'offered','accepted','replacement_pending','in_progress','picked_up','in_transit',
+    'delivery_submitted','incident_hold','completed','rejected','reassigned','cancelled'
+  ));
+
 alter table public.logistics_bookings
   drop constraint if exists logistics_bookings_cargo_custody_status_check;
 alter table public.logistics_bookings
