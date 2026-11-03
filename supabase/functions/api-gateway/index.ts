@@ -9719,7 +9719,15 @@ async function walletBalancesResponse(
     }
   }
 
-  const data = balances.map((balance) => {
+  // wallet_balances is an aggregate view and does not provide row-level
+  // visibility by itself. Return only rows whose wallet account survived the
+  // caller's wallet_accounts RLS query above.
+  const visibleBalances = balances.filter((balance) => {
+    const walletId = stringOrNull(getRecordValue(balance, "wallet_id"));
+    return walletId !== null && walletsById.has(walletId);
+  });
+
+  const data = visibleBalances.map((balance) => {
     const walletId = stringOrNull(getRecordValue(balance, "wallet_id"));
     const wallet = walletId ? walletsById.get(walletId) : null;
     const ownerType = stringOrNull(getRecordValue(wallet, "owner_entity_type"));
