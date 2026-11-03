@@ -1,3 +1,4 @@
+import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { useQuery } from "@tanstack/react-query";
 import { Image, StyleSheet, View } from "react-native";
 import { z } from "zod";
@@ -40,7 +41,7 @@ export function LogisticsPublicEntityImage({
     enabled: Boolean(assetId),
     queryFn: () => api.post(
       "/runtime/media/read-sessions",
-      { assetId },
+      { assetId, idempotencyKey: createClientIdempotencyKey("logistics.media.read") },
       ReadSessionSchema,
     ),
     staleTime: 10 * 60_000,
