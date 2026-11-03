@@ -31,7 +31,10 @@ const migrationReplacementHandoff = await Deno.readTextFile(
 const migrationExceptions = await Deno.readTextFile(
   "supabase/migrations/20261103110000_logistics_incident_and_dispute_protection.sql",
 );
-const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch + "\n" + migrationReplacementHandoff + "\n" + migrationExceptions;
+const migrationCargoRecovery = await Deno.readTextFile(
+  "supabase/migrations/20261103120000_logistics_cargo_recovery_dispatch.sql",
+);
+const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch + "\n" + migrationReplacementHandoff + "\n" + migrationExceptions + "\n" + migrationCargoRecovery;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const apiGateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
@@ -638,4 +641,17 @@ Deno.test("Logistics incident and dispute routes use authenticated runtime RPCs 
   requireText(runtime, '"/runtime/logistics/bookings/disputes/resolve"', "platform dispute resolution route");
   requireText(runtime, 'supabase.rpc("report_logistics_booking_incident"', "incident report uses a database RPC");
   requireText(runtime, 'supabase.rpc("resolve_logistics_booking_dispute"', "refund resolution uses permission-gated database RPC");
+});
+
+
+Deno.test("Failed Logistics deliveries use a controlled recovery assignment and verified custody hand-off", () => {
+  requireText(migrationCargoRecovery, "assign_logistics_booking_recovery_driver", "dedicated recovery dispatch RPC");
+  requireText(migrationCargoRecovery, "booking_record.status <> 'failed_delivery'", "recovery dispatch is limited to failed deliveries");
+  requireText(migrationCargoRecovery, "booking_record.cargo_custody_status <> 'recovery_pending'", "recovery dispatch requires explicit cargo custody state");
+  requireText(migrationCargoRecovery, "'assignment_kind','recovery'", "recovery assignment is distinguishable from the original delivery");
+  requireText(migrationCargoRecovery, "start_logistics_recovery_booking", "recovery driver must explicitly start recovery");
+  requireText(migrationCargoRecovery, "set cargo_custody_status = 'driver_custody'", "physical recovery pickup transfers custody to the recovery driver");
+  requireText(migrationCargoRecovery, "set cargo_custody_status = 'delivered'", "delivery hand-off closes custody state");
+  requireText(migrationCargoRecovery, "logistics.booking.recovery_driver_assigned", "recovery dispatch is auditable");
+  requireText(migrationCargoRecovery, "logistics.booking.recovery_started", "recovery start is auditable");
 });
