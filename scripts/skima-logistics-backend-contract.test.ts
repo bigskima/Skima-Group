@@ -650,6 +650,7 @@ Deno.test("Logistics incident and dispute routes use authenticated runtime RPCs 
   requireText(runtime, '"/runtime/logistics/bookings/disputes/resolve"', "platform dispute resolution route");
   requireText(runtime, 'supabase.rpc("report_logistics_booking_incident"', "incident report uses a database RPC");
   requireText(runtime, 'supabase.rpc("resolve_logistics_booking_dispute"', "refund resolution uses permission-gated database RPC");
+  requireText(runtime, "incident:logistics_booking_incidents(booking_status_before_incident", "admin receives the linked incident's original booking state");
 });
 
 
