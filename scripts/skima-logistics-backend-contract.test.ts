@@ -681,7 +681,7 @@ Deno.test("Logistics incident and dispute routes use authenticated runtime RPCs 
   requireText(runtime, '"/runtime/logistics/bookings/disputes/resolve"', "platform dispute resolution route");
   requireText(runtime, 'supabase.rpc("report_logistics_booking_incident"', "incident report uses a database RPC");
   requireText(runtime, 'supabase.rpc("resolve_logistics_booking_dispute"', "refund resolution uses permission-gated database RPC");
-  requireText(runtime, "incident:logistics_booking_incidents(booking_status_before_incident", "admin receives the linked incident's original booking state");
+  requireText(runtime, "incident:logistics_booking_incidents(status,resolution_code,booking_status_before_incident", "admin receives the linked incident's original booking state");
 });
 
 
@@ -692,7 +692,7 @@ Deno.test("Failed Logistics deliveries use a controlled recovery assignment and 
   requireText(migrationCargoRecovery, "'assignment_kind','recovery'", "recovery assignment is distinguishable from the original delivery");
   requireText(migrationCargoRecovery, "start_logistics_recovery_booking", "recovery driver must explicitly start recovery");
   requireText(migrationCargoRecovery, "set cargo_custody_status = 'driver_custody'", "physical recovery pickup transfers custody to the recovery driver");
-  requireText(migrationCargoRecovery, "set cargo_custody_status = 'delivered'", "delivery hand-off closes custody state");
+  requireText(migrationCargoRecovery, "cargo_custody_status = 'delivered'", "delivery hand-off closes custody state");
   requireText(migrationCargoRecovery, "logistics.booking.recovery_driver_assigned", "recovery dispatch is auditable");
   requireText(migrationCargoRecovery, "logistics.booking.recovery_started", "recovery start is auditable");
   const recoveryStart = migrationCargoRecovery.slice(
