@@ -14,6 +14,7 @@ import { Card } from "../ui/Card";
 import { GeographyPicker } from "../ui/GeographyPicker";
 import { LogisticsMediaPicker } from "../ui/LogisticsMediaPicker";
 import { LogisticsCompanyApplicationPanel } from "../ui/LogisticsCompanyApplicationPanel";
+import { LogisticsCompanyFleetPanel } from "../ui/LogisticsCompanyFleetPanel";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
@@ -199,6 +200,8 @@ export function ProviderCompanyScreen() {
                 displayName={asString(company, "public_name") ?? ""}
                 legalName={asString(organization, "legal_name")}
               />
+
+              <LogisticsCompanyFleetPanel organizationId={organizationId ?? ""} />
 
               <ProviderWalletFundingPanel organizationId={organizationId ?? ""} />
 
