@@ -137,6 +137,7 @@
     "20261102162500_fuel_internal_helper_rpc_acl.sql",
     "20261103090000_logistics_driver_prestart_release.sql",
     "20261103100000_logistics_safe_replacement_handoff.sql",
-    "20261103110000_logistics_incident_and_dispute_protection.sql"
+    "20261103110000_logistics_incident_and_dispute_protection.sql",
+    "20261103120000_logistics_cargo_recovery_dispatch.sql"
   ]
 }
