@@ -480,7 +480,7 @@ begin
   );
   perform public.record_logistics_job_event(
     booking_record.job_id,'logistics.booking.recovery_started',target_idempotency_key || ':job',
-    'delivered','in_progress',jsonb_build_object('booking_id',booking_record.id,'assignment_id',assignment_record.id)
+    'in_progress','in_progress',jsonb_build_object('booking_id',booking_record.id,'assignment_id',assignment_record.id,'assignment_kind','recovery')
   );
   return booking_record.id;
 end;
@@ -609,6 +609,17 @@ begin
   update public.logistics_job_requests
   set status = 'delivered',updated_at = timezone('utc',now())
   where id = booking_record.job_id;
+
+  -- A completed recovery hand-off closes the recovery incident, but any customer
+  -- dispute remains independent and continues to block escrow settlement.
+  update public.logistics_booking_incidents
+  set status = 'resolved',
+      resolution_code = 'recovered_delivery_submitted',
+      resolution_note = 'Cargo recovery was completed and a delivery hand-off was submitted for customer confirmation.',
+      resolved_by = actor,
+      resolved_at = timezone('utc',now()),
+      updated_at = timezone('utc',now())
+  where booking_id = booking_record.id and status = 'recovery_required';
 
   perform public.record_logistics_booking_event(
     booking_record.id,
