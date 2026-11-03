@@ -857,6 +857,15 @@ begin
     update public.logistics_booking_driver_assignments
     set status='cancelled',updated_at=timezone('utc',now())
     where booking_id=new.id and status in ('offered','accepted','in_progress','picked_up','in_transit','delivery_submitted');
+
+    if new.status = 'refunded'
+      and new.cargo_custody_status not in ('driver_custody','recovery_pending','unknown') then
+      update public.logistics_booking_driver_assignments
+      set status='cancelled',
+          updated_at=timezone('utc',now()),
+          metadata = metadata || jsonb_build_object('closed_by_customer_refund',true)
+      where booking_id=new.id and status='incident_hold';
+    end if;
   end if;
   return new;
 end;
