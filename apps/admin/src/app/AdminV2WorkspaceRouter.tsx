@@ -29,6 +29,10 @@ export function AdminV2WorkspaceRouter(props: {
     return <ServicesWorkspaceRouter route={props.route} onNavigate={props.onNavigate} />;
   }
 
+  if (props.route === "/store" || props.route.startsWith("/store/")) {
+    return <StoreWorkspace onNavigate={props.onNavigate} />;
+  }
+
   if (props.route === "/intelligence" || props.route.startsWith("/intelligence/")) {
     return <IntelligenceWorkspaceRouter route={props.route} onNavigate={props.onNavigate} />;
   }
