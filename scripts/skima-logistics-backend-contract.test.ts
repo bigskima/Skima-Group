@@ -23,10 +23,10 @@ const migrationTracking = await Deno.readTextFile(
   "supabase/migrations/20261102140000_logistics_driver_location_tracking.sql",
 );
 const migrationDispatch = await Deno.readTextFile(
-  "supabase/migrations/20261103090000_logistics_driver_prestart_release.sql",
+  "supabase/migrations/20261103131700_logistics_driver_prestart_release.sql",
 );
 const migrationReplacementHandoff = await Deno.readTextFile(
-  "supabase/migrations/20261103100000_logistics_safe_replacement_handoff.sql",
+  "supabase/migrations/20261103131800_logistics_safe_replacement_handoff.sql",
 );
 const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch + "\n" + migrationReplacementHandoff;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
