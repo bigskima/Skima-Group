@@ -147,15 +147,15 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
     ),
     staleTime: 60_000,
   });
-  const countryCatalogue = useQuery<Place[]>({
-    queryKey: ["skima-logistics", "geography-catalogue", "NG"],
-    enabled: status === "authenticated" && mode === "address",
+  const countryRoot = useQuery<Place[]>({
+    queryKey: ["skima-logistics", "geography-search", "NG", "country-root"],
+    enabled: status === "authenticated" && mode === "address" && !selected && debouncedSearch.length >= 2,
     queryFn: ({ signal }) => api.get(
-      "/runtime/logistics/geographies?countryCode=NG",
+      "/runtime/logistics/geographies?countryCode=NG&search=Nigeria&limit=5",
       RecordArraySchema,
       { signal },
     ),
-    staleTime: 5 * 60_000,
+    staleTime: 10 * 60_000,
   });
   const lookupText = useMemo(() => {
     const context = searchContext?.trim();
@@ -176,25 +176,22 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
   });
 
   const addressPredictions = useMemo(() => {
-    const available = countryCatalogue.data ?? query.data ?? [];
+    const available = query.data ?? [];
     return (autocomplete.data?.predictions ?? [])
       .map((item) => toAddressPlace(item, available))
       .filter((item): item is Place => item !== null);
-  }, [autocomplete.data, countryCatalogue.data, query.data]);
+  }, [autocomplete.data, query.data]);
   const places = useMemo(() => mode === "service_area"
     ? (query.data ?? [])
     : uniquePlaces(query.data ?? [], addressPredictions), [mode, query.data, addressPredictions]);
   const selectedName = selected ? asString(selected, "canonical_name", "display_name") : null;
   const loading = query.isPending ||
-    (mode === "address" && debouncedSearch.length >= 3 && (countryCatalogue.isPending || autocomplete.isPending));
+    (mode === "address" && debouncedSearch.length >= 3 && autocomplete.isPending);
   const searchFailed = Boolean(query.error) && (mode === "service_area" || Boolean(autocomplete.error));
   const manualBase = useMemo(() => {
-    const catalogue = countryCatalogue.data ?? query.data ?? [];
     const queryText = normalized(search);
-    const candidates = [...catalogue].sort((left, right) =>
-      (asString(right, "canonical_name")?.length ?? 0) - (asString(left, "canonical_name")?.length ?? 0)
-    );
-    const specific = candidates.find((item) => {
+    const candidates = query.data ?? [];
+    const specificMatches = candidates.filter((item) => {
       const name = normalized(asString(item, "canonical_name"));
       const aliases = Array.isArray(item.aliases)
         ? item.aliases.filter((alias): alias is string => typeof alias === "string").map(normalized)
@@ -202,12 +199,21 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
       return (name.length >= 3 && queryText.includes(name)) ||
         aliases.some((alias) => alias.length >= 3 && queryText.includes(alias));
     });
-    return specific ?? candidates.find((item) =>
-      /state$/i.test(asString(item, "canonical_name") ?? "")
-    ) ?? candidates.find((item) =>
+    const longestMatchLength = Math.max(
+      0,
+      ...specificMatches.map((item) => normalized(asString(item, "canonical_name")).length),
+    );
+    const mostSpecific = specificMatches.filter((item) =>
+      normalized(asString(item, "canonical_name")).length === longestMatchLength
+    );
+    // If the query names several equally specific areas (e.g. Onitsha North
+    // and Onitsha South), do not silently choose one. Keep the manual fallback
+    // at the country root until the customer chooses a precise result.
+    if (mostSpecific.length === 1) return mostSpecific[0];
+    return countryRoot.data?.find((item) =>
       normalized(asString(item, "canonical_name")) === "nigeria"
     ) ?? null;
-  }, [countryCatalogue.data, query.data, search]);
+  }, [countryRoot.data, query.data, search]);
   const useManualAddress = () => {
     const id = asString(manualBase, "id");
     if (!id || !search) return;
