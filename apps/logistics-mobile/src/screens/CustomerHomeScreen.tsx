@@ -64,7 +64,7 @@ export function CustomerHomeScreen() {
     () => (bookings.data ?? []).filter((booking) => !["completed", "completed_offline", "settled", "cancelled", "refunded"].includes((asString(booking, "status") ?? "").toLowerCase())),
     [bookings.data],
   );
-  const refresh = async () => { await Promise.all([categories.refetch(), jobs.refetch(), bookings.refetch()]); };
+  const refresh = async () => { await Promise.all([categories.refetch(), jobs.refetch(), bookings.refetch(), wallets.refetch(), walletBalances.refetch()]); };
   const firstError = categories.error ?? jobs.error ?? bookings.error;
   const activeCategories = (categories.data ?? []).filter((item) => asString(item, "status") === "active");
   const customerWallet = (wallets.data ?? []).find((w) => asString(w, "wallet_type") === "customer" && asString(w, "owner_entity_type") === "user" && asString(w, "owner_entity_id") === session?.user.id && asString(w, "status") === "active") ?? null;
@@ -113,7 +113,6 @@ export function CustomerHomeScreen() {
       <GuideTarget targetKey="customer-home-wallet">
       <Pressable accessibilityRole="button" onPress={() => router.push("/(customer)/wallet" as never)} style={[styles.walletLink,{backgroundColor:palette.surface,borderColor:palette.border}]}><View style={[styles.walletIcon,{backgroundColor:palette.brandSoft}]}><WalletCards color={palette.brand} size={18}/></View><View style={styles.requestCopy}><Text style={[styles.requestTitle,{color:palette.ink}]}>SKIMA Wallet</Text><Text style={[styles.requestMeta,{color:palette.muted}]}>{customerWalletId ? new Intl.NumberFormat("en-NG",{style:"currency",currency:walletCurrency,maximumFractionDigits:2}).format(walletBalance) : "View your shared wallet"}</Text></View><ChevronRight color={palette.muted} size={18}/></Pressable>
 
-      </Pressable>
       </GuideTarget>
 
       <GuideTarget targetKey="customer-home-services" style={styles.section}>
