@@ -639,6 +639,23 @@ Deno.test("Logistics incidents preserve custody and block financial settlement u
   requireText(migrationExceptions, "cargo custody is required only when cargo is with the driver or is uncertain", "recovery decisions require custody justification");
   requireText(migrationExceptions, "must enter controlled recovery, not be closed as a failed attempt", "driver-held or unaccounted cargo cannot be marked safely failed");
   requireText(migrationExceptions, "closed_by_customer_refund", "authorized refund closes linked unresolved incident records");
+  const incidentResponse = migrationExceptions.slice(
+    migrationExceptions.indexOf("create or replace function public.respond_logistics_booking_incident"),
+    migrationExceptions.indexOf("create or replace function public.open_logistics_booking_dispute"),
+  );
+  if (incidentResponse.indexOf("existing_event.idempotency_key") < 0
+    || incidentResponse.indexOf("incident_record.status not in") < incidentResponse.indexOf("existing_event.idempotency_key")) {
+    throw new Error("incident resolution retries must return their original result before terminal-state validation");
+  }
+  const openDispute = migrationExceptions.slice(
+    migrationExceptions.indexOf("create or replace function public.open_logistics_booking_dispute"),
+    migrationExceptions.indexOf("create or replace function public.resolve_logistics_booking_dispute"),
+  );
+  if (openDispute.indexOf("existing_dispute.idempotency_key") < 0
+    || openDispute.indexOf("booking_record.status not in") < openDispute.indexOf("existing_dispute.idempotency_key")) {
+    throw new Error("customer dispute retries must return their original result before booking-state validation");
+  }
+  requireText(migrationExceptions, "assignment.metadata->>'assignment_kind' = 'recovery'", "only an active recovery driver may read the incident custody record");
 });
 
 Deno.test("Logistics incident and dispute routes use authenticated runtime RPCs and RLS reads", () => {
@@ -664,6 +681,21 @@ Deno.test("Failed Logistics deliveries use a controlled recovery assignment and 
   requireText(migrationCargoRecovery, "set cargo_custody_status = 'delivered'", "delivery hand-off closes custody state");
   requireText(migrationCargoRecovery, "logistics.booking.recovery_driver_assigned", "recovery dispatch is auditable");
   requireText(migrationCargoRecovery, "logistics.booking.recovery_started", "recovery start is auditable");
+  const recoveryStart = migrationCargoRecovery.slice(
+    migrationCargoRecovery.indexOf("create or replace function public.start_logistics_recovery_booking"),
+    migrationCargoRecovery.indexOf("create or replace function public.submit_logistics_booking_delivery"),
+  );
+  if (recoveryStart.indexOf("existing_event.idempotency_key") < 0
+    || recoveryStart.indexOf("booking_record.status <> 'failed_delivery'") < recoveryStart.indexOf("existing_event.idempotency_key")) {
+    throw new Error("recovery-start retries must return their original result before checking the changed booking state");
+  }
+  const recoveryRelease = migrationCargoRecovery.slice(
+    migrationCargoRecovery.indexOf("create or replace function public.release_logistics_driver_assignment"),
+    migrationCargoRecovery.indexOf("revoke all on function public.release_logistics_driver_assignment"),
+  );
+  requireText(recoveryRelease, "release_stage := 'before_recovery_start'", "recovery drivers can return an accepted task before starting");
+  requireText(recoveryRelease, "booking_record.cargo_custody_status <> 'recovery_pending'", "recovery release preserves pending cargo custody");
+
   requireText(migrationCargoRecovery, "release_stage := 'before_recovery_start'", "recovery drivers can return an accepted task before starting");
   requireText(migrationCargoRecovery, "a recovery driver may return only their accepted recovery assignment before recovery starts", "recovery release cannot abandon cargo after service starts");
   requireText(providerDriver, "Return recovery task to dispatch", "recovery driver has a pre-start return control");
