@@ -3296,6 +3296,23 @@ async function handleAuthenticatedRequest(request: Request, id: string): Promise
     }
   }
 
+  if (routePath === "/runtime/media/entity-links" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const payload = body.value;
+    return rpcResponse(
+      supabase.rpc("set_public_entity_media", {
+        target_entity_type: requirePlatformKey(payload.entityType, "entityType"),
+        target_entity_id: requireUuid(payload.entityId, "entityId"),
+        target_media_asset_id: requireUuid(payload.mediaAssetId, "mediaAssetId"),
+        target_media_role: requirePlatformKey(payload.mediaRole, "mediaRole"),
+        target_fit: optionalString(payload.fit) ?? "cover",
+        target_is_primary: optionalBoolean(payload.isPrimary) ?? true,
+      }),
+      id,
+    );
+  }
+
   if (routePath === "/runtime/media/entity-links" && request.method === "GET") {
     const entityType = requirePlatformKey(
       url.searchParams.get("entityType"),
