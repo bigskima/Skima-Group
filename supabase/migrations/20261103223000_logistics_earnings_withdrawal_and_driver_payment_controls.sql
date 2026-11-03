@@ -58,10 +58,10 @@ $$;
 
 -- Extend the shared finance withdrawal gate for this exact company earnings
 -- wallet type. can_access_wallet_account above keeps it company-owner managed.
-do $$
+do $withdrawal_wallet_patch$
 declare
   function_sql text;
-  old_gate text := $$wallet_record.wallet_type not in ('customer', 'driver', 'partner', 'commission', 'refund', 'generic')$$;
+  old_gate text := $old_gate$wallet_record.wallet_type not in ('customer', 'driver', 'partner', 'commission', 'refund', 'generic')$old_gate$;
   new_gate text := $$wallet_record.wallet_type not in ('customer', 'driver', 'partner', 'commission', 'refund', 'generic', 'logistics_earnings')$$;
 begin
   function_sql := pg_get_functiondef(
@@ -73,25 +73,25 @@ begin
   function_sql := replace(function_sql, old_gate, new_gate);
   execute function_sql;
 end;
-$$;
+$withdrawal_wallet_patch$;
 
 -- Only the online settlement path changes wallet class; offline fee operations
 -- and company-owned partner wallet funding continue to use wallet_type=partner.
-do $$
+do $settlement_wallet_patch$
 declare
   function_sql text;
-  old_wallet text := $$public.ensure_wallet_account(
+  old_wallet text := $old_wallet$public.ensure_wallet_account(
       'partner', 'organization', booking_record.provider_organization_id, booking_record.currency_code,
       'platform.logistics.wallet_engine',
       jsonb_build_object('module_key', 'logistics_network', 'wallet_role', 'provider'),
       'logistics-provider:' || booking_record.provider_organization_id::text || ':' || booking_record.currency_code
-    )$$;
-  new_wallet text := $$public.ensure_wallet_account(
+    )$old_wallet$;
+  new_wallet text := $new_wallet$public.ensure_wallet_account(
       'logistics_earnings', 'organization', booking_record.provider_organization_id, booking_record.currency_code,
       'platform.logistics.wallet_engine',
       jsonb_build_object('module_key', 'logistics_network', 'wallet_role', 'logistics_earnings'),
       'logistics-earnings:' || booking_record.provider_organization_id::text || ':' || booking_record.currency_code
-    )$$;
+    )$new_wallet$;
 begin
   function_sql := pg_get_functiondef(
     'public.confirm_logistics_booking_delivery(uuid,uuid,text)'::regprocedure
@@ -102,7 +102,7 @@ begin
   function_sql := replace(function_sql, old_wallet, new_wallet);
   execute function_sql;
 end;
-$$;
+$settlement_wallet_patch$;
 
 create table if not exists public.logistics_company_payment_settings (
   organization_id uuid primary key references public.organizations(id) on delete cascade,
