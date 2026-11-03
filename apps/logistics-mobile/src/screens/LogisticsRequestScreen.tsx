@@ -224,7 +224,6 @@ export function LogisticsRequestScreen() {
                 <AppField label="Handling instructions" value={instructions} onChangeText={setInstructions} placeholder="Gate access, fragile items, preferred contact time…" multiline optional />
               </Card>
             </>
-            </>
           ) : (
             <>
               <SectionHeader title="Review your request" description="Check the details before sharing it with eligible providers." />
