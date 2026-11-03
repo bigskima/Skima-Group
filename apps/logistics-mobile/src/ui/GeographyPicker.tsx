@@ -132,16 +132,6 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
     return () => clearTimeout(handle);
   }, [search]);
 
-  const catalogue = useQuery<Place[]>({
-    queryKey: ["skima-logistics", "geography-catalogue", "NG"],
-    enabled: status === "authenticated" && mode === "address",
-    queryFn: ({ signal }) => api.get(
-      "/runtime/logistics/geographies?countryCode=NG",
-      RecordArraySchema,
-      { signal },
-    ),
-    staleTime: 5 * 60_000,
-  });
   const query = useQuery<Place[]>({
     queryKey: ["skima-logistics", "geography-search", debouncedSearch.toLowerCase()],
     enabled: status === "authenticated" && !selected && debouncedSearch.length >= 2,
@@ -171,20 +161,20 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
   });
 
   const addressPredictions = useMemo(() => {
-    const available = catalogue.data ?? [];
+    const available = query.data ?? [];
     return (autocomplete.data?.predictions ?? [])
       .map((item) => toAddressPlace(item, available))
       .filter((item): item is Place => item !== null);
-  }, [autocomplete.data, catalogue.data]);
+  }, [autocomplete.data, query.data]);
   const places = useMemo(() => mode === "service_area"
     ? (query.data ?? [])
     : uniquePlaces(query.data ?? [], addressPredictions), [mode, query.data, addressPredictions]);
   const selectedName = selected ? asString(selected, "canonical_name", "display_name") : null;
-  const loading = query.isPending || (mode === "address" && debouncedSearch.length >= 3 && (catalogue.isPending || autocomplete.isPending));
+  const loading = query.isPending || (mode === "address" && debouncedSearch.length >= 3 && autocomplete.isPending);
   const searchFailed = Boolean(query.error) && (mode === "service_area" || Boolean(autocomplete.error));
-  const manualBase = (catalogue.data ?? []).find((item) =>
+  const manualBase = (query.data ?? []).find((item) =>
     /state$/i.test(asString(item, "canonical_name") ?? "")
-  ) ?? (catalogue.data ?? []).find((item) => normalized(asString(item, "canonical_name")) === "nigeria");
+  ) ?? (query.data ?? []).find((item) => normalized(asString(item, "canonical_name")) === "nigeria");
   const useManualAddress = () => {
     const id = asString(manualBase, "id");
     if (!id || !search) return;
@@ -241,7 +231,7 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
           {places.slice(0, 8).map((place, index) => {
             const id = asString(place, "id");
             const name = asString(place, "canonical_name", "description") ?? "Location";
-            const parent = asString(place, "parent_name", "state_name", "lga_name") ?? "Nigeria";
+            const parent = asString(place, "hierarchy_path", "parent_name", "state_name", "lga_name") ?? "Nigeria";
             const source = asString(place, "location_source");
             return (
               <Pressable key={id ? `${id}:${name}` : `${name}:${index}`} accessibilityRole="button" onPress={() => onSelect(place)}
