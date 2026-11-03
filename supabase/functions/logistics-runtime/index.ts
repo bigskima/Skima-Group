@@ -486,6 +486,17 @@ async function handleLogisticsRequest(
     }), id);
   }
 
+  if (routePath === "/runtime/logistics/driver/assignment/release" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("release_logistics_driver_assignment", {
+      target_assignment_id: requireUuid(p.assignmentId, "assignmentId"),
+      target_reason: requireString(p.reason, "reason"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
   if (routePath === "/runtime/logistics/driver/location" && request.method === "POST") {
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
