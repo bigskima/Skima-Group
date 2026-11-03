@@ -17,6 +17,7 @@ import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
 import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
+import { LogisticsPublicEntityImage } from "../ui/LogisticsPublicEntityImage";
 
 function nested(record: Record<string, unknown> | null | undefined, key: string) {
   const value = record?.[key];
@@ -64,6 +65,16 @@ export function LogisticsBookingScreen() {
   const latestLongitude = asNumber(latestTrackingPoint, "longitude");
   const assignedDriverProfileId = asString(booking, "assigned_driver_profile_id");
   const assignedVehicleId = asString(booking, "assigned_vehicle_id");
+  const providerOrganizationId = asString(booking, "provider_organization_id");
+  const bookingAssignments = Array.isArray(booking?.assignments)
+    ? booking.assignments.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+  const assignedPair = [...bookingAssignments].reverse().find((assignment) =>
+    (!assignedDriverProfileId || asString(assignment, "driver_profile_id") === assignedDriverProfileId) &&
+    (!assignedVehicleId || asString(assignment, "vehicle_id") === assignedVehicleId)
+  ) ?? null;
+  const assignedDriverRecord = nested(assignedPair, "driver");
+  const assignedVehicleRecord = nested(assignedPair, "vehicle");
   const currency = asString(booking, "currency_code") ?? "";
   const customerId = session?.user.id ?? "";
   const customerWallets = useMemo(() => (walletsQuery.data ?? []).filter((wallet) =>
@@ -217,6 +228,80 @@ export function LogisticsBookingScreen() {
             {paymentMode === "offline" ? <AmountLine label="Provider receival fee" value="Paid by the company" subtle /> : null}
             {paymentMode === "online_wallet" && (asNumber(booking, "provider_commission_amount") ?? 0) > 0 ? <AmountLine label="Provider commission" value="Deducted from provider proceeds" subtle /> : null}
           </Card>
+
+          {booking && (providerOrganizationId || assignedDriverProfileId || assignedVehicleId) ? (
+            <Card padding="lg" gap={spacing.md}>
+              <SectionHeader title="Your service provider" description="Public company details and the actual driver and vehicle assigned to your booking." />
+              {providerOrganizationId ? (
+                <View style={styles.providerIdentity}>
+                  <LogisticsPublicEntityImage
+                    entityType="logistics_company"
+                    entityId={providerOrganizationId}
+                    mediaRole="logistics.company.logo.public"
+                    label="Company logo"
+                    size={58}
+                  />
+                  <View style={styles.sectionCopy}>
+                    <Text style={[styles.sectionTitle, { color: palette.ink }]}>Your logistics company</Text>
+                    <Text style={[styles.sectionDescription, { color: palette.muted }]}>Company identity is provided by the service operator.</Text>
+                  </View>
+                </View>
+              ) : null}
+              {providerOrganizationId ? (
+                <LogisticsPublicEntityImage
+                  entityType="logistics_company"
+                  entityId={providerOrganizationId}
+                  mediaRole="logistics.company.photo.public"
+                  label="Company public photo"
+                  size={280}
+                  aspectRatio={2.2}
+                />
+              ) : null}
+              {assignedDriverProfileId && assignedVehicleId ? (
+                <>
+                  <View style={styles.assignmentDivider} />
+                  <View style={styles.providerIdentity}>
+                    <LogisticsPublicEntityImage
+                      entityType="driver"
+                      entityId={assignedDriverProfileId}
+                      mediaRole="driver.photo.public"
+                      label={asString(assignedDriverRecord, "driver_display_name") ?? "Assigned driver"}
+                      size={68}
+                    />
+                    <View style={styles.sectionCopy}>
+                      <Text style={[styles.sectionTitle, { color: palette.ink }]}>
+                        {asString(assignedDriverRecord, "driver_display_name") ?? "Assigned driver"}
+                      </Text>
+                      <Text style={[styles.sectionDescription, { color: palette.muted }]}>
+                        {asString(assignedDriverRecord, "public_driver_id") ?? "SKIMA Logistics driver"}
+                      </Text>
+                      <Text style={[styles.sectionDescription, { color: palette.muted }]}>Your driver</Text>
+                    </View>
+                  </View>
+                  <View style={styles.providerIdentity}>
+                    <LogisticsPublicEntityImage
+                      entityType="logistics_vehicle"
+                      entityId={assignedVehicleId}
+                      mediaRole="logistics.vehicle.photo.public"
+                      label={asString(assignedVehicleRecord, "registration_number") ?? "Assigned vehicle"}
+                      size={68}
+                    />
+                    <View style={styles.sectionCopy}>
+                      <Text style={[styles.sectionTitle, { color: palette.ink }]}>
+                        {[asString(assignedVehicleRecord, "manufacturer"), asString(assignedVehicleRecord, "model")].filter(Boolean).join(" ") || "Assigned vehicle"}
+                      </Text>
+                      <Text style={[styles.sectionDescription, { color: palette.muted }]}>
+                        {asString(assignedVehicleRecord, "registration_number") ?? "Vehicle details"}
+                      </Text>
+                      <Text style={[styles.sectionDescription, { color: palette.muted }]}>Vehicle assigned to this booking</Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <Text style={[styles.sectionDescription, { color: palette.muted }]}>Your assigned driver and vehicle will appear here once the provider confirms the team.</Text>
+              )}
+            </Card>
+          ) : null}
 
           {["in_progress", "delivered", "settled", "completed_offline"].includes(status) ? (
             <Card padding="lg">
@@ -517,6 +602,8 @@ const styles = StyleSheet.create({
   amountLine: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   amountLabel: { ...typography.caption, fontSize: 10 },
   amountValue: { ...typography.caption, fontWeight: "900", fontSize: 11, textAlign: "right" },
+  providerIdentity: { flexDirection: "row", alignItems: "center", gap: 10 },
+  assignmentDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "rgba(128,128,128,0.22)" },
   sectionHeading: { flexDirection: "row", alignItems: "center", gap: 9 },
   sectionIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   sectionCopy: { flex: 1, gap: 2 },
