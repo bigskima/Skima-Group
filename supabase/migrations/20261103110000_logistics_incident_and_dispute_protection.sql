@@ -589,9 +589,8 @@ declare
   next_booking_status text;
 begin
   if actor is null then raise exception 'authentication is required'; end if;
-  if not public.has_permission('platform.escrow.execute',null)
-    and not public.has_permission('platform.settlement.execute',null) then
-    raise exception 'platform escrow or settlement execution permission is required';
+  if not public.has_permission('platform.escrow.execute',null) then
+    raise exception 'platform escrow execution permission is required';
   end if;
   if target_dispute_id is null
     or target_decision is null
@@ -637,7 +636,8 @@ begin
 
     select * into hold_record
     from public.escrow_holds where id = booking_record.escrow_hold_id for update;
-    if not found or hold_record.status <> 'disputed' or hold_record.released_amount <> 0 then
+    if not found or hold_record.status <> 'disputed' or hold_record.released_amount <> 0
+      or hold_record.hold_amount <> booking_record.total_customer_charge then
       raise exception 'the Logistics escrow hold is not fully available for a safe full refund';
     end if;
 
