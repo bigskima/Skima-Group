@@ -374,7 +374,7 @@ begin
   if actor is null then raise exception 'authentication is required'; end if;
   if target_incident_id is null
     or target_decision is null
-    or target_decision not in ('resume_delivery','recovery_required','mark_failed_delivery')
+    or target_decision not in ('resume_delivery','restore_customer_confirmation','recovery_required','mark_failed_delivery')
     or target_resolution_note is null or char_length(btrim(target_resolution_note)) not between 5 and 2000
     or target_idempotency_key is null or char_length(btrim(target_idempotency_key)) not between 8 and 180 then
     raise exception 'incident, supported resolution, explanation and idempotency key are required';
@@ -457,7 +457,47 @@ begin
         resolution_note = btrim(target_resolution_note),resolved_by = actor,
         resolved_at = timezone('utc',now()),updated_at = timezone('utc',now())
     where id = incident_record.id;
+
+  elsif target_decision = 'restore_customer_confirmation' then
+    if booking_record.status <> 'delivery_exception'
+      or incident_record.booking_status_before_incident <> 'delivered'
+      or incident_record.cargo_custody_status <> 'delivered' then
+      raise exception 'customer confirmation can be restored only after a submitted delivery with known delivered custody';
+    end if;
+    if assignment_record.id is null or assignment_record.status <> 'incident_hold' then
+      raise exception 'the original delivery submission assignment must remain available for customer confirmation';
+    end if;
+
+    update public.logistics_booking_driver_assignments
+    set status = 'delivery_submitted',
+        updated_at = timezone('utc',now()),
+        metadata = metadata || jsonb_build_object('incident_review_outcome','customer_confirmation_restored')
+    where id = assignment_record.id;
+
+    if booking_record.payment_mode = 'online_wallet' and booking_record.escrow_hold_id is not null then
+      update public.escrow_holds set status = 'held',updated_at = timezone('utc',now())
+      where id = booking_record.escrow_hold_id and status = 'disputed' and released_amount = 0;
+    end if;
+
+    update public.logistics_bookings
+    set status = 'delivered',
+        cargo_custody_status = 'delivered',
+        delivery_exception_reason = null,
+        updated_at = timezone('utc',now())
+    where id = booking_record.id;
+    next_booking_status := 'delivered';
+
+    update public.logistics_booking_incidents
+    set status = 'resolved',resolution_code = target_decision,
+        resolution_note = btrim(target_resolution_note),resolved_by = actor,
+        resolved_at = timezone('utc',now()),updated_at = timezone('utc',now())
+    where id = incident_record.id;
+
   else
+    if target_decision = 'mark_failed_delivery'
+      and incident_record.booking_status_before_incident = 'delivered' then
+      raise exception 'a submitted delivery must return to customer confirmation, not be closed as a failed delivery';
+    end if;
     if target_decision = 'recovery_required' then
       update public.logistics_booking_incidents
       set status = 'recovery_required',resolution_code = target_decision,
