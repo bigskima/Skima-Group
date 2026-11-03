@@ -62,6 +62,11 @@ export function ProviderCompanyScreen() {
 
   const activeCategories = (categoriesQuery.data ?? []).filter((item) => asString(item, "status") === "active");
   const organization = nested(company, "organization");
+  const companyMetadata = nested(company, "metadata");
+  const registrationStatusValue = asString(companyMetadata, "registration_status");
+  const registrationStatus = registrationStatusValue === "registered" || registrationStatusValue === "in_progress"
+    ? registrationStatusValue
+    : "not_registered";
   const availableServices = services.data ?? [];
   const serviceKey = useMemo(() => serviceCategory && serviceName ? serviceSlug(serviceCategory, serviceName) : "", [serviceCategory, serviceName]);
   const refresh = () => Promise.all([companies.refetch(), categoriesQuery.refetch(), services.refetch(), coverage.refetch()]);
@@ -180,6 +185,7 @@ export function ProviderCompanyScreen() {
                 organizationId={organizationId ?? ""}
                 displayName={asString(company, "public_name") ?? ""}
                 legalName={asString(organization, "legal_name")}
+                registrationStatus={registrationStatus}
               />
 
               <LogisticsCompanyFleetPanel organizationId={organizationId ?? ""} />
