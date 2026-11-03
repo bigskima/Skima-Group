@@ -50,6 +50,7 @@ export function LogisticsDriverScreen() {
   const jobs = useLogisticsQuery(["driver-workspace-bookings"], "/runtime/logistics/driver/bookings", true, 15_000);
   const [recipientNames, setRecipientNames] = useState<Record<string, string>>({});
   const [deliveryNotes, setDeliveryNotes] = useState<Record<string, string>>({});
+  const [releaseReasons, setReleaseReasons] = useState<Record<string, string>>({});
   const actionKeys = useRef(new Map<string, string>());
 
   const runAction = useMutation({
@@ -59,13 +60,14 @@ export function LogisticsDriverScreen() {
       assignmentId: string;
       recipientName?: string;
       deliveryNote?: string;
+      reason?: string;
     }) => {
       if (input.kind === "deliver" && (input.recipientName?.trim().length ?? 0) < 2) {
         throw new Error("Enter the name of the person receiving the cargo.");
       }
       const evidence = input.kind === "deliver"
         ? ":" + input.recipientName?.trim() + ":" + (input.deliveryNote?.trim() ?? "")
-        : "";
+        : input.kind === "release" ? ":" + (input.reason?.trim() ?? "") : "";
       const fingerprint = input.kind + ":" + input.bookingId + ":" + input.assignmentId + evidence;
       let idempotencyKey = actionKeys.current.get(fingerprint);
       if (!idempotencyKey) {
@@ -84,7 +86,7 @@ export function LogisticsDriverScreen() {
       if (input.kind === "release") {
         return api.post("/runtime/logistics/driver/assignment/release", {
           assignmentId: input.assignmentId,
-          reason: "Driver is unable to start this booking and is returning it to company dispatch.",
+          reason: input.reason?.trim() ?? "",
           idempotencyKey,
         }, z.string().uuid());
       }
@@ -195,6 +197,7 @@ export function LogisticsDriverScreen() {
             const isBusy = runAction.isPending && runAction.variables?.bookingId === bookingId;
             const recipientName = recipientNames[bookingId] ?? "";
             const deliveryNote = deliveryNotes[bookingId] ?? "";
+            const releaseReason = releaseReasons[bookingId] ?? "";
 
             return (
               <Card key={bookingId} padding="lg">
@@ -261,17 +264,25 @@ export function LogisticsDriverScreen() {
                   <View style={styles.actions}>
                     <Text style={[styles.meta, { color: palette.muted }]}>Start the job when you are ready to travel to the pickup point. If you cannot start, return it to company dispatch before taking custody of the cargo.</Text>
                     <AppButton label="Start job" fullWidth loading={isBusy} onPress={() => runAction.mutate({ kind: "start", bookingId, assignmentId })} />
+                    <AppField
+                      label="Reason you cannot start"
+                      value={releaseReason}
+                      onChangeText={(value) => setReleaseReasons((current) => ({ ...current, [bookingId]: value }))}
+                      placeholder="e.g. Vehicle issue or unexpected schedule conflict"
+                      multiline
+                      optional
+                    />
                     <AppButton
                       label="I can't start this job"
                       fullWidth
                       variant="secondary"
-                      disabled={runAction.isPending}
+                      disabled={runAction.isPending || releaseReason.trim().length < 5}
                       onPress={() => Alert.alert(
                         "Return this job to dispatch?",
-                        "Your assignment will be released so the company can choose another eligible driver. This is only available before service starts and does not cancel the customer's booking.",
+                        "Your reason will be recorded for the company. The booking and customer payment will remain unchanged.",
                         [
                           { text: "Keep assignment", style: "cancel" },
-                          { text: "Return to dispatch", style: "destructive", onPress: () => runAction.mutate({ kind: "release", bookingId, assignmentId }) },
+                          { text: "Return to dispatch", style: "destructive", onPress: () => runAction.mutate({ kind: "release", bookingId, assignmentId, reason: releaseReason }) },
                         ],
                       )}
                     />
