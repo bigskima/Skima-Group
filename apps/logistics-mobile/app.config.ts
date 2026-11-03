@@ -8,6 +8,8 @@ loadEnvironment({
   quiet: true,
 });
 
+const easProjectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim();
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "SKIMA Logistics",
@@ -55,6 +57,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   extra: {
     apiGatewayUrl: process.env.EXPO_PUBLIC_API_GATEWAY_URL,
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
-    supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+    supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+    ...(easProjectId ? { eas: { projectId: easProjectId } } : {})
   }
 });

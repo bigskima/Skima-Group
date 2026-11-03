@@ -57,12 +57,19 @@ try {
 
   write("apps/lpg-mobile/auth.txt", "base\n");
   write("apps/admin/admin.txt", "base\n");
+  write("apps/logistics-mobile/logistics.txt", "base\n");
   write("package.json", "{}\n");
   const base = commit("base");
 
   run("git", ["checkout", "-b", "feature/auth"]);
   write("apps/lpg-mobile/auth.txt", "feature\n");
   const feature = commit("auth feature");
+
+  assert.equal(
+    ignoreStatus("logistics", { current: feature, previous: base, ref: "feature/auth" }),
+    0,
+    "Logistics preview must skip an LPG-only change",
+  );
 
   assert.equal(
     ignoreStatus("lpg", { current: feature, previous: base, ref: "feature/auth" }),
@@ -102,6 +109,20 @@ try {
     ignoreStatus("admin", { current: adminOnly, previous: feature, ref: "main" }),
     1,
     "Admin production must build for an admin-only main commit",
+  );
+
+  run("git", ["checkout", "-b", "feature/logistics", "main"]);
+  write("apps/logistics-mobile/logistics.txt", "feature\n");
+  const logisticsOnly = commit("logistics only");
+  assert.equal(
+    ignoreStatus("logistics", { current: logisticsOnly, previous: merge, ref: "feature/logistics" }),
+    1,
+    "Logistics preview must build when Logistics files change",
+  );
+  assert.equal(
+    ignoreStatus("lpg", { current: logisticsOnly, previous: merge, ref: "feature/logistics" }),
+    0,
+    "LPG preview must skip a Logistics-only change",
   );
 
   assert.equal(

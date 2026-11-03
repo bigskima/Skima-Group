@@ -20,7 +20,15 @@ const relevantPaths = target === "admin"
         "scripts/vercel-ignore.mjs",
         "vercel.json",
       ]
-    : null;
+    : target === "logistics"
+      ? [
+        "apps/logistics-mobile",
+        "packages/frontend-core",
+        "packages/logistics",
+        "package.json",
+        "scripts/vercel-ignore.mjs",
+      ]
+      : null;
 
 // Vercel treats exit 0 as "skip this build" and exit 1 as "build it".
 // Each SKIMA Vercel project calls this script independently. The path list is

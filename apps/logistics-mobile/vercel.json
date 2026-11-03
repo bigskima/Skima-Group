@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install --no-audit --no-fund",
+  "buildCommand": "npm run build:web",
+  "outputDirectory": "dist",
+  "ignoreCommand": "node ../../scripts/vercel-ignore.mjs logistics",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
