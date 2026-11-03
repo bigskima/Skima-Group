@@ -103,7 +103,7 @@ function toAddressPlace(prediction: Place, geographies: readonly Place[]): Place
 function uniquePlaces(geographies: readonly Place[], predictions: readonly Place[]) {
   const used = new Set<string>();
   const result: Place[] = [];
-  for (const place of [...geographies, ...predictions]) {
+  for (const place of [...predictions, ...geographies]) {
     const name = asString(place, "canonical_name", "description");
     const key = normalized(name);
     if (!name || used.has(key)) continue;
@@ -142,11 +142,11 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
     ),
     staleTime: 60_000,
   });
-  const countryRoot = useQuery<Place[]>({
-    queryKey: ["skima-logistics", "geography-search", "NG", "country-root"],
-    enabled: status === "authenticated" && mode === "address" && !selected && debouncedSearch.length >= 2,
+  const countryCatalogue = useQuery<Place[]>({
+    queryKey: ["skima-logistics", "geography-catalogue", "NG"],
+    enabled: status === "authenticated" && mode === "address",
     queryFn: ({ signal }) => api.get(
-      "/runtime/logistics/geographies?countryCode=NG&search=Nigeria",
+      "/runtime/logistics/geographies?countryCode=NG",
       RecordArraySchema,
       { signal },
     ),
@@ -171,21 +171,38 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
   });
 
   const addressPredictions = useMemo(() => {
-    const available = query.data ?? [];
+    const available = countryCatalogue.data ?? query.data ?? [];
     return (autocomplete.data?.predictions ?? [])
       .map((item) => toAddressPlace(item, available))
       .filter((item): item is Place => item !== null);
-  }, [autocomplete.data, query.data]);
+  }, [autocomplete.data, countryCatalogue.data, query.data]);
   const places = useMemo(() => mode === "service_area"
     ? (query.data ?? [])
     : uniquePlaces(query.data ?? [], addressPredictions), [mode, query.data, addressPredictions]);
   const selectedName = selected ? asString(selected, "canonical_name", "display_name") : null;
-  const loading = query.isPending || (mode === "address" && debouncedSearch.length >= 3 && autocomplete.isPending);
+  const loading = query.isPending ||
+    (mode === "address" && debouncedSearch.length >= 3 && (countryCatalogue.isPending || autocomplete.isPending));
   const searchFailed = Boolean(query.error) && (mode === "service_area" || Boolean(autocomplete.error));
-  const manualBase = (query.data ?? []).find((item) =>
-    /state$/i.test(asString(item, "canonical_name") ?? "")
-  ) ?? (query.data ?? []).find((item) => normalized(asString(item, "canonical_name")) === "nigeria")
-    ?? (countryRoot.data ?? []).find((item) => normalized(asString(item, "canonical_name")) === "nigeria");
+  const manualBase = useMemo(() => {
+    const catalogue = countryCatalogue.data ?? query.data ?? [];
+    const queryText = normalized(search);
+    const candidates = [...catalogue].sort((left, right) =>
+      (asString(right, "canonical_name")?.length ?? 0) - (asString(left, "canonical_name")?.length ?? 0)
+    );
+    const specific = candidates.find((item) => {
+      const name = normalized(asString(item, "canonical_name"));
+      const aliases = Array.isArray(item.aliases)
+        ? item.aliases.filter((alias): alias is string => typeof alias === "string").map(normalized)
+        : [];
+      return (name.length >= 3 && queryText.includes(name)) ||
+        aliases.some((alias) => alias.length >= 3 && queryText.includes(alias));
+    });
+    return specific ?? candidates.find((item) =>
+      /state$/i.test(asString(item, "canonical_name") ?? "")
+    ) ?? candidates.find((item) =>
+      normalized(asString(item, "canonical_name")) === "nigeria"
+    ) ?? null;
+  }, [countryCatalogue.data, query.data, search]);
   const useManualAddress = () => {
     const id = asString(manualBase, "id");
     if (!id || !search) return;
@@ -259,6 +276,15 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
             );
           })}
         </View>
+        {mode === "address" && manualBase && search.length >= 3 ? (
+          <Pressable accessibilityRole="button" onPress={useManualAddress}
+            style={[styles.manualInline, { borderColor: palette.border, backgroundColor: palette.surfaceSubtle }]}>
+            <Text style={[styles.manualInlineTitle, { color: palette.brand }]}>Use typed address instead</Text>
+            <Text style={[styles.hint, { color: palette.muted }]} numberOfLines={2}>
+              “{search}” will be saved as entered and associated with {asString(manualBase, "canonical_name")}.
+            </Text>
+          </Pressable>
+        ) : null}
       ) : (
         <View style={[styles.resultsState, { backgroundColor: palette.surfaceSubtle, borderColor: palette.border }]}>
           <Text style={[styles.hint, { color: palette.muted }]}>
@@ -297,6 +323,8 @@ const styles = StyleSheet.create({
   resultMeta: { ...typography.caption, fontSize: 9 },
   resultsState: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.md, gap: spacing.sm },
   manualButton: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.sm, gap: 3 },
+  manualInline: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: spacing.sm, gap: 3 },
+  manualInlineTitle: { ...typography.caption, fontSize: 10, fontWeight: "900" },
   manualTitle: { ...typography.caption, fontSize: 11, fontWeight: "900" },
   attribution: { ...typography.caption, fontSize: 8, lineHeight: 12 },
 });
