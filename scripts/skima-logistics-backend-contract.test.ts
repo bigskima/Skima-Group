@@ -36,6 +36,7 @@ const migrationCargoRecovery = await Deno.readTextFile(
 );
 const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch + "\n" + migrationReplacementHandoff + "\n" + migrationExceptions + "\n" + migrationCargoRecovery;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
+const providerDriver = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsDriverScreen.tsx");
 const apiGateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
 const moduleRouter = await Deno.readTextFile("supabase/migrations/20261102005600_fuel_module_runtime_router_and_security.sql");
