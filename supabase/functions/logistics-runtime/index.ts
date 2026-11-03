@@ -524,6 +524,18 @@ async function handleLogisticsRequest(
     }), id);
   }
 
+  if (routePath === "/runtime/logistics/bookings/assign-recovery-driver" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("assign_logistics_booking_recovery_driver", {
+      target_booking_id: requireUuid(p.bookingId, "bookingId"),
+      target_driver_profile_id: requireUuid(p.driverProfileId, "driverProfileId"),
+      target_vehicle_id: requireUuid(p.vehicleId, "vehicleId"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
   if (routePath === "/runtime/logistics/bookings/assign-driver" && request.method === "POST") {
     const body = await readJsonBody(request, id);
     if ("response" in body) return body.response;
@@ -629,6 +641,16 @@ async function handleLogisticsRequest(
     if ("response" in body) return body.response;
     const p = body.value;
     return rpcResponse(supabase.rpc("accept_logistics_booking", {
+      target_booking_id: requireUuid(p.bookingId, "bookingId"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/bookings/recovery/start" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("start_logistics_recovery_booking", {
       target_booking_id: requireUuid(p.bookingId, "bookingId"),
       target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
     }), id);
