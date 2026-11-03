@@ -17,6 +17,7 @@ import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
 import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
+import { LogisticsPublicMediaImage } from "../ui/LogisticsPublicMediaImage";
 import { LogisticsPublicEntityImage } from "../ui/LogisticsPublicEntityImage";
 
 function nested(record: Record<string, unknown> | null | undefined, key: string) {
@@ -73,6 +74,22 @@ export function LogisticsBookingScreen() {
   const latestTrackingPoint = trackingPoints[trackingPoints.length - 1] ?? null;
   const latestLatitude = asNumber(latestTrackingPoint, "latitude");
   const latestLongitude = asNumber(latestTrackingPoint, "longitude");
+  const bookingAssignments = Array.isArray(booking?.assignments)
+    ? booking.assignments.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
+    : [];
+  const assignedDriverProfileId = asString(booking, "assigned_driver_profile_id");
+  const assignedVehicleId = asString(booking, "assigned_vehicle_id");
+  const assignedPair = [...bookingAssignments].reverse().find((assignment) =>
+    asString(assignment, "driver_profile_id") === assignedDriverProfileId &&
+    asString(assignment, "vehicle_id") === assignedVehicleId &&
+    !["rejected", "reassigned", "cancelled"].includes(asString(assignment, "status") ?? "")
+  ) ?? null;
+  const assignedDriverRecord = assignedPair?.driver && typeof assignedPair.driver === "object" && !Array.isArray(assignedPair.driver)
+    ? assignedPair.driver as Record<string, unknown>
+    : null;
+  const assignedVehicleRecord = assignedPair?.vehicle && typeof assignedPair.vehicle === "object" && !Array.isArray(assignedPair.vehicle)
+    ? assignedPair.vehicle as Record<string, unknown>
+    : null;
   const currency = asString(booking, "currency_code") ?? "";
   const customerId = session?.user.id ?? "";
   const customerWallets = useMemo(() => (walletsQuery.data ?? []).filter((wallet) =>
@@ -252,6 +269,48 @@ export function LogisticsBookingScreen() {
                   <Text style={[styles.assignmentMeta, { color: palette.muted }]}>
                     {asString(assignedVehicle, "registration_number") ?? "Registration not provided"}
                   </Text>
+                </View>
+              </View>
+            </Card>
+          ) : null}
+
+          {booking && assignedDriverProfileId && assignedVehicleId ? (
+            <Card padding="lg" gap={spacing.md}>
+              <SectionHeader title="Your assigned team" description="See the actual driver and vehicle registered to this booking." />
+              <View style={styles.sectionHeading}>
+                <LogisticsPublicMediaImage
+                  entityType="driver"
+                  entityId={assignedDriverProfileId}
+                  mediaRole="driver.photo.public"
+                  label={asString(assignedDriverRecord, "driver_display_name", "public_driver_id") ?? "Driver"}
+                  size={68}
+                />
+                <View style={styles.sectionCopy}>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>
+                    {asString(assignedDriverRecord, "driver_display_name") ?? "Assigned driver"}
+                  </Text>
+                  <Text style={[styles.sectionDescription, { color: palette.muted }]}>
+                    {asString(assignedDriverRecord, "public_driver_id") ?? "SKIMA Logistics driver"}
+                  </Text>
+                  <Text style={[styles.sectionDescription, { color: palette.muted }]}>Your driver</Text>
+                </View>
+              </View>
+              <View style={styles.sectionHeading}>
+                <LogisticsPublicMediaImage
+                  entityType="logistics_vehicle"
+                  entityId={assignedVehicleId}
+                  mediaRole="logistics.vehicle.photo.public"
+                  label={asString(assignedVehicleRecord, "registration_number") ?? "Vehicle"}
+                  size={68}
+                />
+                <View style={styles.sectionCopy}>
+                  <Text style={[styles.sectionTitle, { color: palette.ink }]}>
+                    {[asString(assignedVehicleRecord, "manufacturer"), asString(assignedVehicleRecord, "model")].filter(Boolean).join(" ") || "Assigned vehicle"}
+                  </Text>
+                  <Text style={[styles.sectionDescription, { color: palette.muted }]}>
+                    {asString(assignedVehicleRecord, "registration_number") ?? "Vehicle details"}
+                  </Text>
+                  <Text style={[styles.sectionDescription, { color: palette.muted }]}>Vehicle assigned to this booking</Text>
                 </View>
               </View>
             </Card>
