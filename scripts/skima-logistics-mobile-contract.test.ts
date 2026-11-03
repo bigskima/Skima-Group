@@ -394,3 +394,31 @@ Deno.test("Foreground GPS sharing is explicit and visible only during an active 
   requireText(booking, "tracking.refetch()", "customer pull-to-refresh also refreshes tracking");
   requireNotText(appConfig, "locationAlwaysAndWhenInUsePermission", "no implicit background location permission");
 });
+
+
+Deno.test("An accepted driver can return an unstarted Logistics booking to company dispatch", () => {
+  requireText(providerDriver, '"release"', "driver release action type");
+  requireText(providerDriver, '"/runtime/logistics/driver/assignment/release"', "release endpoint");
+  requireText(providerDriver, "I can't start this job", "pre-start unavailability control");
+  requireText(providerDriver, "Return this job to dispatch?", "driver release confirmation");
+  requireText(providerDriver, "Reason you cannot start", "driver supplies an operational release reason");
+  requireText(providerDriver, "releaseReason.trim().length < 5", "driver cannot release without a useful reason");
+  requireText(providerDriver, "reason: releaseReason", "driver's actual reason is sent to dispatch");
+
+  requireText(providerDriver, "The customer booking and payment remain unchanged", "release does not imply booking cancellation");
+  requireText(providerDriver, 'status === "accepted"', "release control exists only before service start");
+});
+
+Deno.test("Company dispatch can replace an offered or accepted pre-start driver", () => {
+  requireText(providerBookingDetail, "isReplacingAssignment", "explicit company replacement state");
+  requireText(providerBookingDetail, 'label="Replace assigned driver"', "replace current driver control");
+  requireText(providerBookingDetail, "dispatchResources.refetch()", "eligible replacement resources refresh");
+  requireText(providerBookingDetail, "Keep current assignment", "replacement can be abandoned safely");
+  requireText(providerBookingDetail, "Previous driver update", "company sees prior driver release or rejection context");
+  requireText(providerBookingDetail, "response_reason", "the driver's reason is displayed to dispatch");
+  requireText(providerBookingDetail, "Replace the current driver?", "replacement requires dispatcher confirmation");
+  requireText(providerBookingDetail, "Confirm replacement", "dispatcher explicitly confirms reassignment");
+  requireText(providerBookingDetail, "Send replacement assignment", "replacement action is clearly labelled");
+
+  requireText(providerBookingDetail, '"/runtime/logistics/bookings/assign-driver"', "replacement uses the existing tenant-guarded assignment function");
+});

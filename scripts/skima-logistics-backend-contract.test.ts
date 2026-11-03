@@ -22,7 +22,13 @@ const migrationCancellation = await Deno.readTextFile(
 const migrationTracking = await Deno.readTextFile(
   "supabase/migrations/20261102140000_logistics_driver_location_tracking.sql",
 );
-const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking;
+const migrationDispatch = await Deno.readTextFile(
+  "supabase/migrations/20261103131700_logistics_driver_prestart_release.sql",
+);
+const migrationReplacementHandoff = await Deno.readTextFile(
+  "supabase/migrations/20261103131800_logistics_safe_replacement_handoff.sql",
+);
+const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch + "\n" + migrationReplacementHandoff;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const apiGateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
@@ -556,4 +562,48 @@ Deno.test("Logistics tracking uses only shared SKIMA tracking records and no sep
   requireText(runtime, '"/runtime/logistics/driver/location"', "driver location write endpoint");
   requireText(runtime, '"/runtime/logistics/bookings/tracking"', "booking tracking read endpoint");
   requireNotText(migrationTracking, "create table public.logistics_tracking_points", "no duplicate Logistics GPS store");
+});
+
+
+Deno.test("An accepted driver may release a booking only before service start", () => {
+  requireText(migrationDispatch, "public.release_logistics_driver_assignment", "driver release RPC");
+  requireText(migrationDispatch, "assignment_record.driver_user_id <> actor", "only the assigned driver may release the job");
+  requireText(migrationDispatch, "booking_record.status <> 'provider_accepted'", "booking must not have entered service");
+  requireText(migrationDispatch, "assignment_record.status <> 'accepted'", "only an accepted pre-start assignment may be released");
+  requireText(migrationDispatch, "booking_record.assigned_driver_user_id is distinct from actor", "booking must still belong to this driver");
+  requireText(migrationDispatch, "set status = 'reassigned'", "assignment returns to dispatch");
+  requireText(migrationDispatch, "set assigned_driver_profile_id = null", "booking clears old driver profile");
+  requireText(migrationDispatch, "assigned_vehicle_id = null", "booking clears old vehicle in the same update");
+  requireText(migrationDispatch, "response_reason = btrim(target_reason)", "release reason is audited");
+  requireText(migrationDispatch, "logistics.booking.driver_released", "release event is appended");
+  requireText(migrationDispatch, "existing_event.metadata->>'driver_user_id' is distinct from actor::text", "idempotency replay is actor-bound");
+  requireText(migrationDispatch, "existing_event.metadata->>'assignment_id' is distinct from assignment_record.id::text", "idempotency replay is assignment-bound");
+  requireText(migrationDispatch, "existing_event.metadata->>'reason' is distinct from btrim(target_reason)", "idempotency replay is reason-bound");
+  requireNotText(migrationDispatch, "update public.logistics_bookings set status", "release does not cancel or change booking/payment status");
+  requireNotText(migrationDispatch, "post_financial_transaction", "release does not create financial postings");
+  requireText(runtime, '"/runtime/logistics/driver/assignment/release"', "driver pre-start release route");
+});
+
+Deno.test("Driver release preserves booking payment and makes the booking eligible for a different driver", () => {
+  const releaseFunction = migrationDispatch.slice(
+    migrationDispatch.indexOf("create or replace function public.release_logistics_driver_assignment"),
+    migrationDispatch.indexOf("revoke all on function public.release_logistics_driver_assignment"),
+  );
+  requireText(releaseFunction, "for update", "release serializes against company dispatch and service start");
+  requireText(releaseFunction, "booking_record.status", "booking state is checked while locked");
+  requireText(migrationDriver, "set status = 'reassigned'", "company assignment replacement closes the prior assignment");
+  requireText(migrationDriver, "status = 'offered'", "replacement assignment is offered to the new driver");
+  requireText(migrationDriver, "where booking_id = booking_record.id", "replacement is for the same customer booking");
+  requireNotText(releaseFunction, "escrow_hold_id = null", "customer escrow is preserved");
+  requireNotText(releaseFunction, "payment_transaction_id = null", "customer payment record is preserved");
+});
+
+
+Deno.test("Driver replacement preserves the incumbent until the replacement accepts", () => {
+  requireText(migrationReplacementHandoff, "'replacement_pending'", "recoverable incumbent state");
+  requireText(migrationReplacementHandoff, "'replaces_assignment_id'", "replacement-to-incumbent link");
+  requireText(migrationReplacementHandoff, "reassigned_after_acceptance", "incumbent retired only after acceptance");
+  requireText(migrationReplacementHandoff, "replacement_declined_by", "decline recovery audit");
+  requireText(migrationReplacementHandoff, "set assigned_driver_profile_id = prior_assignment.driver_profile_id", "restore incumbent after replacement decline");
+  requireText(migrationReplacementHandoff, "status in ('offered','accepted','replacement_pending','in_progress','picked_up','in_transit')", "prevent double-booking incumbent during replacement");
 });

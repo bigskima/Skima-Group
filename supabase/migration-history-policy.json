@@ -134,6 +134,8 @@
     "20261102210712_fuel_easy_fulfillment_mode_aware_runtime.sql",
     "20261102210720_fuel_auto_progression_verified_delivery_completion.sql",
     "20261102210817_fuel_verified_settlement_platform_wallet_gate.sql",
-    "20261102211004_fuel_internal_helper_rpc_acl.sql"
+    "20261102211004_fuel_internal_helper_rpc_acl.sql",
+    "20261103131700_logistics_driver_prestart_release.sql",
+    "20261103131800_logistics_safe_replacement_handoff.sql"
   ]
 }
