@@ -458,6 +458,7 @@ const fundingStyles = StyleSheet.create({
   errorText: { flex: 1, ...typography.caption, fontSize: 9, lineHeight: 15 },
 });
 const styles = StyleSheet.create({
+  actions: { flexDirection: "row", gap: spacing.sm },
   content: { gap: spacing.lg },
   section: { gap: 12 },
   sectionIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
