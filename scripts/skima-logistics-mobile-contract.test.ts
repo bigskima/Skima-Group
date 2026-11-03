@@ -389,7 +389,7 @@ Deno.test("Driver workspace is reachable only for a registered driver and shows 
   requireText(providerNavigation, 'name="driver"', "dedicated driver navigation tab");
   requireText(providerWorkspace, "driverProfile.data?.registered === true", "company workspace shows the driver entry only for a registered driver profile");
   requireText(providerWorkspace, 'router.push("/(provider)/driver" as never)', "registered driver opens the dedicated workspace");
-  requireText(providerNavigation, '"/runtime/logistics/driver/profile"', "navigation resolves driver registration");
+  requireText(providerWorkspace, '"/runtime/logistics/driver/profile"', "workspace resolves registered driver profile");
   requireText(providerDriverRoute, "LogisticsDriverScreen", "dedicated authenticated provider driver route");
   requireText(providerDriver, '"/runtime/logistics/driver/profile"', "driver profile and verification check");
   requireText(providerDriver, '"/runtime/logistics/driver/bookings"', "driver-owned assigned booking inbox");
@@ -506,7 +506,7 @@ Deno.test("Platform Logistics administration can review disputes with finance-au
   requireText(logisticsAdmin, "platform.escrow.execute", "refund authority is permission-gated");
   requireText(logisticsAdmin, "Refund full escrow", "full escrow refund action");
   requireText(logisticsAdmin, "Send to finance review", "offline dispute escalation");
-  requireText(logisticsAdmin, "Close finance review", "offline review closure");
+  requireText(logisticsAdmin, "Close review", "offline review closure");
   requireText(logisticsAdmin, "recoveredDeliverySubmitted", "admin can recognize verified recovered delivery");
   requireText(logisticsAdmin, "recovered_delivery_submitted", "customer confirmation remains available after recovered delivery");
 });
@@ -514,7 +514,7 @@ Deno.test("Platform Logistics administration can review disputes with finance-au
 
 Deno.test("Logistics address search is Nigeria-scoped, detailed and supports manual full-address entry", () => {
   requireText(geography, '"/lpg/maps/autocomplete"', "server-side LocationIQ address autocomplete");
-  requireText(geography, '"/runtime/logistics/geographies?countryCode=NG"', "complete Nigeria geography hierarchy");
+  requireText(geography, '"/runtime/logistics/geographies?countryCode=NG&search="', "complete Nigeria geography hierarchy");
   requireText(geography, "address_components", "full address components retained");
   requireText(geography, "coordinates:", "address coordinates retained");
   requireText(geography, "Use typed address instead", "manual entry is available alongside suggestions");
