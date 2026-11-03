@@ -142,6 +142,16 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
     ),
     staleTime: 60_000,
   });
+  const countryRoot = useQuery<Place[]>({
+    queryKey: ["skima-logistics", "geography-search", "NG", "country-root"],
+    enabled: status === "authenticated" && mode === "address" && !selected && debouncedSearch.length >= 2,
+    queryFn: ({ signal }) => api.get(
+      "/runtime/logistics/geographies?countryCode=NG&search=Nigeria",
+      RecordArraySchema,
+      { signal },
+    ),
+    staleTime: 5 * 60_000,
+  });
   const lookupText = useMemo(() => {
     const context = searchContext?.trim();
     const suffix = context ? `, ${context}, Nigeria` : ", Nigeria";
@@ -174,7 +184,8 @@ export function GeographyPicker({ label, value, selected, onChange, onSelect, er
   const searchFailed = Boolean(query.error) && (mode === "service_area" || Boolean(autocomplete.error));
   const manualBase = (query.data ?? []).find((item) =>
     /state$/i.test(asString(item, "canonical_name") ?? "")
-  ) ?? (query.data ?? []).find((item) => normalized(asString(item, "canonical_name")) === "nigeria");
+  ) ?? (query.data ?? []).find((item) => normalized(asString(item, "canonical_name")) === "nigeria")
+    ?? (countryRoot.data ?? []).find((item) => normalized(asString(item, "canonical_name")) === "nigeria");
   const useManualAddress = () => {
     const id = asString(manualBase, "id");
     if (!id || !search) return;
