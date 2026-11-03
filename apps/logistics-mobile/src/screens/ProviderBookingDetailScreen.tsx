@@ -77,6 +77,8 @@ export function ProviderBookingDetailScreen() {
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const actionKeysRef = useRef(new Map<string, string>());
+  const assignmentAttemptRef = useRef(0);
+  const lastAssignmentFingerprintRef = useRef<string | null>(null);
 
   const assignDriver = useMutation({
     mutationFn: async () => {
@@ -86,9 +88,10 @@ export function ProviderBookingDetailScreen() {
       const fingerprint = `assign:${bookingId}:${selectedDriverProfileId}:${selectedVehicleId}`;
       let key = actionKeysRef.current.get(fingerprint);
       if (!key) {
-        key = createClientIdempotencyKey("logistics.company.driver.assignment", fingerprint + ":" + String(Date.now()) + ":" + String(actionKeysRef.current.size));
+        key = createClientIdempotencyKey("logistics.company.driver.assignment", fingerprint + ":" + String(Date.now()) + ":" + String(assignmentAttemptRef.current++));
         actionKeysRef.current.set(fingerprint, key);
       }
+      lastAssignmentFingerprintRef.current = fingerprint;
       return api.post("/runtime/logistics/bookings/assign-driver", {
         bookingId,
         driverProfileId: selectedDriverProfileId,
@@ -98,7 +101,8 @@ export function ProviderBookingDetailScreen() {
     },
     onSuccess: async () => {
       setError(null);
-      actionKeysRef.current.delete(`assign:${bookingId}:${selectedDriverProfileId}:${selectedVehicleId}`);
+      if (lastAssignmentFingerprintRef.current) actionKeysRef.current.delete(lastAssignmentFingerprintRef.current);
+      lastAssignmentFingerprintRef.current = null;
       setIsReplacingAssignment(false);
       setSelectedDriverProfileId("");
       setSelectedVehicleId("");
@@ -226,7 +230,7 @@ export function ProviderBookingDetailScreen() {
                     const id = asString(driver, "driver_profile_id") ?? "";
                     const chosen = selectedDriverProfileId === id;
                     return (
-                      <Pressable key={id} onPress={() => {
+                      <Pressable key={id} disabled={assignDriver.isPending} onPress={() => {
                         setSelectedDriverProfileId(id);
                         const vehicles = Array.isArray(driver.vehicles) ? driver.vehicles as Record<string, unknown>[] : [];
                         setSelectedVehicleId(asString(vehicles[0], "vehicle_id") ?? "");
@@ -247,7 +251,7 @@ export function ProviderBookingDetailScreen() {
                         const chosen = selectedVehicleId === id;
                         const vehicleName = [asString(vehicle, "vehicle_type_name"), asString(vehicle, "manufacturer"), asString(vehicle, "model")].filter(Boolean).join(" · ");
                         return (
-                          <Pressable key={id} onPress={() => setSelectedVehicleId(id)} style={[styles.driverChoice, { borderColor: chosen ? palette.brand : palette.border, backgroundColor: chosen ? palette.brandSoft : palette.surface }]}>
+                          <Pressable key={id} disabled={assignDriver.isPending} onPress={() => setSelectedVehicleId(id)} style={[styles.driverChoice, { borderColor: chosen ? palette.brand : palette.border, backgroundColor: chosen ? palette.brandSoft : palette.surface }]}>
                             <View style={styles.driverChoiceCopy}>
                               <Text style={[styles.contactName, { color: palette.ink }]}>{vehicleName || "Approved vehicle"}</Text>
                               <Text style={[styles.meta, { color: palette.muted }]}>{asString(vehicle, "registration_number") ?? "Registration not supplied"} · {asNumber(vehicle, "max_load_kg") ?? "Unspecified"} kg capacity</Text>
