@@ -16,6 +16,7 @@ import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
 import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
+import { LogisticsMediaPicker } from "../ui/LogisticsMediaPicker";
 import { LogisticsDriverLocationShare } from "./LogisticsDriverLocationShare";
 
 type DriverAction = "accept" | "reject" | "release" | "start" | "recover_start" | "pickup" | "transit" | "deliver";
@@ -210,6 +211,16 @@ export function LogisticsDriverScreen() {
               <StatusPill status={asString(profile.data, "operational_status") ?? "available"} />
             </View>
           </Card>
+
+          <LogisticsMediaPicker
+            entityType="driver"
+            entityId={driverId ?? ""}
+            organizationId={asString(profile.data, "organization_id")}
+            mediaRole="driver.photo.public"
+            title="Your public driver photo"
+            description="Customers can see the driver who has been assigned to their delivery."
+            compact
+          />
 
           <SectionHeader
             title="Assigned to you"
