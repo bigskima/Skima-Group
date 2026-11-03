@@ -16,6 +16,7 @@ import { Screen } from "../ui/Screen";
 export function CompanyOnboardingScreen() {
   const { palette } = useAppTheme();
   const { api } = useSession();
+  const [step, setStep] = useState(1);
   const [displayName, setDisplayName] = useState("");
   const [legalName, setLegalName] = useState("");
   const [about, setAbout] = useState("");
@@ -65,6 +66,11 @@ export function CompanyOnboardingScreen() {
   return (
     <Screen eyebrow="PROVIDER REGISTRATION" title="Bring your company to SKIMA" subtitle="Create your company profile. You’ll configure services and coverage next."
       action={<AppButton label="Back" size="sm" variant="secondary" icon={<ArrowLeft color={palette.ink} size={15} />} onPress={() => router.back()} />}>
+      <View style={styles.progress}>
+        {[1, 2].map((part) => <View key={part} style={[styles.progressSegment, { backgroundColor: part <= step ? palette.brand : palette.border }]} />)}
+        <Text style={[styles.progressText, { color: palette.muted }]}>STEP {step} OF 2</Text>
+      </View>
+      {step === 1 ? (
       <Card padding="lg">
         <View style={styles.intro}>
           <View style={[styles.introIcon, { backgroundColor: palette.brandSoft }]}><Building2 color={palette.brand} size={22} /></View>
@@ -76,8 +82,10 @@ export function CompanyOnboardingScreen() {
         <AppField label="Company display name" value={displayName} onChangeText={setDisplayName} placeholder="e.g. Swift City Logistics" maxLength={160} />
         <AppField label="Registered legal name" value={legalName} onChangeText={setLegalName} placeholder="Legal business name" optional maxLength={200} />
         <AppField label="About your company" value={about} onChangeText={setAbout} placeholder="What do you specialise in? What areas do you cover?" multiline optional maxLength={2000} />
-      </Card>
-
+      
+      ) : (
+        <>
+          <SectionHeader title="Where should we reach your team?" description="Add at least one contact channel. You can update these details later." />
       <Card padding="lg">
         <View style={styles.intro}>
           <View style={[styles.introIcon, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={21} /></View>
@@ -90,16 +98,30 @@ export function CompanyOnboardingScreen() {
         <AppField label="Support email" value={supportEmail} onChangeText={setSupportEmail} placeholder="operations@company.com" keyboardType="email-address" autoCapitalize="none" optional />
       </Card>
 
+
+        </>
+      )}
       {error ? <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}><Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text></View> : null}
       <View style={[styles.note, { backgroundColor: palette.brandSofter }]}>
         <FileText color={palette.brand} size={16} />
         <Text style={[styles.noteText, { color: palette.ink }]}>Registration starts with pending verification. Your company can prepare services and coverage, but only verified, active providers receive and quote on customer requests.</Text>
       </View>
-      <AppButton label="Create company workspace" fullWidth disabled={!valid} loading={register.isPending} onPress={() => { setError(null); register.mutate(); }} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />
+      <View style={styles.actions}>
+        {step > 1 ? <AppButton label="Back" variant="secondary" onPress={() => setStep(1)} icon={<ArrowLeft color={palette.ink} size={15} />} /> : null}
+        {step === 1 ? (
+          <AppButton label="Continue" fullWidth disabled={!valid} onPress={() => setStep(2)} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />
+        ) : (
+          <AppButton label="Create company workspace" fullWidth loading={register.isPending} onPress={() => { setError(null); register.mutate(); }} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />
+        )}
+      </View>
     </Screen>
   );
 }
 const styles = StyleSheet.create({
+  progress: { flexDirection: "row", alignItems: "center", gap: 6 },
+  progressSegment: { flex: 1, height: 5, borderRadius: radii.pill },
+  progressText: { ...typography.eyebrow, fontSize: 8, marginLeft: 5 },
+  actions: { flexDirection: "row", gap: spacing.sm },
   intro: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
   introIcon: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   introCopy: { flex: 1, gap: 3 },
