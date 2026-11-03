@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "remoteHeadVersion": "20261103144006",
+  "remoteHeadVersion": "20261103171000",
   "requiredRestoredMigration": "20260820013807_harden_document_correction_review_flow.sql",
   "pendingPermissionMigration": null,
   "staleAliases": {
@@ -134,22 +134,24 @@
     "20261102013000_fuel_driver_workflow_fees_and_mode_controls.sql",
     "20261102014500_lpg_single_customer_otp_handover.sql",
     "20261102112220_skima_store_foundation.sql",
+    "20261102210712_fuel_easy_fulfillment_mode_aware_runtime.sql",
+    "20261102210720_fuel_auto_progression_verified_delivery_completion.sql",
+    "20261102210817_fuel_verified_settlement_platform_wallet_gate.sql",
+    "20261102211004_fuel_internal_helper_rpc_acl.sql",
+    "20261103131401_skima_store_checkout_delivery.sql",
     "20261103143731_logistics_marketplace_domain_foundation.sql",
     "20261103143833_logistics_marketplace_tenant_and_matching_hardening.sql",
     "20261103143845_logistics_booking_and_payment_modes.sql",
     "20261103143849_logistics_booking_fulfillment_and_settlement.sql",
     "20261103143852_logistics_provider_wallet_funding.sql",
     "20261103143906_logistics_company_driver_fulfillment.sql",
-    "20261103131401_skima_store_checkout_delivery.sql",
     "20261103143909_logistics_customer_prebooking_cancellation.sql",
     "20261103143913_logistics_driver_location_tracking.sql",
-    "20261102210712_fuel_easy_fulfillment_mode_aware_runtime.sql",
-    "20261102210720_fuel_auto_progression_verified_delivery_completion.sql",
-    "20261102210817_fuel_verified_settlement_platform_wallet_gate.sql",
-    "20261102211004_fuel_internal_helper_rpc_acl.sql",
     "20261103143942_logistics_driver_prestart_release.sql",
     "20261103143948_logistics_safe_replacement_handoff.sql",
     "20261103143956_logistics_incident_and_dispute_protection.sql",
-    "20261103144006_logistics_cargo_recovery_dispatch.sql"
+    "20261103144006_logistics_cargo_recovery_dispatch.sql",
+    "20261103223000_logistics_earnings_withdrawal_and_driver_payment_controls.sql",
+    "20261103223100_logistics_external_driver_payment_channels.sql"
   ]
 }
