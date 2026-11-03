@@ -1,20 +1,17 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import {
-  ArrowRight, Bell, Box, Building2, CarFront, ChevronRight, Clock3, FileText,
-  House, Package, PackageCheck, ShieldCheck, Truck, Weight,
+  Bell, Box, BriefcaseBusiness, CarFront, ChevronRight, House, Package,
+  PackageCheck, ShoppingBag, ShieldCheck, Truck,
 } from "lucide-react-native";
 import { useMemo } from "react";
-import { useWindowDimensions } from "react-native";
-import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { useWindowDimensions, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useLogisticsQuery, asString } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { radii, shadows, spacing, typography } from "../theme/tokens";
+import { radii, shadows, typography } from "../theme/tokens";
 import { AppButton } from "../ui/AppButton";
 import { BrandMark } from "../ui/BrandMark";
 import { LogisticsPromotionBanner } from "../ui/LogisticsPromotionBanner";
-import { Card } from "../ui/Card";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
@@ -36,8 +33,7 @@ function locationName(value: unknown) {
   return asString(record, "display_name", "canonical_name", "formatted_address", "address") ?? "Location pending";
 }
 function greetingName(value: string | null | undefined) {
-  const first = value?.trim().split(/\s+/)[0];
-  return first || "there";
+  return value?.trim().split(/\s+/)[0] || "there";
 }
 function displayDate(value: string | null) {
   if (!value) return "Just now";
@@ -65,199 +61,167 @@ export function CustomerHomeScreen() {
     () => (bookings.data ?? []).filter((booking) => !["completed", "completed_offline", "settled", "cancelled", "refunded"].includes((asString(booking, "status") ?? "").toLowerCase())),
     [bookings.data],
   );
-  const refresh = async () => {
-    await Promise.all([categories.refetch(), jobs.refetch(), bookings.refetch()]);
-  };
+  const refresh = async () => { await Promise.all([categories.refetch(), jobs.refetch(), bookings.refetch()]); };
   const firstError = categories.error ?? jobs.error ?? bookings.error;
+  const activeCategories = (categories.data ?? []).filter((item) => asString(item, "status") === "active");
 
   return (
     <Screen
-      eyebrow="SKIMA LOGISTICS"
       title={`Good day, ${name}`}
-      subtitle="The right logistics partner starts with the right connection."
+      denseHeader
       action={
-        <Pressable accessibilityRole="button" accessibilityLabel="Open account" onPress={() => router.push("/(customer)/account" as never)}
-          style={[styles.avatar, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}>
-          <Text style={[styles.avatarText, { color: palette.brand }]}>{name.slice(0, 1).toUpperCase()}</Text>
-        </Pressable>
-      }
-      refreshControl={<RefreshControl refreshing={categories.isRefetching || jobs.isRefetching || bookings.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}
-    >
-      <View style={styles.topBrandRow}>
-        <BrandMark />
-        <View style={styles.topRight}>
-          <View style={[styles.secureTag, { backgroundColor: palette.successSoft }]}>
-            <ShieldCheck color={palette.success} size={13} />
-            <Text style={[styles.secureText, { color: palette.success }]}>Trusted network</Text>
-          </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="View activity" onPress={() => router.push("/(customer)/jobs" as never)}
+        <View style={styles.headerActions}>
+          <BrandMark />
+          <Pressable accessibilityRole="button" accessibilityLabel="Open notifications" onPress={() => router.push("/(customer)/notifications" as never)}
             style={[styles.bell, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <Bell color={palette.ink} size={18} />
+            <Bell color={palette.ink} size={19} />
             {activeJobs.length + activeBookings.length > 0 ? <View style={[styles.bellDot, { backgroundColor: palette.brand }]} /> : null}
           </Pressable>
         </View>
-      </View>
+      }
+      refreshControl={<RefreshControl refreshing={categories.isRefetching || jobs.isRefetching || bookings.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}
+    >
+      <Pressable accessibilityRole="button" onPress={() => router.push("/(customer)/request" as never)}
+        style={({ pressed }) => [styles.requestAction, { backgroundColor: palette.surface, borderColor: palette.border, transform: [{ scale: pressed ? 0.99 : 1 }] }]}>
+        <View style={[styles.requestIcon, { backgroundColor: palette.brandSoft }]}><Truck color={palette.brand} size={21} /></View>
+        <View style={styles.requestCopy}>
+          <Text style={[styles.requestTitle, { color: palette.ink }]}>Create a delivery request</Text>
+          <Text style={[styles.requestMeta, { color: palette.muted }]}>Compare qualified providers for your route</Text>
+        </View>
+        <ChevronRight color={palette.brand} size={20} />
+      </Pressable>
 
-      <LinearGradient colors={["#E21D2F", "#B91323"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-        <View pointerEvents="none" style={styles.heroOrbLarge} />
-        <View pointerEvents="none" style={styles.heroOrbSmall} />
-        <View style={styles.heroCopy}>
-          <Text style={styles.heroEyebrow}>YOUR DELIVERY. YOUR CHOICE.</Text>
-          <Text style={styles.heroTitle}>Move anything.{ "\n" }Move with confidence.</Text>
-          <Text style={styles.heroBody}>Connect with logistics companies ready for your route, cargo and timing.</Text>
-          <AppButton label="Create a request" size="lg" onPress={() => router.push("/(customer)/request" as never)}
-            variant="secondary" trailingIcon={<ArrowRight color={palette.brandDark} size={17} />} />
-        </View>
-        <View style={styles.heroIcon}>
-          <Truck color="#FFFFFF" size={34} strokeWidth={1.8} />
-        </View>
-        <View style={styles.heroFoot}>
-          <View style={styles.heroFootItem}><ShieldCheck color="rgba(255,255,255,.82)" size={13} /><Text style={styles.heroFootText}>Verified providers</Text></View>
-          <View style={styles.heroFootDivider} />
-          <View style={styles.heroFootItem}><FileText color="rgba(255,255,255,.82)" size={13} /><Text style={styles.heroFootText}>Compare offers</Text></View>
-          <View style={styles.heroFootDivider} />
-          <View style={styles.heroFootItem}><Clock3 color="rgba(255,255,255,.82)" size={13} /><Text style={styles.heroFootText}>Track progress</Text></View>
-        </View>
-      </LinearGradient>
-
+      {/* Only the configured campaign banner can occupy the main promotional space. */}
       <LogisticsPromotionBanner />
+
       <View style={styles.statsRow}>
-        <View style={[styles.stat, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-          <Text style={[styles.statValue, { color: palette.ink }]}>{activeJobs.length}</Text>
-          <Text style={[styles.statLabel, { color: palette.muted }]}>Open requests</Text>
-        </View>
-        <View style={[styles.stat, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-          <Text style={[styles.statValue, { color: palette.ink }]}>{activeBookings.length}</Text>
-          <Text style={[styles.statLabel, { color: palette.muted }]}>Active bookings</Text>
-        </View>
-        <View style={[styles.stat, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-          <Text style={[styles.statValue, { color: palette.brand }]}>Free</Text>
-          <Text style={[styles.statLabel, { color: palette.muted }]}>Provider matching</Text>
-        </View>
+        <Stat value={String(activeJobs.length)} label="Requests" />
+        <Stat value={String(activeBookings.length)} label="Bookings" />
+        <Stat value="Free" label="Provider matching" accent />
       </View>
 
       <View style={styles.section}>
-        <SectionHeader title="What are you moving?" description="Choose a service to start with." action={
-          <Pressable onPress={() => router.push("/(customer)/request" as never)}><Text style={[styles.seeAll, { color: palette.brand }]}>View all</Text></Pressable>
+        <SectionHeader title="Services" action={
+          <Pressable onPress={() => router.push("/(customer)/request" as never)}><Text style={[styles.seeAll, { color: palette.brand }]}>All services</Text></Pressable>
         } />
         {categories.isPending ? <ScreenSkeleton cards={2} /> : categories.error ? (
-          <StatePanel title="Services couldn’t load" description="We couldn’t retrieve the live Logistics service catalogue." retry={() => void categories.refetch()} icon={<Package color={palette.brand} size={23} />} />
-        ) : (categories.data ?? []).filter((item) => asString(item, "status") === "active").length ? (
+          <StatePanel title="Services unavailable" description="Try again to load the service list." retry={() => void categories.refetch()} icon={<Package color={palette.brand} size={22} />} />
+        ) : activeCategories.length ? (
           <View style={styles.categoryGrid}>
-            {(categories.data ?? []).filter((item) => asString(item, "status") === "active").map((item) => {
+            {activeCategories.map((item) => {
               const key = asString(item, "key") ?? "";
               const Icon = CATEGORY_ICONS[key] ?? Package;
               return (
                 <Pressable key={key} accessibilityRole="button" onPress={() => router.push({ pathname: "/(customer)/request", params: { category: key } } as never)}
-                  style={({ pressed }) => [styles.categoryCard, shadows.subtle, { width: width >= 1120 ? "31.5%" : width >= 680 ? "48.5%" : "48.5%", flexBasis: width >= 1120 ? "31.5%" : "46%", flexGrow: width >= 1120 ? 0 : 1, backgroundColor: palette.surface, borderColor: palette.border, transform: [{ scale: pressed ? 0.985 : 1 }] }]}>
-                  <View style={[styles.categoryIcon, { backgroundColor: palette.brandSoft }]}><Icon color={palette.brand} size={22} strokeWidth={1.9} /></View>
-                  <View style={styles.categoryCopy}>
-                    <Text style={[styles.categoryTitle, { color: palette.ink }]} numberOfLines={2}>{asString(item, "display_name") ?? "Logistics service"}</Text>
-                    <Text style={[styles.categoryDescription, { color: palette.muted }]} numberOfLines={2}>{asString(item, "description") ?? "Find a qualified logistics provider."}</Text>
-                  </View>
-                  <View style={[styles.categoryArrow, { backgroundColor: palette.brandSofter }]}><ChevronRight color={palette.brand} size={16} /></View>
+                  style={({ pressed }) => [styles.categoryCard, shadows.subtle, {
+                    width: width >= 1120 ? "31.5%" : width >= 680 ? "48.5%" : "48.5%",
+                    flexBasis: width >= 1120 ? "31.5%" : "46%", flexGrow: width >= 1120 ? 0 : 1,
+                    backgroundColor: palette.surface, borderColor: palette.border,
+                    transform: [{ scale: pressed ? 0.985 : 1 }],
+                  }]}>
+                  <View style={[styles.categoryIcon, { backgroundColor: palette.brandSoft }]}><Icon color={palette.brand} size={19} /></View>
+                  <Text style={[styles.categoryTitle, { color: palette.ink }]} numberOfLines={1}>{asString(item, "display_name") ?? "Logistics service"}</Text>
+                  <ChevronRight color={palette.muted} size={15} style={styles.categoryArrow} />
                 </Pressable>
               );
             })}
           </View>
         ) : (
-          <StatePanel title="Services are being prepared" description="The available service catalogue will appear here when it is enabled." icon={<Package color={palette.brand} size={23} />} />
+          <StatePanel title="No services available" description="Service options will appear here when enabled." icon={<Package color={palette.brand} size={22} />} />
         )}
       </View>
 
       <View style={styles.section}>
-        <SectionHeader title="Your activity" description="Keep an eye on requests and confirmed bookings." action={
-          <Pressable onPress={() => router.push("/(customer)/jobs" as never)}><Text style={[styles.seeAll, { color: palette.brand }]}>See all</Text></Pressable>
+        <SectionHeader title="Recent activity" action={
+          <Pressable onPress={() => router.push("/(customer)/jobs" as never)}><Text style={[styles.seeAll, { color: palette.brand }]}>View all</Text></Pressable>
         } />
         {jobs.isPending && bookings.isPending ? <ScreenSkeleton cards={2} /> : firstError ? (
-          <StatePanel title="Activity couldn’t load" description="Your requests are safe. Refresh to try again." retry={() => void refresh()} />
+          <StatePanel title="Activity unavailable" description="Your requests are safe. Refresh to try again." retry={() => void refresh()} />
         ) : activeJobs.length === 0 && activeBookings.length === 0 ? (
-          <Card variant="subtle" padding="lg">
-            <View style={styles.activityEmpty}>
-              <View style={[styles.emptyIcon, { backgroundColor: palette.brandSoft }]}><PackageCheck color={palette.brand} size={23} /></View>
-              <View style={styles.emptyCopy}>
-                <Text style={[styles.emptyTitle, { color: palette.ink }]}>Your next move starts here</Text>
-                <Text style={[styles.emptyBody, { color: palette.muted }]}>Create a request and matched logistics companies can send you offers.</Text>
-              </View>
-              <AppButton label="Start a request" fullWidth onPress={() => router.push("/(customer)/request" as never)} />
-            </View>
-          </Card>
+          <View style={[styles.empty, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <PackageCheck color={palette.brand} size={22} />
+            <Text style={[styles.emptyTitle, { color: palette.ink }]}>No active requests</Text>
+            <AppButton label="Create request" size="md" onPress={() => router.push("/(customer)/request" as never)} />
+          </View>
         ) : (
           <View style={styles.activityList}>
             {activeBookings.slice(0, 2).map((booking) => (
-              <Pressable key={String(booking.id)} onPress={() => router.push({ pathname: "/(customer)/jobs/[id]", params: { id: String(booking.job_id) } } as never)}
+              <Pressable key={String(booking.id)} onPress={() => router.push({ pathname: "/(customer)/bookings/[id]", params: { id: String(booking.id) } } as never)}
                 style={[styles.activityCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                <View style={[styles.activityIcon, { backgroundColor: palette.successSoft }]}><Truck color={palette.success} size={18} /></View>
+                <View style={[styles.activityIcon, { backgroundColor: palette.successSoft }]}><Truck color={palette.success} size={17} /></View>
                 <View style={styles.activityCopy}>
-                  <Text style={[styles.activityTitle, { color: palette.ink }]}>Confirmed booking</Text>
-                  <Text style={[styles.activityMeta, { color: palette.muted }]}>{asString(booking, "currency_code") ?? ""} {String(booking.total_customer_charge ?? "")}</Text>
+                  <Text style={[styles.activityTitle, { color: palette.ink }]} numberOfLines={1}>Confirmed booking</Text>
+                  <Text style={[styles.activityMeta, { color: palette.muted }]} numberOfLines={1}>{asString(booking, "currency_code") ?? ""} {String(booking.total_customer_charge ?? "")}</Text>
                   <StatusPill status={asString(booking, "status") ?? "booked"} />
                 </View>
-                <ChevronRight color={palette.muted} size={18} />
+                <ChevronRight color={palette.muted} size={17} />
               </Pressable>
             ))}
             {activeJobs.slice(0, 2).map((job) => (
               <Pressable key={String(job.id)} onPress={() => router.push({ pathname: "/(customer)/jobs/[id]", params: { id: String(job.id) } } as never)}
                 style={[styles.activityCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                <View style={[styles.activityIcon, { backgroundColor: palette.brandSoft }]}><Package color={palette.brand} size={18} /></View>
+                <View style={[styles.activityIcon, { backgroundColor: palette.brandSoft }]}><BriefcaseBusiness color={palette.brand} size={17} /></View>
                 <View style={styles.activityCopy}>
                   <Text style={[styles.activityTitle, { color: palette.ink }]} numberOfLines={1}>{asString(job, "title") ?? "Logistics request"}</Text>
-                  <Text style={[styles.activityMeta, { color: palette.muted }]}>{displayDate(asString(job, "created_at"))} · {locationName(job.pickup_location)} → {locationName(job.destination_location)}</Text>
+                  <Text style={[styles.activityMeta, { color: palette.muted }]} numberOfLines={1}>{displayDate(asString(job, "created_at"))} · {locationName(job.pickup_location)} → {locationName(job.destination_location)}</Text>
                   <StatusPill status={asString(job, "status") ?? "open"} />
                 </View>
-                <ChevronRight color={palette.muted} size={18} />
+                <ChevronRight color={palette.muted} size={17} />
               </Pressable>
             ))}
           </View>
         )}
       </View>
+
+      <Pressable accessibilityRole="button" onPress={() => router.push("/(customer)/store" as never)}
+        style={[styles.storeLink, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+        <View style={[styles.storeIcon, { backgroundColor: palette.brandSoft }]}><ShoppingBag color={palette.brand} size={19} /></View>
+        <View style={styles.requestCopy}>
+          <Text style={[styles.requestTitle, { color: palette.ink }]}>SKIMA Store</Text>
+          <Text style={[styles.requestMeta, { color: palette.muted }]}>Cylinders, essentials and more</Text>
+        </View>
+        <ChevronRight color={palette.muted} size={18} />
+      </Pressable>
     </Screen>
   );
 }
 
+function Stat({ value, label, accent = false }: { value: string; label: string; accent?: boolean }) {
+  const { palette } = useAppTheme();
+  return <View style={[styles.stat, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+    <Text style={[styles.statValue, { color: accent ? palette.brand : palette.ink }]}>{value}</Text>
+    <Text style={[styles.statLabel, { color: palette.muted }]}>{label}</Text>
+  </View>;
+}
+
 const styles = StyleSheet.create({
-  topBrandRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: -8, marginBottom: -4 },
-  topRight: { flexDirection: "row", alignItems: "center", gap: 9 },
-  secureTag: { height: 30, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, borderRadius: radii.pill },
-  secureText: { ...typography.caption, fontSize: 9, fontWeight: "900" },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
   bell: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 14, borderWidth: StyleSheet.hairlineWidth },
   bellDot: { position: "absolute", top: 8, right: 8, width: 6, height: 6, borderRadius: 3 },
-  avatar: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", borderWidth: StyleSheet.hairlineWidth },
-  avatarText: { ...typography.bodyStrong, fontSize: 16 },
-  hero: { minHeight: 260, overflow: "hidden", borderRadius: 28, padding: 20, justifyContent: "space-between", gap: 18 },
-  heroOrbLarge: { position: "absolute", width: 240, height: 240, borderRadius: 120, top: -115, right: -75, backgroundColor: "rgba(255,255,255,.09)" },
-  heroOrbSmall: { position: "absolute", width: 130, height: 130, borderRadius: 65, top: 75, right: -36, backgroundColor: "rgba(255,255,255,.055)" },
-  heroCopy: { alignItems: "flex-start", gap: 8, zIndex: 1, maxWidth: 340 },
-  heroEyebrow: { color: "rgba(255,255,255,.72)", ...typography.eyebrow, fontSize: 8 },
-  heroTitle: { color: "#FFFFFF", fontSize: 29, lineHeight: 33, fontWeight: "900", letterSpacing: -0.75 },
-  heroBody: { color: "rgba(255,255,255,.78)", ...typography.caption, fontSize: 11, lineHeight: 17, maxWidth: 300, marginBottom: 5 },
-  heroIcon: { position: "absolute", top: 38, right: 26, width: 68, height: 68, borderRadius: 24, backgroundColor: "rgba(255,255,255,.13)", alignItems: "center", justifyContent: "center" },
-  heroFoot: { flexDirection: "row", alignItems: "center", gap: 9, zIndex: 1, flexWrap: "wrap" },
-  heroFootItem: { flexDirection: "row", alignItems: "center", gap: 5 },
-  heroFootText: { color: "rgba(255,255,255,.84)", fontSize: 9, fontWeight: "800" },
-  heroFootDivider: { width: 3, height: 3, borderRadius: 2, backgroundColor: "rgba(255,255,255,.5)" },
+  requestAction: { flexDirection: "row", alignItems: "center", gap: 11, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 13 },
+  requestIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  requestCopy: { flex: 1, minWidth: 0, gap: 2 },
+  requestTitle: { ...typography.bodyStrong, fontSize: 13 },
+  requestMeta: { ...typography.caption, fontSize: 10, lineHeight: 14 },
   statsRow: { flexDirection: "row", gap: 8 },
-  stat: { flex: 1, minWidth: 0, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 12, gap: 2 },
-  statValue: { ...typography.heading, fontSize: 20, lineHeight: 24 },
-  statLabel: { ...typography.caption, fontSize: 9, lineHeight: 13 },
-  section: { gap: 13 },
-  seeAll: { ...typography.caption, fontSize: 11, fontWeight: "900" },
-  categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  categoryCard: { width: "48.5%", minHeight: 160, flexGrow: 1, flexBasis: "46%", borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: 13, gap: 10, justifyContent: "space-between" },
-  categoryIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  categoryCopy: { gap: 4, flex: 1 },
-  categoryTitle: { ...typography.bodyStrong, fontSize: 13, lineHeight: 17 },
-  categoryDescription: { ...typography.caption, fontSize: 10, lineHeight: 15 },
-  categoryArrow: { position: "absolute", right: 10, top: 10, width: 27, height: 27, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  activityList: { gap: 9 },
-  activityCard: { flexDirection: "row", alignItems: "center", gap: 11, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.xl, padding: 13 },
-  activityIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  activityCopy: { flex: 1, minWidth: 0, gap: 4 },
-  activityTitle: { ...typography.bodyStrong, fontSize: 13 },
-  activityMeta: { ...typography.caption, fontSize: 10, lineHeight: 14 },
-  activityEmpty: { alignItems: "flex-start", gap: 12 },
-  emptyIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  emptyCopy: { gap: 3 },
-  emptyTitle: { ...typography.bodyStrong, fontSize: 14 },
-  emptyBody: { ...typography.caption, lineHeight: 18 },
+  stat: { flex: 1, minWidth: 0, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.md, padding: 10, gap: 1 },
+  statValue: { ...typography.heading, fontSize: 19, lineHeight: 23 },
+  statLabel: { ...typography.caption, fontSize: 9, lineHeight: 12 },
+  section: { gap: 10 },
+  seeAll: { ...typography.caption, fontSize: 10, fontWeight: "900" },
+  categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  categoryCard: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: 9, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 11 },
+  categoryIcon: { width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  categoryTitle: { flex: 1, ...typography.bodyStrong, fontSize: 11, lineHeight: 15 },
+  categoryArrow: { position: "absolute", right: 9, top: 9 },
+  activityList: { gap: 8 },
+  activityCard: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 11 },
+  activityIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  activityCopy: { flex: 1, minWidth: 0, gap: 3 },
+  activityTitle: { ...typography.bodyStrong, fontSize: 11 },
+  activityMeta: { ...typography.caption, fontSize: 9, lineHeight: 13 },
+  empty: { alignItems: "center", gap: 8, padding: 16, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth },
+  emptyTitle: { ...typography.bodyStrong, fontSize: 12 },
+  storeLink: { flexDirection: "row", alignItems: "center", gap: 11, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 12 },
+  storeIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
 });
