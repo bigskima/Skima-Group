@@ -231,6 +231,7 @@ export function LogisticsDriverScreen() {
             const status = asString(assignment, "status") ?? "offered";
             const bookingStatus = asString(job, "booking_status") ?? "";
             const assignmentKind = asString(assignment, "assignment_kind") ?? "delivery";
+            const bookingOnHold = ["delivery_exception", "failed_delivery", "disputed"].includes(bookingStatus);
             const latestIncident = (incidentsQuery.data ?? [])
               .filter((item) => asString(item, "booking_id") === bookingId)
               .slice(-1)[0] ?? null;
@@ -398,7 +399,7 @@ export function LogisticsDriverScreen() {
                     </View>
                   </View>
                 ) : null}
-                {["in_progress", "picked_up", "in_transit"].includes(status) ? (
+                {["in_progress", "picked_up", "in_transit"].includes(status) && !bookingOnHold ? (
                   <LogisticsDriverLocationShare bookingId={bookingId} />
                 ) : null}
                 {asString(job, "customer_name") || asString(job, "customer_phone") ? (
@@ -438,7 +439,7 @@ export function LogisticsDriverScreen() {
                     </View>
                     <AppButton label="Start cargo recovery" fullWidth loading={isBusy} onPress={() => runAction.mutate({ kind: "recover_start", bookingId, assignmentId })} />
                   </View>
-                ) : status === "accepted" ? (
+                ) : status === "accepted" && !bookingOnHold ? (
                   <View style={styles.actions}>
                     <Text style={[styles.meta, { color: palette.muted }]}>Start the job when you are ready to travel to the pickup point. If you cannot start, return it to company dispatch before taking custody of the cargo.</Text>
                     <AppButton label="Start job" fullWidth loading={isBusy} onPress={() => runAction.mutate({ kind: "start", bookingId, assignmentId })} />
@@ -464,17 +465,17 @@ export function LogisticsDriverScreen() {
                       )}
                     />
                   </View>
-                ) : status === "in_progress" ? (
+                ) : status === "in_progress" && !bookingOnHold ? (
                   <View style={styles.actions}>
                     <Text style={[styles.meta, { color: palette.muted }]}>Confirm pickup only after the cargo has been handed over to you.</Text>
                     <AppButton label="Confirm pickup" fullWidth loading={isBusy} onPress={() => runAction.mutate({ kind: "pickup", bookingId, assignmentId })} />
                   </View>
-                ) : status === "picked_up" ? (
+                ) : status === "picked_up" && !bookingOnHold ? (
                   <View style={styles.actions}>
                     <Text style={[styles.meta, { color: palette.muted }]}>Mark the cargo in transit when you leave for the destination.</Text>
                     <AppButton label="Mark in transit" fullWidth loading={isBusy} onPress={() => runAction.mutate({ kind: "transit", bookingId, assignmentId })} />
                   </View>
-                ) : status === "in_transit" ? (
+                ) : status === "in_transit" && !bookingOnHold ? (
                   <View style={styles.actions}>
                     <Text style={[styles.meta, { color: palette.muted }]}>Enter the recipient's name at the destination. The customer will confirm receipt before online escrow is released.</Text>
                     <AppField
