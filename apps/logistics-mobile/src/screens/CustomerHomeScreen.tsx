@@ -1,11 +1,11 @@
 import { router } from "expo-router";
 import {
   Bell, Box, BriefcaseBusiness, CarFront, ChevronRight, House, Package,
-  PackageCheck, ShoppingBag, ShieldCheck, Truck,
+  PackageCheck, ShoppingBag, ShieldCheck, Truck, WalletCards,
 } from "lucide-react-native";
 import { useMemo } from "react";
 import { useWindowDimensions, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
-import { useLogisticsQuery, asString } from "../api/logistics";
+import { useLogisticsQuery, asNumber, asString } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, shadows, typography } from "../theme/tokens";
@@ -48,6 +48,8 @@ export function CustomerHomeScreen() {
   const categories = useLogisticsQuery(["categories"], "/runtime/logistics/categories");
   const jobs = useLogisticsQuery(["jobs"], "/runtime/logistics/jobs", true, 30_000);
   const bookings = useLogisticsQuery(["bookings"], "/runtime/logistics/bookings", true, 30_000);
+  const wallets = useLogisticsQuery(["home-wallets"], "/runtime/wallets", true, 60_000);
+  const walletBalances = useLogisticsQuery(["home-wallet-balances"], "/runtime/wallet-balances", true, 30_000);
   const name = greetingName(
     context?.profile?.display_name ??
     (typeof session?.user.user_metadata?.display_name === "string" ? session.user.user_metadata.display_name : null) ??
@@ -64,6 +66,10 @@ export function CustomerHomeScreen() {
   const refresh = async () => { await Promise.all([categories.refetch(), jobs.refetch(), bookings.refetch()]); };
   const firstError = categories.error ?? jobs.error ?? bookings.error;
   const activeCategories = (categories.data ?? []).filter((item) => asString(item, "status") === "active");
+  const customerWallet = (wallets.data ?? []).find((w) => asString(w, "wallet_type") === "customer" && asString(w, "owner_entity_type") === "user" && asString(w, "owner_entity_id") === session?.user.id && asString(w, "status") === "active") ?? null;
+  const customerWalletId = asString(customerWallet, "id");
+  const walletCurrency = asString(customerWallet, "currency_code") ?? "NGN";
+  const walletBalance = asNumber((walletBalances.data ?? []).find((b) => asString(b, "wallet_id") === customerWalletId), "balance") ?? 0;
 
   return (
     <Screen
@@ -99,6 +105,8 @@ export function CustomerHomeScreen() {
         <Stat value={String(activeBookings.length)} label="Bookings" />
         <Stat value="Free" label="Provider matching" accent />
       </View>
+
+      <Pressable accessibilityRole="button" onPress={() => router.push("/(customer)/wallet" as never)} style={[styles.walletLink,{backgroundColor:palette.surface,borderColor:palette.border}]}><View style={[styles.walletIcon,{backgroundColor:palette.brandSoft}]}><WalletCards color={palette.brand} size={18}/></View><View style={styles.requestCopy}><Text style={[styles.requestTitle,{color:palette.ink}]}>SKIMA Wallet</Text><Text style={[styles.requestMeta,{color:palette.muted}]}>{customerWalletId ? new Intl.NumberFormat("en-NG",{style:"currency",currency:walletCurrency,maximumFractionDigits:2}).format(walletBalance) : "View your shared wallet"}</Text></View><ChevronRight color={palette.muted} size={18}/></Pressable>
 
       <View style={styles.section}>
         <SectionHeader title="Services" action={
@@ -222,6 +230,8 @@ const styles = StyleSheet.create({
   activityMeta: { ...typography.caption, fontSize: 9, lineHeight: 13 },
   empty: { alignItems: "center", gap: 8, padding: 16, borderRadius: radii.lg, borderWidth: StyleSheet.hairlineWidth },
   emptyTitle: { ...typography.bodyStrong, fontSize: 12 },
+  walletLink: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 11 },
+  walletIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   storeLink: { flexDirection: "row", alignItems: "center", gap: 11, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 12 },
   storeIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
 });
