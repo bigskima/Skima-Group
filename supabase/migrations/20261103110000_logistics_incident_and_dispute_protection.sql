@@ -478,7 +478,7 @@ begin
           'incident_assignment_outcome',target_decision
         )
     where id = incident_record.assignment_id
-      and status in ('in_progress','picked_up','in_transit','delivery_submitted');
+      and status in ('in_progress','picked_up','in_transit','delivery_submitted','incident_hold');
 
     update public.logistics_bookings
     set status = 'failed_delivery',
