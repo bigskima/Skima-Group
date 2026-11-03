@@ -188,7 +188,19 @@ async function handleLogisticsRequest(
 
   if (routePath === "/runtime/logistics/geographies" && request.method === "GET") {
     const search = optionalString(url.searchParams.get("search"));
-    if (!search || search.trim().length < 2) {
+    const countryCode = optionalString(url.searchParams.get("countryCode"));
+    const parentId = optionalUuid(url.searchParams.get("parentId"), "parentId");
+    if (!search) {
+      let query = supabase.from("geographies")
+        .select("id,parent_id,canonical_name,country_code,geography_level_id,aliases,status")
+        .eq("status", "active")
+        .order("canonical_name", { ascending: true })
+        .limit(50);
+      if (countryCode) query = query.eq("country_code", countryCode.toUpperCase());
+      if (parentId) query = query.eq("parent_id", parentId);
+      return selectResponse(query, id);
+    }
+    if (search.trim().length < 2) {
       return jsonResponse({ ok: true, data: [], requestId: id });
     }
     const rawLimit = url.searchParams.get("limit");
