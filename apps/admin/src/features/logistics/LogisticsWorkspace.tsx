@@ -405,7 +405,12 @@ export function LogisticsWorkspace(props: {
 
       {!loading && page === "providers" ? (
         <div className="logistics-admin__panel">
-          <div className="logistics-admin__panel-heading"><div><h2>Provider review & operating status</h2><p>Verification is separate from pausing an already-verified company.</p></div></div>
+          <div className="logistics-admin__panel-heading">
+            <div><h2>Provider review & operating status</h2><p>Verification is separate from pausing an already-verified company.</p></div>
+            <button type="button" className="logistics-admin__link" onClick={() => props.onNavigate("/partners/applications")}>
+              Review company applications & documents
+            </button>
+          </div>
           {!canManage ? <div className="logistics-admin__notice logistics-admin__notice--warning">Read-only access. Provider decisions require Logistics marketplace manage permission.</div> : null}
           <label className="logistics-admin__field"><span>Review / status reason</span><textarea value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} placeholder="Record the documents checked, reason for approval or pause, and any follow-up required." /></label>
           {providerRows.length === 0 ? <Empty title="No provider companies found" detail="Provider applications will appear when a logistics company completes onboarding." /> : providerRows.map((provider) => {
