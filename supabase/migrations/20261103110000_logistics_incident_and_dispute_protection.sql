@@ -384,6 +384,15 @@ begin
   where id = incident_record.assignment_id and booking_id = booking_record.id
   for update;
 
+  if target_decision = 'recovery_required'
+    and incident_record.cargo_custody_status not in ('driver_custody','unknown','recovery_pending') then
+    raise exception 'cargo recovery is required only when cargo custody is with the driver or is uncertain';
+  end if;
+  if target_decision = 'mark_failed_delivery'
+    and incident_record.cargo_custody_status in ('driver_custody','unknown','recovery_pending') then
+    raise exception 'cargo in driver custody or with uncertain custody must enter controlled recovery, not be closed as a failed attempt';
+  end if;
+
   if target_decision = 'resume_delivery' then
     if booking_record.status <> 'delivery_exception'
       or incident_record.booking_status_before_incident <> 'in_progress'
