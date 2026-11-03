@@ -634,6 +634,9 @@ Deno.test("Logistics incidents preserve custody and block financial settlement u
   requireText(migrationExceptions, "platform.escrow.execute", "refund resolution requires platform escrow permission");
   requireNotText(migrationExceptions, "platform.settlement.execute", "settlement-only authority cannot issue dispute refunds");
   requireText(migrationExceptions, "hold_record.hold_amount <> booking_record.total_customer_charge", "refund escrow amount must match the original customer charge");
+  requireText(migrationExceptions, "cargo custody must be secured or accounted for before the customer refund can close the Logistics booking", "refunds cannot strand cargo with a driver or in an unknown recovery state");
+  requireText(migrationCargoRecovery, "metadata = metadata || jsonb_build_object('closed_by_customer_refund',true)", "refunded bookings release incident-held drivers only after safe custody");
+  requireText(migrationExceptions, "offline finance escalation idempotency key was reused for a different action", "offline dispute escalation is retry-safe and action-bound");
   requireText(migrationExceptions, "logistics_booking_incidents_no_direct_insert", "incident writes are RPC-only");
   requireText(migrationExceptions, "logistics_booking_disputes_no_direct_update", "dispute updates are RPC-only");
   requireText(migrationExceptions, "cargo recovery is required only when cargo custody is with the driver or is uncertain", "recovery decisions require custody justification");
