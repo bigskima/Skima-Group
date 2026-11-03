@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Building2, FileText, ShieldCheck } from "lucide-react-native";
 import { useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -12,6 +12,7 @@ import { AppButton } from "../ui/AppButton";
 import { AppField } from "../ui/AppField";
 import { Card } from "../ui/Card";
 import { Screen } from "../ui/Screen";
+import { SectionHeader } from "../ui/SectionHeader";
 
 export function CompanyOnboardingScreen() {
   const { palette } = useAppTheme();
@@ -82,7 +83,7 @@ export function CompanyOnboardingScreen() {
         <AppField label="Company display name" value={displayName} onChangeText={setDisplayName} placeholder="e.g. Swift City Logistics" maxLength={160} />
         <AppField label="Registered legal name" value={legalName} onChangeText={setLegalName} placeholder="Legal business name" optional maxLength={200} />
         <AppField label="About your company" value={about} onChangeText={setAbout} placeholder="What do you specialise in? What areas do you cover?" multiline optional maxLength={2000} />
-      
+      </Card>
       ) : (
         <>
           <SectionHeader title="Where should we reach your team?" description="Add at least one contact channel. You can update these details later." />
