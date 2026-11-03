@@ -2,7 +2,8 @@ import * as ImagePicker from "expo-image-picker";
 import { File, UploadType } from "expo-file-system";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useState } from "react";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 import { RecordArraySchema } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
@@ -64,9 +65,9 @@ export function LogisticsMediaPicker(props: {
     ),
     staleTime: 10 * 60_000,
   });
-  const [busy, setBusy] = React.useState(false);
-  const [progress, setProgress] = React.useState(0);
-  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   const upload = async () => {
     if (!props.entityId || !session?.user.id || busy) return;
@@ -178,7 +179,6 @@ export function LogisticsMediaPicker(props: {
   );
 }
 
-import React from "react";
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
