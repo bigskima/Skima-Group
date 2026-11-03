@@ -56,8 +56,8 @@ as $$
           from search_tokens token
           where exists (
             select 1
-            from jsonb_array_elements_text(coalesce(geography.aliases, '[]'::jsonb)) alias_value
-            where public.normalize_geography_token(alias_value) = token.token
+            from jsonb_array_elements_text(coalesce(geography.aliases, '[]'::jsonb)) as alias_value(value)
+            where public.normalize_geography_token(alias_value.value) = token.token
           )
         ) then 3
         when exists (
@@ -86,9 +86,9 @@ as $$
           from search_tokens token
           where exists (
             select 1
-            from jsonb_array_elements_text(coalesce(geography.aliases, '[]'::jsonb)) alias_value
-            where public.normalize_geography_token(alias_value) = token.token
-               or public.normalize_geography_token(alias_value) like '%' || token.token || '%'
+            from jsonb_array_elements_text(coalesce(geography.aliases, '[]'::jsonb)) as alias_value(value)
+            where public.normalize_geography_token(alias_value.value) = token.token
+               or public.normalize_geography_token(alias_value.value) like '%' || token.token || '%'
           )
         )
       )
