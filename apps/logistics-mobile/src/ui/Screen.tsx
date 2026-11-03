@@ -4,9 +4,10 @@ import { ScrollView, StyleSheet, Text, View, useWindowDimensions, type RefreshCo
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
 
-export function Screen({ children, title, eyebrow, subtitle, action, refreshControl }: PropsWithChildren<{
+export function Screen({ children, title, eyebrow, subtitle, action, refreshControl, denseHeader = false }: PropsWithChildren<{
   title: string; eyebrow?: string; subtitle?: string; action?: ReactNode;
   refreshControl?: ReactElement<RefreshControlProps>;
+  denseHeader?: boolean;
 }>) {
   const { palette } = useAppTheme();
   const network = useNetInfo();
@@ -34,10 +35,10 @@ export function Screen({ children, title, eyebrow, subtitle, action, refreshCont
             <Text style={[styles.offlineText, { color: palette.ink }]}>You’re offline. Saved details remain available.</Text>
           </View>
         ) : null}
-        <View style={[styles.heading, compact && styles.headingCompact]}>
+        <View style={[styles.heading, compact && styles.headingCompact, denseHeader && styles.headingDense]}>
           <View style={styles.headingCopy}>
             {eyebrow ? <View style={[styles.eyebrowPill, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}><Text style={[styles.eyebrow, { color: palette.brand }]}>{eyebrow}</Text></View> : null}
-            <Text numberOfLines={2} style={[styles.title, { color: palette.ink }, compact && styles.titleMobile]}>{title}</Text>
+            <Text numberOfLines={2} style={[styles.title, { color: palette.ink }, compact && styles.titleMobile, denseHeader && styles.titleDense]}>{title}</Text>
             {subtitle ? <Text style={[styles.subtitle, { color: palette.muted }]}>{subtitle}</Text> : null}
           </View>
           {action ? <View style={[styles.action, compact && styles.actionCompact]}>{action}</View> : null}
@@ -58,6 +59,7 @@ const styles = StyleSheet.create({
   body: { gap: 18 },
   heading: { minHeight: 72, flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md, marginBottom: 20, paddingTop: spacing.xs },
   headingCompact: { minHeight: 62, marginBottom: 18, flexWrap: "wrap" },
+  headingDense: { minHeight: 42, marginBottom: 10, paddingTop: 0 },
   headingCopy: { flex: 1, minWidth: 0, alignItems: "flex-start", gap: 7 },
   action: { alignSelf: "center", flexShrink: 0 },
   actionCompact: { alignSelf: "flex-start", maxWidth: "100%", paddingTop: 2 },
@@ -65,6 +67,7 @@ const styles = StyleSheet.create({
   eyebrow: { ...typography.eyebrow, textTransform: "uppercase" },
   title: { ...typography.title },
   titleMobile: { fontSize: 27, lineHeight: 32, letterSpacing: -0.7 },
+  titleDense: { fontSize: 23, lineHeight: 28, letterSpacing: -0.55 },
   subtitle: { ...typography.body, maxWidth: 620, fontSize: 13, lineHeight: 19 },
   offline: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.sm, borderRadius: radii.md, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 12, paddingVertical: 10, marginBottom: spacing.md },
   offlineDot: { width: 7, height: 7, borderRadius: 4 },
