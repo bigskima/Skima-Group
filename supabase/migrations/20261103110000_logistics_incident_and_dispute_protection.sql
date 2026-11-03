@@ -213,6 +213,9 @@ declare
 begin
   if actor is null then raise exception 'authentication is required'; end if;
   if target_booking_id is null
+    or target_incident_type is null
+    or target_severity is null
+    or target_cargo_custody_status is null
     or target_incident_type not in (
       'vehicle_breakdown','accident','route_blocked','security_risk','cargo_damaged',
       'cargo_missing','customer_unavailable','incorrect_address','recipient_refused',
@@ -342,6 +345,7 @@ declare
 begin
   if actor is null then raise exception 'authentication is required'; end if;
   if target_incident_id is null
+    or target_decision is null
     or target_decision not in ('resume_delivery','recovery_required','mark_failed_delivery')
     or target_resolution_note is null or char_length(btrim(target_resolution_note)) not between 5 and 2000
     or target_idempotency_key is null or char_length(btrim(target_idempotency_key)) not between 8 and 180 then
@@ -382,11 +386,13 @@ begin
 
   if target_decision = 'resume_delivery' then
     if booking_record.status <> 'delivery_exception'
+      or incident_record.booking_status_before_incident <> 'in_progress'
+      or incident_record.assignment_status_before_incident not in ('in_progress','picked_up','in_transit')
       or incident_record.cargo_custody_status in ('recovery_pending','unknown') then
-      raise exception 'delivery may resume only when cargo custody is known and no recovery is pending';
+      raise exception 'delivery may resume only when the same active delivery has known cargo custody and no recovery is pending';
     end if;
-    if assignment_record.id is null then
-      raise exception 'the original assigned driver must remain available to resume this delivery';
+    if assignment_record.id is null or assignment_record.status <> 'incident_hold' then
+      raise exception 'the original incident-held driver assignment must remain available to resume this delivery';
     end if;
     if assignment_record.status = 'incident_hold' then
       update public.logistics_booking_driver_assignments
@@ -485,6 +491,7 @@ declare
 begin
   if actor is null then raise exception 'authentication is required'; end if;
   if target_booking_id is null
+    or target_reason is null
     or target_reason not in ('non_delivery','partial_delivery','damaged_cargo','wrong_delivery','recipient_not_authorized','other')
     or target_details is null or char_length(btrim(target_details)) not between 5 and 3000
     or target_idempotency_key is null or char_length(btrim(target_idempotency_key)) not between 8 and 180 then
@@ -578,6 +585,7 @@ begin
     raise exception 'platform escrow or settlement execution permission is required';
   end if;
   if target_dispute_id is null
+    or target_decision is null
     or target_decision not in (
       'refund_customer','allow_delivery_confirmation','resume_delivery',
       'offline_finance_review','close_offline_finance_review'
