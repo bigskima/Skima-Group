@@ -630,6 +630,9 @@ Deno.test("Logistics incidents preserve custody and block financial settlement u
   requireText(migrationExceptions, "platform.escrow.execute", "refund resolution requires platform escrow permission");
   requireText(migrationExceptions, "logistics_booking_incidents_no_direct_insert", "incident writes are RPC-only");
   requireText(migrationExceptions, "logistics_booking_disputes_no_direct_update", "dispute updates are RPC-only");
+  requireText(migrationExceptions, "cargo custody is required only when cargo is with the driver or is uncertain", "recovery decisions require custody justification");
+  requireText(migrationExceptions, "must enter controlled recovery, not be closed as a failed attempt", "driver-held or unaccounted cargo cannot be marked safely failed");
+  requireText(migrationExceptions, "closed_by_customer_refund", "authorized refund closes linked unresolved incident records");
 });
 
 Deno.test("Logistics incident and dispute routes use authenticated runtime RPCs and RLS reads", () => {
