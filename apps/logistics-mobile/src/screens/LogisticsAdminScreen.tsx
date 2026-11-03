@@ -353,6 +353,12 @@ export function LogisticsAdminScreen() {
               const bookingStatus = asString(dispute, "booking_status_before_dispute") ?? "";
               const linkedIncident = nested(dispute, "incident");
               const incidentBookingStatus = asString(linkedIncident, "booking_status_before_incident") ?? "";
+              const incidentStatus = asString(linkedIncident, "status") ?? "";
+              const incidentResolution = asString(linkedIncident, "resolution_code") ?? "";
+              const currentCargoCustody = asString(nested(dispute, "booking"), "cargo_custody_status") ?? "";
+              const recoveredDeliverySubmitted = incidentStatus === "resolved"
+                && incidentResolution === "recovered_delivery_submitted"
+                && currentCargoCustody === "delivered";
               const paymentMode = asString(nested(dispute, "metadata"), "payment_mode") ?? "unknown";
               const isOffline = paymentMode === "offline";
               const isEscalated = disputeStatus === "escalated";
@@ -437,7 +443,7 @@ export function LogisticsAdminScreen() {
                           )}
                         />
                       ) : null}
-                      {!isOffline && (bookingStatus === "delivered" || (bookingStatus === "delivery_exception" && incidentBookingStatus === "delivered")) ? (
+                      {!isOffline && (bookingStatus === "delivered" || (bookingStatus === "delivery_exception" && incidentBookingStatus === "delivered") || recoveredDeliverySubmitted) ? (
                         <AppButton
                           label="Allow customer confirmation"
                           size="sm"
