@@ -379,6 +379,20 @@ begin
     update public.logistics_bookings
     set cargo_custody_status = 'driver_custody',updated_at = timezone('utc',now())
     where id = booking_record.id;
+    if assignment_record.metadata->>'assignment_kind' = 'recovery' then
+      -- The replacement driver has physically accepted custody. The original
+      -- incident-held driver can now be released without deleting their history.
+      update public.logistics_booking_driver_assignments
+      set status = 'reassigned',
+          updated_at = timezone('utc',now()),
+          metadata = metadata || jsonb_build_object(
+            'custody_transferred_to_recovery_assignment',assignment_record.id,
+            'custody_transferred_at',timezone('utc',now())
+          )
+      where booking_id = booking_record.id
+        and id <> assignment_record.id
+        and status = 'incident_hold';
+    end if;
   else
     if assignment_record.status not in ('picked_up','in_transit') then
       raise exception 'cargo must be picked up before the driver marks it in transit';
