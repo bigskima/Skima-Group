@@ -1,4 +1,6 @@
 const appConfig = await Deno.readTextFile("apps/logistics-mobile/app.config.ts");
+const easConfigText = await Deno.readTextFile("apps/logistics-mobile/eas.json");
+const vercelConfigText = await Deno.readTextFile("apps/logistics-mobile/vercel.json");
 const appPackage = await Deno.readTextFile("apps/logistics-mobile/package.json");
 const rootPackage = await Deno.readTextFile("package.json");
 const theme = await Deno.readTextFile("apps/logistics-mobile/src/theme/tokens.ts");
@@ -65,6 +67,36 @@ Deno.test("Logistics mobile is a genuinely separate Expo application and identit
   requireText(appPackage, '"name": "@skima/logistics-mobile"', "separate app package");
   requireText(rootPackage, '"logistics:mobile"', "root app launch command");
   requireText(rootPackage, '"logistics:mobile:check"', "root app typecheck command");
+});
+
+Deno.test("Expo APK profiles have the production Supabase and gateway configuration", () => {
+  const easConfig = JSON.parse(easConfigText) as {
+    readonly build?: Record<string, { readonly android?: { readonly buildType?: string }; readonly env?: Record<string, string> }>;
+  };
+  for (const profile of ["preview", "production"]) {
+    const config = easConfig.build?.[profile];
+    if (!config) throw new Error("Missing EAS build profile: " + profile);
+    if (config.android?.buildType !== "apk") throw new Error(profile + " must produce an APK");
+    if (config.env?.EXPO_PUBLIC_SUPABASE_URL !== "https://npgladvhpidkgpyzdwxf.supabase.co") {
+      throw new Error(profile + " must use the production SKIMA Supabase URL");
+    }
+    if (!config.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY?.startsWith("eyJ")) {
+      throw new Error(profile + " must use a client-safe Supabase anon key");
+    }
+    if (config.env?.EXPO_PUBLIC_API_GATEWAY_URL !== "https://npgladvhpidkgpyzdwxf.supabase.co/functions/v1/api-gateway") {
+      throw new Error(profile + " must use the shared Supabase API gateway");
+    }
+  }
+  requireText(appConfig, "EXPO_PUBLIC_EAS_PROJECT_ID", "optional EAS project link");
+  requireText(appConfig, "projectId: easProjectId", "EAS project identifier wiring");
+});
+
+Deno.test("Logistics Vercel app root builds the Expo web export", () => {
+  const config = JSON.parse(vercelConfigText) as Record<string, unknown>;
+  if (config.installCommand !== "npm install --no-audit --no-fund") throw new Error("Logistics Vercel install command mismatch");
+  if (config.buildCommand !== "npm run build:web") throw new Error("Logistics Vercel build command mismatch");
+  if (config.outputDirectory !== "dist") throw new Error("Logistics Vercel output directory must be dist");
+  requireText(vercelConfigText, "vercel-ignore.mjs logistics", "Logistics Vercel ignore gate");
 });
 
 Deno.test("The app preserves the LPG visual standard with red brand, premium surfaces and dark/light themes", () => {
