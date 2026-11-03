@@ -12,6 +12,7 @@ import { AppButton } from "../ui/AppButton";
 import { AppField } from "../ui/AppField";
 import { Card } from "../ui/Card";
 import { GeographyPicker } from "../ui/GeographyPicker";
+import { LogisticsMediaPicker } from "../ui/LogisticsMediaPicker";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
@@ -169,6 +170,28 @@ export function ProviderCompanyScreen() {
                   <Text style={[styles.noticeText, { color: palette.ink }]}>SKIMA verification controls when your services become visible to customers and eligible for matching.</Text>
                 </View>
               </Card>
+
+              <View style={styles.section}>
+                <SectionHeader title="Public company identity" description="These verified business images help customers recognise the company they are booking." />
+                <LogisticsMediaPicker
+                  entityType="logistics_company"
+                  entityId={organizationId ?? ""}
+                  organizationId={organizationId}
+                  mediaRole="logistics.company.logo.public"
+                  title="Company logo"
+                  description="A clear square logo used across company cards and booking summaries."
+                  compact
+                />
+                <LogisticsMediaPicker
+                  entityType="logistics_company"
+                  entityId={organizationId ?? ""}
+                  organizationId={organizationId}
+                  mediaRole="logistics.company.photo.public"
+                  title="Company public photo"
+                  description="Show customers your fleet, depot, team or business premises."
+                  compact
+                />
+              </View>
 
               <ProviderWalletFundingPanel organizationId={organizationId ?? ""} />
 
