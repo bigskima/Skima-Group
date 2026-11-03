@@ -60,9 +60,10 @@ export function ProviderWorkspaceScreen() {
             </Card>
           )}
 
-          <GuideTarget targetKey="company-workspace-finance" style={styles.grid}>
           <View style={styles.grid}>
-            <WorkspaceCard title="Company wallet & payouts" description="View settled earnings, withdraw and set driver payment method." icon={<WalletCards color={palette.brand} size={21} />} onPress={() => router.push("/(provider)/finance" as never)} desktop={desktop} disabled={!company} />
+            <GuideTarget targetKey="company-workspace-finance" style={{ width: desktop ? "48.5%" : "100%" }}>
+              <WorkspaceCard title="Company wallet & payouts" description="View settled earnings, withdraw and set driver payment method." icon={<WalletCards color={palette.brand} size={21} />} onPress={() => router.push("/(provider)/finance" as never)} desktop={false} disabled={!company} />
+            </GuideTarget>
             <WorkspaceCard
               title="Customer opportunities"
               description="Review matched customer requests and prepare offers for routes your company serves."
@@ -71,13 +72,15 @@ export function ProviderWorkspaceScreen() {
               desktop={desktop}
               disabled={!company}
             />
-            <WorkspaceCard
-              title="Services & coverage"
-              description="Set up what your company offers, pricing approach and operating areas."
-              icon={<Truck color={palette.brand} size={21} />}
-              onPress={() => router.push("/(provider)/services" as never)}
-              desktop={desktop}
-            />
+            <GuideTarget targetKey="company-workspace-services" style={{ width: desktop ? "48.5%" : "100%" }}>
+              <WorkspaceCard
+                title="Services & coverage"
+                description="Set up what your company offers, pricing approach and operating areas."
+                icon={<Truck color={palette.brand} size={21} />}
+                onPress={() => router.push("/(provider)/services" as never)}
+                desktop={false}
+              />
+            </GuideTarget>
             <WorkspaceCard
               title="Team & access"
               description="Invite staff and assign the right operational responsibilities."
@@ -103,10 +106,6 @@ export function ProviderWorkspaceScreen() {
               desktop={desktop}
             />
           </View>
-          </GuideTarget>
-          <GuideTarget targetKey="company-workspace-services">
-            <View style={{height:1}} />
-          </GuideTarget>
           {driverProfile.isError ? (
             <Text style={[styles.hint, { color: palette.muted }]}>Driver access is temporarily unavailable. Your company workspace remains usable.</Text>
           ) : null}
