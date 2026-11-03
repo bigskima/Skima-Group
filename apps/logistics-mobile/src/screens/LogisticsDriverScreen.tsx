@@ -48,6 +48,7 @@ export function LogisticsDriverScreen() {
   const client = useQueryClient();
   const profile = useLogisticsRecordQuery(["driver-workspace-profile"], "/runtime/logistics/driver/profile", true);
   const jobs = useLogisticsQuery(["driver-workspace-bookings"], "/runtime/logistics/driver/bookings", true, 15_000);
+  const incidentsQuery = useLogisticsQuery(["driver-booking-incidents"], "/runtime/logistics/bookings/incidents", true, 15_000);
   const [recipientNames, setRecipientNames] = useState<Record<string, string>>({});
   const [deliveryNotes, setDeliveryNotes] = useState<Record<string, string>>({});
   const [releaseReasons, setReleaseReasons] = useState<Record<string, string>>({});
@@ -147,12 +148,12 @@ export function LogisticsDriverScreen() {
     onSuccess: async (_result, input) => {
       setIncidentDescriptions((current) => ({ ...current, [input.bookingId]: "" }));
       await client.invalidateQueries({ queryKey: ["skima-logistics", "driver-workspace-bookings"] });
-      await jobs.refetch();
+      await Promise.all([jobs.refetch(), incidentsQuery.refetch()]);
       Alert.alert("Incident reported", "Your company has been notified. Keep the cargo secure and follow dispatch instructions. Customer funds remain protected.");
     },
   });
 
-  const refresh = () => Promise.all([profile.refetch(), jobs.refetch()]);
+  const refresh = () => Promise.all([profile.refetch(), jobs.refetch(), incidentsQuery.refetch()]);
   const driverId = asString(profile.data, "driver_profile_id");
   const isVerified = asString(profile.data, "verification_status") === "approved";
   const rows = (jobs.data ?? []) as DriverJob[];
@@ -220,6 +221,10 @@ export function LogisticsDriverScreen() {
             const vehicle = nested(assignment, "vehicle");
             const assignmentId = asString(assignment, "id") ?? "";
             const status = asString(assignment, "status") ?? "offered";
+            const bookingStatus = asString(job, "booking_status") ?? "";
+            const latestIncident = (incidentsQuery.data ?? [])
+              .filter((item) => asString(item, "booking_id") === bookingId)
+              .slice(-1)[0] ?? null;
             const isBusy = runAction.isPending && runAction.variables?.bookingId === bookingId;
             const recipientName = recipientNames[bookingId] ?? "";
             const deliveryNote = deliveryNotes[bookingId] ?? "";
@@ -262,7 +267,7 @@ export function LogisticsDriverScreen() {
                   </View>
                 ) : null}
 
-                {["in_progress", "picked_up", "in_transit"].includes(status) ? (
+                {["in_progress", "picked_up", "in_transit"].includes(status) && !["delivery_exception", "failed_delivery", "disputed"].includes(bookingStatus) ? (
                   <Card variant="warning" padding="md">
                     <Text style={[styles.instructionTitle, { color: palette.ink }]}>Report a delivery incident</Text>
                     <Text style={[styles.meta, { color: palette.muted }]}>
@@ -351,6 +356,20 @@ export function LogisticsDriverScreen() {
                       />
                     </View>
                   </Card>
+                ) : null}
+                {["delivery_exception", "failed_delivery", "disputed"].includes(bookingStatus) ? (
+                  <View style={[styles.notice, { backgroundColor: palette.warningSoft }]}>
+                    <ShieldCheck color={palette.warning} size={17} />
+                    <View style={styles.noticeCopy}>
+                      <Text style={[styles.instructionTitle, { color: palette.ink }]}>Delivery exception under review</Text>
+                      <Text style={[styles.meta, { color: palette.muted }]}>
+                        {(asString(latestIncident, "incident_type") ?? asString(job, "booking_status") ?? "Incident").replace(/_/g, " ")} · {asString(latestIncident, "status") ?? "dispatch review"}
+                      </Text>
+                      <Text style={[styles.meta, { color: palette.muted }]}>
+                        Cargo custody: {asString(latestIncident, "cargo_custody_status")?.replace(/_/g, " ") ?? "awaiting confirmation"}. Keep the cargo secure and remain available to your company.
+                      </Text>
+                    </View>
+                  </View>
                 ) : null}
                 {status === "incident_hold" ? (
                   <View style={[styles.notice, { backgroundColor: palette.warningSoft }]}>
