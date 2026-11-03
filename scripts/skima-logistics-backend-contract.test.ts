@@ -25,7 +25,10 @@ const migrationTracking = await Deno.readTextFile(
 const migrationDispatch = await Deno.readTextFile(
   "supabase/migrations/20261103090000_logistics_driver_prestart_release.sql",
 );
-const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch;
+const migrationReplacementHandoff = await Deno.readTextFile(
+  "supabase/migrations/20261103100000_logistics_safe_replacement_handoff.sql",
+);
+const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch + "\n" + migrationReplacementHandoff;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const apiGateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
@@ -593,4 +596,14 @@ Deno.test("Driver release preserves booking payment and makes the booking eligib
   requireText(migrationDriver, "where booking_id = booking_record.id", "replacement is for the same customer booking");
   requireNotText(releaseFunction, "escrow_hold_id = null", "customer escrow is preserved");
   requireNotText(releaseFunction, "payment_transaction_id = null", "customer payment record is preserved");
+});
+
+
+Deno.test("Driver replacement preserves the incumbent until the replacement accepts", () => {
+  requireText(migrationReplacementHandoff, "'replacement_pending'", "recoverable incumbent state");
+  requireText(migrationReplacementHandoff, "'replaces_assignment_id'", "replacement-to-incumbent link");
+  requireText(migrationReplacementHandoff, "reassigned_after_acceptance", "incumbent retired only after acceptance");
+  requireText(migrationReplacementHandoff, "replacement_declined_by", "decline recovery audit");
+  requireText(migrationReplacementHandoff, "set assigned_driver_profile_id = prior_assignment.driver_profile_id", "restore incumbent after replacement decline");
+  requireText(migrationReplacementHandoff, "status in ('offered','accepted','replacement_pending','in_progress','picked_up','in_transit')", "prevent double-booking incumbent during replacement");
 });
