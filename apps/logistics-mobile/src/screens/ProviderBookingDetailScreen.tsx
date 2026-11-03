@@ -222,7 +222,15 @@ export function ProviderBookingDetailScreen() {
                 const incidentId = asString(incident, "id") ?? "";
                 const incidentStatus = asString(incident, "status") ?? "reported";
                 const custody = asString(incident, "cargo_custody_status") ?? "unknown";
-                const canResume = status === "delivery_exception" && !["recovery_pending", "unknown"].includes(custody);
+                const incidentBookingStatus = asString(incident, "booking_status_before_incident") ?? "";
+                const canResume = status === "delivery_exception"
+                  && incidentBookingStatus === "in_progress"
+                  && !["recovery_pending", "unknown"].includes(custody);
+                const canRestoreCustomerConfirmation = status === "delivery_exception"
+                  && incidentBookingStatus === "delivered"
+                  && custody === "delivered";
+                const canRequireRecovery = ["driver_custody", "unknown", "recovery_pending"].includes(custody);
+                const canMarkFailed = !canRequireRecovery && incidentBookingStatus !== "delivered";
                 const canResolve = ["reported", "investigating", "recovery_required"].includes(incidentStatus);
                 return (
                   <View key={incidentId} style={[styles.assignmentSummary, { backgroundColor: palette.surfaceSubtle }]}>
@@ -235,6 +243,27 @@ export function ProviderBookingDetailScreen() {
                     {asString(incident, "resolution_note") ? <Text style={[styles.meta, { color: palette.muted }]}>Dispatch note: {asString(incident, "resolution_note")}</Text> : null}
                     {canResolve ? (
                       <View style={styles.dispatchSection}>
+                        {canRestoreCustomerConfirmation ? (
+                          <AppButton
+                            label="Restore customer delivery confirmation"
+                            fullWidth
+                            variant="secondary"
+                            loading={resolveIncident.isPending}
+                            disabled={resolveIncident.isPending}
+                            onPress={() => Alert.alert(
+                              "Restore customer confirmation?",
+                              "Delivery was already submitted. This will reopen the customer receipt-confirmation step; it will not release escrow.",
+                              [
+                                { text: "Keep on hold", style: "cancel" },
+                                { text: "Restore confirmation", onPress: () => resolveIncident.mutate({
+                                  incidentId,
+                                  decision: "restore_customer_confirmation",
+                                  note: "Company operations verified the submitted delivery and restored the customer receipt-confirmation step.",
+                                }) },
+                              ],
+                            )}
+                          />
+                        ) : null}
                         {canResume ? (
                           <AppButton
                             label="Resume delivery with current driver"
@@ -256,6 +285,7 @@ export function ProviderBookingDetailScreen() {
                             )}
                           />
                         ) : null}
+                        {canRequireRecovery ? (
                         <AppButton
                           label="Require cargo recovery"
                           fullWidth
@@ -275,6 +305,8 @@ export function ProviderBookingDetailScreen() {
                             ],
                           )}
                         />
+                        ) : null}
+                        {canMarkFailed ? (
                         <AppButton
                           label="Close as failed delivery"
                           fullWidth
@@ -294,6 +326,7 @@ export function ProviderBookingDetailScreen() {
                             ],
                           )}
                         />
+                        ) : null}
                       </View>
                     ) : null}
                   </View>
