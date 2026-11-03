@@ -85,7 +85,7 @@ export function CompanyFinanceScreen() {
   }),[bookings.data,paidBookingIds.size,paymentRecords.data]);
 
   const saveMethod=useMutation({
-    mutationFn:async(method:"offline"|"skima_wallet")=>{
+    mutationFn:async(method:"bank_transfer"|"cash"|"other"|"offline")=>{
       if(!organizationId) throw new Error("Company profile is unavailable.");
       const {data,error}=await session.supabase.rpc("update_logistics_company_payment_settings",{target_organization_id:organizationId,target_default_driver_payment_method:method});
       if(error) throw error;
@@ -150,7 +150,7 @@ export function CompanyFinanceScreen() {
     onSuccess:async(result)=>{
       setPayingBooking(null);setDriverAmount("");setDriverNote("");
       await Promise.all([paymentRecords.refetch(),balances.refetch(),bookings.refetch()]);
-      Alert.alert("Driver payment recorded",asString(result,"status")==="paid"?"The driver's SKIMA Wallet was credited.":"The offline payment record was saved.");
+      Alert.alert("Driver payment recorded","The company payment reference was saved. SKIMA did not move the money.");
     },
     onError:(e)=>Alert.alert("Driver payment failed",e instanceof Error?e.message:"Please verify the driver and available funds."),
   });
@@ -200,11 +200,15 @@ export function CompanyFinanceScreen() {
       </View>
 
       <View style={[styles.panel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
-        <Text style={[styles.panelTitle,{color:palette.ink}]}>Driver payment recording</Text>
-        <View style={styles.methodRow}>
-          <Method label="Company-managed payment" detail="Bank transfer, cash or another channel" active={paymentMethod==="offline"} onPress={()=>saveMethod.mutate("offline")}/>
+        <Text style={[styles.panelTitle,{color:palette.ink}]}>Driver payment method</Text>
+        <Text style={[styles.hint,{color:palette.muted}]}>Choose how your company pays its drivers after a completed job.</Text>
+        <View style={styles.methodGrid}>
+          <Method label="Bank transfer" detail="Company pays directly" active={paymentMethod==="bank_transfer"} onPress={()=>saveMethod.mutate("bank_transfer")}/>
+          <Method label="Cash" detail="Cash payment" active={paymentMethod==="cash"} onPress={()=>saveMethod.mutate("cash")}/>
+          <Method label="Other" detail="Other external method" active={paymentMethod==="other"} onPress={()=>saveMethod.mutate("other")}/>
+          <Method label="Offline / manual" detail="Record payment outside SKIMA" active={paymentMethod==="offline"} onPress={()=>saveMethod.mutate("offline")}/>
         </View>
-        <Text style={[styles.hint,{color:palette.muted}]}>The company chooses the actual payment channel and records its reference below. SKIMA keeps the completion record; it does not move money for these external driver payments. Withdraw settled company earnings separately.</Text>
+        <Text style={[styles.hint,{color:palette.muted}]}>These are company-managed external payments. SKIMA records the method and reference, but does not collect or transfer driver wages. Withdraw settled company earnings separately.</Text>
       </View>
 
       <View style={[styles.panel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
@@ -220,7 +224,7 @@ export function CompanyFinanceScreen() {
         {payingBooking ? <View style={[styles.payForm,{borderColor:palette.brand}]}>
           <Text style={[styles.beneficiaryName,{color:palette.ink}]}>Pay assigned driver</Text>
           <TextInput value={driverAmount} onChangeText={setDriverAmount} keyboardType="decimal-pad" placeholder="Amount" placeholderTextColor={palette.muted} style={[styles.input,{borderColor:palette.border,color:palette.ink}]}/>
-          <TextInput value={driverNote} onChangeText={setDriverNote} placeholder="Payment channel + reference (bank transfer, cash, etc.)" placeholderTextColor={palette.muted} style={[styles.input,{borderColor:palette.border,color:palette.ink}]}/>
+          <TextInput value={driverNote} onChangeText={setDriverNote} placeholder="Payment reference or note" placeholderTextColor={palette.muted} style={[styles.input,{borderColor:palette.border,color:palette.ink}]}/>
           <Action label="Record driver payment" busy={recordDriverPayment.isPending} disabled={!Number(driverAmount)||Number(driverAmount)<=0||driverNote.trim().length<3} onPress={()=>recordDriverPayment.mutate()}/>
           <Pressable onPress={()=>setPayingBooking(null)}><Text style={{color:palette.muted,fontSize:10,fontWeight:"800",textAlign:"center"}}>Cancel</Text></Pressable>
         </View>:null}
@@ -251,7 +255,7 @@ const styles=StyleSheet.create({
  addBank:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",paddingVertical:6},input:{minHeight:42,borderWidth:1,borderRadius:radii.md,paddingHorizontal:10,fontSize:12},
  bankGrid:{flexDirection:"row",flexWrap:"wrap",gap:7},bankChip:{maxWidth:"48%",paddingHorizontal:9,paddingVertical:8,borderWidth:1,borderRadius:radii.md},
  action:{minHeight:42,borderRadius:radii.md,alignItems:"center",justifyContent:"center",paddingHorizontal:12},actionText:{color:"#fff",fontSize:11,fontWeight:"900"},
- methodRow:{flexDirection:"row",gap:8},method:{flex:1,minHeight:64,borderWidth:1,borderRadius:radii.md,padding:10,gap:4,justifyContent:"center"},
+ methodRow:{flexDirection:"row",gap:8},methodGrid:{flexDirection:"row",flexWrap:"wrap",gap:8},method:{flex:1,minWidth:"46%",minHeight:64,borderWidth:1,borderRadius:radii.md,padding:10,gap:4,justifyContent:"center"},
  booking:{flexDirection:"row",alignItems:"center",gap:8,paddingVertical:8,borderBottomWidth:StyleSheet.hairlineWidth},smallButton:{paddingHorizontal:10,paddingVertical:8,borderRadius:radii.md},
  payForm:{borderWidth:1,borderRadius:radii.md,padding:10,gap:8},withdrawRow:{flexDirection:"row",justifyContent:"space-between",paddingVertical:6,borderBottomWidth:StyleSheet.hairlineWidth,borderColor:"#8884"}
 });
