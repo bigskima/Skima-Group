@@ -621,6 +621,8 @@ Deno.test("Logistics incidents preserve custody and block financial settlement u
   requireText(migrationExceptions, "cargo_custody_status", "explicit cargo custody state");
   requireText(migrationExceptions, "'recovery_pending'", "explicit cargo recovery state");
   requireText(migrationExceptions, "'incident_hold'", "historical driver custody remains traceable");
+  requireText(migrationExceptions, "logistics_driver_one_active_booking_idx", "incident-held drivers remain unavailable for new jobs");
+  requireText(migrationExceptions, "'in_transit','incident_hold'", "incident holds remain part of the driver active-booking uniqueness gate");
   requireText(migrationExceptions, "guard_logistics_settlement_on_open_exceptions", "database settlement guard");
   requireText(migrationExceptions, "dispute.status in ('open','under_review','escalated')", "active customer disputes block settlement");
   requireText(migrationExceptions, "incident.status in ('reported','investigating','recovery_required')", "unresolved delivery incidents block settlement");
