@@ -18,7 +18,7 @@ import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
 import { LogisticsDriverLocationShare } from "./LogisticsDriverLocationShare";
 
-type DriverAction = "accept" | "reject" | "start" | "pickup" | "transit" | "deliver";
+type DriverAction = "accept" | "reject" | "release" | "start" | "pickup" | "transit" | "deliver";
 type DriverJob = Record<string, unknown>;
 
 function nested(record: Record<string, unknown> | null | undefined, key: string) {
@@ -50,6 +50,7 @@ export function LogisticsDriverScreen() {
   const jobs = useLogisticsQuery(["driver-workspace-bookings"], "/runtime/logistics/driver/bookings", true, 15_000);
   const [recipientNames, setRecipientNames] = useState<Record<string, string>>({});
   const [deliveryNotes, setDeliveryNotes] = useState<Record<string, string>>({});
+  const [releaseReasons, setReleaseReasons] = useState<Record<string, string>>({});
   const actionKeys = useRef(new Map<string, string>());
 
   const runAction = useMutation({
@@ -59,13 +60,14 @@ export function LogisticsDriverScreen() {
       assignmentId: string;
       recipientName?: string;
       deliveryNote?: string;
+      reason?: string;
     }) => {
       if (input.kind === "deliver" && (input.recipientName?.trim().length ?? 0) < 2) {
         throw new Error("Enter the name of the person receiving the cargo.");
       }
       const evidence = input.kind === "deliver"
         ? ":" + input.recipientName?.trim() + ":" + (input.deliveryNote?.trim() ?? "")
-        : "";
+        : input.kind === "release" ? ":" + (input.reason?.trim() ?? "") : "";
       const fingerprint = input.kind + ":" + input.bookingId + ":" + input.assignmentId + evidence;
       let idempotencyKey = actionKeys.current.get(fingerprint);
       if (!idempotencyKey) {
@@ -78,6 +80,13 @@ export function LogisticsDriverScreen() {
           assignmentId: input.assignmentId,
           decision: input.kind,
           reason: input.kind === "reject" ? "Driver declined this assignment." : null,
+          idempotencyKey,
+        }, z.string().uuid());
+      }
+      if (input.kind === "release") {
+        return api.post("/runtime/logistics/driver/assignment/release", {
+          assignmentId: input.assignmentId,
+          reason: input.reason?.trim() ?? "",
           idempotencyKey,
         }, z.string().uuid());
       }
@@ -109,6 +118,8 @@ export function LogisticsDriverScreen() {
         Alert.alert("Delivery submitted", "The customer can now confirm receipt. Online escrow remains protected until confirmation.");
       } else if (input.kind === "reject") {
         Alert.alert("Assignment declined", "Your company can now choose another eligible driver.");
+      } else if (input.kind === "release") {
+        Alert.alert("Assignment returned to dispatch", "Your company can now assign another eligible driver. The customer booking and payment remain unchanged.");
       }
       await client.invalidateQueries({ queryKey: ["skima-logistics", "driver-workspace-bookings"] });
       await jobs.refetch();
@@ -186,6 +197,7 @@ export function LogisticsDriverScreen() {
             const isBusy = runAction.isPending && runAction.variables?.bookingId === bookingId;
             const recipientName = recipientNames[bookingId] ?? "";
             const deliveryNote = deliveryNotes[bookingId] ?? "";
+            const releaseReason = releaseReasons[bookingId] ?? "";
 
             return (
               <Card key={bookingId} padding="lg">
@@ -250,8 +262,29 @@ export function LogisticsDriverScreen() {
                   </View>
                 ) : status === "accepted" ? (
                   <View style={styles.actions}>
-                    <Text style={[styles.meta, { color: palette.muted }]}>Start the job when you are ready to travel to the pickup point.</Text>
+                    <Text style={[styles.meta, { color: palette.muted }]}>Start the job when you are ready to travel to the pickup point. If you cannot start, return it to company dispatch before taking custody of the cargo.</Text>
                     <AppButton label="Start job" fullWidth loading={isBusy} onPress={() => runAction.mutate({ kind: "start", bookingId, assignmentId })} />
+                    <AppField
+                      label="Reason you cannot start"
+                      value={releaseReason}
+                      onChangeText={(value) => setReleaseReasons((current) => ({ ...current, [bookingId]: value }))}
+                      placeholder="e.g. Vehicle issue or unexpected schedule conflict"
+                      multiline
+                    />
+                    <AppButton
+                      label="I can't start this job"
+                      fullWidth
+                      variant="secondary"
+                      disabled={runAction.isPending || releaseReason.trim().length < 5}
+                      onPress={() => Alert.alert(
+                        "Return this job to dispatch?",
+                        "Your reason will be recorded for the company. The booking and customer payment will remain unchanged.",
+                        [
+                          { text: "Keep assignment", style: "cancel" },
+                          { text: "Return to dispatch", style: "destructive", onPress: () => runAction.mutate({ kind: "release", bookingId, assignmentId, reason: releaseReason }) },
+                        ],
+                      )}
+                    />
                   </View>
                 ) : status === "in_progress" ? (
                   <View style={styles.actions}>
