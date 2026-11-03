@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClientIdempotencyKey } from "@skima/frontend-core";
 import { z } from "zod";
@@ -79,7 +79,7 @@ function Empty({ title, detail }: { title: string; detail: string }) {
 
 function TableFrame(props: {
   readonly headers: readonly string[];
-  readonly children: React.ReactNode;
+  readonly children: ReactNode;
 }) {
   return (
     <div className="logistics-admin__table-wrap">
