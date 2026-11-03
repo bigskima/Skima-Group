@@ -18,7 +18,7 @@ import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
 import { LogisticsDriverLocationShare } from "./LogisticsDriverLocationShare";
 
-type DriverAction = "accept" | "reject" | "release" | "start" | "pickup" | "transit" | "deliver";
+type DriverAction = "accept" | "reject" | "release" | "start" | "recover_start" | "pickup" | "transit" | "deliver";
 type DriverJob = Record<string, unknown>;
 
 function nested(record: Record<string, unknown> | null | undefined, key: string) {
@@ -100,6 +100,12 @@ export function LogisticsDriverScreen() {
           idempotencyKey,
         }, z.string().uuid());
       }
+      if (input.kind === "recover_start") {
+        return api.post("/runtime/logistics/bookings/recovery/start", {
+          bookingId: input.bookingId,
+          idempotencyKey,
+        }, z.string().uuid());
+      }
       if (input.kind === "pickup" || input.kind === "transit") {
         return api.post("/runtime/logistics/driver/milestone", {
           bookingId: input.bookingId,
@@ -124,6 +130,8 @@ export function LogisticsDriverScreen() {
         Alert.alert("Assignment declined", "Your company can now choose another eligible driver.");
       } else if (input.kind === "release") {
         Alert.alert("Assignment returned to dispatch", "Your company can now assign another eligible driver. The customer booking and payment remain unchanged.");
+      } else if (input.kind === "recover_start") {
+        Alert.alert("Cargo recovery started", "Confirm the physical cargo hand-off before marking it in transit. The original incident and delivery history remain attached to this booking.");
       }
       await client.invalidateQueries({ queryKey: ["skima-logistics", "driver-workspace-bookings"] });
       await jobs.refetch();
@@ -222,6 +230,7 @@ export function LogisticsDriverScreen() {
             const assignmentId = asString(assignment, "id") ?? "";
             const status = asString(assignment, "status") ?? "offered";
             const bookingStatus = asString(job, "booking_status") ?? "";
+            const assignmentKind = asString(assignment, "assignment_kind") ?? "delivery";
             const latestIncident = (incidentsQuery.data ?? [])
               .filter((item) => asString(item, "booking_id") === bookingId)
               .slice(-1)[0] ?? null;
@@ -357,6 +366,15 @@ export function LogisticsDriverScreen() {
                     </View>
                   </Card>
                 ) : null}
+                {assignmentKind === "recovery" ? (
+                  <View style={[styles.notice, { backgroundColor: palette.brandSoft }]}>
+                    <ShieldCheck color={palette.brand} size={17} />
+                    <View style={styles.noticeCopy}>
+                      <Text style={[styles.instructionTitle, { color: palette.ink }]}>Recovery task</Text>
+                      <Text style={[styles.meta, { color: palette.muted }]}>Cargo custody state: {asString(job, "cargo_custody_status")?.replace(/_/g, " ") ?? "recovery pending"}. After the physical recovery hand-off, confirm pickup before marking transit.</Text>
+                    </View>
+                  </View>
+                ) : null}
                 {["delivery_exception", "failed_delivery", "disputed"].includes(bookingStatus) ? (
                   <View style={[styles.notice, { backgroundColor: palette.warningSoft }]}>
                     <ShieldCheck color={palette.warning} size={17} />
@@ -398,12 +416,27 @@ export function LogisticsDriverScreen() {
 
                 {status === "offered" ? (
                   <View style={styles.actions}>
-                    <Text style={[styles.meta, { color: palette.muted }]}>Review the cargo, route and vehicle. Accept only if you can fulfil the booking.</Text>
+                    <Text style={[styles.meta, { color: palette.muted }]}>
+                      {assignmentKind === "recovery"
+                        ? "This is a cargo recovery task after a failed delivery. Accept only if you can reach the recorded cargo custody point and safely transfer it."
+                        : "Review the cargo, route and vehicle. Accept only if you can fulfil the booking."}
+                    </Text>
                     <AppButton label="Accept assignment" fullWidth loading={isBusy} onPress={() => { runAction.mutate({ kind: "accept", bookingId, assignmentId }); }} />
                     <AppButton label="Decline assignment" fullWidth variant="secondary" disabled={runAction.isPending} onPress={() => Alert.alert("Decline this assignment?", "Your company will be able to assign this booking to another eligible driver.", [
                       { text: "Keep assignment", style: "cancel" },
                       { text: "Decline", style: "destructive", onPress: () => runAction.mutate({ kind: "reject", bookingId, assignmentId }) },
                     ])} />
+                  </View>
+                ) : status === "accepted" && assignmentKind === "recovery" && bookingStatus === "failed_delivery" ? (
+                  <View style={styles.actions}>
+                    <View style={[styles.notice, { backgroundColor: palette.warningSoft }]}>
+                      <ShieldCheck color={palette.warning} size={17} />
+                      <View style={styles.noticeCopy}>
+                        <Text style={[styles.instructionTitle, { color: palette.ink }]}>Cargo recovery assignment</Text>
+                        <Text style={[styles.meta, { color: palette.muted }]}>You are assigned to recover cargo from a failed delivery, not to begin a new customer pickup. Contact dispatch, verify the cargo and hand-off point, then start recovery.</Text>
+                      </View>
+                    </View>
+                    <AppButton label="Start cargo recovery" fullWidth loading={isBusy} onPress={() => runAction.mutate({ kind: "recover_start", bookingId, assignmentId })} />
                   </View>
                 ) : status === "accepted" ? (
                   <View style={styles.actions}>
