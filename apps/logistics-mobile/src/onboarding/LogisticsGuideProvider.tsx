@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useSegments } from "expo-router";
 import { Clock3, HelpCircle, X } from "lucide-react-native";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren, type ReactNode } from "react";
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -119,8 +119,14 @@ export function LogisticsGuideProvider({children}:PropsWithChildren){
  return <GuideContext.Provider value={{active,startNow,register}}>
   {children}
   <Modal visible={active&&Boolean(step)} transparent animationType="fade" statusBarTranslucent onRequestClose={()=>setRemind(true)}>
-   <View style={styles.overlay}>
-    {rect?<View pointerEvents="none" style={[styles.spotlight,{left:Math.max(8,rect.x-5),top:Math.max(8,rect.y-5),width:Math.min(width-16,rect.width+10),height:Math.min(height-16,rect.height+10),borderColor:palette.brand}]}/>:null}
+   <View style={[styles.overlay, !rect && styles.fullDim]}>
+    {rect ? <>
+      <View pointerEvents="none" style={[styles.scrim,{left:0,top:0,width,height:Math.max(0,rect.y-6)}]}/>
+      <View pointerEvents="none" style={[styles.scrim,{left:0,top:rect.y+rect.height+6,width,height:Math.max(0,height-(rect.y+rect.height+6))}]}/>
+      <View pointerEvents="none" style={[styles.scrim,{left:0,top:Math.max(0,rect.y-6),width:Math.max(0,rect.x-6),height:rect.height+12}]}/>
+      <View pointerEvents="none" style={[styles.scrim,{left:rect.x+rect.width+6,top:Math.max(0,rect.y-6),width:Math.max(0,width-(rect.x+rect.width+6)),height:rect.height+12}]}/>
+      <View pointerEvents="none" style={[styles.spotlight,{left:Math.max(8,rect.x-5),top:Math.max(8,rect.y-5),width:Math.min(width-16,rect.width+10),height:Math.min(height-16,rect.height+10),borderColor:palette.brand}]}/>
+    </> : null}
     <View style={[styles.tooltip,{backgroundColor:palette.surface,borderColor:palette.border,top:rect&&rect.y>height*0.58?Math.max(56,rect.y-210):Math.min(height-230,rect?rect.y+rect.height+18:height*0.36)}]}>
      <View style={styles.tooltipTop}><Text style={[styles.progress,{color:palette.brand}]}>STEP {stepIndex+1} OF {steps.length}</Text><Pressable onPress={()=>setRemind(true)}><X color={palette.muted} size={18}/></Pressable></View>
      <Text style={[styles.title,{color:palette.ink}]}>{step?.title}</Text>
@@ -158,7 +164,8 @@ export function GuideLaunchLink({workspace}:{workspace:Workspace}){
 }
 
 const styles=StyleSheet.create({
- overlay:{flex:1,backgroundColor:"rgba(8,8,10,.62)"},
+ overlay:{flex:1},fullDim:{backgroundColor:"rgba(8,8,10,.62)"},
+ scrim:{position:"absolute",backgroundColor:"rgba(8,8,10,.62")},
  spotlight:{position:"absolute",borderWidth:2,borderRadius:16,backgroundColor:"transparent",shadowColor:"#000",shadowOpacity:.4,shadowRadius:12,elevation:8},
  tooltip:{position:"absolute",left:16,right:16,borderWidth:1,borderRadius:radii.lg,padding:15,gap:9,elevation:12},
  tooltipTop:{flexDirection:"row",alignItems:"center",justifyContent:"space-between"},progress:{...typography.eyebrow,fontSize:8},
