@@ -421,6 +421,10 @@ begin
     and incident_record.cargo_custody_status in ('driver_custody','unknown','recovery_pending') then
     raise exception 'cargo in driver custody or with uncertain custody must enter controlled recovery, not be closed as a failed attempt';
   end if;
+  if target_decision = 'mark_failed_delivery'
+    and incident_record.cargo_custody_status = 'delivered' then
+    raise exception 'a submitted delivery must return to customer confirmation, not be closed as a failed delivery';
+  end if;
 
   if target_decision = 'resume_delivery' then
     if booking_record.status <> 'delivery_exception'
