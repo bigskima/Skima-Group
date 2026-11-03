@@ -18,6 +18,18 @@ import { StatePanel } from "../ui/StatePanel";
 
 type Place = Record<string, unknown>;
 type Category = Record<string, unknown>;
+function locationSnapshot(place: Place | null): Record<string, unknown> {
+  if (!place) return {};
+  return {
+    formatted_address: asString(place, "formatted_address", "display_name", "canonical_name"),
+    address_components: place.address_components && typeof place.address_components === "object"
+      ? place.address_components
+      : {},
+    coordinates: place.location && typeof place.location === "object" ? place.location : null,
+    place_id: asString(place, "place_id"),
+    source: asString(place, "location_source") ?? "geography_catalogue",
+  };
+}
 const CARGO_TYPES = [
   { key: "", label: "Not specified" },
   { key: "general", label: "General goods" },
@@ -96,8 +108,8 @@ export function LogisticsRequestScreen() {
           service_key: category,
           title: title.trim(),
           description: description.trim() || null,
-          pickup: { geography_id: pickupId, display_name: pickupName },
-          destination: { geography_id: destinationId, display_name: destinationName },
+          pickup: { geography_id: pickupId, display_name: pickupName, address_snapshot: locationSnapshot(pickup) },
+          destination: { geography_id: destinationId, display_name: destinationName, address_snapshot: locationSnapshot(destination) },
           cargo,
           customer_contact: { name: customerName.trim(), phone: customerPhone.trim() },
           instructions: instructions.trim() || null,
@@ -164,9 +176,9 @@ export function LogisticsRequestScreen() {
               </View>
               <SectionHeader title="Where should it go?" description="Choose an active pickup and destination from SKIMA’s location catalogue." />
               <Card padding="md">
-                <GeographyPicker label="Pickup location" value={pickupSearch} selected={pickup} onChange={(value) => { setPickupSearch(value); setPickup(null); }} onSelect={(place) => { setPickup(place); setPickupSearch(asString(place, "canonical_name") ?? ""); }} error={fieldError && !pickup ? fieldError : null} />
+                <GeographyPicker label="Pickup location" mode="address" value={pickupSearch} selected={pickup} onChange={(value) => { setPickupSearch(value); setPickup(null); }} onSelect={(place) => { setPickup(place); setPickupSearch(asString(place, "canonical_name") ?? ""); }} error={fieldError && !pickup ? fieldError : null} />
                 <View style={[styles.routeDivider, { borderColor: palette.border }]} />
-                <GeographyPicker label="Destination" value={destinationSearch} selected={destination} onChange={(value) => { setDestinationSearch(value); setDestination(null); }} onSelect={(place) => { setDestination(place); setDestinationSearch(asString(place, "canonical_name") ?? ""); }} error={fieldError && pickup && !destination ? fieldError : null} />
+                <GeographyPicker label="Destination" mode="address" value={destinationSearch} selected={destination} onChange={(value) => { setDestinationSearch(value); setDestination(null); }} onSelect={(place) => { setDestination(place); setDestinationSearch(asString(place, "canonical_name") ?? ""); }} error={fieldError && pickup && !destination ? fieldError : null} />
               </Card>
             </>
           ) : step === 2 ? (
