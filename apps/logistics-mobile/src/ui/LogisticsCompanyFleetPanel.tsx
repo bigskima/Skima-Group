@@ -159,6 +159,26 @@ export function LogisticsCompanyFleetPanel({ organizationId }: { organizationId:
         </Card>
       ) : (
         <>
+          {approvedDrivers.length ? (
+            <View style={styles.driverDirectory}>
+              <SectionHeader title="Company drivers" description="Keep a clear, current portrait for each approved driver. Customers see the assigned driver's photo before and during the booking." />
+              {approvedDrivers.map((driver) => {
+                const driverId = asString(driver, "driver_profile_id") ?? "";
+                return (
+                  <LogisticsMediaPicker
+                    key={driverId}
+                    entityType="driver"
+                    entityId={driverId}
+                    organizationId={organizationId}
+                    mediaRole="driver.photo.public"
+                    title={asString(driver, "display_name") ?? "Company driver"}
+                    description="Public driver photo shown beside the vehicle assigned to the customer."
+                    compact
+                  />
+                );
+              })}
+            </View>
+          ) : null}
           {vehicles.data?.length ? vehicles.data.map((vehicle) => {
             const vehicleId = asString(vehicle, "id") ?? "";
             const driverId = selectedDriverByVehicle[vehicleId] ?? "";
@@ -285,6 +305,7 @@ export function LogisticsCompanyFleetPanel({ organizationId }: { organizationId:
 
 const styles = StyleSheet.create({
   section: { gap: spacing.md },
+  driverDirectory: { gap: spacing.sm },
   vehicleHeader: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   vehicleCopy: { flex: 1, minWidth: 0, gap: 4 },
   vehicleTitle: { ...typography.bodyStrong, fontSize: 13 },
