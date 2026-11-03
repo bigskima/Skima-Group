@@ -175,6 +175,10 @@ export function ProviderBookingDetailScreen() {
             <Card padding="lg">
               <View style={styles.actionHeading}><Truck color={palette.brand} size={20} /><Text style={[styles.sectionTitle, { color: palette.ink }]}>Assign the delivery team</Text></View>
               <Text style={[styles.meta, { color: palette.muted }]}>Choose a verified company driver and a compliant vehicle. The driver must accept the assignment before starting pickup and delivery.</Text>
+              {isReplacingAssignment ? (
+                <AppButton label="Keep current assignment" fullWidth variant="secondary"
+                  onPress={() => { setIsReplacingAssignment(false); setSelectedDriverProfileId(""); setSelectedVehicleId(""); }} />
+              ) : null}
               {activeAssignment && !isReplacingAssignment ? (
                 <View style={[styles.assignmentSummary, { backgroundColor: palette.surfaceSubtle }]}>
                   <Text style={[styles.contactName, { color: palette.ink }]}>Driver assignment sent</Text>
@@ -204,8 +208,6 @@ export function ProviderBookingDetailScreen() {
                     <View style={[styles.assignmentSummary, { backgroundColor: palette.warningSoft }]}>
                       <Text style={[styles.contactName, { color: palette.ink }]}>Replace the current driver</Text>
                       <Text style={[styles.meta, { color: palette.muted }]}>The existing pre-start assignment will be marked as reassigned when the new driver accepts the offer. The customer booking and payment remain unchanged.</Text>
-                      <AppButton label="Keep current assignment" fullWidth variant="secondary"
-                        onPress={() => { setIsReplacingAssignment(false); setSelectedDriverProfileId(""); setSelectedVehicleId(""); }} />
                     </View>
                   ) : null}
                   {lastReleasedAssignment && !activeAssignment ? (
