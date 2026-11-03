@@ -32,6 +32,7 @@ const routes = await Deno.readTextFile("apps/logistics-mobile/app/(customer)/_la
 const providerNavigation = await Deno.readTextFile("apps/logistics-mobile/src/navigation/ProviderTabs.tsx");
 const providerDashboard = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderDashboardScreen.tsx");
 const providerWorkspace = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderWorkspaceScreen.tsx");
+const guideProvider = await Deno.readTextFile("apps/logistics-mobile/src/onboarding/LogisticsGuideProvider.tsx");
 const providerOpportunities = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderOpportunitiesScreen.tsx");
 const providerCompany = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderCompanyScreen.tsx");
 const providerTeam = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderTeamScreen.tsx");
@@ -602,4 +603,16 @@ Deno.test("Customer and company bell controls open the shared authenticated noti
   requireText(notificationScreen, "read_notification_center", "shared notification center RPC");
   requireText(notificationScreen, "mark_notification_read", "mark a notification read");
   requireText(notificationScreen, "mark_all_notifications_read", "mark all notifications read");
+});
+
+
+Deno.test("Logistics visual tours normalize routes and resolve customer/company targets", () => {
+  requireText(guideProvider, "normalizeGuideRoute", "Expo route group and index normalization");
+  requireText(guideProvider, "routeGroup", "customer/company workspace detection");
+  requireText(guideProvider, "requiredRoute=normalizeGuideRoute(step.route)", "route-aligned spotlight lookup");
+  requireText(guideProvider, "measureInWindow", "actual control highlight measurement");
+  requireText(guideProvider, "Remind me later", "tour snooze action");
+  requireText(guideProvider, "7 days", "tour reminder period");
+  requireText(guideProvider, "customer-home-request", "customer request highlight");
+  requireText(guideProvider, "company-workspace-finance", "company finance highlight");
 });
