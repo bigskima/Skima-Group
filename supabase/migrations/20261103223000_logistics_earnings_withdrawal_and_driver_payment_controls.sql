@@ -389,7 +389,7 @@ language plpgsql
 stable
 security definer
 set search_path = public
-as $
+as $$
 declare result jsonb;
 begin
   if auth.uid() is null or not public.can_manage_logistics_company(target_organization_id) then
@@ -405,7 +405,7 @@ begin
   where payment.provider_organization_id = target_organization_id;
   return result;
 end;
-$;
+$$;
 
 revoke all on function public.read_logistics_company_payment_settings(uuid) from public,anon;
 revoke all on function public.update_logistics_company_payment_settings(uuid,text) from public,anon;
