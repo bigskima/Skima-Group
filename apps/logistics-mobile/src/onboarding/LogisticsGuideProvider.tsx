@@ -1,11 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useSegments } from "expo-router";
-import { ArrowLeft, Clock3, HelpCircle, X } from "lucide-react-native";
+import { Clock3, HelpCircle, X } from "lucide-react-native";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren, type ReactNode } from "react";
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
-import { radii, spacing, typography } from "../theme/tokens";
+import { radii, typography } from "../theme/tokens";
 
 type Workspace = "customer" | "company";
 type Step = { route: string; targetKey: string; title: string; body: string };
@@ -55,7 +55,7 @@ export function LogisticsGuideProvider({children}:PropsWithChildren){
  const startNow=useCallback((nextWorkspace:Workspace)=>{
   setWorkspace(nextWorkspace);setStepIndex(0);setRect(null);setRemind(false);setActive(true);
   const first=STEPS[nextWorkspace][0];
-  if(first && route!==first.route)router.navigate((nextWorkspace==="customer"?"/(customer)":"locations") as never);
+  if(first && route!==first.route)router.navigate((nextWorkspace==="customer"?"/(customer)":"/(provider)") as never);
  },[route]);
 
  useEffect(()=>{
