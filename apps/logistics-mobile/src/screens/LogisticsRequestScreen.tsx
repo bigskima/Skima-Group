@@ -76,9 +76,9 @@ export function LogisticsRequestScreen() {
     if (!selectedCategory) { setStep(1); setFieldError("Choose a logistics service to continue."); return; }
     if (!pickup || !destination) { setStep(1); setFieldError("Choose both a pickup and a destination."); return; }
     if (title.trim().length < 3) { setStep(2); setFieldError("Add a short title for what you are moving."); return; }
-    if (customerName.trim().length < 2) { setStep(2); setFieldError("Enter the name the provider should contact."); return; }
-    if (!phoneValid) { setStep(2); setFieldError("Enter a valid phone number for provider coordination."); return; }
     if (!validWeight) { setStep(2); setFieldError("Weight must be a positive number."); return; }
+    if (customerName.trim().length < 2) { setStep(3); setFieldError("Enter the name the provider should contact."); return; }
+    if (!phoneValid) { setStep(3); setFieldError("Enter a valid phone number for provider coordination."); return; }
 
     const pickupId = asString(pickup, "id");
     const destinationId = asString(destination, "id");
@@ -121,19 +121,21 @@ export function LogisticsRequestScreen() {
     }
     if (step === 2) {
       if (title.trim().length < 3) { setFieldError("Add a short title for what you are moving."); return; }
-      if (customerName.trim().length < 2) { setFieldError("Enter a contact name."); return; }
-      if (!phoneValid) { setFieldError("Enter a valid phone number."); return; }
       if (!validWeight) { setFieldError("Weight must be a positive number."); return; }
     }
-    setStep((current) => Math.min(3, current + 1));
+    if (step === 3) {
+      if (customerName.trim().length < 2) { setFieldError("Enter a contact name."); return; }
+      if (!phoneValid) { setFieldError("Enter a valid phone number."); return; }
+    }
+    setStep((current) => Math.min(4, current + 1));
   };
 
   return (
     <Screen eyebrow="NEW REQUEST" title="Tell us what’s moving" subtitle="Share the route and a few details. Eligible companies in your area can respond with offers."
       refreshControl={<RefreshControl refreshing={categoriesQuery.isRefetching} onRefresh={() => void categoriesQuery.refetch()} tintColor={palette.brand} />}>
       <View style={styles.progress}>
-        {[1, 2, 3].map((part) => <View key={part} style={[styles.progressSegment, { backgroundColor: part <= step ? palette.brand : palette.border }]} />)}
-        <Text style={[styles.progressText, { color: palette.muted }]}>STEP {step} OF 3</Text>
+        {[1, 2, 3, 4].map((part) => <View key={part} style={[styles.progressSegment, { backgroundColor: part <= step ? palette.brand : palette.border }]} />)}
+        <Text style={[styles.progressText, { color: palette.muted }]}>STEP {step} OF 4</Text>
       </View>
 
       {categoriesQuery.isPending ? <ScreenSkeleton cards={2} /> : categoriesQuery.error ? (
@@ -167,32 +169,9 @@ export function LogisticsRequestScreen() {
                 <GeographyPicker label="Destination" value={destinationSearch} selected={destination} onChange={(value) => { setDestinationSearch(value); setDestination(null); }} onSelect={(place) => { setDestination(place); setDestinationSearch(asString(place, "canonical_name") ?? ""); }} error={fieldError && pickup && !destination ? fieldError : null} />
               </Card>
             </>
-          ) : step === 2 ? (
+          ) : step === 3 ? (
             <>
-              <SectionHeader title="A little more detail" description="Help providers understand the item and prepare a suitable offer." />
-              <Card padding="lg">
-                <View style={styles.sectionLead}>
-                  <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><FileText color={palette.brand} size={20} /></View>
-                  <View style={styles.sectionCopy}>
-                    <Text style={[styles.sectionTitle, { color: palette.ink }]}>Describe your request</Text>
-                    <Text style={[styles.sectionDescription, { color: palette.muted }]}>A clear title helps companies respond faster.</Text>
-                  </View>
-                </View>
-                <AppField label="What are you moving?" value={title} onChangeText={setTitle} placeholder="e.g. Deliver a sofa and two chairs" maxLength={180} error={fieldError?.includes("title") ? fieldError : null} />
-                <AppField label="Additional details" value={description} onChangeText={setDescription} placeholder="Size, quantity, handling needs…" multiline optional />
-                <View style={styles.fieldGroup}>
-                  <Text style={[styles.fieldLabel, { color: palette.ink }]}>Cargo type</Text>
-                  <View style={styles.typeChoices}>
-                    {CARGO_TYPES.map((choice) => {
-                      const chosen = cargoType === choice.key;
-                      return <Pressable key={choice.key} onPress={() => setCargoType(choice.key)} style={[styles.typeChip, { borderColor: chosen ? palette.brand : palette.border, backgroundColor: chosen ? palette.brandSoft : palette.surface }]}>
-                        <Text style={[styles.typeText, { color: chosen ? palette.brand : palette.muted }]}>{choice.label}</Text>
-                      </Pressable>;
-                    })}
-                  </View>
-                </View>
-                <AppField label="Estimated weight (kg)" value={weight} onChangeText={setWeight} placeholder="e.g. 25" keyboardType="decimal-pad" optional leading={<Weight color={palette.muted} size={16} />} error={fieldError?.includes("Weight") ? fieldError : null} hint="Leave blank if you do not know the weight." />
-              </Card>
+              <SectionHeader title="Contact details" description="Tell the selected companies how to reach you about the request." />
               <Card padding="lg">
                 <View style={styles.sectionLead}>
                   <View style={[styles.sectionIcon, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={20} /></View>
@@ -205,6 +184,7 @@ export function LogisticsRequestScreen() {
                 <AppField label="Phone number" value={customerPhone} onChangeText={setCustomerPhone} placeholder="+234 800 000 0000" keyboardType="phone-pad" error={fieldError?.includes("phone") ? fieldError : null} hint="Use a number the provider can reach." />
                 <AppField label="Handling instructions" value={instructions} onChangeText={setInstructions} placeholder="Gate access, fragile items, preferred contact time…" multiline optional />
               </Card>
+            </>
             </>
           ) : (
             <>
@@ -244,7 +224,7 @@ export function LogisticsRequestScreen() {
 
           <View style={styles.actions}>
             {step > 1 ? <AppButton label="Back" variant="secondary" onPress={() => { setFieldError(null); setStep((current) => current - 1); }} icon={<ArrowLeft color={palette.ink} size={16} />} /> : null}
-            {step < 3 ? <AppButton label="Continue" fullWidth={step === 1} onPress={next} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} /> :
+            {step < 4 ? <AppButton label="Continue" fullWidth={step === 1} onPress={next} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} /> :
               <AppButton label="Publish request" fullWidth loading={createJob.isPending} onPress={() => void submit()} trailingIcon={<ArrowRight color="#FFFFFF" size={16} />} />}
           </View>
         </View>
