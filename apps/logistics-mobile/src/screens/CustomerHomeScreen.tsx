@@ -72,7 +72,7 @@ export function CustomerHomeScreen() {
       action={
         <View style={styles.headerActions}>
           <BrandMark />
-          <Pressable accessibilityRole="button" accessibilityLabel="Open notifications" onPress={() => router.push("/(customer)/notifications" as never)}
+          <Pressable accessibilityRole="button" accessibilityLabel="Open notifications" onPress={() => router.push("/(customer)/jobs" as never)}
             style={[styles.bell, { backgroundColor: palette.surface, borderColor: palette.border }]}>
             <Bell color={palette.ink} size={19} />
             {activeJobs.length + activeBookings.length > 0 ? <View style={[styles.bellDot, { backgroundColor: palette.brand }]} /> : null}
