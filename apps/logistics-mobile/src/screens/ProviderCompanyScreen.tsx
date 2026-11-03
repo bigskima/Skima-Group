@@ -44,6 +44,8 @@ export function ProviderCompanyScreen() {
   );
 
   const [companyRegistrationKey] = useState(() => createClientIdempotencyKey("logistics.company.register"));
+  const [showServiceForm, setShowServiceForm] = useState(false);
+  const [showCoverageForm, setShowCoverageForm] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [legalName, setLegalName] = useState("");
   const [serviceCategory, setServiceCategory] = useState("");
@@ -103,6 +105,7 @@ export function ProviderCompanyScreen() {
     },
     onSuccess: async () => {
       setServiceName(""); setServiceDescription(""); setServiceWeight("");
+      setShowServiceForm(false);
       await Promise.all([services.refetch(), coverage.refetch()]);
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : "Service could not be saved."),
@@ -127,6 +130,7 @@ export function ProviderCompanyScreen() {
     },
     onSuccess: async () => {
       setCoverageSearch(""); setCoveragePlace(null); setDestinationSearch(""); setDestinationPlace(null);
+      setShowCoverageForm(false);
       await coverage.refetch();
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : "Coverage could not be saved."),
@@ -184,6 +188,7 @@ export function ProviderCompanyScreen() {
                     ))}
                   </View>
                 ) : <StatePanel title="No services configured" description="Add at least one service to tell SKIMA what your company can handle." />}
+                {showServiceForm ? (
                 <Card padding="lg">
                   <View style={styles.sectionLead}><Plus color={palette.brand} size={18} /><Text style={[styles.formTitle, { color: palette.ink }]}>Add a service</Text></View>
                   <AppField label="Service name" value={serviceName} onChangeText={setServiceName} placeholder="e.g. Furniture and home delivery" />
@@ -198,8 +203,14 @@ export function ProviderCompanyScreen() {
                   <AppField label="Service description" value={serviceDescription} onChangeText={setServiceDescription} placeholder="What is included in this service?" optional multiline />
                   <AppField label="Maximum cargo weight (kg)" value={serviceWeight} onChangeText={setServiceWeight} keyboardType="decimal-pad" placeholder="Leave blank if not limited" optional />
                   <View style={styles.quoteHint}><ShieldCheck color={palette.success} size={14} /><Text style={[styles.quoteHintText, { color: palette.muted }]}>Offers are quoted per customer request. No lead unlock fee is charged.</Text></View>
-                  <AppButton label="Save service" fullWidth loading={addService.isPending} disabled={!serviceCategory || serviceName.trim().length < 2} onPress={() => { setError(null); addService.mutate(); }} />
+                  <View style={styles.actions}>
+                    <AppButton label="Cancel" variant="secondary" onPress={() => setShowServiceForm(false)} />
+                    <AppButton label="Save service" fullWidth loading={addService.isPending} disabled={!serviceCategory || serviceName.trim().length < 2} onPress={() => { setError(null); addService.mutate(); }} />
+                  </View>
                 </Card>
+                ) : (
+                  <AppButton label="Add a service" fullWidth variant="secondary" icon={<Plus color={palette.brand} size={15} />} onPress={() => setShowServiceForm(true)} />
+                )}
               </View>
 
               <View style={styles.section}>
@@ -221,6 +232,7 @@ export function ProviderCompanyScreen() {
                   </View>
                 ) : <StatePanel title="No coverage configured" description="Add your service area so SKIMA can match you with relevant customer requests." />}
                 {availableServices.length ? (
+                  showCoverageForm ? (
                   <Card padding="lg">
                     <View style={styles.sectionLead}><MapPin color={palette.brand} size={18} /><Text style={[styles.formTitle, { color: palette.ink }]}>Add operating area</Text></View>
                     <Text style={[styles.fieldLabel, { color: palette.ink }]}>Service</Text>
@@ -238,8 +250,14 @@ export function ProviderCompanyScreen() {
                     <GeographyPicker label={coverageMode === "route" ? "Route origin" : "Operating location"} value={coverageSearch} selected={coveragePlace} onChange={(value) => { setCoverageSearch(value); setCoveragePlace(null); }} onSelect={(place) => { setCoveragePlace(place); setCoverageSearch(asString(place, "canonical_name") ?? ""); }} />
                     {coverageMode === "route" ? <GeographyPicker label="Route destination" value={destinationSearch} selected={destinationPlace} onChange={(value) => { setDestinationSearch(value); setDestinationPlace(null); }} onSelect={(place) => { setDestinationPlace(place); setDestinationSearch(asString(place, "canonical_name") ?? ""); }} /> : null}
                     <Text style={[styles.coverageHint, { color: palette.muted }]}>{coverageMode === "route" ? "Only matching requests on this origin-to-destination corridor will be routed to the service." : "This setting covers both pickup and delivery within the selected geographic area."}</Text>
-                    <AppButton label="Save operating coverage" fullWidth loading={addCoverage.isPending} disabled={!coverageServiceKey || !coveragePlace || (coverageMode === "route" && !destinationPlace)} onPress={() => { setError(null); addCoverage.mutate(); }} />
+                    <View style={styles.actions}>
+                      <AppButton label="Cancel" variant="secondary" onPress={() => setShowCoverageForm(false)} />
+                      <AppButton label="Save operating coverage" fullWidth loading={addCoverage.isPending} disabled={!coverageServiceKey || !coveragePlace || (coverageMode === "route" && !destinationPlace)} onPress={() => { setError(null); addCoverage.mutate(); }} />
+                    </View>
                   </Card>
+                  ) : (
+                    <AppButton label="Add operating area" fullWidth variant="secondary" icon={<Plus color={palette.brand} size={15} />} onPress={() => setShowCoverageForm(true)} />
+                  )
                 ) : null}
               </View>
             </>
