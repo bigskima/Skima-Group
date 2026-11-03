@@ -570,6 +570,7 @@ declare
   hold_record public.escrow_holds%rowtype;
   refund_wallet public.wallet_accounts%rowtype;
   v_refund_transaction_id uuid;
+  next_booking_status text;
 begin
   if actor is null then raise exception 'authentication is required'; end if;
   if not public.has_permission('platform.escrow.execute',null)
@@ -577,14 +578,17 @@ begin
     raise exception 'platform escrow or settlement execution permission is required';
   end if;
   if target_dispute_id is null
-    or target_decision not in ('refund_customer','allow_delivery_confirmation','resume_delivery','offline_finance_review','close_offline_finance_review')
+    or target_decision not in (
+      'refund_customer','allow_delivery_confirmation','resume_delivery',
+      'offline_finance_review','close_offline_finance_review'
+    )
     or target_resolution_note is null or char_length(btrim(target_resolution_note)) not between 5 and 2000
     or target_idempotency_key is null or char_length(btrim(target_idempotency_key)) not between 8 and 180 then
     raise exception 'dispute, supported decision, resolution note and idempotency key are required';
   end if;
 
   select * into dispute_record
-  from public.logistics_booking_disputes where id = target_dispute_id;
+  from public.logistics_booking_disputes where id = target_dispute_id for update;
   if not found then raise exception 'Logistics dispute was not found'; end if;
 
   select * into booking_record
@@ -594,8 +598,10 @@ begin
   if dispute_record.status = 'resolved' then
     if dispute_record.resolution_code = target_decision then
       return jsonb_build_object(
-        'dispute_id',dispute_record.id,'booking_id',booking_record.id,
-        'status',dispute_record.status,'refund_transaction_id',dispute_record.refund_transaction_id
+        'dispute_id',dispute_record.id,
+        'booking_id',booking_record.id,
+        'status',dispute_record.status,
+        'refund_transaction_id',dispute_record.refund_transaction_id
       );
     end if;
     raise exception 'this dispute has already been resolved';
@@ -617,6 +623,7 @@ begin
     if not found or hold_record.status <> 'disputed' or hold_record.released_amount <> 0 then
       raise exception 'the Logistics escrow hold is not fully available for a safe full refund';
     end if;
+
     select * into refund_wallet
     from public.wallet_accounts
     where id = booking_record.payment_attempt_wallet_id
@@ -641,9 +648,11 @@ begin
       )
     );
 
+    next_booking_status := 'refunded';
     update public.logistics_bookings
     set status = 'refunded',updated_at = timezone('utc',now())
     where id = booking_record.id;
+
   elsif target_decision = 'allow_delivery_confirmation' then
     if dispute_record.booking_status_before_dispute <> 'delivered' then
       raise exception 'delivery confirmation can be reopened only for a delivered booking';
@@ -652,8 +661,10 @@ begin
       update public.escrow_holds set status = 'held',updated_at = timezone('utc',now())
       where id = booking_record.escrow_hold_id and status = 'disputed' and released_amount = 0;
     end if;
+    next_booking_status := 'delivered';
     update public.logistics_bookings set status = 'delivered',updated_at = timezone('utc',now())
     where id = booking_record.id;
+
   elsif target_decision = 'resume_delivery' then
     if dispute_record.booking_status_before_dispute <> 'delivery_exception' then
       raise exception 'delivery can resume only when the dispute was opened during an active delivery exception';
@@ -665,12 +676,14 @@ begin
       update public.escrow_holds set status = 'held',updated_at = timezone('utc',now())
       where id = booking_record.escrow_hold_id and status = 'disputed' and released_amount = 0;
     end if;
+    next_booking_status := 'in_progress';
     update public.logistics_bookings set status = 'in_progress',updated_at = timezone('utc',now())
     where id = booking_record.id;
+
   elsif target_decision = 'offline_finance_review' then
     if booking_record.payment_mode <> 'offline' then
       raise exception 'manual offline finance review is only for offline Logistics bookings';
-    elsif target_decision = 'close_offline_finance_review' then\n    if booking_record.payment_mode <> 'offline' or dispute_record.status <> 'escalated' then\n      raise exception 'only an escalated offline dispute can be closed after finance review';\n    end if;\n    update public.logistics_bookings\n    set status = dispute_record.booking_status_before_dispute,updated_at = timezone('utc',now())\n    where id = booking_record.id;\n  end if;
+    end if;
     update public.logistics_booking_disputes
     set status = 'escalated',resolution_code = target_decision,
         resolution_note = btrim(target_resolution_note),resolved_by = actor,
@@ -685,6 +698,15 @@ begin
       'dispute_id',dispute_record.id,'booking_id',booking_record.id,
       'status','escalated','refund_transaction_id',null
     );
+
+  elsif target_decision = 'close_offline_finance_review' then
+    if booking_record.payment_mode <> 'offline' or dispute_record.status <> 'escalated' then
+      raise exception 'only an escalated offline dispute can be closed after finance review';
+    end if;
+    next_booking_status := dispute_record.booking_status_before_dispute;
+    update public.logistics_bookings
+    set status = next_booking_status,updated_at = timezone('utc',now())
+    where id = booking_record.id;
   end if;
 
   update public.logistics_booking_disputes
@@ -699,22 +721,20 @@ begin
 
   perform public.record_logistics_booking_event(
     booking_record.id,'logistics.booking.dispute_resolved',target_idempotency_key,
-    'disputed',case when target_decision = 'refund_customer' then 'refunded'
-      when target_decision = 'allow_delivery_confirmation' then 'delivered'
-      else 'in_progress' end,
+    'disputed',next_booking_status,
     jsonb_build_object(
-      'dispute_id',dispute_record.id,'decision',target_decision,
-      'refund_transaction_id',v_v_refund_transaction_id,'resolution_note',btrim(target_resolution_note)
+      'dispute_id',dispute_record.id,
+      'decision',target_decision,
+      'refund_transaction_id',v_refund_transaction_id,
+      'resolution_note',btrim(target_resolution_note)
     )
   );
   return jsonb_build_object(
     'dispute_id',dispute_record.id,
     'booking_id',booking_record.id,
     'status','resolved',
-    'booking_status',case when target_decision = 'refund_customer' then 'refunded'
-      when target_decision = 'allow_delivery_confirmation' then 'delivered'
-      else 'in_progress' end,
-    'refund_transaction_id',refund_transaction_id
+    'booking_status',next_booking_status,
+    'refund_transaction_id',v_refund_transaction_id
   );
 end;
 $$;
