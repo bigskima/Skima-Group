@@ -18,7 +18,7 @@ import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
 import { LogisticsDriverLocationShare } from "./LogisticsDriverLocationShare";
 
-type DriverAction = "accept" | "reject" | "start" | "pickup" | "transit" | "deliver";
+type DriverAction = "accept" | "reject" | "release" | "start" | "pickup" | "transit" | "deliver";
 type DriverJob = Record<string, unknown>;
 
 function nested(record: Record<string, unknown> | null | undefined, key: string) {
@@ -81,6 +81,13 @@ export function LogisticsDriverScreen() {
           idempotencyKey,
         }, z.string().uuid());
       }
+      if (input.kind === "release") {
+        return api.post("/runtime/logistics/driver/assignment/release", {
+          assignmentId: input.assignmentId,
+          reason: "Driver is unable to start this booking and is returning it to company dispatch.",
+          idempotencyKey,
+        }, z.string().uuid());
+      }
       if (input.kind === "start") {
         return api.post("/runtime/logistics/bookings/start", {
           bookingId: input.bookingId,
@@ -109,6 +116,8 @@ export function LogisticsDriverScreen() {
         Alert.alert("Delivery submitted", "The customer can now confirm receipt. Online escrow remains protected until confirmation.");
       } else if (input.kind === "reject") {
         Alert.alert("Assignment declined", "Your company can now choose another eligible driver.");
+      } else if (input.kind === "release") {
+        Alert.alert("Assignment returned to dispatch", "Your company can now assign another eligible driver. The customer booking and payment remain unchanged.");
       }
       await client.invalidateQueries({ queryKey: ["skima-logistics", "driver-workspace-bookings"] });
       await jobs.refetch();
@@ -250,8 +259,22 @@ export function LogisticsDriverScreen() {
                   </View>
                 ) : status === "accepted" ? (
                   <View style={styles.actions}>
-                    <Text style={[styles.meta, { color: palette.muted }]}>Start the job when you are ready to travel to the pickup point.</Text>
+                    <Text style={[styles.meta, { color: palette.muted }]}>Start the job when you are ready to travel to the pickup point. If you cannot start, return it to company dispatch before taking custody of the cargo.</Text>
                     <AppButton label="Start job" fullWidth loading={isBusy} onPress={() => runAction.mutate({ kind: "start", bookingId, assignmentId })} />
+                    <AppButton
+                      label="I can't start this job"
+                      fullWidth
+                      variant="secondary"
+                      disabled={runAction.isPending}
+                      onPress={() => Alert.alert(
+                        "Return this job to dispatch?",
+                        "Your assignment will be released so the company can choose another eligible driver. This is only available before service starts and does not cancel the customer's booking.",
+                        [
+                          { text: "Keep assignment", style: "cancel" },
+                          { text: "Return to dispatch", style: "destructive", onPress: () => runAction.mutate({ kind: "release", bookingId, assignmentId }) },
+                        ],
+                      )}
+                    />
                   </View>
                 ) : status === "in_progress" ? (
                   <View style={styles.actions}>
