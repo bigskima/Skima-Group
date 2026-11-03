@@ -153,7 +153,7 @@ on public.logistics_booking_disputes for update to authenticated using (false) w
 create policy logistics_booking_disputes_no_direct_delete
 on public.logistics_booking_disputes for delete to authenticated using (false);
 
-grant select on public.logistics_booking_incidents,public.logistics_booking_disputes to authenticated,service_role;
+revoke all on public.logistics_booking_incidents,public.logistics_booking_disputes from public,anon,authenticated;\ngrant select on public.logistics_booking_incidents,public.logistics_booking_disputes to authenticated,service_role;
 
 create or replace function public.guard_logistics_settlement_on_open_exceptions()
 returns trigger
@@ -569,8 +569,7 @@ declare
   booking_record public.logistics_bookings%rowtype;
   hold_record public.escrow_holds%rowtype;
   refund_wallet public.wallet_accounts%rowtype;
-  refund_transaction_id uuid;
-  restored_status text;
+  v_refund_transaction_id uuid;
 begin
   if actor is null then raise exception 'authentication is required'; end if;
   if not public.has_permission('platform.escrow.execute',null)
@@ -578,7 +577,7 @@ begin
     raise exception 'platform escrow or settlement execution permission is required';
   end if;
   if target_dispute_id is null
-    or target_decision not in ('refund_customer','allow_delivery_confirmation','resume_delivery','offline_finance_review')
+    or target_decision not in ('refund_customer','allow_delivery_confirmation','resume_delivery','offline_finance_review','close_offline_finance_review')
     or target_resolution_note is null or char_length(btrim(target_resolution_note)) not between 5 and 2000
     or target_idempotency_key is null or char_length(btrim(target_idempotency_key)) not between 8 and 180 then
     raise exception 'dispute, supported decision, resolution note and idempotency key are required';
@@ -629,7 +628,7 @@ begin
     for update;
     if not found then raise exception 'the original customer wallet is not active or does not match the booking'; end if;
 
-    refund_transaction_id := public.refund_escrow_hold(
+    v_refund_transaction_id := public.refund_escrow_hold(
       booking_record.escrow_hold_id,
       refund_wallet.id,
       target_idempotency_key || ':refund',
@@ -671,7 +670,7 @@ begin
   elsif target_decision = 'offline_finance_review' then
     if booking_record.payment_mode <> 'offline' then
       raise exception 'manual offline finance review is only for offline Logistics bookings';
-    end if;
+    elsif target_decision = 'close_offline_finance_review' then\n    if booking_record.payment_mode <> 'offline' or dispute_record.status <> 'escalated' then\n      raise exception 'only an escalated offline dispute can be closed after finance review';\n    end if;\n    update public.logistics_bookings\n    set status = dispute_record.booking_status_before_dispute,updated_at = timezone('utc',now())\n    where id = booking_record.id;\n  end if;
     update public.logistics_booking_disputes
     set status = 'escalated',resolution_code = target_decision,
         resolution_note = btrim(target_resolution_note),resolved_by = actor,
@@ -694,7 +693,7 @@ begin
       resolution_note = btrim(target_resolution_note),
       resolved_by = actor,
       resolved_at = timezone('utc',now()),
-      refund_transaction_id = refund_transaction_id,
+      refund_transaction_id = v_refund_transaction_id,
       updated_at = timezone('utc',now())
   where id = dispute_record.id;
 
@@ -705,7 +704,7 @@ begin
       else 'in_progress' end,
     jsonb_build_object(
       'dispute_id',dispute_record.id,'decision',target_decision,
-      'refund_transaction_id',refund_transaction_id,'resolution_note',btrim(target_resolution_note)
+      'refund_transaction_id',v_v_refund_transaction_id,'resolution_note',btrim(target_resolution_note)
     )
   );
   return jsonb_build_object(
