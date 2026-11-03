@@ -647,16 +647,18 @@ Deno.test("Logistics incidents preserve custody and block financial settlement u
     migrationExceptions.indexOf("create or replace function public.respond_logistics_booking_incident"),
     migrationExceptions.indexOf("create or replace function public.open_logistics_booking_dispute"),
   );
-  if (incidentResponse.indexOf("existing_event.idempotency_key") < 0
-    || incidentResponse.indexOf("incident_record.status not in") < incidentResponse.indexOf("existing_event.idempotency_key")) {
+  const incidentReplayAt = incidentResponse.indexOf("select * into existing_event");
+  const incidentStateGuardAt = incidentResponse.indexOf("if incident_record.status not in");
+  if (incidentReplayAt < 0 || incidentStateGuardAt < incidentReplayAt) {
     throw new Error("incident resolution retries must return their original result before terminal-state validation");
   }
   const openDispute = migrationExceptions.slice(
     migrationExceptions.indexOf("create or replace function public.open_logistics_booking_dispute"),
     migrationExceptions.indexOf("create or replace function public.resolve_logistics_booking_dispute"),
   );
-  if (openDispute.indexOf("existing_dispute.idempotency_key") < 0
-    || openDispute.indexOf("booking_record.status not in") < openDispute.indexOf("existing_dispute.idempotency_key")) {
+  const disputeReplayAt = openDispute.indexOf("select * into existing_dispute");
+  const disputeStateGuardAt = openDispute.indexOf("if booking_record.status not in");
+  if (disputeReplayAt < 0 || disputeStateGuardAt < disputeReplayAt) {
     throw new Error("customer dispute retries must return their original result before booking-state validation");
   }
   requireText(migrationExceptions, "assignment.metadata->>'assignment_kind' = 'recovery'", "only an active recovery driver may read the incident custody record");
@@ -689,8 +691,9 @@ Deno.test("Failed Logistics deliveries use a controlled recovery assignment and 
     migrationCargoRecovery.indexOf("create or replace function public.start_logistics_recovery_booking"),
     migrationCargoRecovery.indexOf("create or replace function public.submit_logistics_booking_delivery"),
   );
-  if (recoveryStart.indexOf("existing_event.idempotency_key") < 0
-    || recoveryStart.indexOf("booking_record.status <> 'failed_delivery'") < recoveryStart.indexOf("existing_event.idempotency_key")) {
+  const recoveryReplayAt = recoveryStart.indexOf("select * into existing_event");
+  const recoveryStateGuardAt = recoveryStart.indexOf("if booking_record.status <> 'failed_delivery'");
+  if (recoveryReplayAt < 0 || recoveryStateGuardAt < recoveryReplayAt) {
     throw new Error("recovery-start retries must return their original result before checking the changed booking state");
   }
   const recoveryRelease = migrationCargoRecovery.slice(
