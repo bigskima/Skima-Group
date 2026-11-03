@@ -137,6 +137,13 @@ using (
           where assignment.id = logistics_booking_incidents.assignment_id
             and assignment.driver_user_id = auth.uid()
         )
+        or exists (
+          select 1 from public.logistics_booking_driver_assignments assignment
+          where assignment.booking_id = logistics_booking_incidents.booking_id
+            and assignment.driver_user_id = auth.uid()
+            and assignment.metadata->>'assignment_kind' = 'recovery'
+            and assignment.status not in ('rejected','reassigned','cancelled')
+        )
       )
   )
 );
