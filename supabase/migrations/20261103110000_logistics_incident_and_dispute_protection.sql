@@ -453,9 +453,18 @@ begin
     end if;
 
     update public.logistics_booking_driver_assignments
-    set status = 'incident_hold',
+    set status = case
+          when target_decision = 'mark_failed_delivery'
+            and incident_record.cargo_custody_status = 'not_collected' then 'cancelled'
+          when target_decision = 'mark_failed_delivery'
+            and incident_record.cargo_custody_status = 'delivered' then 'completed'
+          else 'incident_hold'
+        end,
         updated_at = timezone('utc',now()),
-        metadata = metadata || jsonb_build_object('delivery_exception_id',incident_record.id)
+        metadata = metadata || jsonb_build_object(
+          'delivery_exception_id',incident_record.id,
+          'incident_assignment_outcome',target_decision
+        )
     where id = incident_record.assignment_id
       and status in ('in_progress','picked_up','in_transit','delivery_submitted');
 
