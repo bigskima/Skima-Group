@@ -4,7 +4,6 @@ import { ArrowUpRight, Megaphone } from "lucide-react-native";
 import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSession } from "../session/SessionProvider";
-import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
 
 type Promotion = {
@@ -18,7 +17,6 @@ type Promotion = {
 
 export function LogisticsPromotionBanner() {
   const { supabase } = useSession();
-  const { palette } = useAppTheme();
   const promotion = useQuery<Promotion | null>({
     queryKey: ["logistics-customer-promotion"],
     staleTime: 2 * 60_000,
@@ -72,6 +70,7 @@ export function LogisticsPromotionBanner() {
       >
         <LinearGradient colors={["#E21D2F", "#9C1422"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
         {item.mediaUrl ? <Image source={{ uri: item.mediaUrl }} resizeMode="cover" style={StyleSheet.absoluteFill} /> : null}
+        {item.mediaUrl ? <LinearGradient colors={["rgba(0,0,0,.08)", "rgba(0,0,0,.70)"]} style={StyleSheet.absoluteFill} /> : null}
         <View style={styles.copy}>
           <View style={styles.eyebrow}><Megaphone size={13} color="#FFFFFF" /><Text style={styles.eyebrowText}>SKIMA FOR YOU</Text></View>
           <Text numberOfLines={2} style={styles.title}>{item.title ?? "Move with confidence"}</Text>
