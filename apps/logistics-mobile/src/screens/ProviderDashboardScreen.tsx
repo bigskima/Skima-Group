@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { ArrowRight, Bell, BriefcaseBusiness, Building2, CheckCircle2, ClipboardList, ShieldCheck, Truck } from "lucide-react-native";
 import { useMemo, type ReactNode } from "react";
-import { Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Pressable, RefreshControl, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { asString, useLogisticsQuery } from "../api/logistics";
 import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
@@ -18,6 +18,7 @@ import { StatusPill } from "../ui/StatusPill";
 export function ProviderDashboardScreen() {
   const { palette } = useAppTheme();
   const { context, session } = useSession();
+  const { width } = useWindowDimensions();
   const companies = useLogisticsQuery(["company"], "/runtime/logistics/company", true, 45_000);
   const company = companies.data?.[0] ?? null;
   const organizationId = asString(company, "organization_id");
@@ -43,14 +44,14 @@ export function ProviderDashboardScreen() {
   const refresh = () => Promise.all([companies.refetch(), opportunities.refetch(), jobs.refetch()]);
   return (
     <Screen eyebrow="PROVIDER WORKSPACE" title={`Welcome, ${ownerName}`} subtitle="Run your logistics company and respond to qualified customer requests."
-      action={<Pressable accessibilityRole="button" accessibilityLabel="Open company settings" onPress={() => router.push("/(provider)/services" as never)}
+      action={<Pressable accessibilityRole="button" accessibilityLabel="Open company settings" onPress={() => router.push("/(provider)/workspace" as never)
         style={[styles.avatar, { backgroundColor: palette.brandSoft, borderColor: palette.border }]}><Building2 color={palette.brand} size={19} /></Pressable>}
       refreshControl={<RefreshControl refreshing={companies.isRefetching || opportunities.isRefetching || jobs.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}>
       <View style={styles.brandRow}><BrandMark /><View style={[styles.trustBadge, { backgroundColor: palette.successSoft }]}><ShieldCheck color={palette.success} size={13} /><Text style={[styles.trustText, { color: palette.success }]}>Company portal</Text></View></View>
       {companies.isPending ? <ScreenSkeleton cards={2} /> : companies.error ? (
         <StatePanel title="Company profile unavailable" description="We could not load your company workspace." retry={() => void companies.refetch()} />
       ) : !company ? (
-        <Card padding="lg">
+        <Card padding="lg" style={{ width: "100%", maxWidth: width >= 900 ? 720 : "100%", alignSelf: "flex-start" }}>
           <View style={[styles.setupIcon, { backgroundColor: palette.brandSoft }]}><Building2 color={palette.brand} size={25} /></View>
           <Text style={[styles.setupTitle, { color: palette.ink }]}>Set up your logistics company</Text>
           <Text style={[styles.setupBody, { color: palette.muted }]}>Register your organisation, configure the services you provide and define the areas your team can cover.</Text>
@@ -137,7 +138,7 @@ const styles = StyleSheet.create({
   companySub: { ...typography.caption, fontSize: 9 },
   notice: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 11, borderRadius: radii.md },
   noticeText: { flex: 1, ...typography.caption, fontSize: 10, lineHeight: 16 },
-  stats: { flexDirection: "row", gap: 10 },
+  stats: { flexDirection: "row", gap: 10, maxWidth: 820 },
   stat: { flex: 1, minWidth: 0, borderWidth: StyleSheet.hairlineWidth, borderRadius: radii.lg, padding: 13, gap: 3 },
   statIcon: { width: 32, height: 32, borderRadius: 11, alignItems: "center", justifyContent: "center", marginBottom: 3 },
   statValue: { ...typography.heading, fontSize: 23 },
@@ -154,5 +155,5 @@ const styles = StyleSheet.create({
   emptyIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   emptyTitle: { ...typography.bodyStrong, fontSize: 14 },
   emptyBody: { ...typography.caption, fontSize: 10, lineHeight: 17 },
-  quickRow: { gap: 8 },
+  quickRow: { gap: 8, maxWidth: 820 },
 });
