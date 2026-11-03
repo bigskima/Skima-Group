@@ -9,7 +9,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public
-as $
+as $$
 declare
   actor uuid := auth.uid();
   target_booking_id uuid;
@@ -122,7 +122,7 @@ begin
   );
   return assignment_record.id;
 end;
-$;
+$$;
 
 revoke all on function public.release_logistics_driver_assignment(uuid,text,text) from public,anon;
 grant execute on function public.release_logistics_driver_assignment(uuid,text,text) to authenticated,service_role;
