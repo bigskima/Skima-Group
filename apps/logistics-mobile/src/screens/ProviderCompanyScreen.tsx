@@ -13,6 +13,7 @@ import { AppField } from "../ui/AppField";
 import { Card } from "../ui/Card";
 import { GeographyPicker } from "../ui/GeographyPicker";
 import { LogisticsMediaPicker } from "../ui/LogisticsMediaPicker";
+import { LogisticsCompanyApplicationPanel } from "../ui/LogisticsCompanyApplicationPanel";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
@@ -192,6 +193,12 @@ export function ProviderCompanyScreen() {
                   compact
                 />
               </View>
+
+              <LogisticsCompanyApplicationPanel
+                organizationId={organizationId ?? ""}
+                displayName={asString(company, "public_name") ?? ""}
+                legalName={asString(organization, "legal_name")}
+              />
 
               <ProviderWalletFundingPanel organizationId={organizationId ?? ""} />
 
