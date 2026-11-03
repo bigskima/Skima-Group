@@ -54,6 +54,7 @@ describe("SKIMA Admin V2 navigation", () => {
       { key: "billing", label: "Utility Billing", href: "/utility-billing", icon: "billing" },
       { key: "catalog", label: "Services", href: "/catalog", icon: "catalog" },
       { key: "store", label: "Store", href: "/store", icon: "store" },
+      { key: "logistics", label: "Logistics", href: "/logistics", icon: "logistics" },
       { key: "ai", label: "SKIMA Intelligence", href: "/ai", icon: "ai" },
       { key: "content", label: "Brand & Content", href: "/content", icon: "content" },
       { key: "policies", label: "Terms & Policies", href: "/policies", icon: "policies" },
