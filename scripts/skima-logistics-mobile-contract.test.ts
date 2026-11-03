@@ -47,6 +47,7 @@ const providerWorkRoute = await Deno.readTextFile("apps/logistics-mobile/app/(pr
 const providerJobRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/work.tsx");
 const bookingFulfillmentMigration = await Deno.readTextFile("supabase/migrations/20261103143849_logistics_booking_fulfillment_and_settlement.sql");
 const logisticsRuntime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
+const geographySearchMigration = await Deno.readTextFile("supabase/migrations/20261103161500_logistics_location_hierarchy_search.sql");
 const companyApplication = await Deno.readTextFile("apps/logistics-mobile/src/ui/LogisticsCompanyApplicationPanel.tsx");
 const companyFleet = await Deno.readTextFile("apps/logistics-mobile/src/ui/LogisticsCompanyFleetPanel.tsx");
 const publicMediaPicker = await Deno.readTextFile("apps/logistics-mobile/src/ui/LogisticsMediaPicker.tsx");
@@ -527,7 +528,9 @@ Deno.test("Logistics address search is Nigeria-scoped, detailed and supports man
   requireText(geography, "manualBase", "manual address linked to nearest known geography");
   requireText(geography, "state_district", "LGA/district hierarchy matching");
   requireText(logisticsRuntime, 'routePath === "/runtime/logistics/geographies"', "searchable canonical geography runtime");
-  requireText(logisticsRuntime, '.contains("aliases", [search])', "configured geography aliases are searchable");
+  requireText(logisticsRuntime, 'supabase.rpc("search_logistics_geographies"', "canonical geography search uses the dedicated RPC");
+  requireText(geographySearchMigration, "jsonb_array_elements_text", "configured geography aliases are searchable");
+  requireText(geographySearchMigration, "match_rank", "geography results prioritize precise matches");
   requireText(request, "address_snapshot: locationSnapshot(pickup)", "pickup address details retained on request");
   requireText(request, "address_snapshot: locationSnapshot(destination)", "destination address details retained on request");
 });
