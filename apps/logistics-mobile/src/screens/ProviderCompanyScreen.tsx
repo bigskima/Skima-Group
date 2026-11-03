@@ -1,4 +1,5 @@
 import { createClientIdempotencyKey } from "@skima/frontend-core";
+import { router } from "expo-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownUp, Building2, CheckCircle2, MapPin, Plus, ShieldCheck, Truck, WalletCards, XCircle } from "lucide-react-native";
 import { useMemo, useState } from "react";
@@ -30,7 +31,6 @@ type Place = Record<string, unknown>;
 export function ProviderCompanyScreen() {
   const { palette } = useAppTheme();
   const { api } = useSession();
-  const client = useQueryClient();
   const companies = useLogisticsQuery(["company"], "/runtime/logistics/company", true, 45_000);
   const categoriesQuery = useLogisticsQuery(["categories"], "/runtime/logistics/categories");
   const company = companies.data?.[0] ?? null;
@@ -46,11 +46,8 @@ export function ProviderCompanyScreen() {
     Boolean(organizationId),
   );
 
-  const [companyRegistrationKey] = useState(() => createClientIdempotencyKey("logistics.company.register"));
   const [showServiceForm, setShowServiceForm] = useState(false);
   const [showCoverageForm, setShowCoverageForm] = useState(false);
-  const [companyName, setCompanyName] = useState("");
-  const [legalName, setLegalName] = useState("");
   const [serviceCategory, setServiceCategory] = useState("");
   const [serviceName, setServiceName] = useState("");
   const [serviceDescription, setServiceDescription] = useState("");
@@ -68,20 +65,6 @@ export function ProviderCompanyScreen() {
   const availableServices = services.data ?? [];
   const serviceKey = useMemo(() => serviceCategory && serviceName ? serviceSlug(serviceCategory, serviceName) : "", [serviceCategory, serviceName]);
   const refresh = () => Promise.all([companies.refetch(), categoriesQuery.refetch(), services.refetch(), coverage.refetch()]);
-
-  const registerCompany = useMutation({
-    mutationFn: () => api.post("/runtime/logistics/company", {
-      displayName: companyName.trim(),
-      legalName: legalName.trim() || null,
-      idempotencyKey: companyRegistrationKey,
-      metadata: { registration_source: "skima.logistics.mobile" },
-    }, z.string().uuid()),
-    onSuccess: async () => {
-      setCompanyName(""); setLegalName("");
-      await client.invalidateQueries({ queryKey: ["skima-logistics", "company"] });
-    },
-    onError: (cause) => setError(cause instanceof Error ? cause.message : "Company registration could not be completed."),
-  });
 
   const addService = useMutation({
     mutationFn: () => {
@@ -149,11 +132,9 @@ export function ProviderCompanyScreen() {
           {!company ? (
             <Card padding="lg">
               <View style={[styles.sectionIcon, { backgroundColor: palette.brandSoft }]}><Building2 color={palette.brand} size={22} /></View>
-              <Text style={[styles.sectionTitle, { color: palette.ink }]}>Register your company</Text>
-              <Text style={[styles.sectionBody, { color: palette.muted }]}>Create your separate logistics provider organisation. It will start in pending verification until SKIMA reviews it.</Text>
-              <AppField label="Company display name" value={companyName} onChangeText={setCompanyName} placeholder="e.g. Eastern Star Logistics" />
-              <AppField label="Legal name" value={legalName} onChangeText={setLegalName} placeholder="Registered legal name" optional />
-              <AppButton label="Register company" fullWidth loading={registerCompany.isPending} disabled={companyName.trim().length < 2} onPress={() => { setError(null); registerCompany.mutate(); }} />
+              <Text style={[styles.sectionTitle, { color: palette.ink }]}>Start your company application</Text>
+              <Text style={[styles.sectionBody, { color: palette.muted }]}>Use the guided application to provide your company details, select your registration status and submit private supporting documents for SKIMA review. CAC registration is not required to apply.</Text>
+              <AppButton label="Start company application" fullWidth onPress={() => router.push("/provider/register" as never)} />
             </Card>
           ) : (
             <>
