@@ -708,6 +708,9 @@ begin
     if booking_record.payment_mode <> 'online_wallet' then
       raise exception 'offline Logistics payments require manual finance review; no wallet refund can be issued by this workflow';
     end if;
+    if booking_record.cargo_custody_status in ('driver_custody','recovery_pending','unknown') then
+      raise exception 'cargo custody must be secured or accounted for before the customer refund can close the Logistics booking';
+    end if;
     if booking_record.escrow_hold_id is null or booking_record.payment_attempt_wallet_id is null then
       raise exception 'the original Logistics escrow hold and customer funding wallet are required';
     end if;
