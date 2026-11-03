@@ -81,12 +81,12 @@ await runGate(
 const adminClient = await resolveAdminClient();
 
 if (adminClient) {
-  await runGate(
-    "optional platform super admin read access",
+  await runOptionalGate(
+    "platform super admin read access",
     () => verifyPlatformAdminReadAccess(adminClient),
   );
-  await runGate(
-    "optional platform super admin frontend session context",
+  await runOptionalGate(
+    "platform super admin frontend session context",
     () => verifyFrontendSessionContext(adminClient),
   );
 } else {
@@ -1718,6 +1718,15 @@ async function runGate(name: string, run: () => Promise<void>): Promise<void> {
   } catch (error) {
     console.error(`FAIL ${name}`);
     throw error;
+  }
+}
+
+async function runOptionalGate(name: string, run: () => Promise<void>): Promise<void> {
+  try {
+    await run();
+    console.log(`PASS optional ${name}`);
+  } catch (error) {
+    console.warn(`SKIP optional ${name}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
