@@ -564,10 +564,6 @@ begin
   select * into booking_record from public.logistics_bookings
   where id = target_booking_id for update;
   if not found then raise exception 'logistics recovery booking was not found'; end if;
-  if booking_record.status <> 'failed_delivery' or booking_record.cargo_custody_status <> 'recovery_pending' then
-    raise exception 'cargo recovery is not awaiting a recovery driver';
-  end if;
-
   actor_is_company := public.can_manage_logistics_company(booking_record.provider_organization_id)
     or public.has_permission('business.logistics.jobs.manage',booking_record.provider_organization_id);
   select * into assignment_record
@@ -592,6 +588,10 @@ begin
       raise exception 'recovery start idempotency key was used for a different action';
     end if;
     return booking_record.id;
+  end if;
+
+  if booking_record.status <> 'failed_delivery' or booking_record.cargo_custody_status <> 'recovery_pending' then
+    raise exception 'cargo recovery is not awaiting a recovery driver';
   end if;
 
   update public.logistics_bookings
