@@ -169,6 +169,38 @@ create table if not exists public.logistics_company_payment_settings (
 alter table public.logistics_company_payment_settings enable row level security;
 revoke all on public.logistics_company_payment_settings from public, anon, authenticated;
 
+create table if not exists public.logistics_driver_payment_records (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null unique references public.logistics_bookings(id) on delete restrict,
+  provider_organization_id uuid not null references public.organizations(id) on delete restrict,
+  driver_profile_id uuid not null references public.driver_profiles(id) on delete restrict,
+  driver_user_id uuid not null references public.profiles(id) on delete restrict,
+  currency_code text not null references public.currency_definitions(code) on delete restrict,
+  amount numeric(28,8) not null check (amount > 0),
+  payment_method text not null check (payment_method in ('bank_transfer','cash','other','offline')),
+  status text not null check (status in ('paid','recorded_offline')),
+  financial_transaction_id uuid references public.financial_transactions(id) on delete restrict,
+  note text,
+  idempotency_key text not null unique,
+  paid_by uuid not null references public.profiles(id) on delete restrict,
+  paid_at timestamptz not null default timezone('utc', now()),
+  metadata jsonb not null default '{}'::jsonb check (jsonb_typeof(metadata) = 'object')
+);
+create index if not exists logistics_driver_payment_records_company_idx
+  on public.logistics_driver_payment_records(provider_organization_id, paid_at desc);
+create index if not exists logistics_driver_payment_records_driver_idx
+  on public.logistics_driver_payment_records(driver_user_id, paid_at desc);
+alter table public.logistics_driver_payment_records enable row level security;
+revoke all on public.logistics_driver_payment_records from public, anon, authenticated;
+grant select on public.logistics_driver_payment_records to authenticated;
+create policy logistics_driver_payment_records_read_participants
+on public.logistics_driver_payment_records for select to authenticated
+using (
+  public.can_read_logistics_company(provider_organization_id)
+  or driver_user_id = auth.uid()
+);
+
+
 create or replace function public.read_logistics_company_payment_settings(target_organization_id uuid)
 returns jsonb
 language plpgsql
