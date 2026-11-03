@@ -733,7 +733,11 @@ begin
       where id = booking_record.escrow_hold_id and status = 'disputed' and released_amount = 0;
     end if;
     next_booking_status := 'delivered';
-    update public.logistics_bookings set status = 'delivered',updated_at = timezone('utc',now())
+    update public.logistics_bookings
+    set status = 'delivered',
+        cargo_custody_status = 'delivered',
+        delivery_exception_reason = null,
+        updated_at = timezone('utc',now())
     where id = booking_record.id;
 
   elsif target_decision = 'resume_delivery' then
