@@ -300,6 +300,18 @@ begin
   )
   returning id into incident_id;
 
+  if assignment_record.id is not null
+    and assignment_record.status in ('in_progress','picked_up','in_transit','delivery_submitted') then
+    update public.logistics_booking_driver_assignments
+    set status = 'incident_hold',
+        updated_at = timezone('utc',now()),
+        metadata = metadata || jsonb_build_object(
+          'delivery_exception_id',incident_id,
+          'incident_reported_at',timezone('utc',now())
+        )
+    where id = assignment_record.id;
+  end if;
+
   if booking_record.status <> 'disputed' then
     update public.logistics_bookings
     set status = 'delivery_exception',
