@@ -67,8 +67,9 @@ begin
 
   if found then
     if existing_event.event_type <> 'logistics.booking.driver_released'
-      or existing_event.metadata->>'assignment_id' <> assignment_record.id::text
-      or existing_event.metadata->>'driver_user_id' <> actor::text then
+      or existing_event.metadata->>'assignment_id' is distinct from assignment_record.id::text
+      or existing_event.metadata->>'driver_user_id' is distinct from actor::text
+      or existing_event.metadata->>'reason' is distinct from btrim(target_reason) then
       raise exception 'driver release idempotency key was used for a different action';
     end if;
     return assignment_record.id;
