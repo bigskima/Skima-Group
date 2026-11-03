@@ -18,7 +18,7 @@ import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
 import { LogisticsDriverLocationShare } from "./LogisticsDriverLocationShare";
 
-type DriverAction = "accept" | "reject" | "release" | "start" | "pickup" | "transit" | "deliver";
+type DriverAction = "accept" | "reject" | "release" | "start" | "recover_start" | "pickup" | "transit" | "deliver";
 type DriverJob = Record<string, unknown>;
 
 function nested(record: Record<string, unknown> | null | undefined, key: string) {
@@ -48,9 +48,13 @@ export function LogisticsDriverScreen() {
   const client = useQueryClient();
   const profile = useLogisticsRecordQuery(["driver-workspace-profile"], "/runtime/logistics/driver/profile", true);
   const jobs = useLogisticsQuery(["driver-workspace-bookings"], "/runtime/logistics/driver/bookings", true, 15_000);
+  const incidentsQuery = useLogisticsQuery(["driver-booking-incidents"], "/runtime/logistics/bookings/incidents", true, 15_000);
   const [recipientNames, setRecipientNames] = useState<Record<string, string>>({});
   const [deliveryNotes, setDeliveryNotes] = useState<Record<string, string>>({});
   const [releaseReasons, setReleaseReasons] = useState<Record<string, string>>({});
+  const [incidentTypes, setIncidentTypes] = useState<Record<string, string>>({});
+  const [incidentSeverities, setIncidentSeverities] = useState<Record<string, string>>({});
+  const [incidentDescriptions, setIncidentDescriptions] = useState<Record<string, string>>({});
   const actionKeys = useRef(new Map<string, string>());
 
   const runAction = useMutation({
@@ -96,6 +100,12 @@ export function LogisticsDriverScreen() {
           idempotencyKey,
         }, z.string().uuid());
       }
+      if (input.kind === "recover_start") {
+        return api.post("/runtime/logistics/bookings/recovery/start", {
+          bookingId: input.bookingId,
+          idempotencyKey,
+        }, z.string().uuid());
+      }
       if (input.kind === "pickup" || input.kind === "transit") {
         return api.post("/runtime/logistics/driver/milestone", {
           bookingId: input.bookingId,
@@ -120,13 +130,38 @@ export function LogisticsDriverScreen() {
         Alert.alert("Assignment declined", "Your company can now choose another eligible driver.");
       } else if (input.kind === "release") {
         Alert.alert("Assignment returned to dispatch", "Your company can now assign another eligible driver. The customer booking and payment remain unchanged.");
+      } else if (input.kind === "recover_start") {
+        Alert.alert("Cargo recovery started", "Confirm the physical cargo hand-off before marking it in transit. The original incident and delivery history remain attached to this booking.");
       }
       await client.invalidateQueries({ queryKey: ["skima-logistics", "driver-workspace-bookings"] });
       await jobs.refetch();
     },
   });
 
-  const refresh = () => Promise.all([profile.refetch(), jobs.refetch()]);
+  const reportIncident = useMutation({
+    mutationFn: async (input: {
+      bookingId: string;
+      incidentType: string;
+      severity: string;
+      description: string;
+      cargoCustodyStatus: string;
+    }) => api.post("/runtime/logistics/bookings/incidents/report", {
+      ...input,
+      locationSnapshot: { captured_from: "skima-logistics.driver-workspace" },
+      idempotencyKey: createClientIdempotencyKey(
+        "logistics.driver.incident",
+        input.bookingId + ":" + input.incidentType + ":" + input.description,
+      ),
+    }, z.string().uuid()),
+    onSuccess: async (_result, input) => {
+      setIncidentDescriptions((current) => ({ ...current, [input.bookingId]: "" }));
+      await client.invalidateQueries({ queryKey: ["skima-logistics", "driver-workspace-bookings"] });
+      await Promise.all([jobs.refetch(), incidentsQuery.refetch()]);
+      Alert.alert("Incident reported", "Your company has been notified. Keep the cargo secure and follow dispatch instructions. Customer funds remain protected.");
+    },
+  });
+
+  const refresh = () => Promise.all([profile.refetch(), jobs.refetch(), incidentsQuery.refetch()]);
   const driverId = asString(profile.data, "driver_profile_id");
   const isVerified = asString(profile.data, "verification_status") === "approved";
   const rows = (jobs.data ?? []) as DriverJob[];
@@ -194,6 +229,12 @@ export function LogisticsDriverScreen() {
             const vehicle = nested(assignment, "vehicle");
             const assignmentId = asString(assignment, "id") ?? "";
             const status = asString(assignment, "status") ?? "offered";
+            const bookingStatus = asString(job, "booking_status") ?? "";
+            const assignmentKind = asString(assignment, "assignment_kind") ?? "delivery";
+            const bookingOnHold = ["delivery_exception", "failed_delivery", "disputed"].includes(bookingStatus);
+            const latestIncident = (incidentsQuery.data ?? [])
+              .filter((item) => asString(item, "booking_id") === bookingId)
+              .slice(-1)[0] ?? null;
             const isBusy = runAction.isPending && runAction.variables?.bookingId === bookingId;
             const recipientName = recipientNames[bookingId] ?? "";
             const deliveryNote = deliveryNotes[bookingId] ?? "";
@@ -235,7 +276,130 @@ export function LogisticsDriverScreen() {
                     <Text style={[styles.meta, { color: palette.ink }]}>{asString(job, "instructions")}</Text>
                   </View>
                 ) : null}
-                {["in_progress", "picked_up", "in_transit"].includes(status) ? (
+
+                {["in_progress", "picked_up", "in_transit"].includes(status) && !["delivery_exception", "failed_delivery", "disputed"].includes(bookingStatus) ? (
+                  <Card variant="warning" padding="md">
+                    <Text style={[styles.instructionTitle, { color: palette.ink }]}>Report a delivery incident</Text>
+                    <Text style={[styles.meta, { color: palette.muted }]}>
+                      Report a breakdown, accident, route problem or cargo issue immediately. Do not abandon cargo or hand it to an unverified person.
+                    </Text>
+                    <View style={styles.actions}>
+                      <View style={styles.incidentChoices}>
+                        {[
+                          ["vehicle_breakdown", "Vehicle breakdown"],
+                          ["accident", "Accident"],
+                          ["route_blocked", "Route blocked"],
+                          ["security_risk", "Security risk"],
+                          ["cargo_damaged", "Cargo damaged"],
+                          ["cargo_missing", "Cargo missing"],
+                          ["customer_unavailable", "Customer unavailable"],
+                          ["other", "Other"],
+                        ].map(([value, label]) => {
+                          const selected = (incidentTypes[bookingId] ?? "other") === value;
+                          return (
+                            <Pressable
+                              key={value}
+                              onPress={() => setIncidentTypes((current) => ({ ...current, [bookingId]: value }))}
+                              style={[
+                                styles.incidentChoice,
+                                {
+                                  borderColor: selected ? palette.brand : palette.border,
+                                  backgroundColor: selected ? palette.brandSoft : palette.surface,
+                                },
+                              ]}
+                            >
+                              <Text style={[styles.meta, { color: selected ? palette.brand : palette.ink }]}>{label}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      <View style={styles.incidentChoices}>
+                        {["medium", "high", "critical"].map((value) => {
+                          const selected = (incidentSeverities[bookingId] ?? "medium") === value;
+                          return (
+                            <Pressable
+                              key={value}
+                              onPress={() => setIncidentSeverities((current) => ({ ...current, [bookingId]: value }))}
+                              style={[
+                                styles.incidentChoice,
+                                {
+                                  borderColor: selected ? palette.brand : palette.border,
+                                  backgroundColor: selected ? palette.brandSoft : palette.surface,
+                                },
+                              ]}
+                            >
+                              <Text style={[styles.meta, { color: selected ? palette.brand : palette.ink }]}>{value.toUpperCase()}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      <AppField
+                        label="What happened?"
+                        value={incidentDescriptions[bookingId] ?? ""}
+                        onChangeText={(value) => setIncidentDescriptions((current) => ({ ...current, [bookingId]: value }))}
+                        placeholder="Explain what happened and where the cargo is now."
+                        multiline
+                      />
+                      <AppButton
+                        label="Report incident to dispatch"
+                        fullWidth
+                        loading={reportIncident.isPending && reportIncident.variables?.bookingId === bookingId}
+                        disabled={reportIncident.isPending || (incidentDescriptions[bookingId] ?? "").trim().length < 5}
+                        onPress={() => Alert.alert(
+                          "Send incident report?",
+                          "This will place the delivery on an exception hold. Dispatch will be notified and online escrow will remain protected.",
+                          [
+                            { text: "Continue delivery", style: "cancel" },
+                            {
+                              text: "Report incident",
+                              style: "destructive",
+                              onPress: () => reportIncident.mutate({
+                                bookingId,
+                                incidentType: incidentTypes[bookingId] ?? "other",
+                                severity: incidentSeverities[bookingId] ?? "medium",
+                                description: incidentDescriptions[bookingId] ?? "",
+                                cargoCustodyStatus: status === "in_progress" ? "not_collected" : "driver_custody",
+                              }),
+                            },
+                          ],
+                        )}
+                      />
+                    </View>
+                  </Card>
+                ) : null}
+                {assignmentKind === "recovery" ? (
+                  <View style={[styles.notice, { backgroundColor: palette.brandSoft }]}>
+                    <ShieldCheck color={palette.brand} size={17} />
+                    <View style={styles.noticeCopy}>
+                      <Text style={[styles.instructionTitle, { color: palette.ink }]}>Recovery task</Text>
+                      <Text style={[styles.meta, { color: palette.muted }]}>Cargo custody state: {asString(job, "cargo_custody_status")?.replace(/_/g, " ") ?? "recovery pending"}. After the physical recovery hand-off, confirm pickup before marking transit.</Text>
+                    </View>
+                  </View>
+                ) : null}
+                {["delivery_exception", "failed_delivery", "disputed"].includes(bookingStatus) ? (
+                  <View style={[styles.notice, { backgroundColor: palette.warningSoft }]}>
+                    <ShieldCheck color={palette.warning} size={17} />
+                    <View style={styles.noticeCopy}>
+                      <Text style={[styles.instructionTitle, { color: palette.ink }]}>Delivery exception under review</Text>
+                      <Text style={[styles.meta, { color: palette.muted }]}>
+                        {(asString(latestIncident, "incident_type") ?? asString(job, "booking_status") ?? "Incident").replace(/_/g, " ")} · {asString(latestIncident, "status") ?? "dispatch review"}
+                      </Text>
+                      <Text style={[styles.meta, { color: palette.muted }]}>
+                        Cargo custody: {asString(latestIncident, "cargo_custody_status")?.replace(/_/g, " ") ?? "awaiting confirmation"}. Keep the cargo secure and remain available to your company.
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+                {status === "incident_hold" ? (
+                  <View style={[styles.notice, { backgroundColor: palette.warningSoft }]}>
+                    <ShieldCheck color={palette.warning} size={17} />
+                    <View style={styles.noticeCopy}>
+                      <Text style={[styles.instructionTitle, { color: palette.ink }]}>Dispatch is reviewing an incident</Text>
+                      <Text style={[styles.meta, { color: palette.muted }]}>Keep the cargo secure, remain contactable and follow the company recovery instructions. Do not transfer custody without an authorized hand-off.</Text>
+                    </View>
+                  </View>
+                ) : null}
+                {["in_progress", "picked_up", "in_transit"].includes(status) && !bookingOnHold ? (
                   <LogisticsDriverLocationShare bookingId={bookingId} />
                 ) : null}
                 {asString(job, "customer_name") || asString(job, "customer_phone") ? (
@@ -253,14 +417,50 @@ export function LogisticsDriverScreen() {
 
                 {status === "offered" ? (
                   <View style={styles.actions}>
-                    <Text style={[styles.meta, { color: palette.muted }]}>Review the cargo, route and vehicle. Accept only if you can fulfil the booking.</Text>
+                    <Text style={[styles.meta, { color: palette.muted }]}>
+                      {assignmentKind === "recovery"
+                        ? "This is a cargo recovery task after a failed delivery. Accept only if you can reach the recorded cargo custody point and safely transfer it."
+                        : "Review the cargo, route and vehicle. Accept only if you can fulfil the booking."}
+                    </Text>
                     <AppButton label="Accept assignment" fullWidth loading={isBusy} onPress={() => { runAction.mutate({ kind: "accept", bookingId, assignmentId }); }} />
                     <AppButton label="Decline assignment" fullWidth variant="secondary" disabled={runAction.isPending} onPress={() => Alert.alert("Decline this assignment?", "Your company will be able to assign this booking to another eligible driver.", [
                       { text: "Keep assignment", style: "cancel" },
                       { text: "Decline", style: "destructive", onPress: () => runAction.mutate({ kind: "reject", bookingId, assignmentId }) },
                     ])} />
                   </View>
-                ) : status === "accepted" ? (
+                ) : status === "accepted" && assignmentKind === "recovery" && bookingStatus === "failed_delivery" ? (
+                  <View style={styles.actions}>
+                    <View style={[styles.notice, { backgroundColor: palette.warningSoft }]}>
+                      <ShieldCheck color={palette.warning} size={17} />
+                      <View style={styles.noticeCopy}>
+                        <Text style={[styles.instructionTitle, { color: palette.ink }]}>Cargo recovery assignment</Text>
+                        <Text style={[styles.meta, { color: palette.muted }]}>You are assigned to recover cargo from a failed delivery, not to begin a new customer pickup. Contact dispatch, verify the cargo and hand-off point, then start recovery.</Text>
+                      </View>
+                    </View>
+                    <AppButton label="Start cargo recovery" fullWidth loading={isBusy} onPress={() => runAction.mutate({ kind: "recover_start", bookingId, assignmentId })} />
+                    <AppField
+                      label="Reason you cannot start recovery"
+                      value={releaseReason}
+                      onChangeText={(value) => setReleaseReasons((current) => ({ ...current, [bookingId]: value }))}
+                      placeholder="Explain why you cannot reach or recover the cargo."
+                      multiline
+                    />
+                    <AppButton
+                      label="Return recovery task to dispatch"
+                      fullWidth
+                      variant="secondary"
+                      disabled={runAction.isPending || releaseReason.trim().length < 5}
+                      onPress={() => Alert.alert(
+                        "Return this recovery task?",
+                        "Your reason will be recorded. Cargo remains marked recovery pending and the company can assign another recovery driver.",
+                        [
+                          { text: "Keep recovery task", style: "cancel" },
+                          { text: "Return to dispatch", style: "destructive", onPress: () => runAction.mutate({ kind: "release", bookingId, assignmentId, reason: releaseReason }) },
+                        ],
+                      )}
+                    />
+                  </View>
+                ) : status === "accepted" && !bookingOnHold ? (
                   <View style={styles.actions}>
                     <Text style={[styles.meta, { color: palette.muted }]}>Start the job when you are ready to travel to the pickup point. If you cannot start, return it to company dispatch before taking custody of the cargo.</Text>
                     <AppButton label="Start job" fullWidth loading={isBusy} onPress={() => runAction.mutate({ kind: "start", bookingId, assignmentId })} />
@@ -286,17 +486,17 @@ export function LogisticsDriverScreen() {
                       )}
                     />
                   </View>
-                ) : status === "in_progress" ? (
+                ) : status === "in_progress" && !bookingOnHold ? (
                   <View style={styles.actions}>
                     <Text style={[styles.meta, { color: palette.muted }]}>Confirm pickup only after the cargo has been handed over to you.</Text>
                     <AppButton label="Confirm pickup" fullWidth loading={isBusy} onPress={() => runAction.mutate({ kind: "pickup", bookingId, assignmentId })} />
                   </View>
-                ) : status === "picked_up" ? (
+                ) : status === "picked_up" && !bookingOnHold ? (
                   <View style={styles.actions}>
                     <Text style={[styles.meta, { color: palette.muted }]}>Mark the cargo in transit when you leave for the destination.</Text>
                     <AppButton label="Mark in transit" fullWidth loading={isBusy} onPress={() => runAction.mutate({ kind: "transit", bookingId, assignmentId })} />
                   </View>
-                ) : status === "in_transit" ? (
+                ) : status === "in_transit" && !bookingOnHold ? (
                   <View style={styles.actions}>
                     <Text style={[styles.meta, { color: palette.muted }]}>Enter the recipient's name at the destination. The customer will confirm receipt before online escrow is released.</Text>
                     <AppField
@@ -342,6 +542,13 @@ export function LogisticsDriverScreen() {
             );
           })}
 
+          {reportIncident.error ? (
+            <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}>
+              <Text style={[styles.errorText, { color: palette.danger }]}>
+                {reportIncident.error instanceof Error ? reportIncident.error.message : "The incident could not be reported."}
+              </Text>
+            </View>
+          ) : null}
           {runAction.error ? (
             <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}>
               <Text style={[styles.errorText, { color: palette.danger }]}>
@@ -379,6 +586,8 @@ const styles = StyleSheet.create({
   phoneAction: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 28 },
   phoneText: { ...typography.caption, fontWeight: "900", fontSize: 10 },
   actions: { gap: 9 },
+  incidentChoices: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  incidentChoice: { borderWidth: 1, borderRadius: radii.md, paddingHorizontal: 9, paddingVertical: 7 },
   notice: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 11, borderRadius: radii.md },
   noticeCopy: { flex: 1, gap: 3 },
   error: { borderRadius: radii.md, padding: 11 },

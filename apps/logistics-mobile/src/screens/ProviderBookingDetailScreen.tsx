@@ -43,6 +43,16 @@ export function ProviderBookingDetailScreen() {
     Boolean(organizationId), 20_000,
   );
   const booking = useMemo(() => (bookings.data ?? []).find((item) => asString(item, "id") === bookingId) ?? null, [bookings.data, bookingId]);
+  const incidentsQuery = useLogisticsQuery(
+    ["booking-incidents", bookingId ?? "none"],
+    `/runtime/logistics/bookings/incidents?bookingId=${encodeURIComponent(bookingId ?? "")}`,
+    Boolean(bookingId), 15_000,
+  );
+  const disputesQuery = useLogisticsQuery(
+    ["booking-disputes", bookingId ?? "none"],
+    `/runtime/logistics/bookings/disputes?bookingId=${encodeURIComponent(bookingId ?? "")}`,
+    Boolean(bookingId), 15_000,
+  );
   const offer = nested(booking, "offer");
   const opportunity = nested(offer, "opportunity");
   const snapshot = nested(opportunity, "job_snapshot");
@@ -50,6 +60,7 @@ export function ProviderBookingDetailScreen() {
   const job = nested(booking, "job");
   const title = asString(snapshot, "title") ?? asString(job, "title") ?? "Logistics booking";
   const status = asString(booking, "status") ?? "unknown";
+  const isRecoveryDispatch = status === "failed_delivery" && asString(booking, "cargo_custody_status") === "recovery_pending";
   const paymentMode = asString(booking, "payment_mode") ?? "online_wallet";
   const assignmentRows = Array.isArray(booking?.assignments)
     ? booking.assignments.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
@@ -64,7 +75,7 @@ export function ProviderBookingDetailScreen() {
   const dispatchResources = useLogisticsRecordQuery(
     ["dispatch-resources", organizationId ?? "none"],
     `/runtime/logistics/company/dispatch-resources?organizationId=${encodeURIComponent(organizationId ?? "")}`,
-    Boolean(organizationId && status === "provider_accepted" && (!activeAssignment || isReplacingAssignment)),
+    Boolean(organizationId && ((status === "provider_accepted" && (!activeAssignment || isReplacingAssignment)) || (isRecoveryDispatch && !activeAssignment))),
   );
   const driverResources = Array.isArray(dispatchResources.data?.drivers)
     ? dispatchResources.data.drivers.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
@@ -92,7 +103,7 @@ export function ProviderBookingDetailScreen() {
         actionKeysRef.current.set(fingerprint, key);
       }
       lastAssignmentFingerprintRef.current = fingerprint;
-      return api.post("/runtime/logistics/bookings/assign-driver", {
+      return api.post(isRecoveryDispatch ? "/runtime/logistics/bookings/assign-recovery-driver" : "/runtime/logistics/bookings/assign-driver", {
         bookingId,
         driverProfileId: selectedDriverProfileId,
         vehicleId: selectedVehicleId,
@@ -108,7 +119,12 @@ export function ProviderBookingDetailScreen() {
       setSelectedVehicleId("");
       await client.invalidateQueries({ queryKey: ["skima-logistics", "provider-bookings"] });
       await bookings.refetch();
-      Alert.alert("Driver assignment sent", "The driver has been notified in their SKIMA Logistics workspace and must accept before the job can start.");
+      Alert.alert(
+        isRecoveryDispatch ? "Recovery driver assignment sent" : "Driver assignment sent",
+        isRecoveryDispatch
+          ? "The recovery driver has been notified. They must accept, start recovery and confirm physical custody before continuing to delivery."
+          : "The driver has been notified in their SKIMA Logistics workspace and must accept before the job can start.",
+      );
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : "The driver could not be assigned."),
   });
@@ -133,7 +149,31 @@ export function ProviderBookingDetailScreen() {
     onError: (cause) => setError(cause instanceof Error ? cause.message : "The booking action could not be completed."),
   });
 
-  const refresh = () => Promise.all([companies.refetch(), bookings.refetch(), dispatchResources.refetch()]);
+  const resolveIncident = useMutation({
+    mutationFn: async (input: { incidentId: string; decision: string; note: string }) =>
+      api.post("/runtime/logistics/bookings/incidents/respond", {
+        incidentId: input.incidentId,
+        decision: input.decision,
+        resolutionNote: input.note,
+        idempotencyKey: createClientIdempotencyKey(
+          "logistics.company.incident",
+          input.incidentId + ":" + input.decision + ":" + input.note,
+        ),
+      }, z.string().uuid()),
+    onSuccess: async () => {
+      setError(null);
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["skima-logistics", "provider-bookings"] }),
+        client.invalidateQueries({ queryKey: ["skima-logistics", "booking-incidents"] }),
+        bookings.refetch(), incidentsQuery.refetch(),
+      ]);
+    },
+    onError: (cause) => setError(cause instanceof Error ? cause.message : "The incident response could not be recorded."),
+  });
+
+  const incidentRows = (incidentsQuery.data ?? []) as Record<string, unknown>[];
+  const disputeRows = (disputesQuery.data ?? []) as Record<string, unknown>[];
+  const refresh = () => Promise.all([companies.refetch(), bookings.refetch(), dispatchResources.refetch(), incidentsQuery.refetch(), disputesQuery.refetch()]);
   return (
     <Screen eyebrow="PROVIDER JOB" title={title} subtitle="Accept the booking, carry out the service and record the delivery hand-off."
       action={<AppButton label="Back" size="sm" variant="secondary" icon={<ArrowLeft color={palette.ink} size={15} />} onPress={() => router.back()} />}
@@ -168,6 +208,145 @@ export function ProviderBookingDetailScreen() {
             <Text style={[styles.contactName, { color: palette.ink }]}>{asString(contact, "name") ?? "Customer"}</Text>
             {asString(contact, "phone") ? <Pressable style={styles.contactLine} onPress={() => void Linking.openURL(`tel:${asString(contact, "phone")}`)}><Phone color={palette.brand} size={14} /><Text style={[styles.phone, { color: palette.brand }]}>{asString(contact, "phone")}</Text></Pressable> : <Text style={[styles.meta, { color: palette.muted }]}>No phone number was provided.</Text>}
           </Card>
+
+          {incidentRows.length > 0 || disputeRows.length > 0 ? (
+            <Card variant="warning" padding="lg">
+              <View style={styles.actionHeading}>
+                <ShieldCheck color={palette.warning} size={20} />
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Delivery protection & incidents</Text>
+              </View>
+              <Text style={[styles.meta, { color: palette.muted }]}>
+                Keep custody and customer communication recorded here. An open incident or dispute blocks settlement.
+              </Text>
+              {incidentRows.map((incident) => {
+                const incidentId = asString(incident, "id") ?? "";
+                const incidentStatus = asString(incident, "status") ?? "reported";
+                const custody = asString(incident, "cargo_custody_status") ?? "unknown";
+                const incidentBookingStatus = asString(incident, "booking_status_before_incident") ?? "";
+                const canResume = status === "delivery_exception"
+                  && incidentBookingStatus === "in_progress"
+                  && !["recovery_pending", "unknown"].includes(custody);
+                const canRestoreCustomerConfirmation = status === "delivery_exception"
+                  && incidentBookingStatus === "delivered"
+                  && custody === "delivered";
+                const canRequireRecovery = ["driver_custody", "unknown", "recovery_pending"].includes(custody);
+                const canMarkFailed = !canRequireRecovery && custody !== "delivered" && incidentBookingStatus !== "delivered";
+                const canResolve = ["reported", "investigating", "recovery_required"].includes(incidentStatus);
+                return (
+                  <View key={incidentId} style={[styles.assignmentSummary, { backgroundColor: palette.surfaceSubtle }]}>
+                    <View style={styles.actionHeading}>
+                      <Text style={[styles.contactName, { color: palette.ink }]}>{(asString(incident, "incident_type") ?? "Incident").replace(/_/g, " ")}</Text>
+                      <StatusPill status={incidentStatus} />
+                    </View>
+                    <Text style={[styles.meta, { color: palette.muted }]}>{asString(incident, "description")}</Text>
+                    <Text style={[styles.meta, { color: palette.muted }]}>Severity: {asString(incident, "severity") ?? "unknown"} · Cargo: {custody.replace(/_/g, " ")}</Text>
+                    {asString(incident, "resolution_note") ? <Text style={[styles.meta, { color: palette.muted }]}>Dispatch note: {asString(incident, "resolution_note")}</Text> : null}
+                    {canResolve ? (
+                      <View style={styles.dispatchSection}>
+                        {canRestoreCustomerConfirmation ? (
+                          <AppButton
+                            label="Restore customer delivery confirmation"
+                            fullWidth
+                            variant="secondary"
+                            loading={resolveIncident.isPending}
+                            disabled={resolveIncident.isPending}
+                            onPress={() => Alert.alert(
+                              "Restore customer confirmation?",
+                              "Delivery was already submitted. This will reopen the customer receipt-confirmation step; it will not release escrow.",
+                              [
+                                { text: "Keep on hold", style: "cancel" },
+                                { text: "Restore confirmation", onPress: () => resolveIncident.mutate({
+                                  incidentId,
+                                  decision: "restore_customer_confirmation",
+                                  note: "Company operations verified the submitted delivery and restored the customer receipt-confirmation step.",
+                                }) },
+                              ],
+                            )}
+                          />
+                        ) : null}
+                        {canResume ? (
+                          <AppButton
+                            label="Resume delivery with current driver"
+                            fullWidth
+                            variant="secondary"
+                            loading={resolveIncident.isPending}
+                            disabled={resolveIncident.isPending}
+                            onPress={() => Alert.alert(
+                              "Resume this delivery?",
+                              "Confirm that the cargo is accounted for and the current driver can safely continue. The booking will return to active delivery.",
+                              [
+                                { text: "Keep on hold", style: "cancel" },
+                                { text: "Resume delivery", onPress: () => resolveIncident.mutate({
+                                  incidentId,
+                                  decision: "resume_delivery",
+                                  note: "Company operations verified cargo custody and authorized the assigned driver to resume delivery.",
+                                }) },
+                              ],
+                            )}
+                          />
+                        ) : null}
+                        {canRequireRecovery ? (
+                        <AppButton
+                          label="Require cargo recovery"
+                          fullWidth
+                          variant="secondary"
+                          loading={resolveIncident.isPending}
+                          disabled={resolveIncident.isPending}
+                          onPress={() => Alert.alert(
+                            "Require cargo recovery?",
+                            "The current driver assignment will be held, cargo custody will be marked recovery pending, and the booking will remain financially protected.",
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              { text: "Require recovery", style: "destructive", onPress: () => resolveIncident.mutate({
+                                incidentId,
+                                decision: "recovery_required",
+                                note: "Company operations requires a controlled cargo recovery and verified custody hand-off before delivery can resume.",
+                              }) },
+                            ],
+                          )}
+                        />
+                        ) : null}
+                        {canMarkFailed ? (
+                        <AppButton
+                          label="Close as failed delivery"
+                          fullWidth
+                          variant="secondary"
+                          loading={resolveIncident.isPending}
+                          disabled={resolveIncident.isPending}
+                          onPress={() => Alert.alert(
+                            "Mark this delivery failed?",
+                            "The booking will remain failed and cannot settle. The incident evidence and cargo custody status will be retained.",
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              { text: "Mark failed", style: "destructive", onPress: () => resolveIncident.mutate({
+                                incidentId,
+                                decision: "mark_failed_delivery",
+                                note: "Company operations has marked this attempt as failed. Cargo custody remains under the recorded state for follow-up.",
+                              }) },
+                            ],
+                          )}
+                        />
+                        ) : null}
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+              {disputeRows.map((dispute) => (
+                <View key={asString(dispute, "id")} style={[styles.assignmentSummary, { backgroundColor: palette.warningSoft }]}>
+                  <View style={styles.actionHeading}>
+                    <Text style={[styles.contactName, { color: palette.ink }]}>Customer dispute · {(asString(dispute, "reason") ?? "other").replace(/_/g, " ")}</Text>
+                    <StatusPill status={asString(dispute, "status") ?? "open"} />
+                  </View>
+                  <Text style={[styles.meta, { color: palette.muted }]}>{asString(dispute, "details")}</Text>
+                  <Text style={[styles.meta, { color: palette.muted }]}>Only SKIMA platform finance/support can resolve or refund a disputed online escrow booking.</Text>
+                </View>
+              ))}
+            </Card>
+          ) : incidentsQuery.isPending || disputesQuery.isPending ? (
+            <ScreenSkeleton cards={1} />
+          ) : null}
+
 
           {status === "payment_reserved" || status === "offline_payment_confirmed" ? (
             <Card variant="warning" padding="lg">
@@ -286,6 +465,79 @@ export function ProviderBookingDetailScreen() {
                 </View>
               )}
             </Card>
+          ) : isRecoveryDispatch ? (
+            <Card variant="warning" padding="lg">
+              <View style={styles.actionHeading}>
+                <ShieldCheck color={palette.warning} size={20} />
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Cargo recovery dispatch</Text>
+              </View>
+              <Text style={[styles.meta, { color: palette.muted }]}>
+                This delivery failed after an incident and cargo custody is marked recovery pending. Select a different approved company driver and compliant vehicle to recover the cargo. The original assignment remains in the audit trail.
+              </Text>
+              {activeAssignment ? (
+                <View style={[styles.assignmentSummary, { backgroundColor: palette.surfaceSubtle }]}>
+                  <Text style={[styles.contactName, { color: palette.ink }]}>Recovery driver offer</Text>
+                  <Text style={[styles.meta, { color: palette.muted }]}>
+                    {asString(assignedDriver, "driver_display_name") ?? asString(assignedDriver, "public_driver_id") ?? "Recovery driver"} · {asString(activeAssignment, "status") ?? "offered"}
+                  </Text>
+                  <Text style={[styles.meta, { color: palette.muted }]}>The recovery driver must accept before starting the recovery task.</Text>
+                  <StatusPill status={asString(activeAssignment, "status") ?? "offered"} />
+                </View>
+              ) : dispatchResources.isPending ? (
+                <ScreenSkeleton cards={1} />
+              ) : dispatchResources.error ? (
+                <StatePanel title="Recovery drivers unavailable" description="The company driver and vehicle directory could not be loaded." retry={() => void dispatchResources.refetch()} />
+              ) : driverResources.length === 0 ? (
+                <StatePanel title="No eligible recovery driver" description="Add or make an approved company driver and a compliant vehicle available before cargo recovery." retry={() => void dispatchResources.refetch()} />
+              ) : (
+                <View style={styles.dispatchSection}>
+                  <Text style={[styles.meta, { color: palette.ink }]}>Available recovery drivers</Text>
+                  {driverResources.map((driver) => {
+                    const id = asString(driver, "driver_profile_id") ?? "";
+                    const chosen = selectedDriverProfileId === id;
+                    return (
+                      <Pressable key={id} disabled={assignDriver.isPending} onPress={() => {
+                        setSelectedDriverProfileId(id);
+                        const vehicles = Array.isArray(driver.vehicles) ? driver.vehicles as Record<string, unknown>[] : [];
+                        setSelectedVehicleId(asString(vehicles[0], "vehicle_id") ?? "");
+                      }} style={[styles.driverChoice, { borderColor: chosen ? palette.brand : palette.border, backgroundColor: chosen ? palette.brandSoft : palette.surface }]}>
+                        <View style={styles.driverChoiceCopy}>
+                          <Text style={[styles.contactName, { color: palette.ink }]}>{asString(driver, "display_name") ?? "Verified recovery driver"}</Text>
+                          <Text style={[styles.meta, { color: palette.muted }]}>{asString(driver, "public_driver_id") ?? "Approved company driver"}</Text>
+                        </View>
+                        <StatusPill status={chosen ? "selected" : "available"} />
+                      </Pressable>
+                    );
+                  })}
+                  {selectedDriver ? (
+                    <View style={styles.dispatchSection}>
+                      <Text style={[styles.meta, { color: palette.ink }]}>Recovery vehicle</Text>
+                      {selectedVehicles.map((vehicle) => {
+                        const id = asString(vehicle, "vehicle_id") ?? "";
+                        const chosen = selectedVehicleId === id;
+                        const vehicleName = [asString(vehicle, "vehicle_type_name"), asString(vehicle, "manufacturer"), asString(vehicle, "model")].filter(Boolean).join(" · ");
+                        return (
+                          <Pressable key={id} disabled={assignDriver.isPending} onPress={() => setSelectedVehicleId(id)} style={[styles.driverChoice, { borderColor: chosen ? palette.brand : palette.border, backgroundColor: chosen ? palette.brandSoft : palette.surface }]}>
+                            <View style={styles.driverChoiceCopy}>
+                              <Text style={[styles.contactName, { color: palette.ink }]}>{vehicleName || "Approved vehicle"}</Text>
+                              <Text style={[styles.meta, { color: palette.muted }]}>{asString(vehicle, "registration_number") ?? "Registration not supplied"} · {asNumber(vehicle, "max_load_kg") ?? "Unspecified"} kg capacity</Text>
+                            </View>
+                            <StatusPill status={chosen ? "selected" : "eligible"} />
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                  <AppButton
+                    label="Assign recovery driver"
+                    fullWidth
+                    loading={assignDriver.isPending}
+                    disabled={!selectedDriverProfileId || !selectedVehicleId || assignDriver.isPending}
+                    onPress={() => assignDriver.mutate()}
+                  />
+                </View>
+              )}
+            </Card>
           ) : status === "in_progress" ? (
             <Card padding="lg">
               <View style={styles.actionHeading}><Truck color={palette.brand} size={20} /><Text style={[styles.sectionTitle, { color: palette.ink }]}>Driver fulfillment in progress</Text></View>
@@ -303,6 +555,7 @@ export function ProviderBookingDetailScreen() {
               <Text style={[styles.meta, { color: palette.muted }]}>{status === "settled" ? "Customer-confirmed delivery triggered the shared escrow split and provider settlement." : "Customer-confirmed offline delivery is complete. Offline fees were already recorded; no online commission was charged."}</Text>
             </Card>
           ) : null}
+          {resolveIncident.error ? <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}><Text style={[styles.errorText, { color: palette.danger }]}>{resolveIncident.error instanceof Error ? resolveIncident.error.message : "Incident response failed."}</Text></View> : null}
           {error ? <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}><Text style={[styles.errorText, { color: palette.danger }]}>{error}</Text></View> : null}
         </View>
       )}
