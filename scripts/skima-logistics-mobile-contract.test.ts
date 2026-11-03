@@ -26,6 +26,7 @@ const providers = await Deno.readTextFile("apps/logistics-mobile/src/providers/A
 const routes = await Deno.readTextFile("apps/logistics-mobile/app/(customer)/_layout.tsx");
 const providerNavigation = await Deno.readTextFile("apps/logistics-mobile/src/navigation/ProviderTabs.tsx");
 const providerDashboard = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderDashboardScreen.tsx");
+const providerWorkspace = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderWorkspaceScreen.tsx");
 const providerOpportunities = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderOpportunitiesScreen.tsx");
 const providerCompany = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderCompanyScreen.tsx");
 const providerTeam = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderTeamScreen.tsx");
@@ -139,10 +140,10 @@ Deno.test("Customer home, activity and request screens read live Logistics servi
   requireText(request, "useCreateLogisticsJob", "customer job publish mutation");
   requireText(logisticsApi, 'api.post("/runtime/logistics/jobs"', "customer job publish API route");
   requireText(request, "createClientIdempotencyKey", "request submission idempotency");
-  requireText(request, "[1, 2, 3].map", "three-stage progress indicator");
-  requireText(request, "STEP {step} OF 3", "three-stage request progress");
+  requireText(request, "[1, 2, 3, 4].map", "four-stage progress indicator");
+  requireText(request, "STEP {step} OF 4", "four-stage request progress");
   requireText(request, "Review your request", "customer review step before publishing");
-  requireText(request, "step < 3", "two information stages before the final publish stage");
+  requireText(request, "step < 4", "three information stages before the final publish stage");
   requireText(request, "customer_contact", "provider coordination contact");
   requireNotText(request.toLowerCase(), "fixed booking fee", "no hardcoded customer booking rate");
   requireNotText(request.toLowerCase(), "sample provider", "no mock service-provider names");
@@ -386,7 +387,8 @@ Deno.test("Customers can cancel only an unpaid Logistics booking from checkout",
 
 Deno.test("Driver workspace is reachable only for a registered driver and shows assigned work", () => {
   requireText(providerNavigation, 'name="driver"', "dedicated driver navigation tab");
-  requireText(providerNavigation, 'driverProfile.data?.registered === true', "driver tab requires a registered driver profile");
+  requireText(providerWorkspace, "driverProfile.data?.registered === true", "company workspace shows the driver entry only for a registered driver profile");
+  requireText(providerWorkspace, 'router.push("/(provider)/driver" as never)', "registered driver opens the dedicated workspace");
   requireText(providerNavigation, '"/runtime/logistics/driver/profile"', "navigation resolves driver registration");
   requireText(providerDriverRoute, "LogisticsDriverScreen", "dedicated authenticated provider driver route");
   requireText(providerDriver, '"/runtime/logistics/driver/profile"', "driver profile and verification check");
@@ -500,7 +502,7 @@ Deno.test("Company dispatch can resolve an incident or send a distinct cargo rec
 
 Deno.test("Platform Logistics administration can review disputes with finance-authorized outcomes", () => {
   requireText(logisticsAdmin, '"/runtime/logistics/bookings/disputes"', "admin dispute register");
-  requireText(logisticsAdmin, "Customer disputes & refund review", "admin dispute queue");
+  requireText(logisticsAdmin, "Customer dispute review", "admin dispute queue");
   requireText(logisticsAdmin, "platform.escrow.execute", "refund authority is permission-gated");
   requireText(logisticsAdmin, "Refund full escrow", "full escrow refund action");
   requireText(logisticsAdmin, "Send to finance review", "offline dispute escalation");
