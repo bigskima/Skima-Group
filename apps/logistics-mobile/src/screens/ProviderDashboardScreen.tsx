@@ -14,6 +14,7 @@ import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
 import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
+import { GuideLaunchLink, GuideTarget } from "../onboarding/LogisticsGuideProvider";
 
 export function ProviderDashboardScreen() {
   const { palette } = useAppTheme();
@@ -46,6 +47,7 @@ export function ProviderDashboardScreen() {
     <Screen denseHeader title={`Good day, ${ownerName}`}
       action={<View style={styles.headerActions}><BrandMark /><Pressable accessibilityRole="button" accessibilityLabel="Open notifications" onPress={() => router.push("/(provider)/work" as never)} style={[styles.notification, { backgroundColor: palette.surface, borderColor: palette.border }]}><Bell color={palette.ink} size={18} /></Pressable></View>}
       refreshControl={<RefreshControl refreshing={companies.isRefetching || opportunities.isRefetching || jobs.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}>
+      <GuideTarget targetKey="company-home-overview">
       {companies.isPending ? <ScreenSkeleton cards={2} /> : companies.error ? (
         <StatePanel title="Company profile unavailable" description="We could not load your company workspace." retry={() => void companies.refetch()} />
       ) : !company ? (
@@ -109,6 +111,8 @@ export function ProviderDashboardScreen() {
           </View>
         </>
       )}
+      </GuideTarget>
+      <GuideLaunchLink workspace="company"/>
     </Screen>
   );
 }
