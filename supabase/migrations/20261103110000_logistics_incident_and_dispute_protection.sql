@@ -667,6 +667,7 @@ declare
   assignment_record public.logistics_booking_driver_assignments%rowtype;
   hold_record public.escrow_holds%rowtype;
   refund_wallet public.wallet_accounts%rowtype;
+  existing_event public.logistics_booking_events%rowtype;
   v_refund_transaction_id uuid;
   next_booking_status text;
 begin
@@ -858,6 +859,21 @@ begin
   elsif target_decision = 'offline_finance_review' then
     if booking_record.payment_mode <> 'offline' then
       raise exception 'manual offline finance review is only for offline Logistics bookings';
+    end if;
+    select * into existing_event
+    from public.logistics_booking_events
+    where booking_id = booking_record.id and idempotency_key = target_idempotency_key;
+    if found then
+      if existing_event.event_type <> 'logistics.booking.dispute_escalated'
+        or existing_event.metadata->>'dispute_id' <> dispute_record.id::text
+        or existing_event.metadata->>'decision' <> target_decision
+        or existing_event.metadata->>'note' is distinct from btrim(target_resolution_note) then
+        raise exception 'offline finance escalation idempotency key was reused for a different action';
+      end if;
+      return jsonb_build_object(
+        'dispute_id',dispute_record.id,'booking_id',booking_record.id,
+        'status','escalated','refund_transaction_id',null
+      );
     end if;
     update public.logistics_booking_disputes
     set status = 'escalated',resolution_code = target_decision,
