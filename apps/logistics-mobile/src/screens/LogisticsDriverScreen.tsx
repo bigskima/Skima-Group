@@ -55,6 +55,7 @@ export function LogisticsDriverScreen() {
   const [incidentTypes, setIncidentTypes] = useState<Record<string, string>>({});
   const [incidentSeverities, setIncidentSeverities] = useState<Record<string, string>>({});
   const [incidentDescriptions, setIncidentDescriptions] = useState<Record<string, string>>({});
+  const [expandedIncidentBookingId, setExpandedIncidentBookingId] = useState<string | null>(null);
   const actionKeys = useRef(new Map<string, string>());
 
   const runAction = useMutation({
@@ -283,6 +284,7 @@ export function LogisticsDriverScreen() {
                     <Text style={[styles.meta, { color: palette.muted }]}>
                       Report a breakdown, accident, route problem or cargo issue immediately. Do not abandon cargo or hand it to an unverified person.
                     </Text>
+                    {expandedIncidentBookingId === bookingId ? (
                     <View style={styles.actions}>
                       <View style={styles.incidentChoices}>
                         {[
@@ -365,6 +367,15 @@ export function LogisticsDriverScreen() {
                         )}
                       />
                     </View>
+                    ) : (
+                      <AppButton
+                        label="Report an issue"
+                        fullWidth
+                        variant="secondary"
+                        onPress={() => setExpandedIncidentBookingId(bookingId)}
+                        icon={<ShieldCheck color={palette.brand} size={15} />}
+                      />
+                    )}
                   </Card>
                 ) : null}
                 {assignmentKind === "recovery" ? (
