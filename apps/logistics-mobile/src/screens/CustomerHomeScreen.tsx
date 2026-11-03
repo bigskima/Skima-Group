@@ -17,6 +17,7 @@ import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { SectionHeader } from "../ui/SectionHeader";
 import { StatePanel } from "../ui/StatePanel";
 import { StatusPill } from "../ui/StatusPill";
+import { GuideLaunchLink, GuideTarget } from "../onboarding/LogisticsGuideProvider";
 
 const CATEGORY_ICONS: Record<string, typeof Package> = {
   "courier.parcel": Package,
@@ -87,6 +88,7 @@ export function CustomerHomeScreen() {
       }
       refreshControl={<RefreshControl refreshing={categories.isRefetching || jobs.isRefetching || bookings.isRefetching} onRefresh={() => void refresh()} tintColor={palette.brand} />}
     >
+      <GuideTarget targetKey="customer-home-request">
       <Pressable accessibilityRole="button" onPress={() => router.push("/(customer)/request" as never)}
         style={({ pressed }) => [styles.requestAction, { backgroundColor: palette.surface, borderColor: palette.border, transform: [{ scale: pressed ? 0.99 : 1 }] }]}>
         <View style={[styles.requestIcon, { backgroundColor: palette.brandSoft }]}><Truck color={palette.brand} size={21} /></View>
@@ -96,6 +98,8 @@ export function CustomerHomeScreen() {
         </View>
         <ChevronRight color={palette.brand} size={20} />
       </Pressable>
+      </GuideTarget>
+      <GuideLaunchLink workspace="customer"/>
 
       {/* Only the configured campaign banner can occupy the main promotional space. */}
       <LogisticsPromotionBanner />
@@ -106,8 +110,13 @@ export function CustomerHomeScreen() {
         <Stat value="Free" label="Provider matching" accent />
       </View>
 
+      <GuideTarget targetKey="customer-home-wallet">
       <Pressable accessibilityRole="button" onPress={() => router.push("/(customer)/wallet" as never)} style={[styles.walletLink,{backgroundColor:palette.surface,borderColor:palette.border}]}><View style={[styles.walletIcon,{backgroundColor:palette.brandSoft}]}><WalletCards color={palette.brand} size={18}/></View><View style={styles.requestCopy}><Text style={[styles.requestTitle,{color:palette.ink}]}>SKIMA Wallet</Text><Text style={[styles.requestMeta,{color:palette.muted}]}>{customerWalletId ? new Intl.NumberFormat("en-NG",{style:"currency",currency:walletCurrency,maximumFractionDigits:2}).format(walletBalance) : "View your shared wallet"}</Text></View><ChevronRight color={palette.muted} size={18}/></Pressable>
 
+      </Pressable>
+      </GuideTarget>
+
+      <GuideTarget targetKey="customer-home-services" style={styles.section}>
       <View style={styles.section}>
         <SectionHeader title="Services" action={
           <Pressable onPress={() => router.push("/(customer)/request" as never)}><Text style={[styles.seeAll, { color: palette.brand }]}>All services</Text></Pressable>
@@ -138,6 +147,7 @@ export function CustomerHomeScreen() {
           <StatePanel title="No services available" description="Service options will appear here when enabled." icon={<Package color={palette.brand} size={22} />} />
         )}
       </View>
+      </GuideTarget>
 
       <View style={styles.section}>
         <SectionHeader title="Recent activity" action={
@@ -181,6 +191,7 @@ export function CustomerHomeScreen() {
         )}
       </View>
 
+      <GuideTarget targetKey="customer-home-store">
       <Pressable accessibilityRole="button" onPress={() => router.push("/(customer)/store" as never)}
         style={[styles.storeLink, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View style={[styles.storeIcon, { backgroundColor: palette.brandSoft }]}><ShoppingBag color={palette.brand} size={19} /></View>
@@ -190,6 +201,7 @@ export function CustomerHomeScreen() {
         </View>
         <ChevronRight color={palette.muted} size={18} />
       </Pressable>
+      </GuideTarget>
     </Screen>
   );
 }
