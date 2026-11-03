@@ -41,7 +41,7 @@ export function Screen({ children, title, eyebrow, subtitle, action, refreshCont
             <Text numberOfLines={2} style={[styles.title, { color: palette.ink }, compact && styles.titleMobile, denseHeader && styles.titleDense]}>{title}</Text>
             {subtitle ? <Text style={[styles.subtitle, { color: palette.muted }]}>{subtitle}</Text> : null}
           </View>
-          {action ? <View style={[styles.action, compact && styles.actionCompact]}>{action}</View> : null}
+          {action ? <View style={[styles.action, compact && styles.actionCompact, denseHeader && styles.actionDense]}>{action}</View> : null}
         </View>
         <View style={styles.body}>{children}</View>
       </View>
