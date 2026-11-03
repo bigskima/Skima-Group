@@ -349,6 +349,70 @@ async function handleLogisticsRequest(
     }), id);
   }
 
+  if (routePath === "/runtime/logistics/company/vehicles" && request.method === "GET") {
+    const organizationId = requireUuid(url.searchParams.get("organizationId"), "organizationId");
+    const permission = await supabase.rpc("can_manage_logistics_company", {
+      target_organization_id: organizationId,
+    });
+    if (permission.error) return databaseError(permission.error, id);
+    if (permission.data !== true) {
+      return jsonResponse({ ok: false, error: "company_fleet_access_denied", requestId: id }, 403);
+    }
+    return selectResponse(
+      supabase.from("vehicles")
+        .select("id,organization_id,vehicle_type_id,status,manufacturer,model,model_year,registration_number,color,max_load_kg,cargo_volume_m3,passenger_capacity,fuel_type,insurance_expires_at,inspection_expires_at,roadworthiness_expires_at,ownership_type,ownership_relationship,metadata,created_at,vehicle_type:vehicle_types(id,key,display_name)")
+        .eq("organization_id", organizationId)
+        .eq("ownership_relationship", "business_owned")
+        .order("created_at", { ascending: false }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/logistics/company/vehicle-types" && request.method === "GET") {
+    return selectResponse(
+      supabase.from("vehicle_types")
+        .select("id,key,display_name,capability_schema")
+        .eq("status", "active")
+        .order("display_name", { ascending: true }),
+      id,
+    );
+  }
+
+  if (routePath === "/runtime/logistics/company/vehicles" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("register_logistics_company_vehicle", {
+      target_organization_id: requireUuid(p.organizationId, "organizationId"),
+      target_vehicle_type_id: requireUuid(p.vehicleTypeId, "vehicleTypeId"),
+      target_registration_number: requireString(p.registrationNumber, "registrationNumber"),
+      target_manufacturer: optionalString(p.manufacturer) ?? null,
+      target_model: optionalString(p.model) ?? null,
+      target_model_year: optionalInteger(p.modelYear),
+      target_color: optionalString(p.color) ?? null,
+      target_max_load_kg: optionalNumber(p.maxLoadKg, "maxLoadKg"),
+      target_cargo_volume_m3: optionalNumber(p.cargoVolumeM3, "cargoVolumeM3"),
+      target_passenger_capacity: optionalInteger(p.passengerCapacity),
+      target_fuel_type: optionalString(p.fuelType) ?? null,
+      target_insurance_expires_at: optionalString(p.insuranceExpiresAt) ?? null,
+      target_inspection_expires_at: optionalString(p.inspectionExpiresAt) ?? null,
+      target_roadworthiness_expires_at: optionalString(p.roadworthinessExpiresAt) ?? null,
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
+  if (routePath === "/runtime/logistics/company/vehicles/assign-driver" && request.method === "POST") {
+    const body = await readJsonBody(request, id);
+    if ("response" in body) return body.response;
+    const p = body.value;
+    return rpcResponse(supabase.rpc("assign_logistics_company_vehicle_to_driver", {
+      target_organization_id: requireUuid(p.organizationId, "organizationId"),
+      target_driver_profile_id: requireUuid(p.driverProfileId, "driverProfileId"),
+      target_vehicle_id: requireUuid(p.vehicleId, "vehicleId"),
+      target_idempotency_key: requireString(p.idempotencyKey, "idempotencyKey"),
+    }), id);
+  }
+
   if (routePath === "/runtime/logistics/company/dispatch-resources" && request.method === "GET") {
     return rpcResponse(supabase.rpc("read_logistics_company_dispatch_resources", {
       target_organization_id: requireUuid(url.searchParams.get("organizationId"), "organizationId"),
