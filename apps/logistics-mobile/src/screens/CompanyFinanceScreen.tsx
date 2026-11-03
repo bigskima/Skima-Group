@@ -246,7 +246,7 @@ function Method({label,detail,active,onPress}:{label:string;detail:string;active
  const {palette}=useAppTheme();return <Pressable onPress={onPress} style={[styles.method,{borderColor:active?palette.brand:palette.border,backgroundColor:active?palette.brandSoft:palette.surface}]}><Text style={{fontSize:11,fontWeight:"900",color:palette.ink}}>{label}</Text><Text style={{fontSize:9,color:palette.muted}}>{detail}</Text></Pressable>;
 }
 const styles=StyleSheet.create({
- back:{flexDirection:"row",alignItems:"center",gap:7},balanceCard:{borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:14,gap:10},
+ back:{flexDirection:"row",alignItems:"center",gap:7},currencyRow:{flexDirection:"row",gap:7},currencyChip:{paddingHorizontal:12,paddingVertical:8,borderWidth:1,borderRadius:radii.pill},balanceCard:{borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:14,gap:10},
  balanceHead:{flexDirection:"row",alignItems:"center",gap:11},icon:{width:42,height:42,borderRadius:14,alignItems:"center",justifyContent:"center"},
  label:{...typography.eyebrow,fontSize:8},balance:{fontSize:23,fontWeight:"900"},hint:{...typography.caption,fontSize:10,lineHeight:15},
  operatingCard:{borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:13,gap:4},operatingTitle:{fontSize:11,fontWeight:"900"},operatingAmount:{fontSize:17,fontWeight:"900"},
