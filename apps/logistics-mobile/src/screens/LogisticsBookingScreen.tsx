@@ -10,6 +10,7 @@ import { useSession } from "../session/SessionProvider";
 import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing, typography } from "../theme/tokens";
 import { AppButton } from "../ui/AppButton";
+import { AppField } from "../ui/AppField";
 import { Card } from "../ui/Card";
 import { Screen } from "../ui/Screen";
 import { ScreenSkeleton } from "../ui/ScreenSkeleton";
@@ -28,10 +29,23 @@ export function LogisticsBookingScreen() {
   const balancesQuery = useLogisticsQuery(["wallet-balances"], "/runtime/wallet-balances");
   const booking = (bookings.data ?? []).find((item) => asString(item, "id") === bookingId) ?? null;
   const status = asString(booking, "status") ?? "awaiting_payment";
+  const incidentsQuery = useLogisticsQuery(
+    ["booking-incidents", bookingId ?? "none"],
+    "/runtime/logistics/bookings/incidents?bookingId=" + encodeURIComponent(bookingId ?? ""),
+    Boolean(bookingId), 15_000,
+  );
+  const disputesQuery = useLogisticsQuery(
+    ["booking-disputes", bookingId ?? "none"],
+    "/runtime/logistics/bookings/disputes?bookingId=" + encodeURIComponent(bookingId ?? ""),
+    Boolean(bookingId), 15_000,
+  );
+  const incidentRows = (incidentsQuery.data ?? []) as Record<string, unknown>[];
+  const disputeRows = (disputesQuery.data ?? []) as Record<string, unknown>[];
+  const activeDispute = [...disputeRows].reverse().find((item) => ["open", "under_review", "escalated"].includes(asString(item, "status") ?? "")) ?? null;
   const tracking = useLogisticsRecordQuery(
     ["booking-tracking", bookingId ?? "none"],
     "/runtime/logistics/bookings/tracking?bookingId=" + encodeURIComponent(bookingId ?? ""),
-    Boolean(bookingId && ["in_progress", "delivered", "settled", "completed_offline"].includes(status)),
+    Boolean(bookingId && ["in_progress", "delivery_exception", "failed_delivery", "disputed", "delivered", "settled", "completed_offline"].includes(status)),
     15_000,
   );
   const trackingSession = tracking.data?.tracking_session && typeof tracking.data.tracking_session === "object" && !Array.isArray(tracking.data.tracking_session)
@@ -53,6 +67,8 @@ export function LogisticsBookingScreen() {
     asString(wallet, "status") === "active"
   ), [walletsQuery.data, customerId, currency]);
   const [selectedWalletId, setSelectedWalletId] = useState("");
+  const [disputeReason, setDisputeReason] = useState("non_delivery");
+  const [disputeDetails, setDisputeDetails] = useState("");
   const [error, setError] = useState<string | null>(null);
   const cancelAttemptRef = useRef<string | null>(null);
 
@@ -131,8 +147,40 @@ export function LogisticsBookingScreen() {
     },
     onError: (cause) => setError(cause instanceof Error ? cause.message : "Delivery confirmation could not be completed."),
   });
-  const refresh = async () => { await Promise.all([bookings.refetch(), walletsQuery.refetch(), balancesQuery.refetch(), tracking.refetch()]); };
-  const isWorking = payOnline.isPending || confirmOffline.isPending || confirmDelivery.isPending || cancelBooking.isPending;
+  const openDispute = useMutation({
+    mutationFn: async () => {
+      if (!bookingId || disputeDetails.trim().length < 5) {
+        throw new Error("Explain the delivery problem in at least five characters.");
+      }
+      const latestIncident = [...incidentRows].reverse().find((item) => asString(item, "id"));
+      return api.post("/runtime/logistics/bookings/disputes/open", {
+        bookingId,
+        reason: disputeReason,
+        details: disputeDetails.trim(),
+        incidentId: asString(latestIncident, "id") ?? null,
+        idempotencyKey: createClientIdempotencyKey(
+          "logistics.customer.dispute",
+          bookingId + ":" + disputeReason + ":" + disputeDetails.trim(),
+        ),
+      }, z.string().uuid());
+    },
+    onSuccess: async () => {
+      setError(null);
+      setDisputeDetails("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["skima-logistics", "bookings"] }),
+        queryClient.invalidateQueries({ queryKey: ["skima-logistics", "booking-disputes"] }),
+        disputesQuery.refetch(), bookings.refetch(),
+      ]);
+      Alert.alert("Dispute opened", paymentMode === "online_wallet"
+        ? "The booking is now under review. The original escrow is held while SKIMA investigates; no provider settlement can proceed."
+        : "The booking is now under review. Offline payment disputes require finance review and will not trigger an automatic wallet refund.");
+    },
+    onError: (cause) => setError(cause instanceof Error ? cause.message : "The delivery dispute could not be opened."),
+  });
+
+  const refresh = async () => { await Promise.all([bookings.refetch(), walletsQuery.refetch(), balancesQuery.refetch(), tracking.refetch(), incidentsQuery.refetch(), disputesQuery.refetch()]); };
+  const isWorking = payOnline.isPending || confirmOffline.isPending || confirmDelivery.isPending || cancelBooking.isPending || openDispute.isPending;
 
   return (
     <Screen eyebrow="BOOKING" title="Booking & payment" subtitle="Review the total and complete the payment step securely."
@@ -304,6 +352,85 @@ export function LogisticsBookingScreen() {
               />
             </Card>
           ) : null}
+
+          {activeDispute ? (
+            <Card variant="warning" padding="lg">
+              <View style={styles.sectionHeading}>
+                <ShieldCheck color={palette.warning} size={20} />
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Customer protection review</Text>
+                <StatusPill status={asString(activeDispute, "status") ?? "open"} />
+              </View>
+              <Text style={[styles.sectionDescription, { color: palette.muted }]}>
+                Your dispute is recorded for SKIMA review. {paymentMode === "online_wallet"
+                  ? "The original escrow remains frozen; the provider cannot be settled while the dispute is open."
+                  : "This booking was paid offline, so any payment reversal requires a manual finance review."}
+              </Text>
+              <Text style={[styles.sectionDescription, { color: palette.ink }]}>Reason: {(asString(activeDispute, "reason") ?? "other").replace(/_/g, " ")}</Text>
+              <Text style={[styles.sectionDescription, { color: palette.muted }]}>{asString(activeDispute, "details")}</Text>
+              {asString(activeDispute, "resolution_note") ? <Text style={[styles.sectionDescription, { color: palette.muted }]}>Review update: {asString(activeDispute, "resolution_note")}</Text> : null}
+            </Card>
+          ) : ["delivered", "delivery_exception", "failed_delivery"].includes(status) ? (
+            <Card variant="warning" padding="lg">
+              <View style={styles.sectionHeading}>
+                <ShieldCheck color={palette.warning} size={20} />
+                <Text style={[styles.sectionTitle, { color: palette.ink }]}>Report a delivery problem</Text>
+              </View>
+              <Text style={[styles.sectionDescription, { color: palette.muted }]}>
+                Report non-delivery, damaged or partial cargo, or an unauthorized hand-off. Opening a dispute blocks settlement while SKIMA reviews the evidence.
+              </Text>
+              <View style={styles.disputeReasons}>
+                {[
+                  ["non_delivery", "Not received"],
+                  ["partial_delivery", "Partial delivery"],
+                  ["damaged_cargo", "Cargo damaged"],
+                  ["wrong_delivery", "Wrong cargo"],
+                  ["recipient_not_authorized", "Wrong recipient"],
+                  ["other", "Other"],
+                ].map(([value, label]) => {
+                  const selected = disputeReason === value;
+                  return (
+                    <Pressable
+                      key={value}
+                      onPress={() => setDisputeReason(value)}
+                      style={[
+                        styles.disputeReason,
+                        {
+                          borderColor: selected ? palette.brand : palette.border,
+                          backgroundColor: selected ? palette.brandSoft : palette.surface,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.sectionDescription, { color: selected ? palette.brand : palette.ink }]}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <AppField
+                label="Describe the problem"
+                value={disputeDetails}
+                onChangeText={setDisputeDetails}
+                placeholder="Tell us what was missing, damaged or not delivered."
+                multiline
+              />
+              <AppButton
+                label="Open customer dispute"
+                fullWidth
+                loading={openDispute.isPending}
+                disabled={openDispute.isPending || disputeDetails.trim().length < 5}
+                onPress={() => Alert.alert(
+                  "Open a dispute?",
+                  paymentMode === "online_wallet"
+                    ? "The booking will be paused and its escrow held for investigation. No provider payout will be released."
+                    : "The booking will be escalated for offline finance review. This does not automatically reverse the payment made to the provider.",
+                  [
+                    { text: "Not now", style: "cancel" },
+                    { text: "Open dispute", style: "destructive", onPress: () => { setError(null); openDispute.mutate(); } },
+                  ],
+                )}
+              />
+            </Card>
+          ) : null}
+
           {status === "settled" ? (
             <Card variant="success" padding="lg">
               <View style={styles.sectionHeading}><CheckCircle2 color={palette.success} size={21} /><Text style={[styles.sectionTitle, { color: palette.ink }]}>Delivery confirmed · payment settled</Text></View>
@@ -329,6 +456,7 @@ export function LogisticsBookingScreen() {
             </Card>
           ) : null}
 
+          {openDispute.error ? <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}><AlertCircle color={palette.danger} size={16} /><Text style={[styles.inlineError, { color: palette.danger }]}>{openDispute.error instanceof Error ? openDispute.error.message : "The delivery dispute could not be opened."}</Text></View> : null}
           {error ? <View style={[styles.error, { backgroundColor: palette.dangerSoft }]}><AlertCircle color={palette.danger} size={16} /><Text style={[styles.inlineError, { color: palette.danger }]}>{error}</Text></View> : null}
         </View>
       )}
@@ -391,6 +519,8 @@ const styles = StyleSheet.create({
   balanceLabel: { ...typography.caption, fontSize: 9 },
   balanceValue: { ...typography.bodyStrong, fontSize: 15 },
   walletList: { gap: 8 },
+  disputeReasons: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  disputeReason: { borderWidth: 1, borderRadius: radii.md, paddingHorizontal: 9, paddingVertical: 8 },
   walletChoice: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: radii.lg, padding: 10 },
   walletIcon: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   walletCopy: { flex: 1, gap: 2 },

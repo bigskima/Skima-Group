@@ -28,7 +28,13 @@ const migrationDispatch = await Deno.readTextFile(
 const migrationReplacementHandoff = await Deno.readTextFile(
   "supabase/migrations/20261103131800_logistics_safe_replacement_handoff.sql",
 );
-const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch + "\n" + migrationReplacementHandoff;
+const migrationExceptions = await Deno.readTextFile(
+  "supabase/migrations/20261103131900_logistics_incident_and_dispute_protection.sql",
+);
+const migrationCargoRecovery = await Deno.readTextFile(
+  "supabase/migrations/20261103132000_logistics_cargo_recovery_dispatch.sql",
+);
+const migration = migrationBase + "\n" + migrationHardening + "\n" + migrationBooking + "\n" + migrationFulfillment + "\n" + migrationWalletFunding + "\n" + migrationDriver + "\n" + migrationCancellation + "\n" + migrationTracking + "\n" + migrationDispatch + "\n" + migrationReplacementHandoff + "\n" + migrationExceptions + "\n" + migrationCargoRecovery;
 const runtime = await Deno.readTextFile("supabase/functions/logistics-runtime/index.ts");
 const apiGateway = await Deno.readTextFile("supabase/functions/api-gateway/index.ts");
 const supabaseConfig = await Deno.readTextFile("supabase/config.toml");
@@ -606,4 +612,113 @@ Deno.test("Driver replacement preserves the incumbent until the replacement acce
   requireText(migrationReplacementHandoff, "replacement_declined_by", "decline recovery audit");
   requireText(migrationReplacementHandoff, "set assigned_driver_profile_id = prior_assignment.driver_profile_id", "restore incumbent after replacement decline");
   requireText(migrationReplacementHandoff, "status in ('offered','accepted','replacement_pending','in_progress','picked_up','in_transit')", "prevent double-booking incumbent during replacement");
+});
+
+
+Deno.test("Logistics incidents preserve custody and block financial settlement until resolved", () => {
+  requireText(migrationExceptions, "create table if not exists public.logistics_booking_incidents", "dedicated incident ledger");
+  requireText(migrationExceptions, "create table if not exists public.logistics_booking_disputes", "dedicated customer dispute ledger");
+  requireText(migrationExceptions, "cargo_custody_status", "explicit cargo custody state");
+  requireText(migrationExceptions, "'recovery_pending'", "explicit cargo recovery state");
+  requireText(migrationExceptions, "'incident_hold'", "historical driver custody remains traceable");
+  requireText(migrationExceptions, "set status = 'incident_hold'", "driver actions stop at incident report time");
+  requireText(migrationExceptions, "'delivery_submitted','incident_hold'", "a customer-reported delivery issue also places the assignment on hold");
+  requireText(migrationExceptions, "logistics_driver_one_active_booking_idx", "incident-held drivers remain unavailable for new jobs");
+  requireText(migrationExceptions, "'in_transit','incident_hold'", "incident holds remain part of the driver active-booking uniqueness gate");
+  requireText(migrationExceptions, "guard_logistics_settlement_on_open_exceptions", "database settlement guard");
+  requireText(migrationExceptions, "dispute.status in ('open','under_review','escalated')", "active customer disputes block settlement");
+  requireText(migrationExceptions, "incident.status in ('reported','investigating','recovery_required')", "unresolved delivery incidents block settlement");
+  requireText(migrationExceptions, "public.refund_escrow_hold(", "refund uses shared escrow ledger");
+  requireText(migrationExceptions, "hold_record.released_amount <> 0", "full refund refuses a partially released escrow");
+  requireText(migrationExceptions, "payment_mode <> 'online_wallet'", "offline disputes cannot use escrow refund");
+  requireText(migrationExceptions, "platform.escrow.execute", "refund resolution requires platform escrow permission");
+  requireNotText(migrationExceptions, "platform.settlement.execute", "settlement-only authority cannot issue dispute refunds");
+  requireText(migrationExceptions, "hold_record.hold_amount <> booking_record.total_customer_charge", "refund escrow amount must match the original customer charge");
+  requireText(migrationExceptions, "cargo custody must be secured or accounted for before the customer refund can close the Logistics booking", "refunds cannot strand cargo with a driver or in an unknown recovery state");
+  requireText(migrationCargoRecovery, "metadata = metadata || jsonb_build_object('closed_by_customer_refund',true)", "refunded bookings release incident-held drivers only after safe custody");
+  requireText(migrationExceptions, "offline finance escalation idempotency key was reused for a different action", "offline dispute escalation is retry-safe and action-bound");
+  requireText(migrationExceptions, "logistics_booking_incidents_no_direct_insert", "incident writes are RPC-only");
+  requireText(migrationExceptions, "logistics_booking_disputes_no_direct_update", "dispute updates are RPC-only");
+  requireText(migrationExceptions, "cargo recovery is required only when cargo custody is with the driver or is uncertain", "recovery decisions require custody justification");
+  requireText(migrationExceptions, "must enter controlled recovery, not be closed as a failed attempt", "driver-held or unaccounted cargo cannot be marked safely failed");
+  requireText(migrationExceptions, "closed_by_customer_refund", "authorized refund closes linked unresolved incident records");
+  requireText(migrationExceptions, "'restore_customer_confirmation'", "submitted delivery incidents have a distinct confirmation recovery outcome");
+  requireText(migrationExceptions, "incident_record.booking_status_before_incident <> 'delivered'", "delivery-stage check prevents treating an already submitted delivery as active transit");
+  requireText(migrationExceptions, "set status = 'delivery_submitted'", "restored delivery returns to customer confirmation rather than payout");
+  requireText(migrationExceptions, "a submitted delivery must return to customer confirmation", "a submitted delivery cannot be closed as a failed delivery");
+  requireText(migrationExceptions, "a submitted delivery must return to customer confirmation, not be closed as a failed delivery", "delivered custody cannot be marked as failed");
+  requireText(migrationCargoRecovery, "recovered_delivery_submitted", "a completed recovery is a separately recognized delivery submission");
+  requireText(migrationExceptions, "verified recovered delivery", "dispute resolution can restore customer confirmation after verified recovery");
+  requireText(migrationExceptions, "assignment_kind' = 'recovery'", "recovered delivery confirmation uses the recovery assignment record");
+  const incidentResponse = migrationExceptions.slice(
+    migrationExceptions.indexOf("create or replace function public.respond_logistics_booking_incident"),
+    migrationExceptions.indexOf("create or replace function public.open_logistics_booking_dispute"),
+  );
+  const incidentReplayAt = incidentResponse.indexOf("select * into existing_event");
+  const incidentStateGuardAt = incidentResponse.indexOf("if incident_record.status not in");
+  if (incidentReplayAt < 0 || incidentStateGuardAt < incidentReplayAt) {
+    throw new Error("incident resolution retries must return their original result before terminal-state validation");
+  }
+  const openDispute = migrationExceptions.slice(
+    migrationExceptions.indexOf("create or replace function public.open_logistics_booking_dispute"),
+    migrationExceptions.indexOf("create or replace function public.resolve_logistics_booking_dispute"),
+  );
+  const disputeReplayAt = openDispute.indexOf("select * into existing_dispute");
+  const disputeStateGuardAt = openDispute.indexOf("if booking_record.status not in");
+  if (disputeReplayAt < 0 || disputeStateGuardAt < disputeReplayAt) {
+    throw new Error("customer dispute retries must return their original result before booking-state validation");
+  }
+  requireText(migrationExceptions, "assignment.metadata->>'assignment_kind' = 'recovery'", "only an active recovery driver may read the incident custody record");
+});
+
+Deno.test("Logistics incident and dispute routes use authenticated runtime RPCs and RLS reads", () => {
+  requireText(runtime, '"/runtime/logistics/bookings/incidents"', "incident read route");
+  requireText(runtime, '"/runtime/logistics/bookings/incidents/report"', "incident report route");
+  requireText(runtime, '"/runtime/logistics/bookings/incidents/respond"', "company incident response route");
+  requireText(runtime, '"/runtime/logistics/bookings/disputes"', "dispute read route");
+  requireText(runtime, '"/runtime/logistics/bookings/disputes/open"', "customer dispute route");
+  requireText(runtime, '"/runtime/logistics/bookings/disputes/resolve"', "platform dispute resolution route");
+  requireText(runtime, 'supabase.rpc("report_logistics_booking_incident"', "incident report uses a database RPC");
+  requireText(runtime, 'supabase.rpc("resolve_logistics_booking_dispute"', "refund resolution uses permission-gated database RPC");
+  requireText(runtime, "incident:logistics_booking_incidents(booking_status_before_incident", "admin receives the linked incident's original booking state");
+});
+
+
+Deno.test("Failed Logistics deliveries use a controlled recovery assignment and verified custody hand-off", () => {
+  requireText(migrationCargoRecovery, "assign_logistics_booking_recovery_driver", "dedicated recovery dispatch RPC");
+  requireText(migrationCargoRecovery, "booking_record.status <> 'failed_delivery'", "recovery dispatch is limited to failed deliveries");
+  requireText(migrationCargoRecovery, "booking_record.cargo_custody_status <> 'recovery_pending'", "recovery dispatch requires explicit cargo custody state");
+  requireText(migrationCargoRecovery, "'assignment_kind','recovery'", "recovery assignment is distinguishable from the original delivery");
+  requireText(migrationCargoRecovery, "start_logistics_recovery_booking", "recovery driver must explicitly start recovery");
+  requireText(migrationCargoRecovery, "set cargo_custody_status = 'driver_custody'", "physical recovery pickup transfers custody to the recovery driver");
+  requireText(migrationCargoRecovery, "set cargo_custody_status = 'delivered'", "delivery hand-off closes custody state");
+  requireText(migrationCargoRecovery, "logistics.booking.recovery_driver_assigned", "recovery dispatch is auditable");
+  requireText(migrationCargoRecovery, "logistics.booking.recovery_started", "recovery start is auditable");
+  const recoveryStart = migrationCargoRecovery.slice(
+    migrationCargoRecovery.indexOf("create or replace function public.start_logistics_recovery_booking"),
+    migrationCargoRecovery.indexOf("create or replace function public.submit_logistics_booking_delivery"),
+  );
+  const recoveryReplayAt = recoveryStart.indexOf("select * into existing_event");
+  const recoveryStateGuardAt = recoveryStart.indexOf("if booking_record.status <> 'failed_delivery'");
+  if (recoveryReplayAt < 0 || recoveryStateGuardAt < recoveryReplayAt) {
+    throw new Error("recovery-start retries must return their original result before checking the changed booking state");
+  }
+  const recoveryRelease = migrationCargoRecovery.slice(
+    migrationCargoRecovery.indexOf("create or replace function public.release_logistics_driver_assignment"),
+    migrationCargoRecovery.indexOf("revoke all on function public.release_logistics_driver_assignment"),
+  );
+  requireText(recoveryRelease, "release_stage := 'before_recovery_start'", "recovery drivers can return an accepted task before starting");
+  requireText(recoveryRelease, "booking_record.cargo_custody_status <> 'recovery_pending'", "recovery release preserves pending cargo custody");
+
+  requireText(migrationCargoRecovery, "release_stage := 'before_recovery_start'", "recovery drivers can return an accepted task before starting");
+  requireText(migrationCargoRecovery, "a recovery driver may return only their accepted recovery assignment before recovery starts", "recovery release cannot abandon cargo after service starts");
+  requireText(providerDriver, "Return recovery task to dispatch", "recovery driver has a pre-start return control");
+  requireText(migrationCargoRecovery, "status = 'incident_hold'", "original driver remains held in the audit trail");
+  requireText(migrationCargoRecovery, "recovered_delivery_submitted", "successful cargo recovery closes the recovery incident");
+  requireText(migrationCargoRecovery, "custody_transferred_to_recovery_assignment", "the original driver is released only after a recovery pickup is confirmed");
+  requireText(migrationCargoRecovery, "status = 'reassigned'", "verified recovery pickup closes the original driver assignment");
+  requireText(migrationExceptions, "incident_assignment_outcome", "failed pre-pickup and delivered attempts preserve the original driver outcome");
+  requireText(migrationCargoRecovery, "'in_progress','in_progress'", "recovery job event uses the active service state");
+  requireText(runtime, '"/runtime/logistics/bookings/assign-recovery-driver"', "recovery dispatch runtime route");
+  requireText(runtime, '"/runtime/logistics/bookings/recovery/start"', "recovery start runtime route");
 });
