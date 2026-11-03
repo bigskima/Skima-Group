@@ -654,4 +654,9 @@ Deno.test("Failed Logistics deliveries use a controlled recovery assignment and 
   requireText(migrationCargoRecovery, "set cargo_custody_status = 'delivered'", "delivery hand-off closes custody state");
   requireText(migrationCargoRecovery, "logistics.booking.recovery_driver_assigned", "recovery dispatch is auditable");
   requireText(migrationCargoRecovery, "logistics.booking.recovery_started", "recovery start is auditable");
+  requireText(migrationCargoRecovery, "status = 'incident_hold'", "original driver remains held in the audit trail");
+  requireText(migrationCargoRecovery, "recovered_delivery_submitted", "successful cargo recovery closes the recovery incident");
+  requireText(migrationCargoRecovery, "'in_progress','in_progress'", "recovery job event uses the active service state");
+  requireText(runtime, '"/runtime/logistics/bookings/assign-recovery-driver"', "recovery dispatch runtime route");
+  requireText(runtime, '"/runtime/logistics/bookings/recovery/start"', "recovery start runtime route");
 });
