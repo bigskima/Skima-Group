@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { Building2, ChevronRight, Settings2, Truck, UsersRound } from "lucide-react-native";
+import { BriefcaseBusiness, Building2, ChevronRight, Settings2, Truck, UsersRound } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import type { ReactNode } from "react";
 import { asString, useLogisticsRecordQuery, useLogisticsQuery } from "../api/logistics";
@@ -60,6 +60,14 @@ export function ProviderWorkspaceScreen() {
           )}
 
           <View style={styles.grid}>
+            <WorkspaceCard
+              title="Customer opportunities"
+              description="Review matched customer requests and prepare offers for routes your company serves."
+              icon={<BriefcaseBusiness color={palette.brand} size={21} />}
+              onPress={() => router.push("/(provider)/opportunities" as never)}
+              desktop={desktop}
+              disabled={!company}
+            />
             <WorkspaceCard
               title="Services & coverage"
               description="Set up what your company offers, pricing approach and operating areas."
