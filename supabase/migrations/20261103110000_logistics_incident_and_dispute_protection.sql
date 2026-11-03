@@ -391,20 +391,21 @@ begin
     and not public.has_permission('business.logistics.jobs.manage',booking_record.provider_organization_id) then
     raise exception 'provider company incident-management permission is required';
   end if;
-  if incident_record.status not in ('reported','investigating','recovery_required') then
-    raise exception 'this incident is already resolved or closed';
-  end if;
-
   select * into existing_event
   from public.logistics_booking_events
   where booking_id = booking_record.id and idempotency_key = target_idempotency_key;
   if found then
     if existing_event.event_type <> 'logistics.booking.incident_resolved'
       or existing_event.metadata->>'incident_id' <> incident_record.id::text
-      or existing_event.metadata->>'decision' <> target_decision then
+      or existing_event.metadata->>'decision' <> target_decision
+      or existing_event.metadata->>'resolution_note' is distinct from btrim(target_resolution_note) then
       raise exception 'incident resolution idempotency key was reused for a different action';
     end if;
     return incident_record.id;
+  end if;
+
+  if incident_record.status not in ('reported','investigating','recovery_required') then
+    raise exception 'this incident is already resolved or closed';
   end if;
 
   select * into assignment_record
@@ -549,11 +550,21 @@ begin
   if not found or booking_record.requester_user_id <> actor then
     raise exception 'Logistics booking was not found for the authenticated customer';
   end if;
+  select * into existing_dispute
+  from public.logistics_booking_disputes
+  where booking_id = booking_record.id and idempotency_key = target_idempotency_key;
+  if found then
+    if existing_dispute.reason <> target_reason
+      or existing_dispute.requester_user_id <> actor
+      or existing_dispute.details <> btrim(target_details)
+      or existing_dispute.incident_id is distinct from target_incident_id then
+      raise exception 'dispute idempotency key was reused with different details';
+    end if;
+    return existing_dispute.id;
+  end if;
+
   if booking_record.status not in ('delivered','delivery_exception','failed_delivery') then
     raise exception 'a dispute can be opened only after a delivery attempt or failure';
-  end if;
-  if booking_record.status in ('settled','completed_offline','refunded') then
-    raise exception 'this booking is already financially completed; contact SKIMA support for a post-settlement review';
   end if;
 
   if target_incident_id is not null then
@@ -561,18 +572,6 @@ begin
     from public.logistics_booking_incidents
     where id = target_incident_id and booking_id = booking_record.id;
     if not found then raise exception 'the selected incident does not belong to this booking'; end if;
-  end if;
-
-  select * into existing_dispute
-  from public.logistics_booking_disputes
-  where booking_id = booking_record.id and idempotency_key = target_idempotency_key;
-  if found then
-    if existing_dispute.reason <> target_reason
-      or existing_dispute.requester_user_id <> actor
-      or existing_dispute.details <> btrim(target_details) then
-      raise exception 'dispute idempotency key was reused with different details';
-    end if;
-    return existing_dispute.id;
   end if;
 
   insert into public.logistics_booking_disputes (
