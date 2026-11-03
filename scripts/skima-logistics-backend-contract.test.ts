@@ -628,6 +628,8 @@ Deno.test("Logistics incidents preserve custody and block financial settlement u
   requireText(migrationExceptions, "hold_record.released_amount <> 0", "full refund refuses a partially released escrow");
   requireText(migrationExceptions, "payment_mode <> 'online_wallet'", "offline disputes cannot use escrow refund");
   requireText(migrationExceptions, "platform.escrow.execute", "refund resolution requires platform escrow permission");
+  requireNotText(migrationExceptions, "platform.settlement.execute", "settlement-only authority cannot issue dispute refunds");
+  requireText(migrationExceptions, "hold_record.hold_amount <> booking_record.total_customer_charge", "refund escrow amount must match the original customer charge");
   requireText(migrationExceptions, "logistics_booking_incidents_no_direct_insert", "incident writes are RPC-only");
   requireText(migrationExceptions, "logistics_booking_disputes_no_direct_update", "dispute updates are RPC-only");
   requireText(migrationExceptions, "cargo custody is required only when cargo is with the driver or is uncertain", "recovery decisions require custody justification");
