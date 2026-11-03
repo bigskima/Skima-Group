@@ -59,10 +59,12 @@ export function ProviderBookingDetailScreen() {
   ) ?? null;
   const assignedDriver = nested(activeAssignment, "driver");
   const assignedVehicle = nested(activeAssignment, "vehicle");
+  const lastReleasedAssignment = [...assignmentRows].reverse().find((item) => ["reassigned", "rejected"].includes(asString(item, "status") ?? "")) ?? null;
+  const [isReplacingAssignment, setIsReplacingAssignment] = useState(false);
   const dispatchResources = useLogisticsRecordQuery(
     ["dispatch-resources", organizationId ?? "none"],
     `/runtime/logistics/company/dispatch-resources?organizationId=${encodeURIComponent(organizationId ?? "")}`,
-    Boolean(organizationId && status === "provider_accepted" && !activeAssignment),
+    Boolean(organizationId && status === "provider_accepted" && (!activeAssignment || isReplacingAssignment)),
   );
   const driverResources = Array.isArray(dispatchResources.data?.drivers)
     ? dispatchResources.data.drivers.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item))
@@ -84,7 +86,7 @@ export function ProviderBookingDetailScreen() {
       const fingerprint = `assign:${bookingId}:${selectedDriverProfileId}:${selectedVehicleId}`;
       let key = actionKeysRef.current.get(fingerprint);
       if (!key) {
-        key = createClientIdempotencyKey("logistics.company.driver.assignment", fingerprint);
+        key = createClientIdempotencyKey("logistics.company.driver.assignment", fingerprint + ":" + String(Date.now()) + ":" + String(actionKeysRef.current.size));
         actionKeysRef.current.set(fingerprint, key);
       }
       return api.post("/runtime/logistics/bookings/assign-driver", {
@@ -96,6 +98,10 @@ export function ProviderBookingDetailScreen() {
     },
     onSuccess: async () => {
       setError(null);
+      actionKeysRef.current.delete(`assign:${bookingId}:${selectedDriverProfileId}:${selectedVehicleId}`);
+      setIsReplacingAssignment(false);
+      setSelectedDriverProfileId("");
+      setSelectedVehicleId("");
       await client.invalidateQueries({ queryKey: ["skima-logistics", "provider-bookings"] });
       await bookings.refetch();
       Alert.alert("Driver assignment sent", "The driver has been notified in their SKIMA Logistics workspace and must accept before the job can start.");
@@ -169,7 +175,7 @@ export function ProviderBookingDetailScreen() {
             <Card padding="lg">
               <View style={styles.actionHeading}><Truck color={palette.brand} size={20} /><Text style={[styles.sectionTitle, { color: palette.ink }]}>Assign the delivery team</Text></View>
               <Text style={[styles.meta, { color: palette.muted }]}>Choose a verified company driver and a compliant vehicle. The driver must accept the assignment before starting pickup and delivery.</Text>
-              {activeAssignment ? (
+              {activeAssignment && !isReplacingAssignment ? (
                 <View style={[styles.assignmentSummary, { backgroundColor: palette.surfaceSubtle }]}>
                   <Text style={[styles.contactName, { color: palette.ink }]}>Driver assignment sent</Text>
                   <Text style={[styles.meta, { color: palette.muted }]}>Assignment status: {asString(activeAssignment, "status")?.replace(/_/g, " ") ?? "pending"}</Text>
@@ -181,6 +187,10 @@ export function ProviderBookingDetailScreen() {
                   </Text>
                   <Text style={[styles.meta, { color: palette.muted }]}>The driver must accept before the job can start.</Text>
                   <StatusPill status={asString(activeAssignment, "status") ?? "offered"} />
+                  {["offered", "accepted"].includes(asString(activeAssignment, "status") ?? "") ? (
+                    <AppButton label="Replace assigned driver" fullWidth variant="secondary"
+                      onPress={() => { setIsReplacingAssignment(true); setSelectedDriverProfileId(""); setSelectedVehicleId(""); void dispatchResources.refetch(); }} />
+                  ) : null}
                 </View>
               ) : dispatchResources.isPending ? (
                 <ScreenSkeleton cards={1} />
@@ -190,6 +200,25 @@ export function ProviderBookingDetailScreen() {
                 <StatePanel title="No eligible driver and vehicle pair" description="Add an approved driver as an active company member and link an approved, available vehicle before dispatching this booking." retry={() => void dispatchResources.refetch()} />
               ) : (
                 <View style={styles.dispatchSection}>
+                  {isReplacingAssignment ? (
+                    <View style={[styles.assignmentSummary, { backgroundColor: palette.warningSoft }]}>
+                      <Text style={[styles.contactName, { color: palette.ink }]}>Replace the current driver</Text>
+                      <Text style={[styles.meta, { color: palette.muted }]}>The existing pre-start assignment will be marked as reassigned when the new driver accepts the offer. The customer booking and payment remain unchanged.</Text>
+                      <AppButton label="Keep current assignment" fullWidth variant="secondary"
+                        onPress={() => { setIsReplacingAssignment(false); setSelectedDriverProfileId(""); setSelectedVehicleId(""); }} />
+                    </View>
+                  ) : null}
+                  {lastReleasedAssignment && !activeAssignment ? (
+                    <View style={[styles.assignmentSummary, { backgroundColor: palette.surfaceSubtle }]}>
+                      <Text style={[styles.contactName, { color: palette.ink }]}>Previous driver update</Text>
+                      <Text style={[styles.meta, { color: palette.muted }]}>
+                        {asString(nested(lastReleasedAssignment, "driver"), "driver_display_name") ?? "Previous driver"} · {asString(lastReleasedAssignment, "status")}
+                      </Text>
+                      {asString(lastReleasedAssignment, "response_reason") ? (
+                        <Text style={[styles.meta, { color: palette.muted }]}>{asString(lastReleasedAssignment, "response_reason")}</Text>
+                      ) : null}
+                    </View>
+                  ) : null}
                   <Text style={[styles.meta, { color: palette.ink }]}>Available company drivers</Text>
                   {driverResources.map((driver) => {
                     const id = asString(driver, "driver_profile_id") ?? "";
