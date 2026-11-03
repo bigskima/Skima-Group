@@ -643,6 +643,9 @@ Deno.test("Logistics incidents preserve custody and block financial settlement u
   requireText(migrationExceptions, "incident_record.booking_status_before_incident <> 'delivered'", "delivery-stage check prevents treating an already submitted delivery as active transit");
   requireText(migrationExceptions, "set status = 'delivery_submitted'", "restored delivery returns to customer confirmation rather than payout");
   requireText(migrationExceptions, "a submitted delivery must return to customer confirmation", "a submitted delivery cannot be closed as a failed delivery");
+  requireText(migrationExceptions, "recovered_delivery_submitted", "a completed recovery is a separately recognized delivery submission");
+  requireText(migrationExceptions, "verified recovered delivery", "dispute resolution can restore customer confirmation after verified recovery");
+  requireText(migrationExceptions, "assignment_kind' = 'recovery'", "recovered delivery confirmation uses the recovery assignment record");
   const incidentResponse = migrationExceptions.slice(
     migrationExceptions.indexOf("create or replace function public.respond_logistics_booking_incident"),
     migrationExceptions.indexOf("create or replace function public.open_logistics_booking_dispute"),
