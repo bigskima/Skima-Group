@@ -19,8 +19,8 @@ const detail = await Deno.readTextFile("apps/logistics-mobile/src/screens/Logist
 const booking = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsBookingScreen.tsx");
 const geography = await Deno.readTextFile("apps/logistics-mobile/src/ui/GeographyPicker.tsx");
 const logisticsApi = await Deno.readTextFile("apps/logistics-mobile/src/api/logistics.ts");
-const logisticsAdminRoute = await Deno.readTextFile("apps/logistics-mobile/app/logistics-admin.tsx");
-const logisticsAdmin = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsAdminScreen.tsx");
+const logisticsAdminRoute = await Deno.readTextFile("apps/admin/src/features/logistics/LogisticsWorkspace.tsx");
+const logisticsAdmin = logisticsAdminRoute;
 const session = await Deno.readTextFile("apps/logistics-mobile/src/session/SessionProvider.tsx");
 const providers = await Deno.readTextFile("apps/logistics-mobile/src/providers/AppProviders.tsx");
 const routes = await Deno.readTextFile("apps/logistics-mobile/app/(customer)/_layout.tsx");
@@ -332,9 +332,9 @@ Deno.test("Company booking workspace assigns an eligible driver and vehicle befo
 
 
 Deno.test("Logistics marketplace administration is permission-gated and uses the existing governance APIs", () => {
-  requireText(account, '"logistics.marketplace.manage"', "admin navigation permission");
-  requireText(account, 'router.push("/logistics-admin"', "admin account entry");
-  requireText(logisticsAdminRoute, "LogisticsAdminScreen", "dedicated admin route");
+  requireNotText(account, 'router.push("/logistics-admin"', "platform administration is not exposed in the Logistics app");
+  requireNotText(account, "Open Logistics administration", "no platform-admin entry in customer/provider workspace");
+  requireText(logisticsAdminRoute, "export function LogisticsWorkspace", "existing SKIMA Admin V2 workspace");
   requireText(logisticsAdmin, '"logistics.marketplace.manage"', "admin screen permission gate");
   requireText(logisticsAdmin, '"/runtime/logistics/company"', "provider register uses RLS-protected provider list");
   requireText(logisticsAdmin, '"/runtime/logistics/categories"', "database-driven service catalogue");
