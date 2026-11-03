@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiGatewayError } from "@skima/frontend-core";
 import { z } from "zod";
 import { useSession } from "../session/SessionProvider";
 
@@ -30,11 +31,28 @@ export function useLogisticsRecordQuery(key: readonly unknown[], path: string, e
 }
 
 export function useCreateLogisticsJob() {
-  const { api } = useSession();
+  const { api, supabase } = useSession();
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { payload: Record<string, unknown>; idempotencyKey: string }) =>
-      api.post("/runtime/logistics/jobs", input, IdSchema),
+    mutationFn: async (input: { payload: Record<string, unknown>; idempotencyKey: string }) => {
+      try {
+        return await api.post("/runtime/logistics/jobs", input, IdSchema);
+      } catch (cause) {
+        // Only recover when the API Gateway request itself failed or timed out.
+        // Application and permission errors must still surface unchanged.
+        if (!(cause instanceof ApiGatewayError) || !["network_error", "request_timeout"].includes(cause.code)) {
+          throw cause;
+        }
+        // This authenticated RPC enforces auth.uid() ownership and reuses the
+        // same idempotency key if the gateway committed but lost its response.
+        const { data, error } = await supabase.rpc("create_logistics_job", {
+          target_payload: input.payload,
+          target_idempotency_key: input.idempotencyKey,
+        });
+        if (error) throw error;
+        return IdSchema.parse(data);
+      }
+    },
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["skima-logistics", "jobs"] });
       await client.invalidateQueries({ queryKey: ["skima-logistics", "opportunities"] });
