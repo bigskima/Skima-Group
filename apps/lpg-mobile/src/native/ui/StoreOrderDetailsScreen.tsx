@@ -1,8 +1,10 @@
 import { router, useLocalSearchParams } from "expo-router";
+import { z } from "zod";
 import { MapPin, PackageCheck, ShieldCheck, ShoppingBag } from "lucide-react-native";
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 
-import { useGatewayQuery } from "../api/gateway";
+import { useGatewayMutation, useGatewayQuery } from "../api/gateway";
+import { idempotencyKey } from "../utilities/idempotency";
 import {
   firstNumber,
   firstString,
@@ -29,6 +31,14 @@ export function StoreOrderDetailsScreen() {
     enabled: Boolean(orderId),
     refetchInterval: 15000,
   });
+  const confirmReceipt = useGatewayMutation<Record<string, unknown>, {
+    orderId: string;
+    idempotencyKey: string;
+  }>({
+    path: "/runtime/storefront/orders/confirm-receipt",
+    schema: z.record(z.string(), z.unknown()),
+    invalidate: [["store", "customer-order", orderId], ["orders"]],
+  });
 
   const order = query.data?.[0] ?? null;
   const payload = nestedRecord(order, "order_payload");
@@ -47,6 +57,8 @@ export function StoreOrderDetailsScreen() {
   const total = firstNumber(order, ["total_amount", "totalAmount"]) ?? subtotal + deliveryFee;
   const metadata = nestedRecord(order, "metadata");
   const escrowHoldId = firstString(metadata, ["escrow_hold_id", "escrowHoldId"]);
+  const etaMinimum = firstNumber(snapshot, ["deliveryEtaMinBusinessDays", "delivery_eta_min_business_days"]);
+  const etaMaximum = firstNumber(snapshot, ["deliveryEtaMaxBusinessDays", "delivery_eta_max_business_days"]);
   const fulfilment = firstString(order, ["fulfillment_method"]) ?? firstString(payload, ["fulfillment_method"]) ?? "delivery";
   const fulfilmentAddress = fulfilment === "pickup"
     ? (firstString(pickup, ["formattedAddress", "formatted_address"]) || firstString(pickup, ["label"]) || "Pickup point")
@@ -129,6 +141,17 @@ export function StoreOrderDetailsScreen() {
 
           <Card padding="lg">
             <Text style={[styles.sectionTitle, { color: palette.ink }]}>Fulfilment</Text>
+            {fulfilment === "delivery" && etaMinimum !== null && etaMaximum !== null ? (
+              <View style={[styles.etaNotice, { backgroundColor: palette.surfaceSubtle }]}>
+                <Text style={[styles.lineTitle, { color: palette.ink }]}>Estimated delivery</Text>
+                <Text style={[styles.etaValue, { color: palette.brand }]}>
+                  {etaMinimum === etaMaximum ? `${etaMinimum} business days` : `${etaMinimum}–${etaMaximum} business days`}
+                </Text>
+                <Text style={[styles.muted, { color: palette.muted }]}>
+                  The estimate starts after SKIMA accepts your order and confirms it can serve your address.
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.addressRow}>
               <MapPin color={palette.brand} size={19} />
               <View style={styles.addressCopy}>
@@ -144,6 +167,41 @@ export function StoreOrderDetailsScreen() {
               <View style={[styles.note, { backgroundColor: palette.surfaceSubtle }]}>
                 <Text style={[styles.eyebrow, { color: palette.muted }]}>YOUR NOTE</Text>
                 <Text style={[styles.muted, { color: palette.ink }]}>{firstString(payload, ["customer_note"])}</Text>
+              </View>
+            ) : null}
+            {status === "fulfilled" ? (
+              <View style={[styles.receiptNotice, { backgroundColor: palette.successSoft }]}>
+                <Text style={[styles.lineTitle, { color: palette.ink }]}>Have you received every item?</Text>
+                <Text style={[styles.muted, { color: palette.mutedStrong }]}>
+                  Confirm only after the products have reached you. Your reserved payment is settled to the Store after this confirmation.
+                </Text>
+                <AppButton
+                  label="I have received my items"
+                  fullWidth
+                  loading={confirmReceipt.isPending}
+                  disabled={confirmReceipt.isPending}
+                  onPress={async () => {
+                    try {
+                      await confirmReceipt.mutateAsync({
+                        orderId,
+                        idempotencyKey: idempotencyKey("store-receipt", orderId),
+                      });
+                      await query.refetch();
+                    } catch {
+                      // Mutation errors are shown below without changing the order state locally.
+                    }
+                  }}
+                />
+                {confirmReceipt.error ? (
+                  <Text style={[styles.muted, { color: palette.danger }]}>
+                    {confirmReceipt.error.message || "Receipt confirmation could not be completed. Please retry or contact SKIMA."}
+                  </Text>
+                ) : null}
+              </View>
+            ) : status === "completed" && firstString(metadata, ["store_customer_receipt_confirmed_at"]) ? (
+              <View style={[styles.receiptNotice, { backgroundColor: palette.successSoft }]}>
+                <Text style={[styles.lineTitle, { color: palette.success }]}>Receipt confirmed</Text>
+                <Text style={[styles.muted, { color: palette.mutedStrong }]}>Your confirmation has been recorded and Store settlement completed.</Text>
               </View>
             ) : null}
           </Card>
@@ -217,6 +275,9 @@ const styles = StyleSheet.create({
   addressRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, marginTop: spacing.md },
   addressCopy: { flex: 1, gap: 4 },
   note: { marginTop: spacing.md, padding: spacing.md, borderRadius: radii.md, gap: 4 },
+  etaNotice: { marginTop: spacing.md, padding: spacing.md, borderRadius: radii.md, gap: 4 },
+  etaValue: { fontSize: 17, fontWeight: "900" },
+  receiptNotice: { marginTop: spacing.md, padding: spacing.md, borderRadius: radii.md, gap: spacing.sm },
   summaryRow: { minHeight: 38, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   totalRow: { minHeight: 50, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderTopWidth: StyleSheet.hairlineWidth, marginTop: spacing.sm },
   totalLabel: { ...typography.bodyStrong, fontSize: 13 },
