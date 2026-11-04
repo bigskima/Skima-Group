@@ -118,7 +118,14 @@ export function CustomerWalletTopUpScreen() {
               <WebView
                 source={{ uri: checkoutUrl }}
                 style={{ flex: 1, backgroundColor: "#fff" }}
-                originWhitelist={["https://*", "http://*"]}
+                originWhitelist={["*"]}
+                onShouldStartLoadWithRequest={(request) => {
+                  if (request.url.startsWith(Linking.createURL("payment-return"))) {
+                    void Promise.all([deposits.refetch(), wallets.refetch(), balances.refetch()]);
+                    return false;
+                  }
+                  return /^https?:\\/\\//i.test(request.url);
+                }}
                 javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled
                 allowsBackForwardNavigationGestures setSupportMultipleWindows={false} startInLoadingState
                 renderLoading={() => <View style={styles.webLoading}><ActivityIndicator size="large" color={palette.brand}/><Text style={{ color: palette.muted, marginTop: 10 }}>Opening secure payment…</Text></View>}
