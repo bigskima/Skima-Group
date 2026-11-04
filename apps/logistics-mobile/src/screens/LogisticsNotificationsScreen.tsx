@@ -133,8 +133,11 @@ export function LogisticsNotificationsScreen() {
 
   const respondToInvitation = useMutation({
     mutationFn: async (input: { invitationId: string; decision: "accept" | "decline" }) => {
+      const path = input.decision === "accept"
+        ? "/runtime/organization-invitations/accept"
+        : "/runtime/organization-invitations/decline";
       return session.api.post(
-        "/runtime/organization-invitations/" + input.decision,
+        path,
         {
           invitationId: input.invitationId,
           idempotencyKey: createClientIdempotencyKey(
