@@ -96,7 +96,7 @@ export function LogisticsGuideProvider({children}:PropsWithChildren){
    else if(requiredRoute==="/workspace")router.navigate("/(provider)/workspace" as never);
    return;
   }
-  let cancelled=false;let attempt=0;let timer:ReturnType<typeof setTimeout>|null=null;
+  let cancelled=false;let attempt=0;let hasScrolled=false;let timer:ReturnType<typeof setTimeout>|null=null;
   const measure=()=>{
    timer=setTimeout(()=>{
     if(cancelled)return;
@@ -106,9 +106,9 @@ export function LogisticsGuideProvider({children}:PropsWithChildren){
      return;
     }
     const scrollTarget=scrollers.current.get(requiredRoute);
-    if(scrollTarget && attempt===0){
+    if(scrollTarget && !hasScrolled){
+     hasScrolled=true;
      scrollTarget(target);
-     attempt=1;
      timer=setTimeout(()=>measure(),280);
      return;
     }
