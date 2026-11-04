@@ -11,7 +11,7 @@ interface FinanceEnvelope<T> {
 function financeUrl() {
   const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
   if (!url) throw new Error("SKIMA finance configuration is unavailable.");
-  return `${url.replace(/\\/$/, "")}/functions/v1/finance-runtime`;
+  return `${url.replace(/\/$/, "")}/functions/v1/finance-runtime`;
 }
 
 async function financeRequest<T>(input: {
