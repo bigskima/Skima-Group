@@ -247,23 +247,83 @@ export function LogisticsStoreScreen() {
            <View style={styles.sectionHead}>
              <View><Text style={[styles.sectionTitle,{color:palette.ink}]}>{category==="all"?"Shop all products":asString(activeCategories.find(item=>(asString(item,"id")??asString(item,"key"))===category),"display_name","name")??"Products"}</Text><Text style={[styles.sectionSubtitle,{color:palette.muted}]}>{filtered.length} product{filtered.length===1?"":"s"} available</Text></View>
            </View>
-           {filtered.length? <View style={styles.grid}>
-            {filtered.map(product=>{
-              const categoryLabel=asString(product.item,"category_name","categoryName","category")??asString(activeCategories.find(item=>(asString(item,"id")??asString(item,"key"))===asString(product.item,"category_id")),"display_name","name")??"General";
-              const discountPercent=product.compareAtAmount!==null&&product.compareAtAmount>product.amount?Math.round((product.compareAtAmount-product.amount)/product.compareAtAmount*100):0;
-              return <View key={${product.id}:${product.variantId??"base"}} style={[styles.product,{width:width>=1100?"23.5%":width>=700?"31.5%":"48.5%",backgroundColor:palette.surface,borderColor:palette.border}]}>
-                <View style={styles.productMedia}>
-                  <ProductImage assetId={product.imageAssetId} label={product.name}/>
-                  {discountPercent>0?<View style={[styles.discountBadge,{backgroundColor:palette.brand}]}><Text style={styles.discountText}>{discountPercent}% OFF</Text></View>:null}
-                </View>
-                <Text style={[styles.productCategory,{color:palette.muted}]} numberOfLines={1}>{categoryLabel}</Text>
-                <Pressable onPress={()=>setSelectedProduct(product)}><Text style={[styles.productName,{color:palette.ink}]} numberOfLines={2}>{product.name}</Text></Pressable>
-                {product.variantName?<Text style={[styles.productDescription,{color:palette.muted}]} numberOfLines={1}>{product.variantName}</Text>:null}
-                <View style={styles.priceRow}><Text style={[styles.price,{color:palette.ink}]}>{money(product.amount,product.currency)}</Text>{product.compareAtAmount!==null&&product.compareAtAmount>product.amount?<Text style={[styles.comparePrice,{color:palette.muted}]}>{money(product.compareAtAmount,product.currency)}</Text>:null}</View>
-                <Pressable onPress={()=>add(product)} style={[styles.add,{backgroundColor:palette.brand}]}><Plus color="#fff" size={15}/><Text style={styles.addText}>Add to basket</Text></Pressable>
-              </View>;
-            })}
-           </View></View>:<StatePanel title="No available products" description="Active Store products with a valid price and available stock will appear here."/>}
+           {filtered.length ? (
+              <View style={styles.grid}>
+                {filtered.map((product) => {
+                  const categoryLabel =
+                    asString(product.item, "category_name", "categoryName", "category") ??
+                    asString(
+                      activeCategories.find(
+                        (item) => (asString(item, "id") ?? asString(item, "key")) ===
+                          asString(product.item, "category_id"),
+                      ),
+                      "display_name",
+                      "name",
+                    ) ?? "General";
+                  const discountPercent =
+                    product.compareAtAmount !== null && product.compareAtAmount > product.amount
+                      ? Math.round((product.compareAtAmount - product.amount) / product.compareAtAmount * 100)
+                      : 0;
+                  return (
+                    <View
+                      key={`${product.id}:${product.variantId ?? "base"}`}
+                      style={[
+                        styles.product,
+                        {
+                          width: width >= 1100 ? "23.5%" : width >= 700 ? "31.5%" : "48.5%",
+                          backgroundColor: palette.surface,
+                          borderColor: palette.border,
+                        },
+                      ]}
+                    >
+                      <View style={styles.productMedia}>
+                        <ProductImage assetId={product.imageAssetId} label={product.name} />
+                        {discountPercent > 0 ? (
+                          <View style={[styles.discountBadge, { backgroundColor: palette.brand }]}>
+                            <Text style={styles.discountText}>{discountPercent}% OFF</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text style={[styles.productCategory, { color: palette.muted }]} numberOfLines={1}>
+                        {categoryLabel}
+                      </Text>
+                      <Pressable
+                        onPress={() => router.push({
+                          pathname: "/(customer)/store",
+                          params: { itemId: product.id },
+                        } as never)}
+                      >
+                        <Text style={[styles.productName, { color: palette.ink }]} numberOfLines={2}>
+                          {product.name}
+                        </Text>
+                      </Pressable>
+                      {product.variantName ? (
+                        <Text style={[styles.productDescription, { color: palette.muted }]} numberOfLines={1}>
+                          {product.variantName}
+                        </Text>
+                      ) : null}
+                      <View style={styles.priceRow}>
+                        <Text style={[styles.price, { color: palette.ink }]}>{money(product.amount, product.currency)}</Text>
+                        {product.compareAtAmount !== null && product.compareAtAmount > product.amount ? (
+                          <Text style={[styles.comparePrice, { color: palette.muted }]}>
+                            {money(product.compareAtAmount, product.currency)}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Pressable onPress={() => add(product)} style={[styles.add, { backgroundColor: palette.brand }]}>
+                        <Plus color="#fff" size={15} />
+                        <Text style={styles.addText}>Add to basket</Text>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <StatePanel
+                title="No available products"
+                description="Active Store products with a valid price and available stock will appear here."
+              />
+            )}
            </>}
           {cart.length? <View style={[styles.cartPanel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
             <View style={styles.cartHead}><View style={styles.cartTitleRow}><ShoppingCart color={palette.brand} size={18}/><Text style={[styles.cartTitle,{color:palette.ink}]}>Basket ({cart.reduce((sum,line)=>sum+line.quantity,0)})</Text></View><Text style={[styles.cartTotal,{color:palette.ink}]}>{money(cartTotal,cartCurrency)}</Text></View>
