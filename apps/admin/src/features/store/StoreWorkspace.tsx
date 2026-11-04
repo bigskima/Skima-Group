@@ -227,6 +227,16 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
 
       const itemId = catalogText(result, "itemId") || (editingItem ? catalogText(editingItem, "id") : "");
       if (!itemId) throw new Error("The Store product was saved but no item identifier was returned.");
+      // Save the identifier before media uploads so a failed upload can be retried
+      // as an edit of the existing listing instead of creating a duplicate.
+      if (!editingItem) {
+        setEditingItem({
+          id: itemId,
+          display_name: productName.trim(),
+          description: description.trim(),
+          status: listingStatus,
+        } as CatalogRecord);
+      }
       for (let index = 0; index < mediaFiles.length; index += 1) {
         const file = mediaFiles[index];
         const contentType = file.type || "application/octet-stream";
@@ -415,6 +425,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           <section className="store-workspace__section">
             <AdminV2PageHeader eyebrow="Store operations" title="Recent Store orders" description="Customer orders submitted from the Store are recorded by the shared order engine and linked to the Store module." />
             {processOrderAction.error ? <StatusBadge tone="danger">{catalogError(processOrderAction.error)}</StatusBadge> : null}
+            {refundOrder.error ? <StatusBadge tone="danger">{catalogError(refundOrder.error)}</StatusBadge> : null}
             <div className="sk-panel"><DataTable caption="Store orders" columns={orderColumns} records={storeOrders.slice(0, 20)} getRowKey={(item) => catalogText(item, "id")} emptyTitle="No Store orders yet" emptyMessage="Customer Store orders will appear here after the first checkout request." /></div>
           </section>
         </>
