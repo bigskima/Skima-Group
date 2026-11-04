@@ -522,8 +522,9 @@ export function LogisticsCompanyApplicationPanel({
   const currentPolicySummary = asString(policy.data, "summary") ??
     "These terms explain partner application, approval, service matching, safety, earnings, privacy and conduct.";
   const policySourceUrl = asString(policy.data, "sourceUrl", "source_url");
-  const canSubmit = canEdit && !busy && identityEvidenceUploaded && termsAccepted &&
-    (identityPassed || identityEvidenceUploaded);
+  const applicationCanBeSubmitted = ["draft", "incomplete", "additional_info_required"].includes(applicationStatus);
+  const canSubmit = canEdit && applicationCanBeSubmitted && !busy &&
+    identityEvidenceUploaded && termsAccepted;
   const showApplicantFields = !applicationId || editing;
 
   return (
@@ -717,7 +718,7 @@ export function LogisticsCompanyApplicationPanel({
             ) : null}
           </Card>
 
-          {canEdit ? (
+          {canEdit && applicationCanBeSubmitted ? (
             <Card padding="lg">
               <Text style={[styles.heading, { color: palette.ink }]}>Submit for SKIMA review</Text>
               <Text style={[styles.copy, { color: palette.muted }]}>
@@ -732,6 +733,13 @@ export function LogisticsCompanyApplicationPanel({
               {!termsAccepted ? (
                 <Text style={[styles.copy, { color: palette.muted }]}>Accept the current SKIMA Partner Participation Terms before submission.</Text>
               ) : null}
+            </Card>
+          ) : canEdit ? (
+            <Card padding="lg">
+              <Text style={[styles.heading, { color: palette.ink }]}>Application remains under review</Text>
+              <Text style={[styles.copy, { color: palette.muted }]}>
+                Your application is already submitted. You may save corrections or replacement evidence while SKIMA reviews it; those changes are added to the existing review rather than creating a duplicate submission.
+              </Text>
             </Card>
           ) : null}
         </>
