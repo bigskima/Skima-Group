@@ -110,7 +110,15 @@ export function SessionProvider({ children }: PropsWithChildren) {
       if (data.session) await apply(data.session);
       return Boolean(data.session);
     },
-    signOut: async () => { await supabase.auth.signOut(); await apply(null); },
+    signOut: async () => {
+      setError(null);
+      const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+      if (signOutError) {
+        setError(signOutError.message);
+        throw signOutError;
+      }
+      await apply(null);
+    },
     refresh: async () => {
       const current = sessionRef.current;
       if (!current) { await apply(null); return; }
