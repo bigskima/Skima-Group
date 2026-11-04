@@ -257,7 +257,7 @@ grant execute on function public.confirm_store_order_receipt(uuid, uuid, text) t
 
 update public.order_action_definitions
 set actor_scope = 'customer_or_business',
-    label = 'Confirm customer receipt',
+    display_name = 'Confirm customer receipt',
     metadata = metadata || jsonb_build_object(
       'customer_receipt_confirmation', true,
       'settlement_on_customer_receipt', true
