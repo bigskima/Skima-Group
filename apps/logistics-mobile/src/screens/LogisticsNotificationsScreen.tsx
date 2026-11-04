@@ -164,7 +164,9 @@ export function LogisticsNotificationsScreen() {
           target_message_id: messageId,
           target_read: true,
         });
-        if (error) throw error;
+        // Receipt/acceptance is already committed. A read-state write failure
+        // must not misreport the invitation action as failed.
+        if (error) console.warn("Could not mark accepted invitation notification as read.", error.message);
       }
       await refreshNotifications();
     },
