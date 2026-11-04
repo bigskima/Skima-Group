@@ -368,7 +368,7 @@ returns uuid
 language plpgsql
 security definer
 set search_path = public
-as $
+as $store_media$
 declare
   settings public.storefront_settings%rowtype;
   item_record public.catalog_items%rowtype;
@@ -458,7 +458,7 @@ begin
 
   return target_media_asset_id;
 end;
-$;
+$store_media$;
 
 revoke all on function public.approve_storefront_product_media(uuid, uuid) from public, anon;
 grant execute on function public.approve_storefront_product_media(uuid, uuid) to authenticated, service_role;
