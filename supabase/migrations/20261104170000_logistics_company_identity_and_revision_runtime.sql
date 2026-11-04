@@ -134,6 +134,64 @@ begin
   if patched_definition = original_definition then
     raise exception 'Could not safely extend update_application_payload review-state policy';
   end if;
+
+  -- Revisions made while an application is submitted or under review become
+  -- the new submitted, locked version; the existing review task stays open.
+  patched_definition := replace(
+    patched_definition,
+    $old$      status,
+      idempotency_key,
+      created_by$old$,
+    $new$      status,
+      locked_at,
+      idempotency_key,
+      created_by$new$
+  );
+  patched_definition := replace(
+    patched_definition,
+    $old$      target_payload,
+      'draft',
+      target_idempotency_key,
+      auth.uid()$old$,
+    $new$      target_payload,
+      case
+        when application_record.status in ('submitted','under_review') then 'submitted'
+        else 'draft'
+      end,
+      case
+        when application_record.status in ('submitted','under_review') then timezone('utc', now())
+        else null
+      end,
+      target_idempotency_key,
+      auth.uid()$new$
+  );
+  patched_definition := replace(
+    patched_definition,
+    $old$        locked_at = null,
+        updated_at = timezone('utc', now())
+    where id = target_application_id;$old$,
+    $new$        locked_at = case
+          when application_record.status in ('submitted','under_review') then timezone('utc', now())
+          else null
+        end,
+        updated_at = timezone('utc', now())
+    where id = target_application_id;
+
+    if application_record.status in ('submitted','under_review') then
+      update public.application_review_tasks
+      set metadata = metadata || jsonb_build_object(
+            'latest_applicant_revision_version', next_version,
+            'latest_applicant_revision_at', timezone('utc', now()),
+            'applicant_revision_pending_review', true
+          ),
+          updated_at = timezone('utc', now())
+      where application_id = target_application_id
+        and status = 'open';
+    end if;$new$
+  );
+  if position('applicant_revision_pending_review' in patched_definition) = 0 then
+    raise exception 'Could not safely configure review-time application revisions';
+  end if;
   execute patched_definition;
 
   select pg_get_functiondef(
