@@ -15,7 +15,7 @@ import { ScreenSkeleton } from "../ui/ScreenSkeleton";
 import { StatePanel } from "../ui/StatePanel";
 
 type CartLine = { itemId: string; variantId: string | null; name: string; variantName: string | null; quantity: number; unitAmount: number; currencyCode: string };
-type Product = { item: Record<string, unknown>; id: string; variantId: string | null; name: string; variantName: string | null; description: string | null; amount: number; currency: string; stock: number | null; imageAssetId: string | null };
+type Product = { item: Record<string, unknown>; id: string; variantId: string | null; name: string; variantName: string | null; description: string | null; amount: number; compareAtAmount: number | null; currency: string; stock: number | null; imageAssetId: string | null };
 const OrderSchema = z.union([z.string(), z.record(z.string(), z.unknown())]);
 const MediaReadSchema = z.object({ assetId:z.string(), contentType:z.string().nullable(), expiresInSeconds:z.number().positive(), signedUrl:z.string().url() });
 const money = (amount: number, currency: string) => new Intl.NumberFormat("en-NG", { style: "currency", currency, maximumFractionDigits: 2 }).format(amount);
@@ -195,12 +195,23 @@ export function LogisticsStoreScreen() {
         <StatePanel title="Store is not available" description="SKIMA Store will appear here when the platform enables it." icon={<Store color={palette.brand} size={23}/>}/>
       ) : (
         <>
-          <View style={[styles.toolbar,{borderColor:palette.border,backgroundColor:palette.surface}]}>
+          <View style={[styles.hero,{backgroundColor:palette.surface,borderColor:palette.border}]}>
+        <View style={styles.heroCopy}>
+          <Text style={[styles.heroEyebrow,{color:palette.brand}]}>MORE THAN LOGISTICS</Text>
+          <Text style={[styles.heroTitle,{color:palette.ink}]}>Everyday essentials, in one place.</Text>
+          <Text style={[styles.heroBody,{color:palette.muted}]}>Shop cylinders and other products published by SKIMA. Catalogue prices and availability stay connected to the shared SKIMA Store.</Text>
+        </View>
+        <View style={[styles.heroIcon,{backgroundColor:palette.brandSoft}]}><ShoppingBag color={palette.brand} size={29}/></View>
+      </View>
+      <View style={[styles.toolbar,{borderColor:palette.border,backgroundColor:palette.surface}]}>
             <View style={styles.search}><Search color={palette.muted} size={16}/><TextInput value={search} onChangeText={setSearch} placeholder="Search products" placeholderTextColor={palette.muted} style={[styles.searchInput,{color:palette.ink}]}/>{search?<Pressable onPress={()=>setSearch("")}><X color={palette.muted} size={16}/></Pressable>:null}</View>
             <View style={styles.walletPill}><ShoppingBag color={palette.brand} size={14}/><Text style={{color:palette.ink,fontSize:10,fontWeight:"800"}}>{walletId?money(walletBalance,currency):"Wallet unavailable"}</Text></View>
           </View>
+          <View style={styles.sectionHead}>
+            <View><Text style={[styles.sectionTitle,{color:palette.ink}]}>Shop by category</Text><Text style={[styles.sectionSubtitle,{color:palette.muted}]}>Browse active Store sections</Text></View>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-            <Filter label="All" active={category==="all"} onPress={()=>setCategory("all")}/>
+            <Filter label="All products" active={category==="all"} onPress={()=>setCategory("all")}/>
             {activeCategories.map((item)=>{const id=asString(item,"id")??asString(item,"key")??"";return <Filter key={id} label={asString(item,"display_name","name")??"Category"} active={category===id} onPress={()=>setCategory(id)}/>;})}
           </ScrollView>
           {store.items.isPending||store.prices.isPending||store.availability.isPending? <ScreenSkeleton cards={3}/> :
@@ -211,11 +222,11 @@ export function LogisticsStoreScreen() {
               <Text style={[styles.productName,{color:palette.ink}]} numberOfLines={2}>{product.name}</Text>
               {product.variantName?<Text style={[styles.productDescription,{color:palette.muted}]} numberOfLines={1}>{product.variantName}</Text>:null}
               {product.description?<Text style={[styles.productDescription,{color:palette.muted}]} numberOfLines={2}>{product.description}</Text>:null}
-              <Text style={[styles.price,{color:palette.ink}]}>{money(product.amount,product.currency)}</Text>
+              <View style={styles.priceRow}><Text style={[styles.price,{color:palette.ink}]}>{money(product.amount,product.currency)}</Text>{product.compareAtAmount!==null&&product.compareAtAmount>product.amount?<Text style={[styles.comparePrice,{color:palette.muted}]}>{money(product.compareAtAmount,product.currency)}</Text>:null}</View>
               <Pressable onPress={()=>add(product)} style={[styles.add,{backgroundColor:palette.brand}]}><Plus color="#fff" size={15}/><Text style={styles.addText}>Add</Text></Pressable>
             </View>)}
            </View>:<StatePanel title="No available products" description="Active Store products with a valid price and available stock will appear here."/>}
-          <View style={[styles.cartPanel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
+          {cart.length? <View style={[styles.cartPanel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
             <View style={styles.cartHead}><View style={styles.cartTitleRow}><ShoppingCart color={palette.brand} size={18}/><Text style={[styles.cartTitle,{color:palette.ink}]}>Basket ({cart.reduce((sum,line)=>sum+line.quantity,0)})</Text></View><Text style={[styles.cartTotal,{color:palette.ink}]}>{money(cartTotal,cartCurrency)}</Text></View>
             {cart.map(line=><View key={`${line.itemId}:${line.variantId??"base"}`} style={styles.cartLine}><View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.cartName,{color:palette.ink}]}>{line.name}</Text>{line.variantName?<Text style={[styles.productDescription,{color:palette.muted}]}>{line.variantName}</Text>:null}</View><View style={styles.quantity}><Pressable onPress={()=>changeQuantity(line.itemId,line.variantId,-1)}><Minus color={palette.muted} size={15}/></Pressable><Text style={{color:palette.ink,fontWeight:"800"}}>{line.quantity}</Text><Pressable onPress={()=>changeQuantity(line.itemId,line.variantId,1)}><Plus color={palette.brand} size={15}/></Pressable></View><Text style={[styles.cartAmount,{color:palette.ink}]}>{money(line.unitAmount*line.quantity,line.currencyCode)}</Text></View>)}
             {cart.length?<>
