@@ -50,6 +50,8 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
   const [deliveryBaseFeeAmount, setDeliveryBaseFeeAmount] = useState("0");
   const [freeDeliveryMinimumAmount, setFreeDeliveryMinimumAmount] = useState("");
   const [minimumOrderAmount, setMinimumOrderAmount] = useState("0");
+  const [deliveryEtaMinBusinessDays, setDeliveryEtaMinBusinessDays] = useState("2");
+  const [deliveryEtaMaxBusinessDays, setDeliveryEtaMaxBusinessDays] = useState("5");
   const [pickupLocationLabel, setPickupLocationLabel] = useState("SKIMA Store pickup");
   const [pickupFormattedAddress, setPickupFormattedAddress] = useState("");
   const [pickupInstructions, setPickupInstructions] = useState("");
@@ -151,6 +153,8 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
     mutationFn: () => {
       const parsedBaseFee = Number(deliveryBaseFeeAmount);
       const parsedMinimumOrder = Number(minimumOrderAmount);
+      const parsedEtaMinimum = Number(deliveryEtaMinBusinessDays);
+      const parsedEtaMaximum = Number(deliveryEtaMaxBusinessDays);
       const parsedFreeThreshold = freeDeliveryMinimumAmount.trim() ? Number(freeDeliveryMinimumAmount) : null;
       if (!deliveryOriginLabel.trim() || !deliveryOriginAddress.trim()) {
         throw new Error("Enter the Store dispatch origin and its formatted address.");
@@ -158,6 +162,10 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
       if (![parsedBaseFee, parsedMinimumOrder].every((value) => Number.isFinite(value) && value >= 0) ||
         (parsedFreeThreshold !== null && (!Number.isFinite(parsedFreeThreshold) || parsedFreeThreshold < 0))) {
         throw new Error("Delivery fees, free-delivery threshold and minimum order must be zero or greater.");
+      }
+      if (!Number.isInteger(parsedEtaMinimum) || !Number.isInteger(parsedEtaMaximum) ||
+        parsedEtaMinimum < 1 || parsedEtaMaximum < parsedEtaMinimum || parsedEtaMaximum > 90) {
+        throw new Error("Set a valid delivery estimate from 1 to 90 business days, with the maximum not below the minimum.");
       }
       return api.post("/runtime/storefront/full-settings", {
         organizationId,
@@ -174,6 +182,8 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
         deliveryRadiusKm: null,
         freeDeliveryMinimumAmount: parsedFreeThreshold,
         minimumOrderAmount: parsedMinimumOrder,
+        deliveryEtaMinBusinessDays: parsedEtaMinimum,
+        deliveryEtaMaxBusinessDays: parsedEtaMaximum,
         pickupLocationLabel: pickupLocationLabel.trim() || deliveryOriginLabel.trim(),
         pickupFormattedAddress: pickupFormattedAddress.trim() || deliveryOriginAddress.trim(),
         pickupInstructions: pickupInstructions.trim(),
@@ -366,6 +376,8 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
             >Cancel</Button>
           ) : null}
         </div>
+      ) : catalogText(order, "status") === "fulfilled" ? (
+        <StatusBadge tone="warning">Awaiting customer receipt</StatusBadge>
       ) : catalogText(order, "status") === "cancelled" && !refunded ? (
         <Button size="sm" variant="outline" disabled={refundOrder.isPending || !orderId} onClick={() => refundOrder.mutate({ orderId, reason: "Store cannot fulfil the customer's delivery location." })}>Refund wallet</Button>
       ) : refunded ? <StatusBadge tone="success">Refunded</StatusBadge> : "—";
@@ -413,6 +425,8 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
           setDeliveryBaseFeeAmount(catalogText(savedSettings, "delivery_base_fee_amount") || "0");
           setFreeDeliveryMinimumAmount(catalogText(savedSettings, "free_delivery_minimum_amount"));
           setMinimumOrderAmount(catalogText(savedSettings, "minimum_order_amount") || "0");
+          setDeliveryEtaMinBusinessDays(catalogText(savedSettings, "delivery_eta_min_business_days") || "2");
+          setDeliveryEtaMaxBusinessDays(catalogText(savedSettings, "delivery_eta_max_business_days") || "5");
           setPickupLocationLabel(catalogText(savedSettings, "pickup_location_label") || "SKIMA Store pickup");
           setPickupFormattedAddress(catalogText(savedSettings, "pickup_formatted_address"));
           setPickupInstructions(catalogText(savedSettings, "pickup_instructions"));
@@ -451,6 +465,11 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
             <TextInput label={`Free delivery from (${currencyCode}, optional)`} type="number" value={freeDeliveryMinimumAmount} onChange={(event) => setFreeDeliveryMinimumAmount(event.currentTarget.value)} />
           </div>
           <TextInput label={`Minimum order amount (${currencyCode})`} type="number" value={minimumOrderAmount} onChange={(event) => setMinimumOrderAmount(event.currentTarget.value)} />
+          <div className="admin-notice"><strong>Delivery estimate</strong><p>Show customers a realistic window after the Store accepts their order. These are business days, not a promise that an order will arrive before SKIMA confirms the destination is serviceable.</p></div>
+          <div className="store-workspace__price-grid">
+            <TextInput label="Minimum delivery estimate (business days)" type="number" value={deliveryEtaMinBusinessDays} onChange={(event) => setDeliveryEtaMinBusinessDays(event.currentTarget.value)} />
+            <TextInput label="Maximum delivery estimate (business days)" type="number" value={deliveryEtaMaxBusinessDays} onChange={(event) => setDeliveryEtaMaxBusinessDays(event.currentTarget.value)} />
+          </div>
           <div className="admin-notice"><strong>Customer pickup</strong><p>Customers choosing pickup will see this location instead of a delivery address.</p></div>
           <TextInput label="Pickup point name" value={pickupLocationLabel} onChange={(event) => setPickupLocationLabel(event.currentTarget.value)} placeholder="SKIMA Store pickup" />
           <TextInput label="Pickup address" value={pickupFormattedAddress} onChange={(event) => setPickupFormattedAddress(event.currentTarget.value)} placeholder="Defaults to the dispatch address" />
@@ -492,7 +511,7 @@ function storeOrderNextAction(status: string): { key: string; label: string; can
     case "accepted": return { key: "store.order.prepare", label: "Start preparation", canCancel: true };
     case "preparing": return { key: "store.order.ready", label: "Mark ready", canCancel: true };
     case "ready_for_pickup": return { key: "store.order.fulfill", label: "Confirm fulfilment", canCancel: true };
-    case "fulfilled": return { key: "store.order.complete", label: "Complete order", canCancel: false };
+    case "fulfilled": return null;
     default: return null;
   }
 }
