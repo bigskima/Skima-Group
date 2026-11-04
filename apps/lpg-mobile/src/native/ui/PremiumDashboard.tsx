@@ -20,7 +20,7 @@ import {
   WalletCards,
   Zap,
 } from "lucide-react-native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import {
   Pressable,
@@ -66,6 +66,20 @@ export function CustomerDashboard() {
   const locations = domainQueries.locations();
   const wallets = domainQueries.wallets();
   const storefront = useStorefrontData();
+  const previewScrollRef = useRef<ScrollView>(null);
+  const previewScrollOffset = useRef(0);
+  const [previewContentWidth, setPreviewContentWidth] = useState(0);
+  const [previewViewportWidth, setPreviewViewportWidth] = useState(0);
+  useEffect(() => {
+    const maxOffset = previewContentWidth - previewViewportWidth;
+    if (maxOffset <= 8 || previewViewportWidth <= 0) return;
+    const timer = setInterval(() => {
+      const nextOffset = previewScrollOffset.current >= maxOffset ? 0 : Math.min(maxOffset, previewScrollOffset.current + 1);
+      previewScrollOffset.current = nextOffset;
+      previewScrollRef.current?.scrollTo({ x: nextOffset, animated: false });
+    }, 32);
+    return () => clearInterval(timer);
+  }, [previewContentWidth, previewViewportWidth]);
   const marketplacePreview = useMemo(() => {
     const settings = storefront.activeSettings;
     const moduleId = typeof storefront.storeModule?.id === "string" ? storefront.storeModule.id : null;
@@ -122,7 +136,7 @@ export function CustomerDashboard() {
           imageAssetId: firstString(media[0], ["media_asset_id", "mediaAssetId"]),
         }];
       })
-      .slice(0, 2);
+      .slice(0, 8);
   }, [
     storefront.activeSettings,
     storefront.storeModule?.id,
@@ -215,52 +229,62 @@ export function CustomerDashboard() {
             style={styles.storefrontFeature}
           >
             <LinearGradient colors={["#E7283A", "#A90A19"]} style={StyleSheet.absoluteFill} />
-            <View style={styles.storefrontFeatureCopy}>
-              <Text style={styles.storefrontFeatureEyebrow}>SKIMA STORE</Text>
-              <Text numberOfLines={2} style={styles.storefrontFeatureTitle}>Shop cylinders, essentials and more.</Text>
-              <Text numberOfLines={2} style={styles.storefrontFeatureBody}>
-                Discover products and everyday essentials, all in one place.
-              </Text>
-              <View style={styles.storefrontFeatureButton}>
-                <Text style={styles.storefrontFeatureButtonText}>Explore Store</Text>
-                <ChevronRight color={colors.brandDark} size={15} />
+            <View style={styles.storefrontFeatureTop}>
+              <View style={styles.storefrontFeatureCopy}>
+                <Text style={styles.storefrontFeatureEyebrow}>SKIMA STORE</Text>
+                <Text numberOfLines={2} style={styles.storefrontFeatureTitle}>Shop cylinders and essentials.</Text>
+                <Text numberOfLines={1} style={styles.storefrontFeatureBody}>Everyday products in one place.</Text>
+                <View style={styles.storefrontFeatureButton}>
+                  <Text style={styles.storefrontFeatureButtonText}>Explore Store</Text>
+                  <ChevronRight color={colors.brandDark} size={14} />
+                </View>
+              </View>
+              <View style={styles.storefrontFeatureIcon}>
+                <ShoppingBag color="#FFFFFF" size={24} strokeWidth={2.2} />
               </View>
             </View>
-            <View style={styles.storefrontFeatureIcon}>
-              <ShoppingBag color="#FFFFFF" size={30} strokeWidth={2.2} />
-            </View>
+            {marketplacePreview.length ? (
+              <View style={styles.storePreviewSection}>
+                <View style={styles.storePreviewHeading}>
+                  <Text style={styles.storePreviewLabel}>AVAILABLE IN STORE</Text>
+                  <Text style={styles.storePreviewHint}>Swipe to explore</Text>
+                </View>
+                <ScrollView
+                  ref={previewScrollRef}
+                  horizontal
+                  nestedScrollEnabled
+                  showsHorizontalScrollIndicator={false}
+                  scrollEventThrottle={16}
+                  onLayout={(event) => setPreviewViewportWidth(event.nativeEvent.layout.width)}
+                  onContentSizeChange={(contentWidth) => setPreviewContentWidth(contentWidth)}
+                  onScroll={(event) => { previewScrollOffset.current = event.nativeEvent.contentOffset.x; }}
+                  contentContainerStyle={styles.storePreviewList}
+                >
+                  {marketplacePreview.map((product) => (
+                    <Pressable
+                      key={product.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`View ${product.name} in SKIMA Store`}
+                      onPress={(event) => {
+                        event.stopPropagation();
+                        router.push("/(customer)/store" as never);
+                      }}
+                      style={styles.storePreviewItem}
+                    >
+                      <View style={styles.storePreviewThumb}>
+                        <RuntimeMediaImage assetId={product.imageAssetId} label={product.name} variant="avatarCompact" />
+                      </View>
+                      <View style={styles.storePreviewCopy}>
+                        <Text numberOfLines={1} style={styles.storePreviewName}>{product.name}</Text>
+                        <Text numberOfLines={1} style={styles.storePreviewPrice}>{formatMoney(product.amount, product.currency)}</Text>
+                      </View>
+                      <ChevronRight color="rgba(255,255,255,.72)" size={14} />
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
           </Pressable>
-
-          {marketplacePreview.length ? (
-            <HomeSection title="Featured in SKIMA Store" action="View all" href="/(customer)/store">
-              <View style={styles.marketplacePreview}>
-                {marketplacePreview.map((product, index) => (
-                  <Pressable
-                    key={product.id}
-                    accessibilityRole="button"
-                    onPress={() => router.push("/(customer)/store" as never)}
-                    style={[
-                      styles.marketplacePreviewRow,
-                      index > 0 && { borderTopColor: palette.border, borderTopWidth: StyleSheet.hairlineWidth },
-                    ]}
-                  >
-                    <View style={[styles.marketplaceThumb, { backgroundColor: palette.surfaceSubtle }]}>
-                      <RuntimeMediaImage
-                        assetId={product.imageAssetId}
-                        label={product.name}
-                        variant="avatarCompact"
-                      />
-                    </View>
-                    <View style={styles.marketplaceCopy}>
-                      <Text numberOfLines={1} style={[styles.marketplaceName, { color: palette.ink }]}>{product.name}</Text>
-                      <Text style={[styles.marketplacePrice, { color: palette.muted }]}>{formatMoney(product.amount, product.currency)}</Text>
-                    </View>
-                    <ChevronRight color={palette.muted} size={17} />
-                  </Pressable>
-                ))}
-              </View>
-            </HomeSection>
-          ) : null}
 
           <HomeSection
             title="Your cylinders"
@@ -1265,28 +1289,25 @@ const styles = StyleSheet.create({
   customerActionIcon: { width: 64, height: 64, alignItems: "center", justifyContent: "center", marginLeft: 8, borderRadius: 32, backgroundColor: "rgba(255,255,255,.14)" },
   customerPrimaryStack: { gap: 10 },
   customerServiceGrid: { flexDirection: "row", gap: 10 },
-  storefrontFeature: {
-    minHeight: 148,
-    overflow: "hidden",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 13,
-    padding: 17,
-    borderRadius: 25,
-  },
-  storefrontFeatureCopy: { flex: 1, alignItems: "flex-start", gap: 4, zIndex: 1 },
+  storefrontFeature: { minHeight: 150, overflow: "hidden", padding: 15, borderRadius: 25, gap: 12 },
+  storefrontFeatureTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  storefrontFeatureCopy: { flex: 1, minWidth: 0, alignItems: "flex-start", gap: 3, zIndex: 1 },
   storefrontFeatureEyebrow: { color: "rgba(255,255,255,.76)", fontSize: 8, fontWeight: "900", letterSpacing: 1.25 },
-  storefrontFeatureTitle: { maxWidth: 290, color: "#FFFFFF", fontSize: 20, lineHeight: 24, fontWeight: "900", letterSpacing: -0.4 },
-  storefrontFeatureBody: { maxWidth: 290, color: "rgba(255,255,255,.80)", fontSize: 10, lineHeight: 15 },
-  storefrontFeatureButton: { minHeight: 33, flexDirection: "row", alignItems: "center", gap: 3, marginTop: 5, paddingHorizontal: 10, borderRadius: 11, backgroundColor: "#FFFFFF" },
+  storefrontFeatureTitle: { maxWidth: 290, color: "#FFFFFF", fontSize: 19, lineHeight: 23, fontWeight: "900", letterSpacing: -0.4 },
+  storefrontFeatureBody: { maxWidth: 290, color: "rgba(255,255,255,.80)", fontSize: 10, lineHeight: 14 },
+  storefrontFeatureButton: { minHeight: 30, flexDirection: "row", alignItems: "center", gap: 3, marginTop: 4, paddingHorizontal: 10, borderRadius: 10, backgroundColor: "#FFFFFF" },
   storefrontFeatureButtonText: { color: colors.brandDark, fontSize: 10, fontWeight: "900" },
-  storefrontFeatureIcon: { width: 62, height: 62, alignItems: "center", justifyContent: "center", borderRadius: 21, backgroundColor: "rgba(255,255,255,.16)" },
-  marketplacePreview: { gap: 0 },
-  marketplacePreviewRow: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 7 },
-  marketplaceThumb: { width: 48, height: 48, borderRadius: 16, overflow: "hidden" },
-  marketplaceCopy: { flex: 1, minWidth: 0, gap: 3 },
-  marketplaceName: { fontSize: 12, fontWeight: "900" },
-  marketplacePrice: { fontSize: 11, fontWeight: "800" },
+  storefrontFeatureIcon: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: 16, backgroundColor: "rgba(255,255,255,.16)" },
+  storePreviewSection: { gap: 7, zIndex: 1 },
+  storePreviewHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  storePreviewLabel: { color: "rgba(255,255,255,.82)", fontSize: 8, fontWeight: "900", letterSpacing: 1 },
+  storePreviewHint: { color: "rgba(255,255,255,.62)", fontSize: 8, fontWeight: "700" },
+  storePreviewList: { gap: 8, paddingRight: 4 },
+  storePreviewItem: { width: 174, minHeight: 55, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 8, paddingVertical: 7, borderRadius: 13, backgroundColor: "rgba(255,255,255,.13)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,.18)" },
+  storePreviewThumb: { width: 38, height: 38, borderRadius: 10, overflow: "hidden", backgroundColor: "rgba(255,255,255,.92)" },
+  storePreviewCopy: { flex: 1, minWidth: 0, gap: 3 },
+  storePreviewName: { color: "#FFFFFF", fontSize: 10, fontWeight: "900" },
+  storePreviewPrice: { color: "rgba(255,255,255,.82)", fontSize: 9, fontWeight: "800" },
   customerServiceCard: { flex: 1, minHeight: 154, overflow: "hidden", padding: 14, borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, justifyContent: "space-between" },
   customerServiceIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,.16)" },
   customerServiceCopy: { gap: 4, marginTop: 10 },
