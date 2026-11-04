@@ -55,7 +55,7 @@ export function CustomerWalletTopUpScreen() {
       const result = await initialize.mutateAsync({ amount: value, currencyCode: currency, walletId: resolvedWalletId ?? undefined, idempotencyKey: depositKey, metadata: { returnUrl: Linking.createURL("payment-return"), appReturnTo: "/(customer)/wallet" } });
       const data = nested(result);
       const url = asString(result, "checkout_url", "checkoutUrl", "authorization_url", "url") ?? asString(data, "checkout_url", "checkoutUrl", "authorization_url", "url");
-      const id = asString(result, "id", "deposit_id", "depositId") ?? asString(data, "id", "deposit_id", "depositId");
+      const id = asString(result, "id", "deposit_id", "depositId", "depositRequestId", "deposit_request_id") ?? asString(data, "id", "deposit_id", "depositId", "depositRequestId", "deposit_request_id");
       if (!url && !id) throw new Error("No payment session was returned.");
       setCheckoutUrl(url); setReference(id ?? ""); if (url) await Linking.openURL(url);
       setPreviewData(null);
