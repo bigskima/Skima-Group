@@ -130,7 +130,7 @@ export function LogisticsStoreScreen() {
           item,id:itemId,variantId,
           name:asString(item,"display_name","name","title")??"Store item",
           variantName:variant?asString(variant,"display_name","name","label"):null,
-          description:asString(item,"description"),amount,currency,stock:remaining,
+          description:asString(item,"description"),amount,compareAtAmount:asNumber(price,"compare_at_amount"),currency,stock:remaining,
           imageAssetId:asString((store.media.data??[]).filter((media)=>asString(media,"item_id")===itemId&&asString(media,"status")==="active").sort((left,right)=>(asNumber(left,"display_order")??0)-(asNumber(right,"display_order")??0))[0],"media_asset_id")
         });
       }
@@ -216,7 +216,11 @@ export function LogisticsStoreScreen() {
           </ScrollView>
           {store.items.isPending||store.prices.isPending||store.availability.isPending? <ScreenSkeleton cards={3}/> :
            store.items.error||store.prices.error||store.availability.error? <StatePanel title="Products could not load" description="Refresh the catalogue and try again." retry={()=>void Promise.all([store.items.refetch(),store.prices.refetch(),store.availability.refetch()])}/> :
-           filtered.length? <View style={styles.grid}>
+           <>
+           <View style={styles.sectionHead}>
+             <View><Text style={[styles.sectionTitle,{color:palette.ink}]}>{category==="all"?"Shop all products":asString(activeCategories.find(item=>(asString(item,"id")??asString(item,"key"))===category),"display_name","name")??"Products"}</Text><Text style={[styles.sectionSubtitle,{color:palette.muted}]}>{filtered.length} product{filtered.length===1?"":"s"} available</Text></View>
+           </View>
+           {filtered.length? <View style={styles.grid}>
             {filtered.map(product=><View key={`${product.id}:${product.variantId??"base"}`} style={[styles.product,{width:width>=1100?"23.5%":width>=700?"31.5%":"48.5%",backgroundColor:palette.surface,borderColor:palette.border}]}>
               <ProductImage assetId={product.imageAssetId} label={product.name}/>
               <Text style={[styles.productName,{color:palette.ink}]} numberOfLines={2}>{product.name}</Text>
@@ -226,6 +230,7 @@ export function LogisticsStoreScreen() {
               <Pressable onPress={()=>add(product)} style={[styles.add,{backgroundColor:palette.brand}]}><Plus color="#fff" size={15}/><Text style={styles.addText}>Add</Text></Pressable>
             </View>)}
            </View>:<StatePanel title="No available products" description="Active Store products with a valid price and available stock will appear here."/>}
+           </>
           {cart.length? <View style={[styles.cartPanel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
             <View style={styles.cartHead}><View style={styles.cartTitleRow}><ShoppingCart color={palette.brand} size={18}/><Text style={[styles.cartTitle,{color:palette.ink}]}>Basket ({cart.reduce((sum,line)=>sum+line.quantity,0)})</Text></View><Text style={[styles.cartTotal,{color:palette.ink}]}>{money(cartTotal,cartCurrency)}</Text></View>
             {cart.map(line=><View key={`${line.itemId}:${line.variantId??"base"}`} style={styles.cartLine}><View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={[styles.cartName,{color:palette.ink}]}>{line.name}</Text>{line.variantName?<Text style={[styles.productDescription,{color:palette.muted}]}>{line.variantName}</Text>:null}</View><View style={styles.quantity}><Pressable onPress={()=>changeQuantity(line.itemId,line.variantId,-1)}><Minus color={palette.muted} size={15}/></Pressable><Text style={{color:palette.ink,fontWeight:"800"}}>{line.quantity}</Text><Pressable onPress={()=>changeQuantity(line.itemId,line.variantId,1)}><Plus color={palette.brand} size={15}/></Pressable></View><Text style={[styles.cartAmount,{color:palette.ink}]}>{money(line.unitAmount*line.quantity,line.currencyCode)}</Text></View>)}
@@ -238,7 +243,7 @@ export function LogisticsStoreScreen() {
               {!walletId?<Text style={[styles.error,{color:palette.danger}]}>Your shared SKIMA customer wallet is unavailable.</Text>:!withinRadius?<Text style={[styles.error,{color:palette.danger}]}>This address is outside the Store delivery coverage.</Text>:!walletEnough?<Text style={[styles.error,{color:palette.danger}]}>Your {currency} customer wallet cannot cover this order and delivery.</Text>:cartTotal<minimumOrder?<Text style={[styles.error,{color:palette.danger}]}>Minimum order: {money(minimumOrder,currency)}.</Text>:null}
               <Pressable disabled={checkout.isPending||!cartReady||!canCheckout} onPress={()=>checkout.mutate()} style={[styles.checkout,{backgroundColor:palette.brand,opacity:checkout.isPending||!cartReady||!canCheckout?0.5:1}]}>{checkout.isPending?<ActivityIndicator color="#fff"/>:<Text style={styles.checkoutText}>Pay {money(total??cartTotal,currency)}</Text>}</Pressable>
             </>:<Text style={[styles.productDescription,{color:palette.muted}]}>Add a product to your basket to continue.</Text>}
-          </View>
+          </View> : null}
         </>
       )}
     </Screen>
@@ -275,6 +280,10 @@ function Filter({label,active,onPress}:{label:string;active:boolean;onPress:()=>
 }
 const styles=StyleSheet.create({
  back:{flexDirection:"row",alignItems:"center",gap:7,marginBottom:5},backText:{fontSize:11,fontWeight:"800"},
+  hero:{minHeight:126,borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:14,flexDirection:"row",alignItems:"center",gap:10},
+  heroCopy:{flex:1,gap:5},heroEyebrow:{fontSize:9,fontWeight:"900",letterSpacing:1},heroTitle:{fontSize:18,lineHeight:22,fontWeight:"900"},heroBody:{fontSize:10,lineHeight:15},
+  heroIcon:{width:50,height:50,borderRadius:16,alignItems:"center",justifyContent:"center"},
+  sectionHead:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",marginTop:6},sectionTitle:{fontSize:15,fontWeight:"900"},sectionSubtitle:{fontSize:10,lineHeight:15,fontWeight:"600"},
  toolbar:{borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:8,flexDirection:"row",alignItems:"center",gap:8},
  search:{flex:1,minWidth:0,height:38,flexDirection:"row",alignItems:"center",gap:7,paddingHorizontal:8},searchInput:{flex:1,minWidth:0,fontSize:12,paddingVertical:0},
  walletPill:{flexDirection:"row",alignItems:"center",gap:5,borderRadius:radii.pill,backgroundColor:"rgba(220,45,65,.09)",paddingHorizontal:9,paddingVertical:8},
@@ -282,7 +291,7 @@ const styles=StyleSheet.create({
  filters:{gap:7,paddingVertical:9},filter:{paddingHorizontal:12,paddingVertical:8,borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.pill},
  grid:{flexDirection:"row",flexWrap:"wrap",gap:10},product:{minWidth:142,flexGrow:1,borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:11,gap:6},
  productIcon:{width:44,height:44,borderRadius:13,alignItems:"center",justifyContent:"center"},productName:{...typography.bodyStrong,fontSize:12,lineHeight:16},
- productDescription:{...typography.caption,fontSize:10,lineHeight:14},price:{fontSize:13,fontWeight:"900"},
+ productDescription:{...typography.caption,fontSize:10,lineHeight:14},price:{fontSize:13,fontWeight:"900"},priceRow:{flexDirection:"row",alignItems:"center",flexWrap:"wrap",gap:6},comparePrice:{fontSize:10,textDecorationLine:"line-through",fontWeight:"600"},
  add:{height:34,borderRadius:radii.md,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:5},addText:{color:"#fff",fontSize:11,fontWeight:"900"},
  cartPanel:{borderWidth:StyleSheet.hairlineWidth,borderRadius:radii.lg,padding:12,gap:9},cartHead:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},
  cartTitleRow:{flexDirection:"row",alignItems:"center",gap:7},cartTitle:{fontSize:12,fontWeight:"900"},cartTotal:{fontSize:14,fontWeight:"900"},
