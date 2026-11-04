@@ -1,3 +1,4 @@
+import * as Linking from "expo-linking";
 import { AlertCircle, CheckCircle2, RefreshCw, ShieldCheck, X } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
@@ -9,7 +10,7 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { spacing, typography } from "../theme/tokens";
 import { AppButton } from "./AppButton";
 
-const SUCCESS_STATUSES = new Set(["completed", "confirmed", "credited", "succeeded", "successful"]);
+const SUCCESS_STATUSES = new Set(["completed", "confirmed", "credited", "settled", "paid", "succeeded", "successful"]);
 const FAILED_STATUSES = new Set(["cancelled", "failed", "rejected", "expired"]);
 
 export interface PaymentCheckoutModalProps {
@@ -146,7 +147,14 @@ export function PaymentCheckoutModal({
               ref={webView}
               source={{ uri: checkoutUrl }}
               style={styles.webView}
-              originWhitelist={["https://*", "http://*"]}
+              originWhitelist={["*"]}
+              onShouldStartLoadWithRequest={(request) => {
+                if (request.url.startsWith(Linking.createURL("payment-return"))) {
+                  void manualCheck();
+                  return false;
+                }
+                return /^https?:\\/\\//i.test(request.url);
+              }}
               javaScriptEnabled
               domStorageEnabled
               sharedCookiesEnabled
