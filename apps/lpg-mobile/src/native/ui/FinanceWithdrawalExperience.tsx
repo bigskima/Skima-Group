@@ -323,7 +323,7 @@ export function FinanceWithdrawalExperience({
         <View style={styles.heroHead}>
           <View>
             <Text style={styles.heroLabel}>AVAILABLE TO WITHDRAW</Text>
-            <Text adjustsFontSizeToFit numberOfLines={1} style={styles.heroAmount}>{money(available, currency)}</Text>
+            <Text adjustsFontSizeToFit minimumFontScale={0.5} maxFontSizeMultiplier={1.1} numberOfLines={1} style={styles.heroAmount}>{money(available, currency)}</Text>
           </View>
           <View style={styles.heroShield}>
             <ShieldCheck color="#FFFFFF" size={23} />
@@ -590,7 +590,7 @@ export function FinanceWithdrawalExperience({
 
 function money(value: number, currency: string) {
   try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(value);
+    return new Intl.NumberFormat("en-NG", { style: "currency", currency, currencyDisplay: "narrowSymbol", maximumFractionDigits: 2 }).format(value);
   } catch {
     return `${currency} ${value.toFixed(2)}`;
   }
@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
   hero: { padding: spacing.lg, borderRadius: radii.xl, gap: spacing.md },
   heroHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md },
   heroLabel: { color: "rgba(255,255,255,.76)", ...typography.eyebrow, fontSize: 9 },
-  heroAmount: { color: "#FFFFFF", fontSize: 33, lineHeight: 40, fontWeight: "900", letterSpacing: -0.7, marginTop: 4, maxWidth: 280 },
+  heroAmount: { color: "#FFFFFF", fontSize: 29, lineHeight: 35, fontWeight: "900", letterSpacing: -0.65, marginTop: 4, flexShrink: 1, maxWidth: "100%" },
   heroShield: { width: 46, height: 46, borderRadius: 16, backgroundColor: "rgba(255,255,255,.14)", alignItems: "center", justifyContent: "center" },
   heroBody: { color: "rgba(255,255,255,.84)", ...typography.caption, lineHeight: 18 },
   beneficiaryList: { gap: spacing.sm },
