@@ -38,6 +38,7 @@ export function LogisticsStoreScreen() {
   const wallets = useLogisticsQuery(["store", "wallets"], "/runtime/wallets");
   const balances = useLogisticsQuery(["store", "wallet-balances"], "/runtime/wallet-balances");
   const locations = useLogisticsQuery(["store", "locations"], "/lpg/locations");
+  const storeOrders = useLogisticsQuery(["store", "orders"], "/runtime/storefront/orders", true, 15_000);
   const cartStorageKey = `skima:logistics:store:v1:${userId}:${asString(store.storeModule,"id")??"pending"}`;
   const [cartReady,setCartReady]=useState(false);
   const [loadedCartKey,setLoadedCartKey]=useState("");
@@ -49,6 +50,22 @@ export function LogisticsStoreScreen() {
   const [locationId, setLocationId] = useState("");
   const [note, setNote] = useState("");
   const [checkoutKey, setCheckoutKey] = useState(idempotency());
+
+  const confirmReceipt = useMutation({
+    mutationFn: async (orderId: string) => session.api.post(
+      "/runtime/storefront/orders/confirm-receipt",
+      { orderId, idempotencyKey: `logistics-store-receipt:${orderId}` },
+      z.record(z.string(), z.unknown()),
+    ),
+    onSuccess: async () => {
+      await Promise.all([
+        storeOrders.refetch(),
+        wallets.refetch(),
+        balances.refetch(),
+      ]);
+      Alert.alert("Receipt confirmed", "Your Store receipt has been recorded and the order settlement is complete.");
+    },
+  });
 
   useEffect(()=>{
     let active=true;
@@ -142,6 +159,8 @@ export function LogisticsStoreScreen() {
   const cartTotal=cart.reduce((sum,line)=>sum+line.unitAmount*line.quantity,0);
   const cartCurrency=cart[0]?.currencyCode??currency;
   const flatDeliveryFee=asNumber(settings,"delivery_base_fee_amount")??0;
+  const deliveryEtaMin=asNumber(settings,"delivery_eta_min_business_days")??2;
+  const deliveryEtaMax=asNumber(settings,"delivery_eta_max_business_days")??5;
   const freeMinimum=asNumber(settings,"free_delivery_minimum_amount");
   const deliveryFee=fulfillment==="pickup"?0:freeMinimum!==null && cartTotal>=freeMinimum?0:flatDeliveryFee;
   const minimumOrder=asNumber(settings,"minimum_order_amount")??0;
@@ -236,12 +255,44 @@ export function LogisticsStoreScreen() {
               {fulfillment==="delivery"?<View style={styles.locationChoices}><Text style={[styles.formLabel,{color:palette.ink}]}>Delivery address</Text>{availableLocations.length?availableLocations.slice(0,6).map(location=>{const id=asString(location,"id")??"";return <Pressable key={id} onPress={()=>setLocationId(id)} style={[styles.location,{borderColor:locationId===id?palette.brand:palette.border,backgroundColor:locationId===id?palette.brandSoft:palette.surface}]}><Text style={[styles.locationText,{color:palette.ink}]} numberOfLines={2}>{asString(location,"formatted_address","display_name","address")??"Saved address"}</Text></Pressable>;}) : <Text style={[styles.productDescription,{color:palette.muted}]}>Add a saved address or choose pickup.</Text>}</View>:null}
               <TextInput value={note} onChangeText={setNote} placeholder="Order note (optional)" placeholderTextColor={palette.muted} style={[styles.note,{color:palette.ink,borderColor:palette.border}]}/>
               {fulfillment==="delivery"?<Text style={[styles.productDescription,{color:palette.muted}]}>Flat delivery fee: {money(deliveryFee,currency)}</Text>:null}
+              {fulfillment==="delivery"?<Text style={[styles.productDescription,{color:palette.muted}]}>Estimated delivery: {deliveryEtaMin===deliveryEtaMax?`${deliveryEtaMin} business days`:`${deliveryEtaMin}–${deliveryEtaMax} business days`} after SKIMA accepts your order and confirms it can serve your address.</Text>:null}
               <Pressable onPress={()=>router.push("/(customer)/wallet" as never)}><Text style={[styles.productDescription,{color:palette.brand,fontWeight:"800"}]}>View shared SKIMA Wallet · Add funds</Text></Pressable>
               {!walletId?<Text style={[styles.error,{color:palette.danger}]}>Your shared SKIMA customer wallet is unavailable.</Text>:!walletEnough?<Text style={[styles.error,{color:palette.danger}]}>Your {currency} customer wallet cannot cover this order and delivery.</Text>:cartTotal<minimumOrder?<Text style={[styles.error,{color:palette.danger}]}>Minimum order: {money(minimumOrder,currency)}.</Text>:null}
               {fulfillment==="delivery"?<Text style={[styles.productDescription,{color:palette.muted}]}>Orders are accepted nationwide in Nigeria. SKIMA Store reviews serviceability after checkout; locations we cannot serve will be cancelled and refunded.</Text>:null}
               <Pressable disabled={checkout.isPending||!cartReady||!canCheckout} onPress={()=>checkout.mutate()} style={[styles.checkout,{backgroundColor:palette.brand,opacity:checkout.isPending||!cartReady||!canCheckout?0.5:1}]}>{checkout.isPending?<ActivityIndicator color="#fff"/>:<Text style={styles.checkoutText}>Pay {money(total??cartTotal,currency)}</Text>}</Pressable>
             </>:<Text style={[styles.productDescription,{color:palette.muted}]}>Add a product to your basket to continue.</Text>}
           </View> : null}
+          <View style={styles.sectionHead}>
+            <View><Text style={[styles.sectionTitle,{color:palette.ink}]}>Your Store orders</Text><Text style={[styles.sectionSubtitle,{color:palette.muted}]}>Track fulfilment and confirm receipt</Text></View>
+          </View>
+          {storeOrders.isPending ? <ScreenSkeleton cards={1}/> : storeOrders.error ? (
+            <StatePanel title="Store orders could not load" description="Refresh to check your purchase status." retry={()=>void storeOrders.refetch()}/>
+          ) : (storeOrders.data??[]).length ? (storeOrders.data??[]).slice(0,5).map(order=>{
+            const orderId=asString(order,"id")??"";
+            const status=asString(order,"status")??"received";
+            const payload=record(order.order_payload);
+            const snapshot=record(payload.store_checkout_snapshot);
+            const etaMin=asNumber(snapshot,"deliveryEtaMinBusinessDays","delivery_eta_min_business_days");
+            const etaMax=asNumber(snapshot,"deliveryEtaMaxBusinessDays","delivery_eta_max_business_days");
+            return <View key={orderId} style={[styles.cartPanel,{backgroundColor:palette.surface,borderColor:palette.border}]}>
+              <View style={styles.cartHead}>
+                <Text style={[styles.cartTitle,{color:palette.ink}]}>Order {orderId.slice(0,8).toUpperCase()}</Text>
+                <Text style={[styles.productDescription,{color:palette.brand,fontWeight:"900"}]}>{status.replace(/[_-]+/g," ")}</Text>
+              </View>
+              <Text style={[styles.productDescription,{color:palette.muted}]}>
+                {fulfillmentLabel(asString(order,"fulfillment_method")??"delivery")} · {money(asNumber(order,"total_amount")??0,asString(order,"currency_code")??currency)}
+              </Text>
+              {etaMin!==null && etaMax!==null && asString(order,"status")!=="completed" ? (
+                <Text style={[styles.productDescription,{color:palette.muted}]}>
+                  Estimated delivery: {etaMin===etaMax?`${etaMin} business days`:`${etaMin}–${etaMax} business days`} after order acceptance
+                </Text>
+              ):null}
+              {status==="fulfilled" ? <Pressable disabled={confirmReceipt.isPending} onPress={()=>confirmReceipt.mutate(orderId)} style={[styles.checkout,{backgroundColor:palette.brand,opacity:confirmReceipt.isPending?0.55:1}]}>
+                {confirmReceipt.isPending?<ActivityIndicator color="#fff"/>:<Text style={styles.checkoutText}>I have received my items</Text>}
+              </Pressable> : status==="completed" ? <Text style={[styles.productDescription,{color:palette.success,fontWeight:"800"}]}>Receipt confirmed · settlement completed</Text> : null}
+            </View>;
+          }) : <StatePanel title="No Store orders yet" description="Your Store purchases and delivery updates will appear here."/>}
+          {confirmReceipt.error ? <Text style={[styles.error,{color:palette.danger}]}>{confirmReceipt.error.message}</Text> : null}
         </>
       )}
       <Modal transparent animationType="slide" visible={Boolean(selectedProduct)} onRequestClose={()=>setSelectedProduct(null)}>
@@ -272,6 +323,10 @@ export function LogisticsStoreScreen() {
   );
 }
 
+
+function fulfillmentLabel(value:string){
+ return value==="pickup"?"Customer pickup":"Delivery";
+}
 
 function isCartLine(value:unknown):value is CartLine{
  const line=record(value);
