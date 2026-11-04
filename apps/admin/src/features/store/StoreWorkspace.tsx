@@ -247,7 +247,7 @@ export function StoreWorkspace(props: { readonly onNavigate: (href: string) => v
         const registered = await api.post("/runtime/media/assets", {
           assetTypeKey: contentType.startsWith("video/") ? "media.video.product" : "media.image.product",
           byteSize: file.size, contentType, idempotencyKey: `${key}:asset`,
-          metadata: { originalFileName: file.name }, ownerUserId: context.user.id,
+          metadata: { originalFileName: file.name, purpose: "skima_store_product_media", storefrontItemId: itemId }, ownerUserId: context.user.id,
           // The catalogue attachment row carries Store organisation scope;
           // the uploaded asset itself stays owner-scoped for platform admins.
           organizationId: null, source: "skima.admin.store",

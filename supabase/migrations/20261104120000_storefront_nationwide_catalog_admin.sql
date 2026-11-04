@@ -424,6 +424,14 @@ begin
     raise exception 'Only the uploader or a platform assets manager can approve this media';
   end if;
 
+  -- Never promote an arbitrary previously uploaded verification/KYC asset.
+  -- The uploader tags the file as a Store product upload for this exact item.
+  if coalesce(media_record.metadata->>'purpose', '') <> 'skima_store_product_media'
+    or coalesce(media_record.metadata->>'storefrontItemId', '') <> target_item_id::text
+    or media_record.privacy_classification not in ('INTERNAL_ONLY', 'PUBLIC_APPROVED') then
+    raise exception 'Only newly uploaded media tagged for this Store listing can be approved';
+  end if;
+
   if coalesce(media_record.content_type, '') !~ '^(image|video)/' then
     raise exception 'Only product images and videos can be made public';
   end if;
