@@ -36,6 +36,7 @@ const guideProvider = await Deno.readTextFile("apps/logistics-mobile/src/onboard
 const providerOpportunities = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderOpportunitiesScreen.tsx");
 const providerCompany = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderCompanyScreen.tsx");
 const providerTeam = await Deno.readTextFile("apps/logistics-mobile/src/screens/ProviderTeamScreen.tsx");
+const logisticsNotificationMigration = await Deno.readTextFile("supabase/migrations/20261104172000_logistics_notification_scope_and_in_app_company_invites.sql");
 const providerTeamRoute = await Deno.readTextFile("apps/logistics-mobile/app/(provider)/team.tsx");
 const providerDriver = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsDriverScreen.tsx");
 const driverLocationShare = await Deno.readTextFile("apps/logistics-mobile/src/screens/LogisticsDriverLocationShare.tsx");
@@ -596,16 +597,28 @@ Deno.test("Customer and company workspaces keep phone, tablet and desktop respon
   requireText(storeScreen, 'width>=1100?"23.5%":width>=700?"31.5%":"48.5%"', "responsive Store product grid");
 });
 
-Deno.test("Customer and company bell controls open the shared authenticated notification inbox", () => {
+Deno.test("Logistics notification inbox is Store/Logistics-scoped and company invites are accepted in app", () => {
   requireText(home, 'router.push("/(customer)/notifications" as never)', "customer notification bell route");
   requireText(providerDashboard, 'router.push("/(provider)/notifications" as never)', "company notification bell route");
   requireText(customerNavigation, 'name="notifications"', "customer notification route registration");
   requireText(providerNavigation, 'name="notifications"', "company notification route registration");
   requireText(customerNotificationRoute, "LogisticsNotificationsScreen", "customer notification screen route");
   requireText(providerNotificationRoute, "LogisticsNotificationsScreen", "company notification screen route");
-  requireText(notificationScreen, "read_notification_center", "shared notification center RPC");
-  requireText(notificationScreen, "mark_notification_read", "mark a notification read");
-  requireText(notificationScreen, "mark_all_notifications_read", "mark all notifications read");
+  requireText(notificationScreen, 'rpc("read_logistics_notification_center"', "Store/Logistics-only notification feed");
+  requireText(notificationScreen, 'rpc("mark_all_logistics_notifications_read"', "mark only Logistics notifications read");
+  requireText(notificationScreen, '"/runtime/organization-invitations/accept"', "accept a company invitation in app");
+  requireText(notificationScreen, '"/runtime/organization-invitations/decline"', "decline a company invitation in app");
+  requireText(notificationScreen, "Company workspace invitation", "Logistics-specific invitation card");
+  requireText(notificationScreen, "logistics_network", "show only Logistics company invitations");
+  requireNotText(notificationScreen, 'rpc("read_notification_center"', "no unscoped shared notification feed");
+  requireNotText(notificationScreen, 'rpc("mark_all_notifications_read"', "do not mark LPG notifications read");
+  requireText(providerTeam, "no email is sent", "invite recipient inside the app rather than email");
+  requireText(providerTeam, "Send in-app invitation", "company team sends in-app invitation");
+  requireText(logisticsNotificationMigration, "public.is_logistics_app_notification", "notification module scope");
+  requireText(logisticsNotificationMigration, "'store.%'", "include Store updates");
+  requireText(logisticsNotificationMigration, "'logistics.%'", "include Logistics updates");
+  requireText(logisticsNotificationMigration, "'in_app'", "company invitation is in-app only");
+  requireText(logisticsNotificationMigration, "recipient_address,", "notification does not address an outbound email");
 });
 
 
