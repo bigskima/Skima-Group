@@ -20,7 +20,7 @@ const money = (value: number, currency: string) => {
 const nested = (value: Record<string, unknown>) => value.data && typeof value.data === "object" ? value.data as Record<string, unknown> : {};
 export function CustomerWalletTopUpScreen() {
   const { palette } = useAppTheme();
-  const { session } = useSession();
+  const { session, api } = useSession();
   const params = useLocalSearchParams<{ walletId?: string | string[] }>();
   const walletIdParam = Array.isArray(params.walletId) ? params.walletId[0] : params.walletId;
   const wallets = useLogisticsQuery(["customer-wallets"], "/runtime/wallets", true, 30000);
@@ -37,8 +37,8 @@ export function CustomerWalletTopUpScreen() {
   const [error, setError] = useState("");
   const [previewKey, setPreviewKey] = useState(() => createClientIdempotencyKey("logistics.wallet.topup.preview", session?.user.id ?? "customer"));
   const [depositKey, setDepositKey] = useState(() => createClientIdempotencyKey("logistics.wallet.topup", session?.user.id ?? "customer"));
-  const preview = useMutation({ mutationFn: (body: Record<string, unknown>) => session.api.post("/runtime/payments/deposits/preview", body, RecordSchema) });
-  const initialize = useMutation({ mutationFn: (body: Record<string, unknown>) => session.api.post("/runtime/payments/deposits", body, RecordSchema) });
+  const preview = useMutation({ mutationFn: (body: Record<string, unknown>) => api.post("/runtime/payments/deposits/preview", body, RecordSchema) });
+  const initialize = useMutation({ mutationFn: (body: Record<string, unknown>) => api.post("/runtime/payments/deposits", body, RecordSchema) });
   const value = Number(amount);
   const credit = asNumber(previewData, "walletCreditAmount", "wallet_credit_amount") ?? value;
   const fee = asNumber(previewData, "calculatedFeeAmount", "calculated_fee_amount") ?? 0;
